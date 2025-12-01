@@ -6,11 +6,7 @@ RUN apk add --no-cache aws-cli curl jq go git openssl bind-tools tar gzip
 # Build xcaddy and use it to build caddy with route53 module explicitly
 RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 ENV PATH=$PATH:/root/go/bin
-# TODO: Check after end of Aug 2025 if libdns/route53 has released a new version (>v1.5.0)
-# that includes the libdns 1.0 API compatibility fix from PR #286. If so, remove the --replace
-# workaround and use the standard: --with github.com/caddy-dns/route53
-# Use the latest Route53 plugin with Caddy 2.10 - force use of fixed libdns version
-RUN xcaddy build --with github.com/caddy-dns/route53 --replace github.com/libdns/route53=github.com/libdns/route53@e55e164
+RUN xcaddy build --with github.com/caddy-dns/route53
 RUN mv caddy /usr/bin/caddy && chmod +x /usr/bin/caddy
 
 # Create necessary directories

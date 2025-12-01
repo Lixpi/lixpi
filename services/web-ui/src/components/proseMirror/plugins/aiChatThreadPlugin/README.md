@@ -150,6 +150,7 @@ sequenceDiagram
 - Content: `(paragraph | block)*` (empty allowed for streaming shell)
 - Attributes: `id, style, isInitialRenderAnimation, isReceivingAnimation, aiProvider, currentFrame`
 - DOM: `div.ai-response-message[data-ai-provider]`
+- Empty shells render a horizontal spinner placeholder so the layout keeps height while the first tokens stream in.
 
 ## DOM Template System
 

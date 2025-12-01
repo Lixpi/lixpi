@@ -5,7 +5,8 @@ import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import Organization from '../../models/organization.ts'
 
-import { ORGANIZATION_SUBJECTS } from '@lixpi/constants'
+import { NATS_SUBJECTS } from '@lixpi/constants'
+const { ORGANIZATION_SUBJECTS } = NATS_SUBJECTS
 
 
 export const organizationSubjects = [

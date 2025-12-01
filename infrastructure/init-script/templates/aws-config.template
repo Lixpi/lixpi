@@ -1,0 +1,9 @@
+[sso-session {{SSO_SESSION_NAME}}]
+sso_start_url = {{SSO_START_URL}}
+sso_region = {{AWS_REGION}}
+
+[profile {{AWS_PROFILE_NAME}}]
+sso_session = {{SSO_SESSION_NAME}}
+sso_account_id = {{AWS_ACCOUNT_ID}}
+sso_role_name = {{AWS_ROLE_NAME}}
+region = {{AWS_REGION}}

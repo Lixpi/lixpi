@@ -1,5 +1,5 @@
 {
-    "name": "lixpi-lists-web-ui",
+    "name": "lixpi-web-ui",
     "private": true,
     "version": "0.0.1",
     "type": "module",
@@ -40,7 +40,8 @@
         "uuid": "*",
         "@xyflow/system": "*",
         "d3-selection": "*",
-        "d3-ease": "*"
+        "d3-ease": "*",
+        "@lixpi/markdown-stream-parser": "^0.0.3-34"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",

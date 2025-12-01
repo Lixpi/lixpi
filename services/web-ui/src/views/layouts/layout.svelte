@@ -11,7 +11,7 @@
     import ProjectDetails from '$src/components/project-details/project-details.svelte'
     import PaymentDetails from '$src/components/subscription-management/payment-details.svelte'
 
-    import AuthService from '$src/services/auth0-service'
+    import AuthService from '$src/services/auth-service'
     import { authStore } from '$src/stores/authStore.ts'
     import { routerStore } from '$src/stores/routerStore.ts'
     import { userStore } from '$src/stores/userStore.ts'

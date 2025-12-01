@@ -2,6 +2,7 @@ services:
 
     lixpi-dynamodb:
         container_name: lixpi-dynamodb
+        profiles: ["main", "deploy"]
         image: amazon/dynamodb-local:latest
         user: "0:0"  # run as root so the volume is writable
         command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data", "-cors", "*", "-delayTransientStatuses"]
@@ -11,9 +12,16 @@ services:
             - dynamodb-data:/data
         networks:
             - nats
+        healthcheck:
+            test: ["CMD-SHELL", "java -version || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 5s
 
     lixpi-dynamodb-admin:
         container_name: lixpi-dynamodb-admin
+        profiles: ["dev"]
         image: aaronshaf/dynamodb-admin
         environment:
             DYNAMO_ENDPOINT: http://lixpi-dynamodb:8000
@@ -22,13 +30,57 @@ services:
             AWS_SECRET_ACCESS_KEY: test
         ports:
             - 8001:8001
-        depends_on:
-            - lixpi-dynamodb
         networks:
             - nats
+        depends_on:
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
+
+    lixpi-caddy:
+        container_name: lixpi-caddy
+        profiles: ["main"]
+        image: lixpi/caddy-cert-manager
+        build:
+            dockerfile: Dockerfile
+            context: infrastructure/pulumi/src/resources/certificate-manager
+        environment:
+            # Local development mode
+            CADDY_LOCAL_MODE: "true"
+            DOMAINS: "localhost"
+            CADDY_EMAIL: ${CERTIFICATE_VALIDATION_EMAIL}
+            STORAGE_TYPE: "local"
+        volumes:
+            - caddy-certs:/certificates
+        networks:
+            - nats
+        # Container exits after generating certificates - no ports needed
+        restart: "no"
+
+    lixpi-localauth0:
+        container_name: lixpi-localauth0
+        profiles: ["main"]
+        image: lixpi/localauth0
+        build:
+            context: services/localauth0
+            dockerfile: Dockerfile
+        ports:
+            - 3000:3000
+        volumes:
+            - localauth0-data:/data
+        networks:
+            - nats
+        healthcheck:
+            test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/.well-known/jwks.json"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 5s
+
 
     lixpi-nats-1:
         container_name: lixpi-nats-1
+        profiles: ["main"]
         image: lixpi/nats
         build:
             dockerfile: Dockerfile
@@ -50,6 +102,7 @@ services:
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -66,11 +119,18 @@ services:
         ]
         networks:
             - nats
-
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
 
     lixpi-nats-2:
         container_name: lixpi-nats-2
-        image: lixpi/nats
+        profiles: ["main"]
+        image: lixpi/nats-2
+        pull_policy: never
         build:
             dockerfile: Dockerfile
             context: services/nats
@@ -87,6 +147,7 @@ services:
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -103,10 +164,18 @@ services:
         ]
         networks:
             - nats
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
 
     lixpi-nats-3:
         container_name: lixpi-nats-3
-        image: lixpi/nats
+        profiles: ["main"]
+        image: lixpi/nats-3
+        pull_policy: never
         build:
             dockerfile: Dockerfile
             context: services/nats
@@ -123,6 +192,7 @@ services:
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -139,9 +209,16 @@ services:
         ]
         networks:
             - nats
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
 
     lixpi-nats-cli:
         container_name: lixpi-nats-cli
+        profiles: ["dev"]
         image: synadia/nats-box:latest
         command: >
             -c "sleep infinity"
@@ -149,14 +226,16 @@ services:
         networks:
             - nats
 
-
     lixpi-web-ui:
         container_name: lixpi-web-ui
+        profiles: ["main"]
         image: lixpi/web-ui
         build:
             dockerfile: services/web-ui/Dockerfile
             context: .
         environment:
+            VITE_MOCK_AUTH: ${VITE_MOCK_AUTH}
+            VITE_MOCK_AUTH0_DOMAIN: ${VITE_MOCK_AUTH0_DOMAIN}
             VITE_API_URL: ${VITE_API_URL}
             VITE_AUTH0_LOGIN_URL: ${VITE_AUTH0_LOGIN_URL}
             VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
@@ -187,12 +266,9 @@ services:
             - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached
 
 
-            - ./packages/lixpi/constants/src:/usr/src/service/packages/lixpi/constants/src:cached
-            - ./packages/lixpi/constants/package.json:/usr/src/service/packages/lixpi/constants/package.json:cached
-            - ./packages/lixpi/debug-tools/src:/usr/src/service/packages/lixpi/debug-tools/src:cached
-            - ./packages/lixpi/debug-tools/package.json:/usr/src/service/packages/lixpi/debug-tools/package.json:cached
-            - ./packages/lixpi/nats-service/src:/usr/src/service/packages/lixpi/nats-service/src:cached
-            - ./packages/lixpi/nats-service/package.json:/usr/src/service/packages/lixpi/nats-service/package.json:cached
+            - ./packages/lixpi/constants:/usr/src/service/packages/lixpi/constants:cached
+            - ./packages/lixpi/debug-tools:/usr/src/service/packages/lixpi/debug-tools:cached
+            - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
             - ./packages-vendor/shadcn-svelte/sites/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
@@ -213,9 +289,17 @@ services:
         stop_signal: SIGTERM
         ports:
             - 3001:5173
+        depends_on:
+            lixpi-api:
+                condition: service_healthy
+                restart: true
+            lixpi-llm-api:
+                condition: service_healthy
+                restart: true
 
     lixpi-api:
         container_name: lixpi-api
+        profiles: ["main"]
         restart: always
         image: lixpi/api
         build:
@@ -248,6 +332,11 @@ services:
             AUTH0_DOMAIN: ${AUTH0_DOMAIN}
             AUTH0_API_IDENTIFIER: ${AUTH0_API_IDENTIFIER}
 
+            # LocalAuth0 mock config
+            MOCK_AUTH0: ${MOCK_AUTH0}
+            MOCK_AUTH0_DOMAIN: ${MOCK_AUTH0_DOMAIN}
+            MOCK_AUTH0_JWKS_URI: ${MOCK_AUTH0_JWKS_URI}
+
             # NATS config
             NATS_SERVERS: ${NATS_SERVERS}
             NATS_AUTH_ACCOUNT: ${NATS_AUTH_ACCOUNT}
@@ -255,6 +344,7 @@ services:
             NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
 
             # AI config
             OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -275,24 +365,15 @@ services:
             - ./services/api/temp-ai-responses:/usr/src/service/temp-ai-responses:cached
 
             # - ./packages:/usr/src/service/packages
-            - ./packages/lixpi/constants/src:/usr/src/service/packages/lixpi/constants/src:cached
-            - ./packages/lixpi/constants/package.json:/usr/src/service/packages/lixpi/constants/package.json:cached
-            - ./packages/lixpi/debug-tools/src:/usr/src/service/packages/lixpi/debug-tools/src:cached
-            - ./packages/lixpi/debug-tools/package.json:/usr/src/service/packages/lixpi/debug-tools/package.json:cached
-            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:cached
-            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:cached
-            - ./packages/lixpi/lambda-service/src:/usr/src/service/packages/lixpi/lambda-service/src:cached
-            - ./packages/lixpi/lambda-service/package.json:/usr/src/service/packages/lixpi/lambda-service/package.json:cached
-            - ./packages/lixpi/sqs-service/src:/usr/src/service/packages/lixpi/sqs-service/src:cached
-            - ./packages/lixpi/sqs-service/package.json:/usr/src/service/packages/lixpi/sqs-service/package.json:cached
-            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:cached
-            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:cached
-            - ./packages/lixpi/sns-service/src:/usr/src/service/packages/lixpi/sns-service/src:cached
-            - ./packages/lixpi/sns-service/package.json:/usr/src/service/packages/lixpi/sns-service/package.json:cached
-            - ./packages/lixpi/nats-service/src:/usr/src/service/packages/lixpi/nats-service/src:cached
-            - ./packages/lixpi/nats-service/package.json:/usr/src/service/packages/lixpi/nats-service/package.json:cached
-            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/packages/lixpi/nats-auth-callout-service/src:cached
-            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/packages/lixpi/nats-auth-callout-service/package.json:cached
+            - ./packages/lixpi/constants:/usr/src/service/packages/lixpi/constants:cached
+            - ./packages/lixpi/debug-tools:/usr/src/service/packages/lixpi/debug-tools:cached
+            - ./packages/lixpi/dynamodb-service:/usr/src/service/packages/lixpi/dynamodb-service:cached
+            - ./packages/lixpi/lambda-service:/usr/src/service/packages/lixpi/lambda-service:cached
+            - ./packages/lixpi/sqs-service:/usr/src/service/packages/lixpi/sqs-service:cached
+            - ./packages/lixpi/ssm-service:/usr/src/service/packages/lixpi/ssm-service:cached
+            - ./packages/lixpi/sns-service:/usr/src/service/packages/lixpi/sns-service:cached
+            - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
+            - ./packages/lixpi/nats-auth-callout-service:/usr/src/service/packages/lixpi/nats-auth-callout-service:cached
 
         networks:
             - nats
@@ -308,6 +389,89 @@ services:
         ports:
             - 3005:3000
             - 35795:35795
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/health-check || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+        depends_on:
+            # lixpi-pulumi-init:
+            #     condition: service_completed_successfully
+            #     restart: true
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
+            lixpi-localauth0:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-1:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-2:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-3:
+                condition: service_healthy
+                restart: true
+
+    lixpi-llm-api:
+        container_name: lixpi-llm-api
+        profiles: ["main"]
+        restart: always
+        image: lixpi/llm-api
+        build:
+            dockerfile: services/llm-api/Dockerfile
+            context: .
+        environment:
+            # Force color output in the terminal
+            FORCE_COLOR: 1
+            PYTHONUNBUFFERED: 1
+
+            # NATS configuration
+            NATS_SERVERS: ${NATS_SERVERS}
+            NATS_NKEY_SEED: ${NATS_LLM_SERVICE_NKEY_SEED}
+
+            # Auth0 configuration (for JWT verification)
+            AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+            AUTH0_API_IDENTIFIER: ${AUTH0_API_IDENTIFIER}
+
+            # AI Provider API Keys
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+
+            # Circuit breaker settings
+            LLM_TIMEOUT_SECONDS: 1200
+
+            # Logging
+            LOG_LEVEL: INFO
+        volumes:
+            # Mount source for hot-reload during development
+            - ./services/llm-api/src:/app/src:cached
+            - ./services/llm-api/pyproject.toml:/app/pyproject.toml:cached
+            # Mount lixpi packages for development
+            - ./packages/lixpi/constants/python:/app/packages/lixpi/constants/python:cached
+            - ./packages/lixpi/debug-tools/python:/app/packages/lixpi/debug-tools/python:cached
+            - ./packages/lixpi/nats-service/python:/app/packages/lixpi/nats-service/python:cached
+            # TLS certificates for NATS connection
+            - caddy-certs:/opt/nats/certs:ro
+
+        networks:
+            - nats
+        working_dir: /app
+        # Health check
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
+        ports:
+            - 8002:8000
+        depends_on:
+            lixpi-api:
+                condition: service_healthy
+                restart: true
 
     # SST container is deprecated and will be removed later in the future. DON'T USE IT !
     # lixpi-sst:
@@ -378,6 +542,7 @@ services:
 
     lixpi-pulumi:
         container_name: lixpi-pulumi
+        profiles: ["deploy"]
         restart: always
         image: lixpi/pulumi
         build:
@@ -425,6 +590,8 @@ services:
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
+            NATS_LLM_SERVICE_NKEY_SEED: ${NATS_LLM_SERVICE_NKEY_SEED}
+            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
 
             # App host addresses
@@ -457,39 +624,9 @@ services:
 
             # Pulumi infrastructure
             - pulumi-local-state:/var/opt/lixpi/.pulumi-local-state
-            - ./infrastructure/pulumi:/usr/src/service:cached
 
             # Allow container to access docker on the host machine so that it can build docker images inside the container utilizing docker on the host machine
             - /var/run/docker.sock:/var/run/docker.sock:cached
-
-            # Mounting all services
-            - ./services:/usr/src/service/services:cached
-
-            # Lixpi packages
-            - ./packages/lixpi/constants/src:/usr/src/service/packages/lixpi/constants/src:cached
-            - ./packages/lixpi/constants/package.json:/usr/src/service/packages/lixpi/constants/package.json:cached
-            - ./packages/lixpi/debug-tools/src:/usr/src/service/packages/lixpi/debug-tools/src:cached
-            - ./packages/lixpi/debug-tools/package.json:/usr/src/service/packages/lixpi/debug-tools/package.json:cached
-            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:cached
-            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:cached
-            - ./packages/lixpi/lambda-service/src:/usr/src/service/packages/lixpi/lambda-service/src:cached
-            - ./packages/lixpi/lambda-service/package.json:/usr/src/service/packages/lixpi/lambda-service/package.json:cached
-            - ./packages/lixpi/sqs-service/src:/usr/src/service/packages/lixpi/sqs-service/src:cached
-            - ./packages/lixpi/sqs-service/package.json:/usr/src/service/packages/lixpi/sqs-service/package.json:cached
-            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:cached
-            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:cached
-            - ./packages/lixpi/sns-service/src:/usr/src/service/packages/lixpi/sns-service/src:cached
-            - ./packages/lixpi/sns-service/package.json:/usr/src/service/packages/lixpi/sns-service/package.json:cached
-            - ./packages/lixpi/nats-service/src:/usr/src/service/packages/lixpi/nats-service/src:cached
-            - ./packages/lixpi/nats-service/package.json:/usr/src/service/packages/lixpi/nats-service/package.json:cached
-            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/packages/lixpi/nats-auth-callout-service/src:cached
-            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/packages/lixpi/nats-auth-callout-service/package.json:cached
-
-            # Web-UI specific dependencies
-            - ./packages-vendor/shadcn-svelte/sites/docs/src/lib:/usr/src/service/packages-vendor/shadcn-svelte/sites/docs/src/lib:cached
-
-            # pnpm config
-            - ./pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
         working_dir: /usr/src/service
         entrypoint: /bin/bash
         # command: -c "pnpm install && pulumi up --stack dev --non-interactive"
@@ -498,82 +635,27 @@ services:
         networks:
             - nats
 
-    lixpi-caddy:
-        container_name: lixpi-caddy
-        image: lixpi/caddy-cert-manager
-        build:
-            dockerfile: Dockerfile
-            context: infrastructure/pulumi/src/resources/certificate-manager
-        environment:
-            # Local development mode
-            CADDY_LOCAL_MODE: "true"
-            DOMAINS: "localhost"
-            CADDY_EMAIL: ${CERTIFICATE_VALIDATION_EMAIL}
-            STORAGE_TYPE: "local"
-        volumes:
-            - caddy-certs:/certificates
-        networks:
-            - nats
-        # Container exits after generating certificates - no ports needed
+    lixpi-pulumi-init:
+        container_name: lixpi-pulumi-init
+        profiles: ["deploy"]
+        image: lixpi/pulumi-init
+        extends:
+            service: lixpi-pulumi
         restart: "no"
-
-    lixpi-ai-models-synchronization:
-        container_name: lixpi-ai-models-synchronization
-        image: lixpi/ai-models-synchronization
-        build:
-            dockerfile: lambda-functions/ai-models-synchronization/Dockerfile
-            context: .
-        environment:
-            # Force color output in the terminal, required for chalk.js to work
-            FORCE_COLOR: 1
-
-            # Node.js config (native TypeScript execution)
-            NODE_OPTIONS: '--trace-deprecation --abort-on-uncaught-exception --trace-warnings --disable-warning=ExperimentalWarning --experimental-transform-types'
-
-            # Environment
-            ENVIRONMENT: ${ENVIRONMENT}
-
-            # Lambda config
-            LAMBDA_NAME: ai-models-synchronization-local
-            ORG_NAME: ${ORG_NAME:-lixpi}
-            STAGE: ${STAGE:-dev}
-
-            # API keys
-            OPENAI_API_KEY: ${OPENAI_API_KEY}
-            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-
-            # AWS config
-            AWS_REGION: ${AWS_REGION}
-            AWS_PROFILE: ${AWS_PROFILE}
-            DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT:-http://lixpi-dynamodb:8000}
-
-        volumes:
-            # AWS SSO credentials
-            - aws-config:/root/.aws:cached
-            - ./.aws/config:/root/.aws/config:cached
-
-            # Lambda function source (for live editing)
-            - ./lambda-functions/ai-models-synchronization/ai-models-synchronization.ts:/app/ai-models-synchronization.ts:cached
-
-            # # Workspace packages
-            # - ./packages/lixpi/constants/src:/app/packages/lixpi/constants/src:cached
-            # - ./packages/lixpi/constants/package.json:/app/packages/lixpi/constants/package.json:cached
-            # - ./packages/lixpi/debug-tools/src:/app/packages/lixpi/debug-tools/src:cached
-            # - ./packages/lixpi/debug-tools/package.json:/app/packages/lixpi/debug-tools/package.json:cached
-            # - ./packages/lixpi/dynamodb-service/src:/app/packages/lixpi/dynamodb-service/src:cached
-            # - ./packages/lixpi/dynamodb-service/package.json:/app/packages/lixpi/dynamodb-service/package.json:cached
-
-        working_dir: /app
-        command: node handler.ts
-        networks:
-            - nats
-        restart: "no"  # Don't auto-restart, run on-demand
+        entrypoint: []
+        working_dir: /usr/src/service/infrastructure/pulumi
+        command: ["pnpm", "run", "deploy:local"]
+        depends_on:
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
 
 volumes:
     aws-config:    # AWS SSO credentials volume that's shared between multiple containers
     pulumi-local-state:    # A volume where Pulumi stores stack state. Used only for local development.
     caddy-certs:   # Shared volume for certificate storage
     dynamodb-data: # Persistent storage for DynamoDB Local
+    localauth0-data: # Persistent storage for LocalAuth0 mock service
 
 networks:
     nats:

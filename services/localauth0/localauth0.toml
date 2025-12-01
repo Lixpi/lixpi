@@ -1,0 +1,45 @@
+# LocalAuth0 Configuration
+# Mock Auth0 service for local development
+
+issuer = "http://localhost:3000/"
+
+[user_info]
+subject = "local|test-user-001"
+email = "test@local.dev"
+name = "Test User"
+given_name = "Test"
+family_name = "User"
+email_verified = true
+picture = "https://via.placeholder.com/150"
+
+[[custom_claims]]
+name = "stripe_customer_id"
+value = "cus_mock_stripe_test"
+
+[[custom_claims]]
+name = "email"
+value = "test@local.dev"
+
+[[custom_claims]]
+name = "name"
+value = "Test User"
+
+[[custom_claims]]
+name = "given_name"
+value = "Test"
+
+[[custom_claims]]
+name = "family_name"
+value = "User"
+
+[[custom_claims]]
+name = "picture"
+value = "https://via.placeholder.com/150"
+given_name = "Test"
+family_name = "User"
+email_verified = true
+picture = "https://via.placeholder.com/150"
+
+[[custom_claims]]
+name = "stripe_customer_id"
+value = "cus_mock_stripe_test"

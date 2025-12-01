@@ -3,14 +3,21 @@
 import c from 'chalk'
 import jwt from 'jsonwebtoken'
 import jwksClient from 'jwks-rsa'
-import { fromSeed } from '@nats-io/nkeys'
+import { fromSeed, fromPublic } from '@nats-io/nkeys'
 import { encodeUser, encodeAuthorizationResponse } from '@nats-io/jwt'
 
 import type { NatsService } from '@lixpi/nats-service'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 
-const getPermissionsForUser = (userId: string, subscriptions) => {
+const getPermissionsForUser = (userId: string, subscriptions, servicePermissions?: { pub: { allow: string[] }, sub: { allow: string[] } }) => {
+    // If service-specific permissions are provided, use them
+    if (servicePermissions) {
+        info('Service permissions (restricted service account):', servicePermissions)
+        return servicePermissions
+    }
+
+    // Regular user permissions (Auth0-authenticated users)
     const resolvedPermissions = {
         pub: {
             allow: [
@@ -37,6 +44,74 @@ const getPermissionsForUser = (userId: string, subscriptions) => {
 
     info('Final resolved permissions:', resolvedPermissions)
     return resolvedPermissions
+}
+
+/**
+ * Verify a self-issued JWT signed with an NKey (Ed25519)
+ * Used for internal service-to-service authentication (e.g., llm-api)
+ */
+export const verifyNKeySignedJWT = async ({
+    token,
+    publicKey
+}: {
+    token: string,
+    publicKey: string
+}) => {
+    if (!token) return { error: "No token provided" }
+    if (!publicKey) return { error: "No public key provided" }
+
+    try {
+        // Decode JWT without verification first to check issuer
+        const decoded = jwt.decode(token, { complete: true })
+
+        if (!decoded || typeof decoded === 'string') {
+            return { error: "Invalid JWT format" }
+        }
+
+        // Verify the issuer matches the expected public key
+        if (decoded.payload.iss !== publicKey) {
+            return { error: `JWT issuer mismatch: expected ${publicKey}, got ${decoded.payload.iss}` }
+        }
+
+        // Create NKey verifier from public key
+        const nkey = fromPublic(publicKey)
+
+        // Extract signature from JWT (remove "Bearer " prefix if present)
+        const parts = token.split('.')
+        if (parts.length !== 3) {
+            return { error: "Invalid JWT structure" }
+        }
+
+        // For NKey-signed JWTs, we need to verify using the NKey library
+        // The signature is base64url-encoded in the third part
+        const message = `${parts[0]}.${parts[1]}`
+        const signatureB64 = parts[2]
+
+        // Convert base64url to base64
+        const signature = Buffer.from(signatureB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
+
+        // Verify signature
+        const isValid = nkey.verify(Buffer.from(message), signature)
+
+        if (!isValid) {
+            return { error: "Invalid NKey signature" }
+        }
+
+        // Check expiration
+        const now = Math.floor(Date.now() / 1000)
+        if (decoded.payload.exp && decoded.payload.exp < now) {
+            return { error: "JWT expired" }
+        }
+
+        // Check not-before
+        if (decoded.payload.nbf && decoded.payload.nbf > now) {
+            return { error: "JWT not yet valid" }
+        }
+
+        return { decoded: decoded.payload }
+    } catch (error) {
+        return { error: error.message }
+    }
 }
 
 export const authenticateTokenOnRequest = async ({
@@ -67,6 +142,84 @@ export const authenticateTokenOnRequest = async ({
     ))
 }
 
+// Authenticate internal services using self-issued JWTs signed with NKeys.
+// Services sign their own tokens with Ed25519 private keys, we verify the signature
+// using the registered public key. No external Auth0 calls, just cryptographic verification.
+const authenticateServiceJWT = async (
+    token: string,
+    serviceConfig: ServiceAuthConfig
+): Promise<{ userId: string, permissions: ServiceAuthConfig['permissions'] }> => {
+    info(`Auth callout: Verifying self-issued JWT from service (issuer: ${serviceConfig.publicKey.substring(0, 10)}...)`)
+
+    const { decoded, error } = await verifyNKeySignedJWT({
+        token,
+        publicKey: serviceConfig.publicKey
+    })
+
+    if (error) {
+        err('Self-issued JWT verification failed:', error)
+        throw new Error(`Self-issued JWT verification failed: ${error}`)
+    }
+
+    const userId = decoded.sub
+    if (!userId) {
+        throw new Error('User ID ("sub") missing in self-issued JWT')
+    }
+
+    // Verify the userId matches the expected service identity
+    if (userId !== serviceConfig.userId) {
+        throw new Error(`User ID mismatch: expected ${serviceConfig.userId}, got ${userId}`)
+    }
+
+    info(`Auth callout: Service authenticated via self-issued JWT (${userId})`)
+
+    return { userId, permissions: serviceConfig.permissions }
+}
+
+// Authenticate regular users via Auth0 OAuth2/OIDC flow.
+// User tokens are issued by Auth0, we verify them against Auth0's JWKS endpoint.
+// Permissions come from subscription definitions, not hardcoded in the token.
+const authenticateAuth0JWT = async (
+    token: string,
+    getKey: any,
+    jwtAudience: string,
+    jwtIssuer: string,
+    jwtAlgorithms: string[]
+): Promise<{ userId: string }> => {
+    info('Auth callout: Verifying Auth0 JWT...')
+
+    const { decoded, error } = await authenticateTokenOnRequest({
+        getKey,
+        token,
+        audience: jwtAudience,
+        issuer: jwtIssuer,
+        algorithms: jwtAlgorithms
+    })
+
+    if (error) {
+        err('Auth0 token verification failed:', error)
+        throw new Error(`Token verification failed: ${error.message}`)
+    }
+
+    const userId = decoded.sub
+    if (!userId) {
+        throw new Error('User ID ("sub") missing in Auth0 JWT')
+    }
+
+    info(`Auth callout: Auth0 user authenticated (${userId})`)
+
+    return { userId }
+}
+
+type ServiceAuthConfig = {
+    publicKey: string
+    userId: string
+    permissions: {
+        pub: { allow: string[] }
+        sub: { allow: string[] }
+    }
+}
+
 export const startNatsAuthCalloutService = async ({
     natsService,
     subscriptions,
@@ -76,7 +229,8 @@ export const startNatsAuthCalloutService = async ({
     jwtIssuer,
     jwksUri,
     jwtAlgorithms = ['RS256'],
-    natsAuthAccount
+    natsAuthAccount,
+    serviceAuthConfigs = []
   }: {
     natsService: NatsService,
     subscriptions: any[],
@@ -87,6 +241,7 @@ export const startNatsAuthCalloutService = async ({
     jwksUri: string,
     jwtAlgorithms?: string[]
     natsAuthAccount: string
+    serviceAuthConfigs?: ServiceAuthConfig[]
   }) => {
     if (!nKeyIssuerSeed) {
         throw new Error('Issuer seed for NATS auth callout not provided!')
@@ -154,27 +309,31 @@ export const startNatsAuthCalloutService = async ({
                 throw new Error('Token missing in client connect options.')
             }
 
-            // console.log("  Verifying Auth0 token...")
-            const { decoded, error } = await authenticateTokenOnRequest({
-                getKey,
-                token: auth0token,
-                audience: jwtAudience,
-                issuer: jwtIssuer,
-                algorithms: jwtAlgorithms
-            })
+            // Check if this is a self-issued JWT from a registered service (NKey-signed)
+            // Decode token to check issuer without verification
+            const decodedToken = jwt.decode(auth0token, { complete: true })
 
-            if (error) {
-                err('authenticateTokenOnRequest() failed', error)
-                throw new Error(`Token verification failed: ${error.message}`)
-            }
+            // Find matching service auth config by issuer
+            const serviceConfig = serviceAuthConfigs.find(
+                config => decodedToken && typeof decodedToken !== 'string' &&
+                         decodedToken.payload.iss === config.publicKey
+            )
 
-            const userId = decoded.sub
-            if (!userId) {
-                throw new Error('User ID ("sub") missing in provided JWT claims.')
+            // Authenticate and get user identity + permissions
+            let userId: string
+            let servicePermissions: ServiceAuthConfig['permissions'] | undefined
+
+            if (serviceConfig) {
+                const result = await authenticateServiceJWT(auth0token, serviceConfig)
+                userId = result.userId
+                servicePermissions = result.permissions
+            } else {
+                const result = await authenticateAuth0JWT(auth0token, getKey, jwtAudience, jwtIssuer, jwtAlgorithms)
+                userId = result.userId
             }
 
             // Get user permissions
-            const permissions = getPermissionsForUser(userId, subscriptions)
+            const permissions = getPermissionsForUser(userId, subscriptions, servicePermissions)
 
             // Each session has a unique nkey
             const userNkey = decodedRequest.nats.user_nkey

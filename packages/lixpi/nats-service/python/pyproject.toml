@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lixpi-nats-service"
+version = "0.0.1"
+description = "Shared NATS service client for Python services"
+requires-python = ">=3.8"
+dependencies = [
+    "nats-py>=2.0.0",
+    "nkeys>=0.1.0",
+    "colorama>=0.4.6"
+]
+
+[tool.setuptools]
+packages = ["lixpi_nats_service"]
+
+[tool.setuptools.package-dir]
+lixpi_nats_service = "."

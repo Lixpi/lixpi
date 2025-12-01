@@ -5,7 +5,7 @@
 
 	import { lixpiLogo } from '../svgIcons/index.ts'
 
-	import AuthService from '../services/auth0-service.ts'
+	import AuthService from '../services/auth-service.ts'
 
 	// export let currentRoute
 

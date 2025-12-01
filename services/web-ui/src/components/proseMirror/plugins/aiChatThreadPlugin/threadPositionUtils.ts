@@ -2,13 +2,7 @@
 import type { EditorView } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 
-/**
- * Get position information for a specific thread in the document
- * @param view - EditorView instance
- * @param threadId - The threadId to find
- * @param threadNodeType - The node type name for threads (to avoid circular dependency)
- * @returns Object with index (0-based position) and totalCount, or null if not found
- */
+// Get position information for a specific thread in the document
 export function getThreadPositionInfo(
     view: EditorView,
     threadId: string,

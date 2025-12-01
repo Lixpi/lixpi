@@ -3,10 +3,15 @@
 import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
-import * as dockerBuild from '@pulumi/docker-build'
 
+import {
+    buildDockerImage,
+    type DockerImageBuildResult
+} from '../../helpers/docker/build-helpers.ts'
 import { createServiceDiscoverySidecar } from './nats-service-discovery-sidecar.ts'
-import type { CertificateHelper } from '../certificate-manager/certificate-helper.ts'
+import {
+    type CertificateHelper
+} from '../certificate-manager/certificate-helper.ts'
 
 const {
     ORG_NAME,
@@ -51,6 +56,7 @@ export interface NatsClusterServiceArgs {
         NATS_SERVER_NAME_BASE: string
         NATS_AUTH_NKEY_ISSUER_PUBLIC: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
+        NATS_LLM_SERVICE_NKEY_PUBLIC: string
         NATS_SAME_ORIGIN: string
         NATS_ALLOWED_ORIGINS: string
         NATS_DEBUG_MODE: string
@@ -98,45 +104,16 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
 
     // Pure CloudMap approach - no load balancers ever!
 
-    // Create ECR Repository
-    const repository = new aws.ecr.Repository(`${serviceName}-repo`, {
-        name: serviceName.toLowerCase(),
-        imageScanningConfiguration: {
-            scanOnPush: true,
-        },
-        imageTagMutability: 'MUTABLE',
-        forceDelete: true,
-    })
-
-    // Create container image in ECR using Docker provider
-    // Use timestamp to ensure unique tags for each deployment
-    const imageTag = `${Date.now()}`;
-    const image = new dockerBuild.Image(`${serviceName}-image-${imageTag}`, {
-        context: {
-            location: dockerBuildContext,
-        },
-        dockerfile: {
-            location: dockerfilePath,
-        },
+    // Build and push NATS Docker image to ECR
+    const { repository, image, imageRef, repositoryUrl } = buildDockerImage({
+        imageName: serviceName,
+        dockerBuildContext,
+        dockerfilePath,
         platforms: ['linux/amd64'],
-        tags: [
-            pulumi.interpolate`${repository.repositoryUrl}:${imageTag}`,
-            pulumi.interpolate`${repository.repositoryUrl}:latest`
-        ],
         push: true,
-        registries: [
-            {
-                address: repository.repositoryUrl,
-                username: aws.ecr.getAuthorizationTokenOutput({}).userName,
-                password: aws.ecr.getAuthorizationTokenOutput({}).password,
-            }
-        ],
         buildOnPreview: true,
-        noCache: true, // Force rebuild every time
-    }, {
-        replaceOnChanges: ['*'],
-        dependsOn: [repository],
-    });
+        noCache: true,
+    }) as DockerImageBuildResult;
 
     // Create PRIVATE CloudMap service for internal cluster communication
     const privateDiscoveryService = new aws.servicediscovery.Service(`${serviceName}-private-discovery`, {
@@ -163,11 +140,11 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         ecsCluster: ecsCluster,
         vpc: vpc,
         privateSubnets: privateSubnets,
-        functionName: `${serviceName}-sd`,
+        functionName: `${serviceName}-sidecar`,
         timeout: 60,
         memorySize: 512,
-        dockerBuildContext: '/usr/src/service/src/resources/NATS-cluster/nats-service-discovery-sidecar',
-        dockerfilePath: '/usr/src/service/src/resources/NATS-cluster/nats-service-discovery-sidecar/Dockerfile',
+        dockerBuildContext: '/usr/src/service/infrastructure/pulumi/src/resources/NATS-cluster/nats-service-discovery-sidecar',
+        dockerfilePath: '/usr/src/service/infrastructure/pulumi/src/resources/NATS-cluster/nats-service-discovery-sidecar/Dockerfile',
     });
 
     // ECS Task Execution Role - used by ECS agent
@@ -331,12 +308,11 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         taskRoleArn: taskRole.arn,
         containerDefinitions: pulumi.all([
             logGroup.name,
-            repository.repositoryUrl,
-            imageTag,
-        ]).apply(([logGroupName, repoUrl, tag]) =>
+            imageRef,
+        ]).apply(([logGroupName, imageReference]) =>
             JSON.stringify([{
                 name: serviceName,
-                image: `${repoUrl}:${tag}`,
+                image: imageReference,
                 cpu: cpu,
                 memory: memory,
                 essential: true,
@@ -452,6 +428,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         },
         forceNewDeployment: true,
         enableExecuteCommand: true, // Enable for debugging
+        waitForSteadyState: false,  // Don't wait - let it deploy async
     }, {
         customTimeouts: {
             create: '10m',

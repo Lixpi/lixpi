@@ -26,8 +26,8 @@ flowchart LR
     PMEditor -->|creates| Plugins[Plugin Stack]
     Plugins -->|compose| EditorView
     EditorView -->|doc JSON| DocumentService
-    Svelte --> AiChatService
-    AiChatService --> SegmentsReceiver
+    Svelte --> AiInteractionService
+    AiInteractionService --> SegmentsReceiver
     SegmentsReceiver -->|events| AiChatPlugin
     AiChatPlugin -->|insert nodes/marks| EditorView
     EditorView --> MenuBar[prosemirror-menu]
@@ -274,7 +274,7 @@ Note: The editor currently ships with the TaskRow Svelte renderer commented out 
 
 ### aiChatPlugin (`plugins/aiChatPlugin.js`)
 - On `use:aiChat` with `{threadId, nodePos}` meta, transforms the current thread into a compact messages array: groups blocks by role (assistant when node type is `aiResponseMessage`, else user) and reduces adjacent same-role blocks.
-- Calls the provided callback with the transformed messages and `threadId` (Svelte wires it to `AiChatService`).
+- Calls the provided callback with the transformed messages and `threadId` (Svelte wires it to `AiInteractionService`).
 - Subscribes to an external `SegmentsReceiver` stream with **multi-thread support**:
   - START_STREAM with `threadId`: inserts an empty `aiResponseMessage` in the specific thread (no inner paragraph) with animation flags and provider; ensures exactly one empty paragraph immediately after and moves the cursor into it.
   - STREAMING with `threadId`: for each segment:
@@ -290,7 +290,7 @@ sequenceDiagram
   participant AU as aiUserInputPlugin
   participant AT as aiTriggerPlugin
   participant AC as aiChatPlugin
-  participant S as AiChatService
+  participant S as AiInteractionServiceService
   participant SR as SegmentsReceiver
   UI->>AU: Enter in aiUserInput
   AU->>EditorView: insert:aiUserMessage(pos, content)
@@ -317,7 +317,7 @@ sequenceDiagram
 - Instantiates `ProseMirrorEditor` with initial doc JSON and three callbacks:
   - `onEditorChange(json)`: debounced save via `DocumentService.updateDocument` and store flags.
   - `onProjectTitleChange(title)`: immediate title sync to stores and persistence.
-  - `onAiChatSubmit(messages)`: forwards to `AiChatService.sendMessage` (which feeds `SegmentsReceiver`).
+  - `onAiChatSubmit(messages)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).r`).
 - Manages teardown on unmount and re-creation when document metadata changes.
 - Renders a model selector UI and keeps a sticky menubar via CSS.
 
@@ -329,7 +329,7 @@ flowchart LR
   PMEditor -->|aiChatPlugin| onAiChatSubmit
   onEditorChange --> DocumentService
   onProjectTitleChange --> DocumentService & Stores
-  onAiChatSubmit --> AiChatService --> SegmentsReceiver --> aiChatPlugin
+  onAiChatSubmit --> AiInteractionService --> SegmentsReceiver --> aiChatPlugintPlugin
 ```
 
 

@@ -87,7 +87,7 @@
             content: "";
             position: absolute;
             z-index: 99;
-            right: $crossOffset;
+            right: var(--arrow-cross-offset, $crossOffset);
         }
 
         &:before {
@@ -109,7 +109,7 @@
             content: "";
             position: absolute;
             z-index: 99;
-            right: $crossOffset;
+            right: var(--arrow-cross-offset, $crossOffset);
         }
 
         &:before {
@@ -131,7 +131,7 @@
             content: "";
             position: absolute;
             z-index: 99;
-            top: $crossOffset;
+            top: var(--arrow-cross-offset, $crossOffset);
         }
 
         &:before {
@@ -153,7 +153,7 @@
             content: "";
             position: absolute;
             z-index: 99;
-            top: $crossOffset;
+            top: var(--arrow-cross-offset, $crossOffset);
         }
 
         &:before {

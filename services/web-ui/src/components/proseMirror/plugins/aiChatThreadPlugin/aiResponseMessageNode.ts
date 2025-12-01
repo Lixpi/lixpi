@@ -68,6 +68,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             <div className="ai-response-message">
                 <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
                 <div className="ai-response-message-boundaries-indicator"></div>
+                <div className="ai-response-message-spinner" aria-hidden="true"></div>
                 <div className="ai-response-message-content"></div>
             </div>
         </div>
@@ -77,6 +78,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     const aiResponseMessageContainer = parentWrapper.querySelector('.ai-response-message')
     const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
     const messageBoundariesIndicator = parentWrapper.querySelector('.ai-response-message-boundaries-indicator')
+    const spinnerElement = parentWrapper.querySelector('.ai-response-message-spinner')
     const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
 
     // // Create an accept button
@@ -139,6 +141,19 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         userAvatarContainer.classList.toggle('node-receiving-animation', node.attrs.isReceivingAnimation)
     }
 
+    const updateSpinnerState = () => {
+        const isWaitingForContent = node.childCount === 0 && node.attrs.isReceivingAnimation
+
+        aiResponseMessageContainer.classList.toggle('is-empty', isWaitingForContent)
+
+        if (spinnerElement) {
+            spinnerElement.classList.toggle('is-active', isWaitingForContent)
+        }
+    }
+
+    updateAnimation()
+    updateSpinnerState()
+
     // Return the node view object
     return {
         dom: parentWrapper, // The outer DOM node of the node view
@@ -151,6 +166,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
             node = updatedNode    // Update the node reference and refresh the animation
             updateAnimation()    // Update the animation state
+            updateSpinnerState()
 
             return true    // Indicate successful update
         },

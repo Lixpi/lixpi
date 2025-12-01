@@ -4,25 +4,21 @@ import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
-// INFO
-// Provider	               Use cases
-// @pulumi/docker-build	   Anything related to building images with docker build.
-// @pulumi/docker	       Everything else – including running containers and creating networks.
-import * as dockerBuild from '@pulumi/docker-build'
-
-
-
 import {
     formatStageResourceName,
 } from '@lixpi/constants'
+
+import {
+    buildDockerImage,
+    type DockerImageBuildResult
+} from '../helpers/docker/build-helpers.ts'
 
 const {
     ORG_NAME,
     STAGE
 } = process.env
 
-// Configuration interface for the main API service
-export interface MainApiServiceArgs {
+export type MainApiServiceArgs = {
     // Infrastructure
     ecsCluster: {
         id: pulumi.Output<string>
@@ -39,12 +35,6 @@ export interface MainApiServiceArgs {
     cpu?: number
     memory?: number
     desiredCount?: number
-
-    // Domain & TLS
-    domainName: string
-    // hostedZoneId: string
-    // hostedZoneName: string
-    // certificateArn: pulumi.Input<string>
 
     // Resource bindings
     resourceBindings: {
@@ -80,6 +70,7 @@ export interface MainApiServiceArgs {
         NATS_AUTH_NKEY_ISSUER_PUBLIC: string
         NATS_AUTH_XKEY_ISSUER_SEED: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
+        NATS_LLM_SERVICE_NKEY_PUBLIC: string
 
         ORIGIN_HOST_URL: string
         API_HOST_URL: string
@@ -108,61 +99,25 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         cpu = 512,        // 0.5 vCPU
         memory = 512,    // 512 MiB
         desiredCount = 1,
-
-        domainName,
-        // certificateArn,
-
         resourceBindings,
         environment,
         dockerBuildContext,
         dockerfilePath,
     } = args
 
-    const serviceDomainName = `${serviceName}-${domainName}`
-
     // Format names consistently
     const formattedServiceName = formatStageResourceName(serviceName, ORG_NAME, STAGE)
-    // const loadBalancerName = formatStageResourceName(`${serviceName}-ALB`, ORG_NAME, STAGE)
 
-    // Create ECR Repository
-    const repository = new aws.ecr.Repository(`${formattedServiceName}-repo`, {
-        name: formattedServiceName.toLowerCase(),
-        imageScanningConfiguration: {
-            scanOnPush: true,
-        },
-        imageTagMutability: 'MUTABLE',
-        forceDelete: true,
-    })
-
-    // Create container image in ECR using Docker provider
-    // Use timestamp to ensure unique tags for each deployment
-    const imageTag = `${Date.now()}`;
-    const image = new dockerBuild.Image(`${formattedServiceName}-image-${imageTag}`, {
-        context: {
-            location: dockerBuildContext,
-        },
-        dockerfile: {
-            location: dockerfilePath,
-        },
+        // Build and push main-api Docker image to ECR
+    const { repository, image, imageRef } = buildDockerImage({
+        imageName: serviceName,
+        dockerBuildContext,
+        dockerfilePath,
         platforms: ['linux/amd64'],
-        tags: [
-            pulumi.interpolate`${repository.repositoryUrl}:${imageTag}`,
-            pulumi.interpolate`${repository.repositoryUrl}:latest`
-        ],
         push: true,
-        registries: [
-            {
-                address: repository.repositoryUrl,
-                username: aws.ecr.getAuthorizationTokenOutput({}).userName,
-                password: aws.ecr.getAuthorizationTokenOutput({}).password,
-            }
-        ],
         buildOnPreview: true,
         noCache: true,
-    }, {
-        replaceOnChanges: ['*'],
-        dependsOn: [repository],
-    });
+    }) as DockerImageBuildResult;
 
     // ECS Task Execution Role - used by ECS agent
     const executionRole = new aws.iam.Role(`${formattedServiceName}-execution-role`, {
@@ -331,11 +286,10 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         taskRoleArn: taskRole.arn,
         containerDefinitions: pulumi.all([
             logGroup.name,
-            repository.repositoryUrl,
-            imageTag,
-        ]).apply(([logGroupName, repositoryUrl, tag]) => JSON.stringify([{
+            imageRef,
+        ]).apply(([logGroupName, imageReference]) => JSON.stringify([{
             name: formattedServiceName,
-            image: `${repositoryUrl}:${tag}`,
+            image: imageReference,
             cpu: cpu,
             memory: memory,
             essential: true,
@@ -368,54 +322,11 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         dependsOn: [image],  // Ensure image is fully built and pushed before creating task definition
     })
 
-    // Security group for the load balancer
-    // const lbSecurityGroup = new aws.ec2.SecurityGroup(`${formattedServiceName}-lb-sg`, {
-    //     vpcId: vpc.id,
-    //     description: 'Security group for the API load balancer',
-    //     ingress: [
-    //         {
-    //             // Allow HTTP traffic from anywhere
-    //             protocol: 'tcp',
-    //             fromPort: 80,
-    //             toPort: 80,
-    //             cidrBlocks: ['0.0.0.0/0'],
-    //             description: 'Allow HTTP inbound traffic',
-    //         },
-    //         {
-    //             // Allow HTTPS traffic from anywhere
-    //             protocol: 'tcp',
-    //             fromPort: 443,
-    //             toPort: 443,
-    //             cidrBlocks: ['0.0.0.0/0'],
-    //             description: 'Allow HTTPS inbound traffic',
-    //         },
-    //     ],
-    //     egress: [
-    //         {
-    //             // Allow all outbound traffic
-    //             protocol: '-1',
-    //             fromPort: 0,
-    //             toPort: 0,
-    //             cidrBlocks: ['0.0.0.0/0'],
-    //             description: 'Allow all outbound traffic',
-    //         },
-    //     ],
-    // })
-
     // Security group for the ECS tasks
     const taskSecurityGroup = new aws.ec2.SecurityGroup(`${formattedServiceName}-task-sg`, {
         vpcId: vpc.id,
         description: 'Security group for the API ECS tasks',
-        ingress: [
-            // {
-            //     // Allow traffic from the load balancer security group to container port
-            //     protocol: 'tcp',
-            //     fromPort: containerPort,
-            //     toPort: containerPort,
-            //     securityGroups: [lbSecurityGroup.id],
-            //     description: 'Allow inbound traffic from the load balancer',
-            // },
-        ],
+        ingress: [],
         egress: [
             {
                 // Allow all outbound traffic
@@ -427,75 +338,6 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
             },
         ],
     })
-
-    // Create Application Load Balancer
-    // const loadBalancer = new aws.lb.LoadBalancer(loadBalancerName, {
-    //     name: loadBalancerName,
-    //     internal: false,
-    //     loadBalancerType: 'application',
-    //     securityGroups: [lbSecurityGroup.id],
-    //     subnets: publicSubnets.map(subnet => subnet.id),
-    //     enableDeletionProtection: false,
-    //     idleTimeout: 60,
-    //     tags: {
-    //         Name: loadBalancerName,
-    //     },
-    // })
-
-    // Create target group for the ECS service
-    // const targetGroup = new aws.lb.TargetGroup(`${formattedServiceName}-tg`, {
-    //     name: formatStageResourceName(`${serviceName}-tg`, ORG_NAME, STAGE),
-    //     port: containerPort,
-    //     protocol: 'HTTP',
-    //     targetType: 'ip',
-    //     vpcId: vpc.id,
-    //     deregistrationDelay: 30,
-    //     healthCheck: {
-    //         enabled: true,
-    //         path: '/health-check',
-    //         port: 'traffic-port',
-    //         healthyThreshold: 2,
-    //         unhealthyThreshold: 2,
-    //         timeout: 5, // must be less than interval
-    //         interval: 10,
-    //         matcher: '200,302',
-    //     },
-    //     stickiness: {
-    //         type: 'lb_cookie',
-    //         cookieDuration: 3 * 60 * 60,  // 3 hours
-    //         enabled: true,
-    //     },
-    // })
-
-    // Create HTTPS listener
-    // const httpsListener = new aws.lb.Listener(`${formattedServiceName}-https-listener`, {
-    //     loadBalancerArn: loadBalancer.arn,
-    //     port: 443,
-    //     protocol: 'HTTPS',
-    //     sslPolicy: 'ELBSecurityPolicy-2016-08',
-    //     certificateArn: certificateArn,
-    //     defaultActions: [{
-    //         type: 'forward',
-    //         targetGroupArn: targetGroup.arn,
-    //     }],
-    // }, {
-    //     // dependsOn: []
-    // })
-
-    // Create HTTP listener that redirects to HTTPS
-    // const httpListener = new aws.lb.Listener(`${formattedServiceName}-http-listener`, {
-    //     loadBalancerArn: loadBalancer.arn,
-    //     port: 80,
-    //     protocol: 'HTTP',
-    //     defaultActions: [{
-    //         type: 'redirect',
-    //         redirect: {
-    //             port: '443',
-    //             protocol: 'HTTPS',
-    //             statusCode: 'HTTP_301',
-    //         },
-    //     }],
-    // })
 
     // Create ECS Service
     const ecsService = new aws.ecs.Service(`${formattedServiceName}-service`, {
@@ -515,12 +357,6 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
             securityGroups: [taskSecurityGroup.id],
             assignPublicIp: false,  // Changed from true to false since we're in private subnets
         },
-        // loadBalancers: [{
-        //     targetGroupArn: targetGroup.arn,
-        //     containerName: formattedServiceName,
-        //     containerPort: containerPort,
-        // }],
-        // healthCheckGracePeriodSeconds: 30,
         forceNewDeployment: true,  // Ensure we deploy a fresh version on updates
         enableEcsManagedTags: true,
         propagateTags: 'SERVICE',
@@ -545,23 +381,14 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         executionRole,
         taskRole,
         logGroup,
-        // loadBalancer,
-        // targetGroup,
-        // httpsListener,
-        // httpListener,
         ecsService,
-        // lbSecurityGroup,
         taskSecurityGroup,
 
         // Outputs
         outputs: {
             serviceName: ecsService.name,
             serviceArn: ecsService.id,
-            apiUrl: pulumi.interpolate`https://${serviceDomainName}`,
-            // loadBalancerDns: loadBalancer.dnsName,
-            // loadBalancerHostedZoneId: loadBalancer.zoneId,
             containerPort,
-            serviceEndpoint: serviceDomainName,
         },
     }
 }

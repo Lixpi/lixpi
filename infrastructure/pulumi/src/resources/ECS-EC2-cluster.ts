@@ -1,5 +1,17 @@
 'use strict'
 
+/**
+ * ⚠️ DEPRECATED - NOT USED ANYMORE ⚠️
+ *
+ * This file creates an ECS cluster with EC2 instances for container hosting.
+ * The infrastructure has been migrated to Fargate-only deployment.
+ *
+ * See: ECS-cluster.ts for the current Fargate-only implementation.
+ *
+ * This file is kept for reference purposes only. If EC2 support is needed
+ * in the future, this code can be used as a starting point.
+ */
+
 import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'

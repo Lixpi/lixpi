@@ -575,9 +575,9 @@ if [ "$CADDY_LOCAL_MODE" = "true" ]; then
     # Wait a bit more for certificate to be fully written
     sleep 5
 
-    # Stop Caddy by finding and killing the process
+    # Stop Caddy gracefully using caddy stop command
     echo "🛑 Stopping Caddy..."
-    pkill caddy || true
+    caddy stop || pkill -9 caddy || true
     sleep 2
 
     # Step 3: Find and copy generated certificates to expected locations

@@ -1,0 +1,8 @@
+{
+  "STREAM_STATUS": {
+    "START_STREAM": "START_STREAM",
+    "STREAMING": "STREAMING",
+    "END_STREAM": "END_STREAM",
+    "ERROR": "ERROR"
+  }
+}

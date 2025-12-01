@@ -4,10 +4,7 @@ import chalk from 'chalk'
 import LambdaService from '@lixpi/lambda-service'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
-import {
-    BILLING_HANDLER_LAMBDA_TARGETS,
-    AuthenticationStatus
-} from '@lixpi/constants'
+import { NATS_SUBJECTS, AuthenticationStatus } from '@lixpi/constants'
 
 import User from '../models/user.ts'
 
@@ -15,6 +12,8 @@ const lambdaService = new LambdaService({
     region: process.env.AWS_REGION,
     ssoProfile: process.env.AWS_PROFILE
 })
+
+const { BILLING_HANDLER_LAMBDA_TARGETS } = NATS_SUBJECTS
 
 const logStats = ({ operation, userId, origin }) => {
     const logOrigin = `Subscription -> ${operation}`

@@ -2,7 +2,11 @@
 
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
-import * as dockerBuild from '@pulumi/docker-build'
+
+import {
+    buildDockerImage,
+    type DockerImageBuildResult
+} from '../../helpers/docker/build-helpers.ts'
 
 // Local helper function (avoiding import issues in Pulumi context)
 const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string =>
@@ -49,8 +53,8 @@ export interface LambdaCertificateManagerResult {
     // ECR Repository for container image
     repository: aws.ecr.Repository
 
-    // Docker image
-    image: dockerBuild.Image
+    // Docker image (from helper)
+    image: DockerImageBuildResult['image']
 
     // Lambda function
     lambdaFunction: aws.lambda.Function
@@ -95,44 +99,14 @@ export const createLambdaCertificateManager = async (
     // Format names consistently
     const formattedFunctionName = formatStageResourceName(functionName, ORG_NAME || 'lixpi', STAGE || 'dev')
 
-    // Create ECR Repository for Lambda
-    const repository = new aws.ecr.Repository(`${formattedFunctionName}-repo`, {
-        name: formattedFunctionName.toLowerCase(),
-        imageScanningConfiguration: {
-            scanOnPush: true,
-        },
-        imageTagMutability: 'MUTABLE',
-        forceDelete: true,
-    })
-
-    // Create container image in ECR using the same Docker image as ECS
-    const imageTag = `${Date.now()}`;
-    const image = new dockerBuild.Image(`${formattedFunctionName}-image-${imageTag}`, {
-        context: {
-            location: dockerBuildContext,
-        },
-        dockerfile: {
-            location: dockerfilePath,
-        },
+    // Build and push certificate manager Lambda Docker image to ECR
+    const { repository, image, imageRef, imageTag } = buildDockerImage({
+        imageName: formattedFunctionName,
+        dockerBuildContext,
+        dockerfilePath,
         platforms: ['linux/amd64'],
-        tags: [
-            pulumi.interpolate`${repository.repositoryUrl}:${imageTag}`,
-            pulumi.interpolate`${repository.repositoryUrl}:latest`
-        ],
         push: true,
-        registries: [
-            {
-                address: repository.repositoryUrl,
-                username: aws.ecr.getAuthorizationTokenOutput({}).userName,
-                password: aws.ecr.getAuthorizationTokenOutput({}).password,
-            }
-        ],
-        buildOnPreview: true,
-        noCache: true,
-    }, {
-        replaceOnChanges: ['*'],
-        dependsOn: [repository],
-    });
+    }) as DockerImageBuildResult;
 
     // Lambda execution role
     const lambdaRole = new aws.iam.Role(`${formattedFunctionName}-role`, {
@@ -318,7 +292,7 @@ export const createLambdaCertificateManager = async (
     const lambdaFunction = new aws.lambda.Function(`${formattedFunctionName}-${imageTag}`, {
         name: `${formattedFunctionName}-${imageTag}`,
         packageType: 'Image',
-        imageUri: pulumi.interpolate`${repository.repositoryUrl}:${imageTag}`,
+        imageUri: imageRef,
         role: lambdaRole.arn,
         timeout,
         memorySize,

@@ -84,7 +84,7 @@ To avoid TLS handshake errors when connecting to `wss://localhost:9222`, you nee
 
 ```bash
 # Extract CA certificate from Docker volume
-docker run --rm -v lixpi-lists_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
+docker run --rm -v lixpi_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
 ```
 
 #### 2. Install Certificate by Operating System

@@ -15,6 +15,7 @@ type InfoBubbleConfig = {
     onClose?: () => void
     closeOnClickOutside?: boolean
     offset?: { x?: number, y?: number }
+    arrowCrossOffset?: number // Optional custom distance of arrow from the edge (overrides CSS default of 8px)
     className?: string
 }
 
@@ -32,6 +33,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         onClose,
         closeOnClickOutside = true,
         offset = { x: 0, y: 20 }, // Default 20px spacing from anchor
+        arrowCrossOffset, // Optional custom arrow cross offset
         className = ''
     } = config
 
@@ -53,6 +55,11 @@ export function createInfoBubble(config: InfoBubbleConfig) {
     const bubbleContainer = dom.querySelector('.bubble-container') as HTMLElement
     const posAnchorEl = positioningAnchor ?? anchor
 
+    // Apply custom arrow cross offset as CSS variable if provided
+    if (arrowCrossOffset !== undefined) {
+        dom.style.setProperty('--arrow-cross-offset', `${arrowCrossOffset}px`)
+    }
+
     // Calculate offset based on arrow side (reusable for original and flipped sides)
     const calculateOffsetForSide = (side: string) => {
         switch (side) {
@@ -71,7 +78,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
 
     // Measure arrow dimensions from actual rendered CSS
     const measureArrowDimensions = () => {
-        if (!bubbleContainer) return { crossOffset: 8, outerSize: 9 }
+        if (!bubbleContainer) return { crossOffset: arrowCrossOffset ?? 8, outerSize: 9 }
 
         const beforeStyle = window.getComputedStyle(bubbleContainer, '::before')
 
@@ -79,11 +86,17 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         const borders = beforeStyle.borderWidth.split(' ').map(parseFloat).filter(b => b > 0)
         const outerSize = Math.max(...borders, 9) // Fallback to 9
 
-        // Extract cross-axis offset (right or top depending on arrow side)
-        const positionValue = (arrowSide === 'top' || arrowSide === 'bottom')
-            ? beforeStyle.right
-            : beforeStyle.top
-        const crossOffset = parseFloat(positionValue) || 8
+        // Use custom arrowCrossOffset if provided, otherwise extract from CSS
+        let crossOffset: number
+        if (arrowCrossOffset !== undefined) {
+            crossOffset = arrowCrossOffset
+        } else {
+            // Extract cross-axis offset (right or top depending on arrow side)
+            const positionValue = (arrowSide === 'top' || arrowSide === 'bottom')
+                ? beforeStyle.right
+                : beforeStyle.top
+            crossOffset = parseFloat(positionValue) || 8
+        }
 
         return { crossOffset, outerSize }
     }

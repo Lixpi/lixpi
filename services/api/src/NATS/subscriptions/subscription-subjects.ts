@@ -9,9 +9,9 @@ import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 import SubscriptionService from '../../services/subscription-service.ts'
 import User from '../../models/user.ts'
 
-import {
-    USER_SUBSCRIPTION_SUBJECTS
-} from '@lixpi/constants'
+import { NATS_SUBJECTS } from '@lixpi/constants'
+
+const { USER_SUBSCRIPTION_SUBJECTS } = NATS_SUBJECTS
 
 // const sqsService = new SQSService()
 const lambdaService = new LambdaService({

@@ -319,7 +319,7 @@
     // Map dropdown's tag-filter to infoBubble's .bubble-header
     .bubble-header {
         .tag-filter {
-            margin-bottom: .3rem;
+            // margin-bottom: .3rem;
 
             .tag-filter-title {
                 font-size: 0.75rem;
@@ -340,7 +340,7 @@
                     font-size: 0.7rem;
                     font-weight: 500;
                     border: 1px solid color.adjust(map-get($s, surfaceBg), $lightness: 8%);
-                    border-radius: 0.25rem;
+                    border-radius: 10px;
                     cursor: pointer;
                     transition: all 0.15s ease;
                     opacity: 0.6;
