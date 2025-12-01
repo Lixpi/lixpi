@@ -2,6 +2,8 @@
 
 Version:  0.0.2
 
+## Preview here: https://slides.com/lixpi/lixpi-ai-bridge-tech-preview/fullscreen
+
 ## Quick Start
 
 ### 1. Environment Setup
