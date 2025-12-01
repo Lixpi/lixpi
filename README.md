@@ -1,4 +1,4 @@
-# lixpi
+# Lixpi AI Bridge
 
 Version:  0.0.2
 
