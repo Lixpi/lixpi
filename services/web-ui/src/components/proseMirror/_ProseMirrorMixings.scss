@@ -1,0 +1,69 @@
+
+@mixin boundaryPointerTriangle($config: ()) {
+    $defaults: (
+        direction: 'right',
+        anchor: 'bottom',
+        horizontalOffset: 4px,
+        verticalOffset: 16px,
+        size: 4px,
+        color: #ff8844,
+        accentColor: null
+    );
+
+    $settings: map-merge($defaults, $config);
+
+    $direction: map-get($settings, direction);
+    $horizontalOffset: map-get($settings, horizontalOffset);
+    $verticalOffset: map-get($settings, verticalOffset);
+    $size: map-get($settings, size);
+    $color: map-get($settings, color);
+    $accentColor: map-get($settings, accentColor);
+    $anchor: map-get($settings, anchor);
+
+    &:after {
+        content: "";
+        position: absolute;
+        border: $size solid transparent;
+
+        @if $anchor == 'top' {
+            top: $verticalOffset;
+        } @else {
+            bottom: $verticalOffset;
+        }
+
+        @if $direction == 'right' {
+            left: 100%;
+            margin-left: $horizontalOffset;
+            border-left-color: $color;
+        } @else if $direction == 'left' {
+            right: 100%;
+            margin-right: $horizontalOffset;
+            border-right-color: $color;
+        }
+    }
+
+    @if $accentColor {
+        &:before {
+            content: "";
+            position: absolute;
+            border: ($size + 2px) solid transparent;
+            z-index: -1;
+
+            @if $anchor == 'top' {
+                top: $verticalOffset - 2px;
+            } @else {
+                bottom: $verticalOffset - 2px;
+            }
+
+            @if $direction == 'right' {
+                left: 100%;
+                margin-left: $horizontalOffset;
+                border-left-color: $accentColor;
+            } @else if $direction == 'left' {
+                right: 100%;
+                margin-right: $horizontalOffset;
+                border-right-color: $accentColor;
+            }
+        }
+    }
+}

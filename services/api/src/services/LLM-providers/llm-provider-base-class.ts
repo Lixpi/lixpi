@@ -32,52 +32,59 @@ class LlmProviderBaseClass {
         this.contentListeners = []
     }
 
-    /**
-     * General purpose circuit breaker for stream processing.
-     * NOTE: No built-in triggers. All triggers must be created by the caller and passed in.
-     * If an empty array is provided, the circuit breaker will never trigger.
-     */
-    createCircuitBreaker(markdownStreamParser?: any, triggers: CircuitBreakerTrigger[] = []) {
+    // Terminate the markdown parser and optionally emit a final message.
+    // Flushes buffered content, resets parser state, emits optional message, and stops parsing.
+    terminateParser(message?: string) {
+        if (!this.markdownStreamParser || typeof this.markdownStreamParser.parseToken !== 'function') {
+            return
+        }
+
+        // First, flush any buffered content to ensure it's emitted before the message
+        if (this.markdownStreamParser.tokensStreamProcessor && typeof this.markdownStreamParser.tokensStreamProcessor.flushBuffer === 'function') {
+            this.markdownStreamParser.tokensStreamProcessor.flushBuffer()
+        }
+
+        // Force exit from current block context by manipulating the parser's state
+        if (this.markdownStreamParser.markdownStreamParser) {
+            const stateMachine = this.markdownStreamParser.markdownStreamParser
+
+            // Reset the parser state to routing (exit any current block)
+            if (typeof stateMachine.resetParser === 'function') {
+                stateMachine.resetParser()
+            }
+
+            // Force the context to indicate we're starting a new line/block
+            if (stateMachine.context) {
+                stateMachine.context.isProcessingNewLine = true
+                stateMachine.context.blockContentBuffer = ''
+            }
+
+            // Reset both block and inline element states to routing
+            if (stateMachine.transitionBlockElementState && stateMachine.transitionInlineElementState) {
+                stateMachine.transitionBlockElementState('routing')
+                stateMachine.transitionInlineElementState('routing')
+            }
+        }
+
+        // Feed the optional message to the parser to naturally generate segments
+        if (message) {
+            this.markdownStreamParser.parseToken(message)
+        }
+
+        // Stop parsing - this will flush remaining content and emit END_STREAM
+        if (typeof this.markdownStreamParser.stopParsing === 'function') {
+            this.markdownStreamParser.stopParsing()
+        }
+    }
+
+    // General purpose circuit breaker for stream processing.
+    // NOTE: No built-in triggers. All triggers must be created by the caller and passed in.
+    // If an empty array is provided, the circuit breaker will never trigger.
+    createCircuitBreaker({ triggers = [] }: { triggers?: CircuitBreakerTrigger[] }) {
         const startTime = Date.now()
 
         const emitCircuitBreakerError = (_reason: string, errorMessage: string) => {
-            // Use the markdown parser's natural parsing ability to emit the error message
-            if (markdownStreamParser && typeof markdownStreamParser.parseToken === 'function') {
-                // First, flush any buffered content to ensure it's emitted before the error
-                if (markdownStreamParser.tokensStreamProcessor && typeof markdownStreamParser.tokensStreamProcessor.flushBuffer === 'function') {
-                    markdownStreamParser.tokensStreamProcessor.flushBuffer()
-                }
-
-                // Force exit from current block context by manipulating the parser's state
-                if (markdownStreamParser.markdownStreamParser) {
-                    const stateMachine = markdownStreamParser.markdownStreamParser
-
-                    // Reset the parser state to routing (exit any current block)
-                    if (typeof stateMachine.resetParser === 'function') {
-                        stateMachine.resetParser()
-                    }
-
-                    // Force the context to indicate we're starting a new line/block
-                    if (stateMachine.context) {
-                        stateMachine.context.isProcessingNewLine = true
-                        stateMachine.context.blockContentBuffer = ''
-                    }
-
-                    // Reset both block and inline element states to routing
-                    if (stateMachine.transitionBlockElementState && stateMachine.transitionInlineElementState) {
-                        stateMachine.transitionBlockElementState('routing')
-                        stateMachine.transitionInlineElementState('routing')
-                    }
-                }
-
-                // Feed the markdown text to the parser to naturally generate segments
-                markdownStreamParser.parseToken(errorMessage)
-
-                // Stop parsing - this will flush remaining content and emit END_STREAM
-                if (markdownStreamParser && typeof markdownStreamParser.stopParsing === 'function') {
-                    markdownStreamParser.stopParsing()
-                }
-            }
+            this.terminateParser(errorMessage)
         }
 
         return {
@@ -143,6 +150,24 @@ class LlmProviderBaseClass {
 
     setInterruptStream() {
         this.interruptStream = true
+    }
+
+    // Stop the active stream gracefully.
+    // Sets the interrupt flag which will cause the streaming loop to stop.
+    // The streaming loop will detect the interrupt flag and call stopParsing() to finalize the stream.
+    // This method should be called when the user manually stops the AI generation.
+    stopStream() {
+        infoStr([
+            chalk.blue('LlmProviderBaseClass -> '),
+            chalk.red('stopStream'),
+            ' :: Setting interrupt flag'
+        ])
+
+        // Set interrupt flag to stop the streaming loop
+        this.interruptStream = true
+
+        // Note: We don't call terminateParser() here - the streaming loop will detect
+        // the interrupt flag and handle termination properly to avoid race conditions
     }
 }
 

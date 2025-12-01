@@ -1,6 +1,7 @@
 'use strict'
 
 import { AI_CHAT_SUBJECTS } from '@lixpi/constants'
+import type { AiModelId, AiChatSendMessagePayload, AiChatStopMessagePayload } from '@lixpi/constants'
 
 import AuthService from './auth0-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
@@ -12,6 +13,9 @@ import { documentStore } from '$src/stores/documentStore.ts'
 
 
 export default class ChatService {
+    instanceKey: string
+    segmentsReceiver: any
+
     constructor(instanceKey: string) {
         this.instanceKey = instanceKey
         this.segmentsReceiver = SegmentsReceiver;
@@ -44,32 +48,38 @@ export default class ChatService {
             alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
             return;
         }
-        this.segmentsReceiver.receiveSegment(data.content);
+        // Backend sends { content: { status, segment, aiProvider }, threadId }
+        // Merge threadId into the content object before passing to receiver
+        this.segmentsReceiver.receiveSegment({ ...data.content, threadId: data.threadId });
     }
 
-    async sendMessage(inputValue) {
-        const organizationId = organizationStore.getData('organizationId')
+    async sendMessage({ messages, aiModel, threadId }: AiChatSendMessagePayload) {
+        console.log('🚀 [SEND_MESSAGE] START', { threadId, aiModel })
 
+        const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
 
-        servicesStore.getData('nats')!.publish(AI_CHAT_SUBJECTS.SEND_MESSAGE, {
+        const payload = {
             token: await AuthService.getTokenSilently(),
             documentId: this.instanceKey,
-            aiModel: documentStore.getData('aiModel'),
-            chatContent: inputValue,
+            messages,
+            aiModel,
+            threadId,
             organizationId
-        })
+        }
+        servicesStore.getData('nats')!.publish(AI_CHAT_SUBJECTS.SEND_MESSAGE, payload)
+    }
 
-        // SocketService.emit({
-        //     event: AI_CHAT_SUBJECTS.SEND_MESSAGE,
-        //     data: {
-        //         documentId: this.instanceKey,
-        //         aiModel: documentStore.getData('aiModel'),
-        //         chatContent: inputValue,
-        //         organizationId,
-        //         // room: this.instanceKey
-        //     }
-        // })
+    async stopMessage({ threadId }: AiChatStopMessagePayload) {
+        console.log('[AI_DBG][SERVICE.stopMessage] called', { documentId: this.instanceKey, threadId })
+
+        const payload = {
+            token: await AuthService.getTokenSilently(),
+            documentId: this.instanceKey,
+            threadId
+        }
+
+        servicesStore.getData('nats')!.publish(AI_CHAT_SUBJECTS.STOP_MESSAGE, payload)
     }
 
     disconnect() {}

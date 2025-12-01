@@ -14,24 +14,14 @@
     import { routerStore } from '$src/stores/routerStore.ts'
     import { documentsStore } from '$src/stores/documentsStore.ts'
     import { documentStore } from '$src/stores/documentStore.ts'
-    import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-    import { servicesStore } from '$src/stores/servicesStore.ts'
-    import { userStore } from '$src/stores/userStore.ts'
 
     import {
         LoadingStatus,
+        type AiChatSendMessagePayload,
+        type AiChatStopMessagePayload
     } from '@lixpi/constants'
 
     import Spinner from `$src/components/spinner.svelte`
-
-    import DropdownMenu from '../inputs/dropdown-menu.svelte'
-    // import UserMenu from '../user-menu.svelte'
-    import DropdownMenuTagPill from '../inputs/dropdown-menu-tag-pill.svelte'
-
-    import {
-        gptAvatarIcon,
-        claudeIcon,
-    } from '$src/svgIcons'
 
     /**
      * @typedef {Object} Props
@@ -48,8 +38,8 @@
     const documentService = new DocumentService()
 
 
-    const onAiChatSubmit = value => {
-        // console.log('onAiChatSubmit', {value, aiChatInstance})
+    const onAiChatSubmit = ({ messages, aiModel, threadId }: AiChatSendMessagePayload) => {
+        // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiChatInstance})
 
         if (!aiChatInstance) {
             console.log('call->onAiChatSubmit', {aiChatInstance, projectKey: $routerStore.data.currentRoute?.routeParams.key})
@@ -58,7 +48,19 @@
             return false
         }
 
-        aiChatInstance.sendMessage(value)
+        aiChatInstance.sendMessage({ messages, aiModel, threadId })
+    }
+
+    const onAiChatStop = ({ threadId }: AiChatStopMessagePayload) => {
+        console.log('onAiChatStop', { threadId, aiChatInstance })
+
+        if (!aiChatInstance) {
+            console.log('call->onAiChatStop', { aiChatInstance, threadId })
+            alert('🚫 call->onAiChatStop :: aiChatInstance is not initialized... \n\nPlease call 📞 Shallbee 🐝 immediatelly!');
+            return false
+        }
+
+        aiChatInstance.stopMessage({ threadId })
     }
 
     const onProjectTitleChange = inputValue => {
@@ -145,7 +147,16 @@
                 aiChatInstance = null
             }
 
-            editorInstance = new ProseMirrorEditor(newEditor, newContent, initialContent, isDisabled, onEditorChange, onProjectTitleChange, onAiChatSubmit);
+            editorInstance = new ProseMirrorEditor({
+                editorMountElement: newEditor,
+                content: newContent,
+                initialVal: initialContent,
+                isDisabled,
+                onEditorChange,
+                onProjectTitleChange,
+                onAiChatSubmit,
+                onAiChatStop
+            });
             aiChatInstance = new AiChatService(RouterService.getRouteParams().documentId as string)
             documentStore.setMetaValues({ isRendered: true })
         }
@@ -163,143 +174,12 @@
         }
     })
 
-    let submenuState = $state({})
-
-    const toggleEditorSubmenuHandler = (e, documentId) => {
-        e.stopPropagation()
-        submenuState[documentId] = !submenuState[documentId]
-    }
-
-    const aiAvatarIcons = {
-        gptAvatarIcon,
-        claudeIcon,
-    }
-
-    let aiModelsSelectorDropdownOptions = $derived($aiModelsStore.data.map(aiModel => ({
-        title: aiModel.title,
-        icon: aiAvatarIcons[aiModel.iconName],
-        color: aiModel.color,
-        aiModel: `${aiModel.provider}:${aiModel.model}`,
-        onClick: (e, id) => {
-            console.log('onClick', {provider: aiModel.provider, model: aiModel.model})
-            documentStore.setDataValues({
-                aiModel: `${aiModel.provider}:${aiModel.model}`
-            })
-            documentStore.setMetaValues({
-                requiresSave: true
-            })
-        }
-    })))
-
-
-
-    // let selectedValue = null;
-    // let options = [
-    //     { id: 1, title: 'Option 1', color: '#ff0000' },
-    //     { id: 2, title: 'Optionnnn 2', color: '#00ff00' },
-    //     { id: 3, title: 'Opti 3', color: '#0000ff' },
-    // ];
-    // let isDisabledDummy = false;
-
-    // const updateCallback = () => {
-    //     console.log('Dropdown value has been updated');
-    // };
-
 </script>
-<!--
-<div class="editor-top-menu-bar">
-
-</div> -->
-
-<div class="model-selector-wrapper flex justify-between items-center">
-    <!-- <div class="ai-model-info">
-        {#if $documentStore.data.aiModel !== ''}
-            <span
-                class="current-ai-model"
-                style="
-                    background: {aiModels[$documentStore.data.aiModel]?.color};
-                    color: white;
-                "
-            >
-                {aiModels[$documentStore.data.aiModel]?.title}
-            </span>
-        {/if}
-    </div> -->
-    <DropdownMenuTagPill
-        selectedValue={aiModelsSelectorDropdownOptions.find(model => model.aiModel === $documentStore.data.aiModel)}
-        submenuState={submenuState}
-        id={'dropdown-menu-tag-pill'}
-        toggleSubmenuHandler={toggleEditorSubmenuHandler}
-        theme="dark"
-        renderPosition="bottom"
-        dropdownOptions={aiModelsSelectorDropdownOptions}
-    />
-
-    <!-- <DropdownMenu
-        submenuState={submenuState}
-        id={'asdf'}
-        toggleSubmenuHandler={toggleEditorSubmenuHandler}
-        theme="dark"
-        dropdownOptions={dropdownOptions}
-    /> -->
-</div>
-
-<!-- <div class="user-menu">
-    <UserMenu theme='light' />
-</div> -->
 
 <div class="editor-wrapper {isDisabled && 'disabled'} {isFocused && 'is-editor-focused'}"></div>
 
 <style lang="scss">
     //NOTE Shared SASS variables available globally
-
-    // .editor-top-menu-bar {
-    //     // background: orange;
-    //     background: rgba(255, 255, 255, 1);
-    //     width: 100%;
-    //     height: 10px;
-    //     position: absolute;
-    //     top: 0;
-    //     left: 0;
-    //     z-index: 999;
-
-    //     // backdrop-filter: blur(10px);
-    //     // filter:blur(4px);
-    //     // -o-filter:blur(4px);
-    //     // -ms-filter:blur(4px);
-    //     // -moz-filter:blur(4px);
-    //     // -webkit-filter:blur(4px);
-    // }
-
-    // .user-menu {
-    //     position: absolute;
-    //     top: 3px;
-    //     right: 1rem;
-    //     z-index: 99999;
-    // }
-
-    .model-selector-wrapper {
-        // border: 1px solid red;
-        position: absolute;
-        // left: 13rem;
-        // bottom: 2rem;
-        top: 14px;
-        right: 4rem;
-        // z-index: 999;
-        width: auto;
-        user-select: none;
-        // .current-ai-model {
-        //     padding: 0.2rem 0.3rem;
-        //     border-radius: 4px;
-        //     font-size: 0.85rem;
-        //     font-weight: 500;
-        //     margin-right: 1.7rem;
-        //     line-height: 1.3;
-        // }
-        // :global(.dots-dropdown-menu button) {
-        //     margin-top: 0.01rem
-        // }
-    }
 
     //TODO move to prosemirror styles file
     .prosemirror-menu {

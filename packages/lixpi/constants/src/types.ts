@@ -46,7 +46,6 @@ export type Document = {
     documentId: string
     revision: number
     title: string
-    aiModel: string
     content: string
     prevRevision: number
     createdAt: number
@@ -82,10 +81,22 @@ export type SubscriptionBalanceUpdateEvent = {
     amount: string
 }
 
+// AI Chat message types
+export type AiChatSendMessagePayload = {
+    messages: Array<{ role: string; content: string }>
+    aiModel: AiModelId
+    threadId: string
+}
+
+export type AiChatStopMessagePayload = {
+    threadId: string
+}
+
 export type AiModel = {
     provider: string
     model: string
     title: string
+    shortTitle?: string
     modelVersion: string
     contextWindow: number
     maxCompletionSize: number
@@ -94,7 +105,7 @@ export type AiModel = {
     color: string
     iconName: string
     sortingPosition: number
-    modalities: string[]
+    modalities: Array<{ modality: string; title: string; shortTitle: string }>
     pricing: {
         currency: string
         resaleMargin: string
@@ -132,6 +143,8 @@ export type EventMeta = {
     documentId: string
 }
 
+export type AiModelId = `${string}:${string}`
+
 export type TokensUsage = {
     eventMeta: EventMeta
     aiModelMetaInfo: AiModel
@@ -154,7 +167,7 @@ export type TokensUsage = {
 
 export type TokensUsageEvent = {
     eventMeta: EventMeta
-    aiModel: `${string}:${string}`
+    aiModel: AiModelId
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number

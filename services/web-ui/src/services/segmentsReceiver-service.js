@@ -40,7 +40,6 @@ class SegmentsReceiver {
     // Parse individual chunk token
     receiveSegment(chunk) {
         this.notifyReceiveSegment(chunk) // Relay the parsed segment event
-
     }
 }
 

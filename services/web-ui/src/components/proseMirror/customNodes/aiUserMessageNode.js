@@ -1,9 +1,9 @@
-import { 
-    gptAvatarIcon, 
-    microphoneIcon, 
+import {
+    gptAvatarIcon,
+    microphoneIcon,
     trashBinIcon,
     checkMarkIcon
-} from '../../../svgIcons/index.js'
+} from '../../../svgIcons/index.ts'
 
 export const aiUserMessageNodeType = 'aiUserMessage'
 
@@ -46,7 +46,7 @@ export const aiUserMessageNodeView = (node, view, getPos, user) => {
     childDiv.className = 'ai-user-message';
     parentWrapper.appendChild(childDiv);
 
-    
+
     const userAvatarContainer = document.createElement('div');
     const userAvatar = new Image();   // Create new img element
     userAvatarContainer.className = 'user-avatar';
@@ -58,13 +58,13 @@ export const aiUserMessageNodeView = (node, view, getPos, user) => {
     const contentDOM = document.createElement('div');
     contentDOM.className = 'ai-user-message-content';
     childDiv.appendChild(contentDOM);
-    
+
     // Add buttons or other elements to the child div
     const acceptButton = document.createElement('button');
     acceptButton.className = 'accept-button';
     acceptButton.innerHTML = checkMarkIcon;
     childDiv.appendChild(acceptButton);
-    
+
     const deleteButton = document.createElement('button');
     deleteButton.className = 'delete-button';
     // deleteButton.innerHTML = 'x';

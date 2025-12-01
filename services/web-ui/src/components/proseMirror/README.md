@@ -1,6 +1,15 @@
 # ProseMirror UI Knowledge Base
 
-This document is the canonical, deep-dive reference for the ProseMirror-based editor powering complex UI in this project. It explains schema composition, custom nodes and node views, plugins, input rules, keymaps, the top menu, and the AI chat pipeline with streaming. It’s written for engineers and AI agents to reason about the system and extend it safely.
+This document is the canonical, deep-dive reference for the ProseMirror-based editor powering complex UI in this project. It explains schema composition, custom nodes and node views, plugins, input rules, keymaps, the top menu, and the AI chat pipe    - Maintains an "end of aiResponse node" pointer scoped to the specific thread. If the node is missing (timing), it creates it with the same rules as START_STREAM.
+  - END_STREAM with `threadId`: clears animation flags on the `aiResponseMessage` node in the specific thread.
+- **Concurrent streams**: Maintains `receivingThreadIds: Set<string>` to track multiple active streams across different threads simultaneously.ne with streaming. It’s written for engineers and AI agents to reason about## Edge cases and invariants
+
+- Document shape: The first node is always `documentTitle`, followed by a single `aiChatThread`.
+- aiResponse streaming insertion locates the most recent `aiResponseMessage` within the target thread (identified by `threadId`) and calculates `endOfNodePos`. Only one empty paragraph is kept immediately after it, and the cursor is moved there on creation.
+- **Multiple concurrent streams ARE supported**: Each thread can have independent AI streaming via `threadId` parameter. The plugin maintains a `Set<string>` of active `receivingThreadIds` to track concurrent streams across different threads.
+- CodeMirror selection sync: Avoid infinite loops by guarding with `this.updating` and focus checks; keep `forwardUpdate` fast.
+- Mod-A behavior intentionally excludes the title from "select all" when cursor isn't in the title; consider that in bulk ops.
+- `aiUserMessage` is deprecated in new flows and not allowed inside the `aiChatThread` by schema.tem and extend it safely.
 
 
 ## High-level overview
@@ -35,12 +44,26 @@ Base schema is defined in `components/schema.ts` (extended CommonMark-like schem
 Custom nodes (in `customNodes/`):
 
 - `documentTitleNode` (`documentTitle`): h1 title, non-selectable, defining.
-- `aiUserInputNode` (`aiUserInput`): a block container for user’s AI prompt and inline control buttons (Stop, Regenerate, Close). Spec provides DOM structure; nodeView is provided by the aiUserInput plugin.
-- `aiChatThreadNode` (`aiChatThread`): the single chat container that holds the conversation. Current content expression: `(aiResponseMessage | paragraph)+`. New code does not insert `aiUserMessage` here.
+- `aiUserInputNode` (`aiUserInput`, deprecated): a block container for user's AI prompt and inline control buttons (Stop, Regenerate, Close). Marked for removal; kept for backward compatibility in old documents.
+- `aiChatThreadNode` (`aiChatThread`): the single chat container that holds the conversation. Current content expression: `(paragraph | code_block | aiResponseMessage | dropdown)+`. New code does not insert `aiUserMessage` here.
 - `aiResponseMessageNode` (`aiResponseMessage`): assistant message with provider avatar, animation controls, and a contentDOM placeholder; `aiResponseMessageNodeView` manages Claude animation frames using node attrs (`isInitialRenderAnimation`, `isReceivingAnimation`, `currentFrame`). Content expression: `(paragraph | block)*` so it can start empty and be filled by streaming.
 - `aiUserMessageNode` (`aiUserMessage`, legacy): styled bubble with user avatar; kept for backward compatibility in old documents. New flows do not create this node.
 - `code_block` override (`codeBlockNode`): prosemirror spec extended with `theme` attr and DOM `data-theme`. Rendering and interaction are delegated to a CodeMirror 6 node view (plugin).
 - `taskRowNode` exists but currently a placeholder without DOM hooks; kept for future Svelte component rendering.
+
+```mermaid
+flowchart TD
+  A[doc] --> B[documentTitle]
+  A --> T[aiChatThread]
+  T --> P[paragraph]
+  T --> CB[code_block]
+  T --> R[aiResponseMessage]
+  R --> RP["(paragraph | block)*"]
+```
+
+Notes
+- Groups: Custom nodes belong to `block` and integrate seamlessly with base block nodes.
+- NodeViews: `aiResponseMessageNodeView` is exposed from `customNodes/index.js` and plugged-in by `aiChatPlugin`; `aiUserMessageNodeView` remains for legacy docs but is not used in new flows; `code_block` node view is provided by the codeBlock plugin; `dropdown` node view is provided by the dropdown primitive plugin.
 
 ```mermaid
 flowchart TD
@@ -250,11 +273,12 @@ Note: The editor currently ships with the TaskRow Svelte renderer commented out 
 - Kept for backward compatibility; new chat thread flow does not use this plugin or node.
 
 ### aiChatPlugin (`plugins/aiChatPlugin.js`)
-- On `use:aiChat`, transforms the current thread into a compact messages array: groups blocks by role (assistant when node type is `aiResponseMessage`, else user) and reduces adjacent same-role blocks.
-- Calls the provided callback with the transformed messages (Svelte wires it to `AiChatService`).
-- Subscribes to an external `SegmentsReceiver` stream:
-  - START_STREAM: inserts an empty `aiResponseMessage` (no inner paragraph) with animation flags and provider; ensures exactly one empty paragraph immediately after and moves the cursor into it.
-  - STREAMING: for each segment:
+- On `use:aiChat` with `{threadId, nodePos}` meta, transforms the current thread into a compact messages array: groups blocks by role (assistant when node type is `aiResponseMessage`, else user) and reduces adjacent same-role blocks.
+- Calls the provided callback with the transformed messages and `threadId` (Svelte wires it to `AiChatService`).
+- Subscribes to an external `SegmentsReceiver` stream with **multi-thread support**:
+  - START_STREAM with `threadId`: inserts an empty `aiResponseMessage` in the specific thread (no inner paragraph) with animation flags and provider; ensures exactly one empty paragraph immediately after and moves the cursor into it.
+  - STREAMING with `threadId`: for each segment:
+    - Uses `threadId` to scope response node search to the correct thread
     - Applies marks from `segment.styles` -> strong/em/strikethrough/code.
     - Inserts block structure for `header`, `paragraph`, or `codeBlock` segments; otherwise appends text with marks.
     - Maintains an “end of aiResponse node” pointer to insert at correct positions. If the node is missing (timing), it creates it with the same rules as START_STREAM.

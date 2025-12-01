@@ -7,7 +7,8 @@ import {
     checkMarkIcon,
     claudeIcon,
     claudeAnimatedFrameIcon,
-} from '../../../../svgIcons/index.js'
+} from '../../../../svgIcons/index.ts'
+import { html } from '../../components/domTemplates.ts'
 
 // Define the unique type name for this custom node
 export const aiResponseMessageNodeType = 'aiResponseMessage'
@@ -61,29 +62,22 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     let animationInterval
     const totalFrames = 8    // Total frames in Claude's animation
 
-    // Create the main wrapper for the node
-    const parentWrapper = document.createElement('div')
-    parentWrapper.className = 'ai-response-message-wrapper'
+    // Create the main wrapper structure using htm
+    const parentWrapper = html`
+        <div className="ai-response-message-wrapper">
+            <div className="ai-response-message">
+                <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
+                <div className="ai-response-message-boundaries-indicator"></div>
+                <div className="ai-response-message-content"></div>
+            </div>
+        </div>
+    `
 
-    // Create the container for the AI response message
-    const aiResponseMessageContainer = document.createElement('div')
-    aiResponseMessageContainer.className = 'ai-response-message'
-    parentWrapper.appendChild(aiResponseMessageContainer)
-
-    // Create the avatar container
-    const userAvatarContainer = document.createElement('div')
-    userAvatarContainer.className = `user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}`
-    aiResponseMessageContainer.appendChild(userAvatarContainer)
-
-    // Create an indicator for message boundaries
-    const messageBoundariesIndicator = document.createElement('div')
-    messageBoundariesIndicator.className = 'ai-response-message-boundaries-indicator'
-    aiResponseMessageContainer.appendChild(messageBoundariesIndicator)
-
-    // Create the container for the actual message content
-    const responseMessageContent = document.createElement('div')
-    responseMessageContent.className = 'ai-response-message-content'
-    aiResponseMessageContainer.appendChild(responseMessageContent)
+    // Get references to the nested elements for manipulation
+    const aiResponseMessageContainer = parentWrapper.querySelector('.ai-response-message')
+    const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
+    const messageBoundariesIndicator = parentWrapper.querySelector('.ai-response-message-boundaries-indicator')
+    const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
 
     // // Create an accept button
     // const acceptButton = document.createElement('button')

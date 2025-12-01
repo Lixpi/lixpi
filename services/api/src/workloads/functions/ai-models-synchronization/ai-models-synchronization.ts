@@ -15,6 +15,27 @@ import type {
 import { getDynamoDbTableStageName } from '@lixpi/constants'
 import type { PartialDeep } from 'type-fest'
 
+// Modality metadata constants
+const MODALITY_METADATA = {
+    text: { title: 'Text', shortTitle: 'TXT' },
+    image: { title: 'Image', shortTitle: 'IMG' },
+    audio: { title: 'Audio', shortTitle: 'AUDIO' },
+    voice: { title: 'Voice', shortTitle: 'VOICE' },
+    video: { title: 'Video', shortTitle: 'VID' }
+} as const
+
+// Helper function to generate modalities with metadata from modalities array
+function generateModalitiesWithMetadata(modalities: string[]): Array<{ modality: string; title: string; shortTitle: string }> {
+    return modalities.map(modality => {
+        const metadata = MODALITY_METADATA[modality as keyof typeof MODALITY_METADATA]
+        return {
+            modality,
+            title: metadata?.title || modality.charAt(0).toUpperCase() + modality.slice(1),
+            shortTitle: metadata?.shortTitle || modality.toUpperCase()
+        }
+    })
+}
+
 // OpenAI API types (using SDK types)
 type OpenAIModel = OpenAI.Models.Model
 type AnthropicModel = {
@@ -38,6 +59,10 @@ type ModelDefaults = Pick<
 > & {
     // Not part of AiModel, used only for provider-grouped sorting
     starSortingPosition: number
+    // Transform functions for model properties
+    transforms?: {
+        [key: string]: (...args: any[]) => any
+    }
 }
 
 type ProviderModelDefaults = {
@@ -107,7 +132,7 @@ export class AiModelsSync {
             // Exact matches (use for cases like 'gpt-4' to avoid excluding 'gpt-4o')
             exact: [
                 'gpt-4',
-                // 'gpt-4o',
+                'gpt-4o',
                 'gpt-image-1',    // temporarily disabled, code doesn't yet support it
                 'gpt-4o-transcribe',    // temporarily disabled, code doesn't yet support it
             ],
@@ -202,7 +227,35 @@ export class AiModelsSync {
                 color: '#56967c',
                 iconName: 'gptAvatarIcon',
                 // Base offset for sorting; used to group providers
-                starSortingPosition: 200
+                starSortingPosition: 200,
+                transforms: {
+                    title: (modelId: string) => {
+                        return modelId
+                            .split('-')
+                            .map(part => {
+                                if (part.toLowerCase() === 'gpt') return 'GPT'
+                                if (part.toLowerCase() === 'o1') return 'O1'
+                                if (part.toLowerCase() === 'o3') return 'O3'
+                                if (part.toLowerCase() === 'o4') return 'O4'
+                                return part.charAt(0).toUpperCase() + part.slice(1)
+                            })
+                            .join(' ')
+                    },
+                    shortTitle: (modelId: string) => {
+                        const title = modelId
+                            .split('-')
+                            .map(part => {
+                                if (part.toLowerCase() === 'gpt') return 'GPT'
+                                if (part.toLowerCase() === 'o1') return 'O1'
+                                if (part.toLowerCase() === 'o3') return 'O3'
+                                if (part.toLowerCase() === 'o4') return 'O4'
+                                return part.charAt(0).toUpperCase() + part.slice(1)
+                            })
+                            .join(' ')
+                        // Remove "Latest" suffix if present
+                        return title.replace(/\s+Latest$/i, '')
+                    }
+                }
             }
         },
         // Anthropic model defaults sourced from official docs (Models overview):
@@ -236,7 +289,23 @@ export class AiModelsSync {
                 },
                 color: '#D97757',
                 iconName: 'claudeIcon',
-                starSortingPosition: 100
+                starSortingPosition: 100,
+                transforms: {
+                    title: (modelId: string, displayName?: string) => {
+                        return displayName || modelId
+                            .split('-')
+                            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                            .join(' ')
+                    },
+                    shortTitle: (modelId: string, displayName?: string) => {
+                        const fullTitle = displayName || modelId
+                            .split('-')
+                            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                            .join(' ')
+                        // Remove "Claude " prefix if present
+                        return fullTitle.replace(/^Claude\s+/i, '')
+                    }
+                }
             }
         }
     }
@@ -267,6 +336,7 @@ export class AiModelsSync {
             color: typeof (p as any).color === 'string' ? (p as any).color : fallback.color,
             iconName: typeof (p as any).iconName === 'string' ? (p as any).iconName : fallback.iconName,
             starSortingPosition: typeof (p as any).starSortingPosition === 'number' ? (p as any).starSortingPosition : fallback.starSortingPosition,
+            transforms: (p as any).transforms || fallback.transforms,
         }
     }
 
@@ -324,7 +394,7 @@ export class AiModelsSync {
             // Filter models based on blacklist and only include relevant models
             const blacklist = AiModelsSync.MODELS_BLACKLIST.OpenAI
 
-            return models.filter(model => {
+            return models.filter((model: OpenAIModel) => {
                 const modelId = model.id
 
                 // Check exact blacklist matches
@@ -424,24 +494,13 @@ export class AiModelsSync {
     private mapOpenAIModelToAiModel(openAIModel: OpenAIModel, sortingPosition: number): AiModel {
         const modelDefaults = this.resolveModelDefaults('OpenAI', openAIModel.id)
 
-        // Generate title from model id by capitalizing and formatting
-        const title = openAIModel.id
-            .split('-')
-            .map(part => {
-                if (part.toLowerCase() === 'gpt') return 'GPT'
-                if (part.toLowerCase() === 'o1') return 'O1'
-                if (part.toLowerCase() === 'o3') return 'O3'
-                if (part.toLowerCase() === 'o4') return 'O4'
-                return part.charAt(0).toUpperCase() + part.slice(1)
-            })
-            .join(' ')
-
         const now = Date.now()
 
-        return {
+        const model: AiModel = {
             provider: 'OpenAI',
             model: openAIModel.id,
-            title,
+            title: openAIModel.id,
+            shortTitle: openAIModel.id,
             modelVersion: openAIModel.id,
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
@@ -450,29 +509,35 @@ export class AiModelsSync {
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
-            modalities: modelDefaults.modalities,
+            modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
         }
+
+        // Apply transforms to model properties
+        if (modelDefaults.transforms) {
+            for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
+                if (transformFn) {
+                    (model as any)[key] = transformFn(openAIModel.id)
+                }
+            }
+        }
+
+        return model
     }
 
     // Map Anthropic model to our AiModel format
     private mapAnthropicModelToAiModel(anthropicModel: AnthropicModel, sortingPosition: number): AiModel {
         const modelDefaults = this.resolveModelDefaults('Anthropic', anthropicModel.id)
 
-        // Use display_name if available, otherwise format the id
-        const title = anthropicModel.display_name || anthropicModel.id
-            .split('-')
-            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-            .join(' ')
-
         const now = Date.now()
 
-        return {
+        const model: AiModel = {
             provider: 'Anthropic',
             model: anthropicModel.id,
-            title,
+            title: anthropicModel.display_name || anthropicModel.id,
+            shortTitle: anthropicModel.display_name || anthropicModel.id,
             modelVersion: anthropicModel.id,
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
@@ -481,11 +546,22 @@ export class AiModelsSync {
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
-            modalities: modelDefaults.modalities,
+            modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
         }
+
+        // Apply transforms to model properties
+        if (modelDefaults.transforms) {
+            for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
+                if (transformFn) {
+                    (model as any)[key] = transformFn(anthropicModel.id, anthropicModel.display_name)
+                }
+            }
+        }
+
+        return model
     }
 
     // Update existing models sequentially to avoid overwhelming DynamoDB

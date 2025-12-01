@@ -118,11 +118,11 @@ class OpenAiChatService extends OpenAiBaseClass {
     }
 
     async generate({
-        chatContent = [],
+        messages = [],
         aiModelMetaInfo,
         eventMeta,
     }: {
-        chatContent: any[],
+        messages: any[],
         aiModelMetaInfo: AiModel,
         eventMeta: EventMeta
     }) {
@@ -138,9 +138,9 @@ class OpenAiChatService extends OpenAiBaseClass {
 
         this.interruptStream = false // Resetting the interrupt flag.
 
-        const messages = [
+        const messagesWithSystem = [
             ...(supportsSystemPrompt ? [{role: 'system', content: SYSTEM_PROMPT}] : []),
-            ...chatContent
+            ...messages
         ]
 
         const responseChunks = []    // Store the response chunks for edge case when the stream is interrupted and tokens stats need to be calculated by tiktoken. And also for debugging purposes.
@@ -158,7 +158,7 @@ class OpenAiChatService extends OpenAiBaseClass {
             ' :: ',
             chalk.green('call'),
             ' :: this.openai.chat.completions.create():'
-        ], {modelVersion, maxCompletionSize, messages: messages.map(el => ({role: el.role, contentLength: el.content.length})), markdownStreamParser: this.markdownStreamParser})
+        ], {modelVersion, maxCompletionSize, messages: messagesWithSystem.map(el => ({role: el.role, contentLength: el.content.length})), markdownStreamParser: this.markdownStreamParser})
 
         // Add timeout protection
         const STREAM_TIMEOUT = 5 * 60 * 1000; // 5 minutes timeout
@@ -170,7 +170,7 @@ class OpenAiChatService extends OpenAiBaseClass {
             const response = await Promise.race([
                 this.openai.chat.completions.create({
                     model: modelVersion,
-                    messages,
+                    messages: messagesWithSystem,
                     temperature: defaultTemperature,
                     max_completion_tokens: maxCompletionSize,
                     stream: true,
@@ -193,7 +193,7 @@ class OpenAiChatService extends OpenAiBaseClass {
             this.markdownStreamParser.startParsing()
 
             // Initialize circuit breaker
-            const circuitBreaker = this.createCircuitBreaker(this.markdownStreamParser, [TIMEOUT_TRIGGER])
+            const circuitBreaker = this.createCircuitBreaker({ triggers: [TIMEOUT_TRIGGER] })
 
             for await (const data of response) {
                 // Check circuit breaker limits

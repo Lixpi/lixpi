@@ -59,12 +59,11 @@ class DocumentService {
     }
 
 
-	async createDocument({ title, aiModel, content }) {
+	async createDocument({ title, content }) {
 		try {
 			const document: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.CREATE_DOCUMENT, {
 				token: await AuthService.getTokenSilently(),
 				title,
-				aiModel,
 				content
 			})
 
@@ -94,14 +93,13 @@ class DocumentService {
 	}
 
 
-	public async updateDocument({ title, prevRevision, aiModel, content, documentId }) {
+	public async updateDocument({ title, prevRevision, content, documentId }) {
 		try {
 			const documentUpdateResult: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.UPDATE_DOCUMENT, {
 				token: await AuthService.getTokenSilently(),
 				documentId,
 				title,
 				prevRevision,
-				aiModel,
 				content,
 			})
 		} catch (error) {

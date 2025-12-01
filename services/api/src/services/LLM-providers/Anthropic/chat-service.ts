@@ -123,11 +123,11 @@ class AnthropicChatService extends AnthropicBaseClass {
     }
 
     async generate({
-            chatContent = [],
+            messages = [],
             aiModelMetaInfo,
             eventMeta,
         }: {
-            chatContent: any[],
+            messages: any[],
             aiModelMetaInfo: AiModel,
             eventMeta: EventMeta
         }) {
@@ -145,7 +145,7 @@ class AnthropicChatService extends AnthropicBaseClass {
         // Store the response chunks for debugging
         const responseChunks = []
 
-        const messages = appendToLastUserMessage(chatContent, ANTHROPIC_CODE_BLOCK_HACK_PROMPT)
+        const messagesWithPrompt = appendToLastUserMessage(messages, ANTHROPIC_CODE_BLOCK_HACK_PROMPT)
 
         const tokensUsage = {
             model: modelVersion,
@@ -160,7 +160,7 @@ class AnthropicChatService extends AnthropicBaseClass {
             ' :: ',
             chalk.green('call'),
             ' :: this.anthropic.chat.completions.create():'
-        ], {modelVersion, maxCompletionSize, messages: messages.map((el: any) => ({role: el.role, contentLength: el.content.length})), markdownStreamParser: this.markdownStreamParser})
+        ], {modelVersion, maxCompletionSize, messages: messagesWithPrompt.map((el: any) => ({role: el.role, contentLength: el.content.length})), markdownStreamParser: this.markdownStreamParser})
 
         try {
             // Use local aliases to avoid TS complaints about properties declared in the base class
@@ -168,7 +168,7 @@ class AnthropicChatService extends AnthropicBaseClass {
 
             const stream = await anthropicClient.messages.create({
                 model: modelVersion,
-                messages,
+                messages: messagesWithPrompt,
                 max_tokens: maxCompletionSize,
                 system: SYSTEM_PROMPT,
                 stream: true,
@@ -187,7 +187,7 @@ class AnthropicChatService extends AnthropicBaseClass {
             let finalMessage = null
 
             // Initialize circuit breaker
-            const circuitBreaker = this.createCircuitBreaker(this.markdownStreamParser, [TIMEOUT_TRIGGER])
+            const circuitBreaker = this.createCircuitBreaker({ triggers: [TIMEOUT_TRIGGER] })
 
             // Iterate async stream events
             for await (const event of stream as any) {

@@ -1,0 +1,229 @@
+@use "sass:color";
+
+// =============================
+// Info Bubble Component
+// =============================
+// A completely generic reusable floating container with an arrow pointer.
+// Arrow side is controlled by data-arrow-side attribute in HTML.
+//
+// Structure:
+//   .bubble-wrapper (positioning container)
+//     .bubble-container (visual container with arrow, border, background)
+//       .bubble-header (optional header section)
+//       .bubble-body (main content area)
+
+// 1) Bubble Placement - Position the wrapper relative to anchor
+// --------------------------------------------------------------
+// NOTE: Positioning is computed in JS using the anchor's bounding rect.
+// This mixin only establishes layering and positioning mode.
+@mixin infoBubblePlacement($config: ()) {
+    $defaults: (
+        zIndex: 999
+    );
+
+    $s: map-merge($defaults, $config);
+
+    .bubble-wrapper {
+        position: fixed; // JS sets top/left dynamically
+        z-index: map-get($s, zIndex);
+
+        // Hidden by default - disable pointer events to prevent blocking
+        display: none;
+        pointer-events: none; // Allows clicks to pass through when hidden
+
+        &.visible {
+            display: block;
+            pointer-events: auto; // Re-enable pointer events when visible
+        }
+    }
+}
+
+// 2) Bubble Structure - Container shape, sizing, and arrow scaffolding
+// ---------------------------------------------------------------------
+@mixin infoBubbleStructure($config: ()) {
+    $defaults: (
+        bubbleRadius: 4px,
+        bubbleOverflow: hidden,
+        arrowCrossOffset: 8px,
+        arrowOuterSize: 9px,
+        arrowInnerSize: 9px
+    );
+    $s: map-merge($defaults, $config);
+
+    .bubble-container {
+        width: 100%;
+        white-space: nowrap;
+        padding: 0;
+        overflow: map-get($s, bubbleOverflow);
+        border-radius: map-get($s, bubbleRadius);
+        margin: 0;
+        user-select: none;
+
+        // Ensure header/body visually conform to bubble radius
+        .bubble-header:first-child {
+            border-top-left-radius: map-get($s, bubbleRadius);
+            border-top-right-radius: map-get($s, bubbleRadius);
+        }
+
+        .bubble-body:last-child {
+            border-bottom-left-radius: map-get($s, bubbleRadius);
+            border-bottom-right-radius: map-get($s, bubbleRadius);
+        }
+
+        &:has(.bubble-header) .bubble-body {
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+    }
+
+    // Arrow positioning for all sides - controlled by data-arrow-side
+    $crossOffset: map-get($s, arrowCrossOffset);
+    $outerSize: map-get($s, arrowOuterSize);
+    $innerSize: map-get($s, arrowInnerSize);
+
+    &[data-arrow-side="top"] .bubble-container {
+        &:before,
+        &:after {
+            content: "";
+            position: absolute;
+            z-index: 99;
+            right: $crossOffset;
+        }
+
+        &:before {
+            top: -$outerSize;
+            border-style: solid;
+            border-width: 0 $outerSize $outerSize $outerSize;
+        }
+
+        &:after {
+            top: -$innerSize + 2px;
+            border-style: solid;
+            border-width: 0 $innerSize $innerSize $innerSize;
+        }
+    }
+
+    &[data-arrow-side="bottom"] .bubble-container {
+        &:before,
+        &:after {
+            content: "";
+            position: absolute;
+            z-index: 99;
+            right: $crossOffset;
+        }
+
+        &:before {
+            bottom: -$outerSize;
+            border-style: solid;
+            border-width: $outerSize $outerSize 0 $outerSize;
+        }
+
+        &:after {
+            bottom: -$innerSize + 2px;
+            border-style: solid;
+            border-width: $innerSize $innerSize 0 $innerSize;
+        }
+    }
+
+    &[data-arrow-side="left"] .bubble-container {
+        &:before,
+        &:after {
+            content: "";
+            position: absolute;
+            z-index: 99;
+            top: $crossOffset;
+        }
+
+        &:before {
+            left: -$outerSize;
+            border-style: solid;
+            border-width: $outerSize $outerSize $outerSize 0;
+        }
+
+        &:after {
+            left: -$innerSize + 2px;
+            border-style: solid;
+            border-width: $innerSize $innerSize $innerSize 0;
+        }
+    }
+
+    &[data-arrow-side="right"] .bubble-container {
+        &:before,
+        &:after {
+            content: "";
+            position: absolute;
+            z-index: 99;
+            top: $crossOffset;
+        }
+
+        &:before {
+            right: -$outerSize;
+            border-style: solid;
+            border-width: $outerSize 0 $outerSize $outerSize;
+        }
+
+        &:after {
+            right: -$innerSize + 2px;
+            border-style: solid;
+            border-width: $innerSize 0 $innerSize $innerSize;
+        }
+    }
+}
+
+// 3) Bubble Theme - All colors, shadows, and visual treatments
+// --------------------------------------------------------------
+@mixin infoBubbleTheme($config: ()) {
+    $defaults: (
+        surfaceBg: #fff,
+        surfaceFg: #333,
+        bubbleRadius: 4px,
+        bubbleShadow: 0.05rem 0.05rem 7px 0px rgba(0,0,0,0.2),
+        borderLightnessAdjustment: -10%
+    );
+    $s: map-merge($defaults, $config);
+
+    $borderColor: color.adjust(map-get($s, surfaceBg), $lightness: map-get($s, borderLightnessAdjustment));
+    $surfaceBg: map-get($s, surfaceBg);
+
+    .bubble-wrapper {
+        box-shadow: map-get($s, bubbleShadow);
+    }
+
+    .bubble-container {
+        background: $surfaceBg;
+        color: map-get($s, surfaceFg);
+        border: .06rem solid $borderColor;
+
+        .bubble-header {
+            padding: .5rem .5rem .5rem .5rem;
+            border-bottom: 1px solid $borderColor;
+            border-top-left-radius: map-get($s, bubbleRadius);
+            border-top-right-radius: map-get($s, bubbleRadius);
+        }
+
+        .bubble-body {
+            background: $surfaceBg;
+        }
+    }
+
+    // Arrow colors for all sides
+    &[data-arrow-side="top"] .bubble-container {
+        &:before { border-color: transparent transparent $borderColor; }
+        &:after { border-color: transparent transparent $surfaceBg; }
+    }
+
+    &[data-arrow-side="bottom"] .bubble-container {
+        &:before { border-color: $borderColor transparent transparent transparent; }
+        &:after { border-color: $surfaceBg transparent transparent transparent; }
+    }
+
+    &[data-arrow-side="left"] .bubble-container {
+        &:before { border-color: transparent $borderColor transparent transparent; }
+        &:after { border-color: transparent $surfaceBg transparent transparent; }
+    }
+
+    &[data-arrow-side="right"] .bubble-container {
+        &:before { border-color: transparent transparent transparent $borderColor; }
+        &:after { border-color: transparent transparent transparent $surfaceBg; }
+    }
+}

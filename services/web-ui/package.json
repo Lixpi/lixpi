@@ -36,7 +36,11 @@
         "vaul-svelte": "^1.0.0-next.2",
         "vite": "^6.0.3",
         "type-fest": "*",
-        "http-server": "*"
+        "http-server": "*",
+        "uuid": "*",
+        "@xyflow/system": "*",
+        "d3-selection": "*",
+        "d3-ease": "*"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
@@ -69,7 +73,8 @@
         "prosemirror-schema-list": "*",
         "prosemirror-state": "*",
         "prosemirror-view": "*",
-        "socket.io-client": "*"
+        "socket.io-client": "*",
+        "htm": "*"
     },
     "packageManager": "pnpm@9.15.0"
 }

@@ -1,188 +1,211 @@
 // AI Chat Thread Styles
+@import '../../ProseMirrorMixings.scss';
+@import '../../../../sass/components/animations';
+@import '../primitives/dropdown/dropdown.scss';
+@import '../primitives/infoBubble/infoBubble.scss';
+@import '../primitives/contextSelector/contextSelector.scss';
+
+$aiChatThreadMinHeight: 50px;
+
+// ========== AI CHAT THREAD WRAPPER ==========
 .ai-chat-thread-wrapper {
     position: relative;
+    margin-top: 2rem;
+    min-height: $aiChatThreadMinHeight;
 
-    // Visual indicator border (temporary)
-    &::before {
-        content: '';
-        position: absolute;
-        right: -1rem;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: linear-gradient(to bottom, #ff8844 0%, #ff8844 60%, #ffaa77 100%);
-    }
-
-    // Receiving state styles (applied via decorations)
-    &.receiving {
-        .keyboard-shortcut-hint {
-            border-color: $redPink;
-            background-color: white;
-            transition: hoverTransition(background, 300ms);
-
-            .shortcut-default,
-            .shortcut-hover {
-                opacity: 0;
-                pointer-events: none;
-            }
-
-            .shortcut-receiving {
-                opacity: 1;
-                pointer-events: auto;
-
-                .stop-icon svg {
-                    fill: $redPink;
-                }
-
-                .shortcut-label {
-                    color: $redPink;
-                }
-            }
-
-            // Hover over receiving state - only when in receiving mode
-            &:hover {
-                // Ensure default/hover states stay hidden during receiving hover
-                .shortcut-default,
-                .shortcut-hover {
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                }
-
-                .shortcut-receiving {
-                    opacity: 1 !important;
-                    pointer-events: auto !important;
-
-                    .stop-icon svg {
-                        fill: white;
-                    }
-
-                    .shortcut-label {
-                        color: white;
-                    }
-                }
-
-                // Add red background on hover
-                background-color: $redPink;
-                border-color: $redPink;
-            }
-        }
-    }
-
+    // ===== THREAD CONTENT =====
     .ai-chat-thread-content {
         position: relative;
     }
 
-    .keyboard-shortcut-hint {
+    // ===== THREAD BOUNDARY SYSTEM =====
+    .ai-thread-boundary-indicator {
         position: absolute;
-        bottom: -0.75rem;
-        right: 1rem;
-        min-width: 85px; // Preserve width during state changes
-        background: white;
-        border: 1px solid rgba($steelBlue, 0.2);
-        border-radius: 20px;
-        font-size: 0.8rem;
-        color: rgba($steelBlue, 0.7);
-        opacity: 0.8;
-        transition: hoverTransition(all, 400ms); // Longer transition for mouse leave
-        box-shadow: 0 2px 8px rgba($steelBlue, 0.2);
-        cursor: pointer;
+        right: -71px;
+        top: -6px;
+        // width: 32px;
+        width: 60px;
+        height: 32px;
+        // border: 1px solid red;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border-radius: 50%;
+        z-index: 3;
+        // cursor: pointer;
 
-        .shortcut-default,
-        .shortcut-hover,
-        .shortcut-receiving {
+        // Add invisible hover area that extends to cover the collapse toggle
+        &::after {
+            content: '';
+            position: absolute;
+            width: 60px; // Extended width to cover both elements
+            height: 62px;
+            pointer-events: auto; // Extends hover area
+            // background: rgba(189, 173, 141, .2);
+            z-index: 0; // Behind children so they can receive clicks
+            // cursor: move;
+        }
+
+        .ai-thread-boundary-icon {
+            width: 20px;
+            height: 20px;
             display: flex;
             align-items: center;
-            gap: 0.4rem;
-            padding: 0.4rem 0.55rem;
+            justify-content: center;
+            position: relative;
+            z-index: 1; // Above ::after
+            cursor: pointer;
+
+            svg {
+                width: 20px;
+                height: 20px;
+                fill: $nightBlue;
+                transition: pupOutTransition(all, 150ms);
+            }
+        }
+
+        // Collapse toggle icon - appears on hover
+        .ai-thread-collapse-toggle {
+            margin-left: .15rem;
+            width: 20px;
+            height: 20px;
+            opacity: 0;
+            transition: hoverTransition(opacity, 200ms);
+            cursor: pointer;
+            position: relative;
+            z-index: 2; // Above ::after so it can receive clicks
+
+            .collapse-icon {
+                display: block;
+            }
+
+            svg {
+                width: 20px;
+                height: 20px;
+                fill: lighten($nightBlue, 30%); // Lighter in expanded state
+            }
+
+            // Click feedback animation - collapsing (going from expanded to collapsed)
+            &.click-feedback svg {
+                @include clickToggleFeedbackAnimation((
+                    startColor: lighten($nightBlue, 30%),
+                    flashColor: lighten($nightBlue, 15%),
+                    endColor: $nightBlue
+                ));
+            }
+        }
+
+        // Show collapse toggle on boundary indicator hover
+        &:hover .ai-thread-collapse-toggle {
+            opacity: 1;
+            pointer-events: auto;
+        }
+    }
+
+    .ai-thread-boundary-indicator-line {
+        position: absolute;
+        right: -15px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: $steelBlue;
+        opacity: 0;
+        transform: scaleY(0);
+        min-height: $aiChatThreadMinHeight;
+        transform-origin: top;
+        transition: pupOutTransition(all, 200ms);
+        z-index: 5;
+        pointer-events: none;
+
+        @include boundaryPointerTriangle((
+            direction: 'left',
+            anchor: 'bottom',
+            horizontalOffset: 0px,
+            verticalOffset: 2px,
+            size: 2px,
+            color: $steelBlue,
+            accentColor: $nightBlue
+        ));
+    }
+
+    // ===== AI CHAT THREAD CONTROLS CONTAINER =====
+    .ai-chat-thread-controls {
+        position: absolute;
+        bottom: -0.75rem;
+        right: -.17rem;
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+        // z-index: 3;
+
+        // All dropdown wrappers inside controls use natural flex flow
+        .dropdown-menu-tag-pill-wrapper {
+            position: relative;
+        }
+    }
+
+    // ===== AI SUBMIT BUTTON =====
+    .ai-submit-button {
+        position: relative; // ensure absolutely positioned state layers anchor here
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px; // prevent flex shrink causing horizontal shift
+        border-radius: 50%;
+        opacity: 0.8;
+        transition: hoverTransition(all, 400ms);
+        cursor: pointer;
+        box-sizing: border-box;
+
+
+        // Button state containers
+        .button-default,
+        .button-hover,
+        .button-receiving {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
             transition: hoverTransition(all, 250ms);
         }
 
-        .shortcut-default {
+        // Default state (always visible)
+        .button-default {
             opacity: 1;
-            position: relative; // ensure stacking below absolute states
+            position: relative;
             z-index: 1;
         }
 
-        .shortcut-hover,
-        .shortcut-receiving {
+        // Hover and receiving states (overlays)
+        .button-hover,
+        .button-receiving {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
+            inset: 0; // shorthand for top/left/right/bottom 0
             opacity: 0;
             pointer-events: none;
         }
 
-        // Layering: receiving above hover above default
-        .shortcut-hover { z-index: 2; }
-        .shortcut-receiving { z-index: 3; }
+        // Z-index layering
+        .button-hover { z-index: 2; }
+        .button-receiving { z-index: 3; }
 
-        .icons-container {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            width: 36px; // Reduced width to minimize empty space
-            height: 20px; // Fixed height to prevent vertical movement
-            // gap: 0.25rem;
-            position: relative; // enable absolute positioning of animated icons
-            overflow: hidden;   // keep animation within bounds
-            // border: 1px solid red;
-        }
-
-        .shortcut-keys {
-            display: flex;
-            align-items: center;
-
-            .key-icon {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 17px;
-                height: 17px;
-                transition: pupOutTransition(all, 150ms);
-
-                svg {
-                    width: 13px;
-                    height: 13px;
-                    fill: rgba($steelBlue, 0.8);
-                    transition: pupOutTransition(fill, 150ms);
-                }
-            }
-
-            .key-text {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding: 0.15rem 0.4rem;
-                font-size: 0.7rem;
-                font-weight: 600;
-                color: rgba($steelBlue, 0.8);
-                line-height: 1;
-                transition: pupOutTransition(all, 150ms);
-            }
-        }
-
+        // Icon styles
         .send-icon {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
 
             svg {
-                width: 14px;
-                height: 14px;
-                fill: $steelBlue;
-            }
-        }
-
-        // Slide animation: in hover state, move send icon from left to right inside icons-container
-        .shortcut-hover {
-            .send-icon {
-                position: absolute;
-                left: 0; // start at the left edge when hover content appears
-                // Default (mouse out): short slide back
-                transition: hoverTransition(left, 40ms);
+                width: 20px;
+                height: 20px;
+                fill: $nightBlue;
+                transition: hoverTransition(fill, 150ms);
             }
         }
 
@@ -190,113 +213,249 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 18px;
-            height: 18px;
+            width: 26px;
+            height: 26px;
 
             svg {
-                width: 18px;  // Increased from 14px to make stop icon more prominent
-                height: 18px; // Increased from 14px to make stop icon more prominent
-                fill: $redPink;
+                width: 26px;
+                height: 26px;
+                fill: $nightBlue;
+                transition: hoverTransition(fill, 150ms);
             }
         }
-
-        .shortcut-label {
-            font-weight: 500;
-            color: rgba($steelBlue, 0.6);
-        }
-
-    // Note: normal hover styles are applied at the wrapper level when not receiving
     }
 
-    // Normal hover state (only when NOT receiving)
-    &:not(.receiving) .keyboard-shortcut-hint:hover {
+    // ===== INTERACTION STATES =====
+
+    // Thread boundary visibility
+    &.thread-boundary-visible {
+        .ai-thread-boundary-indicator-line {
+            opacity: 1;
+            transform: scaleY(1);
+        }
+    }
+
+    // Submit button hover (when not receiving)
+    &:not(.receiving) .ai-submit-button:hover {
         opacity: 1;
-        border-color: rgba($steelBlue, 0.3);
-        transition: hoverTransition(all, 250ms);
+        // Removed border-color to satisfy requirement: no visible border on hover
+        // Keep transition for opacity only to avoid layout shift
+        transition: hoverTransition(opacity, 250ms);
 
-        .shortcut-default { opacity: 0; pointer-events: none; }
-        .shortcut-hover { opacity: 1; pointer-events: auto; }
-        .shortcut-receiving { opacity: 0; pointer-events: none; }
-
-        .shortcut-hover .shortcut-label { color: $steelBlue; }
-
-        // Animate send icon to the right end during hover reveal
-        .shortcut-hover .icons-container .send-icon {
-            // Hover-in: longer, smoother slide
-            transition: hoverTransition(left, 300ms);
-            left: calc(100% - 18px); // container width minus icon width
-        }
+        .button-default { opacity: 0; pointer-events: none; }
+        .button-hover { opacity: 1; pointer-events: auto; }
+        .button-receiving { opacity: 0; pointer-events: none; }
     }
 
-    // Enhanced visibility when thread is focused
-    &:focus-within .keyboard-shortcut-hint {
+    // Thread focus state
+    &:focus-within .ai-submit-button {
         opacity: 1;
         transform: translateY(-2px);
     }
-}
 
-// Keyboard feedback when keys are pressed (applied via ProseMirror decorations)
-.ai-chat-thread-keys-pressed {
-    .keyboard-shortcut-hint {
-        .key-icon.cmd-key,
-        .key-text.ctrl-key {
-            color: $steelBlue !important;
+    // ===== RECEIVING STATE =====
+    &.receiving {
+        .ai-submit-button {
+            background-color: white;
+            transition: hoverTransition(background, 300ms);
 
-            svg {
-                fill: $steelBlue !important;
+            // Hide normal states
+            .button-default,
+            .button-hover {
+                opacity: 0 !important;
+                pointer-events: none !important;
             }
-        }
-    }
-}
 
-// Enter key highlight (only when both mod and enter are pressed)
-.ai-chat-thread-keys-pressed.mod-pressed.enter-pressed {
-    .keyboard-shortcut-hint {
-        .key-icon.enter-key {
-            svg {
-                fill: $steelBlue !important;
+            // Show receiving state
+            .button-receiving {
+                opacity: 1 !important;
+                pointer-events: auto !important;
             }
-        }
-    }
-}
 
-// Receiving state overrides (ensure visibility regardless of cascade order)
-.ai-chat-thread-wrapper.receiving {
-    .keyboard-shortcut-hint {
-        // Hide non-receiving states
-        .shortcut-default,
-        .shortcut-hover {
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }
+            // Receiving hover state
+            &:hover {
+                .button-default,
+                .button-hover {
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
 
-        // Always show receiving content
-        .shortcut-receiving {
-            opacity: 1 !important;
-            pointer-events: auto !important;
+                .button-receiving {
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
 
-            // Default placement: stop icon on the right, ready to slide left on hover
-            .icons-container {
-                .stop-icon {
-                    position: absolute;
-                    left: calc(100% - 18px); // align to right (container width - icon width)
-                    transition: hoverTransition(left, 150ms); // mouse-out timing
+                    .stop-icon svg {
+                        fill: $redPink;
+                    }
                 }
             }
         }
+    }
 
-        // Keep receiving visible on hover
+    // ===== COLLAPSED STATE =====
+    // When collapsed, show 50px preview with fade-out gradient at bottom
+    &.collapsed {
+        .ai-chat-thread-content {
+            max-height: 60px;
+            overflow: hidden;
+            position: relative;
+
+            // Fade-out gradient overlay - starts earlier, fades drastically at bottom
+            &::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 100%;
+                background: linear-gradient(to bottom,
+                    rgba(255, 255, 255, 0) 0%,
+                    rgba(255, 255, 255, 0) 33%,
+                    rgba(255, 255, 255, 0.3) 57%,
+                    rgba(255, 255, 255, 0.7) 74%,
+                    rgba(255, 255, 255, 0.95) 88%,
+                    rgba(255, 255, 255, 1) 96%,
+                    rgba(255, 255, 255, 1) 100%
+                );
+                pointer-events: none;
+                z-index: 2;
+            }
+        }
+
+        .ai-thread-boundary-indicator {
+            .ai-thread-boundary-icon {
+                svg {
+                    fill: lighten($nightBlue, 20%);
+                }
+            }
+
+            // When collapsed, use darker color for toggle icon
+            .ai-thread-collapse-toggle svg {
+                fill: $nightBlue; // Darker in collapsed state
+            }
+
+            // Click feedback animation - expanding (going from collapsed to expanded)
+            .ai-thread-collapse-toggle.click-feedback svg {
+                @include clickToggleFeedbackAnimation((
+                    startColor: $nightBlue,
+                    flashColor: lighten($nightBlue, 15%),
+                    endColor: lighten($nightBlue, 30%)
+                ));
+            }
+        }
+
+
+        .ai-thread-boundary-indicator-line {
+            background: lighten($steelBlue, 20%)
+        }
+
+        .ai-chat-thread-controls {
+            display: none;
+        }
+
         &:hover {
-            .shortcut-receiving {
-                opacity: 1 !important;
-                pointer-events: auto !important;
+            cursor: move;
 
-                // Hover-in: slide stop icon left with same timing as send icon
-                .icons-container {
-                    .stop-icon {
-                        transition: hoverTransition(left, 300ms);
-                        left: 7px;
-                    }
+            .ai-thread-boundary-indicator-line {
+                background: $steelBlue;
+            }
+        }
+    }
+}
+
+// ========== AI RESPONSE MESSAGE WRAPPER ==========
+.ai-response-message-wrapper {
+    margin: 0;
+    padding: 0.8rem 0 0.7rem;
+    position: relative;
+
+    // ===== USER AVATAR =====
+    .user-avatar {
+        display: block;
+        width: 21px;
+        height: 21px;
+        border-radius: 99px;
+        position: absolute;
+        user-select: none;
+        left: -55px;
+        bottom: 0.01rem;
+        cursor: default;
+
+        svg {
+            fill: #94999d;
+        }
+
+        // Assistant providers
+        &.assistant-anthropic {
+            left: -55.5px;
+
+            svg {
+                fill: #D97757;
+                width: 21.5px;
+                height: 21.5px;
+            }
+        }
+
+        &.assistant-openai {
+            overflow: hidden;
+
+            svg {
+                fill: $aiGreen;
+            }
+
+            &.node-receiving-animation svg {
+                animation: heartbeatAnimation 1.5s infinite;
+                animation-timing-function: ease-in-out;
+            }
+        }
+    }
+
+    // ===== AI RESPONSE MESSAGE =====
+    .ai-response-message {
+        position: relative;
+        z-index: 2;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        padding: 0;
+
+        // Boundary indicator
+        .ai-response-message-boundaries-indicator {
+            position: absolute;
+            left: -21px;
+            display: block;
+            height: 100%;
+            width: $aiResponseMessageIndicatorBoundariesWidth;
+            transition: height 400ms cubic-bezier(0.19, 1, 0.22, 1);
+            background-color: $aiResponseMessageIndicatorColor;
+            border-radius: 100px;
+
+            @include boundaryPointerTriangle((
+                direction: 'left',
+                anchor: 'bottom',
+                horizontalOffset: 0px,
+                verticalOffset: 8px,
+                size: 2px,
+                color: $aiResponseMessageIndicatorColor,
+                accentColor: $aiResponseMessageIndicatorAccentPointerColor
+            ));
+
+            &.node-render-animation {
+                animation: popOutAndGrow 300ms cubic-bezier(0.19, 1, 0.22, 1);
+            }
+        }
+
+        // Message content
+        .ai-response-message-content {
+            padding: 0;
+
+            &.node-render-animation {
+                animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
+            }
+
+            h1, h2, h3, h4, h5, h6 {
+                &:first-child {
+                    margin-top: 0;
                 }
             }
         }

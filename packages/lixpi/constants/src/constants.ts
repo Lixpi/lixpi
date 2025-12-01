@@ -14,6 +14,7 @@ export const USER_SUBJECTS: Record<string, string> = {
 export const AI_CHAT_SUBJECTS: Record<string, string> = {
     SEND_MESSAGE: 'aiChat.sendMessage',
     SEND_MESSAGE_RESPONSE: 'aiChat.receiveMessage',
+    STOP_MESSAGE: 'aiChat.stopMessage',
 }
 
 export const DOCUMENT_SUBJECTS: Record<string, string> = {

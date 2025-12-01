@@ -71,10 +71,9 @@ export default {
 
 	createDocument: async ({
 		title,
-		aiModel,
 		content,
 		permissions
-	}: Pick<Document, 'title' | 'aiModel' | 'content'> & { permissions: { userId: string; accessLevel: string } }): Promise<Document | undefined> => {
+	}: Pick<Document, 'title' | 'content'> & { permissions: { userId: string; accessLevel: string } }): Promise<Document | undefined> => {
 		const currentDate = new Date().getTime()
 		const revision = 1    // Default non-expiring revision
 
@@ -82,7 +81,6 @@ export default {
 			documentId: uuid(),    // Partition key    // TODO: guarantee that documentId is unique by checking if it already exists in the database
 			revision,    // Sort key
 			title,
-			aiModel,
 			content,
 			prevRevision: 1,
 			createdAt: currentDate,
@@ -136,7 +134,6 @@ export default {
 
 	update: async ({
 		title,
-		aiModel,
 		content,
 		documentId,
 		prevRevision,
@@ -175,7 +172,6 @@ export default {
 				key: { documentId, revision: 1 },
 				updates: {
 					title,
-					aiModel,
 					// prevRevision: currentRevision,    // TODO: turn back on when versioning is ready
 					content,
 					updatedAt: currentDate

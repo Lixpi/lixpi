@@ -3,7 +3,7 @@
     import { fade, fly } from 'svelte/transition'
     import { elasticOut } from 'svelte/easing'
 
-	import { lixpiLogo } from '../svgIcons/index.js'
+	import { lixpiLogo } from '../svgIcons/index.ts'
 
 	import AuthService from '../services/auth0-service.ts'
 

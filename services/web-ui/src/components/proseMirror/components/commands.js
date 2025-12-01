@@ -1,4 +1,6 @@
+import { v4 as uuidv4 } from 'uuid'
 import { nodeTypes } from "../customNodes"
+import { aiChatThreadNodeType } from '../plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 
 export const useAiInput = (state, dispatch) => {
     const attrs = {}
@@ -12,12 +14,13 @@ export const useAiInput = (state, dispatch) => {
     return false
 }
 
-export const useAiChatThread = (state, dispatch) => {
+export const insertAiChatThread = (state, dispatch) => {
     const attrs = {
-        threadId: `thread-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        threadId: uuidv4(),
         status: 'active'
     }
-    const tr = state.tr.setMeta(`insert:${nodeTypes.aiChatThreadNodeType}`, attrs)
+
+    const tr = state.tr.setMeta(`insert:${aiChatThreadNodeType}`, attrs)
 
     if (dispatch) {
         dispatch(tr)

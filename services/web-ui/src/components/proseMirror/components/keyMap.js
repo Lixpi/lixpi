@@ -15,7 +15,7 @@ import {undo, redo} from "prosemirror-history"
 import {undoInputRule} from "prosemirror-inputrules"
 
 import { documentTitleNodeType } from "../customNodes/documentTitleNode.js"
-import { useAiInput, useAiChatThread } from "./commands.js"
+import { useAiInput, insertAiChatThread } from "./commands.js"
 
 const mac = typeof navigator != "undefined" ? /Mac|iP(hone|[oa]d)/.test(navigator.platform) : false
 
@@ -89,8 +89,8 @@ export const buildKeymap = (schema, mapKeys) => {
     bind("Mod-I", useAiInput)
 
     // AI Chat Thread trigger
-    bind("Mod-Shift-i", useAiChatThread)
-    bind("Mod-Shift-I", useAiChatThread)
+    bind("Mod-Shift-i", insertAiChatThread)
+    bind("Mod-Shift-I", insertAiChatThread)
 
     if (type = schema.marks.em) {
         // Note: Mod-i is now used for AI Input, Mod-Shift-i for AI Chat Thread

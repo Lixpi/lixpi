@@ -21,7 +21,6 @@ export type Document = {
     title: string
     revision?: number
     prevRevision?: number
-    aiModel?: string
     content?: Record<string, any>
     tags?: Tag[]
     createdAt: string
@@ -47,7 +46,6 @@ const document: DocumentStore = {
         title: '',
         revision: 0,
         prevRevision: 0,
-        aiModel: '',
         content: {},
         createdAt: '',
         updatedAt: '',

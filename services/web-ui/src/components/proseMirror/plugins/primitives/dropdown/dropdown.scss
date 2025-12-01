@@ -1,0 +1,42 @@
+/* Import animations and base dropdown styles */
+@import '../../../../../sass/components/_animations.scss';
+@import './_dropdown-mixins.scss';
+
+/* Dropdown Plugin Styles */
+.dropdown-menu-tag-pill-wrapper {
+    // Wrapper needs to be positioned for absolutely positioned bubble
+    position: relative;
+
+    // Trigger button
+    @include dropdownTriggerStructure((
+        fontSize: .9rem,
+        fontWeight: 400,
+        iconMargin: 0 .3rem 0 .2rem,
+        triggerPadding: 0
+    ));
+
+    // Dropdown items
+    @include dropdownItemsStructure((
+        itemFontSize: .83rem
+    ));
+
+    // Dropdown-specific themes (items and trigger only)
+    &.theme-light {
+        @include tagPillDropdownLightTheme();
+    }
+    &.theme-dark {
+        @include tagPillDropdownDarkTheme();
+    }
+}
+
+/* Dropdown open state - when ProseMirror decoration adds .dropdown-open class */
+.dropdown-open {
+    .dropdown-menu-tag-pill-wrapper {
+        .dots-dropdown-menu {
+            .bubble-wrapper {
+                display: block;
+                animation: popOut 300ms cubic-bezier(0.19, 1, 0.22, 1);
+            }
+        }
+    }
+}

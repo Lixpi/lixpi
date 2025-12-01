@@ -32,6 +32,73 @@
     }
 }
 
+// ********** Click Feedback Animation **********
+// INFO: Click feedback with color flash and single smooth wave
+//
+// SCSS Usage - Use the mixin with named parameters:
+// @include clickToggleFeedbackAnimation((
+//   startColor: $nightBlue,
+//   flashColor: lighten($nightBlue, 15%),
+//   endColor: lighten($nightBlue, 30%),
+//   duration: 150ms,
+//   easing: cubic-bezier(0.85, 0, 0.15, 1)
+// ));
+//
+// JavaScript Usage - Toggle a temporary class to trigger the animation:
+// element.classList.add('click-feedback');
+// setTimeout(() => element.classList.remove('click-feedback'), 150); // Match duration
+//
+// Complete Example:
+// SCSS:
+//   .my-button {
+//     svg { fill: $nightBlue; }
+//
+//     &.click-feedback svg {
+//       @include clickToggleFeedbackAnimation((
+//         startColor: $nightBlue,
+//         flashColor: lighten($nightBlue, 15%),
+//         endColor: lighten($nightBlue, 30%)
+//       ));
+//     }
+//   }
+//
+// JS:
+//   button.addEventListener('click', () => {
+//     button.classList.add('click-feedback');
+//     setTimeout(() => button.classList.remove('click-feedback'), 150);
+//   });
+//
+@mixin clickToggleFeedbackAnimation($config: ()) {
+    $defaults: (
+        startColor: inherit,
+        flashColor: inherit,
+        endColor: inherit,
+        duration: 150ms,
+        easing: cubic-bezier(0.85, 0, 0.15, 1),
+        squeezeScale: 0.88
+    );
+    $s: map-merge($defaults, $config);
+
+    $animName: unique-id();
+
+    @keyframes #{$animName} {
+        0% {
+            transform: scale(1);
+            fill: map-get($s, startColor);
+        }
+        50% {
+            transform: scale(map-get($s, squeezeScale));
+            fill: map-get($s, flashColor);
+        }
+        100% {
+            transform: scale(1);
+            fill: map-get($s, endColor);
+        }
+    }
+
+    animation: $animName map-get($s, duration) map-get($s, easing);
+}
+
 // ********** PopOut animation **********
 // INFO: use like this:
 // animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);

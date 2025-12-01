@@ -4,15 +4,11 @@ import { writable } from 'svelte/store'
 
 import {
     LoadingStatus,
+    type AiModel,
 } from '@lixpi/constants'
 
 type Meta = {
     loadingStatus: LoadingStatus
-}
-
-export type AiModel = {
-    provider: string
-    modelName: string
 }
 
 // Define the aiModels object with the types

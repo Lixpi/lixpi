@@ -1,6 +1,7 @@
 @import '../../sass/variables.scss';
 @import 'MenuBar.scss';
 @import './plugins/aiChatThreadPlugin/ai-chat-thread.scss';
+@import './ProseMirrorMixings.scss';
 
 .ProseMirror {
 	&::spelling-error {
@@ -121,9 +122,12 @@
 .ProseMirror-hideselection *::-moz-selection { background: transparent; }
 .ProseMirror-hideselection { caret-color: transparent; }
 
-.ProseMirror-selectednode {
-	outline: 2px solid #8cf;
-}
+
+// Commented out to disable ugly outline around selected nodes.
+// Though keeping commented code as a reference so that I remember that there's such class bein applied to selected nodes
+// .ProseMirror-selectednode {
+// 	outline: 2px solid #8cf;
+// }
 
 /* Make sure li selections wrap around markers */
 
@@ -335,100 +339,7 @@ img.ProseMirror-separator {
 	}
 }
 
-.ai-response-message-wrapper {
-	margin: 0;
-	padding: 0.8rem 0 0.7rem;
-	position: relative;
-	.user-avatar {
-		display: block;
-		width:  21px;
-		height:  21px;
-		border-radius: 99px;
-		position: absolute;
-		user-select: none;
-		left: -55px;
-		bottom: .34rem;
-		cursor: default;
-		svg {
-			fill: #94999d;
-		}
-		&.assistant-anthropic {
-			left: -55.5px;
-			svg {
-				fill: #D97757;
-				width:  21.5px;
-				height:  21.5px;
-			}
-		}
-		&.assistant-openai {
-			overflow: hidden;
-			svg {
-				fill: $aiGreen;
-			}
-			&.node-receiving-animation {
-				svg {
-					animation: heartbeatAnimation 1.5s infinite;
-					animation-timing-function: ease-in-out;
-				}
-			}
-		}
-	}
 
-	.ai-response-message {
-		position: relative;
-		z-index: 2;
-		margin: 0;
-		display: flex;
-		align-items: center;
-		padding: 0;
-		position: relative;
-		// background: #fff;
-		.ai-response-message-boundaries-indicator {
-			position: absolute;
-			left: -21px;
-			display: block;
-			height: 17px;
-			height: 100%;
-			width: $aiResponseMessageIndicatorBoundariesWidth;
-			transition: height 400ms cubic-bezier(0.19, 1, 0.22, 1);
-			background-color: $aiResponseMessageIndicatorColor;
-			border-radius: 100px;
-			&:before,
-			&:after {
-				content: "";
-				position: absolute;
-				right: 100%;
-				bottom: 5px;
-				border: 3px solid transparent;
-				border-right-color: $aiResponseMessageIndicatorColor; // Match the arrow with the bubble color
-			}
-
-			&:before {
-				bottom: 3px;
-				border-width: 5px;
-				border-right-color: $aiResponseMessageIndicatorAccentPointerColor; // Arrow shadow with a darker shade
-				z-index: -1; // Place it behind the main arrow for the border effect
-			}
-			&.node-render-animation {
-				animation: popOutAndGrow 300ms cubic-bezier(0.19, 1, 0.22, 1);
-			}
-
-		}
-		.ai-response-message-content {
-			// padding: .3rem 0;
-			padding: 0;
-			// width: 100%; // TODO: this causes an unexpected weird fly-in-left animation effect, not sure if I want to keep it
-			&.node-render-animation {
-				animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
-			}
-			h1, h2, h3, h4, h5, h6 {
-				&:first-child {
-					margin-top: 0;
-				}
-			}
-		}
-	}
-}
 
 .ai-suggest-decorator {
 	&.visible {

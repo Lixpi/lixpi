@@ -1,4 +1,3 @@
-// @ts-nocheck
 // AI Chat Thread Plugin - Modular Architecture
 // This plugin consolidates AI chat functionality for ProseMirror:
 // - Keyboard triggers (Mod+Enter)
@@ -8,26 +7,35 @@
 // - Placeholder decorations
 
 import { Plugin, PluginKey, EditorState, Transaction } from 'prosemirror-state'
-import { EditorView, Decoration, DecorationSet, NodeView } from 'prosemirror-view'
+import { Selection } from 'prosemirror-state'
 import { TextSelection } from 'prosemirror-state'
-import { Node as PMNode, Schema } from 'prosemirror-model'
+import { Fragment, Slice } from 'prosemirror-model'
+import { EditorView, Decoration, DecorationSet, NodeView } from 'prosemirror-view'
+import { Node as ProseMirrorNode, Schema as ProseMirrorSchema } from 'prosemirror-model'
 import { nodeTypes, nodeViews } from '../../customNodes/index.js'
 import { documentTitleNodeType } from '../../customNodes/documentTitleNode.js'
-import { aiChatThreadNodeType } from './aiChatThreadNode.ts'
+import { aiChatThreadNodeType, aiChatThreadNodeView } from './aiChatThreadNode.ts'
+import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from './aiChatThreadPluginConstants.ts'
 import { aiResponseMessageNodeType, aiResponseMessageNodeView } from './aiResponseMessageNode.ts'
-import { keyboardMacCommandIcon, keyboardEnterKeyIcon, sendIcon, stopIcon } from '../../../../svgIcons/index.js'
 import SegmentsReceiver from '../../../../services/segmentsReceiver-service.js'
+import { documentStore } from '../../../../stores/documentStore.ts'
+import { aiModelsStore } from '../../../../stores/aiModelsStore.ts'
+import type { AiModelId } from '@lixpi/constants'
 
-const IS_RECEIVING_TEMP_DEBUG_STATE = false
+const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
 // ========== TYPE DEFINITIONS ==========
 
-type AiChatCallback = (messages: Array<{ role: string; content: string }>) => void
+import type { AiChatSendMessagePayload, AiChatStopMessagePayload } from '@lixpi/constants'
+
+type SendAiRequestHandler = (data: AiChatSendMessagePayload) => void
+type StopAiRequestHandler = (data: AiChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM'
 type SegmentEvent = {
     status: StreamStatus
     aiProvider?: string
+    threadId?: string
     segment?: {
         segment: string
         styles: string[]
@@ -38,21 +46,20 @@ type SegmentEvent = {
 }
 type ThreadContent = { nodeType: string; textContent: string }
 type AiChatThreadPluginState = {
-    isReceiving: boolean
+    receivingThreadIds: Set<string>
     insideBackticks: boolean
     backtickBuffer: string
     insideCodeBlock: boolean
     codeBuffer: string
     decorations: DecorationSet
-    modPressed: boolean
-    enterPressed: boolean
+    hoveredThreadId: string | null
+    // Note: dropdownStates removed - now handled by dropdown primitive plugin
 }
 
 // ========== CONSTANTS ==========
 
-const PLUGIN_KEY = new PluginKey<AiChatThreadPluginState>('aiChatThread')
+const PLUGIN_KEY = AI_CHAT_THREAD_PLUGIN_KEY as PluginKey<AiChatThreadPluginState>
 const INSERT_THREAD_META = `insert:${aiChatThreadNodeType}`
-const USE_AI_CHAT_META = 'use:aiChat'
 
 // ========== UTILITY MODULES ==========
 
@@ -67,8 +74,33 @@ class KeyboardHandler {
 
 // Content extraction and transformation utilities
 class ContentExtractor {
+    // Find thread node by explicit position
+    static findThreadByPosition(state: EditorState, nodePos: number): ProseMirrorNode | null {
+        // Try direct lookup first
+        let thread = state.doc.nodeAt(nodePos)
+        if (thread?.type.name === aiChatThreadNodeType) return thread
+
+        // Try resolving and walking up tree
+        const $pos = state.doc.resolve(nodePos + 1)
+        for (let depth = $pos.depth; depth >= 0; depth--) {
+            const node = $pos.node(depth)
+            if (node.type.name === aiChatThreadNodeType) return node
+        }
+        return null
+    }
+
+    // Find thread node by current selection
+    static findThreadBySelection(state: EditorState): ProseMirrorNode | null {
+        const { $from } = state.selection
+        for (let depth = $from.depth; depth > 0; depth--) {
+            const node = $from.node(depth)
+            if (node.type.name === aiChatThreadNodeType) return node
+        }
+        return null
+    }
+
     // Extract and format text recursively, preserving code block structure
-    static collectFormattedText(node: PMNode): string {
+    static collectFormattedText(node: ProseMirrorNode): string {
         let text = ''
         node.forEach(child => {
             if (child.type.name === 'text') {
@@ -87,7 +119,7 @@ class ContentExtractor {
     }
 
     // Simple text extraction without formatting (for backwards compatibility)
-    static collectText(node: PMNode): string {
+    static collectText(node: ProseMirrorNode): string {
         let text = ''
         node.forEach(child => {
             if (child.type.name === 'text') {
@@ -101,111 +133,129 @@ class ContentExtractor {
         return text
     }
 
-    // Find the active aiChatThread containing the cursor
-    static getActiveThreadContent(state: EditorState): ThreadContent[] {
-        const { $from } = state.selection
-        let thread: PMNode | null = null
-
-        // Walk up the node hierarchy to find the thread
-        for (let depth = $from.depth; depth > 0; depth--) {
-            const node = $from.node(depth)
-            if (node.type.name === aiChatThreadNodeType) {
-                thread = node
-                break
-            }
+    // Find the active aiChatThread containing the cursor and extract content
+    // If threadContext is 'Document', extract from ALL threads in the document
+    static getActiveThreadContent(state: EditorState, threadContext: string = 'Thread', nodePos?: number): ThreadContent[] {
+        if (threadContext === 'Document') {
+            return ContentExtractor.getAllThreadsContent(state)
         }
+
+        // Find thread node - prefer explicit position, fallback to selection
+        const thread = nodePos !== undefined
+            ? ContentExtractor.findThreadByPosition(state, nodePos)
+            : ContentExtractor.findThreadBySelection(state)
 
         if (!thread) return []
 
         // Extract all blocks with content, preserving code block formatting
         const content: ThreadContent[] = []
         thread.forEach(block => {
-            // Use formatted text extraction for all blocks
             const formattedText = ContentExtractor.collectFormattedText(block)
-            const simpleText = ContentExtractor.collectText(block)
 
-            console.log('Processing block:', {
-                nodeType: block.type.name,
-                textContent: block.textContent,
-                simpleText: simpleText,
-                formattedText: formattedText,
-                hasContent: !!block.textContent,
-                hasFormattedContent: !!formattedText,
-                nodeSize: block.nodeSize,
-                childCount: block.childCount
-            })
-
-            // Include blocks that have any text content
             if (block.textContent || formattedText) {
                 let textContent = formattedText || block.textContent
 
-                // For top-level code blocks, format with triple backticks (if not already formatted)
+                // Format code blocks with triple backticks if needed
                 if (block.type.name === 'code_block' && !textContent.includes('```')) {
                     textContent = `\`\`\`\n${textContent}\n\`\`\``
                 }
 
                 content.push({
                     nodeType: block.type.name,
-                    textContent: textContent
+                    textContent
                 })
             }
         })
 
-        console.log('Final extracted content:', content)
         return content
     }
 
-    // Transform thread content into AI message format
-    static toMessages(items: ThreadContent[]): Array<{ role: string; content: string }> {
-        console.log('Input items to toMessages:', items)
+    // Extract content from ALL aiChatThread nodes in the document
+    static getAllThreadsContent(state: EditorState): ThreadContent[] {
+        const allThreadsContent: ThreadContent[] = []
+        let threadCount = 0
 
-        const messages: Array<{ role: string; content: string; nodeType: string }> = []
+        state.doc.descendants((node, pos) => {
+            if (node.type.name === aiChatThreadNodeType) {
+                threadCount++
 
-        items.forEach(item => {
-            const role = item.nodeType === aiResponseMessageNodeType ? 'assistant' : 'user'
-            const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null
+                // Add a thread separator if not the first thread
+                if (threadCount > 1) {
+                    allThreadsContent.push({
+                        nodeType: 'thread_separator',
+                        textContent: '\n--- Thread Separator ---\n'
+                    })
+                }
 
-            console.log('Processing item:', {
-                nodeType: item.nodeType,
-                role,
-                textContent: item.textContent,
-                isAiResponse: item.nodeType === aiResponseMessageNodeType,
-                expectedType: aiResponseMessageNodeType
-            })
+                // Extract content from this thread
+                node.forEach(block => {
+                    // Skip dropdown nodes
+                    if (block.type.name === 'dropdown') {
+                        return
+                    }
 
-            // Merge consecutive messages with same role
-            if (lastMessage && lastMessage.role === role) {
-                lastMessage.content += '\n' + item.textContent
-            } else {
-                messages.push({
-                    role,
-                    content: item.textContent,
-                    nodeType: item.nodeType
+                    const formattedText = ContentExtractor.collectFormattedText(block)
+                    const simpleText = ContentExtractor.collectText(block)
+
+                    // Include blocks that have any text content
+                    if (block.textContent || formattedText) {
+                        let textContent = formattedText || block.textContent
+
+                        // For top-level code blocks, format with triple backticks (if not already formatted)
+                        if (block.type.name === 'code_block' && !textContent.includes('```')) {
+                            textContent = `\`\`\`\n${textContent}\n\`\`\``
+                        }
+
+                        allThreadsContent.push({
+                            nodeType: block.type.name,
+                            textContent: textContent
+                        })
+                    }
                 })
             }
         })
 
-        const finalMessages = messages.map(({ role, content }) => ({ role, content }))
-        console.log('Final messages to send to AI:', finalMessages)
-        return finalMessages
+        return allThreadsContent
+    }
+
+    // Transform thread content into AI message format (merges consecutive same-role messages)
+    static toMessages(items: ThreadContent[]): Array<{ role: string; content: string }> {
+        const messages: Array<{ role: string; content: string }> = []
+
+        items.forEach(item => {
+            const role = item.nodeType === aiResponseMessageNodeType ? 'assistant' : 'user'
+            const lastMessage = messages[messages.length - 1]
+
+            // Merge consecutive same-role messages
+            if (lastMessage?.role === role) {
+                lastMessage.content += '\n' + item.textContent
+            } else {
+                messages.push({ role, content: item.textContent })
+            }
+        })
+
+        return messages
     }
 }
 
 // Document position and insertion utilities
 class PositionFinder {
     // Find where to insert aiResponseMessage in the active thread
-    static findThreadInsertionPoint(state: EditorState): {
+    static findThreadInsertionPoint(state: EditorState, threadId?: string): {
         insertPos: number
         trailingEmptyParagraphPos: number | null
     } | null {
         let result: { insertPos: number; trailingEmptyParagraphPos: number | null } | null = null
 
-        state.doc.descendants((node, pos) => {
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
             if (node.type.name !== aiChatThreadNodeType) return
+
+            // If threadId specified, only match that thread
+            if (threadId && node.attrs?.threadId !== threadId) return
 
             // Find the last paragraph in the thread
             let lastParaAbsPos: number | null = null
-            let lastParaNode: PMNode | null = null
+            let lastParaNode: ProseMirrorNode | null = null
 
             node.descendants((child, relPos) => {
                 if (child.type.name === 'paragraph') {
@@ -225,26 +275,57 @@ class PositionFinder {
         return result
     }
 
-    // Find the current aiResponseMessage being streamed into
-    static findResponseNode(state: EditorState): {
+    // Find the current aiResponseMessage being streamed into for a specific thread
+    static findResponseNode(state: EditorState, threadId?: string): {
         found: boolean
         endOfNodePos?: number
         childCount?: number
     } {
-        let found = false
-        let endOfNodePos: number | undefined
-        let childCount: number | undefined
+        let bestEndPos: number | undefined
+        let bestChildCount: number | undefined
+        let bestScore = -1 // 2: isReceiving, 1: isInitialRender, 0: any response
 
-        state.doc.descendants((node, pos) => {
-            if (node.type.name !== aiResponseMessageNodeType) return
+        const scoreNode = (attrs: any) =>
+            attrs?.isReceivingAnimation ? 2 : (attrs?.isInitialRenderAnimation ? 1 : 0)
 
-            endOfNodePos = pos + node.nodeSize
-            childCount = node.childCount
-            found = true
-            return false // Stop searching
-        })
+        if (threadId) {
+            // Search within specific thread
+            state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+                if (node.type.name !== aiChatThreadNodeType || node.attrs?.threadId !== threadId) return
 
-        return { found, endOfNodePos, childCount }
+                node.descendants((child: ProseMirrorNode, relPos: number) => {
+                    if (child.type.name !== aiResponseMessageNodeType) return
+
+                    const endPos = pos + relPos + 1 + child.nodeSize
+                    const score = scoreNode(child.attrs)
+
+                    if (score > bestScore || (score === bestScore && endPos > (bestEndPos || 0))) {
+                        bestScore = score
+                        bestEndPos = endPos
+                        bestChildCount = child.childCount
+                    }
+                })
+                return false // Stop after finding thread
+            })
+        } else {
+            // Search globally
+            state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+                if (node.type.name !== aiResponseMessageNodeType) return
+
+                const endPos = pos + node.nodeSize
+                const score = scoreNode(node.attrs)
+
+                if (score > bestScore || (score === bestScore && endPos > (bestEndPos || 0))) {
+                    bestScore = score
+                    bestEndPos = endPos
+                    bestChildCount = node.childCount
+                }
+            })
+        }
+
+        return bestEndPos !== undefined
+            ? { found: true, endOfNodePos: bestEndPos, childCount: bestChildCount }
+            : { found: false }
     }
 }
 
@@ -340,45 +421,54 @@ class StreamingInserter {
 
 // Main plugin class coordinating all AI chat functionality
 class AiChatThreadPluginClass {
-    private callback: AiChatCallback
+    private sendAiRequestHandler: SendAiRequestHandler
+    private stopAiRequestHandler: StopAiRequestHandler
     private placeholderOptions: PlaceholderOptions
     private unsubscribeFromSegments: (() => void) | null = null
 
-    constructor(callback: AiChatCallback, placeholderOptions: PlaceholderOptions) {
-        this.callback = callback
-        this.placeholderOptions = placeholderOptions
+    constructor({
+        sendAiRequestHandler,
+        stopAiRequestHandler,
+        placeholders
+    }: {
+        sendAiRequestHandler: SendAiRequestHandler
+        stopAiRequestHandler: StopAiRequestHandler
+        placeholders: PlaceholderOptions
+    }) {
+        this.sendAiRequestHandler = sendAiRequestHandler
+        this.stopAiRequestHandler = stopAiRequestHandler
+        this.placeholderOptions = placeholders
     }
 
     // ========== STREAMING MANAGEMENT ==========
 
     private startStreaming(view: EditorView): void {
         this.unsubscribeFromSegments = SegmentsReceiver.subscribeToeceiveSegment((event: SegmentEvent) => {
-            const { status, aiProvider, segment } = event
+            const { status, aiProvider, segment, threadId } = event
             const { state, dispatch } = view
 
-            console.log('🚀 SEGMENT RECEIVED:', status, 'aiProvider:', aiProvider)
             switch (status) {
                 case 'START_STREAM':
-                    console.log('🔴 Handling START_STREAM')
-                    this.handleStreamStart(state, dispatch, aiProvider)
+                    console.log('🔴 [PLUGIN] START_STREAM', { threadId, aiProvider })
+                    this.handleStreamStart(state, dispatch, aiProvider, threadId)
                     break
                 case 'STREAMING':
-                    console.log('📡 Handling STREAMING segment')
-                    if (segment) this.handleStreaming(state, dispatch, segment)
+                    if (segment) this.handleStreaming(state, dispatch, segment, threadId, aiProvider)
                     break
                 case 'END_STREAM':
-                    console.log('🟢 Handling END_STREAM')
-                    this.handleStreamEnd(state, dispatch)
+                    console.log('🟢 [PLUGIN] END_STREAM', { threadId })
+                    this.handleStreamEnd(state, dispatch, threadId)
                     break
             }
         })
     }
 
-    private handleStreamStart(state: EditorState, dispatch: (tr: Transaction) => void, aiProvider?: string): void {
-        const threadInfo = PositionFinder.findThreadInsertionPoint(state)
+    private handleStreamStart(state: EditorState, dispatch: (tr: Transaction) => void, aiProvider?: string, threadId?: string): void {
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) return
 
         const { insertPos, trailingEmptyParagraphPos } = threadInfo
+
         const aiResponseNode = state.schema.nodes[aiResponseMessageNodeType].create({
             isInitialRenderAnimation: true,
             isReceivingAnimation: true,
@@ -402,23 +492,34 @@ class AiChatThreadPluginClass {
             }
 
             tr.setSelection(TextSelection.create(tr.doc, cursorPos))
-            tr.setMeta('setReceiving', true)
-            console.log('🔴 STREAM START: Setting isReceiving to true via setMeta')
+
+            // Set receiving state for this specific thread
+            if (threadId) {
+                tr.setMeta('setReceiving', { threadId, receiving: true })
+                console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos })
+            }
             dispatch(tr)
         } catch (error) {
             console.error('Error inserting aiResponseMessage:', error)
         }
     }
 
-    private handleStreaming(state: EditorState, dispatch: (tr: Transaction) => void, segment: SegmentEvent['segment']): void {
+    private handleStreaming(
+        state: EditorState,
+        dispatch: (tr: Transaction) => void,
+        segment: SegmentEvent['segment'],
+        threadId?: string,
+        aiProvider?: string
+    ): void {
         if (!segment) return
 
         let tr = state.tr
-        const responseInfo = PositionFinder.findResponseNode(state)
+        const responseInfo = PositionFinder.findResponseNode(state, threadId)
 
-        // Create response node if missing (fallback)
+        // Create response node if missing (fallback) in the correct thread
         if (!responseInfo.found) {
-            this.createResponseFallback(state, dispatch)
+            console.warn('⚠️ [PLUGIN] No response node found!', { threadId })
+            this.createResponseFallback(state, dispatch, threadId, aiProvider)
             return
         }
 
@@ -442,21 +543,30 @@ class AiChatThreadPluginClass {
         }
     }
 
-    private handleStreamEnd(state: EditorState, dispatch: (tr: Transaction) => void): void {
-        state.doc.descendants((node, pos) => {
+    private handleStreamEnd(state: EditorState, dispatch: (tr: Transaction) => void, threadId?: string): void {
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
             if (node.type.name === aiResponseMessageNodeType && node.attrs.isInitialRenderAnimation) {
+                // If threadId is provided, verify this response is in the correct thread
+                if (threadId) {
+                    let isInCorrectThread = false
+                    state.doc.nodesBetween(0, pos, (n: ProseMirrorNode) => {
+                        if (n.type.name === aiChatThreadNodeType && n.attrs?.threadId === threadId) {
+                            isInCorrectThread = true
+                            return false
+                        }
+                    })
+                    if (!isInCorrectThread) return // Skip this response node
+                }
+
                 const tr = state.tr.setNodeMarkup(pos, undefined, {
                     ...node.attrs,
                     isInitialRenderAnimation: false,
                     isReceivingAnimation: false
                 })
 
-                // Only set isReceiving to false if debug mode is off
-                if (!IS_RECEIVING_TEMP_DEBUG_STATE) {
-                    tr.setMeta('setReceiving', false)
-                    console.log('🟢 STREAM END: Setting isReceiving to false via setMeta')
-                } else {
-                    console.log('🟡 STREAM END: Debug mode ON - keeping isReceiving state active for CSS inspection')
+                // Only set receiving to false if debug mode is off
+                if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
+                    tr.setMeta('setReceiving', { threadId, receiving: false })
                 }
 
                 dispatch(tr)
@@ -465,15 +575,15 @@ class AiChatThreadPluginClass {
         })
     }
 
-    private createResponseFallback(state: EditorState, dispatch: (tr: Transaction) => void): void {
-        const threadInfo = PositionFinder.findThreadInsertionPoint(state)
+    private createResponseFallback(state: EditorState, dispatch: (tr: Transaction) => void, threadId?: string, aiProvider?: string): void {
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) return
 
         const { insertPos, trailingEmptyParagraphPos } = threadInfo
         const responseNode = state.schema.nodes[aiResponseMessageNodeType].create({
             isInitialRenderAnimation: true,
             isReceivingAnimation: true,
-            aiProvider: 'Anthropic'
+            aiProvider: aiProvider || 'Anthropic'
         })
 
         let tr = state.tr.insert(insertPos, responseNode)
@@ -488,7 +598,7 @@ class AiChatThreadPluginClass {
         dispatch(tr)
     }
 
-    private createMark(schema: Schema, style: string): any {
+    private createMark(schema: ProseMirrorSchema, style: string): any {
         switch (style) {
             case 'bold': return schema.marks.strong.create()
             case 'italic': return schema.marks.em.create()
@@ -498,198 +608,21 @@ class AiChatThreadPluginClass {
         }
     }
 
-    // ========== NODE VIEWS ==========
+    // ========== RECEIVING STATE DECORATIONS ==========
 
-    private createThreadNodeView(node: PMNode, view: EditorView, getPos: () => number | undefined): NodeView {
-        // Create DOM structure
-        const dom = document.createElement('div')
-        dom.className = 'ai-chat-thread-wrapper'
-        dom.setAttribute('data-thread-id', node.attrs.threadId)
-        dom.setAttribute('data-status', node.attrs.status)
-
-        // Create content container
-        const contentDOM = document.createElement('div')
-        contentDOM.className = 'ai-chat-thread-content'
-
-        // Create keyboard shortcut indicator
-        const shortcutIndicator = this.createKeyboardShortcutIndicator(view)
-
-        dom.appendChild(contentDOM)
-        dom.appendChild(shortcutIndicator)
-
-        // Focus handling
-        this.setupContentFocus(contentDOM, view, getPos)
-
-        return {
-            dom,
-            contentDOM,
-            update: (updatedNode: PMNode) => {
-                node = updatedNode
-                return true
-            }
-        }
-    }
-
-
-
-    private setupContentFocus(contentDOM: HTMLElement, view: EditorView, getPos: () => number | undefined): void {
-        contentDOM.addEventListener('mousedown', () => {
-            view.focus()
-            const pos = getPos()
-            if (pos !== undefined) {
-                const $pos = view.state.doc.resolve(pos + 1)
-                const selection = TextSelection.create(view.state.doc, $pos.pos)
-                view.dispatch(view.state.tr.setSelection(selection))
-            }
-        })
-    }
-
-
-
-
-
-    private createKeyboardShortcutIndicator(view: EditorView): HTMLElement {
-        const indicator = document.createElement('div')
-        indicator.className = 'keyboard-shortcut-hint'
-
-        // Detect platform for correct modifier key
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
-
-        // Default state (showing keyboard shortcut)
-        const defaultContent = document.createElement('div')
-        defaultContent.className = 'shortcut-default'
-
-        const defaultIconsContainer = document.createElement('div')
-        defaultIconsContainer.className = 'icons-container'
-
-        const keysContainer = document.createElement('div')
-        keysContainer.className = 'shortcut-keys'
-
-        if (isMac) {
-            const cmdIcon = document.createElement('span')
-            cmdIcon.className = 'key-icon cmd-key'
-            cmdIcon.innerHTML = keyboardMacCommandIcon
-            keysContainer.appendChild(cmdIcon)
-        } else {
-            const ctrlKey = document.createElement('span')
-            ctrlKey.className = 'key-text ctrl-key'
-            ctrlKey.textContent = 'Ctrl'
-            keysContainer.appendChild(ctrlKey)
-        }
-
-        const enterIcon = document.createElement('span')
-        enterIcon.className = 'key-icon enter-key'
-        enterIcon.innerHTML = keyboardEnterKeyIcon
-        keysContainer.appendChild(enterIcon)
-
-        defaultIconsContainer.appendChild(keysContainer)
-
-        const defaultLabel = document.createElement('span')
-        defaultLabel.className = 'shortcut-label'
-        defaultLabel.textContent = 'send'
-
-        defaultContent.appendChild(defaultIconsContainer)
-        defaultContent.appendChild(defaultLabel)
-
-        // Hover state (showing send button)
-        const hoverContent = document.createElement('div')
-        hoverContent.className = 'shortcut-hover'
-
-        const hoverIconsContainer = document.createElement('div')
-        hoverIconsContainer.className = 'icons-container'
-
-        const sendIconElement = document.createElement('span')
-        sendIconElement.className = 'send-icon'
-        sendIconElement.innerHTML = sendIcon
-
-        hoverIconsContainer.appendChild(sendIconElement)
-
-        const hoverLabel = document.createElement('span')
-        hoverLabel.className = 'shortcut-label'
-        hoverLabel.textContent = 'send'
-
-        hoverContent.appendChild(hoverIconsContainer)
-        hoverContent.appendChild(hoverLabel)
-
-        // Receiving state (showing stop button)
-        const receivingContent = document.createElement('div')
-        receivingContent.className = 'shortcut-receiving'
-
-        const receivingIconsContainer = document.createElement('div')
-        receivingIconsContainer.className = 'icons-container'
-
-        const stopIconElement = document.createElement('span')
-        stopIconElement.className = 'stop-icon'
-        stopIconElement.innerHTML = stopIcon
-
-        receivingIconsContainer.appendChild(stopIconElement)
-
-        const receivingLabel = document.createElement('span')
-        receivingLabel.className = 'shortcut-label'
-        receivingLabel.textContent = 'stop'
-
-        receivingContent.appendChild(receivingIconsContainer)
-        receivingContent.appendChild(receivingLabel)
-
-        // Add all three states to indicator
-        indicator.appendChild(defaultContent)
-        indicator.appendChild(hoverContent)
-        indicator.appendChild(receivingContent)
-
-        // Enable pointer events and add click handler
-        indicator.style.pointerEvents = 'auto'
-        indicator.style.cursor = 'pointer'
-
-        // Add click handler
-        indicator.addEventListener('click', (e) => {
-            e.preventDefault()
-            e.stopPropagation()
-
-            const pluginState = PLUGIN_KEY.getState(view.state)
-
-            console.log('🖱️ BUTTON CLICKED: pluginState.isReceiving =', pluginState?.isReceiving)
-
-            if (pluginState?.isReceiving) {
-                // TODO: Stop AI streaming functionality
-                console.log('🛑 Stop AI streaming - functionality to be implemented')
-            } else {
-                // Trigger AI chat submission
-                console.log('🚀 Triggering AI chat submission')
-                const tr = view.state.tr.setMeta(USE_AI_CHAT_META, true)
-                view.dispatch(tr)
-            }
-        })
-
-        // Note: Keyboard feedback is now handled via ProseMirror decorations in the plugin props
-
-        return indicator
-    }
-
-
-
-    // ========== KEYBOARD FEEDBACK ==========
-
-    private createKeyboardFeedbackDecorations(state: EditorState, pluginState: AiChatThreadPluginState): Decoration[] {
+    private createReceivingStateDecorations(state: EditorState, pluginState: AiChatThreadPluginState): Decoration[] {
         const decorations: Decoration[] = []
 
-        // Find all ai-chat-thread nodes and add keyboard feedback and receiving state styling
-        state.doc.descendants((node, pos) => {
+        // Find all ai-chat-thread nodes and add receiving state styling ONLY
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
             if (node.type.name === 'aiChatThread') {
-                // Build CSS class based on which keys are pressed and receiving state
-                let cssClass = 'ai-chat-thread-keys-pressed'
-                if (pluginState.modPressed) {
-                    cssClass += ' mod-pressed'
-                }
-                if (pluginState.enterPressed) {
-                    cssClass += ' enter-pressed'
-                }
-                if (pluginState.isReceiving) {
+                let cssClass = 'ai-chat-thread'
+                const threadId = node.attrs?.threadId
+                if (threadId && pluginState.receivingThreadIds.has(threadId)) {
                     cssClass += ' receiving'
                 }
 
-                console.log('Creating decoration with class:', cssClass, 'modPressed:', pluginState.modPressed, 'enterPressed:', pluginState.enterPressed, 'isReceiving:', pluginState.isReceiving)
-
-                // Create a decoration that applies the feedback class to the entire node
+                // Create a decoration that applies the receiving state class to the entire node
                 decorations.push(
                     Decoration.node(pos, pos + node.nodeSize, {
                         class: cssClass
@@ -701,12 +634,55 @@ class AiChatThreadPluginClass {
         return decorations
     }
 
+    // ========== THREAD BOUNDARY SYSTEM ==========
+
+    private createThreadBoundaryDecorations(state: EditorState, pluginState: AiChatThreadPluginState): Decoration[] {
+        const decorations: Decoration[] = []
+
+        // Find all ai-chat-thread nodes and add boundary visibility to ALL threads (always visible)
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+            if (node.type.name === 'aiChatThread') {
+                // Apply boundary visibility class to all threads
+                decorations.push(
+                    Decoration.node(pos, pos + node.nodeSize, {
+                        class: 'thread-boundary-visible'
+                    })
+                )
+            }
+        })
+
+        return decorations
+    }
+
+    // ========== COLLAPSED STATE SYSTEM ==========
+
+    private createCollapsedStateDecorations(state: EditorState): Decoration[] {
+        const decorations: Decoration[] = []
+
+        // Find all ai-chat-thread nodes and add collapsed class if isCollapsed is true
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+            if (node.type.name === 'aiChatThread' && node.attrs.isCollapsed) {
+                // Apply collapsed class - content will be hidden by CSS but still in DOM for streaming
+                decorations.push(
+                    Decoration.node(pos, pos + node.nodeSize, {
+                        class: 'collapsed'
+                    })
+                )
+            }
+        })
+
+        return decorations
+    }
+
+    // ========== DROPDOWN STATE HANDLING ==========
+    // Note: Dropdown decorations and state are now handled by the dropdown primitive plugin
+
     // ========== PLACEHOLDERS ==========
 
     private createPlaceholders(state: EditorState): DecorationSet {
         const decorations: Decoration[] = []
 
-        state.doc.descendants((node, pos) => {
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
             // Title placeholder
             if (node.type.name === documentTitleNodeType && node.content.size === 0) {
                 decorations.push(
@@ -746,21 +722,66 @@ class AiChatThreadPluginClass {
         const paragraph = newState.schema.nodes.paragraph.create()
         const threadNode = nodeType.create(attrs, paragraph)
 
-        // Replace selection with thread
-        const { $from, $to } = newState.selection
-        let tr = newState.tr.replaceWith($from.pos, $to.pos, threadNode)
+        const { $from } = newState.selection
 
-        // Move cursor into thread
-        const pos = $from.pos + 1
-        tr = tr.setSelection(TextSelection.create(tr.doc, pos))
+        // Find if cursor is inside an existing aiChatThread
+        let currentThreadDepth = -1
+        for (let depth = $from.depth; depth >= 0; depth--) {
+            if ($from.node(depth).type.name === aiChatThreadNodeType) {
+                currentThreadDepth = depth
+                break
+            }
+        }
+
+        // Insert after current thread or after current top-level block
+        let insertPos: number
+        if (currentThreadDepth !== -1) {
+            const threadPos = $from.before(currentThreadDepth)
+            const threadNode = $from.node(currentThreadDepth)
+            insertPos = threadPos + threadNode.nodeSize
+        } else {
+            insertPos = $from.after(1)
+        }
+
+        let tr = newState.tr.replace(insertPos, insertPos, new Slice(Fragment.from(threadNode), 0, 0))
+
+        // Set cursor inside new thread's paragraph (insertPos + 2)
+        const cursorPos = insertPos + 2
+        tr = tr.setSelection(TextSelection.create(tr.doc, cursorPos))
 
         return tr
+    }    private handleChatRequest(newState: EditorState, transaction: Transaction): void {
+        const meta = transaction.getMeta(USE_AI_CHAT_META)
+        const { threadId: threadIdFromMeta, nodePos } = meta || {}
+
+        // Find thread: prefer explicit position from button, fallback to selection
+        const threadNode = nodePos !== undefined
+            ? ContentExtractor.findThreadByPosition(newState, nodePos)
+            : ContentExtractor.findThreadBySelection(newState)
+
+        if (!threadNode) return
+
+        // Extract thread attributes
+        const { aiModel = '', threadContext = 'Thread', threadId: threadIdFromNode = '' } = threadNode.attrs
+        const threadId = threadIdFromMeta || threadIdFromNode
+
+        // Validate AI model selected
+        if (!aiModel) {
+            alert('Please select an AI model from the dropdown before submitting.')
+            return
+        }
+
+        // Extract and send content
+        const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos)
+        const messages = ContentExtractor.toMessages(threadContent)
+
+        this.sendAiRequestHandler({ messages, aiModel, threadId })
     }
 
-    private handleChatRequest(newState: EditorState): void {
-        const threadContent = ContentExtractor.getActiveThreadContent(newState)
-        const messages = ContentExtractor.toMessages(threadContent)
-        this.callback(messages)
+    private handleStopRequest(transaction: Transaction): void {
+        const meta = transaction.getMeta(STOP_AI_CHAT_META)
+        const { threadId } = meta || {}
+        this.stopAiRequestHandler({ threadId })
     }
 
     // ========== PLUGIN CREATION ==========
@@ -771,48 +792,50 @@ class AiChatThreadPluginClass {
 
             state: {
                 init: (): AiChatThreadPluginState => ({
-                    isReceiving: IS_RECEIVING_TEMP_DEBUG_STATE,
+                    receivingThreadIds: new Set<string>(),
                     insideBackticks: false,
                     backtickBuffer: '',
                     insideCodeBlock: false,
                     codeBuffer: '',
                     decorations: DecorationSet.empty,
-                    modPressed: false,
-                    enterPressed: false
+                    hoveredThreadId: null
                 }),
                 apply: (tr: Transaction, prev: AiChatThreadPluginState): AiChatThreadPluginState => {
-                    // Handle receiving state toggle
+                    // Handle receiving state toggle per thread
                     const receivingMeta = tr.getMeta('setReceiving')
                     if (receivingMeta !== undefined) {
-                        console.log('📡 PLUGIN STATE APPLY: receivingMeta =', receivingMeta, 'prev.isReceiving =', prev.isReceiving, '-> new isReceiving =', receivingMeta)
+                        const { threadId, receiving } = receivingMeta
+                        if (threadId) {
+                            const newSet = new Set(prev.receivingThreadIds)
+                            if (receiving) {
+                                newSet.add(threadId)
+                            } else {
+                                newSet.delete(threadId)
+                            }
+                            return {
+                                ...prev,
+                                receivingThreadIds: newSet,
+                                decorations: prev.decorations.map(tr.mapping, tr.doc)
+                            }
+                        }
+                    }
+
+
+
+                    // Handle hover thread ID change
+                    const hoverThreadMeta = tr.getMeta('hoverThread')
+                    if (hoverThreadMeta !== undefined) {
                         return {
                             ...prev,
-                            isReceiving: receivingMeta,
+                            hoveredThreadId: hoverThreadMeta,
                             decorations: prev.decorations.map(tr.mapping, tr.doc)
                         }
                     }
 
-                    // Handle mod key toggle
-                    const modToggleMeta = tr.getMeta('modToggle')
-                    if (modToggleMeta !== undefined) {
-                        return {
-                            ...prev,
-                            modPressed: modToggleMeta,
-                            // Clear enter pressed when mod is released
-                            enterPressed: modToggleMeta ? prev.enterPressed : false,
-                            decorations: prev.decorations.map(tr.mapping, tr.doc)
-                        }
-                    }
+                    // Note: Dropdown selections are handled in appendTransaction
 
-                    // Handle enter key toggle (only when mod is pressed)
-                    const enterToggleMeta = tr.getMeta('enterToggle')
-                    if (enterToggleMeta !== undefined && prev.modPressed) {
-                        return {
-                            ...prev,
-                            enterPressed: enterToggleMeta,
-                            decorations: prev.decorations.map(tr.mapping, tr.doc)
-                        }
-                    }
+                    // Note: dropdown state toggle is now handled by dropdown primitive plugin
+                    // aiChatThreadNode converts threadId-based meta to dropdownId-based meta for the primitive
 
                     // Map existing decorations to new document
                     return {
@@ -826,7 +849,13 @@ class AiChatThreadPluginClass {
                 // Handle AI chat requests
                 const chatTransaction = transactions.find(tr => tr.getMeta(USE_AI_CHAT_META))
                 if (chatTransaction) {
-                    this.handleChatRequest(newState)
+                    this.handleChatRequest(newState, chatTransaction)
+                }
+
+                // Handle AI chat stop requests
+                const stopTransaction = transactions.find(tr => tr.getMeta(STOP_AI_CHAT_META))
+                if (stopTransaction) {
+                    this.handleStopRequest(stopTransaction)
                 }
 
                 // Handle thread insertions
@@ -835,11 +864,99 @@ class AiChatThreadPluginClass {
                     return this.handleInsertThread(insertTransaction, newState)
                 }
 
+                // Handle collapse toggle
+                const collapseTransaction = transactions.find(tr => tr.getMeta('toggleCollapse'))
+                if (collapseTransaction) {
+                    const { nodePos } = collapseTransaction.getMeta('toggleCollapse')
+                    if (typeof nodePos === 'number') {
+                        const threadNode = newState.doc.nodeAt(nodePos)
+                        if (threadNode && threadNode.type.name === 'aiChatThread') {
+                            const tr = newState.tr
+                            const newAttrs = { ...threadNode.attrs, isCollapsed: !threadNode.attrs.isCollapsed }
+                            tr.setNodeMarkup(nodePos, undefined, newAttrs)
+                            documentStore.setMetaValues({ requiresSave: true })
+                            return tr
+                        }
+                    }
+                }                // Handle deferred dropdown attr updates after dropdown selection
+                const dropdownTx = transactions.find(tr => tr.getMeta('dropdownOptionSelected'))
+                if (dropdownTx) {
+                    const dropdownSelection = dropdownTx.getMeta('dropdownOptionSelected')
+                    const { option, nodePos, dropdownId } = dropdownSelection || {}
+
+                    // Handle AI model dropdown selection
+                    if (dropdownId?.startsWith('ai-model-dropdown-')) {
+                        let provider = option?.provider
+                        let model = option?.model
+                        if ((!provider || !model) && option?.title) {
+                            const allModels = aiModelsStore.getData()
+                            const found = allModels.find((m: any) => m.title === option.title)
+                            if (found) {
+                                provider = provider || found.provider
+                                model = model || found.model
+                            }
+                        }
+                        if (provider && model && typeof nodePos === 'number') {
+                            const newModel = `${provider}:${model}`
+                            let threadPos = -1
+                            let threadNode: ProseMirrorNode | null = null
+                            newState.doc.nodesBetween(0, newState.doc.content.size, (node: ProseMirrorNode, pos: number) => {
+                                if (node.type.name === 'aiChatThread') {
+                                    const threadStart = pos
+                                    const threadEnd = pos + node.nodeSize
+                                    if (nodePos >= threadStart && nodePos < threadEnd) {
+                                        threadPos = pos
+                                        threadNode = node
+                                        return false
+                                    }
+                                }
+                            })
+                            if (threadPos !== -1 && threadNode && threadNode.attrs.aiModel !== newModel) {
+                                const tr = newState.tr
+                                const newAttrs = { ...threadNode.attrs, aiModel: newModel }
+                                tr.setNodeMarkup(threadPos, undefined, newAttrs)
+                                documentStore.setMetaValues({ requiresSave: true })
+                                return tr
+                            }
+                        }
+                    }
+
+                    // Handle thread context dropdown selection
+                    if (dropdownId?.startsWith('thread-context-dropdown-')) {
+                        const newContext = option?.value || option?.title
+                        if (newContext && typeof nodePos === 'number') {
+                            let threadPos = -1
+                            let threadNode: ProseMirrorNode | null = null
+                            newState.doc.nodesBetween(0, newState.doc.content.size, (node: ProseMirrorNode, pos: number) => {
+                                if (node.type.name === 'aiChatThread') {
+                                    const threadStart = pos
+                                    const threadEnd = pos + node.nodeSize
+                                    if (nodePos >= threadStart && nodePos < threadEnd) {
+                                        threadPos = pos
+                                        threadNode = node
+                                        return false
+                                    }
+                                }
+                            })
+                            if (threadPos !== -1 && threadNode && threadNode.attrs.threadContext !== newContext) {
+                                const tr = newState.tr
+                                const newAttrs = { ...threadNode.attrs, threadContext: newContext }
+                                tr.setNodeMarkup(threadPos, undefined, newAttrs)
+                                documentStore.setMetaValues({ requiresSave: true })
+                                return tr
+                            }
+                        }
+                    }
+                }
+
                 return null
             },
 
             view: (view: EditorView) => {
                 this.startStreaming(view)
+
+                // Note: Dropdown state bridging removed - now handled by dropdown primitive plugin
+
                 return {
                     destroy: () => {
                         if (this.unsubscribeFromSegments) {
@@ -850,41 +967,10 @@ class AiChatThreadPluginClass {
             },
 
             props: {
-                // Keyboard handling
+                // Keyboard handling for mod+enter
                 handleDOMEvents: {
                     keydown: (_view: EditorView, event: KeyboardEvent) => {
-                        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
-                        const isModKey = (isMac && event.metaKey) || (!isMac && event.ctrlKey)
-                        const pluginState = PLUGIN_KEY.getState(_view.state)
-
-                        console.log('Keydown event:', event.key, 'isModKey:', isModKey, 'modPressed:', pluginState?.modPressed, 'enterPressed:', pluginState?.enterPressed)
-
-                        // Handle Mod key press for visual feedback
-                        if (isModKey && !pluginState?.modPressed) {
-                            console.log('Mod key pressed - setting modPressed to true')
-                            const { state, dispatch } = _view
-                            dispatch(state.tr.setMeta('modToggle', true))
-                            return false
-                        }
-
-                        // Handle Enter key press for visual feedback (only when mod is already pressed)
-                        if (event.key === 'Enter' && pluginState?.modPressed && !pluginState?.enterPressed) {
-                            console.log('Enter key pressed while mod is held - setting enterPressed to true')
-                            const { state, dispatch } = _view
-                            dispatch(state.tr.setMeta('enterToggle', true))
-
-                            // After setting visual feedback, handle the AI chat submission
-                            setTimeout(() => {
-                                event.preventDefault()
-                                const { state: currentState, dispatch: currentDispatch } = _view
-                                const { $from } = currentState.selection
-                                currentDispatch(currentState.tr.setMeta(USE_AI_CHAT_META, { pos: $from.pos }))
-                            }, 50) // Small delay to allow visual feedback to show
-
-                            return true // Prevent default Enter behavior
-                        }
-
-                        // Handle Mod+Enter for AI chat (fallback if Enter wasn't handled above)
+                        // Handle Mod+Enter for AI chat
                         if (KeyboardHandler.isModEnter(event)) {
                             event.preventDefault()
                             const { state, dispatch } = _view
@@ -894,62 +980,39 @@ class AiChatThreadPluginClass {
                         }
 
                         return false
-                    },
-
-                    keyup: (_view: EditorView, event: KeyboardEvent) => {
-                        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
-                        const isModKey = (isMac && event.metaKey) || (!isMac && event.ctrlKey)
-                        const pluginState = PLUGIN_KEY.getState(_view.state)
-
-                        console.log('Keyup event:', event.key, 'isModKey:', isModKey, 'modPressed:', pluginState?.modPressed, 'enterPressed:', pluginState?.enterPressed)
-
-                        // Handle Mod key release
-                        if (!isModKey && pluginState?.modPressed) {
-                            console.log('Mod key released - setting modPressed to false')
-                            const { state, dispatch } = _view
-                            dispatch(state.tr.setMeta('modToggle', false))
-                            return false
-                        }
-
-                        // Handle Enter key release (only when mod is still pressed)
-                        if (event.key === 'Enter' && pluginState?.enterPressed) {
-                            console.log('Enter key released - setting enterPressed to false')
-                            const { state, dispatch } = _view
-                            dispatch(state.tr.setMeta('enterToggle', false))
-                            return false
-                        }
-
-                        return false
                     }
                 },
 
-                // Decorations: combine placeholders with keyboard feedback and receiving state
+                // Decorations: combine all independent decoration systems
                 decorations: (state: EditorState) => {
                     const pluginState = PLUGIN_KEY.getState(state)
                     const placeholders = this.createPlaceholders(state)
+                    const allDecorations = [...placeholders.find()]
 
-                    console.log('🎨 DECORATIONS RENDER: pluginState =', {
-                        modPressed: pluginState?.modPressed,
-                        enterPressed: pluginState?.enterPressed,
-                        isReceiving: pluginState?.isReceiving
-                    })
-
-                    if (pluginState?.modPressed || pluginState?.enterPressed || pluginState?.isReceiving) {
-                        console.log('🎨 DECORATIONS: Applying keyboard/receiving decorations')
-                        // Add keyboard visual feedback and receiving state decorations
-                        const keyboardDecorations = this.createKeyboardFeedbackDecorations(state, pluginState)
-                        return DecorationSet.create(state.doc, [...placeholders.find(), ...keyboardDecorations])
+                    // Independent receiving state system - show receiving state for threads that are receiving
+                    if (pluginState && pluginState.receivingThreadIds.size > 0) {
+                        const receivingDecorations = this.createReceivingStateDecorations(state, pluginState)
+                        allDecorations.push(...receivingDecorations)
                     }
 
-                    console.log('🎨 DECORATIONS: Only applying placeholders (no keyboard/receiving state)')
-                    return placeholders
+                    // Independent thread boundary system - always visible
+                    const boundaryDecorations = this.createThreadBoundaryDecorations(state, pluginState)
+                    allDecorations.push(...boundaryDecorations)
+
+                    // Independent collapsed state system - hide content for collapsed threads
+                    const collapsedDecorations = this.createCollapsedStateDecorations(state)
+                    allDecorations.push(...collapsedDecorations)
+
+                    // Note: Dropdown decorations are now handled by the dropdown primitive plugin
+
+                    return DecorationSet.create(state.doc, allDecorations)
                 },
 
                 // Node views
                 nodeViews: {
-                    [aiChatThreadNodeType]: (node: PMNode, view: EditorView, getPos: () => number | undefined) =>
-                        this.createThreadNodeView(node, view, getPos),
-                    [aiResponseMessageNodeType]: (node: PMNode, view: EditorView, getPos: () => number | undefined) =>
+                    [aiChatThreadNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
+                        aiChatThreadNodeView(node, view, getPos),
+                    [aiResponseMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiResponseMessageNodeView(node, view, getPos),
                 }
             }
@@ -957,10 +1020,23 @@ class AiChatThreadPluginClass {
     }
 }
 
+// ========== UTILITY FUNCTIONS ==========
+
+// Re-export utility function to avoid circular dependencies
+export { getThreadPositionInfo } from './threadPositionUtils.ts'
+
 // ========== FACTORY FUNCTION ==========
 
 // Factory function to create the AI Chat Thread plugin
-export function createAiChatThreadPlugin(callback: AiChatCallback, placeholderOptions: PlaceholderOptions): Plugin {
-    const pluginInstance = new AiChatThreadPluginClass(callback, placeholderOptions)
+export function createAiChatThreadPlugin({
+    sendAiRequestHandler,
+    stopAiRequestHandler,
+    placeholders
+}: {
+    sendAiRequestHandler: SendAiRequestHandler
+    stopAiRequestHandler: StopAiRequestHandler
+    placeholders: PlaceholderOptions
+}): Plugin {
+    const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders })
     return pluginInstance.create()
 }
