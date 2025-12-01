@@ -48,10 +48,10 @@ export function createPureDropdown(config: PureDropdownConfig) {
         renderIconForOptions = true,
         renderTitleForSelectedValue = true,
         enableTagFilter = false,
-        availableTags = [],
         onSelect
     } = config
 
+    let availableTags = config.availableTags || []
     let currentSelectedValue = selectedValue
     let activeFilterTags: Set<string> = new Set()
     let allOptions = [...options]
@@ -66,7 +66,6 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Handle option click
     const optionClickHandler = (e: Event, option: DropdownOption) => {
-        console.log('[AI_DBG][PURE_DROPDOWN.optionClick]', { id, option })
         e.preventDefault()
         e.stopPropagation()
         e.stopImmediatePropagation()
@@ -206,11 +205,9 @@ export function createPureDropdown(config: PureDropdownConfig) {
         bodyContent,
         visible: false,
         onOpen: () => {
-            console.log('[AI_DBG][PURE_DROPDOWN.opened]', { id })
             dom.classList.add('dropdown-open')
         },
         onClose: () => {
-            console.log('[AI_DBG][PURE_DROPDOWN.closed]', { id })
             dom.classList.remove('dropdown-open')
         }
     })
@@ -249,12 +246,28 @@ export function createPureDropdown(config: PureDropdownConfig) {
     return {
         dom,
         update: (newSelectedValue: DropdownOption) => {
-            console.log('[AI_DBG][PURE_DROPDOWN.update]', { id, newSelectedValue })
             currentSelectedValue = newSelectedValue
             updateSelectedDisplay()
         },
+        setOptions: ({ options: newOptions, availableTags: newTags, selectedValue: newSelectedValue }: { options: DropdownOption[]; availableTags?: string[]; selectedValue?: DropdownOption }) => {
+            allOptions = [...newOptions]
+
+            if (newTags) {
+                availableTags = [...newTags]
+            }
+
+            if (newSelectedValue) {
+                currentSelectedValue = newSelectedValue
+            }
+
+            renderOptionsList()
+            updateSelectedDisplay()
+        },
+        rerender: () => {
+            renderOptionsList()
+            updateSelectedDisplay()
+        },
         destroy: () => {
-            console.log('[AI_DBG][PURE_DROPDOWN.destroy]', { id })
             infoBubble?.destroy()
         }
     }

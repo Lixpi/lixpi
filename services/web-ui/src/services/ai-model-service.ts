@@ -1,11 +1,10 @@
 'use strict'
 
-import {
-    AI_MODELS_SUBJECTS,
-    LoadingStatus,
-} from '@lixpi/constants'
+import { NATS_SUBJECTS, LoadingStatus } from '@lixpi/constants'
 
-import AuthService from './auth0-service.ts'
+const { AI_MODELS_SUBJECTS } = NATS_SUBJECTS
+
+import AuthService from './auth-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'

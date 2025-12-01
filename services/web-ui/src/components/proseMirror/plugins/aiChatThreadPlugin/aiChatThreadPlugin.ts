@@ -26,10 +26,10 @@ const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
 // ========== TYPE DEFINITIONS ==========
 
-import type { AiChatSendMessagePayload, AiChatStopMessagePayload } from '@lixpi/constants'
+import type { AiInteractionChatSendMessagePayload, AiInteractionChatStopMessagePayload } from '@lixpi/constants'
 
-type SendAiRequestHandler = (data: AiChatSendMessagePayload) => void
-type StopAiRequestHandler = (data: AiChatStopMessagePayload) => void
+type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload) => void
+type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM'
 type SegmentEvent = {

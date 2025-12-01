@@ -1,9 +1,8 @@
 'use strict'
 
 import type { NatsSubjectSubscription } from '@lixpi/nats-service'
-import {
-    USER_SUBJECTS
-} from '@lixpi/constants'
+import { NATS_SUBJECTS } from '@lixpi/constants'
+const { USER_SUBJECTS } = NATS_SUBJECTS
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import User from '../../models/user.ts'

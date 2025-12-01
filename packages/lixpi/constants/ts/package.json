@@ -1,0 +1,22 @@
+{
+    "name": "@lixpi/constants",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": {
+            "import": "./index.ts",
+            "types": "./types.ts"
+        }
+    },
+    "files": [
+        "*.ts",
+        "../nats-subjects.json"
+    ],
+    "scripts": {},
+    "devDependencies": {
+    },
+    "dependencies": {
+        "type-fest": "*"
+    }
+}

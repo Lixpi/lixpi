@@ -1,11 +1,11 @@
 'use strict'
 
-import {
-    AI_MODELS_SUBJECTS
-} from '@lixpi/constants'
+import { NATS_SUBJECTS } from '@lixpi/constants'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import AiModel from '../../models/ai-model.ts'
+
+const { AI_MODELS_SUBJECTS } = NATS_SUBJECTS
 
 export const aiModelSubjects = [
     // AI Models ------------------------------------------------------------------------------------------------

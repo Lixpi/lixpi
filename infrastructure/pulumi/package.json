@@ -8,6 +8,7 @@
         "init": "node src/cli.ts init --stack=${STAGE} --region=${AWS_REGION}",
         "preview": "node src/cli.ts preview",
         "deploy": "node src/cli.ts up",
+        "deploy:local": "node src/local-dynamodb-init.ts",
         "destroy": "node src/cli.ts destroy",
         "force-destroy": "node src/cli.ts force-destroy",
         "cancel": "node src/cli.ts cancel",
@@ -18,6 +19,7 @@
         "remove-stack": "node src/cli.ts remove-stack"
     },
     "dependencies": {
+        "@aws-sdk/client-dynamodb": "*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
         "@pulumi/aws": "*",

@@ -6,9 +6,9 @@
     "author": "Lixpi <lixpi@lixpi.com>",
     "license": "",
     "bugs": {
-        "url": "https://github.com/Lixpi/Lixpi-lists-API/issues"
+        "url": "https://github.com/Lixpi/lixpi-API/issues"
     },
-    "homepage": "https://github.com/Lixpi/Lixpi-lists-API#readme",
+    "homepage": "https://github.com/Lixpi/lixpi-API#readme",
     "main": "server.ts",
     "scripts": {
         "start": "node ./src/server.ts",
@@ -49,7 +49,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Lixpi/Lixpi-lists-API.git"
+        "url": "git+https://github.com/Lixpi/lixpi-API.git"
     },
     "packageManager": "pnpm@9.15.0"
 }

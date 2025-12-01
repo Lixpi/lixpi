@@ -4,10 +4,7 @@ import process from 'process'
 import jwt from 'jsonwebtoken'
 import jwksClient from 'jwks-rsa'
 
-import {
-    AI_CHAT_SUBJECTS,
-    AuthenticationStatus
-} from '@lixpi/constants'
+import { NATS_SUBJECTS, AuthenticationStatus } from '@lixpi/constants'
 
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
@@ -18,15 +15,30 @@ import SubscriptionService from '../services/subscription-service.ts'
 const {
     ENVIRONMENT,
     AUTH0_API_IDENTIFIER,
-    AUTH0_DOMAIN
+    AUTH0_DOMAIN,
+    MOCK_AUTH0,
+    MOCK_AUTH0_DOMAIN,
+    MOCK_AUTH0_JWKS_URI,
 } = process.env
 const USE_CACHED_JWKS = false
 
 const registrationService = new RegistrationService()
 const subscriptionService = new SubscriptionService()
 
+const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
+
+const isMockAuthEnabled = MOCK_AUTH0 === 'true'
+
+const jwksUri = isMockAuthEnabled
+    ? MOCK_AUTH0_JWKS_URI
+    : `${AUTH0_DOMAIN}/.well-known/jwks.json`
+
+const jwtIssuer = isMockAuthEnabled
+    ? `http://${MOCK_AUTH0_DOMAIN}/`
+    : `${AUTH0_DOMAIN}/`
+
 const client = jwksClient({
-    jwksUri: `${AUTH0_DOMAIN}/.well-known/jwks.json`,
+    jwksUri,
     ...(USE_CACHED_JWKS ? {
         fetcher: () => Promise.resolve(
             JSON.parse(readFileSynchronously(`jwks-keys/jwks.${ENVIRONMENT}.json`, 'utf8'))
@@ -48,7 +60,7 @@ export const authenticateTokenOnConnect = async ({ token }) => {
         getKey,
         {
             audience: AUTH0_API_IDENTIFIER,
-            issuer: `${AUTH0_DOMAIN}/`,
+            issuer: jwtIssuer,
             algorithms: ["RS256"]
         },
         async (error, decoded) => {
@@ -74,7 +86,7 @@ export const authenticateTokenOnRequest = async ({ token, eventName }) => {
         getKey,
         {
             audience: AUTH0_API_IDENTIFIER,
-            issuer: `${AUTH0_DOMAIN}/`,
+            issuer: jwtIssuer,
             algorithms: ["RS256"]
         },
         async (error, decoded) => {
@@ -95,7 +107,7 @@ const { user, error } = await registrationService.verifyRegistration({ decodedTo
                 // TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 err('TODO: Turn back balance verification !!!!!!!!!!!!!!!', decoded)
 
-                // if (eventName === AI_CHAT_SUBJECTS.SEND_MESSAGE) {
+                // if (eventName === AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE) {
                 //     const userSubscriptionStatus = await subscriptionService.checkUserBalance({ userId: decoded.sub })
 
                 //     if (userSubscriptionStatus === AuthenticationStatus.noActiveSubscription) {

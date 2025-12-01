@@ -7,6 +7,8 @@ import { log, err, infoStr } from '@lixpi/debug-tools'
 import User from '../models/user.ts'
 import Organization from '../models/organization.ts'
 
+const { MOCK_AUTH0 } = process.env
+
 const logStats = ({ operation, userId, origin }) => {
     const logOrigin = `RegistrationService -> ${operation}`
     infoStr([
@@ -30,7 +32,25 @@ class RegistrationService {
 
         // If the user does not exist, register the user
         if (!user) {
-            const auth0User = await this.getAuth0UserInfo({ queryUserDetailsUrl: decodedToken.aud[1], accessToken })
+            let auth0User
+
+            const isMockAuthEnabled = MOCK_AUTH0 === 'true'
+
+            // For LocalAuth0, extract user info from the token itself
+            if (isMockAuthEnabled) {
+                auth0User = {
+                    sub: decodedToken.sub,
+                    stripe_customer_id: decodedToken.stripe_customer_id || 'cus_mock_stripe_test',
+                    email: decodedToken.email || 'test@local.dev',
+                    name: decodedToken.name || 'Test User',
+                    given_name: decodedToken.given_name || 'Test',
+                    family_name: decodedToken.family_name || 'User',
+                    picture: decodedToken.picture || 'https://via.placeholder.com/150'
+                }
+            } else {
+                // For real Auth0, call the userinfo endpoint
+                auth0User = await this.getAuth0UserInfo({ queryUserDetailsUrl: decodedToken.aud[1], accessToken })
+            }
 
             const {
                 sub: userId,

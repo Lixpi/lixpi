@@ -9,7 +9,6 @@ import { keyboardMacCommandIcon,
     gptAvatarIcon,
     claudeIcon,
     chevronDownIcon,
-    contextIcon,
     contextFilledIcon,
     documentIcon,
     eyeSlashIcon
@@ -108,8 +107,7 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
         contentSize: node.content.size
     })
 
-    const threadContextDropdown = createThreadContextDropdown(view, node, getPos, threadId)
-    const modelSelectorDropdown = createAiModelSelectorDropdown(view, node, getPos, threadId)
+    const { dropdown: modelSelectorDropdown, unsubscribe: unsubscribeModels } = createAiModelSelectorDropdown(view, node, getPos, threadId)
 
     // Create AI submit button
     const submitButton = createAiSubmitButton(view, threadId, getPos)
@@ -117,8 +115,7 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
     // Create thread boundary indicator for context visualization
     const { boundaryIndicator: threadBoundaryIndicator, collapseToggleIcon, infoBubble, contextSelector } = createThreadBoundaryIndicator(dom, view, threadId, getPos, node.attrs.isCollapsed)
 
-    // Append controls to controls container (flex layout: context, model, submit)
-    controlsContainer.appendChild(threadContextDropdown.dom)
+    // Append controls to controls container (flex layout: model, submit)
     controlsContainer.appendChild(modelSelectorDropdown.dom)
     controlsContainer.appendChild(submitButton)
 
@@ -225,17 +222,11 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
                 }
             }
 
-            // Sync threadContext change to context dropdown and context selector
+            // Sync threadContext change to context selector
             if (node.attrs.threadContext !== updatedNode.attrs.threadContext) {
                 console.log('[AI_DBG][THREAD.nodeView.update] threadContext attr changed', { from: node.attrs.threadContext, to: updatedNode.attrs.threadContext, threadId: updatedNode.attrs.threadContext })
 
-                threadContextDropdown.update({
-                    title: updatedNode.attrs.threadContext,
-                    icon: contextIcon,
-                    value: updatedNode.attrs.threadContext
-                })
-
-                // Also update the context selector in the info bubble
+                // Update the context selector in the info bubble
                 contextSelector?.update({
                     selectedValue: updatedNode.attrs.threadContext
                 })
@@ -278,7 +269,8 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
             console.log('[AI_DBG][THREAD.nodeView.destroy] CALLED', { threadId: node.attrs.threadId })
             // Clean up pure dropdowns
             modelSelectorDropdown?.destroy()
-            threadContextDropdown?.destroy()
+            // Unsubscribe from store updates
+            unsubscribeModels?.()
             // Clean up info bubble and context selector
             infoBubble?.destroy()
             contextSelector?.destroy()
@@ -461,6 +453,7 @@ function createThreadInfoBubble(view, threadId, getPos) {
         bodyContent: contextSelector.dom,
         visible: false,
         offset: { x: 0, y: 30 },
+        arrowCrossOffset: 15, // Move arrow further from corner to accommodate larger border-radius (10px)
         className: 'thread-info-bubble'
     })
 
@@ -479,28 +472,38 @@ function createAiModelSelectorDropdown(view, node, getPos, threadId) {
         claudeIcon,
     }
 
-    // Get AI models from store
-    const aiModelsData = aiModelsStore.getData()
+    // Get initial AI models from store (might be empty if still loading)
+    let aiModelsData = aiModelsStore.getData()
     const currentAiModel = node.attrs.aiModel || ''
-    console.log('[AI_DBG][THREAD.modelDropdown] creating dropdown', { threadId, currentAiModel, modelsCount: aiModelsData.length })
 
-    // Transform data to match dropdown format
-    const aiModelsSelectorDropdownOptions = aiModelsData.map(aiModel => ({
-        title: aiModel.shortTitle,
-        icon: aiAvatarIcons[aiModel.iconName],
-        color: aiModel.color,
-        aiModel: `${aiModel.provider}:${aiModel.model}`,
-        provider: aiModel.provider,
-        model: aiModel.model,
-        tags: aiModel.modalities?.map(m => m.shortTitle) || []
-    }))
+    // Helper function to transform models data to dropdown format
+    const transformModelsToOptions = (models) => {
+        return models.map(aiModel => ({
+            title: aiModel.shortTitle,
+            icon: aiAvatarIcons[aiModel.iconName],
+            color: aiModel.color,
+            aiModel: `${aiModel.provider}:${aiModel.model}`,
+            provider: aiModel.provider,
+            model: aiModel.model,
+            tags: aiModel.modalities?.map(m => m.shortTitle) || []
+        }))
+    }
 
-    // Extract all unique tags from all models for the filter
-    const allTags = new Set<string>()
-    aiModelsData.forEach(aiModel => {
-        aiModel.modalities?.forEach(m => allTags.add(m.shortTitle))
+    // Helper function to extract all unique tags
+    const extractAvailableTags = (models) => {
+        const allTags = new Set<string>()
+        models.forEach(aiModel => {
+            aiModel.modalities?.forEach(m => allTags.add(m.shortTitle))
+        })
+        return Array.from(allTags).sort()
+    }
+
+    // Initial transformation
+    const buildDropdownData = (models) => ({
+        options: transformModelsToOptions(models),
+        tags: extractAvailableTags(models)
     })
-    const availableTags = Array.from(allTags).sort()
+    let { options: aiModelsSelectorDropdownOptions, tags: availableTags } = buildDropdownData(aiModelsData)
 
     // Find selected value
     let selectedValue = aiModelsSelectorDropdownOptions.find(model => model.aiModel === currentAiModel)
@@ -510,13 +513,13 @@ function createAiModelSelectorDropdown(view, node, getPos, threadId) {
         selectedValue = aiModelsSelectorDropdownOptions[0]
     }
 
-    // Default to first if still no selection
+    // Default to placeholder if still no selection
     if (!selectedValue) {
         selectedValue = { title: 'Select Model', icon: '', color: '' }
     }
 
     // Create pure dropdown (no document node, just DOM)
-    return createPureDropdown({
+    const dropdown = createPureDropdown({
         id: dropdownId,
         selectedValue,
         options: aiModelsSelectorDropdownOptions,
@@ -530,8 +533,6 @@ function createAiModelSelectorDropdown(view, node, getPos, threadId) {
         enableTagFilter: true,
         availableTags,
         onSelect: (option) => {
-            console.log('[AI_DBG][THREAD.modelDropdown] onSelect', { threadId, option })
-
             // Update thread node attrs via transaction
             const pos = getPos()
             if (pos !== undefined) {
@@ -544,59 +545,51 @@ function createAiModelSelectorDropdown(view, node, getPos, threadId) {
             }
         }
     })
-}
 
-// Helper function to create thread context selector dropdown (direct DOM, no document node)
-function createThreadContextDropdown(view, node, getPos, threadId) {
-    const dropdownId = `thread-context-dropdown-${threadId}`
+    // Subscribe to store changes to reactively update dropdown when models load
+    let lastProcessedCount = aiModelsData.length
+    const unsubscribe = aiModelsStore.subscribe((storeState) => {
+        const newModelsData = storeState.data
 
-    const currentThreadContext = node.attrs.threadContext || 'Thread'
-    console.log('[AI_DBG][THREAD.contextDropdown] creating dropdown', { threadId, currentThreadContext })
+        if (newModelsData.length === 0 || newModelsData.length === lastProcessedCount) return
 
-    // Define thread context options
-    const threadContextOptions = [
-        {
-            title: 'Thread',
-            icon: contextIcon,
-            value: 'Thread'
-        },
-        {
-            title: 'Document',
-            icon: contextIcon,
-            value: 'Document'
-        }
-    ]
+        lastProcessedCount = newModelsData.length
+        aiModelsData = newModelsData
 
-    // Find selected value
-    const selectedValue = threadContextOptions.find(opt => opt.value === currentThreadContext) || threadContextOptions[0]
+        const { options, tags } = buildDropdownData(aiModelsData)
 
-    // Create pure dropdown (no document node, just DOM)
-    return createPureDropdown({
-        id: dropdownId,
-        selectedValue,
-        options: threadContextOptions,
-        theme: 'dark',
+        const matchedSelectedValue = options.find(option => option.aiModel === node.attrs.aiModel)
 
-        buttonIcon: chevronDownIcon,
-        ignoreColorValuesForOptions: true,
-        ignoreColorValuesForSelectedValue: false,
-        renderIconForSelectedValue: false,
-        renderIconForOptions: true,
-        onSelect: (option) => {
-            console.log('[AI_DBG][THREAD.contextDropdown] onSelect', { threadId, option })
+        dropdown.setOptions({
+            options,
+            availableTags: tags,
+            selectedValue: matchedSelectedValue
+        })
 
-            // Update thread node attrs via transaction
-            const pos = getPos()
-            if (pos !== undefined) {
-                const threadNode = view.state.doc.nodeAt(pos)
-                if (threadNode) {
-                    const newAttrs = { ...threadNode.attrs, threadContext: option.value }
-                    const tr = view.state.tr.setNodeMarkup(pos, undefined, newAttrs)
-                    view.dispatch(tr)
+        // Auto-assign first model if thread has no model
+        const pos = getPos()
+        if (pos !== undefined && !node.attrs.aiModel) {
+            const threadNode = view.state.doc.nodeAt(pos)
+            if (threadNode) {
+                const firstModel = newModelsData[0]
+                const newAttrs = {
+                    ...threadNode.attrs,
+                    aiModel: `${firstModel.provider}:${firstModel.model}`
                 }
+                const tr = view.state.tr.setNodeMarkup(pos, undefined, newAttrs)
+                view.dispatch(tr)
+
+                dropdown.update({
+                    title: firstModel.shortTitle,
+                    icon: aiAvatarIcons[firstModel.iconName],
+                    color: firstModel.color,
+                    aiModel: `${firstModel.provider}:${firstModel.model}`
+                })
             }
         }
     })
+
+    return { dropdown, unsubscribe }
 }
 
 // Helper function to create AI submit button

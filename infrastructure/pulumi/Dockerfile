@@ -41,12 +41,20 @@ RUN echo 'eval "$(fnm env)"' >> ~/.bashrc
 # Also add to /etc/profile for any login shell
 RUN echo 'eval "$(fnm env)"' >> /etc/profile
 
-# Set the working directory
-WORKDIR /usr/src/service
-
 # Copy the rest of app's source code
-COPY ./packages ./packages
-COPY ./pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY ./infrastructure /usr/src/service/infrastructure
+COPY ./packages /usr/src/service/packages
+COPY ./services /usr/src/service/services
+
+# Copy `web-ui` specific packages
+COPY ./packages-vendor/shadcn-svelte/sites/docs/src/lib /usr/src/service/packages-vendor/shadcn-svelte/sites/docs/src/lib
+
+COPY ./pnpm-workspace.yaml /usr/src/service/pnpm-workspace.yaml
+RUN echo "FINDME"
+RUN cat /usr/src/service/pnpm-workspace.yaml
+
+# Set the working directory
+WORKDIR /usr/src/service/infrastructure/pulumi
 
 # Install dependencies, redundant when running locally because starting service each time will install deps, but needed for deployment
 RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store

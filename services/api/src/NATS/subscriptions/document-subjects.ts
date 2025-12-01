@@ -5,13 +5,16 @@ import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import Document from '../../models/document.ts'
 
-import { DOCUMENT_SUBJECTS } from '@lixpi/constants'
+import { NATS_SUBJECTS } from '@lixpi/constants'
+
+const { DOCUMENT_SUBJECTS } = NATS_SUBJECTS
 
 export const documentSubjects = [
     {
         subject: DOCUMENT_SUBJECTS.GET_DOCUMENT,
         type: 'reply',
         payloadType: 'json',
+
         permissions: {
             pub: { allow: [ DOCUMENT_SUBJECTS.GET_DOCUMENT ] },
             sub: { allow: [ DOCUMENT_SUBJECTS.GET_DOCUMENT ] }

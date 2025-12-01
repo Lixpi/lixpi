@@ -5,7 +5,7 @@ import { mount, flushSync } from "svelte"
 import NatsService from '@lixpi/nats-service'
 
 import RouterService from '$src/services/router-service.js'
-import AuthService from '$src/services/auth0-service.ts'
+import AuthService from '$src/services/auth-service.ts'
 import UserService from '$src/services/user-service.ts'
 import SubscriptionService from '$src/services/subscription-service.js'
 import OrganizationService from '$src/services/organization-service.js'
@@ -18,6 +18,8 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { authStore } from '$src/stores/authStore.ts'
 
+const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
+
 // Init services and then start the app
 async function initializeServicesSequentially() {
     try {
@@ -29,12 +31,12 @@ async function initializeServicesSequentially() {
         }
 
         console.log('import.meta.env.VITE_NATS_SERVER:', {
-            natsServer: import.meta.env.VITE_NATS_SERVER,
+            natsServer: VITE_NATS_SERVER,
             fullEnv: import.meta.env
         });
 
         const natsInstance = await NatsService.init({
-            servers: [import.meta.env.VITE_NATS_SERVER],
+            servers: [VITE_NATS_SERVER],
             webSocket: true,
             name: 'web-client',
             token: authToken,

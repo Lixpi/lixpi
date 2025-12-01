@@ -57,8 +57,10 @@ createInfoBubble({
   visible?: boolean,
   onOpen?: () => void,                    // NEW: Called when bubble opens
   onClose?: () => void,                   // NEW: Called when bubble closes
-  closeOnClickOutside?: boolean           // NEW: Default true
-  offset?: { x?: number, y?: number }     // NEW: Optional pixel offset applied to computed position
+  closeOnClickOutside?: boolean,          // NEW: Default true
+  offset?: { x?: number, y?: number },    // NEW: Optional pixel offset applied to computed position
+  arrowCrossOffset?: number,              // NEW: Optional distance of arrow from edge (overrides default 8px)
+  className?: string
 })
 // Returns: {
 //   dom: HTMLElement,
@@ -84,6 +86,8 @@ createInfoBubble({
 - **`onClose`**: Callback executed when bubble closes
 - **`closeOnClickOutside`**: Whether to close when clicking outside (default: true)
 - **`offset`**: Spacing from anchor in pixels. Defaults to `{ x: 0, y: 20 }`. The `y` value creates spacing in the arrow's direction (e.g., 20px below anchor for `arrowSide='top'`).
+- **`arrowCrossOffset`**: Optional distance (in pixels) of the arrow from the bubble's edge. Defaults to `8px` (from CSS). Use this when you have a larger `border-radius` on the bubble to prevent the arrow from visually conflicting with rounded corners. For example, if `border-radius: 10px`, use `arrowCrossOffset: 20` to move the arrow further from the corner.
+- `className`: Optional CSS class to add to the wrapper element
 
 ### Return Value
 
@@ -215,6 +219,31 @@ const infoBubble = createInfoBubble({
     boundaryIcon.classList.remove('active')
   }
 })
+```
+
+### With Custom Arrow Offset (for larger border-radius)
+
+```typescript
+// For bubbles with larger border-radius, move arrow away from corners
+const infoBubble = createInfoBubble({
+  id: 'large-bubble',
+  anchor: triggerButton,
+  theme: 'dark',
+  arrowSide: 'right',
+  bodyContent: largeContent,
+  arrowCrossOffset: 20, // Move arrow 20px from edge (default is 8px)
+  className: 'custom-large-bubble' // Add custom styling with border-radius: 10px
+})
+```
+
+```scss
+// In your SCSS file
+.info-bubble-wrapper.custom-large-bubble {
+  .bubble-container {
+    border-radius: 10px; // Larger radius requires larger arrow offset
+    min-width: 500px;
+  }
+}
 ```
 
 ### Programmatic Control

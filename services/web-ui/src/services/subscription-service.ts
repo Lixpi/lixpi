@@ -1,14 +1,12 @@
 'use strict'
 
-import {
-    LoadingStatus
-} from '@lixpi/constants'
+import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
 
 // import SocketService from '$src/services/socket.io-service.ts'
 import { subscriptionStore } from '$src/stores/subscriptionStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 
-import { USER_SUBSCRIPTION_SUBJECTS } from '@lixpi/constants'
+const { USER_SUBSCRIPTION_SUBJECTS } = NATS_SUBJECTS
 
 class SubscriptionService {
     constructor() {

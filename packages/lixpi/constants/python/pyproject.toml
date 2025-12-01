@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lixpi-constants"
+version = "0.0.1"
+description = "Shared constants between Python and TypeScript services"
+requires-python = ">=3.8"
+
+[tool.setuptools]
+packages = ["lixpi_constants"]
+
+[tool.setuptools.package-dir]
+lixpi_constants = "."
+
+[tool.setuptools.package-data]
+lixpi_constants = ["*.json", "../*.json"]

@@ -32,6 +32,68 @@
     }
 }
 
+// ********** Horizontal spinner animation **********
+// INFO: Apply to a block-level node shell whenever we need a placeholder spinner
+// https://cssloaders.github.io/
+@mixin horizontalSpinnerAnimation($config: ()) {
+    $defaults: (
+        size: 1rem,
+        color: #fff,
+        fontSize: 7px,
+        duration: 1000ms,
+        easing: ease-in-out,
+        delayStep: 1050ms,
+        gap: 1rem,
+        shadowOffset: -1.3em
+    );
+    $settings: map-merge($defaults, $config);
+
+    $animName: unique-id();
+
+    @keyframes #{$animName} {
+        0%, 80%, 100% {
+            box-shadow: 0 map-get($settings, size) 0 map-get($settings, shadowOffset);
+        }
+        40% {
+            box-shadow: 0 map-get($settings, size) 0 0;
+        }
+    }
+
+    position: relative;
+    border-radius: 50%;
+    width: map-get($settings, size);
+    height: map-get($settings, size);
+    color: map-get($settings, color);
+    font-size: map-get($settings, fontSize);
+    text-indent: -9999em;
+    transform: translateZ(0);
+    animation-fill-mode: both;
+    animation: #{$animName} map-get($settings, duration) infinite map-get($settings, easing);
+    animation-delay: -1 * map-get($settings, delayStep);
+
+    &::before,
+    &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        border-radius: 50%;
+        width: map-get($settings, size);
+        height: map-get($settings, size);
+        animation-fill-mode: both;
+        animation: #{$animName} map-get($settings, duration) infinite map-get($settings, easing);
+    }
+
+    &::before {
+        left: -1 * map-get($settings, gap);
+        animation-delay: -2 * map-get($settings, delayStep);
+    }
+
+    &::after {
+        left: map-get($settings, gap);
+        animation-delay: 0s;
+    }
+}
+
 // ********** Click Feedback Animation **********
 // INFO: Click feedback with color flash and single smooth wave
 //

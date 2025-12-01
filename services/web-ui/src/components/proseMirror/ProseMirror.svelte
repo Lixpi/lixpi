@@ -8,7 +8,7 @@
     import { isUUID } from '$src/helpers/is-uuid.js'
 
     import DocumentService from '$src/services/document-service.ts'
-    import AiChatService from '$src/services/ai-chat-service.ts'
+    import AiInteractionService from '$src/services/ai-interaction-service.ts'
     import RouterService from '$src/services/router-service.ts'
 
     import { routerStore } from '$src/stores/routerStore.ts'
@@ -32,35 +32,35 @@
     let { isDisabled = false } = $props();
 
     let isFocused = false
-    let aiChatInstance = $state(null)
+    let aiInteractionInstance: AiInteractionService | null = null
     let editorInstance = null
 
     const documentService = new DocumentService()
 
 
     const onAiChatSubmit = ({ messages, aiModel, threadId }: AiChatSendMessagePayload) => {
-        // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiChatInstance})
+        // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiInteractionInstance})
 
-        if (!aiChatInstance) {
-            console.log('call->onAiChatSubmit', {aiChatInstance, projectKey: $routerStore.data.currentRoute?.routeParams.key})
-            alert('🚫 call->onAiChatSubmit :: aiChatInstance is not initialized... \n\nPlease call 📞 Shallbee 🐝 immediatelly!');
+        if (!aiInteractionInstance) {
+            console.log('call->onAiChatSubmit', {aiInteractionInstance, projectKey: $routerStore.data.currentRoute?.routeParams.key})
+            alert('🚫 call->onAiChatSubmit :: aiInteractionInstance is not initialized...');
 
             return false
         }
 
-        aiChatInstance.sendMessage({ messages, aiModel, threadId })
+        aiInteractionInstance.sendChatMessage({ messages, aiModel, threadId })
     }
 
     const onAiChatStop = ({ threadId }: AiChatStopMessagePayload) => {
-        console.log('onAiChatStop', { threadId, aiChatInstance })
+        console.log('onAiChatStop', { threadId, aiInteractionInstance })
 
-        if (!aiChatInstance) {
-            console.log('call->onAiChatStop', { aiChatInstance, threadId })
-            alert('🚫 call->onAiChatStop :: aiChatInstance is not initialized... \n\nPlease call 📞 Shallbee 🐝 immediatelly!');
+        if (!aiInteractionInstance) {
+            console.log('call->onAiChatStop', { aiInteractionInstance, threadId })
+            alert('🚫 call->onAiChatStop :: aiInteractionInstance is not initialized...');
             return false
         }
 
-        aiChatInstance.stopMessage({ threadId })
+        aiInteractionInstance.stopChatMessage({ threadId })
     }
 
     const onProjectTitleChange = inputValue => {
@@ -142,9 +142,9 @@
                 editorInstance = null
             }
 
-            if (aiChatInstance) {
-                aiChatInstance.disconnect()
-                aiChatInstance = null
+            if (aiInteractionInstance) {
+                aiInteractionInstance.disconnect()
+                aiInteractionInstance = null
             }
 
             editorInstance = new ProseMirrorEditor({
@@ -157,7 +157,7 @@
                 onAiChatSubmit,
                 onAiChatStop
             });
-            aiChatInstance = new AiChatService(RouterService.getRouteParams().documentId as string)
+            aiInteractionInstance = new AiInteractionService(RouterService.getRouteParams().documentId as string)
             documentStore.setMetaValues({ isRendered: true })
         }
     });
@@ -166,10 +166,10 @@
     onMount(() => {})
 
     onDestroy(() => {
-        if (aiChatInstance) {
-            aiChatInstance.disconnect()
+        if (aiInteractionInstance) {
+            aiInteractionInstance.disconnect()
             editorInstance.destroy()
-            aiChatInstance = null
+            aiInteractionInstance = null
             editorInstance = null
         }
     })

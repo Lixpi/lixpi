@@ -21,13 +21,25 @@ import { createServer } from 'http'
 import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
-import { aiChatSubjects } from './NATS/subscriptions/ai-chat-subjects.ts'
+import { aiInteractionSubjects } from './NATS/subscriptions/ai-interaction-subjects.ts'
 import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 
 import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
 
 const env = process.env
+
+// Production safety check: Prevent LocalAuth0 from being used in non-local environments
+if (env.ENVIRONMENT !== 'local' && env.MOCK_AUTH0 === 'true') {
+    err('FATAL: LocalAuth0 detected in non-local environment!')
+    err(`Environment: ${env.ENVIRONMENT}`)
+    err(`AUTH0_DOMAIN: ${env.AUTH0_DOMAIN}`)
+    err(`MOCK_AUTH0: ${env.MOCK_AUTH0}`)
+    err(`MOCK_AUTH0_DOMAIN: ${env.MOCK_AUTH0_DOMAIN}`)
+    err(`MOCK_AUTH0_JWKS_URI: ${env.MOCK_AUTH0_JWKS_URI}`)
+    err('LocalAuth0 can only be used when ENVIRONMENT=local')
+    process.exit(1)
+}
 
 // Set the global DynamoDB service instance to be used across the application for database operations
 global.dynamoDBService = new DynamoDBService({
@@ -84,7 +96,7 @@ const subscriptions = [
     ...userSubjects,
     ...subscriptionSubjects,
     ...aiModelSubjects,
-    ...aiChatSubjects,
+    ...aiInteractionSubjects,
     ...documentSubjects,
 ]
 
@@ -106,10 +118,32 @@ await startNatsAuthCalloutService({
     nKeyIssuerSeed: env.NATS_AUTH_NKEY_ISSUER_SEED,
     xKeyIssuerSeed: env.NATS_AUTH_XKEY_ISSUER_SEED,
     jwtAudience: env.AUTH0_API_IDENTIFIER,
-    jwtIssuer: `${env.AUTH0_DOMAIN}/`,
+    jwtIssuer: env.MOCK_AUTH0 === 'true' ? `http://${env.MOCK_AUTH0_DOMAIN}/` : `${env.AUTH0_DOMAIN}/`,
     algorithms: ['RS256'],
-    jwksUri: `${env.AUTH0_DOMAIN}/.well-known/jwks.json`,
+    jwksUri: env.MOCK_AUTH0 === 'true' ? env.MOCK_AUTH0_JWKS_URI : `${env.AUTH0_DOMAIN}/.well-known/jwks.json`,
     natsAuthAccount: env.NATS_AUTH_ACCOUNT,
+    // Configure internal services that use self-issued JWT authentication.
+    // Each service signs its own tokens with an NKey, we verify signatures using public keys.
+    serviceAuthConfigs: [
+        {
+            publicKey: env.NATS_LLM_SERVICE_NKEY_PUBLIC,
+            userId: 'svc:llm-service',
+            permissions: {
+                pub: {
+                    allow: [
+                        "ai.interaction.chat.error.>",           // Publish errors back to API
+                        "ai.interaction.chat.receiveMessage.>"     // Stream LLM responses to web-ui
+                    ]
+                },
+                sub: {
+                    allow: [
+                        "ai.interaction.chat.process",            // Subscribe to chat processing requests
+                        "ai.interaction.chat.stop.>"              // Subscribe to stop requests
+                    ]
+                }
+            }
+        }
+    ]
 })
 
 

@@ -1,0 +1,26 @@
+{
+    "name": "@lixpi/nats-service",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "nats-service.ts",
+    "exports": {
+        ".": {
+            "import": "./nats-service.ts",
+            "types": "./nats-service.ts"
+        }
+    },
+    "files": [
+        "*.ts"
+    ],
+    "scripts": {},
+    "devDependencies": {},
+    "dependencies": {
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/debug-tools": "workspace:*",
+        "@nats-io/nats-core": "*",
+        "@nats-io/transport-node": "*",
+        "@nats-io/nkeys": "*",
+        "chalk": "*"
+    }
+}

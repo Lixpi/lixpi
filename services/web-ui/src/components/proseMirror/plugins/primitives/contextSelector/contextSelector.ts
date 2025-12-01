@@ -7,7 +7,7 @@ import {
     startContextSelectionAnimation,
     startThreadGradientAnimation
 } from '../infographics/shapes/index.ts'
-import { createCheckbox } from '../infographics/shapes/checkbox/index.ts'
+import { createToggleSwitch } from '../infographics/shapes/toggleSwitch/index.ts'
 import { aiLightBulbIcon, contextIcon, documentIcon } from '../../../../../svgIcons/index.ts'
 import { ENTRANCE_ANIMATION_DURATION } from '../infographics/animationConstants.ts'
 
@@ -39,6 +39,120 @@ type ContextSelectorConfig = {
     onThreadSelectionChange?: (threadId: string, selected: boolean) => void  // Callback when checkbox changes
 }
 
+// ============================================================================
+// Helper Functions - Pure, Reusable Logic
+// ============================================================================
+
+// Calculate whether a document should be active and connected based on context mode
+// Pure function - no side effects
+function calculateDocumentState(
+    contextValue: string,
+    threadIndex: number,
+    currentThreadIndex: number,
+    threadSelections: ThreadSelectionState[]
+): { isActive: boolean; shouldConnect: boolean } {
+    if (contextValue === 'Thread') {
+        const isCurrentThread = threadIndex === currentThreadIndex
+        return { isActive: isCurrentThread, shouldConnect: isCurrentThread }
+    } else if (contextValue === 'Document') {
+        return { isActive: true, shouldConnect: true }
+    } else if (contextValue === 'Workspace') {
+        const threadSelection = threadSelections[threadIndex]
+        const selected = threadSelection?.selected ?? false
+        return { isActive: selected, shouldConnect: selected }
+    }
+    return { isActive: false, shouldConnect: false }
+}
+
+// Calculate Y position for a document in the vertical stack
+function calculateDocumentY(
+    threadIndex: number,
+    totalThreads: number,
+    docStackGap: number,
+    documentHeight: number,
+    baselineY: number
+): number {
+    const startOffset = -(totalThreads - 1) / 2
+    return baselineY + (startOffset + threadIndex) * docStackGap - documentHeight / 2
+}
+
+// Calculate Y position for a toggle switch (centered vertically on document)
+function calculateToggleSwitchY(
+    documentY: number,
+    documentHeight: number,
+    toggleSwitchSize: number
+): number {
+    return documentY + documentHeight / 2 - toggleSwitchSize / 2
+}
+
+// Create edge configuration for document-to-LLM connection
+// Factory function to eliminate duplication
+function createDocToLlmEdge(threadIndex: number, curvature: number) {
+    return {
+        id: `doc-${threadIndex}-to-llm`,
+        source: { nodeId: `doc-${threadIndex}`, position: 'right' as const, offset: { x: 2 } },
+        target: { nodeId: 'llm', position: 'left' as const, offset: { x: -6 } },
+        pathType: 'horizontal-bezier' as const,
+        marker: 'arrowhead' as const,
+        markerSize: 12,
+        markerOffset: { source: 5, target: 10 },
+        lineStyle: 'solid' as const,
+        strokeWidth: 2,
+        curvature
+    }
+}
+
+// Create node configuration for a document shape
+// Encapsulates complex NodeConfig creation
+function createDocumentNodeConfig(
+    threadIndex: number,
+    x: number,
+    y: number,
+    documentWidth: number,
+    isActive: boolean
+) {
+    return createIconShape({
+        id: `doc-${threadIndex}`,
+        x,
+        y,
+        size: documentWidth,
+        icon: createContextShapeSVG({
+            withGradient: isActive,
+            withBackgroundAnimatedGradient: false,
+            instanceId: `doc-${threadIndex}`
+        }),
+        className: `document-block-shape ctx-document ${isActive ? 'ctx-document-active' : 'ctx-document-muted'}`,
+        disabled: !isActive
+    })
+}
+
+// Create node configuration for LLM (light bulb) icon
+function createLlmNodeConfig(x: number, y: number, size: number, isActive: boolean = true) {
+    return createIconShape({
+        id: 'llm',
+        x,
+        y,
+        size,
+        icon: aiLightBulbIcon,
+        className: `ctx-llm ${isActive ? '' : 'ctx-llm-muted'}`.trim(),
+        disabled: !isActive
+    })
+}
+
+// Check if there are any active connections (at least one document connected)
+function hasActiveConnections(
+    contextValue: string,
+    totalThreads: number,
+    currentThreadIndex: number,
+    threadSelections: ThreadSelectionState[]
+): boolean {
+    for (let i = 0; i < totalThreads; i++) {
+        const { shouldConnect } = calculateDocumentState(contextValue, i, currentThreadIndex, threadSelections)
+        if (shouldConnect) return true
+    }
+    return false
+}
+
 export function createContextSelector(config: ContextSelectorConfig) {
     const {
         id,
@@ -59,7 +173,7 @@ export function createContextSelector(config: ContextSelectorConfig) {
     let connector: ReturnType<typeof createConnectorRenderer> | null = null
     let activeAnimations: Array<{ stop: () => void }> = []
     let descriptionText: HTMLElement | null = null
-    let checkboxInstances: Map<string, ReturnType<typeof createCheckbox>> = new Map()
+    let toggleSwitchInstances: Map<string, ReturnType<typeof createToggleSwitch>> = new Map()
 
     // Generate unique instance ID for this selector
     const instanceId = `ctx-${Math.random().toString(36).substr(2, 9)}`
@@ -68,9 +182,9 @@ export function createContextSelector(config: ContextSelectorConfig) {
     const VIEWBOX_WIDTH = 480
     const VIEWBOX_HEIGHT = 256
     const baselineY = 128
-    const CHECKBOX_SIZE = 24
-    const CHECKBOX_MARGIN = 16  // Gap between checkbox and document shape
-    const WORKSPACE_SHIFT = CHECKBOX_SIZE + CHECKBOX_MARGIN  // How much to shift docs right in workspace mode
+    const TOGGLE_SWITCH_SIZE = 12
+    const TOGGLE_SWITCH_MARGIN = 16  // Gap between toggle switch and document shape
+    const WORKSPACE_SHIFT = TOGGLE_SWITCH_SIZE + TOGGLE_SWITCH_MARGIN  // How much to shift docs right in workspace mode
 
     const documentLayout = {
         width: 105.6,
@@ -115,8 +229,8 @@ export function createContextSelector(config: ContextSelectorConfig) {
         if (isFirstRender || isModeChange) {
             // Clean up existing
             if (connector) connector.destroy()
-            checkboxInstances.forEach(cb => cb.destroy())
-            checkboxInstances.clear()
+            toggleSwitchInstances.forEach(ts => ts.destroy())
+            toggleSwitchInstances.clear()
             activeAnimations.forEach(anim => anim.stop())
             activeAnimations = []
 
@@ -130,63 +244,26 @@ export function createContextSelector(config: ContextSelectorConfig) {
 
             // Add document nodes at target position
             for (let i = 0; i < totalThreads; i++) {
-                const y = baselineY + (startOffset + i) * docStackGap - documentLayout.height / 2
-                const isCurrentThread = i === currentThreadIdx
+                const y = calculateDocumentY(i, totalThreads, docStackGap, documentLayout.height, baselineY)
+                const { isActive, shouldConnect } = calculateDocumentState(
+                    contextValue,
+                    i,
+                    currentThreadIdx,
+                    currentThreadSelections
+                )
 
-                let isActive = false
-                let shouldConnect = false
-
-                if (contextValue === 'Thread') {
-                    isActive = isCurrentThread
-                    shouldConnect = isCurrentThread
-                } else if (contextValue === 'Document') {
-                    isActive = true
-                    shouldConnect = true
-                } else if (contextValue === 'Workspace') {
-                    const threadSelection = currentThreadSelections.find((_, idx) => idx === i)
-                    isActive = threadSelection?.selected ?? false
-                    shouldConnect = threadSelection?.selected ?? false
-                }
-
-                connector.addNode(createIconShape({
-                    id: `doc-${i}`,
-                    x: targetDocX,  // Already at target position
-                    y,
-                    size: documentLayout.width,
-                    icon: createContextShapeSVG({
-                        withGradient: isActive,
-                        withBackgroundAnimatedGradient: false,
-                        instanceId: `doc-${i}`
-                    }),
-                    className: `document-block-shape ctx-document ${isActive ? 'ctx-document-active' : 'ctx-document-muted'}`,
-                    disabled: !isActive
-                }))
+                connector.addNode(createDocumentNodeConfig(i, targetDocX, y, documentLayout.width, isActive))
 
                 if (shouldConnect) {
-                    connector.addEdge({
-                        id: `doc-${i}-to-llm`,
-                        source: { nodeId: `doc-${i}`, position: 'right', offset: { x: 2 } },
-                        target: { nodeId: 'llm', position: 'left', offset: { x: -6 } },
-                        pathType: 'horizontal-bezier',
-                        marker: 'arrowhead',
-                        markerSize: 12,
-                        markerOffset: { source: 5, target: 10 },
-                        lineStyle: 'solid',
-                        strokeWidth: 2,
-                        curvature: contextValue === 'Workspace' ? 0.18 : 0.12
-                    })
+                    const curvature = contextValue === 'Workspace' ? 0.18 : 0.12
+                    connector.addEdge(createDocToLlmEdge(i, curvature))
                 }
             }
 
             // Add LLM node (always at same position)
-            connector.addNode(createIconShape({
-                id: 'llm',
-                x: llmLayout.iconX,
-                y: llmLayout.iconY,
-                size: llmLayout.size,
-                icon: aiLightBulbIcon,
-                className: 'ctx-llm'
-            }))
+            // Muted if no documents are connected
+            const llmIsActive = hasActiveConnections(contextValue, totalThreads, currentThreadIdx, currentThreadSelections)
+            connector.addNode(createLlmNodeConfig(llmLayout.iconX, llmLayout.iconY, llmLayout.size, llmIsActive))
 
             // Render
             connector.render()
@@ -200,7 +277,7 @@ export function createContextSelector(config: ContextSelectorConfig) {
 
                     // Select all document node foreignObjects and animate them
                     for (let i = 0; i < totalThreads; i++) {
-                        const y = baselineY + (startOffset + i) * docStackGap - documentLayout.height / 2
+                        const y = calculateDocumentY(i, totalThreads, docStackGap, documentLayout.height, baselineY)
                         const docNode = svgSelection.select(`#node-doc-${i}`)
 
                         if (docNode.node()) {
@@ -218,30 +295,97 @@ export function createContextSelector(config: ContextSelectorConfig) {
                 }
             }
 
-            // Add checkboxes if workspace mode (ONLY when workspace mode is active)
+            // Add toggle switches if workspace mode (ONLY when workspace mode is active)
             if (isWorkspaceMode) {
                 const svg = visualizationContainer.querySelector('svg')
                 if (svg) {
                     const svgSelection = select(svg)
 
                     for (let i = 0; i < totalThreads; i++) {
-                        const y = baselineY + (startOffset + i) * docStackGap - documentLayout.height / 2
-                        const checkboxY = y + documentLayout.height / 2 - CHECKBOX_SIZE / 2
+                        const y = calculateDocumentY(i, totalThreads, docStackGap, documentLayout.height, baselineY)
+                        const toggleSwitchY = calculateToggleSwitchY(y, documentLayout.height, TOGGLE_SWITCH_SIZE)
                         const threadSelection = currentThreadSelections[i]
                         const threadId = threadSelection?.threadId || `thread-${i}`
                         const checked = threadSelection?.selected ?? false
 
-                        const checkbox = createCheckbox(svgSelection, {
+                        const toggleSwitch = createToggleSwitch(svgSelection, {
                             id: threadId,
-                            x: 0,  // Checkboxes at left edge
-                            y: checkboxY,
-                            size: CHECKBOX_SIZE,
+                            x: 0,  // Toggle switches at left edge
+                            y: toggleSwitchY,
+                            size: TOGGLE_SWITCH_SIZE,
                             checked,
                             onChange: (newChecked, id) => {
+                                // Update document state
                                 onThreadSelectionChange?.(id, newChecked)
+
+                                // Update connector edges and nodes immediately
+                                if (connector) {
+                                    const threadIndex = currentThreadSelections.findIndex(ts => ts.threadId === id)
+                                    if (threadIndex !== -1) {
+                                        const edgeId = `doc-${threadIndex}-to-llm`
+                                        const nodeId = `doc-${threadIndex}`
+                                        const docY = calculateDocumentY(threadIndex, totalThreads, docStackGap, documentLayout.height, baselineY)
+
+                                        // Update node appearance (active/muted) using factory
+                                        const updatedNodeConfig = createDocumentNodeConfig(
+                                            threadIndex,
+                                            targetDocX,
+                                            docY,
+                                            documentLayout.width,
+                                            newChecked
+                                        )
+                                        connector.updateNode(nodeId, {
+                                            content: updatedNodeConfig.content,
+                                            className: updatedNodeConfig.className,
+                                            disabled: updatedNodeConfig.disabled
+                                        })
+
+                                        if (newChecked) {
+                                            // Add edge if checked using factory
+                                            connector.addEdge(createDocToLlmEdge(threadIndex, 0.18))
+                                        } else {
+                                            // Remove edge if unchecked
+                                            connector.removeEdge(edgeId)
+                                        }
+
+                                        // Update LLM node state based on whether there are any active connections
+                                        // We need to check the updated state, so we manually count active connections
+                                        let hasAnyActiveConnection = false
+                                        for (let j = 0; j < totalThreads; j++) {
+                                            if (j === threadIndex) {
+                                                // For the current toggle, use the new state
+                                                if (newChecked) {
+                                                    hasAnyActiveConnection = true
+                                                    break
+                                                }
+                                            } else {
+                                                // For other toggles, check their current state
+                                                const otherThreadSelection = currentThreadSelections[j]
+                                                if (otherThreadSelection?.selected) {
+                                                    hasAnyActiveConnection = true
+                                                    break
+                                                }
+                                            }
+                                        }
+
+                                        const llmNodeConfig = createLlmNodeConfig(llmLayout.iconX, llmLayout.iconY, llmLayout.size, hasAnyActiveConnection)
+                                        connector.updateNode('llm', {
+                                            className: llmNodeConfig.className,
+                                            disabled: llmNodeConfig.disabled
+                                        })
+
+                                        // Re-render connector (this will replace DOM elements and break animations)
+                                        connector.render()
+
+                                        // Stop all existing animations and restart them
+                                        activeAnimations.forEach(anim => anim.stop())
+                                        activeAnimations = []
+                                        startGradientAnimations(visualizationContainer, contextValue, totalThreads)
+                                    }
+                                }
                             }
                         })
-                        checkboxInstances.set(threadId, checkbox)
+                        toggleSwitchInstances.set(threadId, toggleSwitch)
                     }
                 }
             }
@@ -261,11 +405,9 @@ export function createContextSelector(config: ContextSelectorConfig) {
             activeAnimations.push(startThreadGradientAnimation(container, animationTargetId, 50, threadGradientId))
         } else {
             for (let i = 0; i < totalThreads; i++) {
-                const shouldAnimate = contextValue === 'Workspace'
-                    ? (currentThreadSelections.find((_, idx) => idx === i)?.selected ?? false)
-                    : true
+                const { isActive } = calculateDocumentState(contextValue, i, currentThreadIdx, currentThreadSelections)
 
-                if (shouldAnimate) {
+                if (isActive) {
                     const animationTargetId = `doc-${i}`
                     const animationGradientId = `ctx-grad-${animationTargetId}`
                     const threadGradientId = `ctx-thread-grad-${animationTargetId}`
@@ -402,9 +544,9 @@ export function createContextSelector(config: ContextSelectorConfig) {
             activeAnimations.forEach(anim => anim.stop())
             activeAnimations = []
         }
-        // Clean up checkboxes
-        checkboxInstances.forEach(checkbox => checkbox.destroy())
-        checkboxInstances.clear()
+        // Clean up toggle switches
+        toggleSwitchInstances.forEach(toggleSwitch => toggleSwitch.destroy())
+        toggleSwitchInstances.clear()
         // Clean up connector
         if (connector) {
             connector.destroy()

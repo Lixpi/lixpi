@@ -363,6 +363,8 @@ $aiChatThreadMinHeight: 50px;
     }
 }
 
+$aiResponseMessageEmptyNodeMinHeight: 1.5rem;
+
 // ========== AI RESPONSE MESSAGE WRAPPER ==========
 .ai-response-message-wrapper {
     margin: 0;
@@ -418,6 +420,35 @@ $aiChatThreadMinHeight: 50px;
         display: flex;
         align-items: center;
         padding: 0;
+        gap: 0.4rem;
+
+        &.is-empty {
+            min-height: $aiResponseMessageEmptyNodeMinHeight;
+            align-items: flex-start;
+            padding-top: 0rem;
+            padding-left: 1rem;;
+        }
+
+        .ai-response-message-spinner {
+            display: none;
+            pointer-events: none;
+            flex: 0 0 auto;
+            margin: 0.25rem 0;
+        }
+
+        &.is-empty .ai-response-message-spinner,
+        .ai-response-message-spinner.is-active {
+            display: inline-flex;
+            @include horizontalSpinnerAnimation((
+                size: .5rem,
+                color: $aiResponseMessageIndicatorColor,
+                duration: 1000ms,
+                delayStep: 150ms,
+                gap: 1rem,
+                shadowOffset: -0.85rem,
+                fontSize: 20px
+            ));
+        }
 
         // Boundary indicator
         .ai-response-message-boundaries-indicator {
@@ -448,6 +479,7 @@ $aiChatThreadMinHeight: 50px;
         // Message content
         .ai-response-message-content {
             padding: 0;
+            min-height: $aiResponseMessageEmptyNodeMinHeight;
 
             &.node-render-animation {
                 animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
