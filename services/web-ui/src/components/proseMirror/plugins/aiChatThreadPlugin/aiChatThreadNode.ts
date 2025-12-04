@@ -383,6 +383,7 @@ function createThreadInfoBubble(view, threadId, getPos) {
     ` as HTMLElement
 
     // Create context selector with dynamic thread count
+    // Pass currentThreadId so Workspace mode can disable toggle for current thread (always included)
     const contextSelector = createContextSelector({
         id: `thread-context-selector-${threadId}`,
         options: [
@@ -408,6 +409,7 @@ function createThreadInfoBubble(view, threadId, getPos) {
         selectedValue: currentThreadContext,
         threadCount,
         currentThreadIndex,
+        currentThreadId: threadId,  // For disabling toggle on current thread in Workspace mode
         threadSelections,
         onChange: (value) => {
             console.log('[AI_DBG][THREAD.contextSelector] onChange', { threadId, value })

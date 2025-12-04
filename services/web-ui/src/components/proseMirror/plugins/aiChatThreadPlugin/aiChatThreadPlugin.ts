@@ -134,10 +134,20 @@ class ContentExtractor {
     }
 
     // Find the active aiChatThread containing the cursor and extract content
-    // If threadContext is 'Document', extract from ALL threads in the document
-    static getActiveThreadContent(state: EditorState, threadContext: string = 'Thread', nodePos?: number): ThreadContent[] {
+    // threadContext determines scope: 'Thread' (single), 'Document' (all), or 'Workspace' (selected)
+    // currentThreadId is required for Workspace mode to ensure triggering thread is always included
+    static getActiveThreadContent(
+        state: EditorState,
+        threadContext: string = 'Thread',
+        nodePos?: number,
+        currentThreadId?: string
+    ): ThreadContent[] {
         if (threadContext === 'Document') {
             return ContentExtractor.getAllThreadsContent(state)
+        }
+
+        if (threadContext === 'Workspace') {
+            return ContentExtractor.getSelectedThreadsContent(state, currentThreadId)
         }
 
         // Find thread node - prefer explicit position, fallback to selection
@@ -150,16 +160,9 @@ class ContentExtractor {
         // Extract all blocks with content, preserving code block formatting
         const content: ThreadContent[] = []
         thread.forEach(block => {
-            const formattedText = ContentExtractor.collectFormattedText(block)
+            const textContent = ContentExtractor.collectFormattedText(block)
 
-            if (block.textContent || formattedText) {
-                let textContent = formattedText || block.textContent
-
-                // Format code blocks with triple backticks if needed
-                if (block.type.name === 'code_block' && !textContent.includes('```')) {
-                    textContent = `\`\`\`\n${textContent}\n\`\`\``
-                }
-
+            if (textContent) {
                 content.push({
                     nodeType: block.type.name,
                     textContent
@@ -171,21 +174,19 @@ class ContentExtractor {
     }
 
     // Extract content from ALL aiChatThread nodes in the document
+    // Uses XML tags to clearly separate threads: <thread id="...">content</thread>
     static getAllThreadsContent(state: EditorState): ThreadContent[] {
         const allThreadsContent: ThreadContent[] = []
-        let threadCount = 0
 
         state.doc.descendants((node, pos) => {
             if (node.type.name === aiChatThreadNodeType) {
-                threadCount++
+                const threadId = node.attrs.threadId || 'unknown'
 
-                // Add a thread separator if not the first thread
-                if (threadCount > 1) {
-                    allThreadsContent.push({
-                        nodeType: 'thread_separator',
-                        textContent: '\n--- Thread Separator ---\n'
-                    })
-                }
+                // Add opening XML tag for thread
+                allThreadsContent.push({
+                    nodeType: 'thread_start',
+                    textContent: `<thread id="${threadId}">`
+                })
 
                 // Extract content from this thread
                 node.forEach(block => {
@@ -194,28 +195,76 @@ class ContentExtractor {
                         return
                     }
 
-                    const formattedText = ContentExtractor.collectFormattedText(block)
-                    const simpleText = ContentExtractor.collectText(block)
+                    const textContent = ContentExtractor.collectFormattedText(block)
 
-                    // Include blocks that have any text content
-                    if (block.textContent || formattedText) {
-                        let textContent = formattedText || block.textContent
-
-                        // For top-level code blocks, format with triple backticks (if not already formatted)
-                        if (block.type.name === 'code_block' && !textContent.includes('```')) {
-                            textContent = `\`\`\`\n${textContent}\n\`\`\``
-                        }
-
+                    if (textContent) {
                         allThreadsContent.push({
                             nodeType: block.type.name,
-                            textContent: textContent
+                            textContent
                         })
                     }
+                })
+
+                // Add closing XML tag for thread
+                allThreadsContent.push({
+                    nodeType: 'thread_end',
+                    textContent: '</thread>'
                 })
             }
         })
 
         return allThreadsContent
+    }
+
+    // Extract content from SELECTED aiChatThread nodes (workspaceSelected: true OR currentThreadId match)
+    // Uses XML tags to clearly separate threads: <thread id="...">content</thread>
+    // currentThreadId is always included regardless of workspaceSelected state
+    static getSelectedThreadsContent(state: EditorState, currentThreadId?: string): ThreadContent[] {
+        const selectedContent: ThreadContent[] = []
+
+        state.doc.descendants((node, pos) => {
+            if (node.type.name === aiChatThreadNodeType) {
+                const threadId = node.attrs.threadId || 'unknown'
+                const isSelected = node.attrs.workspaceSelected ?? false
+                const isCurrentThread = currentThreadId && threadId === currentThreadId
+
+                // Include thread if it's selected OR if it's the current triggering thread
+                if (!isSelected && !isCurrentThread) {
+                    return // Skip this thread
+                }
+
+                // Add opening XML tag for thread
+                selectedContent.push({
+                    nodeType: 'thread_start',
+                    textContent: `<thread id="${threadId}">`
+                })
+
+                // Extract content from this thread
+                node.forEach(block => {
+                    // Skip dropdown nodes
+                    if (block.type.name === 'dropdown') {
+                        return
+                    }
+
+                    const textContent = ContentExtractor.collectFormattedText(block)
+
+                    if (textContent) {
+                        selectedContent.push({
+                            nodeType: block.type.name,
+                            textContent
+                        })
+                    }
+                })
+
+                // Add closing XML tag for thread
+                selectedContent.push({
+                    nodeType: 'thread_end',
+                    textContent: '</thread>'
+                })
+            }
+        })
+
+        return selectedContent
     }
 
     // Transform thread content into AI message format (merges consecutive same-role messages)
@@ -772,7 +821,8 @@ class AiChatThreadPluginClass {
         }
 
         // Extract and send content
-        const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos)
+        // Pass threadId for Workspace mode to ensure current thread is always included
+        const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
 
         this.sendAiRequestHandler({ messages, aiModel, threadId })
@@ -878,7 +928,9 @@ class AiChatThreadPluginClass {
                             return tr
                         }
                     }
-                }                // Handle deferred dropdown attr updates after dropdown selection
+                }
+
+                // Handle deferred dropdown attr updates after dropdown selection
                 const dropdownTx = transactions.find(tr => tr.getMeta('dropdownOptionSelected'))
                 if (dropdownTx) {
                     const dropdownSelection = dropdownTx.getMeta('dropdownOptionSelected')

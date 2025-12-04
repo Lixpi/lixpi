@@ -142,9 +142,45 @@ sequenceDiagram
   - `threadId: string | null` - Unique identifier for the thread
   - `status: 'active'|'paused'|'completed'` - Thread lifecycle state
   - `aiModel: string` - Selected AI model (e.g., "Anthropic:claude-3-5-sonnet")
-  - `threadContext: string` - Context scope ('Thread' or 'Document')
+  - `threadContext: string` - Context scope ('Thread', 'Document', or 'Workspace')
   - `isCollapsed: boolean` - Whether thread content is visually hidden (default: false)
-- DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model][data-thread-context][data-is-collapsed]`
+  - `workspaceSelected: boolean` - Whether this thread is included in Workspace context mode (default: false)
+- DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model][data-thread-context][data-is-collapsed][data-workspace-selected]`
+
+## Thread Context Modes
+
+Each thread has a **context selector** that determines what content is sent to the AI when submitting a message:
+
+### Thread Mode (Default)
+Only content from the current thread is included. Best for isolated conversations.
+
+### Document Mode
+Content from **all threads** in the document is included. Each thread's content is wrapped in XML tags for clear separation:
+```
+<thread id="abc123">
+[user message]
+[assistant response]
+</thread>
+<thread id="def456">
+[user message]
+...
+</thread>
+```
+
+### Workspace Mode
+Selective thread inclusion. Users can toggle which threads to include via checkboxes in the context selector UI.
+
+**Key behaviors:**
+- The **current thread** (where the submit button was clicked) is **always included** - its toggle is checked and disabled (grayed out)
+- Other threads can be toggled on/off via their `workspaceSelected` attribute
+- Uses the same XML tag format as Document mode for consistent parsing
+
+**XML Separator Format:**
+Content from multiple threads uses semantic XML tags rather than plain text separators:
+- Opening tag: `<thread id="threadId">`
+- Closing tag: `</thread>`
+
+This format follows modern prompt engineering best practices (per OpenAI/Anthropic guidelines) and won't conflict with user-typed content.
 
 **`aiResponseMessage`** - Individual AI responses
 - Content: `(paragraph | block)*` (empty allowed for streaming shell)

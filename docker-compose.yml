@@ -39,7 +39,7 @@ services:
 
     lixpi-caddy:
         container_name: lixpi-caddy
-        profiles: ["main"]
+        profiles: ["deploy"]
         image: lixpi/caddy-cert-manager
         build:
             dockerfile: Dockerfile
@@ -85,9 +85,9 @@ services:
         build:
             dockerfile: Dockerfile
             context: services/nats
-        depends_on:
-            lixpi-caddy:
-                condition: service_completed_successfully
+        # depends_on:
+            # lixpi-caddy:
+            #     condition: service_completed_successfully
         ports:
             - 4222:4222
             - 8222:8222
@@ -134,9 +134,9 @@ services:
         build:
             dockerfile: Dockerfile
             context: services/nats
-        depends_on:
-            lixpi-caddy:
-                condition: service_completed_successfully
+        # depends_on:
+            # lixpi-caddy:
+            #     condition: service_completed_successfully
         environment:
             # NATS config
             NATS_CLUSTER_NAME: Lixpi-NATS
@@ -179,9 +179,9 @@ services:
         build:
             dockerfile: Dockerfile
             context: services/nats
-        depends_on:
-            lixpi-caddy:
-                condition: service_completed_successfully
+        # depends_on:
+            # lixpi-caddy:
+            #     condition: service_completed_successfully
         environment:
             # NATS config
             NATS_CLUSTER_NAME: Lixpi-NATS
@@ -473,73 +473,6 @@ services:
                 condition: service_healthy
                 restart: true
 
-    # SST container is deprecated and will be removed later in the future. DON'T USE IT !
-    # lixpi-sst:
-    #     container_name: lixpi-sst
-    #     restart: always
-    #     build:
-    #         dockerfile: Dockerfile-SST
-    #         context: .
-    #     image: lixpi/sst
-    #     environment:
-    #         # Force color output in the terminal, required for chalk.js to work
-    #         FORCE_COLOR: 1
-
-    #         # SST Config
-    #         ORG_NAME: ${ORG_NAME}
-    #         STAGE: ${STAGE}
-
-    #         # AWS credentials, used only for local development
-    #         AWS_REGION: ${AWS_REGION}
-    #         AWS_PROFILE: ${AWS_PROFILE}
-
-    #     volumes:
-
-    #         # AWS SSO credentials
-    #         - aws-config:/root/.aws:cached
-    #         - ./.aws/config:/root/.aws/config:cached
-
-    #         - ./package.json:/usr/src/service/package.json:cached
-
-    #         - ./.vscode:/usr/src/service/.vscode:cached    # Do we really need it? Maybe for somebody who wants to attach a debugger to the container
-
-    #         - ./services:/usr/src/service/services:cached
-
-    #         - ./stacks:/usr/src/service/stacks:cached
-    #         # - ./.env.development:/usr/src/service/.env
-    #         - ./.env:/usr/src/service/.env:cached
-    #         # - ./.env.development:/usr/src/service/.env
-    #         - ./sst.config.ts:/usr/src/service/sst.config.ts:cached
-    #         - ./tsconfig.json:/usr/src/service/tsconfig.json:cached
-    #         - /var/run/docker.sock:/var/run/docker.sock:cached
-
-    #         - ./lambda-functions:/usr/src/service/lambda-functions:cached
-
-    #         - ./pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
-
-    #         # - ./packages:/usr/src/service/packages
-    #         - ./packages/lixpi/constants/src:/usr/src/service/packages/lixpi/constants/src:cached
-    #         - ./packages/lixpi/constants/package.json:/usr/src/service/packages/lixpi/constants/package.json:cached
-    #         - ./packages/lixpi/debug-tools/src:/usr/src/service/packages/lixpi/debug-tools/src:cached
-    #         - ./packages/lixpi/debug-tools/package.json:/usr/src/service/packages/lixpi/debug-tools/package.json:cached
-    #         - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:cached
-    #         - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:cached
-    #         - ./packages/lixpi/lambda-service/src:/usr/src/service/packages/lixpi/lambda-service/src:cached
-    #         - ./packages/lixpi/lambda-service/package.json:/usr/src/service/packages/lixpi/lambda-service/package.json:cached
-    #         - ./packages/lixpi/sqs-service/src:/usr/src/service/packages/lixpi/sqs-service/src:cached
-    #         - ./packages/lixpi/sqs-service/package.json:/usr/src/service/packages/lixpi/sqs-service/package.json:cached
-    #         - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:cached
-    #         - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:cached
-    #         - ./packages/lixpi/sns-service/src:/usr/src/service/packages/lixpi/sns-service/src:cached
-    #         - ./packages/lixpi/sns-service/package.json:/usr/src/service/packages/lixpi/sns-service/package.json:cached
-    #         - ./packages/lixpi/nats-service/src:/usr/src/service/packages/lixpi/nats-service/src:cached
-    #         - ./packages/lixpi/nats-service/package.json:/usr/src/service/packages/lixpi/nats-service/package.json:cached
-    #     working_dir: /usr/src/service
-    #     # making sure we install the packages before running the dev server
-    #     command: >
-    #         sh -c "pnpm i
-    #         && sleep infinity"
-
     lixpi-pulumi:
         container_name: lixpi-pulumi
         profiles: ["deploy"]
@@ -649,7 +582,8 @@ services:
             lixpi-dynamodb:
                 condition: service_healthy
                 restart: true
-
+            lixpi-caddy:
+                condition: service_completed_successfully
 volumes:
     aws-config:    # AWS SSO credentials volume that's shared between multiple containers
     pulumi-local-state:    # A volume where Pulumi stores stack state. Used only for local development.
