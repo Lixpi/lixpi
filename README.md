@@ -186,34 +186,30 @@ Examples:
 
 ## Authentication Flow
 
-### Step 1: Get Token from Auth0
-
 ```mermaid
-flowchart LR
-    A["Web UI"] -->|OAuth2| B["Auth0"]
-    B -->|JWT| A
+flowchart TB
+    subgraph Step1["1️⃣ Get Token"]
+        A["Web UI"] -->|OAuth2| B["Auth0"]
+        B -->|JWT| A
+    end
+    
+    subgraph Step2["2️⃣ Connect to NATS"]
+        C["Web UI"] -->|JWT| D["NATS"]
+        D -->|validate| E["Auth Callout"]
+        E -->|✓| D
+        D -->|connected| C
+    end
+    
+    subgraph Step3["3️⃣ Make Requests"]
+        F["Web UI"] --> G["NATS"]
+        G --> H["API"] --> I[(DB)]
+        G --> J["LLM API"] --> K(("AI"))
+    end
+    
+    Step1 --> Step2 --> Step3
 ```
 
-### Step 2: Connect to NATS with Token
-
-```mermaid
-flowchart LR
-    A["Web UI"] -->|JWT| B["NATS"]
-    B -->|validate| C["Auth Callout"]
-    C -->|✓| B
-    B -->|connected| A
-```
-
-### Step 3: Make Authenticated Requests
-
-```mermaid
-flowchart LR
-    A["Web UI"] --> B["NATS"]
-    B --> C["API"] --> D[(DB)]
-    B --> E["LLM API"] --> F(("AI"))
-```
-
-Both services connect to NATS, but only API can access the database. LLM API must publish messages back through NATS if it needs to persist data (e.g., usage tracking) — a tradeoff for simpler access control.
+Only API can access the database directly. LLM API must publish messages through NATS if it needs to persist data — a tradeoff for simpler access control.
 
 ### Two Authentication Modes
 
