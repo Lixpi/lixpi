@@ -4,7 +4,6 @@ Version:  0.0.2
 
 ## Preview here: https://slides.com/lixpi/lixpi-ai-bridge-tech-preview/fullscreen
 
-https://github.com/user-attachments/assets/mmwZWrnd-screen-recording.mp4
 
 ## Quick Start
 
