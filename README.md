@@ -192,20 +192,20 @@ flowchart TB
         A["Web UI"] -->|OAuth2| B["Auth0"]
         B -->|JWT| A
     end
-    
+
     subgraph Step2["2️⃣ Connect to NATS"]
         C["Web UI"] -->|JWT| D["NATS"]
         D -->|validate| E["Auth Callout"]
         E -->|✓| D
         D -->|connected| C
     end
-    
+
     subgraph Step3["3️⃣ Make Requests"]
         F["Web UI"] --> G["NATS"]
         G --> H["API"] --> I[(DB)]
         G --> J["LLM API"] --> K(("AI"))
     end
-    
+
     Step1 --> Step2 --> Step3
 ```
 
@@ -225,28 +225,24 @@ Only API can access the database directly. LLM API must publish messages through
 
 ## AI Chat Flow
 
-**Step 1:** Web UI sends message → API validates & enriches
-
 ```mermaid
-flowchart LR
-    A["Web UI"] -->|"sendMessage"| B["NATS"] --> C["API"]
+flowchart TB
+    subgraph Step1["1️⃣ Request: Web UI → API"]
+        A["Web UI"] -->|sendMessage| B["NATS"] --> C["API"]
+    end
+
+    subgraph Step2["2️⃣ Forward: API → LLM API"]
+        D["API"] -->|process| E["NATS"] --> F["LLM API"] --> G(("AI"))
+    end
+
+    subgraph Step3["3️⃣ Response: Direct Stream to Client"]
+        H(("AI")) -->|tokens| I["LLM API"] -->|receiveMessage| J["NATS"] --> K["Web UI"]
+    end
+
+    Step1 --> Step2 --> Step3
 ```
 
-**Step 2:** API forwards to LLM API → LLM calls AI provider
-
-```mermaid
-flowchart LR
-    A["API"] -->|"process"| B["NATS"] --> C["LLM API"] --> D(("AI"))
-```
-
-**Step 3:** LLM streams response directly to Web UI (API is bypassed!)
-
-```mermaid
-flowchart LR
-    A(("AI")) -->|tokens| B["LLM API"] -->|"receiveMessage.{docId}"| C["NATS"] --> D["Web UI"]
-```
-
-This is the key architectural decision — the response bypasses API entirely, going straight from LLM API to the client for minimal latency.
+**Key insight:** Response tokens stream directly from LLM API → NATS → Web UI, bypassing the API service for minimal latency.
 
 ### Key Design Decisions
 
@@ -258,48 +254,47 @@ This is the key architectural decision — the response bypasses API entirely, g
 
 4. **Provider abstraction**: OpenAI and Anthropic share a common base class, making it easy to add new AI providers.
 
-## Data Flow Patterns
+## Scalability & Load Balancing
 
-### Request/Reply Pattern
+The system is designed to scale horizontally with zero configuration changes. Both `main-api` and `llm-api` services are stateless and can be replicated to handle increased load.
 
-Used for synchronous operations (CRUD):
+### NATS Queue Groups
 
-```mermaid
-flowchart LR
-    A["Client"] --> B["NATS"] --> C["API"] --> D[(DB)]
-    D --> C --> B --> A
-```
+Instead of using traditional external load balancers (like Nginx or AWS ALB), we leverage NATS **Queue Groups**.
 
-**Subjects:** `user.get`, `document.create`, `document.update`, etc.
-
-### Pub/Sub Pattern
-
-Used for real-time streaming:
+When multiple instances of a service subscribe to the same subject with the same queue group name, NATS automatically distributes messages among them.
 
 ```mermaid
 flowchart LR
-    A["LLM API"] --> B["NATS"] --> C["Client 1"]
-    B --> D["Client 2"]
-    B --> E["Client 3"]
+    Client["Web UI / Client"] -->|Request| NATS["⚡ NATS Cluster"]
+
+    subgraph API_Group["Queue Group: 'aiInteraction'"]
+        API1["API Instance 1"]
+        API2["API Instance 2"]
+        API3["API Instance 3"]
+    end
+
+    subgraph LLM_Group["Queue Group: 'llm-workers'"]
+        LLM1["LLM Instance 1"]
+        LLM2["LLM Instance 2"]
+    end
+
+    NATS -.->|Randomly Distributed| API1
+    NATS -.->|Randomly Distributed| API2
+    NATS -.->|Randomly Distributed| API3
+
+    NATS -.->|Randomly Distributed| LLM1
+    NATS -.->|Randomly Distributed| LLM2
 ```
 
-**Subjects:** `ai.interaction.chat.receiveMessage.{documentId}`
+### How It Works
 
-### Queue Groups
+1. **Service Registration**: When a new instance of `main-api` or `llm-api` starts, it connects to NATS and subscribes to its relevant subjects (e.g., `ai.interaction.chat.process`) using a specific queue group name (e.g., `llm-workers`).
+2. **Automatic Discovery**: NATS immediately recognizes the new subscriber as part of the group.
+3. **Load Distribution**: When a message is published to that subject, NATS delivers it to **only one** member of the group, chosen at random.
+4. **Fault Tolerance**: If an instance crashes, NATS detects the disconnection and stops sending messages to it, automatically rerouting traffic to the remaining healthy instances.
 
-Used for load balancing across service instances:
-
-```mermaid
-flowchart LR
-    A["Client"] --> B["NATS"]
-    B --> C["API Instance 1"]
-    B --> D["API Instance 2"]
-    B --> E["API Instance 3"]
-```
-
-Only one instance receives each message.
-
-**Queue groups:** `aiInteraction`, `llm-workers`
+This architecture allows us to add or remove service instances dynamically based on CPU/memory usage without updating any routing configurations.
 
 
 # A big thanks to all open source technologies that make this project possible!
