@@ -35,6 +35,7 @@ type ContextSelectorConfig = {
     onChange?: (value: string) => void
     threadCount?: number           // Total number of threads in document
     currentThreadIndex?: number    // This thread's position (0-based)
+    currentThreadId?: string       // The threadId of the current thread (for disabling toggle in Workspace mode)
     threadSelections?: ThreadSelectionState[]  // Workspace selection state for each thread
     onThreadSelectionChange?: (threadId: string, selected: boolean) => void  // Callback when checkbox changes
 }
@@ -45,6 +46,7 @@ type ContextSelectorConfig = {
 
 // Calculate whether a document should be active and connected based on context mode
 // Pure function - no side effects
+// In Workspace mode, current thread is always active regardless of selection state
 function calculateDocumentState(
     contextValue: string,
     threadIndex: number,
@@ -57,9 +59,12 @@ function calculateDocumentState(
     } else if (contextValue === 'Document') {
         return { isActive: true, shouldConnect: true }
     } else if (contextValue === 'Workspace') {
+        const isCurrentThread = threadIndex === currentThreadIndex
         const threadSelection = threadSelections[threadIndex]
         const selected = threadSelection?.selected ?? false
-        return { isActive: selected, shouldConnect: selected }
+        // Current thread is always active in Workspace mode
+        const isActive = isCurrentThread || selected
+        return { isActive, shouldConnect: isActive }
     }
     return { isActive: false, shouldConnect: false }
 }
@@ -161,6 +166,7 @@ export function createContextSelector(config: ContextSelectorConfig) {
         onChange,
         threadCount = 3,
         currentThreadIndex = 1,
+        currentThreadId,
         threadSelections = [],
         onThreadSelectionChange
     } = config
@@ -168,6 +174,7 @@ export function createContextSelector(config: ContextSelectorConfig) {
     let currentValue = selectedValue || options[0]?.value || ''
     let currentThreadCount = threadCount
     let currentThreadIdx = currentThreadIndex
+    let currentThreadIdValue = currentThreadId
     let currentThreadSelections = threadSelections
     let domRef: HTMLElement | null = null
     let connector: ReturnType<typeof createConnectorRenderer> | null = null
@@ -306,7 +313,10 @@ export function createContextSelector(config: ContextSelectorConfig) {
                         const toggleSwitchY = calculateToggleSwitchY(y, documentLayout.height, TOGGLE_SWITCH_SIZE)
                         const threadSelection = currentThreadSelections[i]
                         const threadId = threadSelection?.threadId || `thread-${i}`
-                        const checked = threadSelection?.selected ?? false
+                        const isCurrentThread = threadId === currentThreadIdValue || i === currentThreadIdx
+                        // Current thread is always checked and disabled in Workspace mode
+                        const checked = isCurrentThread ? true : (threadSelection?.selected ?? false)
+                        const disabled = isCurrentThread  // Disable toggle for current thread
 
                         const toggleSwitch = createToggleSwitch(svgSelection, {
                             id: threadId,
@@ -314,6 +324,7 @@ export function createContextSelector(config: ContextSelectorConfig) {
                             y: toggleSwitchY,
                             size: TOGGLE_SWITCH_SIZE,
                             checked,
+                            disabled,
                             onChange: (newChecked, id) => {
                                 // Update document state
                                 onThreadSelectionChange?.(id, newChecked)
@@ -526,6 +537,9 @@ export function createContextSelector(config: ContextSelectorConfig) {
         if (newConfig.currentThreadIndex !== undefined) {
             currentThreadIdx = newConfig.currentThreadIndex
         }
+        if (newConfig.currentThreadId !== undefined) {
+            currentThreadIdValue = newConfig.currentThreadId
+        }
         if (newConfig.threadSelections !== undefined) {
             currentThreadSelections = newConfig.threadSelections
         }
@@ -533,6 +547,7 @@ export function createContextSelector(config: ContextSelectorConfig) {
         // Re-render visualization if thread state changed
         if (newConfig.threadCount !== undefined ||
             newConfig.currentThreadIndex !== undefined ||
+            newConfig.currentThreadId !== undefined ||
             newConfig.threadSelections !== undefined) {
             createVisualization(currentValue)
         }

@@ -71,6 +71,7 @@ createContextSelector({
 - `selectedValue`: Initial selected value (default: first option)
 - `threadCount`: Total number of threads in document (default: 3) - used for dynamic visualization
 - `currentThreadIndex`: This thread's 0-based position (default: 1) - used to highlight current thread
+- `currentThreadId`: The threadId of the current thread - used to disable toggle in Workspace mode (current thread is always included)
 - `threadSelections`: Array of workspace selection states for each thread - only used in Workspace mode
 - `onChange`: Callback executed when selection changes
 - `onThreadSelectionChange`: Callback executed when a checkbox is toggled in Workspace mode
@@ -140,8 +141,9 @@ This enables thread-specific visualizations:
 
 **Workspace Mode:**
 - Mirrors Document mode (workspace scope) with a slightly wider arc
-- Shows checkboxes to the left of each document shape
+- Shows checkboxes (toggle switches) to the left of each document shape
 - Checkboxes allow selective inclusion of threads in the AI context
+- **Current thread's toggle is always checked and disabled (grayed out)** - the thread where you're submitting from is always included
 - Selection state is preserved even when switching to other modes
 - Only threads with checked boxes show active connections to AI
 

@@ -39,7 +39,7 @@ services:
 
     lixpi-caddy:
         container_name: lixpi-caddy
-        profiles: ["main"]
+        profiles: ["deploy"]
         image: lixpi/caddy-cert-manager
         build:
             dockerfile: Dockerfile
@@ -85,9 +85,9 @@ services:
         build:
             dockerfile: Dockerfile
             context: services/nats
-        depends_on:
-            lixpi-caddy:
-                condition: service_completed_successfully
+        # depends_on:
+            # lixpi-caddy:
+            #     condition: service_completed_successfully
         ports:
             - 4222:4222
             - 8222:8222
@@ -134,9 +134,9 @@ services:
         build:
             dockerfile: Dockerfile
             context: services/nats
-        depends_on:
-            lixpi-caddy:
-                condition: service_completed_successfully
+        # depends_on:
+            # lixpi-caddy:
+            #     condition: service_completed_successfully
         environment:
             # NATS config
             NATS_CLUSTER_NAME: Lixpi-NATS
@@ -179,9 +179,9 @@ services:
         build:
             dockerfile: Dockerfile
             context: services/nats
-        depends_on:
-            lixpi-caddy:
-                condition: service_completed_successfully
+        # depends_on:
+            # lixpi-caddy:
+            #     condition: service_completed_successfully
         environment:
             # NATS config
             NATS_CLUSTER_NAME: Lixpi-NATS
@@ -649,7 +649,8 @@ services:
             lixpi-dynamodb:
                 condition: service_healthy
                 restart: true
-
+            lixpi-caddy:
+                condition: service_completed_successfully
 volumes:
     aws-config:    # AWS SSO credentials volume that's shared between multiple containers
     pulumi-local-state:    # A volume where Pulumi stores stack state. Used only for local development.
