@@ -8,6 +8,8 @@ import {
     formatStageResourceName,
 } from '@lixpi/constants'
 
+import { CONTAINER_INSIGHTS_ENABLED } from '../constants/logging.ts'
+
 const {
     ORG_NAME,
     STAGE
@@ -65,7 +67,7 @@ export const createEcsCluster = async (
         name: formattedClusterName,
         settings: [{
             name: 'containerInsights',
-            value: 'enabled',
+            value: CONTAINER_INSIGHTS_ENABLED ? 'enabled' : 'disabled',
         }],
         tags: resourceTags,
     })

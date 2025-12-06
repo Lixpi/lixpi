@@ -20,6 +20,8 @@ import {
     formatStageResourceName,
 } from '@lixpi/constants'
 
+import { LOG_RETENTION_DAYS } from '../constants/logging.ts'
+
 const {
     ORG_NAME,
     STAGE
@@ -328,7 +330,7 @@ echo 'ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]' >> /etc/ecs/ecs.con
     // ==========================================
     const logGroup = new aws.cloudwatch.LogGroup('ecsLogGroup', {
         name: `/aws/ecs/${formattedClusterName}`,
-        retentionInDays: 7,
+        retentionInDays: LOG_RETENTION_DAYS,
         tags: resourceTags,
     })
 

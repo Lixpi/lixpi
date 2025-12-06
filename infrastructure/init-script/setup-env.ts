@@ -42,17 +42,24 @@ type EnvConfig = {
     natsSysUserPassword: string
     natsRegularUserPassword: string
 
-    // AWS (optional)
-    configureAws: boolean
+    // AWS SSO (optional)
+    configureAwsSso: boolean
     awsSsoSessionName: string
     awsSsoStartUrl: string
     awsRegion: string
     awsProfileName: string
     awsAccountId: string
     awsRoleName: string
+
+    // AWS Deployment (optional)
+    configureAwsDeployment: boolean
     hostedZoneDnsRoleArn: string
     hostedZoneName: string
     awsRoute53ParentHostedZoneId: string
+
+    // CloudWatch Logging
+    cloudwatchLogRetentionDays: number
+    cloudwatchContainerInsightsEnabled: boolean
 
     // API Keys
     openaiApiKey: string
@@ -185,7 +192,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
     // -------------------------------------------------------------------------
     // General Section
     // -------------------------------------------------------------------------
-    prompts.log.step(c.bold(c.blue('📋 General Configuration')))
+    prompts.log.step(c.bold(c.blue('General Configuration')))
 
     const developerName = await prompts.text({
         message: 'Developer name (used in stage name, e.g., "kitty")',
@@ -266,7 +273,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
     // -------------------------------------------------------------------------
     // Database Section
     // -------------------------------------------------------------------------
-    prompts.log.step(c.bold(c.blue('🗄️  Database Configuration')))
+    prompts.log.step(c.bold(c.blue('Database Configuration')))
 
     const useLocalDynamoDB = await prompts.confirm({
         message: 'Use local DynamoDB (Docker)?',
@@ -294,7 +301,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
     // -------------------------------------------------------------------------
     // Authentication Section
     // -------------------------------------------------------------------------
-    prompts.log.step(c.bold(c.blue('🔐 Authentication Configuration')))
+    prompts.log.step(c.bold(c.blue('Authentication Configuration')))
 
     const useLocalAuth0Mock = await prompts.confirm({
         message: 'Use LocalAuth0 mock (for local development)?',
@@ -345,7 +352,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
     // -------------------------------------------------------------------------
     // NATS Section (Auto-generated)
     // -------------------------------------------------------------------------
-    prompts.log.step(c.bold(c.blue('📡 NATS Configuration')))
+    prompts.log.step(c.bold(c.blue('NATS Configuration')))
 
     const spinner = prompts.spinner()
     spinner.start('Generating NATS keys and passwords...')
@@ -361,16 +368,16 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
     prompts.log.success(`LLM Service NKey public: ${c.dim(natsKeys.llmServiceNkey.public)}`)
 
     // -------------------------------------------------------------------------
-    // AWS Section
+    // AWS SSO Section
     // -------------------------------------------------------------------------
-    prompts.log.step(c.bold(c.blue('☁️  AWS Configuration')))
+    prompts.log.step(c.bold(c.blue('AWS SSO Configuration')))
 
-    const configureAws = await prompts.confirm({
+    const configureAwsSso = await prompts.confirm({
         message: 'Configure AWS SSO profile?',
         initialValue: false,
     })
 
-    if (prompts.isCancel(configureAws)) {
+    if (prompts.isCancel(configureAwsSso)) {
         prompts.cancel('Setup cancelled')
         return null
     }
@@ -381,11 +388,8 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
     let awsProfileName = ''
     let awsAccountId = ''
     let awsRoleName = 'AdministratorAccess'
-    let hostedZoneDnsRoleArn = ''
-    let hostedZoneName = ''
-    let awsRoute53ParentHostedZoneId = ''
 
-    if (configureAws) {
+    if (configureAwsSso) {
         const ssoSessionName = await prompts.text({
             message: 'AWS SSO session name',
             placeholder: 'my-sso',
@@ -429,7 +433,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
 
         const accountId = await prompts.text({
             message: 'AWS Account ID',
-            placeholder: '123456789012',
+            placeholder: '',
             validate: (value) => {
                 if (!value) return 'Account ID is required'
                 if (!/^\d{12}$/.test(value)) return 'Account ID must be 12 digits'
@@ -451,10 +455,33 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
             return null
         }
         awsRoleName = roleName as string
+    }
 
+    // -------------------------------------------------------------------------
+    // AWS Deployment Section
+    // -------------------------------------------------------------------------
+    prompts.log.step(c.bold(c.blue('AWS Deployment Configuration')))
+
+    const configureAwsDeployment = await prompts.confirm({
+        message: 'Configure AWS deployment settings?',
+        initialValue: false,
+    })
+
+    if (prompts.isCancel(configureAwsDeployment)) {
+        prompts.cancel('Setup cancelled')
+        return null
+    }
+
+    let hostedZoneDnsRoleArn = ''
+    let hostedZoneName = ''
+    let awsRoute53ParentHostedZoneId = ''
+    let cloudwatchLogRetentionDays = 7
+    let cloudwatchContainerInsightsEnabled = false
+
+    if (configureAwsDeployment) {
         const hostedZoneDns = await prompts.text({
             message: 'Hosted Zone DNS Role ARN (optional)',
-            placeholder: 'arn:aws:iam::123456789012:role/my-dns-role',
+            placeholder: 'arn:aws:iam::<account-id>:role/<role-name>',
         })
         if (prompts.isCancel(hostedZoneDns)) {
             prompts.cancel('Setup cancelled')
@@ -472,21 +499,79 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         }
         hostedZoneName = (hostedZone as string) || ''
 
-        const parentHostedZone = await prompts.text({
-            message: 'Parent Hosted Zone ID (optional)',
-            placeholder: 'Z0123456789ABCDEFGHIJ',
+        const useParentHostedZone = await prompts.confirm({
+            message: 'Use parent hosted zone for DNS delegation?',
+            initialValue: false,
         })
-        if (prompts.isCancel(parentHostedZone)) {
+        if (prompts.isCancel(useParentHostedZone)) {
             prompts.cancel('Setup cancelled')
             return null
         }
-        awsRoute53ParentHostedZoneId = (parentHostedZone as string) || ''
+
+        if (useParentHostedZone) {
+            const parentHostedZone = await prompts.text({
+                message: 'Parent Hosted Zone ID',
+                placeholder: '',
+                validate: (value) => {
+                    if (!value) return 'Parent Hosted Zone ID is required'
+                },
+            })
+            if (prompts.isCancel(parentHostedZone)) {
+                prompts.cancel('Setup cancelled')
+                return null
+            }
+            awsRoute53ParentHostedZoneId = parentHostedZone as string
+        }
+
+        const logRetentionDays = await prompts.select({
+            message: 'CloudWatch log retention period',
+            options: [
+                { value: 1, label: '1 day' },
+                { value: 3, label: '3 days' },
+                { value: 5, label: '5 days' },
+                { value: 7, label: '7 days', hint: 'Recommended for development' },
+                { value: 14, label: '14 days' },
+                { value: 30, label: '30 days', hint: 'Recommended for staging' },
+                { value: 60, label: '60 days' },
+                { value: 90, label: '90 days', hint: 'Recommended for production' },
+                { value: 120, label: '120 days' },
+                { value: 150, label: '150 days' },
+                { value: 180, label: '180 days (6 months)' },
+                { value: 365, label: '365 days (1 year)' },
+                { value: 400, label: '400 days' },
+                { value: 545, label: '545 days (18 months)' },
+                { value: 731, label: '731 days (2 years)' },
+                { value: 1096, label: '1096 days (3 years)' },
+                { value: 1827, label: '1827 days (5 years)' },
+                { value: 2192, label: '2192 days (6 years)' },
+                { value: 2557, label: '2557 days (7 years)' },
+                { value: 2922, label: '2922 days (8 years)' },
+                { value: 3288, label: '3288 days (9 years)' },
+                { value: 3653, label: '3653 days (10 years)' },
+            ],
+            initialValue: isLocal ? 7 : 30,
+        })
+        if (prompts.isCancel(logRetentionDays)) {
+            prompts.cancel('Setup cancelled')
+            return null
+        }
+        cloudwatchLogRetentionDays = logRetentionDays as number
+
+        const containerInsightsEnabled = await prompts.confirm({
+            message: 'Enable ECS Container Insights?',
+            initialValue: false,
+        })
+        if (prompts.isCancel(containerInsightsEnabled)) {
+            prompts.cancel('Setup cancelled')
+            return null
+        }
+        cloudwatchContainerInsightsEnabled = containerInsightsEnabled as boolean
     }
 
     // -------------------------------------------------------------------------
     // API Keys Section
     // -------------------------------------------------------------------------
-    prompts.log.step(c.bold(c.blue('🔑 API Keys')))
+    prompts.log.step(c.bold(c.blue('API Keys')))
 
     prompts.log.info(c.dim('Leave empty to configure later'))
 
@@ -542,16 +627,19 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
         natsSysUserPassword,
         natsRegularUserPassword,
-        configureAws: configureAws as boolean,
+        configureAwsSso: configureAwsSso as boolean,
         awsSsoSessionName,
         awsSsoStartUrl,
         awsRegion,
         awsProfileName,
         awsAccountId,
         awsRoleName,
+        configureAwsDeployment: configureAwsDeployment as boolean,
         hostedZoneDnsRoleArn,
         hostedZoneName,
         awsRoute53ParentHostedZoneId,
+        cloudwatchLogRetentionDays,
+        cloudwatchContainerInsightsEnabled,
         openaiApiKey: (openaiApiKey as string) || '',
         anthropicApiKey: (anthropicApiKey as string) || '',
         stripePublicKey: (stripePublicKey as string) || '',
@@ -610,6 +698,8 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{VITE_AUTH0_REDIRECT_URI}}': isLocal ? 'http://localhost:3001' : `https://${config.domainName}`,
         '{{VITE_STRIPE_PUBLIC_KEY}}': config.stripePublicKey,
         '{{VITE_NATS_SERVER}}': isLocal ? 'wss://localhost:9222' : `wss://nats.${config.domainName}`,
+        '{{CLOUDWATCH_LOG_RETENTION_DAYS}}': String(config.cloudwatchLogRetentionDays),
+        '{{CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED}}': String(config.cloudwatchContainerInsightsEnabled),
     }
 
     let result = template
@@ -668,7 +758,7 @@ async function writeFiles(config: EnvConfig): Promise<void> {
     }
 
     // Write AWS config if configured
-    if (config.configureAws) {
+    if (config.configureAwsSso) {
         const awsDir = path.dirname(awsConfigPath)
         if (!fs.existsSync(awsDir)) {
             fs.mkdirSync(awsDir, { recursive: true })
@@ -737,16 +827,19 @@ async function main(): Promise<void> {
             natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
             natsSysUserPassword: generateSecurePassword(28),
             natsRegularUserPassword: generateSecurePassword(28),
-            configureAws: false,
+            configureAwsSso: false,
             awsSsoSessionName: '',
             awsSsoStartUrl: '',
             awsRegion: 'us-east-1',
             awsProfileName: '',
             awsAccountId: '',
             awsRoleName: '',
+            configureAwsDeployment: false,
             hostedZoneDnsRoleArn: '',
             hostedZoneName: '',
             awsRoute53ParentHostedZoneId: '',
+            cloudwatchLogRetentionDays: 7,
+            cloudwatchContainerInsightsEnabled: false,
             openaiApiKey: '',
             anthropicApiKey: '',
             stripePublicKey: '',
@@ -768,7 +861,7 @@ async function main(): Promise<void> {
     }
 
     // Summary
-    prompts.log.step(c.bold(c.blue('📝 Summary')))
+    prompts.log.step(c.bold(c.blue('Summary')))
 
     const stageName = `${config.developerName}-${config.environment}`
     const isLocal = config.environment === 'local'
@@ -780,7 +873,10 @@ async function main(): Promise<void> {
     console.log(`  ${c.dim('Environment:')}    ${c.cyan(config.environment)}`)
     console.log(`  ${c.dim('Local DynamoDB:')} ${config.useLocalDynamoDB ? c.green('Yes') : c.yellow('No')}`)
     console.log(`  ${c.dim('LocalAuth0:')}     ${config.useLocalAuth0Mock ? c.green('Yes') : c.yellow('No')}`)
-    console.log(`  ${c.dim('AWS Config:')}     ${config.configureAws ? c.green('Yes') : c.yellow('No')}`)
+    console.log(`  ${c.dim('AWS SSO:')}        ${config.configureAwsSso ? c.green('Yes') : c.yellow('No')}`)
+    console.log(`  ${c.dim('AWS Deployment:')} ${config.configureAwsDeployment ? c.green('Yes') : c.yellow('No')}`)
+    console.log(`  ${c.dim('Log Retention:')} ${c.cyan(`${config.cloudwatchLogRetentionDays} days`)}`)
+    console.log(`  ${c.dim('Container Insights:')} ${config.cloudwatchContainerInsightsEnabled ? c.yellow('Enabled') : c.green('Disabled')}`)
     console.log()
 
     const confirmed = await prompts.confirm({
@@ -800,7 +896,7 @@ async function main(): Promise<void> {
     console.log()
     console.log(c.bold('Next steps:'))
     console.log(`  1. Run ${c.cyan(`docker-compose --env-file .env.${stageName} up`)}`)
-    if (config.configureAws) {
+    if (config.configureAwsSso) {
         console.log(`  2. Run ${c.cyan('pnpm run aws-login')} to authenticate with AWS`)
     }
     console.log()

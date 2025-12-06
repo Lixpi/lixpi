@@ -12,6 +12,7 @@ import { createServiceDiscoverySidecar } from './nats-service-discovery-sidecar.
 import {
     type CertificateHelper
 } from '../certificate-manager/certificate-helper.ts'
+import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
 const {
     ORG_NAME,
@@ -284,7 +285,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
     // Create CloudWatch Log Group for Container
     const logGroup = new aws.cloudwatch.LogGroup(`${serviceName}-logs`, {
         name: `/aws/ecs/${serviceName}`,
-        retentionInDays: 7,
+        retentionInDays: LOG_RETENTION_DAYS,
     })
 
     // log('cloudMapNamespace:', {

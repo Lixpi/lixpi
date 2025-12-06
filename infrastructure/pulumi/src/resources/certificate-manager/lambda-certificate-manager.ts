@@ -8,6 +8,8 @@ import {
     type DockerImageBuildResult
 } from '../../helpers/docker/build-helpers.ts'
 
+import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
+
 // Local helper function (avoiding import issues in Pulumi context)
 const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string =>
     `${resourceName}-${orgName}-${stageName}`
@@ -59,6 +61,9 @@ export interface LambdaCertificateManagerResult {
     // Lambda function
     lambdaFunction: aws.lambda.Function
     lambdaRole: aws.iam.Role
+
+    // CloudWatch Log Group
+    logGroup: aws.cloudwatch.LogGroup
 
     // Certificate generation invocation (for dependency management)
     initialCertificateGeneration: aws.lambda.Invocation
@@ -287,6 +292,12 @@ export const createLambdaCertificateManager = async (
         })
     }
 
+    // Create CloudWatch Log Group for Lambda (prevents auto-creation with infinite retention)
+    const logGroup = new aws.cloudwatch.LogGroup(`${formattedFunctionName}-logs`, {
+        name: `/aws/lambda/${formattedFunctionName}`,
+        retentionInDays: LOG_RETENTION_DAYS,
+    })
+
     // Create Lambda function using container image
     // Use a unique resource name AND function name with imageTag to avoid naming conflicts
     const lambdaFunction = new aws.lambda.Function(`${formattedFunctionName}-${imageTag}`, {
@@ -306,7 +317,7 @@ export const createLambdaCertificateManager = async (
         // Publish a new version to force update
         publish: true,
     }, {
-        dependsOn: [...(storageType === 'secrets-manager' ? certificateSecrets : []), image],
+        dependsOn: [...(storageType === 'secrets-manager' ? certificateSecrets : []), image, logGroup],
         // Force complete resource replacement when any input changes
         replaceOnChanges: ['*'],
         // Delete the old function before creating the new one
@@ -343,6 +354,7 @@ export const createLambdaCertificateManager = async (
         image,
         lambdaFunction,
         lambdaRole,
+        logGroup,
         initialCertificateGeneration,
         certificateSecrets,
         outputs: {
