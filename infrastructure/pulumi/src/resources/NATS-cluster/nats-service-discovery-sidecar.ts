@@ -7,6 +7,7 @@ import {
     buildDockerImage,
     type DockerImageBuildResult
 } from '../../helpers/docker/build-helpers.ts'
+import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
 // Local helper function (avoiding import issues)
 const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string =>
@@ -165,7 +166,7 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
     // CloudWatch Log Group for Lambda
     const logGroup = new aws.cloudwatch.LogGroup(`${functionName}-logs`, {
         name: `/aws/lambda/${functionName}`,
-        retentionInDays: 7,
+        retentionInDays: LOG_RETENTION_DAYS,
     })
 
     // Lambda function using Container Image

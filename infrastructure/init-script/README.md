@@ -11,7 +11,8 @@ This script runs inside a Docker container and:
    - **Database**: Local DynamoDB or custom endpoint
    - **Authentication**: LocalAuth0 mock or real Auth0 configuration
    - **NATS**: Auto-generates all required keys and passwords
-   - **AWS**: Optional SSO profile configuration
+   - **AWS SSO Configuration**: Optional SSO profile setup
+   - **AWS Deployment Configuration**: Optional Route53, CloudWatch log retention, Container Insights
    - **API Keys**: OpenAI, Anthropic, Stripe
 
 2. **Generates NATS keys** using `@nats-io/nkeys`:
@@ -84,7 +85,8 @@ Complete environment configuration including:
 - Docker Compose settings
 - Domain and SSL configuration
 - SST/Pulumi configuration
-- AWS settings
+- AWS SSO settings
+- AWS deployment settings (Route53, CloudWatch)
 - NATS servers, keys, and passwords
 - Auth0 configuration
 - API keys

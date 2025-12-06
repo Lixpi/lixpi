@@ -13,6 +13,8 @@ import {
     type DockerImageBuildResult
 } from '../helpers/docker/build-helpers.ts'
 
+import { LOG_RETENTION_DAYS } from '../constants/logging.ts'
+
 const {
     ORG_NAME,
     STAGE
@@ -272,7 +274,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     // Create CloudWatch Log Group for Container
     const logGroup = new aws.cloudwatch.LogGroup(`${formattedServiceName}-logs`, {
         name: `/aws/ecs/${formattedServiceName}`,
-        retentionInDays: 7,
+        retentionInDays: LOG_RETENTION_DAYS,
     })
 
     // Create ECS Task Definition
