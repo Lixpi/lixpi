@@ -15,6 +15,8 @@ import {
     heading1Icon,
     heading2Icon,
     heading3Icon,
+    checkMarkIcon,
+    trashBinIcon,
 } from '../../../../svgIcons/index.ts'
 
 type BubbleMenuView = {
@@ -235,29 +237,29 @@ function createDropdown(
 function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView): HTMLElement {
     const input = createEl('input', {
         type: 'url',
-        placeholder: 'Enter URL...',
+        placeholder: 'URL...',
         className: 'link-input-field',
     }) as HTMLInputElement
 
-    const applyButton = createEl('button', {
+    const applyIcon = createEl('span', {
         className: 'link-input-apply',
-        type: 'button',
-        innerHTML: 'Apply',
+        innerHTML: checkMarkIcon,
+        title: 'Apply link',
     })
 
-    const removeButton = createEl('button', {
+    const removeIcon = createEl('span', {
         className: 'link-input-remove',
-        type: 'button',
-        innerHTML: 'Remove',
+        innerHTML: trashBinIcon,
+        title: 'Remove link',
     })
 
-    applyButton.addEventListener('click', (e) => {
+    applyIcon.addEventListener('click', (e) => {
         e.preventDefault()
         e.stopPropagation()
         bubbleMenuView.applyLink(input.value)
     })
 
-    removeButton.addEventListener('click', (e) => {
+    removeIcon.addEventListener('click', (e) => {
         e.preventDefault()
         e.stopPropagation()
         bubbleMenuView.removeLink()
@@ -274,7 +276,7 @@ function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView):
         }
     })
 
-    return createEl('div', { className: 'bubble-menu-link-input' }, input, applyButton, removeButton)
+    return createEl('div', { className: 'bubble-menu-link-input' }, input, applyIcon, removeIcon)
 }
 
 export function buildBubbleMenuItems(
