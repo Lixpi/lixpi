@@ -1,0 +1,43 @@
+
+Source:
+https://codepen.io/P1N2O/pen/pyBNzX
+
+
+
+<div class="d-flex flex-column justify-content-center w-100 h-100">
+
+	<div class="d-flex flex-column justify-content-center align-items-center">
+		<h1 class="fw-light text-white m-0">Animated Gradient Background</h1>
+		<div class="btn-group my-5">
+			<a href="https://codepen.io/P1N2O/details/pyBNzX" target="_blank" class="btn btn-outline-light" aria-current="page"><i class="fas fa-circle-info me-2"></i> PEN DETAILS</a>
+			<a href="https://codepen.io/P1N2O/full/pyBNzX" target="_blank" class="btn btn-outline-light">FULL SCREEN <i class="fas fa-expand ms-2"></i></a>
+		</div>
+		<a href="https://github.com/p1n2o" class="text-decoration-none">
+			<h5 class="fw-light text-white m-0">— P1N2O —</h5>
+		</a>
+	</div>
+</div>
+</div>
+
+
+<style>
+body {
+	background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+	background-size: 400% 400%;
+	animation: gradient 15s ease infinite;
+	height: 100vh;
+}
+
+@keyframes gradient {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
+</style>
