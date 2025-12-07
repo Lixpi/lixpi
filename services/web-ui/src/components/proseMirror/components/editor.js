@@ -33,6 +33,7 @@ import { activeNodePlugin } from "../plugins/activeNodePlugin"
 import { documentTitleNodeType } from "../customNodes/documentTitleNode.js"
 
 import { bubbleMenuPlugin } from '../plugins/bubbleMenuPlugin/index.ts'
+import { linkTooltipPlugin } from '../plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
 
 import {buildKeymap} from "./keyMap.js"
 import {buildInputRules} from "./inputRules.js"
@@ -109,6 +110,7 @@ export class ProseMirrorEditor {
             statePlugin(initialValue, this.dispatchStateChange.bind(this), this.onProjectTitleChange.bind(this)),
             focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
+            linkTooltipPlugin(),
             buildInputRules(this.editorSchema),
             keymap(buildKeymap(this.editorSchema)),
             keymap(baseKeymap),
