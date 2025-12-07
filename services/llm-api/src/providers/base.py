@@ -48,7 +48,10 @@ class ProviderState(TypedDict, total=False):
         - temperature: Model temperature
         - stream_active: Whether streaming is currently active
         - error: Error message if any
+        - error_code: Error code from provider
+        - error_type: Error type from provider
         - usage: Token usage statistics
+        - response_id: Response ID from provider (OpenAI Responses API)
         - ai_vendor_request_id: Request ID from AI provider
         - ai_request_received_at: Request start timestamp
         - ai_request_finished_at: Request end timestamp
@@ -65,7 +68,10 @@ class ProviderState(TypedDict, total=False):
     temperature: float
     stream_active: bool
     error: Optional[str]
+    error_code: Optional[str]
+    error_type: Optional[str]
     usage: Dict[str, Any]
+    response_id: Optional[str]
     ai_vendor_request_id: Optional[str]
     ai_request_received_at: int
     ai_request_finished_at: Optional[int]
@@ -145,7 +151,10 @@ class BaseLLMProvider(ABC):
                 'temperature': request_data.get('aiModelMetaInfo', {}).get('defaultTemperature'),
                 'stream_active': False,
                 'error': None,
+                'error_code': None,
+                'error_type': None,
                 'usage': {},
+                'response_id': None,
                 'ai_vendor_request_id': None,
                 'ai_request_received_at': int(datetime.now().timestamp() * 1000),
                 'ai_request_finished_at': None,
@@ -358,20 +367,34 @@ class BaseLLMProvider(ABC):
             }
         )
 
-    async def _publish_error(self, instance_key: str, error_message: str) -> None:
+    async def _publish_error(
+        self,
+        instance_key: str,
+        error_message: str,
+        error_code: Optional[str] = None,
+        error_type: Optional[str] = None
+    ) -> None:
         """
         Publish error back to services/api.
 
         Args:
             instance_key: Instance key (documentId or documentId:threadId)
             error_message: Error message
+            error_code: Optional error code from provider
+            error_type: Optional error type from provider
         """
+        error_data = {
+            'error': error_message,
+            'instanceKey': instance_key
+        }
+        if error_code:
+            error_data['errorCode'] = error_code
+        if error_type:
+            error_data['errorType'] = error_type
+
         self.nats_client.publish(
             f"ai.interaction.chat.error.{instance_key}",
-            {
-                'error': error_message,
-                'instanceKey': instance_key
-            }
+            error_data
         )
 
     # Abstract methods to be implemented by subclasses

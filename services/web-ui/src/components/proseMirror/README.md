@@ -30,7 +30,7 @@ flowchart LR
     AiInteractionService --> SegmentsReceiver
     SegmentsReceiver -->|events| AiChatPlugin
     AiChatPlugin -->|insert nodes/marks| EditorView
-    EditorView --> MenuBar[prosemirror-menu]
+    EditorView --> BubbleMenu[bubbleMenuPlugin]
 ```
 
 
@@ -45,7 +45,7 @@ Custom nodes (in `customNodes/`):
 
 - `documentTitleNode` (`documentTitle`): h1 title, non-selectable, defining.
 - `aiUserInputNode` (`aiUserInput`, deprecated): a block container for user's AI prompt and inline control buttons (Stop, Regenerate, Close). Marked for removal; kept for backward compatibility in old documents.
-- `aiChatThreadNode` (`aiChatThread`): the single chat container that holds the conversation. Current content expression: `(paragraph | code_block | aiResponseMessage | dropdown)+`. New code does not insert `aiUserMessage` here.
+- `aiChatThreadNode` (`aiChatThread`): the single chat container that holds the conversation. Current content expression: `(paragraph | heading | blockquote | code_block | aiResponseMessage)+`. New code does not insert `aiUserMessage` here.
 - `aiResponseMessageNode` (`aiResponseMessage`): assistant message with provider avatar, animation controls, and a contentDOM placeholder; `aiResponseMessageNodeView` manages Claude animation frames using node attrs (`isInitialRenderAnimation`, `isReceivingAnimation`, `currentFrame`). Content expression: `(paragraph | block)*` so it can start empty and be filled by streaming.
 - `aiUserMessageNode` (`aiUserMessage`, legacy): styled bubble with user avatar; kept for backward compatibility in old documents. New flows do not create this node.
 - `code_block` override (`codeBlockNode`): prosemirror spec extended with `theme` attr and DOM `data-theme`. Rendering and interaction are delegated to a CodeMirror 6 node view (plugin).
@@ -87,7 +87,7 @@ Notes
   - Plugin list (order matters):
     - `statePlugin`: bubbles doc JSON changes to Svelte and emits project title changes.
     - `focusPlugin`: tracks focus and toggles editable state.
-    - `menuPlugin`: top toolbar (formatting, paragraph/heading dropdown, links, images, etc.).
+    - `bubbleMenuPlugin`: floating selection-based menu (Bold, Italic, Strikethrough, Code, Link, Headings, Code Block, Blockquote).
     - `buildInputRules`: smart quotes, ellipsis, em-dash, blockquote/lists/heading; code fence rule is handled by codeBlock plugin.
     - `keymap(buildKeymap)`, `keymap(baseKeymap)`: custom shortcuts including a special Mod-A behavior and standard PM bindings.
     - `dropCursor`, `gapCursor`, `history` standard UX.
@@ -128,7 +128,7 @@ graph LR
   subgraph PM Plugins
     SP[statePlugin]
     FP[focusPlugin]
-    MB[menuPlugin]
+    BM[bubbleMenuPlugin]
     IR[inputRules]
     KM[keymap]
     DC[dropCursor]
@@ -151,7 +151,7 @@ graph LR
   CBP-- CM6 NodeView and code fences -->EditorView
   SP-- docChanged --> Svelte
   EP-- decorations --> EditorView
-  MB-- menuBar --> EditorView
+  BM-- floating menu --> EditorView
 ```
 
 ### statePlugin (`plugins/statePlugin.js`)
@@ -169,35 +169,40 @@ graph LR
 - Tracks `{ nodeType, nodeAttrs }` of the parent of current selection for UI state, styling, or debugging.
 
 
-## Menus and toolbar
+## Bubble Menu (`plugins/bubbleMenuPlugin/`)
 
-Implemented using a vendored version of `prosemirror-menu` adapted in TypeScript under `components/prosemirror-menu/`. Our wrapper `components/menu.js` builds items.
+A floating selection-based formatting menu using FloatingUI for positioning. Appears when text is selected and provides quick access to formatting commands.
 
-- `menuBar.ts` wraps editor DOM with a `.ProseMirror-menubar` and renders content from `renderGrouped`.
-- `menu.ts` provides `MenuItem`, `Dropdown`, and helpers (plus icons). We added:
-  - `getIcon` to render SVG strings.
-  - `blockTypeItem` with `activeContext` support (e.g., highlight Header level).
-- `menu.js` exports `menuPlugin(schema)` that calls `menuBar({ content: buildMenu(schema).fullMenu })`.
-- Dropdown heading switcher has a dynamic label from `getActiveLabel(state)` to show “Regular text”, “Title”, “Heading N”, or “Code Block”.
+### Features
+- **Inline marks**: Bold, Italic, Strikethrough, Code
+- **Link editing**: Inline URL input (not a modal)
+- **Block formatting**: Headings (1-4), Code Block, Blockquote via dropdown
+- **Mobile-first**: Touch-friendly with larger tap targets
+- **Smart positioning**: Uses FloatingUI with flip/shift middleware
 
-Menu items include:
-- Undo/Redo, Bold, Italic, Inline code, Code Block, Blockquote, Link (prompt), Image (prompt), Paragraph/Headings (1..4).
+### Architecture
+- `bubbleMenuPlugin.ts` - Main plugin with `BubbleMenuView` class
+- `bubbleMenuItems.ts` - Menu item definitions and command handlers
+- `bubbleMenu.scss` - Mobile-first styles using project color system
+- `index.ts` - Public exports
 
 ```mermaid
 graph TD
-  M[menuPlugin] --> MB[menuBar.ts]
-  MB --> RG[renderGrouped]
-  RG --> I1[MenuItem: Bold]
-  RG --> I2[MenuItem: Italic]
-  RG --> D1[Dropdown: Paragraph/Heading]
-  D1 --> H1[Title]
-  D1 --> H2[Heading 1]
-  D1 --> H3[Heading 2]
-  D1 --> P1[Paragraph]
+  BMP[bubbleMenuPlugin] --> BMV[BubbleMenuView]
+  BMV --> FUI[FloatingUI positioning]
+  BMV --> Items[Menu Items]
+  Items --> Bold
+  Items --> Italic
+  Items --> Strikethrough
+  Items --> Code
+  Items --> Link
+  Items --> Dropdown[Block Type Dropdown]
+  Dropdown --> H1[Heading 1]
+  Dropdown --> H2[Heading 2]
+  Dropdown --> CB[Code Block]
+  Dropdown --> BQ[Blockquote]
 ```
 
-
-## Keymap and input rules
 
 - `components/keyMap.js` binds:
   - Mod-Z/Shift-Mod-Z/Mod-Y for undo/redo, Backspace undoInputRule.
@@ -319,7 +324,7 @@ sequenceDiagram
   - `onProjectTitleChange(title)`: immediate title sync to stores and persistence.
   - `onAiChatSubmit(messages)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).r`).
 - Manages teardown on unmount and re-creation when document metadata changes.
-- Renders a model selector UI and keeps a sticky menubar via CSS.
+- Renders a model selector UI.
 
 ```mermaid
 flowchart LR
@@ -333,20 +338,20 @@ flowchart LR
 ```
 
 
-## Menu UX specifics
+## Bubble Menu UX specifics
 
-- Dropdown label reflects current block context:
-  - `paragraph` → “Regular text”
-  - `heading[level=1]` → “Title”
-  - `heading[level>1]` → “Heading N-1”
-  - `code_block` → “Code Block”
-- `blockTypeItem` uses `activeContext` to add `ProseMirror-menu-current-active` class to the active entry.
-- Icons are inline SVG strings; `getIcon` injects them into a `.ProseMirror-icon` container.
+- Block type dropdown label reflects current block context:
+  - `paragraph` → "Text"
+  - `heading[level]` → "Heading N"
+  - `code_block` → "Code"
+  - `blockquote` → "Quote"
+- Active marks and block types are highlighted with `.is-active` class.
+- Icons are inline SVG strings from `svgIcons/index.ts`.
 
 
 ## Styling hooks (non-exhaustive)
 
-- Menubar: `.ProseMirror-menubar`, `.ProseMirror-menu`, `.ProseMirror-menuitem`, `.ProseMirror-menu-dropdown[...]`.
+- Bubble menu: `.bubble-menu`, `.bubble-menu-content`, `.bubble-menu-button`, `.bubble-menu-dropdown`, `.bubble-menu-separator`.
 - AI nodes: `.ai-user-input-wrapper`, `.ai-user-input`, `.ai-user-message(-decorator)`, `.ai-response-message(-wrapper)`, `.user-avatar`, `.node-render-animation`, `.node-receiving-animation`.
 - Code blocks: `.code-block-wrapper`; selection decorations apply `inline.selected` class.
 - Placeholders: `.empty-node-placeholder[data-placeholder]` is applied as a node decoration.
@@ -355,9 +360,9 @@ flowchart LR
 ## Developer recipes
 
 - Insert a new block node via meta:
-  - Dispatch `tr.setMeta('insert:<yourNodeType>', attrs)` and handle it in a plugin’s `appendTransaction` to create and place the node.
-- Extend the menubar:
-  - Add a `MenuItem` or `Dropdown` in `components/menu.js`’s `buildMenuItems` and include in `fullMenu`.
+  - Dispatch `tr.setMeta('insert:<yourNodeType>', attrs)` and handle it in a plugin's `appendTransaction` to create and place the node.
+- Extend the bubble menu:
+  - Add a new item in `plugins/bubbleMenuPlugin/bubbleMenuItems.ts` and include it in `buildMenu()`.
 - Add a NodeView:
   - Provide a function in `customNodes/index.js` and add it in a plugin under `props.nodeViews[<nodeType>]`.
 - React to Mod+Enter differently:
@@ -386,7 +391,7 @@ flowchart LR
 - Svelte: `ProseMirror.svelte`
 - Editor driver: `components/editor.js`
 - Schema base: `components/schema.ts`
-- Menus: `components/menu.js`, `components/prosemirror-menu/*`
+- Bubble menu: `plugins/bubbleMenuPlugin/*`
 - Keymap & rules: `components/keyMap.js`, `components/inputRules.js`, `components/prompt.js`, `components/commands.js`
 - Custom nodes: `customNodes/*` and `customNodes/index.js`
 - Plugins: `plugins/*.js` (active), `plugins/svelteComponentRenderer/*` (component NodeView helper), and `plugins/DEPRECATED_DUMPSTER/*` (inactive)

@@ -137,7 +137,7 @@ sequenceDiagram
 ### Schema Nodes
 
 **`aiChatThread`** - Container for entire conversation
-- Content: `(paragraph | code_block | aiResponseMessage)+`
+- Content: `(paragraph | heading | blockquote | code_block | aiResponseMessage)+`
 - Attributes:
   - `threadId: string | null` - Unique identifier for the thread
   - `status: 'active'|'paused'|'completed'` - Thread lifecycle state

@@ -41,7 +41,7 @@ class OpenAIProvider(BaseLLMProvider):
 
     async def _stream_impl(self, state: ProviderState) -> ProviderState:
         """
-        Stream tokens from OpenAI API.
+        Stream tokens from OpenAI Responses API.
 
         Args:
             state: Current workflow state
@@ -57,80 +57,103 @@ class OpenAIProvider(BaseLLMProvider):
         thread_id = state.get('thread_id')
         supports_system_prompt = state['ai_model_meta_info'].get('supportsSystemPrompt', True)
 
-        # Prepare messages with system prompt
-        formatted_messages = []
-        if supports_system_prompt:
-            formatted_messages.append({
-                'role': 'system',
-                'content': get_system_prompt()
-            })
-
-        # Add conversation messages
+        # Prepare input array from messages
+        input_messages = []
         for msg in messages:
-            formatted_messages.append({
+            input_messages.append({
                 'role': msg.get('role', 'user'),
                 'content': msg.get('content', '')
             })
 
-        logger.info(f"Streaming from OpenAI model: {model_version}")
-        logger.debug(f"Messages count: {len(formatted_messages)}")
+        # Extract system prompt as instructions (if supported)
+        instructions = get_system_prompt() if supports_system_prompt else None
+
+        logger.info(f"Streaming from OpenAI Responses API with model: {model_version}")
+        logger.debug(f"Input messages count: {len(input_messages)}")
 
         try:
             # Publish stream start event
             await self._publish_stream_start(document_id, thread_id)
 
-            # Create streaming completion
-            stream = await self.client.chat.completions.create(
+            # Create streaming response using Responses API
+            stream = await self.client.responses.create(
                 model=model_version,
-                messages=formatted_messages,
+                input=input_messages,
+                instructions=instructions,
                 temperature=temperature,
-                max_completion_tokens=max_tokens,
+                max_output_tokens=max_tokens,
                 stream=True,
-                store=False,
-                stream_options={'include_usage': True}
+                store=False
             )
 
-            # Stream tokens to client
-            async for chunk in stream:
+            # Stream events from Responses API
+            async for event in stream:
                 # Check if we should stop
                 if self.should_stop:
                     logger.info("Stream stopped by user request")
                     break
 
-                # Extract data from chunk
-                chunk_id = chunk.id
-                choices = chunk.choices
-                usage = chunk.usage
+                match event.type:
+                    # Handle text delta events (streaming content)
+                    case 'response.output_text.delta':
+                        delta_text = event.delta
+                        if delta_text:
+                            await self._publish_stream_chunk(document_id, delta_text, thread_id)
 
-                # Update usage info when available (last chunk)
-                if usage:
-                    state['usage'] = {
-                        'promptTokens': usage.prompt_tokens,
-                        'promptAudioTokens': getattr(usage.prompt_tokens_details, 'audio_tokens', 0) if hasattr(usage, 'prompt_tokens_details') else 0,
-                        'promptCachedTokens': getattr(usage.prompt_tokens_details, 'cached_tokens', 0) if hasattr(usage, 'prompt_tokens_details') else 0,
-                        'completionTokens': usage.completion_tokens,
-                        'completionAudioTokens': getattr(usage.completion_tokens_details, 'audio_tokens', 0) if hasattr(usage, 'completion_tokens_details') else 0,
-                        'completionReasoningTokens': getattr(usage.completion_tokens_details, 'reasoning_tokens', 0) if hasattr(usage, 'completion_tokens_details') else 0,
-                        'totalTokens': usage.total_tokens
-                    }
-                    state['ai_vendor_request_id'] = chunk_id
-                    logger.info(f"Received usage data: {state['usage']}")
+                    # Handle completion event (includes usage data)
+                    case 'response.completed':
+                        response = event.response
+                        state['response_id'] = response.id
+                        state['ai_vendor_request_id'] = response.id
 
-                # Stream content if available
-                if choices and len(choices) > 0:
-                    delta = choices[0].delta
-                    content = delta.content
+                        # Extract usage data
+                        if hasattr(response, 'usage') and response.usage:
+                            usage = response.usage
+                            state['usage'] = {
+                                'promptTokens': usage.input_tokens,
+                                'promptAudioTokens': getattr(usage, 'input_tokens_audio', 0) if hasattr(usage, 'input_tokens_audio') else 0,
+                                'promptCachedTokens': getattr(usage, 'input_tokens_cached', 0) if hasattr(usage, 'input_tokens_cached') else 0,
+                                'completionTokens': usage.output_tokens,
+                                'completionAudioTokens': getattr(usage, 'output_tokens_audio', 0) if hasattr(usage, 'output_tokens_audio') else 0,
+                                'completionReasoningTokens': getattr(usage, 'output_tokens_reasoning', 0) if hasattr(usage, 'output_tokens_reasoning') else 0,
+                                'totalTokens': usage.input_tokens + usage.output_tokens
+                            }
+                            logger.info(f"Received usage data: {state['usage']}")
 
-                    if content:
-                        await self._publish_stream_chunk(document_id, content, thread_id)
+                    # Handle failure event (structured errors)
+                    case 'response.failed':
+                        response = event.response
+                        error_obj = response.error if hasattr(response, 'error') else None
+
+                        if error_obj:
+                            error_message = getattr(error_obj, 'message', 'Unknown error')
+                            error_code = getattr(error_obj, 'code', None)
+                            error_type = getattr(error_obj, 'type', None)
+
+                            state['error'] = error_message
+                            state['error_code'] = error_code
+                            state['error_type'] = error_type
+                            state['response_id'] = response.id
+
+                            logger.error(f"Response failed: {error_message} (code: {error_code}, type: {error_type})")
+
+                            # Publish structured error
+                            await self._publish_error(
+                                self.instance_key,
+                                error_message,
+                                error_code=error_code,
+                                error_type=error_type
+                            )
+                            raise RuntimeError(f"OpenAI Responses API error: {error_message}")
 
             # Publish stream end
             await self._publish_stream_end(document_id, thread_id)
-            logger.info(f"✅ OpenAI streaming completed for {self.instance_key}")
+            logger.info(f"✅ OpenAI Responses API streaming completed for {self.instance_key}")
 
         except Exception as e:
-            logger.error(f"Error streaming from OpenAI: {e}", exc_info=True)
-            state['error'] = str(e)
+            logger.error(f"Error streaming from OpenAI Responses API: {e}", exc_info=True)
+            if not state.get('error'):
+                state['error'] = str(e)
             raise
 
         return state

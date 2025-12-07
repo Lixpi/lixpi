@@ -82,9 +82,28 @@ echo.
 
 :: Initialize DynamoDB tables
 echo Initializing DynamoDB tables...
-docker-compose --env-file "%selected_env%" --profile deploy up --abort-on-container-exit --exit-code-from lixpi-pulumi-init
 
+:: Start DynamoDB first and wait for it to be healthy
+docker-compose --env-file "%selected_env%" up -d lixpi-dynamodb
+echo Waiting for DynamoDB to be ready...
+
+:wait_dynamodb
+docker inspect lixpi-dynamodb --format="{{.State.Health.Status}}" 2>nul | findstr /C:"healthy" >nul
 if errorlevel 1 (
+    echo Waiting for DynamoDB...
+    timeout /t 2 /nobreak >nul
+    goto wait_dynamodb
+)
+echo DynamoDB is ready!
+
+:: Run pulumi-init and wait for it to complete
+docker-compose --env-file "%selected_env%" up lixpi-pulumi-init
+set init_exit_code=%errorlevel%
+
+:: Stop DynamoDB
+docker-compose --env-file "%selected_env%" down
+
+if %init_exit_code% neq 0 (
     echo Database initialization failed.
     exit /b 1
 )

@@ -179,20 +179,7 @@
 <div class="editor-wrapper {isDisabled && 'disabled'} {isFocused && 'is-editor-focused'}"></div>
 
 <style lang="scss">
-    //NOTE Shared SASS variables available globally
-
-    //TODO move to prosemirror styles file
-    .prosemirror-menu {
-        position: sticky;
-        width: 100%;
-        box-shadow: 0px 0px 8px 0 rgba(0, 0, 0, 0.2);
-        top: 0;
-        z-index: 99999;
-
-    }
-
     .editor-wrapper {
-      // height: auto;
       height: 100%;
       width: 100%;
       display: flex;
@@ -204,23 +191,5 @@
         width: auto;
         flex: 1;
       }
-      //TODO refactor, move to prosemirror styles file
-      // &.disabled :global()
-      &.disabled :global(.ProseMirror-menubar) {
-        padding: 0;
-        // border-color: red;
-        border-color: #e4e4e4;
-        box-shadow: none;
-      }
-      &.disabled :global(.ProseMirror) {
-        // padding-top: 1.3rem !important;
-
-      }
-      &.disabled :global(.ProseMirror-menubar .ProseMirror-menuitem) {
-        display: none;
-      }
     }
-
-
-
 </style>

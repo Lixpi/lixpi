@@ -1,0 +1,248 @@
+
+
+Source:
+https://codepen.io/syahrizaldev/pen/raxevgv
+
+
+<main class="main">
+   <section class="section banner">
+      <div class="banner-overlay">
+         <span class="blob blob-gradient-1"></span>
+         <span class="blob blob-gradient-2"></span>
+         <span class="blob blob-gradient-3"></span>
+         <span class="blob blob-gradient-4"></span>
+      </div>
+      <div class="container banner-column">
+         <article class="banner-content">
+            <h1 class="title">Intelligence in Motion</h1>
+            <p class="paragraph">
+               Experience the next generation of data analytics.
+               Our platform provides actionable insights that drive
+               growth and innovation.
+            </p>
+            <button type="button" class="btn btn-gradient">Request a Demo</button>
+         </article>
+      </div>
+   </section>
+</main>
+
+
+
+
+<style>
+
+:root {
+   --background-color: hsl(220, 10%, 100%);
+   --foreground-color: hsl(240, 05%, 05%);
+
+   --gradient-color-1: hsl(210, 85%, 50%);
+   --gradient-color-2: hsl(165, 85%, 50%);
+   --gradient-color-3: hsl(270, 85%, 50%);
+   --gradient-color-4: hsl(350, 85%, 50%);
+}
+
+*,
+*::before,
+*::after {
+   padding: 0;
+   margin: 0;
+   list-style: none;
+   list-style-type: none;
+   text-decoration: none;
+   box-sizing: border-box;
+   -webkit-font-smoothing: antialiased;
+   -moz-osx-font-smoothing: grayscale;
+   text-rendering: optimizeLegibility;
+}
+
+html {
+   font-size: 100%;
+   font-style: normal;
+   scroll-behavior: smooth;
+   height: -webkit-fill-available;
+}
+
+body {
+   font-family: "Roboto", ui-sans-serif, sans-serif;
+   font-size: 1.13rem;
+   font-weight: 400;
+   line-height: 1.5;
+   color: var(--foreground-color);
+   background-color: var(--background-color);
+}
+
+main,
+section {
+   overflow: hidden;
+}
+
+a,
+button {
+   cursor: pointer;
+   user-select: none;
+   white-space: nowrap;
+   border: none;
+   outline: none;
+   color: inherit;
+   background: none;
+}
+
+// Keyframes animation
+@keyframes pulseGradient {
+   0% {
+      opacity: 0.5;
+      transform: scale(0.9);
+   }
+   100% {
+      opacity: 0.8;
+      transform: scale(1.2);
+   }
+}
+
+.container {
+   max-width: 75rem;
+   height: auto;
+   margin-inline: auto;
+   padding-inline: 1.5rem;
+}
+
+.title {
+   font-family: inherit;
+   font-size: 4.5rem;
+   font-weight: 700;
+   line-height: 1.25;
+   text-wrap: balance;
+   letter-spacing: -0.05rem;
+   text-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.paragraph {
+   font-family: inherit;
+   line-height: 1.5;
+   max-width: 50ch;
+   text-wrap: pretty;
+   word-wrap: break-word;
+}
+
+.btn {
+   display: flex;
+   font-family: inherit;
+   font-size: 1rem;
+   font-weight: 500;
+   line-height: 1.5;
+   align-items: center;
+   justify-content: center;
+   white-space: nowrap;
+   text-align: center;
+   padding-block: 0.75rem;
+   padding-inline: 1.75rem;
+   border-radius: 3rem;
+   transition: all 0.3s ease;
+
+   &-gradient {
+      color: var(--background-color);
+      background: linear-gradient(
+         45deg,
+         var(--gradient-color-3),
+         var(--gradient-color-1)
+      );
+      box-shadow: 0 5px 20px hsla(270, 75%, 45%, 0.35);
+
+      &:hover,
+      &:focus {
+         transform: translateY(-0.25rem);
+         box-shadow: 0 10px 30px hsla(270, 75%, 45%, 0.55);
+      }
+   }
+}
+
+// Blob gradients
+.blob {
+   position: absolute;
+   border-radius: 50%;
+
+   &-gradient-1 {
+      top: 10%;
+      left: 15%;
+      width: 20rem;
+      height: 20rem;
+      background-color: var(--gradient-color-1);
+      animation: pulseGradient 16s infinite alternate ease-in-out;
+   }
+
+   &-gradient-2 {
+      right: 20%;
+      bottom: 15%;
+      width: 25rem;
+      height: 25rem;
+      background-color: var(--gradient-color-2);
+      animation-delay: -5s;
+      animation: pulseGradient 20s infinite alternate ease-in-out;
+   }
+
+   &-gradient-3 {
+      top: 20%;
+      right: 10%;
+      width: 20rem;
+      height: 20rem;
+      background-color: var(--gradient-color-3);
+      animation-delay: -8s;
+      animation: pulseGradient 18s infinite alternate ease-in-out;
+   }
+
+   &-gradient-4 {
+      left: 10%;
+      bottom: 25%;
+      width: 15rem;
+      height: 15rem;
+      background-color: var(--gradient-color-4);
+      animation-delay: -2s;
+      animation: pulseGradient 14s infinite alternate ease-in-out;
+   }
+}
+
+// Banner section
+.banner {
+   position: relative;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   width: 100%;
+   min-height: 100dvh;
+   overflow: hidden;
+   text-align: center;
+
+   &::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 3;
+      width: 100%;
+      height: 100%;
+      opacity: 0.15;
+      pointer-events: none;
+      background: var(--background-color);
+   }
+
+   &-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      filter: blur(10rem);
+   }
+
+   &-content {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      row-gap: 2rem;
+      z-index: 5;
+   }
+}
+
+</style>

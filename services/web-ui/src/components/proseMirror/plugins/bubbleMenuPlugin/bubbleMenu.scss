@@ -1,0 +1,300 @@
+@use "sass:color";
+@import '../../../../sass/_transitions.scss';
+@import '../../../../sass/_variables.scss';
+@import '../../../../sass/themes/_minimalist-chic.scss';
+
+// Use same colors as dropdown and infoBubble primitives
+$bubbleMenuBg: $steelBlue;
+$bubbleMenuFg: $offWhite;
+$bubbleMenuBorder: color.adjust($steelBlue, $lightness: -10%);
+$bubbleMenuHoverBg: $nightBlue;
+$bubbleMenuActiveBg: rgba(85, 150, 124, 1);
+$bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
+
+.bubble-menu {
+    position: absolute;
+    z-index: 100;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: pupOutTransition(opacity, 0.2s), pupOutTransition(transform, 0.2s), visibility 0.2s;
+
+    &.is-visible {
+        visibility: visible;
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.bubble-menu-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px;
+    background: $bubbleMenuBg;
+    border-radius: 99px;
+    // box-shadow: $bubbleMenuShadow;
+    box-shadow: 0.05rem 0.05rem 7px 0px rgba(0,0,0,0.2);
+    border: 0.06rem solid $bubbleMenuBorder;
+
+    // Mobile: slightly larger touch targets
+    @media (max-width: 640px) {
+        gap: 4px;
+    }
+
+    // Prevent text selection in menu
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.bubble-menu-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 99px;
+    background: transparent;
+    color: $bubbleMenuFg;
+    cursor: pointer;
+    transition: hoverTransition(all, 150ms);
+
+    // Mobile: larger touch targets
+    @media (max-width: 640px) {
+        width: 40px;
+        height: 40px;
+    }
+
+    // Prevent default touch behavior
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+
+    svg {
+        width: 16px;
+        height: 16px;
+        fill: $offWhite;
+    }
+
+    &:hover {
+        background-color: $bubbleMenuHoverBg;
+    }
+
+    &:active {
+        background-color: $bubbleMenuActiveBg;
+    }
+
+    &.is-active {
+        background-color: $bubbleMenuActiveBg;
+        color: $offWhite;
+    }
+
+    &:focus-visible {
+        outline: 2px solid $offWhite;
+        outline-offset: 2px;
+    }
+}
+
+.bubble-menu-separator {
+    display: block;
+    width: 1px;
+    height: 20px;
+    background-color: $bubbleMenuBorder;
+    margin: 0 4px;
+}
+
+// Text type dropdown
+.bubble-menu-dropdown {
+    position: relative;
+}
+
+.bubble-menu-dropdown-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 99px;
+    background: transparent;
+    color: $bubbleMenuFg;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+
+    @media (max-width: 640px) {
+        height: 40px;
+        padding: 0 12px;
+        font-size: 14px;
+    }
+
+    .dropdown-label {
+        display: flex;
+        align-items: center;
+
+        svg {
+            width: 16px;
+            height: 16px;
+            fill: $offWhite;
+            opacity: 1;
+        }
+    }
+
+    // Chevron icon
+    > svg {
+        width: 14px;
+        height: 14px;
+        fill: $offWhite;
+        opacity: 0.7;
+    }
+
+    &:hover {
+        background-color: $bubbleMenuHoverBg;
+    }
+}
+
+.bubble-menu-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    padding: 4px;
+    background: $bubbleMenuBg;
+    border-radius: 99px;
+    box-shadow: $bubbleMenuShadow;
+    border: 0.06rem solid $bubbleMenuBorder;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+    z-index: 110;
+
+    &.is-open {
+        visibility: visible;
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.bubble-menu-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 99px;
+    background: transparent;
+    color: $bubbleMenuFg;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+
+    svg {
+        width: 18px;
+        height: 18px;
+        fill: $offWhite;
+    }
+
+    @media (max-width: 640px) {
+        width: 36px;
+        height: 36px;
+
+        svg {
+            width: 20px;
+            height: 20px;
+        }
+    }
+
+    &:hover {
+        background-color: $bubbleMenuHoverBg;
+    }
+
+    &.is-active {
+        background-color: $bubbleMenuActiveBg;
+    }
+}
+
+// Link input panel
+.bubble-menu-link-input {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: $bubbleMenuBg;
+    border-radius: 8px;
+    box-shadow: $bubbleMenuShadow;
+    border: 0.06rem solid $bubbleMenuBorder;
+    margin-top: 4px;
+
+    &.is-active {
+        display: flex;
+    }
+}
+
+.link-input-field {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid $bubbleMenuBorder;
+    border-radius: 6px;
+    background: color.adjust($steelBlue, $lightness: -8%);
+    color: $bubbleMenuFg;
+    font-size: 14px;
+    outline: none;
+
+    @media (max-width: 640px) {
+        min-width: 160px;
+        padding: 10px 14px;
+    }
+
+    &:focus {
+        border-color: $offWhite;
+    }
+
+    &::placeholder {
+        color: color.adjust($offWhite, $alpha: -0.5);
+    }
+}
+
+.link-input-apply,
+.link-input-remove {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+
+    @media (max-width: 640px) {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+}
+
+.link-input-apply {
+    background: $aiGreen;
+    color: $offWhite;
+
+    &:hover {
+        background: color.adjust($aiGreen, $lightness: -6%);
+    }
+}
+
+.link-input-remove {
+    background: color.adjust($red, $alpha: -0.7);
+    color: $red;
+
+    &:hover {
+        background: color.adjust($red, $alpha: -0.6);
+    }
+}

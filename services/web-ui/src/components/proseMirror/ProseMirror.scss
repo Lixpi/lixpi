@@ -1,5 +1,5 @@
 @import '../../sass/variables.scss';
-@import 'MenuBar.scss';
+@import './plugins/bubbleMenuPlugin/bubbleMenu.scss';
 @import './plugins/aiChatThreadPlugin/ai-chat-thread.scss';
 @import './ProseMirrorMixings.scss';
 
@@ -262,13 +262,6 @@ img.ProseMirror-separator {
 	height: 100%;
 	background: white;
 	background-clip: padding-box;
-	// padding: 5px 0;
-	// margin: 0px -16px 0px -16px;
-	// &.is-focused .ProseMirror-menubar {
-	// 	box-shadow: 1px 4px 10px 5px rgba(232,240,255, 91%);
-	// 	border-color: rgba(189, 212, 255, 0.9098039216);
-
-	// }
 }
 
 
