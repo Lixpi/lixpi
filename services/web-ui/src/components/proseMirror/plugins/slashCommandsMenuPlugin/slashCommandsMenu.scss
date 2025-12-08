@@ -1,0 +1,95 @@
+@use "sass:color";
+@import '../../../../sass/_transitions.scss';
+@import '../../../../sass/_variables.scss';
+@import '../../../../sass/themes/_minimalist-chic.scss';
+
+// Lightweight menu - frosted glass effect
+$slashMenuFg: $nightBlue;
+$slashMenuHoverBg: rgba($steelBlue, 0.15);
+
+.slash-commands-menu {
+    position: absolute;
+    z-index: 100;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: pupOutTransition(opacity, 0.15s), pupOutTransition(transform, 0.15s), visibility 0.15s;
+
+    &.is-visible {
+        visibility: visible;
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slash-commands-menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 4px 0;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 6px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+
+    // Prevent text selection in menu
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.slash-commands-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+
+    // Prevent default touch behavior
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+
+    &:hover,
+    &.is-selected {
+        background-color: $slashMenuHoverBg;
+    }
+}
+
+.slash-commands-menu-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    svg {
+        width: 16px;
+        height: 16px;
+        fill: $slashMenuFg;
+    }
+}
+
+.slash-commands-menu-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: $slashMenuFg;
+    white-space: nowrap;
+}
+
+.slash-commands-menu-empty {
+    padding: 12px 16px;
+    font-size: 13px;
+    color: rgba($slashMenuFg, 0.6);
+    text-align: center;
+}
+
+// Mobile adjustments
+@media (max-width: 640px) {
+    .slash-commands-menu-item {
+        padding: 8px 14px;
+    }
+
+    .slash-commands-menu-item-name {
+        font-size: 14px;
+    }
+}
