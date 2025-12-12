@@ -10,13 +10,13 @@
         "@types/jsonwebtoken": "*"
     },
     "dependencies": {
+        "@lixpi/auth-service": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@nats-io/nats-core": "*",
         "@nats-io/nkeys": "*",
         "jsonwebtoken": "*",
-        "chalk": "*",
         "@nats-io/jwt": "*"
     }
 }
