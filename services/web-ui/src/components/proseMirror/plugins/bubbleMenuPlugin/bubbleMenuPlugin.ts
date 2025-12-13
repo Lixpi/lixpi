@@ -1,9 +1,9 @@
-import { Plugin, PluginKey } from 'prosemirror-state'
+import { Plugin, PluginKey, NodeSelection } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { computePosition, inline, flip, shift, offset, hide, type VirtualElement } from '@floating-ui/dom'
 import { createEl } from '../../components/domTemplates.ts'
-import { buildBubbleMenuItems } from './bubbleMenuItems.ts'
+import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from './bubbleMenuItems.ts'
 import { documentTitleNodeType } from '../../customNodes/documentTitleNode.js'
 
 export const bubbleMenuPluginKey = new PluginKey('bubbleMenu')
@@ -17,13 +17,15 @@ type BubbleMenuViewOptions = {
 class BubbleMenuView {
     private view: EditorView
     private menu: HTMLElement
+    private menuContent: HTMLElement
     private preventHide = false
     private updateDebounceTimer: ReturnType<typeof setTimeout> | null = null
     private readonly debounceDelay: number
     private linkInputPanel: HTMLElement | null = null
     private isLinkInputActive = false
     private isSelecting = false
-    private dropdownUpdaters: Array<() => void> = []
+    private menuItems: MenuItemElement[] = []
+    private currentContext: SelectionContext = 'none'
 
     constructor({ view }: BubbleMenuViewOptions) {
         this.view = view
@@ -32,14 +34,17 @@ class BubbleMenuView {
         this.menu = createEl('div', {
             className: 'bubble-menu',
             role: 'toolbar',
-            'aria-label': 'Text formatting',
+            'aria-label': 'Formatting toolbar',
             tabIndex: 0,
             style: {
-                position: 'absolute',
+                position: 'fixed',
                 visibility: 'hidden',
                 zIndex: '100',
             },
         })
+
+        this.menuContent = createEl('div', { className: 'bubble-menu-content' })
+        this.menu.appendChild(this.menuContent)
 
         this.buildMenu()
 
@@ -51,6 +56,9 @@ class BubbleMenuView {
         document.addEventListener('mouseup', this.handleDocumentMouseUp)
         document.addEventListener('touchend', this.handleDocumentTouchEnd)
 
+        // Listen for image resize events
+        view.dom.addEventListener('image-resize', this.handleImageResize)
+
         view.dom.parentNode?.appendChild(this.menu)
 
         if (isTouchDevice()) {
@@ -58,21 +66,33 @@ class BubbleMenuView {
         }
     }
 
+    // Expose view for image actions
+    getView(): EditorView {
+        return this.view
+    }
+
     private buildMenu(): void {
-        const { items, linkInputPanel, dropdownUpdaters } = buildBubbleMenuItems(this.view, this)
+        const { items, linkInputPanel } = buildBubbleMenuItems(this.view, this)
+        this.menuItems = items
         this.linkInputPanel = linkInputPanel
-        this.dropdownUpdaters = dropdownUpdaters
 
-        const menuContent = createEl('div', { className: 'bubble-menu-content' })
-
-        items.forEach((item: HTMLElement) => {
-            menuContent.appendChild(item)
-        })
-
-        this.menu.appendChild(menuContent)
+        // Add all items to content (visibility controlled by context)
+        for (const item of items) {
+            this.menuContent.appendChild(item.element)
+        }
 
         if (this.linkInputPanel) {
             this.menu.appendChild(this.linkInputPanel)
+        }
+    }
+
+    private updateVisibleItems(context: SelectionContext): void {
+        this.currentContext = context
+
+        // Show/hide items based on context
+        for (const item of this.menuItems) {
+            const isVisible = item.context.includes(context)
+            item.element.style.display = isVisible ? '' : 'none'
         }
     }
 
@@ -97,7 +117,6 @@ class BubbleMenuView {
     private handleDocumentMouseUp = (): void => {
         if (this.isSelecting) {
             this.isSelecting = false
-            // Small delay to let the selection settle
             setTimeout(() => this.showIfNeeded(), 10)
         }
     }
@@ -105,13 +124,20 @@ class BubbleMenuView {
     private handleDocumentTouchEnd = (): void => {
         if (this.isSelecting) {
             this.isSelecting = false
-            // Longer delay for touch to let selection handles settle
             setTimeout(() => this.showIfNeeded(), 100)
         }
     }
 
+    private handleImageResize = (): void => {
+        if (this.currentContext === 'image' && this.menu.classList.contains('is-visible')) {
+            this.updatePosition()
+        }
+    }
+
     private showIfNeeded(): void {
-        if (this.shouldShow() && !this.isSelecting) {
+        const context = getSelectionContext(this.view)
+        if (context !== 'none' && this.shouldShow(context) && !this.isSelecting) {
+            this.updateVisibleItems(context)
             this.show()
             this.updateMenuState()
             this.updatePosition()
@@ -119,31 +145,58 @@ class BubbleMenuView {
     }
 
     private handleViewportResize = (): void => {
-        if (this.shouldShow()) {
+        const context = getSelectionContext(this.view)
+        if (context !== 'none' && this.shouldShow(context)) {
             this.updatePosition()
         }
     }
 
-    private shouldShow(): boolean {
+    private shouldShow(context: SelectionContext): boolean {
+        if (!this.view.hasFocus()) return false
+        if (!this.view.editable) return false
+        if (context === 'none') return false
+
         const { state } = this.view
         const { selection } = state
-        const { empty } = selection
-
-        if (!this.view.hasFocus()) return false
-        if (empty) return false
-        if (!this.view.editable) return false
-
         const { $from, $to } = selection
+
+        // Don't show in code blocks
         const isCodeBlock = $from.parent.type.name === 'code_block' || $to.parent.type.name === 'code_block'
         if (isCodeBlock) return false
 
+        // Don't show in document title
         const isDocumentTitle = $from.parent.type.name === documentTitleNodeType || $to.parent.type.name === documentTitleNodeType
         if (isDocumentTitle) return false
 
         return true
     }
 
-    private createVirtualElement(): VirtualElement {
+    private getImageElement(): HTMLImageElement | null {
+        const { selection } = this.view.state
+        if (!(selection instanceof NodeSelection)) return null
+        if (selection.node.type.name !== 'image') return null
+
+        const nodeDom = this.view.nodeDOM(selection.from)
+        if (!nodeDom) return null
+
+        const element = nodeDom as HTMLElement
+
+        if (element.classList?.contains('pm-image-wrapper')) {
+            const img = element.querySelector('img')
+            if (img) return img
+        }
+
+        if (element.tagName === 'IMG') {
+            return element as HTMLImageElement
+        }
+
+        const img = element.querySelector?.('img')
+        if (img) return img
+
+        return null
+    }
+
+    private createTextVirtualElement(): VirtualElement {
         const { state } = this.view
         const { from, to } = state.selection
 
@@ -197,35 +250,64 @@ class BubbleMenuView {
     }
 
     private async updatePosition(): Promise<void> {
-        const virtualElement = this.createVirtualElement()
+        if (this.currentContext === 'image') {
+            // Position below the image, centered
+            const imgElement = this.getImageElement()
+            if (!imgElement) return
 
-        const { x, y, middlewareData } = await computePosition(virtualElement, this.menu, {
-            placement: 'top',
-            middleware: [
-                inline(),
-                offset(8),
-                flip({ fallbackPlacements: ['bottom', 'top-start', 'bottom-start'] }),
-                shift({ padding: 8 }),
-                hide(),
-            ],
-        })
+            const imageRect = imgElement.getBoundingClientRect()
 
-        const isHidden = middlewareData.hide?.referenceHidden
+            // Measure toolbar
+            this.menu.style.visibility = 'hidden'
+            this.menu.style.display = 'flex'
+            const toolbarRect = this.menu.getBoundingClientRect()
 
-        Object.assign(this.menu.style, {
-            left: `${x}px`,
-            top: `${y}px`,
-            visibility: isHidden ? 'hidden' : 'visible',
-        })
+            // Center toolbar horizontally below the image
+            const imageCenterX = imageRect.left + imageRect.width / 2
+            const toolbarLeft = imageCenterX - toolbarRect.width / 2
+            const toolbarTop = imageRect.bottom + 8
+
+            // Clamp to viewport bounds
+            const maxLeft = window.innerWidth - toolbarRect.width - 8
+            const clampedLeft = Math.max(8, Math.min(toolbarLeft, maxLeft))
+
+            Object.assign(this.menu.style, {
+                left: `${clampedLeft}px`,
+                top: `${toolbarTop}px`,
+                visibility: 'visible',
+            })
+        } else {
+            // Position above text selection using floating-ui
+            const virtualElement = this.createTextVirtualElement()
+
+            const { x, y, middlewareData } = await computePosition(virtualElement, this.menu, {
+                placement: 'top',
+                middleware: [
+                    inline(),
+                    offset(8),
+                    flip({ fallbackPlacements: ['bottom', 'top-start', 'bottom-start'] }),
+                    shift({ padding: 8 }),
+                    hide(),
+                ],
+            })
+
+            const isHidden = middlewareData.hide?.referenceHidden
+
+            Object.assign(this.menu.style, {
+                left: `${x}px`,
+                top: `${y}px`,
+                visibility: isHidden ? 'hidden' : 'visible',
+            })
+        }
     }
 
     update(): void {
-        // Don't show while user is actively selecting
         if (this.isSelecting) {
             return
         }
 
         const wasVisible = this.menu.classList.contains('is-visible')
+        const context = getSelectionContext(this.view)
 
         if (this.preventHide) {
             this.preventHide = false
@@ -237,15 +319,19 @@ class BubbleMenuView {
             return
         }
 
-        const shouldBeVisible = this.shouldShow()
+        const shouldBeVisible = context !== 'none' && this.shouldShow(context)
 
         if (shouldBeVisible && !wasVisible) {
-            // Show immediately without delay
+            this.updateVisibleItems(context)
             this.show()
             this.updateMenuState()
             this.updatePosition()
         } else if (shouldBeVisible && wasVisible) {
-            // Debounce position updates while visible (for selection handle dragging)
+            // Context might have changed
+            if (context !== this.currentContext) {
+                this.updateVisibleItems(context)
+            }
+
             if (this.updateDebounceTimer) {
                 clearTimeout(this.updateDebounceTimer)
             }
@@ -258,21 +344,26 @@ class BubbleMenuView {
         }
     }
 
-
-
     private updateMenuState(): void {
-        // Update mark button states
-        const buttons = this.menu.querySelectorAll('.bubble-menu-button')
-        buttons.forEach((button) => {
-            const updateFn = (button as HTMLElement).dataset.update
-            if (updateFn) {
-                const isActive = this.checkMarkActive((button as HTMLElement).dataset.markType || '')
-                button.classList.toggle('is-active', isActive)
-            }
-        })
+        if (this.currentContext === 'text') {
+            // Update mark button states
+            const buttons = this.menu.querySelectorAll('.bubble-menu-button')
+            buttons.forEach((button) => {
+                const updateFn = (button as HTMLElement).dataset.update
+                if (updateFn) {
+                    const isActive = this.checkMarkActive((button as HTMLElement).dataset.markType || '')
+                    button.classList.toggle('is-active', isActive)
+                }
+            })
 
-        // Update dropdown labels
-        this.dropdownUpdaters.forEach((update) => update())
+            // Update dropdown labels
+            for (const item of this.menuItems) {
+                if (item.update) item.update()
+            }
+        } else if (this.currentContext === 'image') {
+            // Update image button states (alignment, wrap)
+            updateImageButtonStates(this.menuItems, this.view)
+        }
     }
 
     private checkMarkActive(markType: string): boolean {
@@ -296,7 +387,13 @@ class BubbleMenuView {
     private hide(): void {
         this.menu.style.visibility = 'hidden'
         this.menu.classList.remove('is-visible')
+        this.currentContext = 'none'
         this.closeLinkInput()
+    }
+
+    forceHide(): void {
+        this.preventHide = false
+        this.hide()
     }
 
     showLinkInput(): void {
@@ -362,6 +459,7 @@ class BubbleMenuView {
 
         this.view.dom.removeEventListener('mousedown', this.handleEditorMouseDown)
         this.view.dom.removeEventListener('touchstart', this.handleEditorTouchStart)
+        this.view.dom.removeEventListener('image-resize', this.handleImageResize)
         document.removeEventListener('mouseup', this.handleDocumentMouseUp)
         document.removeEventListener('touchend', this.handleDocumentTouchEnd)
         window.visualViewport?.removeEventListener('resize', this.handleViewportResize)

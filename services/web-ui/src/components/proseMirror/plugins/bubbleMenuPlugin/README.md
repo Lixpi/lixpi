@@ -1,15 +1,22 @@
 # Bubble Menu Plugin
 
-A floating selection-based bubble menu for ProseMirror that appears when text is selected, providing quick access to text formatting options.
+A universal floating selection-based bubble menu for ProseMirror that shows context-appropriate options based on what is selected.
 
 ## Features
 
-- **Selection-based positioning**: Uses FloatingUI to position the menu above or below the selected text
+- **Context-aware menu**: Shows different items based on selection type (text vs image)
+- **Selection-based positioning**: Uses FloatingUI for text, custom positioning for images (centered below)
 - **Mobile-first design**: Optimized touch targets, platform-aware debouncing (350ms touch / 200ms desktop)
 - **Inline link editing**: Link input panel integrated directly in the bubble menu (no modal dialogs)
+
+### Text Selection Items
 - **Text formatting marks**: Bold, Italic, Strikethrough, Inline Code, Link
 - **Block actions**: Text type dropdown (Paragraph, Headings), Code Block, Blockquote
-- **Accessibility**: ARIA attributes, keyboard navigation support
+
+### Image Selection Items
+- **Alignment**: Left, Center, Right
+- **Text Wrap**: None, Wrap Left, Wrap Right
+- **Actions**: Wrap in Blockquote, Delete
 
 ## Usage
 
@@ -29,9 +36,19 @@ const plugins = [
 ### Files
 
 - `bubbleMenuPlugin.ts` - Main plugin with `BubbleMenuView` class
-- `bubbleMenuItems.ts` - Menu item configuration and creation built from a structured section list using `domTemplates`
+- `bubbleMenuItems.ts` - Menu item configuration with context-aware visibility and creation built from a structured list using `domTemplates`
 - `bubbleMenu.scss` - Mobile-first styles with CSS custom properties
 - `index.ts` - Exports
+
+### Selection Context
+
+The menu detects selection type using `getSelectionContext()`:
+
+- `'text'` - Text selection (non-empty)
+- `'image'` - NodeSelection of an image node
+- `'none'` - Empty selection or unsupported node type
+
+Each menu item has a `context` array specifying which contexts it appears in.
 
 ### Key Components
 
@@ -39,12 +56,14 @@ const plugins = [
 
 The main view class that manages:
 
-- Menu visibility based on selection state
-- FloatingUI positioning with `inline()`, `flip()`, `shift()`, `offset()`, `hide()` middleware
+- Menu visibility based on selection state and context
+- Context-aware item visibility (show/hide based on selection type)
+- FloatingUI positioning for text, custom centered positioning for images
 - Debounced updates for performance (especially on mobile during selection handle dragging)
 - Link input panel state
+- Image resize event handling for real-time position updates
 
-#### Virtual Element
+#### Virtual Element (Text Selection)
 
 Uses ProseMirror's `coordsAtPos()` to create a virtual element for FloatingUI:
 
@@ -54,21 +73,35 @@ const virtualElement = {
     const start = view.coordsAtPos(from)
     const end = view.coordsAtPos(to)
     return { left, top, right, bottom, width, height }
-
-### Menu Structure (Declarative)
-
-The bubble menu is defined via a structured list of sections in `bubbleMenuItems.ts`, making it easy to reorder or add controls:
-
-- Dropdown: Text/Heading levels
-- Separator
-- Mark buttons: Bold, Italic, Strikethrough, Inline Code, Link
-- Separator
-- Block buttons: Code Block, Blockquote
-
-Each button is built with `createEl` from `components/domTemplates.ts` so markup is centralized and readable.
   },
 }
 ```
+
+#### Image Positioning
+
+For image selections, the menu is positioned centered below the image:
+
+```typescript
+const imageCenterX = imageRect.left + imageRect.width / 2
+const toolbarLeft = imageCenterX - toolbarRect.width / 2
+const toolbarTop = imageRect.bottom + 8
+```
+
+### Menu Structure (Declarative)
+
+The bubble menu is defined via a structured list in `bubbleMenuItems.ts`, making it easy to add new contexts:
+
+**Text context:**
+- Dropdown: Text/Heading levels
+- Mark buttons: Bold, Italic, Strikethrough, Link, Inline Code
+- Block buttons: Code Block, Blockquote
+
+**Image context:**
+- Alignment buttons: Left, Center, Right
+- Text wrap buttons: None, Wrap Left, Wrap Right
+- Action buttons: Blockquote, Delete
+
+Each button is built with `createEl` from `components/domTemplates.ts` so markup is centralized and readable.
 
 ### Mobile Considerations
 
