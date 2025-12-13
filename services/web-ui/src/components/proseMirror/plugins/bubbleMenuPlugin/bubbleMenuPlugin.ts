@@ -26,6 +26,8 @@ class BubbleMenuView {
     private isSelecting = false
     private menuItems: MenuItemElement[] = []
     private currentContext: SelectionContext = 'none'
+    private scrollContainer: HTMLElement | Window = window
+    private activeImageWrapper: HTMLElement | null = null
 
     constructor({ view }: BubbleMenuViewOptions) {
         this.view = view
@@ -58,6 +60,10 @@ class BubbleMenuView {
 
         // Listen for image resize events
         view.dom.addEventListener('image-resize', this.handleImageResize)
+
+        // Listen for scroll events to reposition menu
+        this.scrollContainer = this.findScrollContainer(view.dom)
+        this.scrollContainer.addEventListener('scroll', this.handleScroll, { passive: true })
 
         view.dom.parentNode?.appendChild(this.menu)
 
@@ -134,6 +140,24 @@ class BubbleMenuView {
         }
     }
 
+    private handleScroll = (): void => {
+        if (this.menu.classList.contains('is-visible')) {
+            this.updatePosition()
+        }
+    }
+
+    private findScrollContainer(element: HTMLElement): HTMLElement | Window {
+        let current: HTMLElement | null = element
+        while (current) {
+            const style = getComputedStyle(current)
+            if (style.overflow === 'auto' || style.overflow === 'scroll' || style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                return current
+            }
+            current = current.parentElement
+        }
+        return window
+    }
+
     private showIfNeeded(): void {
         const context = getSelectionContext(this.view)
         if (context !== 'none' && this.shouldShow(context) && !this.isSelecting) {
@@ -196,6 +220,22 @@ class BubbleMenuView {
         return null
     }
 
+    private getImageWrapper(): HTMLElement | null {
+        const { selection } = this.view.state
+        if (!(selection instanceof NodeSelection)) return null
+        if (selection.node.type.name !== 'image') return null
+
+        const nodeDom = this.view.nodeDOM(selection.from)
+        if (!nodeDom) return null
+
+        const element = nodeDom as HTMLElement
+        if (element.classList?.contains('pm-image-wrapper')) {
+            return element
+        }
+
+        return null
+    }
+
     private createTextVirtualElement(): VirtualElement {
         const { state } = this.view
         const { from, to } = state.selection
@@ -249,11 +289,17 @@ class BubbleMenuView {
         }
     }
 
-    private async updatePosition(): Promise<void> {
+    private async updatePosition(retryCount = 0): Promise<void> {
         if (this.currentContext === 'image') {
             // Position below the image, centered
             const imgElement = this.getImageElement()
-            if (!imgElement) return
+            if (!imgElement) {
+                // After undo, the DOM might not be ready yet - retry a few times
+                if (retryCount < 3) {
+                    requestAnimationFrame(() => this.updatePosition(retryCount + 1))
+                }
+                return
+            }
 
             const imageRect = imgElement.getBoundingClientRect()
 
@@ -312,6 +358,11 @@ class BubbleMenuView {
         if (this.preventHide) {
             this.preventHide = false
             this.updateMenuState()
+            this.markImageActive()
+            // Reposition after state change (e.g., alignment changed)
+            requestAnimationFrame(() => {
+                this.updatePosition()
+            })
             return
         }
 
@@ -324,8 +375,12 @@ class BubbleMenuView {
         if (shouldBeVisible && !wasVisible) {
             this.updateVisibleItems(context)
             this.show()
+            this.markImageActive()
             this.updateMenuState()
-            this.updatePosition()
+            // Use requestAnimationFrame to ensure DOM is updated before positioning
+            requestAnimationFrame(() => {
+                this.updatePosition()
+            })
         } else if (shouldBeVisible && wasVisible) {
             // Context might have changed
             if (context !== this.currentContext) {
@@ -384,11 +439,27 @@ class BubbleMenuView {
         this.menu.classList.add('is-visible')
     }
 
+    private markImageActive(): void {
+        // Mark image as menu-active to keep selection visible
+        if (this.currentContext === 'image') {
+            const wrapper = this.getImageWrapper()
+            if (wrapper && wrapper !== this.activeImageWrapper) {
+                this.activeImageWrapper?.classList.remove('pm-image-menu-active')
+                this.activeImageWrapper = wrapper
+            }
+            this.activeImageWrapper?.classList.add('pm-image-menu-active')
+        }
+    }
+
     private hide(): void {
         this.menu.style.visibility = 'hidden'
         this.menu.classList.remove('is-visible')
         this.currentContext = 'none'
         this.closeLinkInput()
+
+        // Remove menu-active state from image
+        this.activeImageWrapper?.classList.remove('pm-image-menu-active')
+        this.activeImageWrapper = null
     }
 
     forceHide(): void {
@@ -460,6 +531,7 @@ class BubbleMenuView {
         this.view.dom.removeEventListener('mousedown', this.handleEditorMouseDown)
         this.view.dom.removeEventListener('touchstart', this.handleEditorTouchStart)
         this.view.dom.removeEventListener('image-resize', this.handleImageResize)
+        this.scrollContainer.removeEventListener('scroll', this.handleScroll)
         document.removeEventListener('mouseup', this.handleDocumentMouseUp)
         document.removeEventListener('touchend', this.handleDocumentTouchEnd)
         window.visualViewport?.removeEventListener('resize', this.handleViewportResize)
