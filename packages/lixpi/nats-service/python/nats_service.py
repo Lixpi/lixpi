@@ -4,16 +4,19 @@ Shared implementation mirroring TypeScript version with optional self-issued JWT
 """
 
 import asyncio
+import io
 import json
 import time
 import base64
-from typing import Any, Dict, Optional, Callable, List
+from typing import Any, Dict, Optional, Callable, List, Union
 from enum import Enum
 
 import nats
 from nats.aio.client import Client as NATS
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
+from nats.js.api import ObjectStoreConfig, ObjectInfo, ObjectMeta
+from nats.js.object_store import ObjectStore
 from nkeys import from_seed
 from colorama import Fore, Style
 from lixpi_debug_tools import log, info, info_str, warn, err
@@ -177,6 +180,7 @@ class NatsService:
         self.config = config
         self.nc: Optional[NATS] = None
         self.js: Optional[JetStreamContext] = None
+        self._objm = None  # Object Store manager cache
         self._subscriptions: Dict[str, Any] = {}
         self._is_connecting = False
         self._is_monitoring = False
@@ -481,6 +485,9 @@ class NatsService:
         else:
             subscription = await self.nc.subscribe(subject, cb=message_handler)
 
+        # Track subscription for unsubscribe_all
+        self._subscriptions[subject] = subscription
+
         return subscription
 
     async def request(
@@ -564,6 +571,9 @@ class NatsService:
         else:
             subscription = await self.nc.subscribe(subject, cb=reply_handler)
 
+        # Track subscription for unsubscribe_all
+        self._subscriptions[subject] = subscription
+
         return subscription
 
     async def unsubscribe_all(self) -> None:
@@ -629,3 +639,110 @@ class NatsService:
         warn("NATS -> connection closed")
         # Reset the initialized flag on close so we can reconnect properly
         self._subscriptions_initialized = False
+
+    # ===========================================
+    # JetStream Object Store Methods
+    # ===========================================
+
+    def _get_jetstream(self) -> JetStreamContext:
+        """Get JetStream context."""
+        if not self.nc:
+            raise RuntimeError("NATS client is not connected.")
+        if not self.js:
+            self.js = self.nc.jetstream()
+        return self.js
+
+    def _get_object_store_manager(self):
+        """Get Object Store manager."""
+        if not self._objm:
+            self._objm = self._get_jetstream()
+        return self._objm
+
+    async def create_object_store(
+        self,
+        bucket_name: str,
+        options: Optional[ObjectStoreConfig] = None
+    ) -> ObjectStore:
+        """Create an Object Store bucket."""
+        js = self._get_jetstream()
+        if options:
+            os = await js.create_object_store(bucket_name, config=options)
+        else:
+            os = await js.create_object_store(bucket_name)
+        info(f"Object Store bucket created: {bucket_name}")
+        return os
+
+    async def get_object_store(self, bucket_name: str) -> ObjectStore:
+        """Open an existing Object Store bucket."""
+        js = self._get_jetstream()
+        return await js.object_store(bucket_name)
+
+    async def delete_object_store(self, bucket_name: str) -> bool:
+        """Delete an Object Store bucket."""
+        js = self._get_jetstream()
+        result = await js.delete_object_store(bucket_name)
+        info(f"Object Store bucket deleted: {bucket_name}")
+        return result
+
+    async def put_object(
+        self,
+        bucket_name: str,
+        name: str,
+        data: bytes,
+        meta: Optional[ObjectMeta] = None
+    ) -> ObjectInfo:
+        """Store data as an object."""
+        os = await self.get_object_store(bucket_name)
+        result = await os.put(name, data, meta=meta)
+        info(f"Object stored: {bucket_name}/{name} ({len(data)} bytes)")
+        return result
+
+    async def put_object_from_readable(
+        self,
+        bucket_name: str,
+        name: str,
+        readable: io.BufferedIOBase,
+        meta: Optional[ObjectMeta] = None
+    ) -> ObjectInfo:
+        """Store data from a readable stream."""
+        os = await self.get_object_store(bucket_name)
+        result = await os.put(name, readable, meta=meta)
+        info(f"Object stored from stream: {bucket_name}/{name}")
+        return result
+
+    async def get_object(self, bucket_name: str, name: str) -> Optional[bytes]:
+        """Retrieve an object as bytes."""
+        os = await self.get_object_store(bucket_name)
+        result = await os.get(name)
+        if not result:
+            return None
+        return result.data
+
+    async def get_object_stream(
+        self,
+        bucket_name: str,
+        name: str,
+        writeinto: io.BufferedIOBase
+    ) -> Optional[ObjectInfo]:
+        """Retrieve an object by streaming directly into a writable buffer."""
+        os = await self.get_object_store(bucket_name)
+        result = await os.get(name, writeinto=writeinto)
+        if not result:
+            return None
+        return result.info
+
+    async def get_object_info(self, bucket_name: str, name: str) -> Optional[ObjectInfo]:
+        """Get object metadata."""
+        os = await self.get_object_store(bucket_name)
+        return await os.info(name)
+
+    async def delete_object(self, bucket_name: str, name: str) -> None:
+        """Delete an object from a bucket."""
+        os = await self.get_object_store(bucket_name)
+        await os.delete(name)
+        info(f"Object deleted: {bucket_name}/{name}")
+
+    async def list_objects(self, bucket_name: str) -> List[ObjectInfo]:
+        """List all objects in a bucket."""
+        os = await self.get_object_store(bucket_name)
+        return await os.list()
