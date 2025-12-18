@@ -35,6 +35,8 @@ import { documentTitleNodeType } from "../customNodes/documentTitleNode.js"
 import { bubbleMenuPlugin } from '../plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '../plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
 import { slashCommandsMenuPlugin } from '../plugins/slashCommandsMenuPlugin/index.ts'
+import { imageLifecyclePlugin } from '../plugins/imageLifecyclePlugin/index.ts'
+import { imageSelectionPlugin } from '../plugins/imageSelectionPlugin/index.ts'
 
 import {buildKeymap} from "./keyMap.js"
 import {buildInputRules} from "./inputRules.js"
@@ -113,6 +115,8 @@ export class ProseMirrorEditor {
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
             slashCommandsMenuPlugin(),
+            imageLifecyclePlugin(),
+            imageSelectionPlugin(),
             buildInputRules(this.editorSchema),
             keymap(buildKeymap(this.editorSchema)),
             keymap(baseKeymap),

@@ -27,10 +27,10 @@ export const aiChatThreadNodeType = 'aiChatThread'
 
 export const aiChatThreadNodeSpec = {
     group: 'block',
-    // Allow paragraphs, headings, blockquotes, AI response messages, code blocks
+    // Allow paragraphs, headings, blockquotes, images, AI response messages, code blocks
     // Put 'paragraph' first so PM's contentMatch.defaultType picks it when creating an empty thread
     // Dropdowns are UI controls (outside document schema) managed by thread NodeView
-    content: '(paragraph | heading | blockquote | code_block | aiResponseMessage)+', // Must contain at least one child; default child = paragraph
+    content: '(paragraph | heading | blockquote | image | code_block | aiResponseMessage)+', // Must contain at least one child; default child = paragraph
     defining: false, // Changed to false to allow better cursor interaction
     draggable: false,
     isolating: false, // Changed to false to allow cursor interaction
