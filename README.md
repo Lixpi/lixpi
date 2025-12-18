@@ -19,16 +19,6 @@ Run the interactive setup wizard to generate your `.env` file.
 init-config.bat
 ```
 
-Or run Docker commands directly:
-
-```bash
-# macOS / Linux
-docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v "$(pwd):/workspace" lixpi/setup
-
-# Windows (CMD: use %cd%, PowerShell: use ${PWD})
-docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v "%cd%:/workspace" lixpi/setup
-```
-
 For CI/automation (non-interactive), see [`infrastructure/init-script/README.md`](infrastructure/init-script/README.md).
 
 ### 2. Initialize Infrastructure
