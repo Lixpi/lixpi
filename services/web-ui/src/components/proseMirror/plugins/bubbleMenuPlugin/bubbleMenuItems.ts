@@ -1,6 +1,7 @@
 import type { EditorView } from 'prosemirror-view'
-import type { Schema } from 'prosemirror-model'
+import type { Schema, Node as ProseMirrorNode } from 'prosemirror-model'
 import { toggleMark, wrapIn, setBlockType } from 'prosemirror-commands'
+import { NodeSelection } from 'prosemirror-state'
 import { createEl } from '../../components/domTemplates.ts'
 import {
     boldIcon,
@@ -17,30 +18,142 @@ import {
     heading3Icon,
     checkMarkIcon,
     trashBinIcon,
+    alignLeftIcon,
+    alignCenterIcon,
+    alignRightIcon,
 } from '../../../../svgIcons/index.ts'
+
+// =============================================================================
+// SELECTION CONTEXT TYPES
+// =============================================================================
+
+export type SelectionContext = 'text' | 'image' | 'none'
+
+export function getSelectionContext(view: EditorView): SelectionContext {
+    const { selection } = view.state
+
+    if (selection instanceof NodeSelection) {
+        if (selection.node.type.name === 'image') {
+            return 'image'
+        }
+        return 'none'
+    }
+
+    if (!selection.empty) {
+        return 'text'
+    }
+
+    return 'none'
+}
+
+// =============================================================================
+// BUBBLE MENU VIEW INTERFACE
+// =============================================================================
 
 type BubbleMenuView = {
     showLinkInput: () => void
     closeLinkInput: () => void
     applyLink: (href: string) => void
     removeLink: () => void
+    getView: () => EditorView
+    forceHide: () => void
 }
 
 type Command = (state: EditorView['state'], dispatch?: EditorView['dispatch']) => boolean
 
 // =============================================================================
+// TEXT WRAP ICONS
+// =============================================================================
+
+const wrapNoneIcon = '<svg fill="none" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="6" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="1.5"/></svg>'
+const wrapLeftIcon = '<svg fill="none" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="6" width="6" height="8" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="11" y1="6" x2="17" y2="6" stroke="currentColor" stroke-width="1.5"/><line x1="11" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="11" y1="14" x2="17" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="17" x2="17" y2="17" stroke="currentColor" stroke-width="1.5"/></svg>'
+const wrapRightIcon = '<svg fill="none" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg"><rect x="11" y="6" width="6" height="8" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="3" y1="6" x2="9" y2="6" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="10" x2="9" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="14" x2="9" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="17" x2="17" y2="17" stroke="currentColor" stroke-width="1.5"/></svg>'
+
+// =============================================================================
 // MENU CONFIGURATION
 // =============================================================================
-// Edit this array to add/remove/reorder menu items.
-// Each item is either a button, separator, or dropdown.
-// Icon sizes are normalized here to ensure visual consistency.
 
-const MENU_ITEMS = [
+type MenuItemBase = {
+    context: SelectionContext[]  // Which contexts this item appears in
+}
+
+type SeparatorItem = MenuItemBase & { type: 'separator' }
+
+type DropdownItem = MenuItemBase & {
+    type: 'dropdown'
+    key: string
+    defaultIcon: string
+    options: Array<{ icon: string; node: string; attrs?: Record<string, unknown> }>
+}
+
+type MarkItem = MenuItemBase & {
+    type: 'mark'
+    key: string
+    mark: string
+    icon: string
+    title: string
+    iconSize: number
+    action?: 'showLinkInput'
+}
+
+type BlockItem = MenuItemBase & {
+    type: 'block'
+    key: string
+    node: string
+    icon: string
+    title: string
+    iconSize: number
+}
+
+type BlockWrapItem = MenuItemBase & {
+    type: 'blockWrap'
+    key: string
+    node: string
+    icon: string
+    title: string
+    iconSize: number
+}
+
+type ImageAlignmentItem = MenuItemBase & {
+    type: 'imageAlignment'
+    key: string
+    alignment: 'left' | 'center' | 'right'
+    icon: string
+    title: string
+    iconSize: number
+}
+
+type ImageWrapItem = MenuItemBase & {
+    type: 'imageWrap'
+    key: string
+    wrap: 'none' | 'left' | 'right'
+    icon: string
+    title: string
+    iconSize: number
+}
+
+type ImageActionItem = MenuItemBase & {
+    type: 'imageAction'
+    key: string
+    action: 'delete' | 'blockquote'
+    icon: string
+    title: string
+    iconSize: number
+}
+
+type MenuItem = SeparatorItem | DropdownItem | MarkItem | BlockItem | BlockWrapItem | ImageAlignmentItem | ImageWrapItem | ImageActionItem
+
+const MENU_ITEMS: MenuItem[] = [
+    // ==========================================================================
+    // TEXT SELECTION ITEMS
+    // ==========================================================================
+
     // Text type dropdown
     {
-        type: 'dropdown' as const,
+        type: 'dropdown',
         key: 'textType',
         defaultIcon: paragraphIcon,
+        context: ['text'],
         options: [
             { icon: paragraphIcon, node: 'paragraph' },
             { icon: heading1Icon, node: 'heading', attrs: { level: 1 } },
@@ -49,32 +162,47 @@ const MENU_ITEMS = [
         ],
     },
 
-    { type: 'separator' as const },
+    { type: 'separator', context: ['text'] },
 
     // Mark buttons (inline formatting)
-    { type: 'mark' as const, key: 'bold', mark: 'strong', icon: boldIcon, title: 'Bold (Ctrl+B)', iconSize: 14 },
-    { type: 'mark' as const, key: 'italic', mark: 'em', icon: italicIcon, title: 'Italic (Ctrl+I)', iconSize: 13 },
-    { type: 'mark' as const, key: 'strikethrough', mark: 'strikethrough', icon: strikethroughIcon, title: 'Strikethrough', iconSize: 15 },
-    { type: 'mark' as const, key: 'link', mark: 'link', icon: linkIcon, title: 'Link', iconSize: 15, action: 'showLinkInput' as const },
-    { type: 'mark' as const, key: 'inlineCode', mark: 'code', icon: inlineCodeIcon, title: 'Inline Code', iconSize: 16 },
+    { type: 'mark', key: 'bold', mark: 'strong', icon: boldIcon, title: 'Bold (Ctrl+B)', iconSize: 14, context: ['text'] },
+    { type: 'mark', key: 'italic', mark: 'em', icon: italicIcon, title: 'Italic (Ctrl+I)', iconSize: 13, context: ['text'] },
+    { type: 'mark', key: 'strikethrough', mark: 'strikethrough', icon: strikethroughIcon, title: 'Strikethrough', iconSize: 15, context: ['text'] },
+    { type: 'mark', key: 'link', mark: 'link', icon: linkIcon, title: 'Link', iconSize: 15, action: 'showLinkInput', context: ['text'] },
+    { type: 'mark', key: 'inlineCode', mark: 'code', icon: inlineCodeIcon, title: 'Inline Code', iconSize: 16, context: ['text'] },
 
-    { type: 'separator' as const },
+    { type: 'separator', context: ['text'] },
 
     // Block buttons
-    { type: 'block' as const, key: 'codeBlock', node: 'code_block', icon: codeBlockIcon, title: 'Code Block', iconSize: 17 },
-    { type: 'blockWrap' as const, key: 'blockquote', node: 'blockquote', icon: blockquoteIcon, title: 'Blockquote', iconSize: 17 },
+    { type: 'block', key: 'codeBlock', node: 'code_block', icon: codeBlockIcon, title: 'Code Block', iconSize: 17, context: ['text'] },
+    { type: 'blockWrap', key: 'blockquote', node: 'blockquote', icon: blockquoteIcon, title: 'Blockquote', iconSize: 17, context: ['text'] },
+
+    // ==========================================================================
+    // IMAGE SELECTION ITEMS
+    // ==========================================================================
+
+    // Alignment buttons
+    { type: 'imageAlignment', key: 'alignLeft', alignment: 'left', icon: alignLeftIcon, title: 'Align left', iconSize: 16, context: ['image'] },
+    { type: 'imageAlignment', key: 'alignCenter', alignment: 'center', icon: alignCenterIcon, title: 'Align center', iconSize: 16, context: ['image'] },
+    { type: 'imageAlignment', key: 'alignRight', alignment: 'right', icon: alignRightIcon, title: 'Align right', iconSize: 16, context: ['image'] },
+
+    { type: 'separator', context: ['image'] },
+
+    // Text wrap buttons
+    { type: 'imageWrap', key: 'wrapNone', wrap: 'none', icon: wrapNoneIcon, title: 'No text wrap', iconSize: 16, context: ['image'] },
+    { type: 'imageWrap', key: 'wrapLeft', wrap: 'left', icon: wrapLeftIcon, title: 'Wrap text right', iconSize: 16, context: ['image'] },
+    { type: 'imageWrap', key: 'wrapRight', wrap: 'right', icon: wrapRightIcon, title: 'Wrap text left', iconSize: 16, context: ['image'] },
+
+    { type: 'separator', context: ['image'] },
+
+    // Image actions
+    { type: 'imageAction', key: 'imageBlockquote', action: 'blockquote', icon: blockquoteIcon, title: 'Wrap in blockquote', iconSize: 17, context: ['image'] },
+    { type: 'imageAction', key: 'imageDelete', action: 'delete', icon: trashBinIcon, title: 'Delete image', iconSize: 16, context: ['image'] },
 ]
 
 // =============================================================================
-// IMPLEMENTATION (no need to edit below unless adding new item types)
+// HELPER FUNCTIONS
 // =============================================================================
-
-type MenuItem =
-    | { type: 'separator' }
-    | { type: 'dropdown'; key: string; defaultIcon: string; options: Array<{ icon: string; node: string; attrs?: Record<string, unknown> }> }
-    | { type: 'mark'; key: string; mark: string; icon: string; title: string; iconSize: number; action?: 'showLinkInput' }
-    | { type: 'block'; key: string; node: string; icon: string; title: string; iconSize: number }
-    | { type: 'blockWrap'; key: string; node: string; icon: string; title: string; iconSize: number }
 
 function getMarkCommand(schema: Schema, markName: string): Command | null {
     const markType = schema.marks[markName]
@@ -90,6 +218,17 @@ function getBlockWrapCommand(schema: Schema, nodeName: string): Command | null {
     const nodeType = schema.nodes[nodeName]
     return nodeType ? (state, dispatch) => wrapIn(nodeType)(state, dispatch) : null
 }
+
+function getSelectedImageNode(view: EditorView): { pos: number; node: ProseMirrorNode } | null {
+    const { selection } = view.state
+    if (!(selection instanceof NodeSelection)) return null
+    if (selection.node.type.name !== 'image') return null
+    return { pos: selection.from, node: selection.node }
+}
+
+// =============================================================================
+// BUTTON CREATORS
+// =============================================================================
 
 function createButton(
     item: { key: string; icon: string; title: string; iconSize: number; action?: 'showLinkInput' },
@@ -107,7 +246,6 @@ function createButton(
         innerHTML: item.icon,
     })
 
-    // Apply icon size normalization inline
     const svg = button.querySelector('svg')
     if (svg) {
         svg.style.width = `${item.iconSize}px`
@@ -140,7 +278,7 @@ function createSeparator(): HTMLElement {
 }
 
 function createDropdown(
-    item: { key: string; defaultIcon: string; options: Array<{ icon: string; node: string; attrs?: Record<string, unknown> }> },
+    item: DropdownItem,
     view: EditorView
 ): { element: HTMLElement; update: () => void } {
     const { schema } = view.state
@@ -219,7 +357,6 @@ function createDropdown(
 
         labelSpan.innerHTML = currentIcon
 
-        // Update active state on dropdown items
         for (const { btn, node, attrs } of optionButtons) {
             let isActive = parentNode.type.name === node
             if (isActive && attrs) {
@@ -232,6 +369,135 @@ function createDropdown(
     }
 
     return { element: wrapper, update }
+}
+
+function createImageAlignmentButton(
+    item: ImageAlignmentItem,
+    bubbleMenuView: BubbleMenuView
+): HTMLElement {
+    const button = createEl('button', {
+        className: 'bubble-menu-button',
+        type: 'button',
+        title: item.title,
+        innerHTML: item.icon,
+        data: { imageAlignment: item.alignment },
+    })
+
+    const svg = button.querySelector('svg')
+    if (svg) {
+        svg.style.width = `${item.iconSize}px`
+        svg.style.height = `${item.iconSize}px`
+    }
+
+    button.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const view = bubbleMenuView.getView()
+        const imageInfo = getSelectedImageNode(view)
+        if (!imageInfo) return
+
+        const { pos, node } = imageInfo
+        const tr = view.state.tr.setNodeMarkup(pos, null, {
+            ...node.attrs,
+            alignment: item.alignment,
+        })
+        view.dispatch(tr)
+        view.focus()
+    })
+
+    return button
+}
+
+function createImageWrapButton(
+    item: ImageWrapItem,
+    bubbleMenuView: BubbleMenuView
+): HTMLElement {
+    const button = createEl('button', {
+        className: 'bubble-menu-button',
+        type: 'button',
+        title: item.title,
+        innerHTML: item.icon,
+        data: { imageWrap: item.wrap },
+    })
+
+    const svg = button.querySelector('svg')
+    if (svg) {
+        svg.style.width = `${item.iconSize}px`
+        svg.style.height = `${item.iconSize}px`
+    }
+
+    button.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const view = bubbleMenuView.getView()
+        const imageInfo = getSelectedImageNode(view)
+        if (!imageInfo) return
+
+        const { pos, node } = imageInfo
+        const tr = view.state.tr.setNodeMarkup(pos, null, {
+            ...node.attrs,
+            textWrap: item.wrap,
+        })
+        view.dispatch(tr)
+        view.focus()
+    })
+
+    return button
+}
+
+function createImageActionButton(
+    item: ImageActionItem,
+    bubbleMenuView: BubbleMenuView
+): HTMLElement {
+    const button = createEl('button', {
+        className: 'bubble-menu-button',
+        type: 'button',
+        title: item.title,
+        innerHTML: item.icon,
+        data: { imageAction: item.action },
+    })
+
+    const svg = button.querySelector('svg')
+    if (svg) {
+        svg.style.width = `${item.iconSize}px`
+        svg.style.height = `${item.iconSize}px`
+    }
+
+    button.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const view = bubbleMenuView.getView()
+        const imageInfo = getSelectedImageNode(view)
+        if (!imageInfo) return
+
+        const { pos, node } = imageInfo
+
+        switch (item.action) {
+            case 'delete': {
+                const tr = view.state.tr.delete(pos, pos + node.nodeSize)
+                view.dispatch(tr)
+                view.focus()
+                bubbleMenuView.forceHide()
+                break
+            }
+            case 'blockquote': {
+                const { schema } = view.state
+                const blockquoteType = schema.nodes.blockquote
+                if (!blockquoteType) return
+
+                const blockquote = blockquoteType.create(null, node)
+                const tr = view.state.tr.replaceWith(pos, pos + node.nodeSize, blockquote)
+                view.dispatch(tr)
+                view.focus()
+                break
+            }
+        }
+    })
+
+    return button
 }
 
 function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView): HTMLElement {
@@ -279,49 +545,99 @@ function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView):
     return createEl('div', { className: 'bubble-menu-link-input' }, input, applyIcon, removeIcon)
 }
 
+// =============================================================================
+// MAIN BUILDER FUNCTION
+// =============================================================================
+
+export type MenuItemElement = {
+    element: HTMLElement
+    context: SelectionContext[]
+    update?: () => void
+}
+
 export function buildBubbleMenuItems(
     view: EditorView,
     bubbleMenuView: BubbleMenuView
-): { items: HTMLElement[]; linkInputPanel: HTMLElement; dropdownUpdaters: Array<() => void> } {
+): { items: MenuItemElement[]; linkInputPanel: HTMLElement } {
     const { schema } = view.state
-    const items: HTMLElement[] = []
-    const dropdownUpdaters: Array<() => void> = []
+    const items: MenuItemElement[] = []
 
-    for (const item of MENU_ITEMS as MenuItem[]) {
+    for (const item of MENU_ITEMS) {
         switch (item.type) {
             case 'separator':
-                items.push(createSeparator())
+                items.push({ element: createSeparator(), context: item.context })
                 break
 
             case 'dropdown': {
                 const { element, update } = createDropdown(item, view)
-                items.push(element)
-                dropdownUpdaters.push(update)
+                items.push({ element, context: item.context, update })
                 break
             }
 
             case 'mark': {
                 const cmd = getMarkCommand(schema, item.mark)
                 const btn = createButton(item, cmd, view, bubbleMenuView, item.mark)
-                if (btn) items.push(btn)
+                if (btn) items.push({ element: btn, context: item.context })
                 break
             }
 
             case 'block': {
                 const cmd = getBlockCommand(schema, item.node)
                 const btn = createButton(item, cmd, view, bubbleMenuView)
-                if (btn) items.push(btn)
+                if (btn) items.push({ element: btn, context: item.context })
                 break
             }
 
             case 'blockWrap': {
                 const cmd = getBlockWrapCommand(schema, item.node)
                 const btn = createButton(item, cmd, view, bubbleMenuView)
-                if (btn) items.push(btn)
+                if (btn) items.push({ element: btn, context: item.context })
+                break
+            }
+
+            case 'imageAlignment': {
+                const btn = createImageAlignmentButton(item, bubbleMenuView)
+                items.push({ element: btn, context: item.context })
+                break
+            }
+
+            case 'imageWrap': {
+                const btn = createImageWrapButton(item, bubbleMenuView)
+                items.push({ element: btn, context: item.context })
+                break
+            }
+
+            case 'imageAction': {
+                const btn = createImageActionButton(item, bubbleMenuView)
+                items.push({ element: btn, context: item.context })
                 break
             }
         }
     }
 
-    return { items, linkInputPanel: createLinkInputPanel(view, bubbleMenuView), dropdownUpdaters }
+    return { items, linkInputPanel: createLinkInputPanel(view, bubbleMenuView) }
+}
+
+export function updateImageButtonStates(items: MenuItemElement[], view: EditorView): void {
+    const imageInfo = getSelectedImageNode(view)
+    if (!imageInfo) return
+
+    const { node } = imageInfo
+    const alignment = node.attrs.alignment || 'left'
+    const textWrap = node.attrs.textWrap || 'none'
+
+    for (const item of items) {
+        if (!item.context.includes('image')) continue
+
+        const el = item.element
+        const alignmentAttr = el.dataset?.imageAlignment
+        const wrapAttr = el.dataset?.imageWrap
+
+        if (alignmentAttr) {
+            el.classList.toggle('is-active', alignmentAttr === alignment)
+        }
+        if (wrapAttr) {
+            el.classList.toggle('is-active', wrapAttr === textWrap)
+        }
+    }
 }

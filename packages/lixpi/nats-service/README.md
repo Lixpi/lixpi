@@ -7,6 +7,7 @@ Provides a unified API for NATS messaging with support for:
 - Publish/subscribe patterns
 - Request/reply patterns
 - Queue groups for load balancing
+- JetStream Object Store for file/blob storage
 - Optional self-issued JWT authentication via NKeys
 
 ## ⚠️ CRITICAL: Keeping TypeScript and Python Versions in Sync
@@ -148,6 +149,44 @@ await natsService.reply(
 await natsService.disconnect()
 ```
 
+### JetStream Object Store (TypeScript)
+
+```typescript
+// Create an Object Store bucket
+const os = await natsService.createObjectStore('my-bucket', {
+    description: 'My object store',
+    maxBytes: 1024 * 1024 * 100  // 100MB
+})
+
+// Or open an existing bucket
+const os = await natsService.getObjectStore('my-bucket')
+
+// Store an object (bytes)
+const data = new TextEncoder().encode('Hello World')
+await natsService.putObject('my-bucket', 'hello.txt', data)
+
+// Store from a ReadableStream
+await natsService.putObjectFromReadable('my-bucket', 'large-file.bin', readableStream)
+
+// Retrieve an object as bytes
+const content = await natsService.getObject('my-bucket', 'hello.txt')
+
+// Retrieve as a stream
+const stream = await natsService.getObjectStream('my-bucket', 'large-file.bin')
+
+// Get object metadata
+const info = await natsService.getObjectInfo('my-bucket', 'hello.txt')
+
+// List all objects
+const objects = await natsService.listObjects('my-bucket')
+
+// Delete an object
+await natsService.deleteObject('my-bucket', 'hello.txt')
+
+// Delete a bucket
+await natsService.deleteObjectStore('my-bucket')
+```
+
 ### Python
 
 ```python
@@ -200,6 +239,47 @@ await nats_service.reply(
 
 # Disconnect
 await nats_service.disconnect()
+```
+
+### JetStream Object Store (Python)
+
+```python
+# Create an Object Store bucket
+from nats.js.api import ObjectStoreConfig
+
+os = await nats_service.create_object_store("my-bucket", ObjectStoreConfig(
+    description="My object store",
+    max_bytes=1024 * 1024 * 100  # 100MB
+))
+
+# Or open an existing bucket
+os = await nats_service.get_object_store("my-bucket")
+
+# Store an object (bytes)
+await nats_service.put_object("my-bucket", "hello.txt", b"Hello World")
+
+# Store from a file stream
+with open("large-file.bin", "rb") as f:
+    await nats_service.put_object_from_readable("my-bucket", "large-file.bin", f)
+
+# Retrieve an object as bytes
+content = await nats_service.get_object("my-bucket", "hello.txt")
+
+# Retrieve by streaming to a file
+with open("output.bin", "wb") as f:
+    await nats_service.get_object_stream("my-bucket", "large-file.bin", f)
+
+# Get object metadata
+info = await nats_service.get_object_info("my-bucket", "hello.txt")
+
+# List all objects
+objects = await nats_service.list_objects("my-bucket")
+
+# Delete an object
+await nats_service.delete_object("my-bucket", "hello.txt")
+
+# Delete a bucket
+await nats_service.delete_object_store("my-bucket")
 ```
 
 ## Self-Issued JWT Authentication
@@ -287,6 +367,13 @@ config = NatsServiceConfig(
 - **Subscribe**: Receive messages on a subject
 - **Request/Reply**: Synchronous request-response pattern
 - **Queue Groups**: Load balancing across multiple subscribers
+
+### JetStream Object Store
+
+- **Bucket Management**: Create, open, delete Object Store buckets
+- **Object Operations**: Put, get, delete objects
+- **Streaming**: Stream large objects without loading into memory
+- **Metadata**: Get object info and list objects in buckets
 
 ### Payload Types
 

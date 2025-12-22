@@ -76,23 +76,69 @@ export const nodes = {
   /// An inline image (`<img>`) node. Supports `src`,
   /// `alt`, and `href` attributes. The latter two default to the empty
   /// string.
+  /// `fileId` and `documentId` are used for images stored in NATS Object Store.
+  /// `width` is stored as percentage string (e.g., "50%") for responsive behavior.
+  /// `alignment` controls horizontal positioning: 'left', 'center', 'right'.
+  /// `textWrap` controls text flow: 'none', 'left', 'right'.
   image: {
-    inline: true,
+    inline: false,
     attrs: {
       src: {},
       alt: {default: null},
-      title: {default: null}
+      title: {default: null},
+      fileId: {default: null},
+      documentId: {default: null},
+      width: {default: null},
+      alignment: {default: 'left'},
+      textWrap: {default: 'none'}
     },
-    group: "inline",
+    group: "block",
     draggable: true,
-    parseDOM: [{tag: "img[src]", getAttrs(dom: HTMLElement) {
+    parseDOM: [{tag: "figure.pm-image-wrapper", getAttrs(dom: HTMLElement) {
+      const img = dom.querySelector('img')
+      if (!img) return false
+      return {
+        src: img.getAttribute("src"),
+        title: img.getAttribute("title"),
+        alt: img.getAttribute("alt"),
+        fileId: img.getAttribute("data-file-id"),
+        documentId: img.getAttribute("data-document-id"),
+        width: dom.getAttribute("data-width"),
+        alignment: dom.getAttribute("data-alignment") || 'center',
+        textWrap: dom.getAttribute("data-text-wrap") || 'none'
+      }
+    }}, {tag: "img[src]", getAttrs(dom: HTMLElement) {
       return {
         src: dom.getAttribute("src"),
         title: dom.getAttribute("title"),
-        alt: dom.getAttribute("alt")
+        alt: dom.getAttribute("alt"),
+        fileId: dom.getAttribute("data-file-id"),
+        documentId: dom.getAttribute("data-document-id"),
+        width: null,
+        alignment: 'center',
+        textWrap: 'none'
       }
     }}],
-    toDOM(node) { let {src, alt, title} = node.attrs; return ["img", {src, alt, title}] }
+    toDOM(node) {
+      const {src, alt, title, fileId, documentId, width, alignment, textWrap} = node.attrs
+      const imgAttrs: Record<string, string> = {src}
+      if (alt) imgAttrs.alt = alt
+      if (title) imgAttrs.title = title
+      if (fileId) imgAttrs['data-file-id'] = fileId
+      if (documentId) imgAttrs['data-document-id'] = documentId
+
+      const figureAttrs: Record<string, string> = {
+        class: `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`
+      }
+      if (width) {
+        figureAttrs['data-width'] = width
+        figureAttrs.style = `width: ${width}`
+      }
+      figureAttrs['data-alignment'] = alignment
+      figureAttrs['data-text-wrap'] = textWrap
+
+      return ["figure", figureAttrs, ["img", imgAttrs]]
+    }
   } as NodeSpec,
 
   /// A hard line break, represented in the DOM as `<br>`.

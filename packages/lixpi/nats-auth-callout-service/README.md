@@ -1,80 +1,79 @@
 # NATS Auth Callout Service
 
-Centralized authentication and authorization for NATS using the auth_callout mechanism. This service handles all authentication requests for the NATS cluster, supporting both user authentication via Auth0 and service-to-service authentication using self-issued JWTs.
+Centralized authentication and authorization for NATS using the auth_callout mechanism. Validates all NATS connection attempts and issues short-lived user JWTs with appropriate permissions.
 
 ## Overview
 
-NATS auth_callout delegates authentication decisions to an external service (this one). Instead of hardcoding users and permissions in NATS server config, every connection attempt is verified by calling this service. It decides whether to allow or deny the connection and what permissions to grant.
+NATS auth_callout delegates authentication decisions to this service. Every connection attempt is intercepted by NATS and forwarded here for verification.
 
-The service is completely generic - it doesn't know anything about specific services. All service configurations are passed during initialization, making it trivial to add new services without touching the auth code.
+```mermaid
+flowchart LR
+    Client -->|token| NATS
+    NATS -->|auth request| AC["Auth Callout"]
+    AC -->|verify| AS["@lixpi/auth-service"]
+    AC -->|signed JWT| NATS
+    NATS -->|connected| Client
+```
 
-## How It Works
-
-When a client tries to connect to NATS:
-1. NATS server intercepts the connection and sends auth request to `$SYS.REQ.USER.AUTH`
-2. This service receives the encrypted auth request
-3. Decrypts it and extracts the client's token
-4. Verifies the token (either Auth0 JWT or self-issued service JWT)
-5. Returns a signed user JWT with appropriate permissions
-6. NATS server allows/denies connection based on the response
+**Steps:** Decrypt request → Verify token via `@lixpi/auth-service` → Build permissions → Sign user JWT → Return to NATS
 
 ## Authentication Modes
 
 ### Auth0 (Regular Users)
 
-Used by web UI and API endpoints. Users authenticate with Auth0 and get an access token. The auth callout verifies it against Auth0's JWKS endpoint.
+Web UI and API clients authenticate via Auth0 OAuth2 flow. The auth callout verifies tokens against Auth0's JWKS endpoint using `@lixpi/auth-service`.
 
+- RS256 signature verification
 - Token expiration enforced
-- Full audit trail via Auth0
-- User-specific permissions via `{userId}` templating in subscription configs
+- Permissions derived from subscription configs
+- User-specific templating via `{userId}`
 
-### Self-Issued JWTs (Internal Services)
+### NKey JWTs (Internal Services)
 
-Used for machine-to-machine communication (like `llm-api`). Services sign their own JWTs using NKeys (Ed25519 keypairs).
+Services like `llm-api` authenticate using self-signed JWTs with Ed25519 NKey signatures.
 
-**Why not use Auth0 for services?**
-- Extra latency on every connection
-- Complexity of OAuth2 client credentials flow
-- External dependency for internal communication
-- Additional Auth0 API costs
-
-**Why this is better:**
-- Cryptographic signatures (Ed25519) instead of shared passwords
-- Short-lived tokens (1 hour) that auto-rotate on reconnect
-- Zero hardcoded logic - all service configs passed at init
-- No password management headaches
+**Why NKeys instead of Auth0 for services?**
+- Zero external dependency for internal communication
+- Cryptographic Ed25519 signatures (more secure than passwords)
+- Short-lived tokens (1 hour) with auto-rotation
+- No Auth0 API costs or latency
 
 ## Usage
 
-### Basic Setup
+### Initialization
 
 ```typescript
 import { startNatsAuthCalloutService } from '@lixpi/nats-auth-callout-service'
 
 await startNatsAuthCalloutService({
     natsService: natsServiceInstance,
-    subscriptions: [...], // Your NATS subscriptions
+    subscriptions: [...],  // Your NATS subscription configs
     nKeyIssuerSeed: process.env.NATS_AUTH_NKEY_ISSUER_SEED,
     xKeyIssuerSeed: process.env.NATS_AUTH_XKEY_ISSUER_SEED,
     jwtAudience: process.env.AUTH0_API_IDENTIFIER,
-    jwtIssuer: `${process.env.AUTH0_DOMAIN}/`,
-    jwksUri: `${process.env.AUTH0_DOMAIN}/.well-known/jwks.json`,
+    jwtIssuer: `https://${process.env.AUTH0_DOMAIN}/`,
+    jwksUri: `https://${process.env.AUTH0_DOMAIN}/.well-known/jwks.json`,
     natsAuthAccount: 'AUTH',
     serviceAuthConfigs: [
-        // Service configurations go here
+        {
+            publicKey: process.env.NATS_LLM_SERVICE_NKEY_PUBLIC,
+            userId: 'svc:llm-api',
+            permissions: {
+                pub: { allow: ['ai.interaction.chat.receiveMessage.*'] },
+                sub: { allow: ['ai.interaction.chat.process'] }
+            }
+        }
     ]
 })
 ```
 
-### Adding a Service
-
-To allow a new service to authenticate:
+### Adding a New Service
 
 1. **Generate NKey pair:**
    ```bash
-   nsc generate nkey --account
+   nsc generate nkey --user
    ```
-   This gives you a seed (SU...) and public key (UA...).
+   Output: seed (`SU...`) and public key (`UA...`)
 
 2. **Add to environment:**
    ```bash
@@ -82,81 +81,82 @@ To allow a new service to authenticate:
    NATS_MY_SERVICE_NKEY_PUBLIC=UA...
    ```
 
-3. **Configure auth callout:**
+3. **Register in auth callout:**
    ```typescript
    serviceAuthConfigs: [
        {
            publicKey: env.NATS_MY_SERVICE_NKEY_PUBLIC,
            userId: 'svc:my-service',
            permissions: {
-               pub: { allow: ["my.service.responses"] },
-               sub: { allow: ["my.service.requests"] }
+               pub: { allow: ['my.service.responses'] },
+               sub: { allow: ['my.service.requests'] }
            }
        }
    ]
    ```
 
-4. **Service generates JWT:**
-   The service signs a JWT with its NKey seed:
+4. **Service creates JWT:**
    ```python
-   # Python example (see llm-api for full implementation)
+   # Python example (see llm-api for reference)
    jwt_payload = {
        "sub": "svc:my-service",
-       "iss": public_key,
+       "iss": public_key,  # Must match registered public key
        "iat": now,
        "exp": now + 3600
    }
-   # Sign with NKey and send in NATS connect options
+   # Sign with NKey seed, send in NATS connect options
    ```
 
-That's it. No changes to the auth callout code needed.
+## Architecture
+
+**Key design principle:** The auth callout is generic. It knows nothing about specific services—all service configurations are passed at initialization. Adding a service requires zero code changes to auth callout.
+
+## Permission Resolution
+
+For **regular users**, permissions come from subscription definitions:
+```typescript
+{
+    subject: 'document.get',
+    permissions: {
+        pub: { allow: ['document.get'] },
+        sub: { allow: ['document.get'] }
+    }
+}
+```
+
+The `{userId}` placeholder is replaced with the authenticated user's ID.
+
+For **services**, permissions are defined in `serviceAuthConfigs`:
+```typescript
+{
+    publicKey: 'UA...',
+    userId: 'svc:llm-api',
+    permissions: {
+        pub: { allow: ['ai.interaction.chat.receiveMessage.*'] },
+        sub: { allow: ['ai.interaction.chat.process'] }
+    }
+}
+```
 
 ## Security
 
 ### NKey Management
 
-**Seeds are secrets** - they're like private keys. Store them in:
-- Environment variables for local dev
-- AWS Secrets Manager for production
-- **Never** commit to git
-
-**Public keys are safe to share** - they're distributed to any service that needs to verify signatures.
-
-**Rotation**: Change NKeys if compromised or every 90 days. Update both seed and public key in all relevant places.
-
-### Permissions
-
-Each service gets minimal permissions for its specific use case. The `svc:` prefix clearly identifies service accounts vs real users.
-
-Example for llm-api:
-- Can publish to `ai.interaction.chat.error.*` and `ai.interaction.chat.receiveMessage.*`
-- Can subscribe to `ai.interaction.chat.process` and `ai.interaction.chat.stop.*`
-- **Cannot** use `_INBOX.*` (no request-reply)
-- **Cannot** publish to system subjects
-- **Cannot** access admin operations
+- **Seeds are secrets** — store in env vars or secrets manager, never commit
+- **Public keys are safe** — distributed to services that verify signatures
+- **Rotation**: Update both seed and public key every 90 days or on compromise
 
 ### Monitoring
 
 Watch for:
 - Failed auth attempts from `svc:*` identities
-- JWT signature verification failures (possible key compromise)
+- JWT signature verification failures
 - Permission violations
-- Connections from unexpected IPs
+- Unexpected connection sources
 
-Set alerts for >5 failed auths or >10 permission violations per minute.
+## Dependencies
 
-## Architecture
-
-**Generic by design** - the auth callout has zero knowledge of specific services. All policies are defined where services are configured (in `server.ts`), not in the auth code.
-
-This means:
-- Adding a service: 4 lines of config
-- No need to modify/redeploy auth callout
-- Clear separation: auth callout verifies signatures, caller defines policies
-- Easy to audit (all service permissions in one place)
-
-## Reference
-
-See `services/llm-api/src/nats_client/client.py` for a complete example of a service implementing self-issued JWT authentication.
-
-For NATS server configuration, see `services/nats/nats-server.conf` - look for the `auth_callout` section.
+- `@lixpi/auth-service` — JWT and NKey verification
+- `@lixpi/nats-service` — NATS connection management
+- `@nats-io/jwt` — NATS JWT encoding
+- `@nats-io/nkeys` — Ed25519 key operations

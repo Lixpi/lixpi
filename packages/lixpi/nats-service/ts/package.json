@@ -18,9 +18,11 @@
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
+        "@nats-io/jetstream": "*",
         "@nats-io/nats-core": "*",
-        "@nats-io/transport-node": "*",
         "@nats-io/nkeys": "*",
+        "@nats-io/obj": "*",
+        "@nats-io/transport-node": "*",
         "chalk": "*"
     }
 }

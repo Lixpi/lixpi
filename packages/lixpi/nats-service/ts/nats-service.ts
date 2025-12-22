@@ -4,6 +4,8 @@ import c from 'chalk'
 import { wsconnect } from '@nats-io/nats-core'
 import { connect } from "@nats-io/transport-node"
 import { fromSeed } from '@nats-io/nkeys'
+import { jetstream } from '@nats-io/jetstream'
+import { Objm } from '@nats-io/obj'
 
 import type {
     NatsConnection,
@@ -11,6 +13,8 @@ import type {
     Subscription,
     ConnectionOptions
 } from '@nats-io/nats-core'
+import type { JetStreamClient } from '@nats-io/jetstream'
+import type { ObjectStore, ObjectStoreOptions, ObjectInfo } from '@nats-io/obj'
 
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
@@ -136,6 +140,8 @@ export function generateSelfIssuedJWT(nkeySeed: string, userId: string, expiryHo
 export default class NatsService {
     private static instance: NatsService
     private nc: NatsConnection | null = null
+    private js: JetStreamClient | null = null
+    private objm: Objm | null = null
     private config: NatsServiceConfig
     private isMonitoring = false
     private isConnecting = false
@@ -488,5 +494,125 @@ export default class NatsService {
         })()
 
         return subscription
+    }
+
+    // ===========================================
+    // JetStream Object Store Methods
+    // ===========================================
+
+    private getJetStream(): JetStreamClient {
+        if (!this.nc) {
+            throw new Error('NATS client is not connected.')
+        }
+        if (!this.js) {
+            this.js = jetstream(this.nc)
+        }
+        return this.js
+    }
+
+    private getObjectStoreManager(): Objm {
+        if (!this.objm) {
+            this.objm = new Objm(this.getJetStream())
+        }
+        return this.objm
+    }
+
+    async createObjectStore(bucketName: string, options?: Partial<ObjectStoreOptions>): Promise<ObjectStore> {
+        const objm = this.getObjectStoreManager()
+        const os = await objm.create(bucketName, options)
+        info(`Object Store bucket created: ${bucketName}`)
+        return os
+    }
+
+    async getObjectStore(bucketName: string): Promise<ObjectStore> {
+        const objm = this.getObjectStoreManager()
+        return objm.open(bucketName)
+    }
+
+    async deleteObjectStore(bucketName: string): Promise<boolean> {
+        const objm = this.getObjectStoreManager()
+        const result = await objm.destroy(bucketName)
+        info(`Object Store bucket deleted: ${bucketName}`)
+        return result
+    }
+
+    // Helper to convert Uint8Array to ReadableStream (required by @nats-io/obj)
+    private readableStreamFrom(data: Uint8Array): ReadableStream<Uint8Array> {
+        return new ReadableStream<Uint8Array>({
+            pull(controller) {
+                controller.enqueue(data)
+                controller.close()
+            }
+        })
+    }
+
+    async putObject(bucketName: string, name: string, data: Uint8Array, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
+        const os = await this.getObjectStore(bucketName)
+        const stream = this.readableStreamFrom(data)
+        const result = await os.put({ name, ...meta }, stream)
+        info(`Object stored: ${bucketName}/${name} (${data.length} bytes)`)
+        return result
+    }
+
+    async putObjectFromReadable(bucketName: string, name: string, readable: ReadableStream<Uint8Array>, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
+        const os = await this.getObjectStore(bucketName)
+        const result = await os.put({ name, ...meta }, readable)
+        info(`Object stored from stream: ${bucketName}/${name}`)
+        return result
+    }
+
+    async getObject(bucketName: string, name: string): Promise<Uint8Array | null> {
+        const os = await this.getObjectStore(bucketName)
+        const result = await os.get(name)
+        if (!result) {
+            return null
+        }
+        // Read the data from the result
+        const chunks: Uint8Array[] = []
+        const reader = result.data.getReader()
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (value) chunks.push(value)
+        }
+        // Combine chunks
+        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0)
+        const combined = new Uint8Array(totalLength)
+        let offset = 0
+        for (const chunk of chunks) {
+            combined.set(chunk, offset)
+            offset += chunk.length
+        }
+        return combined
+    }
+
+    async getObjectStream(bucketName: string, name: string): Promise<ReadableStream<Uint8Array> | null> {
+        const os = await this.getObjectStore(bucketName)
+        const result = await os.get(name)
+        if (!result) {
+            return null
+        }
+        return result.data
+    }
+
+    async getObjectInfo(bucketName: string, name: string): Promise<ObjectInfo | null> {
+        const os = await this.getObjectStore(bucketName)
+        return os.info(name)
+    }
+
+    async deleteObject(bucketName: string, name: string): Promise<void> {
+        const os = await this.getObjectStore(bucketName)
+        await os.delete(name)
+        info(`Object deleted: ${bucketName}/${name}`)
+    }
+
+    async listObjects(bucketName: string): Promise<ObjectInfo[]> {
+        const os = await this.getObjectStore(bucketName)
+        const objects: ObjectInfo[] = []
+        const list = await os.list()
+        for await (const obj of list) {
+            objects.push(obj)
+        }
+        return objects
     }
 }

@@ -1,0 +1,208 @@
+@use "sass:color";
+@import '../../../../sass/_transitions.scss';
+@import '../../../../sass/_variables.scss';
+@import '../../../../sass/themes/_minimalist-chic.scss';
+
+// Selection highlight color (same as bubble menu active state)
+$imageSelectionColor: rgba(85, 150, 124, 1);
+
+// =============================================================================
+// IMAGE WRAPPER (FIGURE)
+// =============================================================================
+
+.pm-image-wrapper {
+    display: block;
+    position: relative;
+    margin: 1rem 0;
+    max-width: 100%;
+
+    // Default centered alignment
+    margin-left: auto;
+    margin-right: auto;
+
+    img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+    }
+
+    // Selection state (when editor focused or menu is open)
+    &.ProseMirror-selectednode,
+    &.pm-image-menu-active {
+        .pm-image-resize-handle {
+            opacity: 1;
+        }
+    }
+
+    // Resizing state
+    &.is-resizing {
+        user-select: none;
+
+        img {
+            pointer-events: none;
+        }
+    }
+}
+
+// =============================================================================
+// ALIGNMENT
+// =============================================================================
+
+.pm-image-align-left {
+    margin-left: 0;
+    margin-right: auto;
+}
+
+.pm-image-align-center {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.pm-image-align-right {
+    margin-left: auto;
+    margin-right: 0;
+}
+
+// =============================================================================
+// TEXT WRAP (using shape-outside for modern text flow)
+// =============================================================================
+
+.pm-image-wrap-none {
+    // No wrapping - default block behavior
+    clear: both;
+}
+
+.pm-image-wrap-left {
+    float: left;
+    margin-right: 1.5rem;
+    margin-bottom: 0.5rem;
+    margin-left: 0;
+    clear: left;
+    position: relative;
+    z-index: 1;
+
+    // Use shape-outside for smoother text flow
+    shape-outside: margin-box;
+    shape-margin: 0.5rem;
+}
+
+.pm-image-wrap-right {
+    float: right;
+    margin-left: 1.5rem;
+    margin-bottom: 0.5rem;
+    margin-right: 0;
+    clear: right;
+    position: relative;
+    z-index: 1;
+
+    // Use shape-outside for smoother text flow
+    shape-outside: margin-box;
+    shape-margin: 0.5rem;
+}
+
+// Clear floats after wrapped images
+.ProseMirror {
+    &::after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+
+    // Clear float after non-wrapped block elements
+    > p:not(:first-child),
+    > h1, > h2, > h3, > h4, > h5, > h6,
+    > blockquote,
+    > pre,
+    > .pm-image-wrap-none {
+        clear: both;
+    }
+}
+
+// =============================================================================
+// RESIZE HANDLES
+// =============================================================================
+
+.pm-image-resize-handle {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.15s ease;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    svg {
+        width: 20px;
+        height: 20px;
+        fill: $steelBlue !important;
+        transition: transform 0.15s ease;
+    }
+
+    // Show on hover or when selected or during resize
+    .pm-image-wrapper:hover &,
+    .pm-image-wrapper.ProseMirror-selectednode &,
+    .pm-image-wrapper.pm-image-menu-active &,
+    .pm-image-wrapper.is-resizing & {
+        opacity: 1;
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: scale(1.2);
+    }
+}
+
+// Corner positions - outside image boundaries
+.pm-image-resize-top-left {
+    top: -6px;
+    left: -6px;
+    cursor: nwse-resize;
+
+    svg {
+        transform: rotate(180deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(180deg) scale(1.2);
+    }
+}
+
+.pm-image-resize-top-right {
+    top: -6px;
+    right: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(-90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(-90deg) scale(1.2);
+    }
+}
+
+.pm-image-resize-bottom-left {
+    bottom: -6px;
+    left: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(90deg) scale(1.2);
+    }
+}
+
+.pm-image-resize-bottom-right {
+    bottom: -6px;
+    right: -6px;
+    cursor: nwse-resize;
+}

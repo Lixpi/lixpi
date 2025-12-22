@@ -8,10 +8,23 @@ echo "Hostname: $(hostname)"
 echo "=== Environment Variables ==="
 env | grep -E "(AWS_|PUBLIC_|NATS_|ECS_)" | sort
 
-# Generate simple server name from hostname
+# Generate server name from hostname ONLY if NATS_SERVER_NAME is not already set
+# AWS (Pulumi): Sets NATS_SERVER_NAME_BASE, entrypoint generates unique name per container
+# Local (docker-compose): Sets NATS_SERVER_NAME explicitly, entrypoint respects it
 HOSTNAME=$(hostname)
-export NATS_SERVER_NAME="${NATS_SERVER_NAME_BASE:-Lixpi-NATS}-${HOSTNAME}"
-echo "Generated NATS_SERVER_NAME: $NATS_SERVER_NAME"
+if [ -z "$NATS_SERVER_NAME" ]; then
+    export NATS_SERVER_NAME="${NATS_SERVER_NAME_BASE:-Lixpi-NATS}-${HOSTNAME}"
+    echo "Generated NATS_SERVER_NAME: $NATS_SERVER_NAME"
+else
+    echo "Using pre-configured NATS_SERVER_NAME: $NATS_SERVER_NAME"
+fi
+
+# Generate server tags config file with unique server identifier for JetStream placement
+# The "server:<name>" tag is used by unique_tag: "server:" for replica distribution
+echo "Generating server tags configuration..."
+echo "server_tags: [\"server:${NATS_SERVER_NAME}\"]" > /opt/nats/server-tags.conf
+echo "Generated /opt/nats/server-tags.conf with content:"
+cat /opt/nats/server-tags.conf
 
 # Check if we're in ECS/Fargate by looking for metadata URI
 if [ -n "$ECS_CONTAINER_METADATA_URI_V4" ] || [ -n "$ECS_CONTAINER_METADATA_URI" ]; then
