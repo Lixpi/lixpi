@@ -2,25 +2,24 @@
 
 import { NATS_SUBJECTS, LoadingStatus } from '@lixpi/constants'
 
-const { DOCUMENT_SUBJECTS } = NATS_SUBJECTS
+const { DOCUMENT_SUBJECTS, WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
 import AuthService from './auth-service.ts'
-import RouterService from './router-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
-import { userStore } from '$src/stores/userStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 
 class DocumentService {
     constructor() {}
 
-	public async getDocument({ documentId }: { documentId: string }): Promise<void> {
+	public async getDocument({ workspaceId, documentId }: { workspaceId: string; documentId: string }): Promise<void> {
 		documentStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
 
 		try {
 			const document: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.GET_DOCUMENT, {
 				token: await AuthService.getTokenSilently(),
+				workspaceId,
 				documentId
 			})
 
@@ -38,160 +37,102 @@ class DocumentService {
 			documentStore.setMetaValues({ loadingStatus: LoadingStatus.error })
 			documentStore.setDataValues({ error: error })
 		}
-
 	}
 
 
-	public async getUserDocuments() {
+	public async getWorkspaceDocuments({ workspaceId }: { workspaceId: string }): Promise<void> {
         try {
 			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
 
-			const documents: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.GET_USER_DOCUMENTS, {
+			const documents: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.GET_WORKSPACE_DOCUMENTS, {
 				token: await AuthService.getTokenSilently(),
+				workspaceId
 			})
-			documentsStore.setDocuments(documents)
+			documentsStore.setDocuments(Array.isArray(documents) ? documents : [])
+			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 		} catch (error) {
-			console.error('Failed to load user documents:', error)
+			console.error('Failed to load workspace documents:', error)
 			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.error })
-			documentsStore.setDataValues({ error: error })
 		}
     }
 
 
-	async createDocument({ title, content }) {
+	public async createDocument({ workspaceId, title, content }: { workspaceId: string; title: string; content: any }): Promise<any> {
+		console.log('DocumentService.createDocument called with:', { workspaceId, title, content })
 		try {
 			const document: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.CREATE_DOCUMENT, {
 				token: await AuthService.getTokenSilently(),
+				workspaceId,
 				title,
 				content
 			})
+			console.log('DocumentService.createDocument response:', document)
 
 			if (document.error) {
+				console.error('Document creation error:', document.error)
 				documentStore.setMetaValues({ loadingStatus: LoadingStatus.error })
 				documentStore.setDataValues({ error: document.error })
-				return
+				return null
 			}
 
 			documentStore.setDataValues(document)
 			documentStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
-			// Add document to the documents list in sidebar
+			// Add document to the documents list
 			documentsStore.addDocuments([document])
 
-			RouterService.navigateTo('/document/:documentId', {
-				params: { documentId: document.documentId },
-				shouldFetchData: true
-			})
-        	documentStore.setMetaValues({ isRendered: false })    // Trigger editor re-render after project creation
+			return document
 
 		} catch (error) {
-			console.error('Failed to load document:', error)
+			console.error('Failed to create document:', error)
 			documentStore.setMetaValues({ loadingStatus: LoadingStatus.error })
 			documentStore.setDataValues({ error: error })
+			return null
 		}
 	}
 
 
-	public async updateDocument({ title, prevRevision, content, documentId }) {
+	public async updateDocument({ workspaceId, documentId, title, prevRevision, content }: { workspaceId?: string; documentId: string; title?: string; prevRevision?: number; content?: any }): Promise<void> {
 		try {
-			const documentUpdateResult: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.UPDATE_DOCUMENT, {
+			const updatePayload: any = {
 				token: await AuthService.getTokenSilently(),
-				documentId,
-				title,
-				prevRevision,
-				content,
-			})
+				documentId
+			}
+			if (workspaceId) updatePayload.workspaceId = workspaceId
+			if (title !== undefined) updatePayload.title = title
+			if (prevRevision !== undefined) updatePayload.prevRevision = prevRevision
+			if (content !== undefined) updatePayload.content = content
+
+			const documentUpdateResult: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.UPDATE_DOCUMENT, updatePayload)
 		} catch (error) {
-			console.error('Failed to load update document:', error)
-			documentsStore.setDataValues({ error: error })
+			console.error('Failed to update document:', error)
 		}
     }
 
-	public async deleteDocument({ documentId }) {
+	public async deleteDocument({ workspaceId, documentId }: { workspaceId: string; documentId: string }): Promise<void> {
 		try {
 			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
 
 			const documentDeleteResult: any = await servicesStore.getData('nats')!.request(DOCUMENT_SUBJECTS.DELETE_DOCUMENT, {
 				token: await AuthService.getTokenSilently(),
+				workspaceId,
 				documentId
 			})
 
 			const { documentId: deletedDocumentId, success } = documentDeleteResult
 
-			if(!success)
+			if (!success)
 				throw new Error('Failed to delete document')
 
-			const currentDocumentIndex = documentsStore.getData().findIndex(document => document.documentId === deletedDocumentId)
-
-			// Remove project from the sidebar
-			documentsStore.deleteDocument(deletedDocumentId)    // Order matters, delete project from documentsStore first
-
-			// And then navigate to the next available project
-			const currentdocumentId = RouterService.getRouteParams().documentId
-			const isDeletingCurrentlyOpenedDocument = currentdocumentId === deletedDocumentId
-			const shiftedProjectIndex = Math.max(currentDocumentIndex -1, 0)
-			const prevDocumentId = documentsStore.getData()[shiftedProjectIndex]?.documentId
-
-			if (isDeletingCurrentlyOpenedDocument) {
-				if (prevDocumentId) {
-					RouterService.navigateTo('/document/:documentId', {
-						params: { documentId: prevDocumentId },
-						shouldFetchData: true
-					})
-					documentStore.setMetaValues({ isRendered: false })    // Trigger editor re-render after project creation
-
-				} else {
-					RouterService.navigateTo('/', { params: {} })
-					documentStore.setMetaValues({ isRendered: false, isLoaded: false })    // Trigger editor re-render after project creation
-				}
-			}
-
+			// Remove document from the documents list
+			documentsStore.deleteDocument(deletedDocumentId)
+			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
 		} catch (error) {
-			console.error('Failed to delete user documents:', error)
+			console.error('Failed to delete document:', error)
 			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.error })
-			documentsStore.setDataValues({ error: error })
 		}
 	}
-
-	addTagToDocument({ documentId, tagId, organizationId }) {
-        // SocketService.emit({
-        //     event: DOCUMENT_SUBJECTS.ADD_TAG_TO_DOCUMENT,
-        //     data: {
-        //         documentId,
-        //         tagId,
-        //         organizationId
-        //     }
-        // })
-    }
-    _addTagToDocumentResponse(data) {
-		// if (data.error) {
-		// 	// Handle error case
-		// 	documentStore.setMetaValues({ isLoaded: true, errorLoading: data.error });
-		// } else {
-		// 	// Assuming data contains updated project tags
-		// 	const updatedTags = data.tags;
-
-		// 	// Update the tags in the project data
-		// 	documentStore.setDataValues({ tags: updatedTags });
-
-		// 	// Set metadata indicating successful loading
-		// 	documentStore.setMetaValues({ isLoaded: true, errorLoading: false });
-		// }
-	}
-
-    removeTagFromDocument({ documentId, tagId }) {
-        // SocketService.emit({
-        //     event: DOCUMENT_SUBJECTS.REMOVE_TAG_FROM_DOCUMENT,
-        //     data: {
-        //         documentId,
-        //         tagId
-        //     }
-        // })
-    }
-
-    _removeTagFromDocumentResponse(data) {
-    }
 }
 
 export default DocumentService

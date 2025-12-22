@@ -1,0 +1,304 @@
+@import '../../sass/_variables.scss';
+
+.workspace-canvas {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    padding: 32px 16px 16px 16px;
+    overflow: hidden;
+}
+
+.workspace-toolbar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    padding: 0;
+    align-items: center;
+    gap: 12px;
+}
+
+.create-document-btn {
+    background: var(--primary-color, #3b82f6);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    &:hover {
+        background: var(--primary-color-hover, #2563eb);
+    }
+}
+
+.zoom-indicator {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #555;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.workspace-pane {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    cursor: default;
+}
+
+.workspace-viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+
+.workspace-document-node {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    transition: box-shadow 0.15s ease;
+    position: relative;
+
+    &:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16), 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    &:hover .document-resize-handle {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    &.is-selected .document-resize-handle,
+    &.is-resizing .document-resize-handle {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    &.is-selected,
+    &:focus-within {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+        outline: none;
+    }
+
+    &.is-resizing {
+        user-select: none;
+
+        .document-node-editor {
+            pointer-events: none;
+        }
+    }
+}
+
+.document-node-editor {
+    flex: 1;
+    overflow: auto;
+    min-height: 100px;
+    border-radius: 0 0 8px 8px;
+    padding: 16px;
+    box-sizing: border-box;
+    cursor: text;
+
+    .ProseMirror {
+        min-height: 100%;
+        width: 100%;
+        max-width: 100%;
+        padding: 0;
+        outline: none;
+        box-sizing: border-box;
+        overflow-x: hidden;
+
+        > * + * {
+            margin-top: 0.5em;
+        }
+
+        p {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        h1, h2, h3 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        h1 {
+            font-size: 1.5em;
+        }
+
+        h2 {
+            font-size: 1.25em;
+        }
+
+        h3 {
+            font-size: 1.1em;
+        }
+
+        ul, ol {
+            padding-left: 1.5em;
+            margin: 0;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+
+            code {
+                background: none;
+                padding: 0;
+                color: inherit;
+            }
+        }
+
+        blockquote {
+            border-left: 3px solid #ddd;
+            margin: 0;
+            padding-left: 1em;
+            color: #666;
+        }
+    }
+}
+
+.editor-error,
+.editor-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 80px;
+    color: #888;
+    font-size: 13px;
+}
+
+.editor-error {
+    color: #d63031;
+    background: #fff5f5;
+}
+
+.document-resize-handle {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.15s ease;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+
+    svg {
+        width: 20px;
+        height: 20px;
+        fill: $nightBlue !important;
+        transition: transform 0.15s ease;
+        display: block;
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: scale(1.2);
+    }
+}
+
+.document-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    cursor: move;
+    z-index: 15;
+    background: transparent;
+}
+
+.workspace-document-node.is-dragging .document-drag-overlay {
+    cursor: move;
+}
+
+.document-resize-top-left {
+    top: -6px;
+    left: -6px;
+    cursor: nwse-resize;
+
+    svg {
+        transform: rotate(180deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(180deg) scale(1.2);
+    }
+}
+
+.document-resize-top-right {
+    top: -6px;
+    right: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(-90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(-90deg) scale(1.2);
+    }
+}
+
+.document-resize-bottom-left {
+    bottom: -6px;
+    left: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(90deg) scale(1.2);
+    }
+}
+
+.document-resize-bottom-right {
+    bottom: -6px;
+    right: -6px;
+    cursor: nwse-resize;
+
+    svg {
+        transform: rotate(0deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(0deg) scale(1.2);
+    }
+}

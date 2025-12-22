@@ -55,17 +55,46 @@ export const getTableDefinitions = () => [
         ],
     },
     {
+        name: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+        attributes: [{ name: 'workspaceId', type: 'S' as const }],
+        hashKey: 'workspaceId',
+    },
+    {
+        name: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+        attributes: [{ name: 'workspaceId', type: 'S' as const }],
+        hashKey: 'workspaceId',
+    },
+    {
+        name: getDynamoDbTableStageName('WORKSPACES_ACCESS_LIST', ORG_NAME, STAGE),
+        attributes: [
+            { name: 'userId', type: 'S' as const },
+            { name: 'workspaceId', type: 'S' as const },
+            { name: 'createdAt', type: 'N' as const },
+            { name: 'updatedAt', type: 'N' as const },
+        ],
+        hashKey: 'userId',
+        rangeKey: 'workspaceId',
+        localSecondaryIndexes: [
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
+            { name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
+        ],
+    },
+    {
         name: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
         attributes: [
             { name: 'documentId', type: 'S' as const },
             { name: 'revision', type: 'N' as const },
             { name: 'createdAt', type: 'N' as const },
+            { name: 'workspaceId', type: 'S' as const },
         ],
         hashKey: 'documentId',
         rangeKey: 'revision',
         localSecondaryIndexes: [
             { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
             { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
+        ],
+        globalSecondaryIndexes: [
+            { name: 'workspaceId', hashKey: 'workspaceId', projectionType: 'ALL' as const },
         ],
         ttl: { attributeName: 'revisionExpiresAt', enabled: true },
     },
@@ -190,7 +219,7 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         tags: { Name: tableDefs[2].name },
     }, resourceOpts)
 
-    const documentsTable = new aws.dynamodb.Table(tableDefs[3].name, {
+    const workspacesTable = new aws.dynamodb.Table(tableDefs[3].name, {
         ...tableDefs[3],
         billingMode: 'PAY_PER_REQUEST',
         ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
@@ -201,7 +230,7 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         tags: { Name: tableDefs[3].name },
     }, resourceOpts)
 
-    const documentsMetaTable = new aws.dynamodb.Table(tableDefs[4].name, {
+    const workspacesMetaTable = new aws.dynamodb.Table(tableDefs[4].name, {
         ...tableDefs[4],
         billingMode: 'PAY_PER_REQUEST',
         ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
@@ -212,7 +241,7 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         tags: { Name: tableDefs[4].name },
     }, resourceOpts)
 
-    const documentsAccessListTable = new aws.dynamodb.Table(tableDefs[5].name, {
+    const workspacesAccessListTable = new aws.dynamodb.Table(tableDefs[5].name, {
         ...tableDefs[5],
         billingMode: 'PAY_PER_REQUEST',
         ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
@@ -223,8 +252,7 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         tags: { Name: tableDefs[5].name },
     }, resourceOpts)
 
-    // Billing ----------------------------------------------------------------------
-    const aiTokensUsageTransactionsTable = new aws.dynamodb.Table(tableDefs[6].name, {
+    const documentsTable = new aws.dynamodb.Table(tableDefs[6].name, {
         ...tableDefs[6],
         billingMode: 'PAY_PER_REQUEST',
         ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
@@ -232,11 +260,10 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
             streamEnabled: true as const,
             streamViewType: 'NEW_AND_OLD_IMAGES' as const,
         }),
-        // tableClass: 'STANDARD_INFREQUENT_ACCESS'    // TODO, make sure to set infrequent access for this table when we reach 25GB storage (because the first 25GB is free for standard tables, but not for infrequent access tables)
         tags: { Name: tableDefs[6].name },
     }, resourceOpts)
 
-    const financialTransactionsTable = new aws.dynamodb.Table(tableDefs[7].name, {
+    const documentsMetaTable = new aws.dynamodb.Table(tableDefs[7].name, {
         ...tableDefs[7],
         billingMode: 'PAY_PER_REQUEST',
         ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
@@ -247,7 +274,7 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         tags: { Name: tableDefs[7].name },
     }, resourceOpts)
 
-    const aiTokensUsageReportsTable = new aws.dynamodb.Table(tableDefs[8].name, {
+    const documentsAccessListTable = new aws.dynamodb.Table(tableDefs[8].name, {
         ...tableDefs[8],
         billingMode: 'PAY_PER_REQUEST',
         ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
@@ -258,7 +285,8 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         tags: { Name: tableDefs[8].name },
     }, resourceOpts)
 
-    const aiModelsListTable = new aws.dynamodb.Table(tableDefs[9].name, {
+    // Billing ----------------------------------------------------------------------
+    const aiTokensUsageTransactionsTable = new aws.dynamodb.Table(tableDefs[9].name, {
         ...tableDefs[9],
         billingMode: 'PAY_PER_REQUEST',
         ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
@@ -266,7 +294,41 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
             streamEnabled: true as const,
             streamViewType: 'NEW_AND_OLD_IMAGES' as const,
         }),
+        // tableClass: 'STANDARD_INFREQUENT_ACCESS'    // TODO, make sure to set infrequent access for this table when we reach 25GB storage (because the first 25GB is free for standard tables, but not for infrequent access tables)
         tags: { Name: tableDefs[9].name },
+    }, resourceOpts)
+
+    const financialTransactionsTable = new aws.dynamodb.Table(tableDefs[10].name, {
+        ...tableDefs[10],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[10].name },
+    }, resourceOpts)
+
+    const aiTokensUsageReportsTable = new aws.dynamodb.Table(tableDefs[11].name, {
+        ...tableDefs[11],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[11].name },
+    }, resourceOpts)
+
+    const aiModelsListTable = new aws.dynamodb.Table(tableDefs[12].name, {
+        ...tableDefs[12],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[12].name },
     }, resourceOpts)
     // END Billing -------------------------------------------------------------------
 
@@ -276,6 +338,10 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
 
         organizationsTableName: organizationsTable.name,
         organizationsAccessListTableName: organizationsAccessListTable.name,
+
+        workspacesTableName: workspacesTable.name,
+        workspacesMetaTableName: workspacesMetaTable.name,
+        workspacesAccessListTableName: workspacesAccessListTable.name,
 
         documentsTableName: documentsTable.name,
         documentsMetaTableName: documentsMetaTable.name,
@@ -294,6 +360,10 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         organizationsTable,
         organizationsAccessListTable,
 
+        workspacesTable,
+        workspacesMetaTable,
+        workspacesAccessListTable,
+
         documentsTable,
         documentsMetaTable,
         documentsAccessListTable,
@@ -304,9 +374,9 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
 
         financialTransactionsTable,
 
-    // Optional bindings preserved for consumers; undefined in this module
-    stripeBillingHandlerLambda: undefined,
-    subscriptionBalanceUpdatesSNSTopic: undefined,
+        // Optional bindings preserved for consumers; undefined in this module
+        stripeBillingHandlerLambda: undefined,
+        subscriptionBalanceUpdatesSNSTopic: undefined,
 
         outputs,
     }

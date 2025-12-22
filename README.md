@@ -13,27 +13,34 @@ Run the interactive setup wizard to generate your `.env` file.
 
 ```bash
 # macOS / Linux
-./init.sh
+./init-config.sh
 
 # Windows
-init.bat
-```
-
-Or run Docker commands directly:
-
-```bash
-# macOS / Linux
-docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v "$(pwd):/workspace" lixpi/setup
-
-# Windows (CMD: use %cd%, PowerShell: use ${PWD})
-docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v "%cd%:/workspace" lixpi/setup
+init-config.bat
 ```
 
 For CI/automation (non-interactive), see [`infrastructure/init-script/README.md`](infrastructure/init-script/README.md).
 
-### 2. Start the Application
+### 2. Initialize Infrastructure
 
-Run the startup script which will let you select an environment and optionally initialize the database:
+Run the infrastructure initialization script to set up TLS certificates and DynamoDB tables. This step is required before starting the application for the first time.
+
+```bash
+# macOS / Linux
+./init-infrastructure.sh
+
+# Windows (run as Administrator for certificate installation)
+init-infrastructure.bat
+```
+
+This script will:
+- Start Caddy to generate TLS certificates
+- Extract and install the CA certificate to your system's trust store
+- Initialize DynamoDB tables using Pulumi
+
+### 3. Start the Application
+
+Run the startup script which will let you select an environment:
 
 ```bash
 # macOS / Linux
@@ -197,14 +204,17 @@ flowchart TB
     subgraph Step2["2️⃣ Connect to NATS"]
         C["Web UI"] -->|JWT| D["NATS"]
         D -->|validate| E["Auth Callout"]
-        E -->|✓| D
+        E -->|verify| F["@lixpi/auth-service"]
+        F -->|JWKS| G["Auth0"]
+        F -->|✓| E
+        E -->|signed JWT| D
         D -->|connected| C
     end
 
     subgraph Step3["3️⃣ Make Requests"]
-        F["Web UI"] --> G["NATS"]
-        G --> H["API"] --> I[(DB)]
-        G --> J["LLM API"] --> K(("AI"))
+        H["Web UI"] --> I["NATS"]
+        I --> J["API"] --> K[(DB)]
+        I --> L["LLM API"] --> M(("AI"))
     end
 
     Step1 --> Step2 --> Step3
@@ -212,16 +222,46 @@ flowchart TB
 
 Only API can access the database directly. LLM API must publish messages through NATS if it needs to persist data — a tradeoff for simpler access control.
 
+### Authentication Architecture
+
+All token verification is handled by `@lixpi/auth-service`, a shared package used by:
+- **NATS Auth Callout** — validates tokens during NATS connection
+- **API HTTP endpoints** — validates Bearer tokens on REST calls
+
+```mermaid
+flowchart TB
+    subgraph Clients
+        WebUI["Web UI"]
+        LLM["LLM API"]
+    end
+
+    subgraph auth-service["@lixpi/auth-service"]
+        JV["createJwtVerifier()"]
+        NKV["verifyNKeySignedJWT()"]
+    end
+
+    subgraph Consumers
+        AC["NATS Auth Callout"]
+        API["API Endpoints"]
+    end
+
+    WebUI -->|Auth0 JWT| JV
+    LLM -->|NKey JWT| NKV
+    JV --> AC & API
+    NKV --> AC
+```
+
 ### Two Authentication Modes
 
 1. **User Authentication (Auth0/LocalAuth0)**
    - OAuth2 flow with RS256 JWTs
-   - JWKS endpoint validation
+   - JWKS endpoint validation via `@lixpi/auth-service`
    - Permissions derived from subscription configurations
 
 2. **Service Authentication (NKey-signed JWTs)**
    - For internal service-to-service communication (e.g., LLM API)
    - Ed25519 cryptographic signatures
+   - Verified by `@lixpi/auth-service`
    - No external Auth0 dependency
 
 ## AI Chat Flow

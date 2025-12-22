@@ -4,7 +4,15 @@ Do not create README.md if it doesn't exist.
 
 Never use any JSDoc comments!
 
-When working on TypeScript code make sure to use `type` instead of `interface` for type definitions.
-Always use `.ts` extension when importing files, all our code is in TypeScript, never use `.js` imports.
+When working on TypeScript code make sure to follow these rules:
+ - use `type` instead of `interface` for type definitions.
+ - Always use `.ts` extension when importing files, all our code is in TypeScript, never use `.js` imports.
+ - When importing types and methods from a package, make sure to do it in a single block, like this:
+    ```TypeScript
+    import {
+        createJwtVerifier,
+        type JwtVerificationResult
+    } from '@lixpi/auth-service'
+    ```
 
 When question is related to SVG or D3 you must always refer to the available `D3` MCP server!

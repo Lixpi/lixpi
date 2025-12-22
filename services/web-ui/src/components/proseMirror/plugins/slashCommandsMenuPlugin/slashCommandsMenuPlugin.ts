@@ -139,7 +139,7 @@ class SlashCommandsMenuView {
                 this.updateSelectedIndex(index)
             })
 
-            item.addEventListener('click', (e) => {
+            item.addEventListener('mousedown', (e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 this.executeCommand(index)

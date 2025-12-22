@@ -3,7 +3,9 @@
 import chalk from 'chalk'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
+import NATS_Service from '@lixpi/nats-service'
 import Document from '../../models/document.ts'
+import Workspace from '../../models/workspace.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -19,11 +21,19 @@ export const documentSubjects = [
             pub: { allow: [ DOCUMENT_SUBJECTS.GET_DOCUMENT ] },
             sub: { allow: [ DOCUMENT_SUBJECTS.GET_DOCUMENT ] }
         },
-        handler: async (data, msg) => {
+        handler: async (data: any, msg: any) => {
+            const { workspaceId, documentId } = data
+            const userId = data.user.userId
+
+            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+            if (!workspace || 'error' in workspace) {
+                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            }
+
             return await Document.getDocument({
-                userId: data.user.userId,
-                documentId: data.documentId,
-                revision: 1,
+                workspaceId,
+                documentId,
+                revision: 1
             })
         }
     },
@@ -36,50 +46,26 @@ export const documentSubjects = [
             pub: { allow: [ DOCUMENT_SUBJECTS.CREATE_DOCUMENT ] },
             sub: { allow: [ DOCUMENT_SUBJECTS.CREATE_DOCUMENT ] }
         },
-        handler: async (data, msg) => {
+        handler: async (data: any, msg: any) => {
             const {
-                user: {
-                    userId
-                },
+                user: { userId },
+                workspaceId,
                 title,
-                aiModel,
                 content
             } = data
 
-            const document = await Document.createDocument({
-                title,
-                aiModel: aiModel,
-                content,
-                permissions: {
-                    userId: userId,
-                    accessLevel: 'owner'
-                }
-            })
-
-            //TODO: when document is created, not just the requester but all the users in the organization should be notified
-            //TODO: nats publish to all users in the organization (except the requester???)
-
-            return document
-        }
-    },
-
-    {
-        subject: DOCUMENT_SUBJECTS.GET_USER_DOCUMENTS,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [ DOCUMENT_SUBJECTS.GET_USER_DOCUMENTS ] },
-            sub: { allow: [ DOCUMENT_SUBJECTS.GET_USER_DOCUMENTS ] }
-        },
-        handler: async (data, msg) => {
-            const userId = data.user.userId
-
-            if (!userId) {
-                err('NATS -> DOCUMENT_SUBJECTS.GET_USER_DOCUMENTS', 'userId is not available in the socket token.')
-                return
+            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+            if (!workspace || 'error' in workspace) {
+                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
             }
 
-            return await Document.getUserDocuments({ userId })
+            const document = await Document.createDocument({
+                workspaceId,
+                title,
+                content
+            })
+
+            return document
         }
     },
 
@@ -91,20 +77,26 @@ export const documentSubjects = [
             pub: { allow: [ DOCUMENT_SUBJECTS.UPDATE_DOCUMENT ] },
             sub: { allow: [ DOCUMENT_SUBJECTS.UPDATE_DOCUMENT ] }
         },
-        handler: async (data, msg) => {
-            const document = await Document.update({
-                userId: data.user.userId,
-                permissions: data.permissions,
-                documentId: data.documentId,
+        handler: async (data: any, msg: any) => {
+            const { workspaceId, documentId } = data
+            const userId = data.user.userId
+
+            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+            if (!workspace || 'error' in workspace) {
+                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            }
+
+            await Document.update({
+                workspaceId,
+                documentId,
                 title: data.title,
                 prevRevision: data.prevRevision,
-                aiModel: data.aiModel,
-                content: data.content,
+                content: data.content
             })
 
             return {
                 success: true,
-                documentId: data.documentId
+                documentId
             }
         }
     },
@@ -118,15 +110,23 @@ export const documentSubjects = [
             pub: { allow: [ DOCUMENT_SUBJECTS.DELETE_DOCUMENT ] },
             sub: { allow: [ DOCUMENT_SUBJECTS.DELETE_DOCUMENT ] }
         },
-        handler: async (data, msg) => {
-            const document = await Document.delete({
-                userId: data.user.userId,
-                documentId: data.documentId
+        handler: async (data: any, msg: any) => {
+            const { workspaceId, documentId } = data
+            const userId = data.user.userId
+
+            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+            if (!workspace || 'error' in workspace) {
+                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            }
+
+            await Document.delete({
+                workspaceId,
+                documentId
             })
 
             return {
                 success: true,
-                documentId: data.documentId
+                documentId
             }
         }
     },
@@ -139,8 +139,8 @@ export const documentSubjects = [
             pub: { allow: [ DOCUMENT_SUBJECTS.ADD_TAG_TO_DOCUMENT ] },
             sub: { allow: [ DOCUMENT_SUBJECTS.ADD_TAG_TO_DOCUMENT ] }
         },
-        handler: async (data, msg) => {
-            return  await Document.addTagToDocument({
+        handler: async (data: any, msg: any) => {
+            return await Document.addTagToDocument({
                 userId: data.user.userId,
                 documentId: data.documentId,
                 tagId: data.tagId
@@ -155,7 +155,7 @@ export const documentSubjects = [
             pub: { allow: [ DOCUMENT_SUBJECTS.REMOVE_TAG_FROM_DOCUMENT ] },
             sub: { allow: [ DOCUMENT_SUBJECTS.REMOVE_TAG_FROM_DOCUMENT ] }
         },
-        handler: async (data, msg) => {
+        handler: async (data: any, msg: any) => {
             return await Document.removeTagFromDocument({
                 documentId: data.documentId,
                 tagId: data.tagId

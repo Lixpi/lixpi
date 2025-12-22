@@ -42,20 +42,80 @@ export type OrganizationAccessList = {
     updatedAt: number
 }
 
+export type DocumentFile = {
+    id: string
+    name: string
+    mimeType: string
+    size: number
+    uploadedAt: number
+}
+
+export type CanvasNodeType = 'document'
+
+export type CanvasNode = {
+    nodeId: string
+    type: CanvasNodeType
+    referenceId: string
+    position: {
+        x: number
+        y: number
+    }
+    dimensions: {
+        width: number
+        height: number
+    }
+}
+
+export type CanvasViewport = {
+    x: number
+    y: number
+    zoom: number
+}
+
+export type CanvasState = {
+    viewport: CanvasViewport
+    nodes: CanvasNode[]
+}
+
+export type Workspace = {
+    workspaceId: string
+    name: string
+    accessType: 'private' | 'public'
+    accessList: {
+        userId: string
+        accessLevel: AccessLevel
+    }[]
+    files?: DocumentFile[]
+    canvasState: CanvasState
+    createdAt: number
+    updatedAt: number
+}
+
+export type WorkspaceMeta = {
+    workspaceId: string
+    name: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type WorkspaceAccessList = {
+    userId: string
+    workspaceId: string
+    accessLevel: AccessLevel
+    createdAt: number
+    updatedAt: number
+}
+
 export type Document = {
     documentId: string
+    workspaceId: string
     revision: number
     title: string
     content: string
     prevRevision: number
     createdAt: number
     updatedAt: number
-    accessType: 'private' | 'public'
-    accessList: {
-        userId: string
-        accessLevel: AccessLevel
-    }[]
-    revisionExpiresAt?: number // For TTL soft deletes
+    revisionExpiresAt?: number
 }
 
 export type DocumentMeta = {
