@@ -171,14 +171,14 @@ graph LR
 
 ## Bubble Menu (`plugins/bubbleMenuPlugin/`)
 
-A floating selection-based formatting menu using FloatingUI for positioning. Appears when text is selected and provides quick access to formatting commands.
+A floating selection-based formatting menu with transform-aware positioning. Appears when text is selected and provides quick access to formatting commands.
 
 ### Features
 - **Inline marks**: Bold, Italic, Strikethrough, Code
 - **Link editing**: Inline URL input (not a modal)
 - **Block formatting**: Headings (1-4), Code Block, Blockquote via dropdown
 - **Mobile-first**: Touch-friendly with larger tap targets
-- **Smart positioning**: Uses FloatingUI with flip/shift middleware
+- **Transform-aware positioning**: Works correctly inside zoomed/panned canvas viewports
 
 ### Architecture
 - `bubbleMenuPlugin.ts` - Main plugin with `BubbleMenuView` class
@@ -189,7 +189,7 @@ A floating selection-based formatting menu using FloatingUI for positioning. App
 ```mermaid
 graph TD
   BMP[bubbleMenuPlugin] --> BMV[BubbleMenuView]
-  BMV --> FUI[FloatingUI positioning]
+  BMV --> TP[Transform-aware positioning]
   BMV --> Items[Menu Items]
   Items --> Bold
   Items --> Italic

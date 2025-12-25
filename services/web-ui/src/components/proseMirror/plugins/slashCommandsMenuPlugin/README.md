@@ -55,13 +55,13 @@ type SlashCommandsPluginState = {
 The main view class that manages:
 
 - Menu DOM construction using `createEl` from `domTemplates.ts`
-- FloatingUI positioning with `flip()`, `shift()`, `offset()` middleware
+- Transform-aware positioning that handles CSS scaled/translated ancestors
 - Command list rendering with selection highlighting
 - Keyboard event handling delegation
 
-### Virtual Element
+### Transform-aware Positioning
 
-Uses ProseMirror's `coordsAtPos()` to create a virtual element for FloatingUI positioning at the `/` trigger position.
+Uses ProseMirror's `coordsAtPos()` to get screen coordinates at the `/` trigger position, then converts to local coordinates accounting for CSS transforms on ancestor elements.
 
 ## Available Commands
 

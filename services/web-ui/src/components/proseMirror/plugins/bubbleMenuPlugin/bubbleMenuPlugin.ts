@@ -1,7 +1,5 @@
 import { Plugin, PluginKey, NodeSelection } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import { computePosition, inline, flip, shift, offset, hide, type VirtualElement } from '@floating-ui/dom'
 import { createEl } from '../../components/domTemplates.ts'
 import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from './bubbleMenuItems.ts'
 import { documentTitleNodeType } from '../../customNodes/documentTitleNode.js'
@@ -28,6 +26,7 @@ class BubbleMenuView {
     private currentContext: SelectionContext = 'none'
     private scrollContainer: HTMLElement | Window = window
     private activeImageWrapper: HTMLElement | null = null
+    private menuParent: HTMLElement | null = null
 
     constructor({ view }: BubbleMenuViewOptions) {
         this.view = view
@@ -39,7 +38,7 @@ class BubbleMenuView {
             'aria-label': 'Formatting toolbar',
             tabIndex: 0,
             style: {
-                position: 'fixed',
+                position: 'absolute',
                 visibility: 'hidden',
                 zIndex: '100',
             },
@@ -65,7 +64,9 @@ class BubbleMenuView {
         this.scrollContainer = this.findScrollContainer(view.dom)
         this.scrollContainer.addEventListener('scroll', this.handleScroll, { passive: true })
 
-        view.dom.parentNode?.appendChild(this.menu)
+        // Append to editor's parent - menu will scale with the transformed viewport
+        this.menuParent = view.dom.parentNode as HTMLElement
+        this.menuParent?.appendChild(this.menu)
 
         if (isTouchDevice()) {
             window.visualViewport?.addEventListener('resize', this.handleViewportResize)
@@ -236,60 +237,51 @@ class BubbleMenuView {
         return null
     }
 
-    private createTextVirtualElement(): VirtualElement {
-        const { state } = this.view
-        const { from, to } = state.selection
-
-        return {
-            getBoundingClientRect: () => {
-                const start = this.view.coordsAtPos(from)
-                const end = this.view.coordsAtPos(to)
-
-                const left = Math.min(start.left, end.left)
-                const right = Math.max(start.right, end.right)
-                const top = Math.min(start.top, end.top)
-                const bottom = Math.max(start.bottom, end.bottom)
-
-                return {
-                    x: left,
-                    y: top,
-                    top,
-                    left,
-                    bottom,
-                    right,
-                    width: right - left,
-                    height: bottom - top,
+    private findTransformedAncestor(): { element: HTMLElement; scale: number } | null {
+        // Walk up the DOM tree to find an ancestor with a CSS transform
+        let current: HTMLElement | null = this.menuParent
+        while (current) {
+            const style = getComputedStyle(current)
+            const transform = style.transform
+            if (transform && transform !== 'none') {
+                const match = transform.match(/matrix\(([^,]+),/)
+                if (match) {
+                    return { element: current, scale: parseFloat(match[1]) }
                 }
-            },
-            getClientRects: () => {
-                const { from, to } = this.view.state.selection
-                const rects: DOMRect[] = []
-
-                this.view.state.doc.nodesBetween(from, to, (node: ProseMirrorNode, pos: number) => {
-                    if (node.isText) {
-                        const start = Math.max(from, pos)
-                        const end = Math.min(to, pos + node.nodeSize)
-                        const startCoords = this.view.coordsAtPos(start)
-                        const endCoords = this.view.coordsAtPos(end)
-
-                        rects.push(
-                            new DOMRect(
-                                startCoords.left,
-                                startCoords.top,
-                                endCoords.right - startCoords.left,
-                                endCoords.bottom - startCoords.top
-                            )
-                        )
-                    }
-                    return true
-                })
-
-                return rects
-            },
+            }
+            current = current.parentElement
         }
+        return null
     }
 
-    private async updatePosition(retryCount = 0): Promise<void> {
+    private screenToLocal(screenX: number, screenY: number): { x: number; y: number } {
+        // Convert screen coordinates to local coordinates relative to menuParent
+        // accounting for CSS transforms on ancestor elements
+        if (!this.menuParent) {
+            return { x: screenX, y: screenY }
+        }
+
+        const parentRect = this.menuParent.getBoundingClientRect()
+        const transformInfo = this.findTransformedAncestor()
+        const scale = transformInfo?.scale ?? 1
+
+        // parentRect is already in screen coordinates (post-transform)
+        // So the offset from screen to parent is just the difference
+        // But we need to divide by scale to get local coordinates
+        const localX = (screenX - parentRect.left) / scale
+        const localY = (screenY - parentRect.top) / scale
+
+        return { x: localX, y: localY }
+    }
+
+    private getScale(): number {
+        const transformInfo = this.findTransformedAncestor()
+        return transformInfo?.scale ?? 1
+    }
+
+    private updatePosition(retryCount = 0): void {
+        const scale = this.getScale()
+
         if (this.currentContext === 'image') {
             // Position below the image, centered
             const imgElement = this.getImageElement()
@@ -307,42 +299,72 @@ class BubbleMenuView {
             this.menu.style.visibility = 'hidden'
             this.menu.style.display = 'flex'
             const toolbarRect = this.menu.getBoundingClientRect()
+            const toolbarWidthLocal = toolbarRect.width / scale
 
-            // Center toolbar horizontally below the image
+            // Center toolbar horizontally below the image (in screen coords)
             const imageCenterX = imageRect.left + imageRect.width / 2
-            const toolbarLeft = imageCenterX - toolbarRect.width / 2
-            const toolbarTop = imageRect.bottom + 8
+            const toolbarScreenLeft = imageCenterX - toolbarRect.width / 2
+            const toolbarScreenTop = imageRect.bottom + 8 * scale
 
-            // Clamp to viewport bounds
-            const maxLeft = window.innerWidth - toolbarRect.width - 8
-            const clampedLeft = Math.max(8, Math.min(toolbarLeft, maxLeft))
+            // Convert to local coordinates
+            const local = this.screenToLocal(toolbarScreenLeft, toolbarScreenTop)
+
+            // Clamp to parent bounds (in local coordinates)
+            const parentRect = this.menuParent?.getBoundingClientRect()
+            const parentWidthLocal = parentRect ? parentRect.width / scale : window.innerWidth
+            const maxLeft = parentWidthLocal - toolbarWidthLocal - 8
+            const clampedLeft = Math.max(8, Math.min(local.x, maxLeft))
 
             Object.assign(this.menu.style, {
                 left: `${clampedLeft}px`,
-                top: `${toolbarTop}px`,
+                top: `${local.y}px`,
                 visibility: 'visible',
             })
         } else {
-            // Position above text selection using floating-ui
-            const virtualElement = this.createTextVirtualElement()
+            // Position above text selection
+            const { state } = this.view
+            const { from, to } = state.selection
 
-            const { x, y, middlewareData } = await computePosition(virtualElement, this.menu, {
-                placement: 'top',
-                middleware: [
-                    inline(),
-                    offset(8),
-                    flip({ fallbackPlacements: ['bottom', 'top-start', 'bottom-start'] }),
-                    shift({ padding: 8 }),
-                    hide(),
-                ],
-            })
+            const start = this.view.coordsAtPos(from)
+            const end = this.view.coordsAtPos(to)
 
-            const isHidden = middlewareData.hide?.referenceHidden
+            // Measure menu
+            this.menu.style.visibility = 'hidden'
+            this.menu.style.display = 'flex'
+            const menuRect = this.menu.getBoundingClientRect()
+            const menuWidthLocal = menuRect.width / scale
+
+            // Calculate center of selection in screen coords
+            const selectionLeft = Math.min(start.left, end.left)
+            const selectionRight = Math.max(start.right, end.right)
+            const selectionTop = Math.min(start.top, end.top)
+            const selectionBottom = Math.max(start.bottom, end.bottom)
+            const selectionCenterX = (selectionLeft + selectionRight) / 2
+
+            // Position menu above selection, centered (in screen coords)
+            const menuScreenLeft = selectionCenterX - menuRect.width / 2
+            const menuScreenTop = selectionTop - menuRect.height - 8 * scale
+
+            // Convert to local coordinates
+            const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
+
+            // Clamp horizontal position
+            const parentRect = this.menuParent?.getBoundingClientRect()
+            const parentWidthLocal = parentRect ? parentRect.width / scale : window.innerWidth
+            const maxLeft = parentWidthLocal - menuWidthLocal - 8
+            const clampedLeft = Math.max(8, Math.min(local.x, maxLeft))
+
+            // Check if menu would go above parent bounds, flip to below
+            let finalY = local.y
+            if (local.y < 8) {
+                const belowScreenTop = selectionBottom + 8 * scale
+                finalY = this.screenToLocal(0, belowScreenTop).y
+            }
 
             Object.assign(this.menu.style, {
-                left: `${x}px`,
-                top: `${y}px`,
-                visibility: isHidden ? 'hidden' : 'visible',
+                left: `${clampedLeft}px`,
+                top: `${finalY}px`,
+                visibility: 'visible',
             })
         }
     }
