@@ -1,10 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import { servicesStore } from '../../../../stores/servicesStore.ts'
-import AuthService from '../../../../services/auth-service.ts'
-import { NATS_SUBJECTS } from '@lixpi/constants'
-
-const { WORKSPACE_IMAGE_SUBJECTS } = NATS_SUBJECTS
+import { deleteImage } from '../../../../utils/imageUtils.ts'
 
 export const imageLifecyclePluginKey = new PluginKey('imageLifecycle')
 
@@ -26,36 +22,6 @@ function findImagesWithFileId(doc: ProseMirrorNode): Map<string, TrackedImage> {
     })
 
     return images
-}
-
-async function deleteImage(fileId: string, workspaceId: string): Promise<void> {
-    try {
-        const nats = servicesStore.getData('nats')
-        if (!nats) {
-            console.error('[imageLifecyclePlugin] NATS service not available')
-            return
-        }
-
-        const token = await AuthService.getTokenSilently()
-        if (!token) {
-            console.error('[imageLifecyclePlugin] Failed to get auth token')
-            return
-        }
-
-        const result = await nats.request(WORKSPACE_IMAGE_SUBJECTS.DELETE_IMAGE, {
-            token,
-            workspaceId,
-            fileId,
-        })
-
-        if (result?.error) {
-            console.error(`[imageLifecyclePlugin] Failed to delete image ${fileId}:`, result.error)
-        } else {
-            console.log(`[imageLifecyclePlugin] Deleted image ${fileId} from workspace ${workspaceId}`)
-        }
-    } catch (error) {
-        console.error(`[imageLifecyclePlugin] Error deleting image ${fileId}:`, error)
-    }
 }
 
 export function imageLifecyclePlugin(): Plugin {

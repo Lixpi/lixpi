@@ -50,21 +50,38 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document'
+export type CanvasNodeType = 'document' | 'image'
 
-export type CanvasNode = {
-    nodeId: string
-    type: CanvasNodeType
-    referenceId: string
-    position: {
-        x: number
-        y: number
-    }
-    dimensions: {
-        width: number
-        height: number
-    }
+type CanvasNodePosition = {
+    x: number
+    y: number
 }
+
+type CanvasNodeDimensions = {
+    width: number
+    height: number
+}
+
+export type DocumentCanvasNode = {
+    nodeId: string
+    type: 'document'
+    referenceId: string
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+}
+
+export type ImageCanvasNode = {
+    nodeId: string
+    type: 'image'
+    fileId: string
+    workspaceId: string
+    src: string
+    aspectRatio: number
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode
 
 export type CanvasViewport = {
     x: number

@@ -1,18 +1,32 @@
 # Workspace Canvas
 
-This module renders the main workspace view—a zoomable, pannable canvas where documents appear as draggable, resizable cards with embedded ProseMirror editors.
+This module renders the main workspace view—a zoomable, pannable canvas where documents and images appear as draggable, resizable cards.
 
 ## What It Does
 
-When you open a workspace, you see a canvas. On that canvas are document nodes. You can:
+When you open a workspace, you see a canvas. On that canvas are nodes (documents or images). You can:
 
 - **Pan** the canvas by clicking and dragging empty space (or two-finger scroll on trackpad)
 - **Zoom** with pinch gestures or Ctrl+scroll
-- **Drag** documents by grabbing the top overlay bar
-- **Resize** documents from any corner
-- **Edit** content directly—ProseMirror editors are embedded in each card
+- **Drag** nodes by grabbing the overlay (top bar for documents, anywhere for images)
+- **Resize** nodes from any corner (images preserve aspect ratio)
+- **Edit** document content directly—ProseMirror editors are embedded in document cards
+- **Add images** via the toolbar button which opens an upload modal
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
+
+## Node Types
+
+### Document Nodes
+- Contain embedded ProseMirror editors
+- Have a drag overlay at the top (20px)
+- Free resize (no aspect ratio constraint)
+
+### Image Nodes
+- Display uploaded images from workspace storage
+- Have a full-area drag overlay
+- Resize preserves aspect ratio (stored when image is uploaded)
+- Automatically deleted from storage when removed from canvas
 
 ## Architecture
 
@@ -28,12 +42,15 @@ flowchart TB
         CC[createWorkspaceCanvas]
         PZ[XYPanZoom instance]
         DN[Document Nodes]
+        IN[Image Nodes]
         PM[ProseMirror Editors]
+        IL[Canvas Image Lifecycle]
     end
 
     subgraph Backend["Backend Services"]
         NS[NATS Service]
         API[Workspace API]
+        OBJ[NATS Object Store]
     end
 
     WC -->|"paneEl, viewportEl"| CC
@@ -45,7 +62,11 @@ flowchart TB
 
     CC --> PZ
     CC --> DN
+    CC --> IN
     DN --> PM
+    CC --> IL
+    IL -->|"deleteImage"| NS
+    NS -->|"DELETE_IMAGE"| OBJ
 ```
 
 ## How It Works
@@ -86,6 +107,33 @@ Each canvas node becomes a `div.workspace-document-node` with:
   ↙ resize     resize ↘
   handle       handle
 ```
+
+### Image Nodes
+
+Image nodes have a simpler structure:
+
+```
+┌─────────────────────────────────────────┐
+│                                         │
+│  .image-node-content                    │
+│  (contains img element)                 │
+│                                         │
+│  .image-drag-overlay                    │
+│  (covers entire image for dragging)     │
+│                                         │
+└─────────────────────────────────────────┘
+  ↖ resize     resize ↗
+  handle       handle
+
+  ↙ resize     resize ↘
+  handle       handle
+```
+
+Image resize always preserves aspect ratio using the `aspectRatio` value stored when the image was uploaded.
+
+### Image Lifecycle
+
+When an image node is removed from the canvas, the `canvasImageLifecycle` tracker detects the change and triggers deletion from NATS Object Store via the `WORKSPACE_IMAGE_SUBJECTS.DELETE_IMAGE` NATS subject.
 
 ### Drag and Resize
 
@@ -132,6 +180,7 @@ sequenceDiagram
 |------|---------|
 | `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers |
 | `workspace-canvas.scss` | All styles for canvas, nodes, handles, editors |
+| `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 
 ## CSS Classes
 
@@ -141,8 +190,12 @@ sequenceDiagram
 | `.workspace-pane` | Pan/zoom target |
 | `.workspace-viewport` | Transformed container for nodes |
 | `.workspace-document-node` | Individual document card |
-| `.document-drag-overlay` | Top bar for dragging |
+| `.workspace-image-node` | Individual image card |
+| `.document-drag-overlay` | Top bar for dragging documents |
+| `.image-drag-overlay` | Full-area overlay for dragging images |
 | `.document-node-editor` | ProseMirror container |
-| `.document-resize-handle` | Corner resize controls |
+| `.image-node-content` | Image container |
+| `.image-node-img` | The actual img element |
+| `.document-resize-handle` | Corner resize controls (shared by both node types) |
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |

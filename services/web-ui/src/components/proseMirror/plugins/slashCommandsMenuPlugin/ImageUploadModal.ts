@@ -5,7 +5,7 @@ import RouterService from '../../../../services/router-service.ts'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
-type ImageUploadResult = {
+export type ImageUploadResult = {
     success: boolean
     fileId?: string
     src?: string
@@ -13,7 +13,7 @@ type ImageUploadResult = {
 }
 
 type ImageUploadModalOptions = {
-    view: EditorView
+    view?: EditorView
     onComplete: (result: ImageUploadResult) => void
     onCancel: () => void
 }

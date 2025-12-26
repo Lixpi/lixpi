@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte'
     import type { Viewport } from '@xyflow/system'
-    import type { CanvasState } from '@lixpi/constants'
+    import type { CanvasState, ImageCanvasNode } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
     import DocumentService from '$src/services/document-service.ts'
@@ -9,6 +9,7 @@
     import { documentsStore } from '$src/stores/documentsStore.ts'
     import { routerStore } from '$src/stores/routerStore.ts'
     import { servicesStore } from '$src/stores/servicesStore.ts'
+    import { ImageUploadModal, type ImageUploadResult } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/ImageUploadModal.ts'
 
     import '$src/infographics/workspace/workspace-canvas.scss'
 
@@ -88,6 +89,85 @@
         }
     }
 
+    function handleAddImage() {
+        if (!workspaceId) {
+            console.error('No workspaceId available!')
+            return
+        }
+
+        const modal = new ImageUploadModal({
+            onComplete: (result: ImageUploadResult) => {
+                if (result.success && result.src && result.fileId) {
+                    // Load the image to get natural dimensions for aspect ratio
+                    const img = new Image()
+                    img.onload = () => {
+                        const aspectRatio = img.naturalWidth / img.naturalHeight
+
+                        // Calculate initial dimensions (max 400px width, preserve aspect ratio)
+                        const maxWidth = 400
+                        const width = Math.min(maxWidth, img.naturalWidth)
+                        const height = width / aspectRatio
+
+                        const existingNodes = canvasState?.nodes || []
+                        const newX = 50 + (existingNodes.length % 3) * 450
+                        const newY = 50 + Math.floor(existingNodes.length / 3) * 400
+
+                        const imageNode: ImageCanvasNode = {
+                            nodeId: `node-${result.fileId}`,
+                            type: 'image',
+                            fileId: result.fileId,
+                            workspaceId: workspaceId,
+                            src: result.src,
+                            aspectRatio,
+                            position: { x: newX, y: newY },
+                            dimensions: { width, height }
+                        }
+
+                        const newCanvasState: CanvasState = {
+                            viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                            nodes: [...existingNodes, imageNode]
+                        }
+
+                        persistCanvasState(newCanvasState)
+                    }
+
+                    img.onerror = () => {
+                        console.error('Failed to load image for dimension calculation')
+                        // Fallback: add with default dimensions
+                        const existingNodes = canvasState?.nodes || []
+                        const newX = 50 + (existingNodes.length % 3) * 450
+                        const newY = 50 + Math.floor(existingNodes.length / 3) * 400
+
+                        const imageNode: ImageCanvasNode = {
+                            nodeId: `node-${result.fileId}`,
+                            type: 'image',
+                            fileId: result.fileId!,
+                            workspaceId: workspaceId,
+                            src: result.src!,
+                            aspectRatio: 1, // Default to square if we can't determine
+                            position: { x: newX, y: newY },
+                            dimensions: { width: 300, height: 300 }
+                        }
+
+                        const newCanvasState: CanvasState = {
+                            viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                            nodes: [...existingNodes, imageNode]
+                        }
+
+                        persistCanvasState(newCanvasState)
+                    }
+
+                    img.src = result.src
+                }
+            },
+            onCancel: () => {
+                // Modal was cancelled, nothing to do
+            }
+        })
+
+        modal.show()
+    }
+
     onMount(() => {
         if (!paneEl || !viewportEl) return
 
@@ -140,6 +220,9 @@
     <div class="workspace-toolbar">
         <button class="create-document-btn" onclick={handleCreateDocument}>
             + New Document
+        </button>
+        <button class="add-image-btn" onclick={handleAddImage}>
+            + Add Image
         </button>
         <span class="zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>
     </div>

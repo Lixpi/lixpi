@@ -1,14 +1,16 @@
 # Workspace Feature
 
-A workspace is the primary container where users organize and edit their documents. Think of it as an infinite canvas where document cards float, can be arranged freely, resized, and edited in place.
+A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
 ## Core Concepts
 
-**Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents.
+**Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents and uploaded files.
 
-**Canvas Node** — A positioned rectangle on the canvas representing a document. Stores position, dimensions, and a reference ID pointing to the actual document.
+**Canvas Node** — A positioned rectangle on the canvas. Can be either a document node (with ProseMirror editor) or an image node. Stores position, dimensions, and type-specific data.
 
-**Document** — The actual content (ProseMirror JSON). Lives separately from its canvas representation so the same document could theoretically appear in multiple workspaces.
+**Document** — The actual text content (ProseMirror JSON). Lives separately from its canvas representation so the same document could theoretically appear in multiple workspaces.
+
+**Image** — An uploaded image file stored in NATS Object Store. Referenced by canvas nodes and automatically deleted when removed from the canvas.
 
 **Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off.
 
@@ -91,14 +93,33 @@ type CanvasState = {
 
 ### CanvasNode
 
+Canvas nodes use a discriminated union based on the `type` field:
+
 ```typescript
-type CanvasNode = {
+type CanvasNodeType = 'document' | 'image'
+
+// Document node - contains a ProseMirror editor
+type DocumentCanvasNode = {
     nodeId: string
     type: 'document'
     referenceId: string    // Points to Document.documentId
     position: { x: number; y: number }
     dimensions: { width: number; height: number }
 }
+
+// Image node - displays an uploaded image
+type ImageCanvasNode = {
+    nodeId: string
+    type: 'image'
+    fileId: string         // Points to file in NATS Object Store
+    workspaceId: string    // For deletion context
+    src: string            // Full URL for rendering
+    aspectRatio: number    // Used for aspect-ratio-locked resize
+    position: { x: number; y: number }
+    dimensions: { width: number; height: number }
+}
+
+type CanvasNode = DocumentCanvasNode | ImageCanvasNode
 ```
 
 ## User Flows
@@ -141,6 +162,54 @@ sequenceDiagram
     Canvas->>Canvas: Calculate position
     Canvas->>WSvc: updateCanvasState()
     Canvas->>Canvas: Re-render with new node
+```
+
+### Adding an Image
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Svelte as WorkspaceCanvas.svelte
+    participant Modal as ImageUploadModal
+    participant API as /api/images/:workspaceId
+    participant ObjStore as NATS Object Store
+    participant WSvc as WorkspaceService
+
+    User->>Svelte: Click "+ Add Image"
+    Svelte->>Modal: show()
+    User->>Modal: Select/drop image file
+    Modal->>API: POST file (multipart)
+    API->>ObjStore: putObject(fileId, buffer)
+    API-->>Modal: { fileId, url }
+    Modal->>Svelte: onComplete({ fileId, src })
+    Svelte->>Svelte: Load image to get aspectRatio
+    Svelte->>Svelte: Create ImageCanvasNode
+    Svelte->>WSvc: updateCanvasState()
+    Svelte->>Svelte: Re-render with new image node
+```
+
+### Deleting an Image
+
+When an image node is removed from the canvas (either by user action or programmatically):
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Canvas as WorkspaceCanvas.ts
+    participant Tracker as canvasImageLifecycle
+    participant NATS as NATS Client
+    participant API as API Service
+    participant ObjStore as NATS Object Store
+
+    User->>Canvas: Remove image node
+    Canvas->>Canvas: commitCanvasState(newState)
+    Canvas->>Tracker: trackCanvasState(newState)
+    Tracker->>Tracker: Compare previous vs current
+    Tracker->>Tracker: Detect removed image
+    Tracker->>NATS: DELETE_IMAGE request
+    NATS->>API: Handle deletion
+    API->>ObjStore: deleteObject(fileId)
+    API->>API: Remove from workspace.files
 ```
 
 ### Editing Content
@@ -235,6 +304,14 @@ Documents belonging to the current workspace.
 | `DOCUMENT.CREATE_DOCUMENT` | Create document |
 | `DOCUMENT.UPDATE_DOCUMENT` | Update document content/title |
 | `DOCUMENT.DELETE_DOCUMENT` | Delete document |
+| `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image from Object Store |
+
+### Image HTTP Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/images/:workspaceId` | POST | Upload image (multipart/form-data) |
+| `/api/images/:workspaceId/:fileId` | GET | Serve image with auth token |
 
 ## Rendering Pipeline
 
@@ -248,22 +325,29 @@ flowchart LR
     subgraph WorkspaceCanvas.ts
         RN[renderNodes]
         CDN[createDocumentNode]
+        CIN[createImageNode]
         PM[ProseMirrorEditor]
     end
 
     subgraph DOM
         VP[.workspace-viewport]
-        NODES[.workspace-document-node]
+        DOCNODES[.workspace-document-node]
+        IMGNODES[.workspace-image-node]
         ED[.document-node-editor]
+        IMG[img element]
     end
 
     CS --> RN
     DOCS --> RN
     RN --> CDN
+    RN --> CIN
     CDN --> PM
-    CDN --> NODES
-    NODES --> VP
+    CDN --> DOCNODES
+    CIN --> IMGNODES
+    DOCNODES --> VP
+    IMGNODES --> VP
     PM --> ED
+    CIN --> IMG
 ```
 
 ## Persistence Strategy
@@ -274,9 +358,21 @@ Document content changes are handled by `DocumentService.updateDocument()` which
 
 Position and dimension changes after drag/resize are persisted immediately via `onCanvasStateChange`.
 
+## Image Lifecycle Management
+
+Images on the canvas are tracked by `canvasImageLifecycle.ts`. When an image node is removed from the canvas state:
+
+1. The tracker compares previous and current canvas states
+2. Detects which fileIds are no longer present
+3. Calls `deleteImage()` from `imageUtils.ts` to delete from storage
+4. The same `deleteImage()` utility is shared with ProseMirror's `imageLifecyclePlugin`
+
+This ensures orphaned images don't accumulate in storage.
+
 ## Future Considerations
 
 - **Multi-user collaboration** — Real-time sync of canvas state and document content
-- **Node types beyond documents** — Images, embeds, connectors between nodes
+- **Additional node types** — Embeds, connectors between nodes, sticky notes
 - **Workspace templates** — Pre-arranged layouts for common use cases
 - **Tags on workspaces** — Already stubbed in `WorkspaceService.addTagToWorkspace()`
+- **Image metadata editing** — Alt text, titles via context menu
