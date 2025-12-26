@@ -13,12 +13,23 @@
 		"CHAT_STOP": "ai.interaction.chat.stop",
 		"CHAT_ERROR": "ai.interaction.chat.error"
 	},
+	"WORKSPACE_SUBJECTS": {
+		"CREATE_WORKSPACE": "workspace.create",
+		"GET_WORKSPACE": "workspace.get",
+		"UPDATE_WORKSPACE": "workspace.update",
+		"DELETE_WORKSPACE": "workspace.delete",
+		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
+		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
+		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments"
+	},
+	"WORKSPACE_IMAGE_SUBJECTS": {
+		"DELETE_IMAGE": "workspace.image.delete"
+	},
 	"DOCUMENT_SUBJECTS": {
 		"CREATE_DOCUMENT": "document.create",
 		"GET_DOCUMENT": "document.get",
 		"UPDATE_DOCUMENT": "document.update",
 		"DELETE_DOCUMENT": "document.delete",
-		"GET_USER_DOCUMENTS": "document.getUserDocuments",
 		"ADD_TAG_TO_DOCUMENT": "document.addTag",
 		"REMOVE_TAG_FROM_DOCUMENT": "document.removeTag"
 	},

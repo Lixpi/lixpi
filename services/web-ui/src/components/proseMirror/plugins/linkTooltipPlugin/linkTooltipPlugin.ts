@@ -1,7 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import type { Mark } from 'prosemirror-model'
-import { computePosition, flip, shift, offset, hide, type VirtualElement } from '@floating-ui/dom'
 import { createEl } from '../../components/domTemplates.ts'
 
 export const linkTooltipPluginKey = new PluginKey('linkTooltip')
@@ -15,6 +13,7 @@ class LinkTooltipView {
     private tooltip: HTMLElement
     private currentHref: string = ''
     private linkElement: HTMLElement | null = null
+    private tooltipParent: HTMLElement | null = null
 
     constructor({ view }: LinkTooltipViewOptions) {
         this.view = view
@@ -30,7 +29,9 @@ class LinkTooltipView {
 
         this.buildTooltip()
 
-        view.dom.parentNode?.appendChild(this.tooltip)
+        // Append to editor's parent so tooltip scales with transformed viewport
+        this.tooltipParent = view.dom.parentNode as HTMLElement
+        this.tooltipParent?.appendChild(this.tooltip)
 
         view.dom.addEventListener('click', this.handleClick)
         document.addEventListener('click', this.handleDocumentClick)
@@ -69,31 +70,75 @@ class LinkTooltipView {
         }
     }
 
-    private async show(anchor: HTMLElement): Promise<void> {
+    private findTransformedAncestor(): { element: HTMLElement; scale: number } | null {
+        let current: HTMLElement | null = this.tooltipParent
+        while (current) {
+            const style = getComputedStyle(current)
+            const transform = style.transform
+            if (transform && transform !== 'none') {
+                const match = transform.match(/matrix\(([^,]+),/)
+                if (match) {
+                    return { element: current, scale: parseFloat(match[1]) }
+                }
+            }
+            current = current.parentElement
+        }
+        return null
+    }
+
+    private screenToLocal(screenX: number, screenY: number): { x: number; y: number } {
+        if (!this.tooltipParent) {
+            return { x: screenX, y: screenY }
+        }
+
+        const parentRect = this.tooltipParent.getBoundingClientRect()
+        const transformInfo = this.findTransformedAncestor()
+        const scale = transformInfo?.scale ?? 1
+
+        const localX = (screenX - parentRect.left) / scale
+        const localY = (screenY - parentRect.top) / scale
+
+        return { x: localX, y: localY }
+    }
+
+    private getScale(): number {
+        const transformInfo = this.findTransformedAncestor()
+        return transformInfo?.scale ?? 1
+    }
+
+    private show(anchor: HTMLElement): void {
         const urlEl = this.tooltip.querySelector('.link-tooltip-url') as HTMLAnchorElement
         if (urlEl) {
             urlEl.href = this.currentHref
             urlEl.textContent = this.currentHref
         }
 
-        this.tooltip.style.visibility = 'visible'
+        this.tooltip.style.visibility = 'hidden'
+        this.tooltip.style.display = 'block'
         this.tooltip.classList.add('is-visible')
 
-        const virtualElement: VirtualElement = {
-            getBoundingClientRect: () => anchor.getBoundingClientRect(),
-        }
+        const scale = this.getScale()
+        const anchorRect = anchor.getBoundingClientRect()
+        const tooltipRect = this.tooltip.getBoundingClientRect()
+        const tooltipWidthLocal = tooltipRect.width / scale
 
-        const { x, y, middlewareData } = await computePosition(virtualElement, this.tooltip, {
-            placement: 'bottom',
-            middleware: [offset(6), flip({ fallbackPlacements: ['top', 'bottom-start', 'top-start'] }), shift({ padding: 8 }), hide()],
-        })
+        // Position below the anchor, centered (in screen coords)
+        const anchorCenterX = anchorRect.left + anchorRect.width / 2
+        const tooltipScreenLeft = anchorCenterX - tooltipRect.width / 2
+        const tooltipScreenTop = anchorRect.bottom + 6 * scale
 
-        const isHidden = middlewareData.hide?.referenceHidden
+        const local = this.screenToLocal(tooltipScreenLeft, tooltipScreenTop)
+
+        // Clamp to parent bounds
+        const parentRect = this.tooltipParent?.getBoundingClientRect()
+        const parentWidthLocal = parentRect ? parentRect.width / scale : window.innerWidth
+        const maxLeft = parentWidthLocal - tooltipWidthLocal - 8
+        const clampedLeft = Math.max(8, Math.min(local.x, maxLeft))
 
         Object.assign(this.tooltip.style, {
-            left: `${x}px`,
-            top: `${y}px`,
-            visibility: isHidden ? 'hidden' : 'visible',
+            left: `${clampedLeft}px`,
+            top: `${local.y}px`,
+            visibility: 'visible',
         })
     }
 

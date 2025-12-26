@@ -8,6 +8,7 @@
     // import Sidebar from '$src/components/sidebar/Sidebar.svelte'
     import Sidebar2 from '$src/components/sidebar/Sidebar2.svelte'
     import IntroPage from '$src/components/intro-page.svelte'
+    import WorkspaceCanvas from '$src/components/WorkspaceCanvas.svelte'
     import ProjectDetails from '$src/components/project-details/project-details.svelte'
     import PaymentDetails from '$src/components/subscription-management/payment-details.svelte'
 
@@ -269,6 +270,8 @@
 
             {#if $routerStore.data.currentRoute.path === '/document/:documentId'}
                 <ProjectDetails />
+            {:else if $routerStore.data.currentRoute.path === '/workspace/:workspaceId'}
+                <WorkspaceCanvas />
             {:else}
                 <!-- <PaymentDetails /> -->
                 <IntroPage />

@@ -1,0 +1,54 @@
+/* Workspace document node styles */
+
+.workspace-document-node {
+    cursor: pointer;
+}
+
+.document-card {
+    background: var(--card-background, #ffffff);
+    border: 2px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.document-card:hover {
+    border-color: var(--primary-color, #3b82f6);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.document-header {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    background: var(--header-background, #f8fafc);
+    border-radius: 6px 6px 0 0;
+}
+
+.document-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-color, #1e293b);
+}
+
+.document-preview {
+    padding: 12px;
+    flex: 1;
+}
+
+/* Dark mode */
+:global(.dark) .document-card {
+    background: var(--card-background-dark, #1e293b);
+    border-color: var(--border-color-dark, #334155);
+}
+
+:global(.dark) .document-header {
+    background: var(--header-background-dark, #0f172a);
+}
+
+:global(.dark) .document-title {
+    color: var(--text-color-dark, #f1f5f9);
+}

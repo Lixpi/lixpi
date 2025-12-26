@@ -13,11 +13,11 @@ export const routes: RouteDefinition[] = [
         path: '/',
     },
     {
-        path: '/document/:documentId',
-        load: (params: any) => {
-            // console.log('ROUTER -> /document/:documentId', params)
-            servicesStore.getData('documentService').getDocument({ documentId: params.documentId as string })
-            return Promise.resolve()
+        path: '/workspace/:workspaceId',
+        load: async (params: any) => {
+            const workspaceId = params.workspaceId as string
+            await servicesStore.getData('workspaceService').getWorkspace({ workspaceId })
+            await servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId })
         },
     },
 ]

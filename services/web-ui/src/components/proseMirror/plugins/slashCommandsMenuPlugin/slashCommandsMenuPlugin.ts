@@ -1,6 +1,5 @@
 import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { computePosition, flip, shift, offset, type VirtualElement } from '@floating-ui/dom'
 import { createEl } from '../../components/domTemplates.ts'
 import { SLASH_COMMANDS, filterCommands, type SlashCommand } from './commandRegistry.ts'
 import { documentTitleNodeType } from '../../customNodes/documentTitleNode.js'
@@ -29,6 +28,7 @@ class SlashCommandsMenuView {
     private view: EditorView
     private menu: HTMLElement
     private menuList: HTMLElement
+    private menuParent: HTMLElement | null = null
     private filteredCommands: SlashCommand[] = []
 
     constructor({ view }: SlashCommandsMenuViewOptions) {
@@ -48,7 +48,9 @@ class SlashCommandsMenuView {
         this.menuList = createEl('div', { className: 'slash-commands-menu-list' })
         this.menu.appendChild(this.menuList)
 
-        view.dom.parentNode?.appendChild(this.menu)
+        // Append to editor's parent so menu scales with transformed viewport
+        this.menuParent = view.dom.parentNode as HTMLElement
+        this.menuParent?.appendChild(this.menu)
     }
 
     private shouldShow(): boolean {
@@ -68,39 +70,52 @@ class SlashCommandsMenuView {
         return true
     }
 
-    private createVirtualElement(pos: number): VirtualElement {
-        return {
-            getBoundingClientRect: () => {
-                const coords = this.view.coordsAtPos(pos)
-                return {
-                    x: coords.left,
-                    y: coords.top,
-                    top: coords.top,
-                    left: coords.left,
-                    bottom: coords.bottom,
-                    right: coords.left,
-                    width: 0,
-                    height: coords.bottom - coords.top,
+    private findTransformedAncestor(): { element: HTMLElement; scale: number } | null {
+        let current: HTMLElement | null = this.menuParent
+        while (current) {
+            const style = getComputedStyle(current)
+            const transform = style.transform
+            if (transform && transform !== 'none') {
+                const match = transform.match(/matrix\(([^,]+),/)
+                if (match) {
+                    return { element: current, scale: parseFloat(match[1]) }
                 }
-            },
+            }
+            current = current.parentElement
         }
+        return null
     }
 
-    private async updatePosition(triggerPos: number): Promise<void> {
-        const virtualElement = this.createVirtualElement(triggerPos)
+    private screenToLocal(screenX: number, screenY: number): { x: number; y: number } {
+        if (!this.menuParent) {
+            return { x: screenX, y: screenY }
+        }
 
-        const { x, y } = await computePosition(virtualElement, this.menu, {
-            placement: 'bottom-start',
-            middleware: [
-                offset(4),
-                flip({ fallbackPlacements: ['top-start'] }),
-                shift({ padding: 8 }),
-            ],
-        })
+        const parentRect = this.menuParent.getBoundingClientRect()
+        const transformInfo = this.findTransformedAncestor()
+        const scale = transformInfo?.scale ?? 1
+
+        const localX = (screenX - parentRect.left) / scale
+        const localY = (screenY - parentRect.top) / scale
+
+        return { x: localX, y: localY }
+    }
+
+    private getScale(): number {
+        const transformInfo = this.findTransformedAncestor()
+        return transformInfo?.scale ?? 1
+    }
+
+    private updatePosition(triggerPos: number): void {
+        const coords = this.view.coordsAtPos(triggerPos)
+        const scale = this.getScale()
+
+        // Convert screen coordinates to local
+        const local = this.screenToLocal(coords.left, coords.bottom + 4 * scale)
 
         Object.assign(this.menu.style, {
-            left: `${x}px`,
-            top: `${y}px`,
+            left: `${local.x}px`,
+            top: `${local.y}px`,
         })
     }
 
@@ -139,7 +154,7 @@ class SlashCommandsMenuView {
                 this.updateSelectedIndex(index)
             })
 
-            item.addEventListener('click', (e) => {
+            item.addEventListener('mousedown', (e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 this.executeCommand(index)

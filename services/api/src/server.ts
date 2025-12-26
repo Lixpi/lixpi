@@ -22,8 +22,11 @@ import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
 import { aiInteractionSubjects } from './NATS/subscriptions/ai-interaction-subjects.ts'
+import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
 import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
+import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
+import imageRoutes from './routes/image-routes.ts'
 
 import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
 
@@ -97,7 +100,9 @@ const subscriptions = [
     ...subscriptionSubjects,
     ...aiModelSubjects,
     ...aiInteractionSubjects,
+    ...workspaceSubjects,
     ...documentSubjects,
+    ...imageSubjects,
 ]
 
 // Initialize with your NATS server connection
@@ -162,6 +167,9 @@ app.use(express.json({ limit: '100mb' }))
 app.use(express.urlencoded({ limit: '100mb', extended: true }))
 app.use(cors(corsOptions))
 app.use(cookieParser())
+
+// Image upload/download routes
+app.use('/api/images', imageRoutes)
 
 
 

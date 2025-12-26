@@ -5,6 +5,8 @@ import {
     imageIcon,
     documentIcon,
 } from '../../../../svgIcons/index.ts'
+import { ImageUploadModal } from './ImageUploadModal.ts'
+import RouterService from '../../../../services/router-service.ts'
 
 type SlashCommand = {
     name: string
@@ -25,20 +27,39 @@ const createCodeBlockCommand = (): SlashCommand['execute'] => {
 
 const createImageCommand = (): SlashCommand['execute'] => {
     return (view: EditorView) => {
-        // TODO: Phase 2 - Implement proper image upload with file picker or URL input
-        // For now, prompt for URL
-        const url = window.prompt('Enter image URL:')
-        if (!url) return false
-
-        const { state, dispatch } = view
+        const { state } = view
         const imageType = state.schema.nodes.image
         if (!imageType) {
             console.warn('[slashCommandsMenu] Image node type not found in schema')
             return false
         }
 
-        const image = imageType.create({ src: url, alt: '', title: '' })
-        dispatch(state.tr.replaceSelectionWith(image).scrollIntoView())
+        const workspaceId = RouterService.getRouteParams().workspaceId as string
+
+        const modal = new ImageUploadModal({
+            view,
+            onComplete: (result) => {
+                if (result.success && result.src) {
+                    const attrs: Record<string, string | null> = {
+                        src: result.src,
+                        alt: '',
+                        title: '',
+                        fileId: result.fileId || null,
+                        workspaceId: result.fileId ? workspaceId : null,
+                    }
+
+                    const image = imageType.create(attrs)
+                    const tr = view.state.tr.replaceSelectionWith(image).scrollIntoView()
+                    view.dispatch(tr)
+                    view.focus()
+                }
+            },
+            onCancel: () => {
+                view.focus()
+            },
+        })
+
+        modal.show()
         return true
     }
 }

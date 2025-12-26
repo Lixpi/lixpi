@@ -44,7 +44,6 @@
         "@lixpi/markdown-stream-parser": "^0.0.3-34"
     },
     "dependencies": {
-        "@floating-ui/dom": "*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@auth0/auth0-spa-js": "*",

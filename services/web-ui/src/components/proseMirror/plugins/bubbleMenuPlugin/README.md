@@ -5,7 +5,7 @@ A universal floating selection-based bubble menu for ProseMirror that shows cont
 ## Features
 
 - **Context-aware menu**: Shows different items based on selection type (text vs image)
-- **Selection-based positioning**: Uses FloatingUI for text, custom positioning for images (centered below)
+- **Transform-aware positioning**: Custom positioning that handles CSS transforms (zoom/pan) correctly
 - **Mobile-first design**: Optimized touch targets, platform-aware debouncing (350ms touch / 200ms desktop)
 - **Inline link editing**: Link input panel integrated directly in the bubble menu (no modal dialogs)
 
@@ -58,23 +58,23 @@ The main view class that manages:
 
 - Menu visibility based on selection state and context
 - Context-aware item visibility (show/hide based on selection type)
-- FloatingUI positioning for text, custom centered positioning for images
+- Transform-aware positioning that works with CSS scaled/translated ancestors
 - Debounced updates for performance (especially on mobile during selection handle dragging)
 - Link input panel state
 - Image resize event handling for real-time position updates
 
-#### Virtual Element (Text Selection)
+#### Transform-aware Positioning
 
-Uses ProseMirror's `coordsAtPos()` to create a virtual element for FloatingUI:
+Uses ProseMirror's `coordsAtPos()` to get screen coordinates, then converts to local coordinates accounting for CSS transforms:
 
 ```typescript
-const virtualElement = {
-  getBoundingClientRect: () => {
-    const start = view.coordsAtPos(from)
-    const end = view.coordsAtPos(to)
-    return { left, top, right, bottom, width, height }
-  },
-}
+// Find ancestor with CSS transform (zoom/pan viewport)
+const transformInfo = findTransformedAncestor()
+const scale = transformInfo?.scale ?? 1
+
+// Convert screen coords to local coords
+const localX = (screenX - parentRect.left) / scale
+const localY = (screenY - parentRect.top) / scale
 ```
 
 #### Image Positioning

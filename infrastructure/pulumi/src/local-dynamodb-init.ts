@@ -79,6 +79,16 @@ async function createTables() {
                         Projection: { ProjectionType: lsi.projectionType },
                     })),
                 }),
+                ...(table.globalSecondaryIndexes && {
+                    GlobalSecondaryIndexes: table.globalSecondaryIndexes.map(gsi => ({
+                        IndexName: gsi.name,
+                        KeySchema: [
+                            { AttributeName: gsi.hashKey, KeyType: 'HASH' as const },
+                            ...(gsi.rangeKey ? [{ AttributeName: gsi.rangeKey, KeyType: 'RANGE' as const }] : []),
+                        ],
+                        Projection: { ProjectionType: gsi.projectionType },
+                    })),
+                }),
             }))
             console.log(`  ✓ ${table.name} (created)`)
         } catch (error: unknown) {

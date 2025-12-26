@@ -12,10 +12,10 @@
     } from '$src/svgIcons'
 
     import routerService from '$src/services/router-service'
-    import DocumentService from '$src/services/document-service.ts'
+    import WorkspaceService from '$src/services/workspace-service.ts'
     import { routerStore } from '$src/stores/routerStore'
-    import { documentsStore } from '$src/stores/documentsStore'
-    import { documentStore } from '$src/stores/documentStore.ts'
+    import { workspacesStore } from '$src/stores/workspacesStore.ts'
+    import { workspaceStore } from '$src/stores/workspaceStore.ts'
     import { aiModelsStore } from '$src/stores/aiModelsStore'
     import { authStore } from '$src/stores/authStore'
     import { organizationStore } from '$src/stores/organizationStore.ts'
@@ -61,13 +61,13 @@
 		return "secondary";
 	}
 
-    let currentDocumentId = $derived($routerStore.data.currentRoute.routeParams.documentId)
+    let currentWorkspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId)
 
-    const onDocumentDeleteHandler = async (e, documentId) => {
+    const onWorkspaceDeleteHandler = async (e, workspaceId) => {
         e.stopPropagation()
 
-        const documentService = new DocumentService()
-        const deleteDocumentRes = await documentService.deleteDocument({ documentId })
+        const workspaceService = new WorkspaceService()
+        const deleteWorkspaceRes = await workspaceService.deleteWorkspace({ workspaceId })
 
     }
 
@@ -95,28 +95,24 @@
     let defaultAiModel = $derived($aiModelsStore.data.find(model => model.sortingPosition === 103))
 
 
-    const handleDocumentClick = documentId => {
-        console.log('documentId', documentId)
-        documentStore.setMetaValues({
+    const handleWorkspaceClick = workspaceId => {
+        console.log('workspaceId', workspaceId)
+        workspaceStore.setMetaValues({
             loadingStatus: LoadingStatus.idle,
-            isRendered: false
         })
 
-        routerService.navigateTo('/document/:documentId', {
-            params: { documentId },
+        routerService.navigateTo('/workspace/:workspaceId', {
+            params: { workspaceId },
             shouldFetchData: true
         });
 	}
 
-    const handleCreateNewDocumentClick = async () => {
+    const handleCreateNewWorkspaceClick = async () => {
 
-        // const documentService = DocumentService.getInstance('new')
-        const documentService = new DocumentService()
+        const workspaceService = new WorkspaceService()
 
-        await documentService.createDocument({
-            title: 'New document',
-            aiModel: `${defaultAiModel.provider}:${defaultAiModel.model}`,
-            content: {},
+        await workspaceService.createWorkspace({
+            name: 'New Workspace',
         })
     }
 </script>
@@ -130,7 +126,7 @@
                 variant="ghost"
                 size="icon"
                 class="[&_svg]:size-6 mr-3"
-                onclick={handleCreateNewDocumentClick}
+                onclick={handleCreateNewWorkspaceClick}
             >
                 <!-- {@html createNewFileIcon} -->
                 <FilePlus2Icon />
@@ -149,9 +145,7 @@
 
 
 	<div class="flex flex-col gap-2 p-3 pt-0 mt-6 select-none">
-        {#each $documentsStore.data as document, index (document.documentId)} <!-- keyed loop allows the render animation inside the component to work properly -->
-            <!-- hover:bg-accent
-            bg-muted -->
+        {#each $workspacesStore.data as workspace, index (workspace.workspaceId)}
 			<button
 				class={cn(`
                     hover:bg-zinc-200
@@ -171,7 +165,7 @@
                     transition-all
                     ease-hover
                     duration-75`,
-					currentDocumentId === document.documentId && `
+					currentWorkspaceId === workspace.workspaceId && `
                         bg-zinc-200
                         dark:bg-sidebar-foreground
                         dark:text-sidebar-accent
@@ -179,25 +173,21 @@
 				)}
                 in:popOutTransition={{duration: 400}}
                 out:popOutTransition={{duration: $authStore.meta.isAuthenticated ? 200 : 0}}
-				onclick={() => handleDocumentClick(document.documentId)}
+				onclick={() => handleWorkspaceClick(workspace.workspaceId)}
 			>
 				<div class="flex w-full flex-col">
 					<div class="flex items-center">
 						<div class="flex items-center gap-2">
-							<div class="font-medium">{document.title}</div>
-							{#if document.hasUpdates}
-								<span class="flex h-2 w-2 rounded-full bg-blue-600" />
-							{/if}
+							<div class="font-medium">{workspace.name}</div>
 						</div>
 						<div
 							class={cn(
 								"ml-auto text-xs",
-								currentDocumentId === document.documentId
+								currentWorkspaceId === workspace.workspaceId
 									? "text-foreground"
 									: "text-muted-foreground"
 							)}
 						>
-							<!-- {formatTimeAgo(new Date(document.date))} -->
 
                             <DropdownMenu.Root>
                                 <DropdownMenu.Trigger>
@@ -220,7 +210,7 @@
                                         <DropdownMenu.Sub>
                                             <DropdownMenu.SubTrigger>Labels</DropdownMenu.SubTrigger>
                                             <DropdownMenu.SubContent>
-                                                <DropdownMenu.RadioGroup value={task.label}>
+                                                <DropdownMenu.RadioGroup value={workspace.name}>
                                                     {#each labels as label (label.value)}
                                                         <DropdownMenu.RadioItem value={label.value}>
                                                             {label.label}
@@ -232,8 +222,8 @@
                                         <DropdownMenu.Separator />
                                         <DropdownMenu.Item
                                             onclick={(e) => {
-                                                console.log('delete', document.documentId)
-                                                onDocumentDeleteHandler(e, document.documentId)
+                                                console.log('delete', workspace.workspaceId)
+                                                onWorkspaceDeleteHandler(e, workspace.workspaceId)
                                             }}
                                         >
                                             Delete
@@ -244,24 +234,16 @@
                             </DropdownMenu.Root>
 						</div>
 					</div>
-					<div class="text-xs font-medium">{document.subject}</div>
+					{#if workspace.tags?.length}
+						<div class="flex items-center gap-2 mb-2 ">
+							{#each workspace.tags as tag}
+								<span class="bg-orange-500 text-white text-xs font-normal me-1 px-1.5 py-0.3 rounded-[9px]">
+									{tag}
+								</span>
+							{/each}
+						</div>
+					{/if}
 				</div>
-				<!-- <div class="text-muted-foreground line-clamp-2 text-xs">
-                    Project description
-				</div> -->
-				{#if document?.tags?.length}
-					<div class="flex items-center gap-2 mb-2 ">
-						{#each document.tags as tag}
-							<!-- <Badge variant={get_badge_variant_from_label(tag)}>
-								{tag}
-							</Badge> -->
-                            <!-- <Badge variant="outline">
-								{$organizationStore.data.tags[tag].name}
-							</Badge> -->
-                            <span class="bg-orange-500 text-white text-xs font-normal me-1 px-1.5 py-0.3 rounded-[9px] dark:bg-green-900 dark:text-green-300">{$organizationStore.data.tags[tag]?.name}</span>
-						{/each}
-					</div>
-				{/if}
 			</button>
 		{/each}
 	</div>

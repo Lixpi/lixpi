@@ -72,16 +72,14 @@ export const documentsStore = {
     addDocuments: (documents: Document[] = []): void => store.update(state => ({
         ...state,
         data: [
-            ...documents,
+            ...Array.isArray(documents) ? documents : [],
             ...state.data,
         ],
     })),
 
     setDocuments: (documents: Document[] = []): void => store.update(state => ({
         ...state,
-        data: [
-            ...documents,
-        ],
+        data: Array.isArray(documents) ? [...documents] : [],
     })),
 
     deleteDocument: (documentId: string): void => store.update(state => ({

@@ -22,7 +22,6 @@ type UserStore = {
     data: User
 }
 
-// const subscription: ReadonlyDeep<SubscriptionStore> = deepFreeze({
 const user: ReadonlyDeep<UserStore> = deepFreeze({
     meta: {
         loadingStatus: LoadingStatus.idle,

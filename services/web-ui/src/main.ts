@@ -11,6 +11,7 @@ import SubscriptionService from '$src/services/subscription-service.js'
 import OrganizationService from '$src/services/organization-service.js'
 import AiModelService from '$src/services/ai-model-service.ts'
 import DocumentService from '$src/services/document-service.ts'
+import WorkspaceService from '$src/services/workspace-service.ts'
 
 import App from '$src/App.svelte'
 
@@ -48,6 +49,7 @@ async function initializeServicesSequentially() {
             subscriptionService: new SubscriptionService(),
             aiModelService: new AiModelService(),
             documentService: new DocumentService(),
+            workspaceService: new WorkspaceService(),
             organizationService: new OrganizationService()
         });
 
@@ -62,8 +64,8 @@ async function initializeServicesSequentially() {
         // Fetch available AI models
         servicesStore.getData('aiModelService')!.getAvailableAiModels();
 
-        // Fetch user documents
-        servicesStore.getData('documentService')!.getUserDocuments();
+        // Fetch user workspaces
+        servicesStore.getData('workspaceService')!.getUserWorkspaces();
 
         await RouterService.init();
     } catch (error) {

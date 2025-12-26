@@ -3,7 +3,7 @@
 import * as process from 'process'
 import { v4 as uuid } from 'uuid'
 
-import { getDynamoDbTableStageName, type Document, type DocumentMeta, type DocumentAccessList } from '@lixpi/constants'
+import { getDynamoDbTableStageName, type Document, type DocumentMeta, type DocumentFile } from '@lixpi/constants'
 import type { Partial, Pick } from 'type-fest'
 
 const {
@@ -18,9 +18,8 @@ export default {
 	getDocument: async ({
 		documentId,
 		revision,
-		userId
-	}: Pick<Document, 'documentId' | 'revision'> & { userId: string }): Promise<Document | { error: string }> => {
-		// console.log('key', { documentId, revision })
+		workspaceId
+	}: Pick<Document, 'documentId' | 'revision' | 'workspaceId'>): Promise<Document | { error: string }> => {
 		const document = await dynamoDBService.getItem({
 			tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
 			key: { documentId, revision },
@@ -31,80 +30,61 @@ export default {
 			return { error: 'NOT_FOUND' }
 		}
 
-		// Check if user has permission to access document
-		return document?.accessList?.some(entry => entry.userId === userId)
-			? document
-			: { error: 'PERMISSION_DENIED'}
-	},
-
-	getUserDocuments: async ({
-		userId
-	}: { userId: string }): Promise<DocumentMeta[]> => {
-		const userDocuments = await dynamoDBService.queryItems({
-			tableName: getDynamoDbTableStageName('DOCUMENTS_ACCESS_LIST', ORG_NAME, STAGE),
-			indexName: 'updatedAt',
-			keyConditions: { userId: userId },
-			limit: 25,
-        	fetchAllItems: true,
-			scanIndexForward: false,
-			origin: 'model::Document->getUserDocuments()',
-		})
-
-		if (!userDocuments.items.length) {
-			return []
+		if (document.workspaceId !== workspaceId) {
+			return { error: 'DOCUMENT_NOT_IN_WORKSPACE' }
 		}
 
-		const documentsMeta = await dynamoDBService.batchReadItems({
-			queries: [{
-				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
-				keys: userDocuments.items.map(({documentId}) => ({documentId})),
-			}],
-			readBatchSize: 100,
-        	fetchAllItems: true,
-        	scanIndexForward: false,
-			origin: 'model::Document->getUserDocuments()'
-		})
-		const documentsMetaItems = documentsMeta.items[getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE)]
+		return document
+	},
 
-		return userDocuments.items.map(document => documentsMetaItems.find(meta => meta.documentId === document.documentId)).filter(document => document)
+	getWorkspaceDocuments: async ({
+		workspaceId
+	}: { workspaceId: string }): Promise<Document[]> => {
+		const documents = await dynamoDBService.queryItems({
+			tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+			indexName: 'workspaceId',
+			keyConditions: { workspaceId },
+			fetchAllItems: true,
+			scanIndexForward: false,
+			origin: 'model::Document->getWorkspaceDocuments()'
+		})
+
+		// Filter to only get the latest revision (revision = 1) in memory
+		const latestRevisions = (documents?.items || []).filter((doc: Document) => doc.revision === 1)
+		return latestRevisions
 	},
 
 	createDocument: async ({
+		workspaceId,
 		title,
-		content,
-		permissions
-	}: Pick<Document, 'title' | 'content'> & { permissions: { userId: string; accessLevel: string } }): Promise<Document | undefined> => {
+		content
+	}: Pick<Document, 'workspaceId' | 'title' | 'content'>): Promise<Document | undefined> => {
 		const currentDate = new Date().getTime()
-		const revision = 1    // Default non-expiring revision
+		const revision = 1
 
-		const newDocumentData = {
-			documentId: uuid(),    // Partition key    // TODO: guarantee that documentId is unique by checking if it already exists in the database
-			revision,    // Sort key
+		const newDocumentData: Document = {
+			documentId: uuid(),
+			workspaceId,
+			revision,
 			title,
 			content,
 			prevRevision: 1,
 			createdAt: currentDate,
-			updatedAt: currentDate,
-			accessType: 'private',
-			accessList: [{
-				userId: permissions.userId,
-				accessLevel: permissions.accessLevel
-			}],
+			updatedAt: currentDate
 		}
 
 		try {
-			// Insert the new document data into the database
 			await dynamoDBService.putItem({
 				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
 				item: newDocumentData,
 				origin: 'createDocument'
 			})
 
-			// Insert the new document metadata into the database
 			await dynamoDBService.putItem({
 				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
 				item: {
-					documentId: newDocumentData.documentId,    // Partition key
+					documentId: newDocumentData.documentId,
+					workspaceId: newDocumentData.workspaceId,
 					title: newDocumentData.title,
 					tags: [],
 					createdAt: newDocumentData.createdAt,
@@ -113,22 +93,9 @@ export default {
 				origin: 'createDocument'
 			})
 
-			// Insert the new document permissions into the database
-			await dynamoDBService.putItem({
-				tableName: getDynamoDbTableStageName('DOCUMENTS_ACCESS_LIST', ORG_NAME, STAGE),
-				item: {
-					userId: permissions.userId,	// Partition key
-					documentId: newDocumentData.documentId,	// Sort key
-					accessLevel: permissions.accessLevel,
-					createdAt: newDocumentData.createdAt,
-					updatedAt: newDocumentData.updatedAt
-				},
-				origin: 'createDocument'
-			})
-
 			return newDocumentData
-		} catch (e) {
-			console.error(e)
+		} catch (error) {
+			console.error('Failed to create document:', error)
 		}
 	},
 
@@ -137,9 +104,8 @@ export default {
 		content,
 		documentId,
 		prevRevision,
-		permissions,
-		userId
-	}: Partial<Document> & { documentId: string; userId: string; permissions?: any }): Promise<void> => {
+		workspaceId
+	}: Partial<Document> & { documentId: string; workspaceId: string }): Promise<void> => {
 		const currentDate = new Date().getTime()
 		const currentRevision = sliceTime({ precision: 'hours' })
 
@@ -276,18 +242,10 @@ export default {
 
 	delete: async ({
 		documentId,
-		userId
-	}: Pick<Document, 'documentId'> & { userId: string }): Promise<{ status: string; documentId: string }> => {
-
-		// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-		//TODO check if user has permission to delete document
-
-		// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
+		workspaceId
+	}: Pick<Document, 'documentId' | 'workspaceId'>): Promise<{ status: string; documentId: string }> => {
 		try {
-			const result = await dynamoDBService.softDeleteItem({
+			await dynamoDBService.softDeleteItem({
 				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
 				key: { documentId, revision: 1 },
 				timeToLiveAttributeName: 'revisionExpiresAt',
@@ -295,22 +253,73 @@ export default {
 				origin: 'deleteDocument:Documents'
 			})
 
-			const result2 = await dynamoDBService.deleteItems({
+			await dynamoDBService.deleteItems({
 				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
 				key: { documentId },
 				origin: 'deleteDocument:Meta'
 			})
 
-			const result3 = await dynamoDBService.deleteItems({
-				tableName: getDynamoDbTableStageName('DOCUMENTS_ACCESS_LIST', ORG_NAME, STAGE),
-				key: { userId: userId, documentId },
-				origin: 'deleteDocument'
+			return { status: 'deleted', documentId }
+		} catch (error) {
+			throw error
+		}
+	},
+
+	addFile: async ({
+		documentId,
+		file
+	}: { documentId: string; file: DocumentFile }): Promise<void> => {
+		try {
+			// Get current document to append to files array
+			const document = await dynamoDBService.getItem({
+				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+				key: { documentId, revision: 1 },
+				origin: 'addFile:getDocument'
 			})
 
-			return { status: 'deleted', documentId } //TODO is this necessary? Probably just a rudiement of the old code
+			const currentFiles = document?.files || []
+			const updatedFiles = [...currentFiles, file]
+
+			await dynamoDBService.updateItem({
+				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+				key: { documentId, revision: 1 },
+				updates: {
+					files: updatedFiles,
+					updatedAt: Date.now()
+				},
+				origin: 'addFile'
+			})
+		} catch (e) {
+			throw e
 		}
-		catch (e) {
-			throw e;
+	},
+
+	removeFile: async ({
+		documentId,
+		fileId
+	}: { documentId: string; fileId: string }): Promise<void> => {
+		try {
+			// Get current document to filter out the file
+			const document = await dynamoDBService.getItem({
+				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+				key: { documentId, revision: 1 },
+				origin: 'removeFile:getDocument'
+			})
+
+			const currentFiles = document?.files || []
+			const updatedFiles = currentFiles.filter((f: DocumentFile) => f.id !== fileId)
+
+			await dynamoDBService.updateItem({
+				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+				key: { documentId, revision: 1 },
+				updates: {
+					files: updatedFiles,
+					updatedAt: Date.now()
+				},
+				origin: 'removeFile'
+			})
+		} catch (e) {
+			throw e
 		}
 	}
 }
