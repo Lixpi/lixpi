@@ -250,7 +250,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Find the node to check if it's an image (for aspect ratio locking)
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
         const isImageNode = node?.type === 'image'
-        
+
         // For images, get aspect ratio from the actual img element (more reliable than stored data)
         let aspectRatio: number | null = null
         if (isImageNode) {
@@ -467,17 +467,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         imgEl.src = node.src
         imgEl.alt = ''
         imgEl.draggable = false
-        
+
         // Once image loads, fix container dimensions to match actual aspect ratio
         imgEl.onload = () => {
             const naturalAspect = imgEl.naturalWidth / imgEl.naturalHeight
             const storedAspect = node.dimensions.width / node.dimensions.height
-            
+
             // If aspect ratios don't match, fix and persist
             if (Math.abs(naturalAspect - storedAspect) > 0.01) {
                 const correctedHeight = node.dimensions.width / naturalAspect
                 nodeEl.style.height = `${correctedHeight}px`
-                
+
                 // Persist the corrected dimensions
                 if (currentCanvasState && onCanvasStateChange) {
                     const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
@@ -496,7 +496,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
         }
-        
+
         nodeEl.appendChild(imgEl)
 
         // Add resize handles

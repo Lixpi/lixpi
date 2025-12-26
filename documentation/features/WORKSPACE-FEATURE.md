@@ -186,6 +186,8 @@ sequenceDiagram
     Svelte->>Svelte: Create ImageCanvasNode
     Svelte->>WSvc: updateCanvasState()
     Svelte->>Svelte: Re-render with new image node
+
+Note: after an image is uploaded the client loads it to determine the natural aspect ratio. On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing and the UI computes resize handle size/offsets dynamically so handles remain visually consistent regardless of canvas zoom.
 ```
 
 ### Deleting an Image
@@ -203,6 +205,7 @@ sequenceDiagram
 
     User->>Canvas: Remove image node
     Canvas->>Canvas: commitCanvasState(newState)
+    Note: committing canvas state persists corrected dimensions and triggers the image lifecycle tracker which will detect removed fileIds and call `deleteImage` to remove orphaned files from storage.
     Canvas->>Tracker: trackCanvasState(newState)
     Tracker->>Tracker: Compare previous vs current
     Tracker->>Tracker: Detect removed image
