@@ -2,7 +2,8 @@
 
 import { NATS_SUBJECTS, LoadingStatus } from '@lixpi/constants'
 
-const { DOCUMENT_SUBJECTS, WORKSPACE_SUBJECTS } = NATS_SUBJECTS
+const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
+const { DOCUMENT_SUBJECTS } = WORKSPACE_SUBJECTS
 
 import AuthService from './auth-service.ts'
 

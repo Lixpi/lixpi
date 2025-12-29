@@ -19,7 +19,7 @@ import { useAiInput, insertAiChatThread } from "./commands.js"
 
 const mac = typeof navigator != "undefined" ? /Mac|iP(hone|[oa]d)/.test(navigator.platform) : false
 
-export const buildKeymap = (schema, mapKeys) => {
+export const buildKeymap = (schema, documentType, mapKeys) => {
     let keys = {}, type
     const bind = (key, cmd) => {
         if (mapKeys) {
@@ -84,19 +84,28 @@ export const buildKeymap = (schema, mapKeys) => {
         bind("Mod-B", toggleMark(type))
     }
 
-    // AI Input trigger - needs to be before italic binding to take precedence
-    bind("Mod-i", useAiInput)
-    bind("Mod-I", useAiInput)
+    // AI-specific keybindings - only for aiChatThread documents
+    if (documentType === 'aiChatThread') {
+        // AI Input trigger
+        bind("Mod-i", useAiInput)
+        bind("Mod-I", useAiInput)
 
-    // AI Chat Thread trigger
-    bind("Mod-Shift-i", insertAiChatThread)
-    bind("Mod-Shift-I", insertAiChatThread)
+        // AI Chat Thread trigger
+        bind("Mod-Shift-i", insertAiChatThread)
+        bind("Mod-Shift-I", insertAiChatThread)
 
-    if (type = schema.marks.em) {
-        // Note: Mod-i is now used for AI Input, Mod-Shift-i for AI Chat Thread
-        // Original italic binding moved to different keys if needed
-        bind("Mod-Alt-i", toggleMark(type))
-        bind("Mod-Alt-I", toggleMark(type))
+        if (type = schema.marks.em) {
+            // Mod-i is used for AI Input in aiChatThread mode
+            // Move italic binding to different keys
+            bind("Mod-Alt-i", toggleMark(type))
+            bind("Mod-Alt-I", toggleMark(type))
+        }
+    } else {
+        // Regular document - standard italic binding
+        if (type = schema.marks.em) {
+            bind("Mod-i", toggleMark(type))
+            bind("Mod-I", toggleMark(type))
+        }
     }
     if (type = schema.marks.code)
     bind("Mod-`", toggleMark(type))

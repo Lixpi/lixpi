@@ -53,8 +53,8 @@ class AnthropicProvider(BaseLLMProvider):
         model_version = state['model_version']
         max_tokens = state.get('max_completion_size', 4096)
         temperature = state.get('temperature', 0.7)
-        document_id = state['document_id']
-        thread_id = state.get('thread_id')
+        workspace_id = state['workspace_id']
+        ai_chat_thread_id = state['ai_chat_thread_id']
 
         # Apply Anthropic-specific code block formatting hack to last user message
         formatted_messages = []
@@ -75,7 +75,7 @@ class AnthropicProvider(BaseLLMProvider):
 
         try:
             # Publish stream start event
-            await self._publish_stream_start(document_id, thread_id)
+            await self._publish_stream_start(workspace_id, ai_chat_thread_id)
 
             # Create streaming completion
             async with self.client.messages.stream(
@@ -93,7 +93,7 @@ class AnthropicProvider(BaseLLMProvider):
                         break
 
                     # Publish content chunk
-                    await self._publish_stream_chunk(document_id, text, thread_id)
+                    await self._publish_stream_chunk(workspace_id, ai_chat_thread_id, text)
 
                 # Get final message with usage data
                 final_message = await stream.get_final_message()
@@ -114,7 +114,7 @@ class AnthropicProvider(BaseLLMProvider):
                     logger.info(f"Received usage data: {state['usage']}")
 
             # Publish stream end
-            await self._publish_stream_end(document_id, thread_id)
+            await self._publish_stream_end(workspace_id, ai_chat_thread_id)
             logger.info(f"✅ Anthropic streaming completed for {self.instance_key}")
 
         except Exception as e:

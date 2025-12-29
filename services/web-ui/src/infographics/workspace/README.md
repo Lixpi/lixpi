@@ -1,32 +1,43 @@
 # Workspace Canvas
 
-This module renders the main workspace view—a zoomable, pannable canvas where documents and images appear as draggable, resizable cards.
+This module renders the main workspace view—a zoomable, pannable canvas where documents, images, and AI chat threads appear as draggable, resizable cards.
 
 ## What It Does
 
-When you open a workspace, you see a canvas. On that canvas are nodes (documents or images). You can:
+When you open a workspace, you see a canvas. On that canvas are nodes (documents, images, or AI chat threads). You can:
 
 - **Pan** the canvas by clicking and dragging empty space (or two-finger scroll on trackpad)
 - **Zoom** with pinch gestures or Ctrl+scroll
-- **Drag** nodes by grabbing the overlay (top bar for documents, anywhere for images)
+- **Drag** nodes by grabbing the overlay (top bar for documents/threads, anywhere for images)
 - **Resize** nodes from any corner (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
+- **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
+- **Add AI Chats** via the toolbar button which creates a new AI chat thread
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
 
 ## Node Types
 
 ### Document Nodes
-- Contain embedded ProseMirror editors
+- Contain embedded ProseMirror editors with `documentType: 'document'`
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
+- Support block-level content (paragraphs, headings, lists, etc.)
 
 ### Image Nodes
 - Display uploaded images from workspace storage
 - Have a full-area drag overlay
 - Resize preserves aspect ratio (stored when image is uploaded)
 - Automatically deleted from storage when removed from canvas
+
+### AI Chat Thread Nodes
+- Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
+- Have a drag overlay at the top (20px)
+- Free resize (no aspect ratio constraint)
+- Each thread has its own `AiInteractionService` instance for AI messaging
+- Support streaming AI responses with real-time token parsing
+- Content is persisted separately from documents in the AI-Chat-Threads table
 
 ## Architecture
 
@@ -36,6 +47,7 @@ flowchart TB
         WC[WorkspaceCanvas.svelte]
         WS[workspaceStore]
         DS[documentsStore]
+        TS[aiChatThreadsStore]
     end
 
     subgraph Core["Framework-Agnostic Core"]
@@ -43,18 +55,21 @@ flowchart TB
         PZ[XYPanZoom instance]
         DN[Document Nodes]
         IN[Image Nodes]
+        TN[AI Chat Thread Nodes]
         PM[ProseMirror Editors]
+        AIS[AiInteractionService]
         IL[Canvas Image Lifecycle]
     end
 
     subgraph Backend["Backend Services"]
         NS[NATS Service]
         API[Workspace API]
+        LLMAPI[llm-api Python]
         OBJ[NATS Object Store]
     end
 
     WC -->|"paneEl, viewportEl"| CC
-    WC -->|"canvasState, documents"| CC
+    WC -->|"canvasState, documents, threads"| CC
     CC -->|"onCanvasStateChange"| WC
     WC -->|"persistCanvasState"| WS
     WS -->|"updateCanvasState"| NS
@@ -63,7 +78,11 @@ flowchart TB
     CC --> PZ
     CC --> DN
     CC --> IN
+    CC --> TN
     DN --> PM
+    TN --> PM
+    TN --> AIS
+    AIS -->|"streaming"| LLMAPI
     CC --> IL
     IL -->|"deleteImage"| NS
     NS -->|"DELETE_IMAGE"| OBJ
@@ -137,7 +156,7 @@ Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoot
 
 ### Image Lifecycle
 
-When an image node is removed from the canvas, the `canvasImageLifecycle` tracker detects the change and triggers deletion from NATS Object Store via the `WORKSPACE_IMAGE_SUBJECTS.DELETE_IMAGE` NATS subject.
+When an image node is removed from the canvas, the `canvasImageLifecycle` tracker detects the change and triggers deletion from NATS Object Store via the `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE` NATS subject.
 
 ### Drag and Resize
 
@@ -199,11 +218,14 @@ sequenceDiagram
 | `.workspace-viewport` | Transformed container for nodes |
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
+| `.workspace-ai-chat-thread-node` | Individual AI chat thread card |
 | `.document-drag-overlay` | Top bar for dragging documents |
+| `.ai-chat-thread-drag-overlay` | Top bar for dragging AI chat threads |
 | `.image-drag-overlay` | Full-area overlay for dragging images |
-| `.document-node-editor` | ProseMirror container |
+| `.document-node-editor` | ProseMirror container for documents |
+| `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
 | `.image-node-content` | Image container |
 | `.image-node-img` | The actual img element |
-| `.document-resize-handle` | Corner resize controls (shared by both node types) |
+| `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |

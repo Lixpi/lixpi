@@ -7,19 +7,19 @@ import Workspace from '../../models/workspace.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
-const { WORKSPACE_IMAGE_SUBJECTS } = NATS_SUBJECTS
+const { IMAGE_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
 
 export const imageSubjects = [
     {
-        subject: WORKSPACE_IMAGE_SUBJECTS.DELETE_IMAGE,
+        subject: IMAGE_SUBJECTS.DELETE_IMAGE,
         type: 'reply',
         payloadType: 'json',
 
         permissions: {
-            pub: { allow: [WORKSPACE_IMAGE_SUBJECTS.DELETE_IMAGE] },
-            sub: { allow: [WORKSPACE_IMAGE_SUBJECTS.DELETE_IMAGE] }
+            pub: { allow: [IMAGE_SUBJECTS.DELETE_IMAGE] },
+            sub: { allow: [IMAGE_SUBJECTS.DELETE_IMAGE] }
         },
 
         handler: async (data: any, msg: any) => {

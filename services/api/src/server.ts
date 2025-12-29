@@ -24,6 +24,7 @@ import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
 import { aiInteractionSubjects } from './NATS/subscriptions/ai-interaction-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
 import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
+import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
 import imageRoutes from './routes/image-routes.ts'
@@ -102,6 +103,7 @@ const subscriptions = [
     ...aiInteractionSubjects,
     ...workspaceSubjects,
     ...documentSubjects,
+    ...aiChatThreadSubjects,
     ...imageSubjects,
 ]
 

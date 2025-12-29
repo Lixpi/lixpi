@@ -119,20 +119,15 @@
 }
 
 .workspace-image-node {
+    // Override document-node defaults for images
     background: transparent;
     border-radius: 4px;
     overflow: visible;
-    position: relative;
+    box-shadow: none;
+    padding: 0;
 
-    &:hover .document-resize-handle {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    &.is-selected .document-resize-handle,
-    &.is-resizing .document-resize-handle {
-        opacity: 1;
-        pointer-events: auto;
+    &:hover {
+        box-shadow: none;
     }
 
     &.is-resizing {
@@ -311,6 +306,17 @@
     cursor: move;
     z-index: 15;
     background: transparent;
+}
+
+// AI chat thread editor container - extends document-node-editor
+.ai-chat-thread-node-editor {
+    flex: 1;
+    overflow: auto;
+    min-height: 100px;
+    border-radius: 0 0 8px 8px;
+    padding: 0;
+    box-sizing: border-box;
+    cursor: text;
 }
 
 .workspace-document-node.is-dragging .document-drag-overlay {

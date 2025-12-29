@@ -1,12 +1,14 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte'
     import type { Viewport } from '@xyflow/system'
-    import type { CanvasState, ImageCanvasNode } from '@lixpi/constants'
+    import type { CanvasState, ImageCanvasNode, AiChatThreadCanvasNode } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
     import DocumentService from '$src/services/document-service.ts'
+    import AiChatThreadService from '$src/services/ai-chat-thread-service.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
     import { documentsStore } from '$src/stores/documentsStore.ts'
+    import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
     import { routerStore } from '$src/stores/routerStore.ts'
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import { ImageUploadModal, type ImageUploadResult } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/ImageUploadModal.ts'
@@ -20,10 +22,12 @@
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
     let canvasState = $derived($workspaceStore.data.canvasState)
     let documents = $derived($documentsStore.data)
+    let aiChatThreads = $derived(Array.from($aiChatThreadsStore.data.values()))
 
     let viewport: Viewport = $state({ x: 0, y: 0, zoom: 1 })
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
     const documentService = new DocumentService()
+    const aiChatThreadService = new AiChatThreadService()
 
     function persistCanvasState(newCanvasState: CanvasState) {
         workspaceStore.updateCanvasState(newCanvasState)
@@ -57,10 +61,25 @@
         }
 
         try {
+            // Create document with valid ProseMirror content structure
+            // Schema requires: documentTitle block+
+            const initialContent = {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'documentTitle',
+                        content: [{ type: 'text', text: 'New Document' }]
+                    },
+                    {
+                        type: 'paragraph'
+                    }
+                ]
+            }
+
             const doc = await servicesStore.getData('documentService').createDocument({
                 workspaceId,
                 title: 'New Document',
-                content: {}
+                content: initialContent
             })
 
             if (doc) {
@@ -168,14 +187,74 @@
         modal.show()
     }
 
+    async function handleAddAiChatThread() {
+        if (!workspaceId) {
+            console.error('No workspaceId available!')
+            return
+        }
+
+        try {
+            // Create empty AI chat thread content with required paragraph child
+            const initialContent = {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'documentTitle',
+                        content: [{ type: 'text', text: 'New AI Chat' }]
+                    },
+                    {
+                        type: 'aiChatThread',
+                        attrs: { threadId: null },
+                        content: [
+                            {
+                                type: 'paragraph'
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            const thread = await aiChatThreadService.createAiChatThread({
+                workspaceId,
+                content: initialContent,
+                aiModel: 'anthropic:claude-sonnet-4-20250514'
+            })
+
+            if (thread) {
+                const existingNodes = canvasState?.nodes || []
+                const newX = 50 + (existingNodes.length % 3) * 450
+                const newY = 50 + Math.floor(existingNodes.length / 3) * 400
+
+                const threadNode: AiChatThreadCanvasNode = {
+                    nodeId: `node-${thread.threadId}`,
+                    type: 'aiChatThread',
+                    referenceId: thread.threadId,
+                    position: { x: newX, y: newY },
+                    dimensions: { width: 400, height: 500 }
+                }
+
+                const newCanvasState: CanvasState = {
+                    viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                    nodes: [...existingNodes, threadNode]
+                }
+
+                persistCanvasState(newCanvasState)
+            }
+        } catch (error) {
+            console.error('Error creating AI chat thread:', error)
+        }
+    }
+
     onMount(() => {
         if (!paneEl || !viewportEl) return
 
         renderer = createWorkspaceCanvas({
             paneEl,
             viewportEl,
+            workspaceId,
             canvasState,
             documents,
+            aiChatThreads,
             onViewportChange: handleViewportChange,
             onCanvasStateChange: persistCanvasState,
             onDocumentContentChange: ({ documentId, title, prevRevision, content }) => {
@@ -196,6 +275,13 @@
                     documentId,
                     title
                 })
+            },
+            onAiChatThreadContentChange: ({ workspaceId: wsId, threadId, content }) => {
+                aiChatThreadService.updateAiChatThread({
+                    workspaceId: wsId,
+                    threadId,
+                    content
+                })
             }
         })
 
@@ -206,7 +292,7 @@
 
     $effect(() => {
         if (renderer) {
-            renderer.render(canvasState, documents)
+            renderer.render(canvasState, documents, aiChatThreads)
         }
     })
 
@@ -223,6 +309,9 @@
         </button>
         <button class="add-image-btn" onclick={handleAddImage}>
             + Add Image
+        </button>
+        <button class="add-ai-chat-btn" onclick={handleAddAiChatThread}>
+            + AI Chat
         </button>
         <span class="zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>
     </div>

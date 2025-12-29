@@ -9,7 +9,7 @@ import Workspace from '../../models/workspace.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
-const { DOCUMENT_SUBJECTS } = NATS_SUBJECTS
+const { DOCUMENT_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
 export const documentSubjects = [
     {

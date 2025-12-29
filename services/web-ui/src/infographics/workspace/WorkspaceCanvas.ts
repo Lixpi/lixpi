@@ -11,12 +11,15 @@ import {
     type CanvasNode,
     type DocumentCanvasNode,
     type ImageCanvasNode,
+    type AiChatThreadCanvasNode,
+    type AiChatThread,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from './canvasImageLifecycle.ts'
+import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -26,18 +29,27 @@ type DocumentEditorEntry = {
     containerEl: HTMLElement
 }
 
+type AiChatThreadEditorEntry = {
+    editor: any
+    aiService: AiInteractionService
+    containerEl: HTMLElement
+}
+
 type WorkspaceCanvasCallbacks = {
     onViewportChange?: (viewport: Viewport) => void
     onCanvasStateChange?: (state: CanvasState) => void
     onDocumentContentChange?: (params: { documentId: string; title?: string; prevRevision?: number; content: any }) => void
     onDocumentTitleChange?: (params: { documentId: string; title: string }) => void
+    onAiChatThreadContentChange?: (params: { workspaceId: string; threadId: string; content: any }) => void
 }
 
 type WorkspaceCanvasOptions = {
     paneEl: HTMLDivElement
     viewportEl: HTMLDivElement
+    workspaceId: string
     canvasState: CanvasState | null
     documents: Document[]
+    aiChatThreads: AiChatThread[]
     panZoomConfig?: Partial<ReturnType<typeof defaultPanZoomConfig>>
 } & WorkspaceCanvasCallbacks
 
@@ -64,19 +76,74 @@ function defaultPanZoomConfig(onTransformChange: (transform: Transform) => void)
 }
 
 export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
-    const { paneEl, viewportEl, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange } = options
+    const { paneEl, viewportEl, workspaceId, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange, onAiChatThreadContentChange } = options
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
+    let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
     let selectedNodeId: string | null = null
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
+    const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
+
+    // Visibility tracking for lazy loading
+    const visibleNodeIds: Set<string> = new Set()
+    const loadedNodeIds: Set<string> = new Set()
+    let paneRect: DOMRect | null = null
 
     // Image lifecycle tracker - handles deletion of orphaned images
     const canvasImageLifecycle = createCanvasImageLifecycleTracker()
     canvasImageLifecycle.initializeFromCanvasState(currentCanvasState)
+
+    // Visibility detection for lazy loading
+    function isNodeInViewport(node: CanvasNode, viewport: Viewport): boolean {
+        if (!paneRect) {
+            paneRect = paneEl.getBoundingClientRect()
+        }
+
+        const { x, y, zoom } = viewport
+
+        // Transform node coordinates to screen space
+        const screenLeft = node.position.x * zoom + x
+        const screenTop = node.position.y * zoom + y
+        const screenRight = screenLeft + node.dimensions.width * zoom
+        const screenBottom = screenTop + node.dimensions.height * zoom
+
+        // Check intersection with pane bounds
+        return !(
+            screenRight < 0 ||
+            screenLeft > paneRect.width ||
+            screenBottom < 0 ||
+            screenTop > paneRect.height
+        )
+    }
+
+    function updateVisibleNodes() {
+        if (!currentCanvasState) return
+
+        const viewport = panZoom?.getViewport() || { x: 0, y: 0, zoom: 1 }
+        paneRect = paneEl.getBoundingClientRect()
+
+        for (const node of currentCanvasState.nodes) {
+            const wasVisible = visibleNodeIds.has(node.nodeId)
+            const isVisible = isNodeInViewport(node, viewport)
+
+            if (isVisible && !wasVisible) {
+                visibleNodeIds.add(node.nodeId)
+            } else if (!isVisible && wasVisible) {
+                visibleNodeIds.delete(node.nodeId)
+            }
+        }
+    }
+
+    // Track pane bounds on resize for visibility detection
+    const resizeObserver = new ResizeObserver(() => {
+        paneRect = paneEl.getBoundingClientRect()
+        updateVisibleNodes()
+    })
+    resizeObserver.observe(paneEl)
 
     const panZoomConfig = {
         ...defaultPanZoomConfig((transform) => {
@@ -88,6 +155,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // Update handle sizes/positions to remain constant in screen space
                 updateResizeHandles(vp.zoom)
             }
+            // Update visibility tracking for lazy loading
+            updateVisibleNodes()
             onViewportChange?.(vp)
         }),
         ...options.panZoomConfig
@@ -402,6 +471,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     content: document.createElement('div'),
                     initialVal: doc.content,
                     isDisabled: false,
+                    documentType: 'document',
                     onEditorChange: (value: any) => {
                         onDocumentContentChange?.({
                             documentId: node.referenceId,
@@ -413,33 +483,120 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     onProjectTitleChange: (title: string) => {
                         onDocumentTitleChange?.({ documentId: node.referenceId, title })
                     },
-                    onAiChatSubmit: ({ messages, aiModel, threadId }: any) => {
-                        const aiService = documentEditors.get(node.referenceId)?.aiService
-                        if (aiService) {
-                            aiService.sendChatMessage({ messages, aiModel, threadId })
-                        }
-                    },
-                    onAiChatStop: ({ threadId }: any) => {
-                        const aiService = documentEditors.get(node.referenceId)?.aiService
-                        if (aiService) {
-                            aiService.stopChatMessage({ threadId })
-                        }
-                    }
+                    onAiChatSubmit: () => {},
+                    onAiChatStop: () => {}
                 })
-
-                const aiService = new AiInteractionService(node.referenceId)
 
                 documentEditors.set(node.referenceId, {
                     editor,
-                    aiService,
+                    aiService: null,
                     containerEl: nodeEl
                 })
             } catch (error) {
                 console.error('Failed to create ProseMirror editor:', error)
-                editorContainer.innerHTML = '<div class="editor-error">Failed to load editor</div>'
+                editorContainer.innerHTML = ''
+                const errorPlaceholder = createErrorPlaceholder({
+                    message: 'Failed to load editor',
+                    retryLabel: 'Retry',
+                    onRetry: () => {
+                        loadedNodeIds.delete(node.nodeId)
+                        renderNodes()
+                    }
+                })
+                editorContainer.appendChild(errorPlaceholder.dom)
             }
         } else {
-            editorContainer.innerHTML = '<div class="editor-placeholder">Loading document...</div>'
+            editorContainer.innerHTML = ''
+            editorContainer.appendChild(createLoadingPlaceholder().dom)
+        }
+
+        return nodeEl
+    }
+
+    function createAiChatThreadNode(node: AiChatThreadCanvasNode, thread: AiChatThread | undefined): HTMLElement {
+        const nodeEl = document.createElement('div')
+        nodeEl.className = 'workspace-document-node workspace-ai-chat-thread-node'
+        nodeEl.dataset.nodeId = node.nodeId
+        nodeEl.dataset.threadId = node.referenceId
+        nodeEl.style.position = 'absolute'
+        nodeEl.style.left = `${node.position.x}px`
+        nodeEl.style.top = `${node.position.y}px`
+        nodeEl.style.width = `${node.dimensions.width}px`
+        nodeEl.style.height = `${node.dimensions.height}px`
+
+        nodeEl.addEventListener('click', (e) => {
+            e.stopPropagation()
+            selectNode(node.nodeId)
+        })
+
+        const corners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+        for (const corner of corners) {
+            const handle = createResizeHandle(node.nodeId, corner)
+            nodeEl.appendChild(handle)
+        }
+
+        const dragOverlay = document.createElement('div')
+        dragOverlay.className = 'document-drag-overlay nopan'
+        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
+        nodeEl.appendChild(dragOverlay)
+
+        const editorContainer = document.createElement('div')
+        editorContainer.className = 'ai-chat-thread-node-editor nopan'
+        nodeEl.appendChild(editorContainer)
+
+        if (thread && thread.content !== undefined) {
+            try {
+                // Create AiInteractionService for this thread
+                const aiService = new AiInteractionService({
+                    workspaceId,
+                    aiChatThreadId: node.referenceId
+                })
+
+                const editor = new ProseMirrorEditor({
+                    editorMountElement: editorContainer,
+                    content: document.createElement('div'),
+                    initialVal: thread.content,
+                    isDisabled: false,
+                    documentType: 'aiChatThread',
+                    onEditorChange: (value: any) => {
+                        onAiChatThreadContentChange?.({
+                            workspaceId,
+                            threadId: node.referenceId,
+                            content: value
+                        })
+                    },
+                    onProjectTitleChange: () => {},
+                    onAiChatSubmit: ({ messages, aiModel }: any) => {
+                        aiService.sendChatMessage({ messages, aiModel })
+                    },
+                    onAiChatStop: () => {
+                        aiService.stopChatMessage()
+                    }
+                })
+
+                threadEditors.set(node.referenceId, {
+                    editor,
+                    aiService,
+                    containerEl: nodeEl
+                })
+
+                loadedNodeIds.add(node.nodeId)
+            } catch (error) {
+                console.error('Failed to create AI chat thread editor:', error)
+                editorContainer.innerHTML = ''
+                const errorPlaceholder = createErrorPlaceholder({
+                    message: 'Failed to load AI chat',
+                    retryLabel: 'Retry',
+                    onRetry: () => {
+                        loadedNodeIds.delete(node.nodeId)
+                        renderNodes()
+                    }
+                })
+                editorContainer.appendChild(errorPlaceholder.dom)
+            }
+        } else {
+            // Show loading placeholder until content is loaded
+            editorContainer.appendChild(createLoadingPlaceholder().dom)
         }
 
         return nodeEl
@@ -447,7 +604,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createImageNode(node: ImageCanvasNode): HTMLElement {
         const nodeEl = document.createElement('div')
-        nodeEl.className = 'workspace-image-node'
+        nodeEl.className = 'workspace-document-node workspace-image-node'
         nodeEl.dataset.nodeId = node.nodeId
         nodeEl.dataset.fileId = node.fileId
         nodeEl.style.position = 'absolute'
@@ -534,7 +691,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         documentEditors.clear()
 
+        for (const [, { editor, aiService }] of threadEditors) {
+            if (editor?.destroy) editor.destroy()
+            if (aiService?.disconnect) aiService.disconnect()
+        }
+        threadEditors.clear()
+
+        // Clear loaded node tracking on full re-render
+        loadedNodeIds.clear()
+
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
+        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((t) => [t.threadId, t]))
 
         for (const node of currentCanvasState.nodes) {
             let nodeEl: HTMLElement
@@ -545,6 +712,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createDocumentNode(docNode, doc)
             } else if (node.type === 'image') {
                 nodeEl = createImageNode(node as ImageCanvasNode)
+            } else if (node.type === 'aiChatThread') {
+                const threadNode = node as AiChatThreadCanvasNode
+                const thread = threadMap.get(threadNode.referenceId)
+                nodeEl = createAiChatThreadNode(threadNode, thread)
             } else {
                 // Unknown node type, skip
                 console.warn(`Unknown canvas node type: ${(node as CanvasNode).type}`)
@@ -562,12 +733,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return docs.map(d => `${d.documentId}:${d.content ? 'loaded' : 'pending'}`).join(',')
     }
 
-    let lastDocumentsKey = getDocumentsKey(currentDocuments)
+    function getAiChatThreadsKey(threads: AiChatThread[]): string {
+        // Track thread IDs and their loaded state
+        return threads.map(t => `${t.threadId}:${t.content ? 'loaded' : 'pending'}`).join(',')
+    }
 
-    function shouldRerender(newCanvasState: CanvasState | null, newDocuments: Document[]): boolean {
+    let lastDocumentsKey = getDocumentsKey(currentDocuments)
+    let lastThreadsKey = getAiChatThreadsKey(currentAiChatThreads)
+
+    function shouldRerender(newCanvasState: CanvasState | null, newDocuments: Document[], newThreads: AiChatThread[]): boolean {
         const newNodeKey = getNodeStructureKey(newCanvasState)
         const newDocsKey = getDocumentsKey(newDocuments)
-        return newNodeKey !== lastNodeStructureKey || newDocsKey !== lastDocumentsKey
+        const newThreadsKey = getAiChatThreadsKey(newThreads)
+        return newNodeKey !== lastNodeStructureKey || newDocsKey !== lastDocumentsKey || newThreadsKey !== lastThreadsKey
     }
 
     function initializePanZoom() {
@@ -609,10 +787,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     renderNodes()
 
     return {
-        render(newCanvasState: CanvasState | null, newDocuments: Document[]) {
-            // Only do a full re-render if node structure or documents changed
+        render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = []) {
+            // Only do a full re-render if node structure or documents/threads changed
             // Position/dimension updates are handled directly in DOM during drag/resize
-            const needsRerender = shouldRerender(newCanvasState, newDocuments)
+            const needsRerender = shouldRerender(newCanvasState, newDocuments, newAiChatThreads)
 
             // Check if viewport actually changed (not just nodes)
             const oldViewport = currentCanvasState?.viewport
@@ -624,10 +802,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             currentCanvasState = newCanvasState
             currentDocuments = newDocuments
+            currentAiChatThreads = newAiChatThreads
 
             if (needsRerender) {
                 renderNodes()
                 lastDocumentsKey = getDocumentsKey(newDocuments)
+                lastThreadsKey = getAiChatThreadsKey(newAiChatThreads)
             }
 
             // Only sync viewport if it actually changed from external source
@@ -639,6 +819,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         },
         destroy() {
+            resizeObserver.disconnect()
             if (panZoom) {
                 panZoom.destroy()
             }
@@ -647,6 +828,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (aiService?.disconnect) aiService.disconnect()
             }
             documentEditors.clear()
+            for (const [, { editor, aiService }] of threadEditors) {
+                if (editor?.destroy) editor.destroy()
+                if (aiService?.disconnect) aiService.disconnect()
+            }
+            threadEditors.clear()
             canvasImageLifecycle.destroy()
         }
     }

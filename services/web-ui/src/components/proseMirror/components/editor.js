@@ -45,16 +45,30 @@ import { createSvelteComponentRendererPlugin } from '../plugins/svelteComponentR
 
 import { defaultAttrs as defautSubtaskAttrs } from '../customNodes/taskRowNode.js'
 
+// Document type constants
+const DOCUMENT_TYPE = {
+    DOCUMENT: 'document',
+    AI_CHAT_THREAD: 'aiChatThread'
+}
+
 // `nodesBuilder` extends the base ProseMirror `schema` with custom node types defined in `supportedNodes`.
 // `schema`: Base ProseMirror schema to be extended.
 // `supportedNodes`: Object with custom node types. Each key is a node type name, value is its spec.
-// The function updates the 'doc' node type to allow the documentTitle followed by one or more aiChatThread nodes at document level.
+// `documentType`: Determines the doc content model.
 // Returns the extended schema.
-const nodesBuilder = (schema, supportedNodes) => {
+const nodesBuilder = (schema, supportedNodes, documentType) => {
     const nodesKeys = Object.keys(supportedNodes)
+
+    // Determine doc content based on documentType
+    // - 'document': Regular documents with title and block content
+    // - 'aiChatThread': AI chat thread with title and aiChatThread nodes
+    const docContent = documentType === DOCUMENT_TYPE.AI_CHAT_THREAD
+        ? `${documentTitleNodeType} ${aiChatThreadNodeType}+`
+        : `${documentTitleNodeType} block+`
+
     let extendedSchema = schema.spec.nodes
     .update('doc', {
-        content: `${documentTitleNodeType} ${aiChatThreadNodeType}+`,
+        content: docContent,
         marks: "_",
     })
     nodesKeys.forEach((nodeKey) => {
@@ -69,6 +83,7 @@ export class ProseMirrorEditor {
         content,
         initialVal = {},
         isDisabled,
+        documentType = DOCUMENT_TYPE.DOCUMENT,
         onEditorChange,
         onProjectTitleChange,
         onAiChatSubmit,
@@ -79,6 +94,7 @@ export class ProseMirrorEditor {
         this.onAiChatSubmit = onAiChatSubmit
         this.onAiChatStop = onAiChatStop
         this.isDisabled = isDisabled
+        this.documentType = documentType
         this.editorSchema = this.createSchema()
 
         const initialDocContent = Object.keys(initialVal ?? {}).length > 0
@@ -103,13 +119,13 @@ export class ProseMirrorEditor {
         }
 
         return new Schema({
-            nodes: nodesBuilder(schema, allNodes),
+            nodes: nodesBuilder(schema, allNodes, this.documentType),
             marks: schema.spec.marks
         })
     }
 
     createPlugins(initialValue, isDisabled) {
-        return [
+        const basePlugins = [
             statePlugin(initialValue, this.dispatchStateChange.bind(this), this.onProjectTitleChange.bind(this)),
             focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
@@ -118,27 +134,34 @@ export class ProseMirrorEditor {
             imageLifecyclePlugin(),
             imageSelectionPlugin(),
             buildInputRules(this.editorSchema),
-            keymap(buildKeymap(this.editorSchema)),
+            keymap(buildKeymap(this.editorSchema, this.documentType)),
             keymap(baseKeymap),
             dropCursor(),
             gapCursor(),
             history(),
             // createSvelteComponentRendererPlugin(TaskRow, 'taskRow', defautSubtaskAttrs),
-            createAiChatThreadPlugin({
-                sendAiRequestHandler: val => this.onAiChatSubmit(val),
-                stopAiRequestHandler: val => this.onAiChatStop(val),
-                placeholders: {
-                    titlePlaceholder: 'New document',
-                    paragraphPlaceholder: 'Type something and hit Cmd+Enter on Mac or Ctrl+Enter on PC to send it to AI.\n'
-                }
-            }),
-            createAiUserInputPlugin(val => {}),
-            // lockCursorPositionPlugin()
             createCodeBlockPlugin(this.editorSchema),
             codeBlockInputRule(this.editorSchema),
             activeNodePlugin,
             // codeMirrorInputRulePlugin(this.editorSchema),
         ]
+
+        // Add aiChatThread-specific plugins only for AI chat thread documents
+        if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
+            basePlugins.push(
+                createAiChatThreadPlugin({
+                    sendAiRequestHandler: val => this.onAiChatSubmit(val),
+                    stopAiRequestHandler: val => this.onAiChatStop(val),
+                    placeholders: {
+                        titlePlaceholder: 'New document',
+                        paragraphPlaceholder: 'Type something and hit Cmd+Enter on Mac or Ctrl+Enter on PC to send it to AI.\n'
+                    }
+                }),
+                createAiUserInputPlugin(val => {})
+            )
+        }
+
+        return basePlugins
     }
 
     updateEditorFocusState(focusedState) {

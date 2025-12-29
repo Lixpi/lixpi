@@ -53,8 +53,8 @@ class OpenAIProvider(BaseLLMProvider):
         model_version = state['model_version']
         max_tokens = state.get('max_completion_size')
         temperature = state.get('temperature', 0.7)
-        document_id = state['document_id']
-        thread_id = state.get('thread_id')
+        workspace_id = state['workspace_id']
+        ai_chat_thread_id = state['ai_chat_thread_id']
         supports_system_prompt = state['ai_model_meta_info'].get('supportsSystemPrompt', True)
 
         # Prepare input array from messages
@@ -73,7 +73,7 @@ class OpenAIProvider(BaseLLMProvider):
 
         try:
             # Publish stream start event
-            await self._publish_stream_start(document_id, thread_id)
+            await self._publish_stream_start(workspace_id, ai_chat_thread_id)
 
             # Create streaming response using Responses API
             stream = await self.client.responses.create(
@@ -98,7 +98,7 @@ class OpenAIProvider(BaseLLMProvider):
                     case 'response.output_text.delta':
                         delta_text = event.delta
                         if delta_text:
-                            await self._publish_stream_chunk(document_id, delta_text, thread_id)
+                            await self._publish_stream_chunk(workspace_id, ai_chat_thread_id, delta_text)
 
                     # Handle completion event (includes usage data)
                     case 'response.completed':
@@ -139,7 +139,8 @@ class OpenAIProvider(BaseLLMProvider):
 
                             # Publish structured error
                             await self._publish_error(
-                                self.instance_key,
+                                workspace_id,
+                                ai_chat_thread_id,
                                 error_message,
                                 error_code=error_code,
                                 error_type=error_type
@@ -147,7 +148,7 @@ class OpenAIProvider(BaseLLMProvider):
                             raise RuntimeError(f"OpenAI Responses API error: {error_message}")
 
             # Publish stream end
-            await self._publish_stream_end(document_id, thread_id)
+            await self._publish_stream_end(workspace_id, ai_chat_thread_id)
             logger.info(f"✅ OpenAI Responses API streaming completed for {self.instance_key}")
 
         except Exception as e:

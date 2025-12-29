@@ -21,11 +21,17 @@ packages/lixpi/constants/
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import type { AiInteractionChatSendMessagePayload, User } from '@lixpi/constants'
 
-const { AI_INTERACTION_SUBJECTS, DOCUMENT_SUBJECTS } = NATS_SUBJECTS
+const { AI_INTERACTION_SUBJECTS, WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
-// Access subjects
+// Access AI interaction subjects
 const subject = AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE
 const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${documentId}`
+
+// Access workspace-related subjects (nested under WORKSPACE_SUBJECTS)
+const { DOCUMENT_SUBJECTS, AI_CHAT_THREAD_SUBJECTS, IMAGE_SUBJECTS } = WORKSPACE_SUBJECTS
+const createDocSubject = DOCUMENT_SUBJECTS.CREATE_DOCUMENT
+const createThreadSubject = AI_CHAT_THREAD_SUBJECTS.CREATE_AI_CHAT_THREAD
+const deleteImageSubject = IMAGE_SUBJECTS.DELETE_IMAGE
 
 // Use types
 const payload: AiInteractionChatSendMessagePayload = { messages, aiModel, threadId }
@@ -38,6 +44,11 @@ from lixpi_constants import NATS_SUBJECTS
 
 ai_interaction_subjects = NATS_SUBJECTS["AI_INTERACTION_SUBJECTS"]
 send_subject = ai_interaction_subjects["CHAT_SEND_MESSAGE"]
+
+# Workspace-related subjects are nested
+workspace_subjects = NATS_SUBJECTS["WORKSPACE_SUBJECTS"]
+document_subjects = workspace_subjects["DOCUMENT_SUBJECTS"]
+create_doc_subject = document_subjects["CREATE_DOCUMENT"]
 ```
 
 ## Adding New Subjects
