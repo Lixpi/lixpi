@@ -396,12 +396,23 @@
             opacity: 0;
         }
 
+        // Default edge color
+        .workspace-edge {
+            stroke: $steelBlue;
+        }
+
+        // Arrowhead markers
+        .connector-arrowhead {
+            fill: $steelBlue;
+            stroke: $steelBlue;
+        }
+
         .workspace-edge.is-selected {
-            stroke: var(--primary-color, #3b82f6);
+            stroke: $steelBlue;
         }
 
         .workspace-edge-temp {
-            stroke: rgba(59, 130, 246, 0.7);
+            stroke: rgba($steelBlue, 0.6);
         }
     }
 }
@@ -423,7 +434,7 @@
     height: calc(12px / var(--zoom-scale, 1));
     border-radius: 999px;
     background: white;
-    border: calc(2px / var(--zoom-scale, 1)) solid var(--primary-color, #3b82f6);
+    border: calc(2px / var(--zoom-scale, 1)) solid $nightBlue;
     pointer-events: auto;
     cursor: crosshair;
 }
@@ -436,10 +447,15 @@
     width: calc(10px / var(--zoom-scale, 1));
     height: calc(10px / var(--zoom-scale, 1));
     border-radius: 999px;
-    background: var(--primary-color, #3b82f6);
+    background: $nightBlue;
     opacity: 0;
     pointer-events: none;
     z-index: 18;
+    transition: opacity 0.15s ease-out;
+
+    &:hover {
+        transform: translate(-50%, -50%) scale(1.2);
+    }
 }
 
 .workspace-handle.left {
@@ -450,10 +466,13 @@
     left: 100%;
 }
 
+// Show handles on hover for all node types
 .workspace-document-node:hover .workspace-handle,
 .workspace-image-node:hover .workspace-handle,
+.workspace-ai-chat-thread-node:hover .workspace-handle,
 .workspace-document-node.is-selected .workspace-handle,
-.workspace-image-node.is-selected .workspace-handle {
+.workspace-image-node.is-selected .workspace-handle,
+.workspace-ai-chat-thread-node.is-selected .workspace-handle {
     opacity: 1;
     pointer-events: auto;
 }

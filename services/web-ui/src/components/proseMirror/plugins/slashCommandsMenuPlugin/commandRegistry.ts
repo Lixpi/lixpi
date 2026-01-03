@@ -5,7 +5,7 @@ import {
     imageIcon,
     documentIcon,
 } from '$src/svgIcons/index.ts'
-import { ImageUploadModal } from './ImageUploadModal.ts'
+import { ImageUploadModal } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/ImageUploadModal.ts'
 import RouterService from '$src/services/router-service.ts'
 
 type SlashCommand = {

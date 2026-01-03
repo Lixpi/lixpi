@@ -38,7 +38,7 @@ drawDocumentContentBlock(parent: D3Selection, config: {
 
 **Usage:**
 ```typescript
-import { drawDocumentContentBlock } from './documentShape'
+import { drawDocumentContentBlock } from '$src/infographics/shapes/documentShape/index.ts'
 
 drawDocumentContentBlock(svgGroup, { variant: 'top' })
 drawDocumentContentBlock(svgGroup, { variant: 'bottom' })
@@ -85,7 +85,7 @@ import {
   drawDocumentThreadShape,
   setupThreadGradient,
   startThreadGradientAnimation
-} from './documentShape'
+} from '$src/infographics/shapes/documentShape/index.ts'
 
 // In SVG defs section
 setupThreadGradient(defs, { gradientId: 'my-thread-grad' })
@@ -128,7 +128,7 @@ drawContextSelection(parent: D3Selection, config: {
 
 **Usage:**
 ```typescript
-import { setupContextGradient, drawContextSelection } from './documentShape'
+import { setupContextGradient, drawContextSelection } from '$src/infographics/shapes/documentShape/index.ts'
 
 // In SVG defs section
 setupContextGradient(defs, { gradientId: 'ctx-grad' })
@@ -161,7 +161,7 @@ startContextShapeAnimation(
 
 **Usage:**
 ```typescript
-import { createContextShapeSVG, startContextShapeAnimation } from './documentShape'
+import { createContextShapeSVG, startContextShapeAnimation } from '$src/infographics/shapes/documentShape/index.ts'
 
 // Create SVG markup
 const svgString = createContextShapeSVG()

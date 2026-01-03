@@ -48,9 +48,9 @@
 
 
 	import Search from "@lucide/svelte/icons/search";
-	// import { primaryRoutes, secondaryRoutes } from "../config.js";
-	// import { mailStore } from "../store.js";
-	// import type { Account, Mail } from "../data.js";
+	// import { primaryRoutes, secondaryRoutes } from "$src/views/config.js";
+	// import { mailStore } from "$src/views/store.js";
+	// import type { Account, Mail } from "$src/views/data.js";
 	// import AccountSwitcher from "./account-switcher.svelte";
 	// import MailDisplay from "./mail-display.svelte";
 	// import MailList from "./mail-list.svelte";

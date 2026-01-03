@@ -1,7 +1,7 @@
 // Type definitions for the shapes system
 // Shape factories that generate NodeConfig objects for the connector system
 
-import type { NodeConfig } from '../connectors/types.ts'
+import type { NodeConfig } from '$src/infographics/connectors/types.ts'
 
 // Thread/Document shape configuration
 export type ThreadShapeParams = {

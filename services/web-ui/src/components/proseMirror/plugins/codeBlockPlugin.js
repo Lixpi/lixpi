@@ -22,8 +22,8 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 // import { solarizedLight } from 'cm6-theme-solarized-light'
 // import { materialDark } from 'cm6-theme-material-dark'
 // import { nord } from 'cm6-theme-nord'
-import { gruvboxLight } from './../themes/cm6-themes/packages/gruvbox-light/src/index'
-import { gruvboxDark } from './../themes/cm6-themes/packages/gruvbox-dark/src/index'
+import { gruvboxLight } from '$src/components/proseMirror/themes/cm6-themes/packages/gruvbox-light/src/index'
+import { gruvboxDark } from '$src/components/proseMirror/themes/cm6-themes/packages/gruvbox-dark/src/index'
 
 import { undo, redo } from 'prosemirror-history';
 import { exitCode } from 'prosemirror-commands';

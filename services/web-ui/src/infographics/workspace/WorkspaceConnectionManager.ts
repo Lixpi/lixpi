@@ -20,7 +20,9 @@ import {
 	type ConnectorRenderer,
 	type EdgeConfig,
 	type NodeConfig,
-} from '../connectors/index.ts'
+} from '$src/infographics/connectors/index.ts'
+
+import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 
 import type {
 	CanvasNode,
@@ -401,9 +403,18 @@ export class WorkspaceConnectionManager {
 			this.connector.addNode(nodeConfig)
 		}
 
+		// Get current zoom for proportional scaling
+		const transform = this.config.getTransform()
+		const zoom = transform[2]
+
+		// Calculate scaled sizes for edges
+		const { strokeWidth: scaledStrokeWidth, markerSize: scaledMarkerSize, markerOffset: scaledMarkerOffset } =
+			getEdgeScaledSizes(zoom)
+
 		// Add committed edges
 		for (const e of this.edges) {
 			const { source, target } = getEdgeAnchorPositions(e)
+			const isSelected = e.edgeId === this.selectedEdgeId
 
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
@@ -411,10 +422,10 @@ export class WorkspaceConnectionManager {
 				target: { nodeId: e.targetNodeId, position: target },
 				pathType: 'horizontal-bezier',
 				marker: 'arrowhead',
-				markerSize: 12,
-				markerOffset: { source: 5, target: 10 },
-				strokeWidth: e.edgeId === this.selectedEdgeId ? 3 : 2,
-				className: `workspace-edge ${e.edgeId === this.selectedEdgeId ? 'is-selected' : ''}`
+				markerSize: scaledMarkerSize,
+				markerOffset: scaledMarkerOffset,
+				strokeWidth: isSelected ? scaledStrokeWidth * 1.5 : scaledStrokeWidth,
+				className: `workspace-edge ${isSelected ? 'is-selected' : ''}`
 			}
 
 			this.connector.addEdge(edgeConfig)
@@ -455,7 +466,7 @@ export class WorkspaceConnectionManager {
 				target: { nodeId: tempNodeId, position: 'center' },
 				pathType: 'horizontal-bezier',
 				marker: 'none',
-				strokeWidth: 2,
+				strokeWidth: scaledStrokeWidth,
 				lineStyle: 'dashed',
 				className: 'workspace-edge workspace-edge-temp'
 			}

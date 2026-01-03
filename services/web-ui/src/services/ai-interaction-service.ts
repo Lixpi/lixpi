@@ -6,7 +6,7 @@ import type { AiModelId, AiInteractionChatSendMessagePayload, AiInteractionChatS
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
 
-import AuthService from './auth-service.ts'
+import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 

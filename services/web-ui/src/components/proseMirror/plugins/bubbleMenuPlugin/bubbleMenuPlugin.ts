@@ -1,7 +1,7 @@
 import { Plugin, PluginKey, NodeSelection } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 import { createEl } from '$src/utils/domTemplates.ts'
-import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from './bubbleMenuItems.ts'
+import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuItems.ts'
 import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.js'
 
 export const bubbleMenuPluginKey = new PluginKey('bubbleMenu')

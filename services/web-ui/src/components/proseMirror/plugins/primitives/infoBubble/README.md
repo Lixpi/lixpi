@@ -103,7 +103,7 @@ createInfoBubble({
 The `infoBubbleStateManager` singleton ensures only one bubble is open at a time:
 
 ```typescript
-import { infoBubbleStateManager } from './primitives/infoBubble'
+import { infoBubbleStateManager } from '$src/components/proseMirror/plugins/primitives/infoBubble/index.ts'
 
 infoBubbleStateManager.closeAll()      // Close all open bubbles
 infoBubbleStateManager.isOpen(id)      // Check if specific bubble is open
@@ -137,7 +137,7 @@ This means dropdowns with filtered content automatically reposition without manu
 ### Simple Info Bubble
 
 ```typescript
-import { createInfoBubble } from './primitives/infoBubble'
+import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/index.ts'
 
 // Create anchor element
 const infoIcon = html`
@@ -167,7 +167,7 @@ container.appendChild(infoBubble.dom)
 ### Dropdown with Separate Positioning Anchor
 
 ```typescript
-import { createInfoBubble } from './primitives/infoBubble'
+import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/index.ts'
 
 // Dropdown button with chevron icon
 const button = html`

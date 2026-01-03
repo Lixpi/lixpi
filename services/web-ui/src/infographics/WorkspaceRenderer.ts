@@ -1,10 +1,10 @@
 // Workspace canvas renderer using vanilla JS with @xyflow/system and d3.js
 // Based on the infographics connector system
 
-import { createConnectorRenderer } from './connectors/index.ts'
-import type { ConnectorRenderer, NodeConfig, EdgeConfig } from './connectors/types.ts'
+import { createConnectorRenderer } from '$src/infographics/connectors/index.ts'
+import type { ConnectorRenderer, NodeConfig, EdgeConfig } from '$src/infographics/connectors/types.ts'
 import type { CanvasState, CanvasNode, WorkspaceMeta } from '@lixpi/constants'
-import { html } from '../utils/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 export type WorkspaceDocument = {
     documentId: string

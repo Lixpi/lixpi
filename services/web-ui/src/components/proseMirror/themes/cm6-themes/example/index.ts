@@ -3,8 +3,8 @@ import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { markdownLanguage } from '@codemirror/lang-markdown'
 import { Compartment } from '@codemirror/state'
-import testDoc from './doc-example'
-import themes from './themes'
+import testDoc from '$src/components/proseMirror/themes/cm6-themes/example/doc-example'
+import themes from '$src/components/proseMirror/themes/cm6-themes/example/themes'
 
 const elCM = document.querySelector('#codemirror')
 

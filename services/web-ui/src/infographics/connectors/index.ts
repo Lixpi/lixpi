@@ -1,9 +1,9 @@
 // Connector / Infographics System
 // Reusable abstractions for drawing connections between visual nodes using XYFlow and D3
 
-export { createConnectorRenderer } from './renderer.ts'
-export { createMarkers, getMarkerUrl, collectMarkerTypes } from './markers.ts'
-export { computePath, computeLabelPosition, applyOffset } from './paths.ts'
+export { createConnectorRenderer } from '$src/infographics/connectors/renderer.ts'
+export { createMarkers, getMarkerUrl, collectMarkerTypes } from '$src/infographics/connectors/markers.ts'
+export { computePath, computeLabelPosition, applyOffset } from '$src/infographics/connectors/paths.ts'
 
 export type {
     AnchorPosition,
@@ -18,4 +18,4 @@ export type {
     ConnectorState,
     ConnectorRenderer,
     ComputedPath
-} from './types.ts'
+} from '$src/infographics/connectors/types.ts'

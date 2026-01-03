@@ -1,7 +1,7 @@
 import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 import { createEl } from '$src/utils/domTemplates.ts'
-import { SLASH_COMMANDS, filterCommands, type SlashCommand } from './commandRegistry.ts'
+import { SLASH_COMMANDS, filterCommands, type SlashCommand } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts'
 import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.js'
 
 export const slashCommandsMenuPluginKey = new PluginKey('slashCommandsMenu')

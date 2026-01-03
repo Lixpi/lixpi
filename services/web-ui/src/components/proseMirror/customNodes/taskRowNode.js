@@ -23,7 +23,7 @@ export const taskRowNodeSpec = {
 
 
 // TODO for reference. Now we have an improved version of this code, but I'm not sure if we need to specify toDOM and destroy methods for this spec...
-// import { DOMManager } from './../plugins/subtasks/subtaskRowService'
+// import { DOMManager } from '$src/components/proseMirror/plugins/subtasks/subtaskRowService.ts'
 // export class DOMManager {
 // 	static create(node) {
 // 		const element = document.createElement('div')

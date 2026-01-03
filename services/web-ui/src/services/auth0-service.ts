@@ -1,7 +1,7 @@
 'use strict'
 
 import { Auth0Client, createAuth0Client } from '@auth0/auth0-spa-js'
-import { authStore } from '../stores/authStore.ts'
+import { authStore } from '$src/stores/authStore.ts'
 
 const AUTH0_DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN
 const AUTH0_CLIENT_ID = import.meta.env.VITE_AUTH0_CLIENT_ID

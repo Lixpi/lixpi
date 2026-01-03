@@ -18,8 +18,8 @@
 
     import { popOutTransition } from '$src/constants/svelteAnimationTransitions';
 
-    import DropdownMenu from '../inputs/dropdown-menu.svelte'
-    import TagsInput from '../inputs/tags-input.svelte';
+    import DropdownMenu from '$src/components/inputs/dropdown-menu.svelte'
+    import TagsInput from '$src/components/inputs/tags-input.svelte';
 
     let { project, onClick, isActive } = $props();
 

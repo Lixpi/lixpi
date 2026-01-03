@@ -4,7 +4,7 @@ import { NATS_SUBJECTS, LoadingStatus, type AiChatThread, type AiChatThreadStatu
 
 const { AI_CHAT_THREAD_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
-import AuthService from './auth-service.ts'
+import AuthService from '$src/services/auth-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { aiChatThreadStore } from '$src/stores/aiChatThreadStore.ts'

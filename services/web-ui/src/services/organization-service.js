@@ -1,7 +1,7 @@
 'use strict'
 
-// import SocketService from './socket.io-service.ts'
-import { organizationStore } from '../stores/organizationStore.ts'
+// import SocketService from '$src/services/socket.io-service.ts'
+import { organizationStore } from '$src/stores/organizationStore.ts'
 
 class OrganizationService {
     static instances = new Map()

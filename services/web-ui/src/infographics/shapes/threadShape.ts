@@ -1,8 +1,8 @@
 // Thread/Document shape factory
 // Renders a capsule with a chamfered left wedge directly via SVG path data
 
-import type { ThreadShapeParams } from './types.ts'
-import type { NodeConfig } from '../connectors/types.ts'
+import type { ThreadShapeParams } from '$src/infographics/shapes/types.ts'
+import type { NodeConfig } from '$src/infographics/connectors/types.ts'
 
 export function createThreadShape(params: ThreadShapeParams): NodeConfig {
     const {

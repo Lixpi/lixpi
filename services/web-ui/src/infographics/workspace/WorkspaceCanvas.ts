@@ -19,9 +19,10 @@ import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
-import { createCanvasImageLifecycleTracker } from './canvasImageLifecycle.ts'
+import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
-import { WorkspaceConnectionManager } from './WorkspaceConnectionManager.ts'
+import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
+import { getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -480,12 +481,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Handle sizing/positioning of resize handles so they appear constant in screen pixels
     function applyHandleSizing(handle: HTMLElement, corner: ResizeCorner, zoom: number) {
-        const baseSize = 24 // px
-        const baseOffset = 6 // px (distance from corner)
-
-        // Compute CSS px values that will, after viewport scaling, result in base visual px
-        const sizePx = Math.max(10, baseSize / Math.max(zoom, 0.01))
-        const offsetPx = baseOffset / Math.max(zoom, 0.01)
+        const { size: sizePx, offset: offsetPx } = getResizeHandleScaledSizes(zoom)
 
         handle.style.width = `${sizePx}px`
         handle.style.height = `${sizePx}px`

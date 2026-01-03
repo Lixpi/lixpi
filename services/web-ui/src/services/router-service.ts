@@ -1,7 +1,7 @@
 'use strict'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
-import { routerStore } from '../stores/routerStore.ts'
+import { routerStore } from '$src/stores/routerStore.ts'
 
 type RouteDefinition = {
     path: string

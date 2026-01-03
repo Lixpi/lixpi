@@ -1,2 +1,2 @@
 // ContextSelector Primitive (Outside Document Schema)
-export { createContextSelector } from './contextSelector.ts'
+export { createContextSelector } from '$src/components/proseMirror/plugins/primitives/contextSelector/contextSelector.ts'

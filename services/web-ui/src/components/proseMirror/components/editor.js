@@ -4,9 +4,9 @@
 import { EditorState, Plugin, PluginKey } from "prosemirror-state"
 import { EditorView } from "prosemirror-view"
 import { Schema, DOMParser } from "prosemirror-model"
-import customNodes from '../customNodes'
+import customNodes from '$src/components/proseMirror/customNodes'
 // import { schema } from "prosemirror-schema-basic"
-import { schema } from './schema'
+import { schema } from '$src/components/proseMirror/components/schema'
 import { keymap } from "prosemirror-keymap"
 import { history } from "prosemirror-history"
 import { baseKeymap } from "prosemirror-commands"
@@ -14,36 +14,36 @@ import { dropCursor } from "prosemirror-dropcursor"
 import { gapCursor } from "prosemirror-gapcursor"
 
 // Plugins
-import { statePlugin } from '../plugins/statePlugin.js'
-import focusPlugin from '../plugins/focusPlugin.js'
-import { createAiUserInputPlugin } from '../plugins/aiUserInputPlugin.js' //TODO: deprecated, remove
-import { createAiUserMessagePlugin } from '../plugins/aiUserMessagePlugin.js'
-import lockCursorPositionPlugin from '../plugins/lockCursorPositionPlugin.js'
+import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
+import focusPlugin from '$src/components/proseMirror/plugins/focusPlugin.js'
+import { createAiUserInputPlugin } from '$src/components/proseMirror/plugins/aiUserInputPlugin.js' //TODO: deprecated, remove
+import { createAiUserMessagePlugin } from '$src/components/proseMirror/plugins/aiUserMessagePlugin.js'
+import lockCursorPositionPlugin from '$src/components/proseMirror/plugins/lockCursorPositionPlugin.js'
 import {
     createAiChatThreadPlugin,
     aiChatThreadNodeType,
     aiChatThreadNodeSpec,
     aiResponseMessageNodeType,
     aiResponseMessageNodeSpec
-} from '../plugins/aiChatThreadPlugin'
-import { createCodeBlockPlugin, codeBlockInputRule } from '../plugins/codeBlockPlugin.js'
-import { activeNodePlugin } from "../plugins/activeNodePlugin"
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
+import { createCodeBlockPlugin, codeBlockInputRule } from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
+import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNodePlugin"
 
 // Node types
-import { documentTitleNodeType } from "../customNodes/documentTitleNode.js"
+import { documentTitleNodeType } from "$src/components/proseMirror/customNodes/documentTitleNode.js"
 
-import { bubbleMenuPlugin } from '../plugins/bubbleMenuPlugin/index.ts'
-import { linkTooltipPlugin } from '../plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
-import { slashCommandsMenuPlugin } from '../plugins/slashCommandsMenuPlugin/index.ts'
-import { imageLifecyclePlugin } from '../plugins/imageLifecyclePlugin/index.ts'
-import { imageSelectionPlugin } from '../plugins/imageSelectionPlugin/index.ts'
+import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
+import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
+import { slashCommandsMenuPlugin } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/index.ts'
+import { imageLifecyclePlugin } from '$src/components/proseMirror/plugins/imageLifecyclePlugin/index.ts'
+import { imageSelectionPlugin } from '$src/components/proseMirror/plugins/imageSelectionPlugin/index.ts'
 
-import {buildKeymap} from "./keyMap.js"
-import {buildInputRules} from "./inputRules.js"
-import { createSvelteComponentRendererPlugin } from '../plugins/svelteComponentRenderer/svelteComponentRendererPlugin.js'
-// import TaskRow from './../../rows/TaskRow.svelte'
+import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
+import {buildInputRules} from "$src/components/proseMirror/components/inputRules.js"
+import { createSvelteComponentRendererPlugin } from '$src/components/proseMirror/plugins/svelteComponentRenderer/svelteComponentRendererPlugin.js'
+// import TaskRow from '$src/rows/TaskRow.svelte'
 
-import { defaultAttrs as defautSubtaskAttrs } from '../customNodes/taskRowNode.js'
+import { defaultAttrs as defautSubtaskAttrs } from '$src/components/proseMirror/customNodes/taskRowNode.js'
 
 // Document type constants
 const DOCUMENT_TYPE = {

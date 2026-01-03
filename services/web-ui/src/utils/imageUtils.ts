@@ -1,5 +1,5 @@
-import { servicesStore } from '../stores/servicesStore.ts'
-import AuthService from '../services/auth-service.ts'
+import { servicesStore } from '$src/stores/servicesStore.ts'
+import AuthService from '$src/services/auth-service.ts'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 const { IMAGE_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS

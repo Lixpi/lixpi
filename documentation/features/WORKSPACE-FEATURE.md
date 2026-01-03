@@ -35,7 +35,9 @@ flowchart TB
 
         subgraph Infographics["Framework-Agnostic Layer"]
             WC[WorkspaceCanvas.ts]
+            WCM[WorkspaceConnectionManager]
             XY[XYPanZoom]
+            CR[ConnectorRenderer]
         end
 
         subgraph Services["Frontend Services"]
@@ -60,6 +62,8 @@ flowchart TB
     WCS --> TS
     WCS --> WC
     WC --> XY
+    WC --> WCM
+    WCM --> CR
 
     WCS --> WSvc
     WCS --> DSvc
@@ -100,6 +104,21 @@ type CanvasState = {
         zoom: number   // 0.1 to 2.0
     }
     nodes: CanvasNode[]
+    edges: WorkspaceEdge[]  // Connections between nodes
+}
+```
+
+### WorkspaceEdge
+
+Edges represent visual connections between canvas nodes, used for showing context flows and dependencies.
+
+```typescript
+type WorkspaceEdge = {
+    edgeId: string
+    sourceNodeId: string
+    targetNodeId: string
+    sourceHandle?: string  // e.g., 'right'
+    targetHandle?: string  // e.g., 'left'
 }
 ```
 
@@ -374,22 +393,32 @@ flowchart LR
         AIS[AiInteractionService]
     end
 
+    subgraph ConnectionManager["WorkspaceConnectionManager"]
+        WCM[syncNodes/syncEdges]
+        XYH[XYHandle API]
+        CR[ConnectorRenderer]
+    end
+
     subgraph DOM
         VP[.workspace-viewport]
+        EDGES[.workspace-edges-layer SVG]
         DOCNODES[.workspace-document-node]
         IMGNODES[.workspace-image-node]
         THREADNODES[.workspace-ai-chat-thread-node]
+        HANDLES[.workspace-handle]
         ED[.document-node-editor]
         TED[.ai-chat-thread-node-editor]
         IMG[img element]
     end
 
     CS --> RN
+    CS --> WCM
     DOCS --> RN
     THREADS --> RN
     RN --> CDN
     RN --> CIN
     RN --> CTN
+    RN --> HANDLES
     CDN --> PM
     CTN --> PM
     CTN --> AIS
@@ -399,6 +428,10 @@ flowchart LR
     DOCNODES --> VP
     IMGNODES --> VP
     THREADNODES --> VP
+    WCM --> XYH
+    WCM --> CR
+    CR --> EDGES
+    EDGES --> VP
     PM --> ED
     PM --> TED
     CIN --> IMG
@@ -410,7 +443,11 @@ Canvas state changes are debounced (1 second) before persisting. This prevents h
 
 Document content changes are handled by `DocumentService.updateDocument()` which has its own debouncing logic.
 
+AI chat thread content changes are handled by `AiChatThreadService.updateAiChatThread()` with similar debouncing.
+
 Position and dimension changes after drag/resize are persisted immediately via `onCanvasStateChange`.
+
+Edge changes are persisted immediately when edges are created, deleted, or reconnected.
 
 ## Image Lifecycle Management
 
@@ -496,74 +533,22 @@ sequenceDiagram
 
 Each AI chat thread node has its own `AiInteractionService` instance, enabling concurrent AI streams across multiple threads in the same workspace.
 
-## Persistence Strategy
-
-Canvas state changes are debounced (1 second) before persisting. This prevents hammering the backend during continuous pan/zoom operations.
-
-Document content changes are handled by `DocumentService.updateDocument()` which has its own debouncing logic.
-
-AI chat thread content changes are handled by `AiChatThreadService.updateAiChatThread()` with similar debouncing.
-
-Position and dimension changes after drag/resize are persisted immediately via `onCanvasStateChange`.
-
-## Image Lifecycle Management
-
-Images on the canvas are tracked by `canvasImageLifecycle.ts`. When an image node is removed from the canvas state:
-
-1. The tracker compares previous and current canvas states
-2. Detects which fileIds are no longer present
-3. Calls `deleteImage()` from `imageUtils.ts` to delete from storage
-4. The same `deleteImage()` utility is shared with ProseMirror's `imageLifecyclePlugin`
-
-This ensures orphaned images don't accumulate in storage.
-
 ---
 
-## Workspace Edges — Technical Proposal
+## Workspace Edges
 
-This section describes how to add visual connections (edges/arrows) between canvas nodes. Users will be able to drag from a handle on one node to another node to create a relationship line. This is useful for showing context flows, dependencies, or any kind of relationship between workspace entities.
+Visual connections (edges/arrows) between canvas nodes allow users to show relationships, context flows, and dependencies between workspace entities. Users can drag from a handle on one node to another to create a relationship line.
 
-### Why We Need This
+### Key Features
 
-The old `contextSelector` plugin inside ProseMirror handled AI context visualization — showing which documents/threads feed into an AI chat. But that was tightly coupled to the document-level concept of "threads within a document." Now that AI chat threads are first-class workspace nodes (not nested inside documents), we need a workspace-level way to draw connections between nodes.
+- **Connection handles** on each node (small circles on the sides, visible on hover)
+- **Drag-to-connect** interaction using `XYHandle.onPointerDown` from `@xyflow/system`
+- **Edge rendering** using ConnectorRenderer from `src/infographics/connectors/`
+- **Edge selection and deletion** (click to select, Delete/Backspace to remove)
+- **Edge reconnection** (drag an edge endpoint to move it to a different node)
+- **Persistence** of edges in `CanvasState`
 
-The good news: most of the rendering code already exists in `src/infographics/connectors/`. We just need to wire it into the workspace canvas and add the interaction layer using `@xyflow/system`'s `XYHandle` API.
-
-### What We're Building
-
-1. **Connection handles** on each node (small circles on the sides, visible on hover)
-2. **Drag-to-connect** interaction using `XYHandle.onPointerDown`
-3. **Edge rendering** using our existing connector system
-4. **Edge selection and deletion** (click to select, Delete key to remove)
-5. **Edge reconnection** (drag an edge endpoint to move it to a different node)
-6. **Persistence** of edges in `CanvasState`
-7. **Context icon on AI chat threads** — the "branch" icon at the bottom-right corner of AI chat thread nodes (see below)
-
-### Context Icon on AI Chat Thread Nodes
-
-The current implementation has a small icon (looks like a git branch / network icon) at the bottom-right corner of AI chat thread cards. When clicked, it opens the context selector bubble. We need to **keep this icon** but repurpose it for the new workspace-level connection system.
-
-```
-┌─────────────────────────────────────────┐
-│  AI Chat Thread                         │
-│                                         │
-│  [conversation content...]              │
-│                                         │
-│                                         │
-│                                    ⎇   │ ← Context icon (bottom-right)
-└─────────────────────────────────────────┘
-```
-
-The icon serves as a quick way to see/manage connections for that specific AI chat thread. When clicked, it could:
-- Show a mini-popover listing all nodes currently connected to this thread
-- Allow quick disconnect (remove edge) from the popover
-- Possibly highlight connected edges on the canvas
-
-This is especially useful because AI chat threads are the primary "sink" for context — users typically connect documents/other threads TO an AI chat thread to provide context for the AI conversation.
-
-The icon remains part of the AI chat thread's ProseMirror NodeView (rendered inside the editor chrome), not a workspace-level element. It just needs to communicate with the workspace connection system to display and manage edges.
-
-### Architecture Overview
+### Architecture
 
 ```mermaid
 flowchart TB
@@ -588,7 +573,7 @@ flowchart TB
         CR --> SVG
     end
 
-    subgraph "Existing Canvas"
+    subgraph "Canvas"
         WC[WorkspaceCanvas.ts]
         NODES[Node DOM Elements]
         PZ[XYPanZoom]
@@ -603,9 +588,7 @@ flowchart TB
     XYH -->|in-progress line| SVG
 ```
 
-### How XYHandle Works
-
-`@xyflow/system` provides `XYHandle` for connection creation. Here's the flow:
+### Connection Flow
 
 ```mermaid
 sequenceDiagram
@@ -635,9 +618,7 @@ sequenceDiagram
     WCM->>SVG: Render permanent edge
 ```
 
-### Key Components
-
-#### 1. WorkspaceConnectionManager
+### WorkspaceConnectionManager
 
 Lives at `src/infographics/workspace/WorkspaceConnectionManager.ts`. This is the brain of the connection system.
 
@@ -672,9 +653,6 @@ classDiagram
         toPosition: XYPosition
         isValid: boolean
     }
-
-    WorkspaceConnectionManager --> HandleMeta
-    WorkspaceConnectionManager --> ConnectionState
 ```
 
 Responsibilities:
@@ -684,30 +662,29 @@ Responsibilities:
 - Delegates to `XYHandle.onPointerDown` for the actual drag interaction
 - Manages edge selection state
 
-#### 2. Handle DOM Elements
+### Handle DOM Elements
 
-Each workspace node gets connection handles — small circles at the left and right edges:
+Each workspace node has connection handles — small circles at the left (target) and right (source) edges:
 
 ```
 ┌─────────────────────────────────────────┐
-│  ○                                   ○  │
+│ ○                                     ○ │
 │ left                               right│
 │ (target)                         (source)│
 │                                         │
 │         Node Content                    │
 │                                         │
-│  ○                                   ○  │
 └─────────────────────────────────────────┘
 ```
 
 Handles are:
-- Hidden by default, shown on node hover (CSS transition)
+- Hidden by default, shown on node hover (CSS)
 - Marked with `data-nodeid`, `data-handleid`, `data-handlepos` attributes (required by XYHandle)
 - Wired with `pointerdown` listener that calls `WorkspaceConnectionManager.onHandlePointerDown`
 
-#### 3. Edge Rendering
+### Edge Rendering
 
-We reuse the existing `createConnectorRenderer` from `src/infographics/connectors/`. Edges are rendered as SVG paths in a layer below the node cards but above the canvas background.
+Edges are rendered as SVG paths using `createConnectorRenderer` from `src/infographics/connectors/`. The edge layer sits below node cards but above the canvas background.
 
 ```mermaid
 flowchart LR
@@ -721,16 +698,13 @@ flowchart LR
     BG --> EDGES --> NODES --> HANDLES
 ```
 
-Edge styling (preserved from old contextSelector):
+Edge styling:
 - Path type: `horizontal-bezier`
-- Stroke width: `2px`
+- Stroke width: `2px` (3px when selected)
 - Marker (arrowhead) size: `12px`
-- Marker offset from node: `{ source: 5, target: 10 }`
-- Color: `rgba(190, 190, 200, 0.95)` (matches existing connector styles)
+- Color: `rgba(190, 190, 200, 0.95)` (primary color when selected)
 
-#### 4. Edge Selection and Deletion
-
-Clicking an edge selects it. The selected edge gets a highlight style (thicker stroke, different color). Pressing Delete or Backspace removes it from state.
+### Edge Selection and Deletion
 
 ```mermaid
 stateDiagram-v2
@@ -741,126 +715,9 @@ stateDiagram-v2
     Selected --> [*]: Delete/Backspace key
 ```
 
-#### 5. Edge Reconnection
+When an edge is selected, small draggable circles appear at the source and target endpoints for reconnection.
 
-Users can drag an edge endpoint to reconnect it to a different node. This uses `XYHandle.onPointerDown` with `edgeUpdaterType` set to `'source'` or `'target'`.
-
-When an edge is selected, small draggable circles appear at the source and target endpoints. Dragging one of these initiates a reconnection:
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Endpoint as Edge Endpoint Handle
-    participant XYH as XYHandle
-    participant WCM as WorkspaceConnectionManager
-
-    User->>Endpoint: pointerdown on source endpoint
-    Endpoint->>XYH: onPointerDown with edgeUpdaterType='source'
-    Note over XYH: Now tracking new source
-
-    loop Drag
-        User->>XYH: pointermove
-        XYH->>WCM: updateConnection (shows temp line)
-    end
-
-    User->>XYH: pointerup on new node's target handle
-    XYH->>WCM: onReconnectEnd
-    WCM->>WCM: Update edge source in state
-```
-
-### Data Model Changes
-
-#### WorkspaceEdge Type
-
-Add to `@lixpi/constants`:
-
-```typescript
-type WorkspaceEdge = {
-    edgeId: string
-    sourceNodeId: string
-    targetNodeId: string
-    sourceHandle?: string  // e.g., 'right-top', 'right-bottom'
-    targetHandle?: string  // e.g., 'left-top', 'left-bottom'
-}
-```
-
-#### CanvasState Extension
-
-```typescript
-type CanvasState = {
-    viewport: {
-        x: number
-        y: number
-        zoom: number
-    }
-    nodes: CanvasNode[]
-    edges: WorkspaceEdge[]  // NEW — defaults to []
-}
-```
-
-### Integration with WorkspaceCanvas.ts
-
-The existing `WorkspaceCanvas.ts` already manages nodes, drag, resize, and pan/zoom. We extend it to:
-
-1. Instantiate `WorkspaceConnectionManager` on init
-2. Add handle DOM elements when creating nodes
-3. Create the edge SVG layer
-4. Wire keyboard events for edge deletion
-5. Update edges on `onCanvasStateChange`
-
-```mermaid
-flowchart TB
-    subgraph "WorkspaceCanvas.ts"
-        INIT[createWorkspaceCanvas]
-        RENDER[renderNodes]
-        HANDLES[addHandlesToNode]
-        EDGE_LAYER[createEdgeSvgLayer]
-        KEYBOARD[setupKeyboardHandlers]
-    end
-
-    subgraph "New Components"
-        WCM[WorkspaceConnectionManager]
-        CR[ConnectorRenderer]
-    end
-
-    INIT --> WCM
-    INIT --> EDGE_LAYER
-    INIT --> KEYBOARD
-    RENDER --> HANDLES
-    HANDLES -->|pointerdown| WCM
-    WCM --> CR
-    CR --> EDGE_LAYER
-```
-
-### Infographics Folder Consolidation
-
-Before implementing edges, we need to clean up the duplicate infographics code:
-
-**Current state:**
-- `src/components/proseMirror/plugins/primitives/infographics/` — old location
-- `src/infographics/` — new location (already has workspace/, connectors/, shapes/)
-
-Both `connectors/` and `shapes/` folders are identical. The contextSelector plugin imports from the old location. After we delete contextSelector (it's obsolete), we can delete the old infographics folder entirely.
-
-```mermaid
-flowchart LR
-    subgraph "Before"
-        OLD[primitives/infographics/]
-        NEW[src/infographics/]
-        CS[contextSelector] -->|imports| OLD
-    end
-
-    subgraph "After"
-        ONLY[src/infographics/]
-        WC[WorkspaceCanvas] -->|imports| ONLY
-        WCM[WorkspaceConnectionManager] -->|imports| ONLY
-    end
-
-    OLD -.->|delete| X1[❌]
-    CS -.->|delete| X2[❌]
-```
-
-### Persistence Flow
+### Edge Persistence
 
 Edge changes follow the same pattern as node changes:
 
@@ -884,204 +741,43 @@ sequenceDiagram
 
 ---
 
-## Implementation Plan
+## Follow-up Tasks
 
-### Phase 1: Infographics Consolidation
+The following items are pending implementation:
 
-Copy `src/components/proseMirror/plugins/primitives/infographics` to `src/infographics/`
+### Handle Styling Polish
 
-- [ ] **Verify folder parity**
-  - [ ] Compare `src/components/proseMirror/plugins/primitives/infographics/connectors/` with `src/infographics/connectors/`
-  - [ ] Compare `src/components/proseMirror/plugins/primitives/infographics/shapes/` with `src/infographics/shapes/`
-  - [ ] Verify `animationConstants.ts` is identical in both locations
-  - [ ] Document any differences (there shouldn't be any significant ones)
+- [ ] Show handles on AI chat thread node hover (CSS selector missing `.workspace-ai-chat-thread-node:hover .workspace-handle`)
+- [ ] Add hover effect on handle itself (`:hover` style)
+- [ ] Add transition for smooth fade in/out
 
-- [ ] **Check for imports from old location**
-  - [ ] Search codebase for imports from `primitives/infographics`
-  - [ ] List all files that need import path updates
-  - [ ] Verify contextSelector is the only consumer
+### Context Icon for AI Chat Thread Nodes
 
-### Phase 2: Data Model
+The "branch" icon at the bottom-right corner of AI chat thread cards currently uses the old `contextSelector` plugin. It needs to be refactored to work with the workspace edge system:
 
-- [ ] **Add WorkspaceEdge type to @lixpi/constants**
-  - [ ] Define `WorkspaceEdge` type with `edgeId`, `sourceNodeId`, `targetNodeId`, optional handle IDs
-  - [ ] Export from constants package index
+- [ ] Refactor icon click handler to work with workspace connection system
+- [ ] Show popover listing nodes connected TO this thread (incoming edges)
+- [ ] Allow quick disconnect (remove edge) from the popover
+- [ ] Optionally highlight connected edges on canvas when popover is open
 
-- [ ] **Extend CanvasState type**
-  - [ ] Add `edges: WorkspaceEdge[]` field to `CanvasState`
-  - [ ] Default to empty array for backward compatibility
-  - [ ] Update any validation/schema if applicable
+### Cleanup Old Code
 
-- [ ] **Update persistence layer**
-  - [ ] Verify `WORKSPACE.UPDATE_CANVAS_STATE` handler accepts edges
-  - [ ] Test that existing workspaces with no edges still load correctly
+Once the context icon is refactored:
 
-### Phase 3: WorkspaceConnectionManager
+- [ ] Delete `src/components/proseMirror/plugins/primitives/contextSelector/` folder
+- [ ] Remove import from `aiChatThreadNode.ts`
+- [ ] Remove SCSS import from `ai-chat-thread.scss`
 
-- [ ] **Create WorkspaceConnectionManager.ts**
-  - [ ] Set up file at `src/infographics/workspace/WorkspaceConnectionManager.ts`
-  - [ ] Define types: `ConnectionManagerConfig`, `ConnectionState`, `HandleMeta`
-  - [ ] Import `XYHandle`, `ConnectionMode`, `Position` from `@xyflow/system`
+### Edge Cases
 
-- [ ] **Implement node lookup management**
-  - [ ] `syncNodes(canvasNodes)` — converts CanvasNode[] to XYFlow's nodeLookup format
-  - [ ] Store node positions and dimensions for handle positioning
-  - [ ] Call `adoptUserNodes` and `updateNodeInternals` as needed
+- [ ] When a node with edges is deleted, connected edges should be removed too
+- [ ] Verify edges update correctly during node drag
 
-- [ ] **Implement connection initiation**
-  - [ ] `onHandlePointerDown(event, handleMeta)` — delegates to `XYHandle.onPointerDown`
-  - [ ] Configure: `connectionMode: Strict`, `connectionRadius: 30`, `autoPanOnConnect: true`
-  - [ ] Set up `updateConnection` callback to track in-progress connection
-  - [ ] Set up `cancelConnection` callback for cleanup
+### Testing
 
-- [ ] **Implement connection validation**
-  - [ ] `isValidConnection(connection)` — no self-loops, no duplicate edges
-  - [ ] Check if edge already exists between source and target
-
-- [ ] **Implement connection completion**
-  - [ ] `onConnect(connection)` callback — creates new edge in state
-  - [ ] Generate unique `edgeId`
-  - [ ] Call external `onEdgeCreate` callback
-
-- [ ] **Implement edge selection**
-  - [ ] Track `selectedEdgeId` state
-  - [ ] `selectEdge(edgeId)` / `deselectEdge()` methods
-  - [ ] Expose selected state for styling
-
-- [ ] **Implement edge deletion**
-  - [ ] `deleteSelectedEdge()` — removes edge from state
-  - [ ] Call external `onEdgeDelete` callback
-
-- [ ] **Implement edge reconnection**
-  - [ ] Support `edgeUpdaterType` parameter for reconnection mode
-  - [ ] `onReconnectEnd` callback — updates existing edge instead of creating new
-
-### Phase 4: Handle DOM Elements
-
-- [ ] **Create handle elements in WorkspaceCanvas.ts**
-  - [ ] Add function `createNodeHandles(nodeEl, nodeId)`
-  - [ ] Create handle elements: left-target, right-source (initially, can add more later)
-  - [ ] Position handles at node edges using absolute positioning
-  - [ ] Set required data attributes: `data-nodeid`, `data-handleid`, `data-handlepos`
-
-- [ ] **Style handles**
-  - [ ] Add CSS for `.workspace-handle` (small circles, ~8px diameter)
-  - [ ] Hide by default: `opacity: 0`
-  - [ ] Show on node hover: `.workspace-node:hover .workspace-handle { opacity: 1 }`
-  - [ ] Add hover effect on handle itself
-  - [ ] Transition for smooth fade in/out
-
-- [ ] **Wire handle events**
-  - [ ] Add `pointerdown` listener on each handle
-  - [ ] Call `WorkspaceConnectionManager.onHandlePointerDown`
-  - [ ] Prevent event propagation to avoid triggering node drag
-
-- [ ] **Register handles with XYFlow**
-  - [ ] After node mount, call `updateNodeInternals` to register handle bounds
-  - [ ] Handle bounds are needed for XYHandle to find closest valid handle during drag
-
-- [ ] **Context icon for AI chat thread nodes**
-  - [ ] Keep the existing "branch" icon at bottom-right of AI chat thread cards
-  - [ ] Refactor icon click handler to work with workspace connection system
-  - [ ] Show popover listing nodes connected TO this thread (incoming edges)
-  - [ ] Allow quick disconnect (remove edge) from the popover
-  - [ ] Optionally highlight connected edges on canvas when popover is open
-
-### Phase 5: Edge Rendering Layer
-
-- [ ] **Create SVG container for edges**
-  - [ ] Add `<svg>` element to viewport, positioned below node cards
-  - [ ] Set viewBox to match canvas dimensions
-  - [ ] Apply same transform as viewport for pan/zoom
-
-- [ ] **Integrate ConnectorRenderer**
-  - [ ] Instantiate `createConnectorRenderer` with SVG container
-  - [ ] Configure styling: `horizontal-bezier`, `strokeWidth: 2`, `markerSize: 12`
-
-- [ ] **Render committed edges**
-  - [ ] `renderEdges(edges: WorkspaceEdge[])` function
-  - [ ] For each edge, calculate source/target positions from node bounds + handle positions
-  - [ ] Use `connector.addEdge()` for each edge
-  - [ ] Call `connector.render()`
-
-- [ ] **Render in-progress connection**
-  - [ ] When `connectionInProgress` is set, render temporary edge
-  - [ ] Source: from dragged handle position
-  - [ ] Target: current mouse position (or snapped handle if hovering valid target)
-  - [ ] Use different style (dashed line or lower opacity)
-
-- [ ] **Handle edge clicks for selection**
-  - [ ] Add invisible wider stroke path for easier clicking (interaction area)
-  - [ ] On click, call `selectEdge(edgeId)`
-  - [ ] Apply `.selected` class for visual feedback
-
-- [ ] **Render reconnection handles**
-  - [ ] When edge is selected, show small circles at source/target endpoints
-  - [ ] Wire pointerdown to `onHandlePointerDown` with `edgeUpdaterType`
-
-### Phase 6: Keyboard and Selection
-
-- [ ] **Set up keyboard listeners**
-  - [ ] Listen for Delete and Backspace keys
-  - [ ] When edge is selected, call `deleteSelectedEdge()`
-  - [ ] Listen for Escape to deselect
-
-- [ ] **Handle click-away deselection**
-  - [ ] Click on canvas background deselects edge
-  - [ ] Click on node deselects edge
-  - [ ] Only edge click selects edge
-
-- [ ] **Visual feedback for selection**
-  - [ ] Selected edge: thicker stroke, highlight color
-  - [ ] Maybe subtle glow or shadow effect
-
-### Phase 7: Integration with WorkspaceCanvas.svelte
-
-- [ ] **Pass edges to WorkspaceCanvas.ts**
-  - [ ] Add `edges` to `createWorkspaceCanvas` options
-  - [ ] Add `onEdgeCreate` and `onEdgeDelete` callbacks
-
-- [ ] **Handle edge state changes**
-  - [ ] When `onEdgeCreate` fires, update local state and persist
-  - [ ] When `onEdgeDelete` fires, update local state and persist
-  - [ ] Include edges in `onCanvasStateChange` payload
-
-- [ ] **Update canvas on edge changes**
-  - [ ] Call `connectionManager.syncEdges(edges)` when edges change
-  - [ ] Re-render edge layer
-
-### Phase 8: Cleanup Old Code
-
-- [ ] **Remove contextSelector plugin**
-  - [ ] Delete `src/components/proseMirror/plugins/primitives/contextSelector/` folder
-  - [ ] Remove import from `aiChatThreadNode.ts`
-  - [ ] Remove any Thread/Document/Workspace context mode code
-
-- [ ] **Remove old infographics folder**
-  - [ ] Delete `src/components/proseMirror/plugins/primitives/infographics/` folder
-  - [ ] Verify no broken imports anywhere
-
-- [ ] **Clean up related code**
-  - [ ] Search for any remaining references to context modes
-  - [ ] Remove unused types or interfaces
-  - [ ] Update README files if they reference old architecture
-
-### Phase 9: Testing and Polish
-
-- [ ] **Manual testing**
-  - [ ] Create edges between different node types (document ↔ document, document ↔ AI thread, etc.)
-  - [ ] Test edge selection and deletion
-  - [ ] Test edge reconnection
-  - [ ] Test with pan/zoom (edges should transform correctly)
-  - [ ] Test persistence (reload page, edges should still be there)
-  - [ ] Test with many nodes and edges (performance)
-
-- [ ] **Edge cases**
-  - [ ] What happens when a node with edges is deleted? (edges should be removed too)
-  - [ ] What happens during node drag? (connected edges should update position)
-  - [ ] What about undo/redo? (out of scope for now, but note for future)
-
-- [ ] **Update documentation**
-  - [ ] Update this WORKSPACE-FEATURE.md with final architecture
-  - [ ] Add edges to the data model diagrams
-  - [ ] Document the new API surface
+- [ ] Create edges between different node types (document ↔ document, document ↔ AI thread, etc.)
+- [ ] Test edge selection and deletion
+- [ ] Test edge reconnection
+- [ ] Test with pan/zoom (edges should transform correctly)
+- [ ] Test persistence (reload page, edges should still be there)
+- [ ] Test with many nodes and edges (performance)

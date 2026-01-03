@@ -4,7 +4,7 @@
     import { onMount, onDestroy, tick } from 'svelte'
 
 
-    import { ProseMirrorEditor } from './components/editor.js'
+    import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
     import { isUUID } from '$src/helpers/is-uuid.js'
 
     import DocumentService from '$src/services/document-service.ts'

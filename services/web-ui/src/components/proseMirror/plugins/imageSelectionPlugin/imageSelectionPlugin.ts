@@ -1,6 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { ImageNodeView } from './imageNodeView.ts'
+import { ImageNodeView } from '$src/components/proseMirror/plugins/imageSelectionPlugin/imageNodeView.ts'
 
 export const imageSelectionPluginKey = new PluginKey('imageSelection')
 

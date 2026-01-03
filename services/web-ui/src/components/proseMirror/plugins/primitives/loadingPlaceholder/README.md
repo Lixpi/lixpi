@@ -27,7 +27,7 @@ The loadingPlaceholder is a **stateless UI component**:
 ### Basic Usage
 
 ```typescript
-import { createLoadingPlaceholder } from './plugins/primitives/loadingPlaceholder'
+import { createLoadingPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 
 // Create with defaults
 const placeholder = createLoadingPlaceholder()
@@ -51,7 +51,7 @@ const placeholder = createLoadingPlaceholder({
 ### Error State
 
 ```typescript
-import { createErrorPlaceholder } from './plugins/primitives/loadingPlaceholder'
+import { createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 
 const errorPlaceholder = createErrorPlaceholder({
     message: 'Failed to load document',
