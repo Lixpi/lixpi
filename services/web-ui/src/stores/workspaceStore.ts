@@ -26,7 +26,8 @@ type WorkspaceStore = {
 
 const defaultCanvasState: CanvasState = {
     viewport: { x: 0, y: 0, zoom: 1 },
-    nodes: []
+    nodes: [],
+    edges: []
 }
 
 const workspace: ReadonlyDeep<WorkspaceStore> = deepFreeze({

@@ -54,7 +54,7 @@ type SlashCommandsPluginState = {
 
 The main view class that manages:
 
-- Menu DOM construction using `createEl` from `domTemplates.ts`
+- Menu DOM construction using `createEl` from `$src/utils/domTemplates.ts`
 - Transform-aware positioning that handles CSS scaled/translated ancestors
 - Command list rendering with selection highlighting
 - Keyboard event handling delegation

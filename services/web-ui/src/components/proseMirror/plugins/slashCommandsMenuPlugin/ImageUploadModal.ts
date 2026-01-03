@@ -1,4 +1,4 @@
-import { createEl } from '../../components/domTemplates.ts'
+import { createEl } from '$src/utils/domTemplates.ts'
 import type { EditorView } from 'prosemirror-view'
 import AuthService from '../../../../services/auth-service.ts'
 import RouterService from '../../../../services/router-service.ts'

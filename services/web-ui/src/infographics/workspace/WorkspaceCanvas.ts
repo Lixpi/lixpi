@@ -13,6 +13,7 @@ import {
     type ImageCanvasNode,
     type AiChatThreadCanvasNode,
     type AiChatThread,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
@@ -20,8 +21,11 @@ import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from './canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
+import { WorkspaceConnectionManager } from './WorkspaceConnectionManager.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
+const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 
 type DocumentEditorEntry = {
     editor: any
@@ -82,7 +86,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let currentDocuments: Document[] = options.documents
     let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
+    let lastTransform: Transform = [0, 0, 1]
+
+    let connectionManager: WorkspaceConnectionManager | null = null
+    let edgesLayerEl: HTMLDivElement | null = null
+    let edgeEndpointHandlesEl: HTMLDivElement | null = null
+
+    const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
+    let edgesRaf: number | null = null
     let selectedNodeId: string | null = null
+    let selectedEdgeId: string | null = null
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
@@ -147,6 +160,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     const panZoomConfig = {
         ...defaultPanZoomConfig((transform) => {
+            lastTransform = transform
             const vp: Viewport = { x: transform[0], y: transform[1], zoom: transform[2] }
             if (viewportEl) {
                 viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
@@ -157,6 +171,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             // Update visibility tracking for lazy loading
             updateVisibleNodes()
+            // Ensure edges keep up with autopan + zoom changes
+            scheduleEdgesRender()
             onViewportChange?.(vp)
         }),
         ...options.panZoomConfig
@@ -174,6 +190,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const newNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`)
             newNode?.classList.add('is-selected')
         }
+
+        if (nodeId) {
+            selectedEdgeId = null
+            connectionManager?.deselect()
+            updateEdgeEndpointHandles()
+        }
     }
 
     function createResizeHandle(nodeId: string, corner: ResizeCorner): HTMLElement {
@@ -190,11 +212,270 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return handle
     }
 
+    function createBaseNodeElement(
+        node: CanvasNode,
+        extraClasses?: string,
+        extraDataAttrs?: Record<string, string>
+    ): { nodeEl: HTMLElement; dragOverlay: HTMLElement } {
+        const nodeEl = document.createElement('div')
+        nodeEl.className = `workspace-document-node${extraClasses ? ` ${extraClasses}` : ''}`
+        nodeEl.dataset.nodeId = node.nodeId
+        if (extraDataAttrs) {
+            for (const [key, value] of Object.entries(extraDataAttrs)) {
+                nodeEl.dataset[key] = value
+            }
+        }
+        nodeEl.style.position = 'absolute'
+        nodeEl.style.left = `${node.position.x}px`
+        nodeEl.style.top = `${node.position.y}px`
+        nodeEl.style.width = `${node.dimensions.width}px`
+        nodeEl.style.height = `${node.dimensions.height}px`
+
+        nodeEl.addEventListener('click', (e) => {
+            e.stopPropagation()
+            selectNode(node.nodeId)
+        })
+
+        for (const corner of RESIZE_CORNERS) {
+            nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
+        }
+
+        const dragOverlay = document.createElement('div')
+        dragOverlay.className = 'node-drag-overlay nopan'
+        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
+        nodeEl.appendChild(dragOverlay)
+
+        return { nodeEl, dragOverlay }
+    }
+
     function commitCanvasState(nextState: CanvasState) {
         // Track image changes and delete orphaned images from storage
         canvasImageLifecycle.trackCanvasState(nextState)
         currentCanvasState = nextState
         onCanvasStateChange?.(nextState)
+
+        connectionManager?.syncEdges(nextState.edges)
+        connectionManager?.syncNodes(nextState.nodes)
+        scheduleEdgesRender()
+    }
+
+    function scheduleEdgesRender() {
+        if (!connectionManager || !currentCanvasState) return
+        if (edgesRaf !== null) return
+
+        edgesRaf = requestAnimationFrame(() => {
+            edgesRaf = null
+
+            if (!connectionManager || !currentCanvasState) return
+
+            const nodesForEdges = currentCanvasState.nodes.map((n: CanvasNode) => {
+                const override = liveNodeOverrides.get(n.nodeId)
+                if (!override) return n
+
+                return {
+                    ...n,
+                    position: override.position ?? n.position,
+                    dimensions: override.dimensions ?? n.dimensions
+                }
+            })
+
+            connectionManager.syncNodes(nodesForEdges)
+            connectionManager.syncEdges(currentCanvasState.edges)
+            connectionManager.render()
+            updateEdgeEndpointHandles()
+        })
+    }
+
+    function ensureEdgesLayer() {
+        if (edgesLayerEl && viewportEl.contains(edgesLayerEl)) {
+            return
+        }
+
+        if (connectionManager) {
+            connectionManager.destroy()
+            connectionManager = null
+        }
+
+        edgesLayerEl = document.createElement('div')
+        edgesLayerEl.className = 'workspace-edges-layer'
+
+        edgeEndpointHandlesEl = document.createElement('div')
+        edgeEndpointHandlesEl.className = 'workspace-edge-endpoints-layer'
+
+        viewportEl.prepend(edgeEndpointHandlesEl)
+        viewportEl.prepend(edgesLayerEl)
+
+        connectionManager = new WorkspaceConnectionManager({
+            paneEl,
+            viewportEl,
+            edgesLayerEl,
+            getTransform: () => lastTransform,
+            panBy: async ({ x, y }) => {
+                if (!panZoom) return false
+                const vp = panZoom.getViewport()
+                await panZoom.setViewport({ ...vp, x: vp.x + x, y: vp.y + y, zoom: vp.zoom })
+                return true
+            },
+            onEdgesChange: (edges) => {
+                if (!currentCanvasState) return
+                commitCanvasState({
+                    ...currentCanvasState,
+                    edges
+                })
+            },
+            onSelectedEdgeChange: (edgeId) => {
+                selectedEdgeId = edgeId
+                if (edgeId) {
+                    selectNode(null)
+                }
+                updateEdgeEndpointHandles()
+            }
+        })
+
+        if (currentCanvasState) {
+            connectionManager.syncNodes(currentCanvasState.nodes)
+            connectionManager.syncEdges(currentCanvasState.edges)
+            if (selectedEdgeId) {
+                connectionManager.selectEdge(selectedEdgeId)
+            }
+            scheduleEdgesRender()
+        }
+    }
+
+    function createConnectionHandle(params: {
+        nodeId: string
+        handleId: string
+        handleType: 'source' | 'target'
+        position: 'left' | 'right'
+        onPointerDown?: (e: MouseEvent) => void
+    }): HTMLDivElement {
+        const handle = document.createElement('div')
+        handle.className = [
+            'workspace-handle',
+            'nopan',
+            'connectable',
+            'connectableend',
+            'xy-flow__handle',
+            params.handleType,
+            params.position,
+        ].join(' ')
+
+        handle.dataset.nodeid = params.nodeId
+        handle.dataset.handleid = params.handleId
+        handle.dataset.handlepos = params.position
+        handle.dataset.id = `workspace-${params.nodeId}-${params.handleId}-${params.handleType}`
+
+        if (params.onPointerDown) {
+            handle.addEventListener('mousedown', (e) => {
+                params.onPointerDown?.(e)
+            })
+        }
+
+        return handle
+    }
+
+    function addConnectionHandlesToNode(nodeEl: HTMLElement, nodeId: string) {
+        const left = createConnectionHandle({
+            nodeId,
+            handleId: 'left',
+            handleType: 'target',
+            position: 'left',
+            onPointerDown: (e) => {
+                if (!connectionManager) return
+                connectionManager.onHandlePointerDown(e, {
+                    nodeId,
+                    handleId: 'left',
+                    isTarget: true,
+                    handleDomNode: left
+                })
+            }
+        })
+
+        const right = createConnectionHandle({
+            nodeId,
+            handleId: 'right',
+            handleType: 'source',
+            position: 'right',
+            onPointerDown: (e) => {
+                if (!connectionManager) return
+                connectionManager.onHandlePointerDown(e, {
+                    nodeId,
+                    handleId: 'right',
+                    isTarget: false,
+                    handleDomNode: right
+                })
+            }
+        })
+
+        nodeEl.appendChild(left)
+        nodeEl.appendChild(right)
+    }
+
+    function updateEdgeEndpointHandles() {
+        if (!edgeEndpointHandlesEl || !connectionManager || !currentCanvasState) return
+
+        edgeEndpointHandlesEl.replaceChildren()
+
+        if (!selectedEdgeId) return
+
+        const edge = currentCanvasState.edges.find((e: WorkspaceEdge) => e.edgeId === selectedEdgeId)
+        if (!edge) return
+
+        const sourceNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === edge.sourceNodeId)
+        const targetNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === edge.targetNodeId)
+        if (!sourceNode || !targetNode) return
+
+        const sourceOnLeft = (edge.sourceHandle ?? '').startsWith('left')
+        const targetOnRight = (edge.targetHandle ?? '').startsWith('right')
+
+        const sourceAnchor = {
+            x: sourceNode.position.x + (sourceOnLeft ? 0 : sourceNode.dimensions.width),
+            y: sourceNode.position.y + sourceNode.dimensions.height / 2
+        }
+        const targetAnchor = {
+            x: targetNode.position.x + (targetOnRight ? targetNode.dimensions.width : 0),
+            y: targetNode.position.y + targetNode.dimensions.height / 2
+        }
+
+        const createEndpoint = (params: {
+            x: number
+            y: number
+            updaterType: 'source' | 'target'
+        }) => {
+            const el = document.createElement('div')
+            el.className = [
+                'workspace-edge-endpoint',
+                'nopan',
+                'connectable',
+                'connectableend',
+                'xy-flow__handle',
+                params.updaterType,
+            ].join(' ')
+
+            el.style.left = `${params.x}px`
+            el.style.top = `${params.y}px`
+
+            el.addEventListener('mousedown', (e) => {
+                if (!connectionManager) return
+
+                // Flip isTarget for source updates so strict mode yields "new source" semantics.
+                const isTarget = params.updaterType === 'source'
+
+                connectionManager.onHandlePointerDown(e, {
+                    nodeId: params.updaterType === 'source' ? edge.sourceNodeId : edge.targetNodeId,
+                    handleId: params.updaterType === 'source' ? (edge.sourceHandle ?? 'right') : (edge.targetHandle ?? 'left'),
+                    isTarget,
+                    handleDomNode: el,
+                    edgeUpdaterType: params.updaterType,
+                    reconnectingEdgeId: edge.edgeId,
+                })
+            })
+
+            return el
+        }
+
+        edgeEndpointHandlesEl.appendChild(createEndpoint({ x: sourceAnchor.x, y: sourceAnchor.y, updaterType: 'source' }))
+        edgeEndpointHandlesEl.appendChild(createEndpoint({ x: targetAnchor.x, y: targetAnchor.y, updaterType: 'target' }))
     }
 
     // Handle sizing/positioning of resize handles so they appear constant in screen pixels
@@ -277,11 +558,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             nodeEl.style.left = `${startLeft + deltaX}px`
             nodeEl.style.top = `${startTop + deltaY}px`
+
+            liveNodeOverrides.set(nodeId, {
+                position: {
+                    x: parseFloat(nodeEl.style.left),
+                    y: parseFloat(nodeEl.style.top)
+                },
+                dimensions: {
+                    width: nodeEl.offsetWidth,
+                    height: nodeEl.offsetHeight
+                }
+            })
+            scheduleEdgesRender()
         }
 
         const handleMouseUp = () => {
             nodeEl.classList.remove('is-dragging')
             draggingNodeId = null
+
+            liveNodeOverrides.delete(nodeId)
 
             document.removeEventListener('mousemove', handleMouseMove)
             document.removeEventListener('mouseup', handleMouseUp)
@@ -395,12 +690,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const heightDiff = newHeight - startHeight
                 nodeEl.style.top = `${startTop - heightDiff}px`
             }
+
+            liveNodeOverrides.set(nodeId, {
+                position: {
+                    x: parseFloat(nodeEl.style.left),
+                    y: parseFloat(nodeEl.style.top)
+                },
+                dimensions: {
+                    width: nodeEl.offsetWidth,
+                    height: nodeEl.offsetHeight
+                }
+            })
+            scheduleEdgesRender()
         }
 
         const handleMouseUp = () => {
             nodeEl.classList.remove('is-resizing')
             handle.classList.remove('is-dragging')
             resizingNodeId = null
+
+            liveNodeOverrides.delete(nodeId)
 
             document.removeEventListener('mousemove', handleMouseMove)
             document.removeEventListener('mouseup', handleMouseUp)
@@ -434,31 +743,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createDocumentNode(node: DocumentCanvasNode, doc: Document | undefined): HTMLElement {
-        const nodeEl = document.createElement('div')
-        nodeEl.className = 'workspace-document-node'
-        nodeEl.dataset.nodeId = node.nodeId
-        nodeEl.dataset.documentId = node.referenceId
-        nodeEl.style.position = 'absolute'
-        nodeEl.style.left = `${node.position.x}px`
-        nodeEl.style.top = `${node.position.y}px`
-        nodeEl.style.width = `${node.dimensions.width}px`
-        nodeEl.style.height = `${node.dimensions.height}px`
-
-        nodeEl.addEventListener('click', (e) => {
-            e.stopPropagation()
-            selectNode(node.nodeId)
-        })
-
-        const corners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-        for (const corner of corners) {
-            const handle = createResizeHandle(node.nodeId, corner)
-            nodeEl.appendChild(handle)
-        }
-
-        const dragOverlay = document.createElement('div')
+        const { nodeEl, dragOverlay } = createBaseNodeElement(node, undefined, { documentId: node.referenceId })
         dragOverlay.className = 'document-drag-overlay nopan'
-        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
-        nodeEl.appendChild(dragOverlay)
 
         const editorContainer = document.createElement('div')
         editorContainer.className = 'document-node-editor nopan'
@@ -514,31 +800,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createAiChatThreadNode(node: AiChatThreadCanvasNode, thread: AiChatThread | undefined): HTMLElement {
-        const nodeEl = document.createElement('div')
-        nodeEl.className = 'workspace-document-node workspace-ai-chat-thread-node'
-        nodeEl.dataset.nodeId = node.nodeId
-        nodeEl.dataset.threadId = node.referenceId
-        nodeEl.style.position = 'absolute'
-        nodeEl.style.left = `${node.position.x}px`
-        nodeEl.style.top = `${node.position.y}px`
-        nodeEl.style.width = `${node.dimensions.width}px`
-        nodeEl.style.height = `${node.dimensions.height}px`
-
-        nodeEl.addEventListener('click', (e) => {
-            e.stopPropagation()
-            selectNode(node.nodeId)
-        })
-
-        const corners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-        for (const corner of corners) {
-            const handle = createResizeHandle(node.nodeId, corner)
-            nodeEl.appendChild(handle)
-        }
-
-        const dragOverlay = document.createElement('div')
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-ai-chat-thread-node',
+            { threadId: node.referenceId }
+        )
         dragOverlay.className = 'document-drag-overlay nopan'
-        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
-        nodeEl.appendChild(dragOverlay)
 
         const editorContainer = document.createElement('div')
         editorContainer.className = 'ai-chat-thread-node-editor nopan'
@@ -603,20 +870,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createImageNode(node: ImageCanvasNode): HTMLElement {
-        const nodeEl = document.createElement('div')
-        nodeEl.className = 'workspace-document-node workspace-image-node'
-        nodeEl.dataset.nodeId = node.nodeId
-        nodeEl.dataset.fileId = node.fileId
-        nodeEl.style.position = 'absolute'
-        nodeEl.style.left = `${node.position.x}px`
-        nodeEl.style.top = `${node.position.y}px`
-        nodeEl.style.width = `${node.dimensions.width}px`
-        nodeEl.style.height = `${node.dimensions.height}px`
-
-        nodeEl.addEventListener('click', (e) => {
-            e.stopPropagation()
-            selectNode(node.nodeId)
-        })
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-image-node',
+            { fileId: node.fileId }
+        )
+        dragOverlay.className = 'image-drag-overlay nopan'
 
         // Create the img element - fills the container
         const imgEl = document.createElement('img')
@@ -656,26 +915,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         nodeEl.appendChild(imgEl)
 
-        // Add resize handles
-        const corners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-        for (const corner of corners) {
-            const handle = createResizeHandle(node.nodeId, corner)
-            nodeEl.appendChild(handle)
-        }
-
-        // Add drag overlay for the entire image
-        const dragOverlay = document.createElement('div')
-        dragOverlay.className = 'image-drag-overlay nopan'
-        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
-        nodeEl.appendChild(dragOverlay)
-
         return nodeEl
     }
 
     function getNodeStructureKey(canvasState: CanvasState | null): string {
         if (!canvasState) return ''
         // Create a key based on node IDs and types - position/dimension changes don't affect this
-        return canvasState.nodes.map(n => `${n.nodeId}:${n.type}`).join(',')
+        return canvasState.nodes.map((n: CanvasNode) => `${n.nodeId}:${n.type}`).join(',')
     }
 
     let lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
@@ -684,6 +930,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!viewportEl || !currentCanvasState) return
 
         viewportEl.innerHTML = ''
+
+        ensureEdgesLayer()
 
         for (const [, { editor, aiService }] of documentEditors) {
             if (editor?.destroy) editor.destroy()
@@ -722,8 +970,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 continue
             }
 
+            addConnectionHandlesToNode(nodeEl, node.nodeId)
             viewportEl.appendChild(nodeEl)
+
+            // Register after insertion so bounds are measurable
+            connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
         }
+
+        // Ensure edges render after a full rerender
+        connectionManager?.syncNodes(currentCanvasState.nodes)
+        connectionManager?.syncEdges(currentCanvasState.edges)
+        scheduleEdgesRender()
 
         lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
     }
@@ -780,8 +1037,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.addEventListener('click', (e) => {
         if (e.target === paneEl || e.target === viewportEl) {
             selectNode(null)
+            selectedEdgeId = null
+            connectionManager?.deselect()
+            updateEdgeEndpointHandles()
         }
     })
+
+    const onKeyDown = (e: KeyboardEvent) => {
+        const target = e.target as HTMLElement | null
+        const isTyping = !!target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            (target as any).isContentEditable
+        )
+
+        if (e.key === 'Escape') {
+            selectedEdgeId = null
+            connectionManager?.deselect()
+            selectNode(null)
+            updateEdgeEndpointHandles()
+            return
+        }
+
+        if (isTyping) return
+
+        if ((e.key === 'Backspace' || e.key === 'Delete') && selectedEdgeId) {
+            e.preventDefault()
+            connectionManager?.deleteSelectedEdge()
+        }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
 
     initializePanZoom()
     renderNodes()
@@ -804,6 +1090,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentDocuments = newDocuments
             currentAiChatThreads = newAiChatThreads
 
+            if (currentCanvasState && connectionManager) {
+                connectionManager.syncNodes(currentCanvasState.nodes)
+                connectionManager.syncEdges(currentCanvasState.edges)
+                scheduleEdgesRender()
+            }
+
             if (needsRerender) {
                 renderNodes()
                 lastDocumentsKey = getDocumentsKey(newDocuments)
@@ -820,6 +1112,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
         destroy() {
             resizeObserver.disconnect()
+            window.removeEventListener('keydown', onKeyDown)
+            if (edgesRaf !== null) {
+                cancelAnimationFrame(edgesRaf)
+                edgesRaf = null
+            }
+            connectionManager?.destroy()
+            connectionManager = null
             if (panZoom) {
                 panZoom.destroy()
             }

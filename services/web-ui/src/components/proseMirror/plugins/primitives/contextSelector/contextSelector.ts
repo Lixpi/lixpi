@@ -1,5 +1,5 @@
 
-import { html } from '../../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 import { createConnectorRenderer } from '../infographics/connectors/index.ts'
 import {
     createIconShape,

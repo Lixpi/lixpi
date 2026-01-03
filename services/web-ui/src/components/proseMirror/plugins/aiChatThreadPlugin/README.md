@@ -198,14 +198,14 @@ This format follows modern prompt engineering best practices (per OpenAI/Anthrop
 
 ## DOM Template System
 
-We use `htm` for declarative DOM in NodeViews. The shared helper lives at `../../components/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `../README.md` (see “Templating & NodeViews”).
+We use `htm` for declarative DOM in NodeViews. The shared helper lives at `$src/utils/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `../README.md` (see "Templating & NodeViews").
 
 More generic patterns and folder layout guidance: `../README.md`.
 
 Quick taste, this is how buttons are built now:
 
 ```ts
-import { html } from '../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 const button = html`
   <div className="ai-submit-button" onclick=${handleClick}>
@@ -430,11 +430,11 @@ This pattern follows our decoration-first approach: visual states come from clas
   - Used by aiChatThreadNode for AI model and context selectors
   - See `primitives/dropdown/README.md` for full documentation
 
-- `../../components/domTemplates.ts` - **NEW** Shared DOM template utilities:
+- `$src/utils/domTemplates.ts` - Shared DOM template utilities:
   - TypeScript class-based `DOMTemplateBuilder` with proper typing
   - `html` template function using htm/mini for zero-overhead DOM creation
   - Handles events, styles, data attributes, innerHTML
-  - Available across all ProseMirror components, not just this plugin
+  - Available across all components, not just ProseMirror plugins
 
 - `ai-chat-thread.scss` - All the styling and animations
 - `index.ts` - Exports everything

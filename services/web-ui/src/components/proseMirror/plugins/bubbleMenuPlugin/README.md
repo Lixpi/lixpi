@@ -101,7 +101,7 @@ The bubble menu is defined via a structured list in `bubbleMenuItems.ts`, making
 - Text wrap buttons: None, Wrap Left, Wrap Right
 - Action buttons: Blockquote, Delete
 
-Each button is built with `createEl` from `components/domTemplates.ts` so markup is centralized and readable.
+Each button is built with `createEl` from `$src/utils/domTemplates.ts` so markup is centralized and readable.
 
 ### Mobile Considerations
 

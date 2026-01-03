@@ -33,7 +33,15 @@ class WorkspaceService {
                 return
             }
 
-            workspaceStore.setDataValues(workspace)
+            const normalizedWorkspace = {
+                ...workspace,
+                canvasState: {
+                    ...workspace.canvasState,
+                    edges: workspace.canvasState?.edges ?? []
+                }
+            }
+
+            workspaceStore.setDataValues(normalizedWorkspace)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
         } catch (error) {
@@ -75,7 +83,15 @@ class WorkspaceService {
                 return
             }
 
-            workspaceStore.setDataValues(workspace)
+            const normalizedWorkspace = {
+                ...workspace,
+                canvasState: {
+                    ...workspace.canvasState,
+                    edges: workspace.canvasState?.edges ?? []
+                }
+            }
+
+            workspaceStore.setDataValues(normalizedWorkspace)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
             // Add workspace to the workspaces list in sidebar

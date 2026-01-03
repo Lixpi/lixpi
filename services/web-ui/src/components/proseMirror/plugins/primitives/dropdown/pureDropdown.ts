@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { html } from '../../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 import { chevronDownIcon } from '../../../../../svgIcons/index.ts'
 import { createInfoBubble } from '../infoBubble/pureInfoBubble.ts'
 

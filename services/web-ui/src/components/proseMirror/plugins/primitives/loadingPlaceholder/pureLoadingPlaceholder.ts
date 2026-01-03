@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { html } from '../../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 type LoadingPlaceholderConfig = {
     size?: 'small' | 'medium' | 'large'

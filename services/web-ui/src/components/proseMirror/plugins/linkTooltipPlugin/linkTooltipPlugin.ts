@@ -1,6 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { createEl } from '../../components/domTemplates.ts'
+import { createEl } from '$src/utils/domTemplates.ts'
 
 export const linkTooltipPluginKey = new PluginKey('linkTooltip')
 

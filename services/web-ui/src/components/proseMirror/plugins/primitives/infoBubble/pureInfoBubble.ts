@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { html } from '../../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 import { infoBubbleStateManager } from './infoBubbleStateManager.ts'
 
 type InfoBubbleConfig = {

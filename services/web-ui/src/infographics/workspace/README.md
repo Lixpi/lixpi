@@ -14,6 +14,10 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
+- **Connect nodes** by dragging from a node's right handle to another node's left handle
+- **Select edges** by clicking the connector line
+- **Delete edges** using Delete/Backspace (when an edge is selected)
+- **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
 
@@ -53,6 +57,7 @@ flowchart TB
     subgraph Core["Framework-Agnostic Core"]
         CC[createWorkspaceCanvas]
         PZ[XYPanZoom instance]
+        ECM[WorkspaceConnectionManager]
         DN[Document Nodes]
         IN[Image Nodes]
         TN[AI Chat Thread Nodes]
@@ -76,6 +81,7 @@ flowchart TB
     NS --> API
 
     CC --> PZ
+    CC --> ECM
     CC --> DN
     CC --> IN
     CC --> TN
@@ -177,6 +183,14 @@ Note: viewport transforms are only re-applied when the saved viewport actually c
 
 Rendering note: full re-renders are triggered when node structure or document load state changes; position/dimension updates are handled directly in the DOM during drag/resize to avoid unnecessary work.
 
+### Workspace Edges
+
+Edges are stored in `canvasState.edges` and rendered using the existing infographics connector renderer. Connection interactions are handled by `WorkspaceConnectionManager.ts` using `@xyflow/system`'s `XYHandle`.
+
+- Node DOM elements get left/right connection handles (target/source)
+- Clicking an edge selects it; when selected, endpoint handles appear for reconnection
+- Deleting an edge updates `canvasState.edges` via the normal persistence flow
+
 ### ProseMirror Integration
 
 Each document node instantiates a `ProseMirrorEditor`. The editor container has `.nopan` so clicking inside doesn't pan the canvas. Content changes fire `onDocumentContentChange` which the Svelte layer forwards to `DocumentService`.
@@ -206,7 +220,8 @@ sequenceDiagram
 | File | Purpose |
 |------|---------|
 | `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers |
-| `workspace-canvas.scss` | All styles for canvas, nodes, handles, editors |
+| `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, edge rendering, selection/deletion |
+| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 
 ## CSS Classes

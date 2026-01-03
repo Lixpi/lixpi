@@ -89,6 +89,7 @@
 
                 const newCanvasState: CanvasState = {
                     viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                    edges: canvasState?.edges ?? [],
                     nodes: [
                         ...existingNodes,
                         {
@@ -144,6 +145,7 @@
 
                         const newCanvasState: CanvasState = {
                             viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                            edges: canvasState?.edges ?? [],
                             nodes: [...existingNodes, imageNode]
                         }
 
@@ -170,6 +172,7 @@
 
                         const newCanvasState: CanvasState = {
                             viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                            edges: canvasState?.edges ?? [],
                             nodes: [...existingNodes, imageNode]
                         }
 
@@ -235,6 +238,7 @@
 
                 const newCanvasState: CanvasState = {
                     viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                    edges: canvasState?.edges ?? [],
                     nodes: [...existingNodes, threadNode]
                 }
 

@@ -2,7 +2,7 @@ import type { EditorView } from 'prosemirror-view'
 import type { Schema, Node as ProseMirrorNode } from 'prosemirror-model'
 import { toggleMark, wrapIn, setBlockType } from 'prosemirror-commands'
 import { NodeSelection } from 'prosemirror-state'
-import { createEl } from '../../components/domTemplates.ts'
+import { createEl } from '$src/utils/domTemplates.ts'
 import {
     boldIcon,
     italicIcon,

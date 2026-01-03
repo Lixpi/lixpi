@@ -97,9 +97,18 @@ export type CanvasViewport = {
     zoom: number
 }
 
+export type WorkspaceEdge = {
+    edgeId: string
+    sourceNodeId: string
+    targetNodeId: string
+    sourceHandle?: string
+    targetHandle?: string
+}
+
 export type CanvasState = {
     viewport: CanvasViewport
     nodes: CanvasNode[]
+    edges: WorkspaceEdge[]
 }
 
 export type Workspace = {

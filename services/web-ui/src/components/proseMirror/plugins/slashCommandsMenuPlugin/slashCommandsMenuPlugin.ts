@@ -1,6 +1,6 @@
 import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { createEl } from '../../components/domTemplates.ts'
+import { createEl } from '$src/utils/domTemplates.ts'
 import { SLASH_COMMANDS, filterCommands, type SlashCommand } from './commandRegistry.ts'
 import { documentTitleNodeType } from '../../customNodes/documentTitleNode.js'
 
