@@ -21,7 +21,7 @@ import {
     alignLeftIcon,
     alignCenterIcon,
     alignRightIcon,
-} from '../../../../svgIcons/index.ts'
+} from '$src/svgIcons/index.ts'
 
 // =============================================================================
 // SELECTION CONTEXT TYPES

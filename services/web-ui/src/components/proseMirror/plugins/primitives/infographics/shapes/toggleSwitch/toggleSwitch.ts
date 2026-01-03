@@ -5,8 +5,8 @@
 import { select } from 'd3-selection'
 // @ts-ignore - runtime import
 import { easeCubicOut, easeCubicIn } from 'd3-ease'
-import { ENTRANCE_ANIMATION_DURATION } from '../../animationConstants.ts'
-import { checkMarkIcon } from '../../../../../../../svgIcons/index.ts'
+import { ENTRANCE_ANIMATION_DURATION } from '$src/components/proseMirror/plugins/primitives/infographics/animationConstants.ts'
+import { checkMarkIcon } from '$src/svgIcons/index.ts'
 
 type ToggleSwitchConfig = {
     id: string

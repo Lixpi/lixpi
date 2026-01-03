@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { html } from '$src/utils/domTemplates.ts'
-import { chevronDownIcon } from '../../../../../svgIcons/index.ts'
+import { chevronDownIcon } from '$src/svgIcons/index.ts'
 import { createInfoBubble } from '../infoBubble/pureInfoBubble.ts'
 
 // Inject fill color utility (same as original dropdown)

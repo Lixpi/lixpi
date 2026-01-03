@@ -8,7 +8,7 @@ import {
     startThreadGradientAnimation
 } from '../infographics/shapes/index.ts'
 import { createToggleSwitch } from '../infographics/shapes/toggleSwitch/index.ts'
-import { aiLightBulbIcon, contextIcon, documentIcon } from '../../../../../svgIcons/index.ts'
+import { aiLightBulbIcon, contextIcon, documentIcon } from '$src/svgIcons/index.ts'
 import { ENTRANCE_ANIMATION_DURATION } from '../infographics/animationConstants.ts'
 
 // @ts-ignore - runtime import

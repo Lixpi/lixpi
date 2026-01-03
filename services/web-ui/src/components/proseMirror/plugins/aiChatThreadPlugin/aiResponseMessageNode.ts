@@ -7,8 +7,8 @@ import {
     checkMarkIcon,
     claudeIcon,
     claudeAnimatedFrameIcon,
-} from '../../../../svgIcons/index.ts'
-import { html } from '../../components/domTemplates.ts'
+} from '$src/svgIcons/index.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 // Define the unique type name for this custom node
 export const aiResponseMessageNodeType = 'aiResponseMessage'

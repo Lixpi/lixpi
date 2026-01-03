@@ -4,7 +4,7 @@
 import type { Selection } from 'd3-selection'
 import type { MarkerType } from './types.ts'
 
-import { arrowRightIcon } from '../../../../../../svgIcons/index.ts'
+import { arrowRightIcon } from '$src/svgIcons/index.ts'
 
 // Extract the <path d="..."> from an SVG string
 function extractPathD(svg: string): string {

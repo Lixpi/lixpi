@@ -5,18 +5,18 @@
         projectIcon,
         tagIcon,
         plusIcon
-    } from '../../svgIcons'
+    } from '$src/svgIcons'
 
-    import { documentsStore } from '../../stores/documentsStore.ts'
-    import DocumentService from '../../services/document-service.ts'
-    import routerService from '../../services/router-service';
+    import { documentsStore } from '$src/stores/documentsStore.ts'
+    import DocumentService from '$src/services/document-service.ts'
+    import routerService from '$src/services/router-service';
 
-    import { routerStore } from '../../stores/routerStore.ts'
-    import { authStore } from '../../stores/authStore.ts'
-    import { userStore } from '../../stores/userStore.ts'
-    import { organizationStore } from '../../stores/organizationStore.ts'
+    import { routerStore } from '$src/stores/routerStore.ts'
+    import { authStore } from '$src/stores/authStore.ts'
+    import { userStore } from '$src/stores/userStore.ts'
+    import { organizationStore } from '$src/stores/organizationStore.ts'
 
-    import { popOutTransition } from '../../constants/svelteAnimationTransitions';
+    import { popOutTransition } from '$src/constants/svelteAnimationTransitions';
 
     import DropdownMenu from '../inputs/dropdown-menu.svelte'
     import TagsInput from '../inputs/tags-input.svelte';

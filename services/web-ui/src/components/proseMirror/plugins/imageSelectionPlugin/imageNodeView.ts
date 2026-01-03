@@ -1,7 +1,7 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView, NodeView } from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
-import { imageResizeCornerIcon } from '../../../../svgIcons/index.ts'
+import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
 
 type ImageAlignment = 'left' | 'center' | 'right'
 type TextWrap = 'none' | 'left' | 'right'
