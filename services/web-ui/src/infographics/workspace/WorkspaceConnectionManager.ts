@@ -68,8 +68,8 @@ function toRendererPoint(point: { x: number; y: number }, transform: Transform) 
 }
 
 function getEdgeAnchorPositions(edge: WorkspaceEdge): { source: 'left' | 'right'; target: 'left' | 'right' } {
-	const source = edge.sourceHandle?.startsWith('left') ? 'left' : 'right'
-	const target = edge.targetHandle?.startsWith('right') ? 'right' : 'left'
+	const source = edge.sourceHandle === 'left' ? 'left' : 'right'
+	const target = edge.targetHandle === 'left' ? 'left' : 'right'
 	return { source, target }
 }
 
@@ -225,12 +225,21 @@ export class WorkspaceConnectionManager {
 					return
 				}
 
+				// Use the actual drag start/end nodes, not XYFlow's source/target
+				// which depends on handle types (source/target) not drag direction
+				const fromNodeId = this.connectionInProgress?.fromHandle?.nodeId
+				const fromHandleId = this.connectionInProgress?.fromHandle?.id
+				if (!fromNodeId) return
+
+				const toNodeId = fromNodeId === connection.source ? connection.target : connection.source
+				const toHandleId = fromNodeId === connection.source ? connection.targetHandle : connection.sourceHandle
+
 				const nextEdge: WorkspaceEdge = {
 					edgeId: generateEdgeId(),
-					sourceNodeId: connection.source,
-					targetNodeId: connection.target,
-					sourceHandle: connection.sourceHandle ?? undefined,
-					targetHandle: connection.targetHandle ?? undefined,
+					sourceNodeId: fromNodeId,
+					targetNodeId: toNodeId,
+					sourceHandle: fromHandleId ?? undefined,
+					targetHandle: toHandleId ?? undefined,
 				}
 
 				this.config.onEdgesChange([...this.edges, nextEdge])
@@ -242,17 +251,24 @@ export class WorkspaceConnectionManager {
 					return
 				}
 
+				const edgeIdToUpdate = this.reconnectingEdge.edgeId
+
+				// If dropped in empty space (no target node), delete the edge
 				if (!finalState.toNode) {
+					this.selectEdge(null)
+					this.config.onEdgesChange(this.edges.filter((e) => e.edgeId !== edgeIdToUpdate))
 					return
 				}
 
-				const edgeToUpdate = this.edges.find((e) => e.edgeId === this.reconnectingEdge?.edgeId)
+				const edgeToUpdate = this.edges.find((e) => e.edgeId === edgeIdToUpdate)
 				if (!edgeToUpdate) {
 					return
 				}
 
 				const updatedEdge: WorkspaceEdge = { ...edgeToUpdate }
 
+				// Reconnect logic: edgeUpdaterType tells us which end is being moved
+				// 'source' means moving the source end, 'target' means moving the target end
 				if (this.reconnectingEdge.edgeUpdaterType === 'source') {
 					updatedEdge.sourceNodeId = finalState.toNode.id
 					updatedEdge.sourceHandle = finalState.toHandle?.id ?? undefined
@@ -411,8 +427,13 @@ export class WorkspaceConnectionManager {
 		const { strokeWidth: scaledStrokeWidth, markerSize: scaledMarkerSize, markerOffset: scaledMarkerOffset } =
 			getEdgeScaledSizes(zoom)
 
-		// Add committed edges
+		// Add committed edges (skip the one being reconnected)
 		for (const e of this.edges) {
+			// Hide the edge being reconnected - it will be shown as in-progress line
+			if (this.reconnectingEdge?.edgeId === e.edgeId && this.connectionInProgress) {
+				continue
+			}
+
 			const { source, target } = getEdgeAnchorPositions(e)
 			const isSelected = e.edgeId === this.selectedEdgeId
 
@@ -431,7 +452,7 @@ export class WorkspaceConnectionManager {
 			this.connector.addEdge(edgeConfig)
 		}
 
-		// Add in-progress edge
+		// Add in-progress edge (new connection or reconnecting existing edge)
 		if (this.connectionInProgress) {
 			const transform = this.config.getTransform()
 			const to = this.connectionInProgress.toHandle
@@ -457,18 +478,44 @@ export class WorkspaceConnectionManager {
 			}
 			this.connector.addNode(tempNode)
 
+			// When reconnecting, show the edge from the anchored end to the cursor
+			// When creating new connection, show dashed line from source to cursor
+			const isReconnecting = this.reconnectingEdge !== null
+			const reconnectingEdgeData = isReconnecting
+				? this.edges.find((e) => e.edgeId === this.reconnectingEdge?.edgeId)
+				: null
+
+			let sourceNodeId: string
+			let sourcePosition: 'left' | 'right' | 'center'
+
+			if (isReconnecting && reconnectingEdgeData) {
+				// When reconnecting, the source is the end that's NOT being dragged
+				if (this.reconnectingEdge!.edgeUpdaterType === 'source') {
+					// Dragging source end, so anchor from target
+					sourceNodeId = reconnectingEdgeData.targetNodeId
+					sourcePosition = (reconnectingEdgeData.targetHandle === 'left' ? 'left' : 'right') as 'left' | 'right'
+				} else {
+					// Dragging target end, so anchor from source
+					sourceNodeId = reconnectingEdgeData.sourceNodeId
+					sourcePosition = (reconnectingEdgeData.sourceHandle === 'left' ? 'left' : 'right') as 'left' | 'right'
+				}
+			} else {
+				// New connection - use the fromHandle
+				sourceNodeId = this.connectionInProgress.fromHandle.nodeId
+				sourcePosition = this.connectionInProgress.fromHandle.position as 'left' | 'right'
+			}
+
 			const tempEdge: EdgeConfig = {
 				id: '__workspace-temp-edge',
-				source: {
-					nodeId: this.connectionInProgress.fromHandle.nodeId,
-					position: this.connectionInProgress.fromHandle.position as any
-				},
+				source: { nodeId: sourceNodeId, position: sourcePosition },
 				target: { nodeId: tempNodeId, position: 'center' },
 				pathType: 'horizontal-bezier',
-				marker: 'none',
+				marker: isReconnecting ? 'arrowhead' : 'none',
+				markerSize: isReconnecting ? scaledMarkerSize : undefined,
+				markerOffset: isReconnecting ? scaledMarkerOffset : undefined,
 				strokeWidth: scaledStrokeWidth,
-				lineStyle: 'dashed',
-				className: 'workspace-edge workspace-edge-temp'
+				lineStyle: isReconnecting ? 'solid' : 'dashed',
+				className: `workspace-edge ${isReconnecting ? '' : 'workspace-edge-temp'}`
 			}
 			this.connector.addEdge(tempEdge)
 		}
@@ -478,46 +525,61 @@ export class WorkspaceConnectionManager {
 		this.attachEdgeInteractionHandlers()
 	}
 
+	private paneClickHandler: ((e: MouseEvent) => void) | null = null
+
 	private attachEdgeInteractionHandlers() {
-		const svg = this.config.edgesLayerEl.querySelector('svg')
-		if (!svg) return
+		if (this.paneClickHandler) return  // Already attached
 
-		// Remove old hitareas to avoid stacking
-		svg.querySelectorAll('path.workspace-edge-hitarea').forEach((p) => p.remove())
+		this.paneClickHandler = (e: MouseEvent) => {
+			const target = e.target as HTMLElement
+			if (target.closest('.workspace-document-node, .workspace-image-node, .workspace-ai-chat-thread-node')) {
+				return
+			}
 
-		const paths = Array.from(svg.querySelectorAll('path.connector-edge')) as SVGPathElement[]
+			const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg') as SVGSVGElement | null
+			if (!svg) return
 
-		for (const path of paths) {
-			const id = path.getAttribute('id')
-			if (!id?.startsWith('edge-')) continue
+			const ctm = svg.getScreenCTM()
+			if (!ctm) return
 
-			const edgeId = id.slice('edge-'.length)
-			if (edgeId.startsWith('__workspace-temp')) continue
+			const svgPoint = svg.createSVGPoint()
+			svgPoint.x = e.clientX
+			svgPoint.y = e.clientY
+			const point = svgPoint.matrixTransform(ctm.inverse())
 
-			const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-			hit.setAttribute('d', path.getAttribute('d') ?? '')
-			hit.setAttribute('class', 'workspace-edge-hitarea')
-			hit.setAttribute('data-edge-id', edgeId)
-			hit.setAttribute('fill', 'none')
-			hit.setAttribute('stroke', 'transparent')
-			hit.setAttribute('stroke-width', '14')
-			hit.style.pointerEvents = 'stroke'
+			const paths = svg.querySelectorAll('path.connector-edge') as NodeListOf<SVGPathElement>
+			for (const path of paths) {
+				const id = path.getAttribute('id')
+				if (!id?.startsWith('edge-')) continue
+				const edgeId = id.slice('edge-'.length)
+				if (edgeId.startsWith('__workspace-temp')) continue
 
-			hit.addEventListener('click', (e) => {
-				e.preventDefault()
-				e.stopPropagation()
-				this.selectEdge(edgeId)
-			})
+				const origWidth = path.style.strokeWidth
+				path.style.strokeWidth = '14'
+				const hit = path.isPointInStroke(point)
+				path.style.strokeWidth = origWidth
 
-			// Add on top of the visible path for easier hit target
-			path.parentElement?.appendChild(hit)
+				if (hit) {
+					e.preventDefault()
+					e.stopPropagation()
+					this.selectEdge(edgeId)
+					return
+				}
+			}
 		}
+
+		this.config.paneEl.addEventListener('click', this.paneClickHandler)
 	}
 
 	public destroy() {
 		this.connector?.destroy()
 		this.connector = null
 		this.config.edgesLayerEl.replaceChildren()
+		// Remove click handler
+		if (this.paneClickHandler) {
+			this.config.paneEl.removeEventListener('click', this.paneClickHandler)
+			this.paneClickHandler = null
+		}
 		this.nodeLookup.clear()
 		this.parentLookup.clear()
 		this.nodes = []

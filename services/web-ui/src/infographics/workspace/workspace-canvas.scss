@@ -389,11 +389,36 @@
     top: 0;
     left: 0;
     z-index: 5;
-    pointer-events: auto;
+    // Container passes events through to nodes below
+    pointer-events: none;
 
     .connector-svg {
+        // SVG itself doesn't block events
+        pointer-events: none;
+
         .workspace-edge-node {
             opacity: 0;
+            pointer-events: none;
+        }
+
+        // Edges group
+        .connector-edges {
+            pointer-events: none;
+        }
+
+        // Visible edge paths should not block clicks
+        .connector-edge {
+            pointer-events: none;
+        }
+
+        // Markers should not block clicks
+        marker, defs {
+            pointer-events: none;
+        }
+
+        // Node rects in edges group
+        .connector-nodes {
+            pointer-events: none;
         }
 
         // Default edge color
