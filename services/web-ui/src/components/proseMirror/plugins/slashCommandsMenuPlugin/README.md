@@ -13,8 +13,8 @@ A floating command palette that appears when typing `/` at the start of a line o
 ## Usage
 
 ```typescript
-import { slashCommandsMenuPlugin } from './plugins/slashCommandsMenuPlugin/index.ts'
-import './plugins/slashCommandsMenuPlugin/slashCommandsMenu.scss'
+import { slashCommandsMenuPlugin } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/index.ts'
+import '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/slashCommandsMenu.scss'
 
 // Add to your EditorState plugins
 const plugins = [

@@ -198,9 +198,9 @@ This format follows modern prompt engineering best practices (per OpenAI/Anthrop
 
 ## DOM Template System
 
-We use `htm` for declarative DOM in NodeViews. The shared helper lives at `$src/utils/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `../README.md` (see "Templating & NodeViews").
+We use `htm` for declarative DOM in NodeViews. The shared helper lives at `$src/utils/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `$src/components/proseMirror/plugins/README.md` (see "Templating & NodeViews").
 
-More generic patterns and folder layout guidance: `../README.md`.
+More generic patterns and folder layout guidance: `$src/components/proseMirror/plugins/README.md`.
 
 Quick taste, this is how buttons are built now:
 
@@ -422,7 +422,7 @@ This pattern follows our decoration-first approach: visual states come from clas
 
 - `aiChatThreadPluginConstants.ts` - Shared `PluginKey` to avoid identity mismatch and circular imports between NodeView and plugin. Import this key in both places and call `AI_CHAT_THREAD_PLUGIN_KEY.getState(view.state)` when needed.
 
-- `../primitives/dropdown/` - Dropdown primitive (outside document schema):
+- `$src/components/proseMirror/plugins/primitives/dropdown/` - Dropdown primitive (outside document schema):
   - `pureDropdown.ts` - Factory function creating dropdowns with {dom, update, destroy} API
   - Uses `infoBubble` primitive for state management
   - `index.ts` - Clean exports
@@ -709,7 +709,7 @@ case 'Cohere':
 Want to use templates in other ProseMirror components?
 
 ```typescript
-import { html } from '../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 const myNodeView = html`
   <div className="my-component" onclick=${handleClick}>

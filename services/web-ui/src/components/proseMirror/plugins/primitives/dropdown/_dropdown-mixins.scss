@@ -1,10 +1,10 @@
 @use "sass:color";
 @use "sass:math";
-@import "../../../../../sass/variables";
-@import "../../../../../sass/transitions";
-@import "../../../../../sass/components/animations";
-@import "../../../../../sass/themes/minimalist-chic";
-@import "../infoBubble/_infoBubble-mixins.scss";
+@import "$src/sass/variables";
+@import "$src/sass/transitions";
+@import "$src/sass/components/animations";
+@import "$src/sass/themes/minimalist-chic";
+@import "$src/components/proseMirror/plugins/primitives/infoBubble/_infoBubble-mixins.scss";
 
 // =============================
 // Dropdown Chip (Tag Pill) Component

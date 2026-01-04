@@ -21,8 +21,8 @@ A universal floating selection-based bubble menu for ProseMirror that shows cont
 ## Usage
 
 ```typescript
-import { bubbleMenuPlugin } from './plugins/bubbleMenuPlugin/index.ts'
-import './plugins/bubbleMenuPlugin/bubbleMenu.scss'
+import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
+import '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenu.scss'
 
 // Add to your EditorState plugins
 const plugins = [

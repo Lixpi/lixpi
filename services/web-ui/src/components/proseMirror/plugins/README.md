@@ -4,7 +4,7 @@ This is the shared guide for plugins in our ProseMirror app. Keep generic stuff 
 
 If you want a concrete example, check `aiChatThreadPlugin/README.md`.
 
-Direct link: `./aiChatThreadPlugin/README.md`.
+Direct link: `$src/components/proseMirror/plugins/aiChatThreadPlugin/README.md`.
 
 ## Folder layout (typical)
 

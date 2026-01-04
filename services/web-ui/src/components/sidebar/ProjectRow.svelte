@@ -130,7 +130,7 @@
 <style lang="scss">
     //NOTE Shared SASS variables available globally
 
-    @import "../../sass/_helpers";
+    @import "$src/sass/_helpers";
 
     .project-row-wrapper {
         box-shadow: $projectRowWrapperBoxShadow;

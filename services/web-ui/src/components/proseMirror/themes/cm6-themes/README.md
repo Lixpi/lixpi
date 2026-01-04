@@ -7,14 +7,14 @@ Themes for [CodeMirror 6](https://codemirror.net/).
 
 ## Available themes
 
-- [Basic Light](./packages/basic-light)
-- [Basic Dark](./packages/basic-dark)
-- [Solarized Light](./packages/solarized-light)
-- [Solarized Dark](./packages/solarized-dark)
-- [Material Dark](./packages/material-dark)
-- [Nord](./packages/nord)
-- [Gruvbox Light](./packages/gruvbox-light)
-- [Gruvbox Dark](./packages/gruvbox-dark)
+- [Basic Light]($src/components/proseMirror/themes/cm6-themes/packages/basic-light)
+- [Basic Dark]($src/components/proseMirror/themes/cm6-themes/packages/basic-dark)
+- [Solarized Light]($src/components/proseMirror/themes/cm6-themes/packages/solarized-light)
+- [Solarized Dark]($src/components/proseMirror/themes/cm6-themes/packages/solarized-dark)
+- [Material Dark]($src/components/proseMirror/themes/cm6-themes/packages/material-dark)
+- [Nord]($src/components/proseMirror/themes/cm6-themes/packages/nord)
+- [Gruvbox Light]($src/components/proseMirror/themes/cm6-themes/packages/gruvbox-light)
+- [Gruvbox Dark]($src/components/proseMirror/themes/cm6-themes/packages/gruvbox-dark)
 
 ## How to use
 

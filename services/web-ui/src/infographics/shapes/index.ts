@@ -1,7 +1,7 @@
 // Shapes System - Factory functions for common diagram shapes
 // Returns NodeConfig objects for use with the connector system
 
-import './shapes.scss'
+import '$src/infographics/shapes/shapes.scss'
 
 export { createThreadShape } from '$src/infographics/shapes/threadShape.ts'
 export { createIconShape } from '$src/infographics/shapes/iconShape.ts'

@@ -24,7 +24,7 @@
 </div>
 
 <style lang="scss"> //NOTE Shared SASS variables available globally
-@import "../../sass/_helpers";
+@import "$src/sass/_helpers";
 
 $checkboxSize: 18px;
 $checkboxPrimaryColor: $nightBlue;

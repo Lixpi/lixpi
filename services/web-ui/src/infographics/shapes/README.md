@@ -29,7 +29,7 @@ type ShapeRenderer = {
 ### Separation of Concerns
 
 - **Shapes** (this module): Visual rendering only
-- **Connectors** (`../connectors`): Edge/arrow rendering
+- **Connectors** (`$src/infographics/connectors`): Edge/arrow rendering
 - **Consumer** (e.g., contextSelector): Layout, state, orchestration
 
 ## Available Shapes

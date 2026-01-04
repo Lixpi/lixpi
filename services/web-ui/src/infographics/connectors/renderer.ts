@@ -1,7 +1,7 @@
 // Core connector rendering engine
 // Coordinates nodes, edges, and markers using D3 and XYFlow utilities
 
-import './connectors.scss'
+import '$src/infographics/connectors/connectors.scss'
 import { select } from 'd3-selection'
 import type {
     ConnectorConfig,

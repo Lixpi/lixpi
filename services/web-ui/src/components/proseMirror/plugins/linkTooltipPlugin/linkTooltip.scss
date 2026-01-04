@@ -1,7 +1,7 @@
 @use "sass:color";
-@import '../../../../sass/_transitions.scss';
-@import '../../../../sass/_variables.scss';
-@import '../../../../sass/themes/_minimalist-chic.scss';
+@import '$src/sass/_transitions.scss';
+@import '$src/sass/_variables.scss';
+@import '$src/sass/themes/_minimalist-chic.scss';
 
 $linkTooltipBg: $steelBlue;
 $linkTooltipFg: $offWhite;

@@ -1,4 +1,6 @@
 import { sveltePreprocess } from 'svelte-preprocess';
+import path from 'path';
+import { pathToFileURL } from 'url';
 
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
@@ -9,13 +11,25 @@ const config = {
         sveltePreprocess({
             defaults: { style: 'scss' },
             scss: {
+                includePaths: ['src'],
                 prependData: `
-                    @use "src/sass/_variables.scss" as *;
-                    @use "src/sass/_transitions.scss" as *;
-                    @use "src/sass/themes/themes.scss" as *;
-                `
+                    @import "sass/_variables.scss";
+                    @import "sass/_transitions.scss";
+                    @import "sass/themes/_minimalist-chic.scss";
+                `,
+                importer: [
+                    (url) => {
+                        if (url.startsWith('$src/')) {
+                            return { file: path.resolve('./src', url.slice(5)) };
+                        }
+                        if (url.startsWith('$lib/')) {
+                            return { file: path.resolve('./packages/shadcn-svelte/lib', url.slice(5)) };
+                        }
+                        return null;
+                    }
+                ]
             },
-            typescript: false    // Disable TypeScript processing in svelte-preprocess, it's broken and Svelte 5 now supports it out of the box. Using this preprocessor for SCSS only
+            typescript: false    // Disable TypeScript processing in svelte-preprocess, Svelte 5 supports it out of the box
         }),
         vitePreprocess({ script: true, style: false }),
     ],

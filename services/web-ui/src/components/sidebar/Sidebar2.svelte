@@ -254,7 +254,7 @@
 <style lang="scss">
     //NOTE Shared SASS variables available globally
 
-    @import "../../sass/_helpers";
+    @import "$src/sass/_helpers";
 
     aside {
         // background: $sidbarBackgroundColor;
