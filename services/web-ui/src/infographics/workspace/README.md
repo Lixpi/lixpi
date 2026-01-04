@@ -14,9 +14,9 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
-- **Connect nodes** by dragging from a node's right handle to another node's left handle
+- **Connect nodes** by dragging from a node's right handle to another node's left handle (arrow points in drag direction)
 - **Select edges** by clicking the connector line
-- **Delete edges** using Delete/Backspace (when an edge is selected)
+- **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 - **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
@@ -188,7 +188,10 @@ Rendering note: full re-renders are triggered when node structure or document lo
 Edges are stored in `canvasState.edges` and rendered using the existing infographics connector renderer. Connection interactions are handled by `WorkspaceConnectionManager.ts` using `@xyflow/system`'s `XYHandle`.
 
 - Node DOM elements get left/right connection handles (target/source)
+- Edge direction follows the drag direction (arrow points toward the node you dragged TO)
 - Clicking an edge selects it; when selected, endpoint handles appear for reconnection
+- Dragging an endpoint shows the edge following the cursor (original edge is hidden during reconnect)
+- Dropping an endpoint on another node reconnects the edge; dropping in empty space deletes it
 - Deleting an edge updates `canvasState.edges` via the normal persistence flow
 
 ### ProseMirror Integration

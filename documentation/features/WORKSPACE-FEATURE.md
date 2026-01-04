@@ -545,7 +545,7 @@ Visual connections (edges/arrows) between canvas nodes allow users to show relat
 - **Drag-to-connect** interaction using `XYHandle.onPointerDown` from `@xyflow/system`
 - **Edge rendering** using ConnectorRenderer from `src/infographics/connectors/`
 - **Edge selection and deletion** (click to select, Delete/Backspace to remove)
-- **Edge reconnection** (drag an edge endpoint to move it to a different node)
+- **Edge reconnection** (drag an edge endpoint to move it to a different node, or drop in empty space to delete)
 - **Persistence** of edges in `CanvasState`
 
 ### Architecture
