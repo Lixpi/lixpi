@@ -22,6 +22,7 @@ export type Services = {
     organizationService: any
     workspaceService: any
     documentService: any
+    aiChatThreadService: any
 }
 
 type NatsStore = {
@@ -42,6 +43,7 @@ const nats: ReadonlyDeep<NatsStore> = deepFreeze({
         organizationService: null,
         workspaceService: null,
         documentService: null,
+        aiChatThreadService: null,
     }
 })
 

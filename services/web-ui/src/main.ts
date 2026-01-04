@@ -12,6 +12,7 @@ import OrganizationService from '$src/services/organization-service.js'
 import AiModelService from '$src/services/ai-model-service.ts'
 import DocumentService from '$src/services/document-service.ts'
 import WorkspaceService from '$src/services/workspace-service.ts'
+import AiChatThreadService from '$src/services/ai-chat-thread-service.ts'
 
 import App from '$src/App.svelte'
 
@@ -50,7 +51,8 @@ async function initializeServicesSequentially() {
             aiModelService: new AiModelService(),
             documentService: new DocumentService(),
             workspaceService: new WorkspaceService(),
-            organizationService: new OrganizationService()
+            organizationService: new OrganizationService(),
+            aiChatThreadService: new AiChatThreadService()
         });
 
         // Fetch registered user

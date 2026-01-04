@@ -17,7 +17,10 @@ export const routes: RouteDefinition[] = [
         load: async (params: any) => {
             const workspaceId = params.workspaceId as string
             await servicesStore.getData('workspaceService').getWorkspace({ workspaceId })
-            await servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId })
+            await Promise.all([
+                servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId }),
+                servicesStore.getData('aiChatThreadService').getWorkspaceAiChatThreads({ workspaceId })
+            ])
         },
     },
 ]

@@ -1,7 +1,13 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte'
-    import type { Viewport } from '@xyflow/system'
-    import type { CanvasState, ImageCanvasNode, AiChatThreadCanvasNode } from '@lixpi/constants'
+    import {
+        type Viewport
+    } from '@xyflow/system'
+    import {
+        type CanvasState,
+        type ImageCanvasNode,
+        type AiChatThreadCanvasNode
+    } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
     import DocumentService from '$src/services/document-service.ts'
@@ -11,7 +17,10 @@
     import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
     import { routerStore } from '$src/stores/routerStore.ts'
     import { servicesStore } from '$src/stores/servicesStore.ts'
-    import { ImageUploadModal, type ImageUploadResult } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/ImageUploadModal.ts'
+    import {
+        ImageUploadModal,
+        type ImageUploadResult
+    } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/ImageUploadModal.ts'
 
     import '$src/infographics/workspace/workspace-canvas.scss'
 
