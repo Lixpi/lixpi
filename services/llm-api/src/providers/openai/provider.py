@@ -7,11 +7,11 @@ import logging
 from typing import Dict, Any
 
 from openai import AsyncOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 
 from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt
 from config import settings
+from utils.attachments import convert_attachments_for_provider, AttachmentFormat
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +57,15 @@ class OpenAIProvider(BaseLLMProvider):
         ai_chat_thread_id = state['ai_chat_thread_id']
         supports_system_prompt = state['ai_model_meta_info'].get('supportsSystemPrompt', True)
 
-        # Prepare input array from messages
+        # Prepare input array from messages with attachment conversion
         input_messages = []
         for msg in messages:
+            content = msg.get('content', '')
+            # Convert attachments to OpenAI format (validates and normalizes)
+            content = convert_attachments_for_provider(content, AttachmentFormat.OPENAI)
             input_messages.append({
                 'role': msg.get('role', 'user'),
-                'content': msg.get('content', '')
+                'content': content
             })
 
         # Extract system prompt as instructions (if supported)

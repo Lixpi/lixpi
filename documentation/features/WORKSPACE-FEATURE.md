@@ -741,6 +741,38 @@ sequenceDiagram
 
 ---
 
+## AI Chat Context from Connected Nodes
+
+When nodes are connected TO an AI chat thread (incoming edges), the AI chat automatically extracts their content and passes it to the AI model. This includes text from documents, text from other AI chat threads, and images (converted to base64). Context is extracted by walking the edge graph backwards from the AI chat node, collecting all connected content recursively.
+
+### How It Works
+
+1. **Edge Traversal** — When a user sends a message in an AI chat thread, `AiChatThreadService.extractConnectedContext()` finds all nodes connected via incoming edges (recursively)
+2. **Content Extraction** — Documents and AI threads have their ProseMirror content parsed for text; embedded images are also extracted. Standalone image nodes are fetched and converted to base64
+3. **Message Building** — `buildContextMessage()` formats the extracted context as a multimodal message with interleaved text and images
+4. **API Format** — All content uses the OpenAI Responses API format (`input_text`, `input_image` blocks) as the canonical format. The `llm-api` service converts to provider-specific formats (e.g., Anthropic) as needed
+
+### Multimodal Content Format
+
+```typescript
+// Text content block
+{ type: 'input_text'; text: string }
+
+// Image content block
+{ type: 'input_image'; image_url: string; detail?: 'auto' | 'low' | 'high' }
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `services/web-ui/src/services/ai-chat-thread-service.ts` | Context extraction (`extractConnectedContext`, `buildContextMessage`) |
+| `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` | Integration point (`onAiChatSubmit` calls context extraction) |
+| `services/llm-api/src/utils/attachments.py` | Attachment format conversion for LLM providers |
+| `packages/lixpi/constants/ts/types.ts` | Shared multimodal types (`TextContentBlock`, `ImageContentBlock`) |
+
+---
+
 ## Follow-up Tasks
 
 The following items are pending implementation:

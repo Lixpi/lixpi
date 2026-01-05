@@ -23,6 +23,7 @@ import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/c
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { servicesStore } from '$src/stores/servicesStore.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -829,8 +830,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         })
                     },
                     onProjectTitleChange: () => {},
-                    onAiChatSubmit: ({ messages, aiModel }: any) => {
-                        aiService.sendChatMessage({ messages, aiModel })
+                    onAiChatSubmit: async ({ messages, aiModel }: any) => {
+                        try {
+                            // Extract context from connected nodes
+                            const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+                            const context = await aiChatThreadService.extractConnectedContext(node.nodeId)
+                            const contextMessage = aiChatThreadService.buildContextMessage(context)
+
+                            // Prepend context message if there's connected content
+                            const messagesWithContext = contextMessage
+                                ? [contextMessage, ...messages]
+                                : messages
+
+                            aiService.sendChatMessage({ messages: messagesWithContext, aiModel })
+                        } catch (error) {
+                            console.error('Failed to gather context from connected nodes:', error)
+                            // Re-throw to let the UI show an error state
+                            throw error
+                        }
                     },
                     onAiChatStop: () => {
                         aiService.stopChatMessage()

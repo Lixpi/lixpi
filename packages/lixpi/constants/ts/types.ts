@@ -175,9 +175,14 @@ export type SubscriptionBalanceUpdateEvent = {
     amount: string
 }
 
-// AI Chat message types
+// AI Chat message types - multimodal support (OpenAI Responses API format)
+export type TextContentBlock = { type: 'input_text'; text: string }
+export type ImageContentBlock = { type: 'input_image'; image_url: string; detail?: 'auto' | 'low' | 'high' }
+export type MessageContentBlock = TextContentBlock | ImageContentBlock
+export type MessageContent = string | MessageContentBlock[]
+
 export type AiInteractionChatSendMessagePayload = {
-    messages: Array<{ role: string; content: string }>
+    messages: Array<{ role: string; content: MessageContent }>
     aiModel: AiModelId
     threadId: string
 }
