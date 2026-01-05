@@ -1,7 +1,7 @@
 // @ts-nocheck
-import { html } from '../../../components/domTemplates.ts'
-import { chevronDownIcon } from '../../../../../svgIcons/index.ts'
-import { createInfoBubble } from '../infoBubble/pureInfoBubble.ts'
+import { html } from '$src/utils/domTemplates.ts'
+import { chevronDownIcon } from '$src/svgIcons/index.ts'
+import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/pureInfoBubble.ts'
 
 // Inject fill color utility (same as original dropdown)
 function injectFillColor(svg: string, color: string): string {

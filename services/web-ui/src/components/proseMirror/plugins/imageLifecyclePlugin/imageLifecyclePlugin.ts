@@ -1,6 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import { deleteImage } from '../../../../utils/imageUtils.ts'
+import { deleteImage } from '$src/utils/imageUtils.ts'
 
 export const imageLifecyclePluginKey = new PluginKey('imageLifecycle')
 

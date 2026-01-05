@@ -44,7 +44,17 @@ export default {
         )
         console.log('hasAccess:', hasAccess)
 
-        return hasAccess ? workspace : { error: 'PERMISSION_DENIED' }
+        if (!hasAccess) {
+            return { error: 'PERMISSION_DENIED' }
+        }
+
+        return {
+            ...workspace,
+            canvasState: {
+                ...workspace.canvasState,
+                edges: workspace.canvasState?.edges ?? []
+            }
+        }
     },
 
     getUserWorkspaces: async ({
@@ -95,7 +105,8 @@ export default {
 
         const defaultCanvasState: CanvasState = {
             viewport: { x: 0, y: 0, zoom: 1 },
-            nodes: []
+            nodes: [],
+            edges: []
         }
 
         const newWorkspaceData: Workspace = {

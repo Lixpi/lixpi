@@ -1,8 +1,8 @@
 // Label shape factory
 // Creates NodeConfig for text content in a rounded rectangle container
 
-import type { LabelShapeParams } from './types.ts'
-import type { NodeConfig } from '../connectors/types.ts'
+import type { LabelShapeParams } from '$src/infographics/shapes/types.ts'
+import type { NodeConfig } from '$src/infographics/connectors/types.ts'
 
 // Factory function that creates a properly configured NodeConfig for a label
 export function createLabelShape(params: LabelShapeParams): NodeConfig {

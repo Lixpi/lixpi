@@ -2,7 +2,7 @@
 // Abstracts SVG marker definitions for reusable edge decorations
 
 import type { Selection } from 'd3-selection'
-import type { MarkerType } from './types.ts'
+import type { MarkerType } from '$src/infographics/connectors/types.ts'
 
 import { arrowRightIcon } from '$src/svgIcons/index.ts'
 

@@ -1,6 +1,6 @@
 /* Import animations and base dropdown styles */
-@import '../../../../../sass/components/_animations.scss';
-@import './_dropdown-mixins.scss';
+@import '$src/sass/components/_animations.scss';
+@import '$src/components/proseMirror/plugins/primitives/dropdown/_dropdown-mixins.scss';
 
 /* Dropdown Plugin Styles */
 .dropdown-menu-tag-pill-wrapper {

@@ -33,7 +33,7 @@ Ultra-thin, precise, graceful:
 Import the renderer and call it:
 
 ```typescript
-import { createConnectorRenderer } from './primitives/infographics/connectors'
+import { createConnectorRenderer } from '$src/infographics/connectors/index.ts'
 
 const connector = createConnectorRenderer({
   container: document.querySelector('.my-edge-layer')!,

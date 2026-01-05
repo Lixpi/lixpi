@@ -1,7 +1,7 @@
 'use strict'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
-import { routerStore } from '../stores/routerStore.ts'
+import { routerStore } from '$src/stores/routerStore.ts'
 
 type RouteDefinition = {
     path: string
@@ -17,7 +17,10 @@ export const routes: RouteDefinition[] = [
         load: async (params: any) => {
             const workspaceId = params.workspaceId as string
             await servicesStore.getData('workspaceService').getWorkspace({ workspaceId })
-            await servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId })
+            await Promise.all([
+                servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId }),
+                servicesStore.getData('aiChatThreadService').getWorkspaceAiChatThreads({ workspaceId })
+            ])
         },
     },
 ]

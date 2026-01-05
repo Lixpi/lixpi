@@ -1,8 +1,8 @@
-import { taskRowNodeType, taskRowNodeSpec } from './taskRowNode.js'
-import { aiUserMessageNodeType, aiUserMessageNodeSpec, aiUserMessageNodeView } from './aiUserMessageNode.js'
-import { aiUserInputNodeType, aiUserInputNodeSpec } from './aiUserInputNode.js'
-import { documentTitleNodeType, documentTitleNodeSpec } from './documentTitleNode.js'
-import { codeBlockNodeType, codeBlockNodeSpec } from './codeBlockNode.js'
+import { taskRowNodeType, taskRowNodeSpec } from '$src/components/proseMirror/customNodes/taskRowNode.js'
+import { aiUserMessageNodeType, aiUserMessageNodeSpec, aiUserMessageNodeView } from '$src/components/proseMirror/customNodes/aiUserMessageNode.js'
+import { aiUserInputNodeType, aiUserInputNodeSpec } from '$src/components/proseMirror/customNodes/aiUserInputNode.js'
+import { documentTitleNodeType, documentTitleNodeSpec } from '$src/components/proseMirror/customNodes/documentTitleNode.js'
+import { codeBlockNodeType, codeBlockNodeSpec } from '$src/components/proseMirror/customNodes/codeBlockNode.js'
 
 export const nodeTypes = {
     documentTitleNodeType,

@@ -12,14 +12,14 @@ import { TextSelection } from 'prosemirror-state'
 import { Fragment, Slice } from 'prosemirror-model'
 import { EditorView, Decoration, DecorationSet, NodeView } from 'prosemirror-view'
 import { Node as ProseMirrorNode, Schema as ProseMirrorSchema } from 'prosemirror-model'
-import { nodeTypes, nodeViews } from '../../customNodes/index.js'
-import { documentTitleNodeType } from '../../customNodes/documentTitleNode.js'
-import { aiChatThreadNodeType, aiChatThreadNodeView } from './aiChatThreadNode.ts'
-import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from './aiChatThreadPluginConstants.ts'
-import { aiResponseMessageNodeType, aiResponseMessageNodeView } from './aiResponseMessageNode.ts'
-import SegmentsReceiver from '../../../../services/segmentsReceiver-service.js'
-import { documentStore } from '../../../../stores/documentStore.ts'
-import { aiModelsStore } from '../../../../stores/aiModelsStore.ts'
+import { nodeTypes, nodeViews } from '$src/components/proseMirror/customNodes/index.js'
+import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.js'
+import { aiChatThreadNodeType, aiChatThreadNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
+import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
+import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
+import { documentStore } from '$src/stores/documentStore.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import type { AiModelId } from '@lixpi/constants'
 
 const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
@@ -1075,7 +1075,7 @@ class AiChatThreadPluginClass {
 // ========== UTILITY FUNCTIONS ==========
 
 // Re-export utility function to avoid circular dependencies
-export { getThreadPositionInfo } from './threadPositionUtils.ts'
+export { getThreadPositionInfo } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/threadPositionUtils.ts'
 
 // ========== FACTORY FUNCTION ==========
 

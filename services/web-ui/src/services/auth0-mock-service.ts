@@ -1,6 +1,6 @@
 'use strict'
 
-import { authStore } from '../stores/authStore.ts'
+import { authStore } from '$src/stores/authStore.ts'
 
 const AUTH0_DOMAIN = import.meta.env.VITE_MOCK_AUTH0_DOMAIN
 const AUTH0_CLIENT_ID = 'mock-client-id'

@@ -8,8 +8,8 @@ import {
 
 const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
-import AuthService from './auth-service.ts'
-import RouterService from './router-service.ts'
+import AuthService from '$src/services/auth-service.ts'
+import RouterService from '$src/services/router-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { workspacesStore } from '$src/stores/workspacesStore.ts'
@@ -33,7 +33,15 @@ class WorkspaceService {
                 return
             }
 
-            workspaceStore.setDataValues(workspace)
+            const normalizedWorkspace = {
+                ...workspace,
+                canvasState: {
+                    ...workspace.canvasState,
+                    edges: workspace.canvasState?.edges ?? []
+                }
+            }
+
+            workspaceStore.setDataValues(normalizedWorkspace)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
         } catch (error) {
@@ -75,7 +83,15 @@ class WorkspaceService {
                 return
             }
 
-            workspaceStore.setDataValues(workspace)
+            const normalizedWorkspace = {
+                ...workspace,
+                canvasState: {
+                    ...workspace.canvasState,
+                    edges: workspace.canvasState?.edges ?? []
+                }
+            }
+
+            workspaceStore.setDataValues(normalizedWorkspace)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
             // Add workspace to the workspaces list in sidebar

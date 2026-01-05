@@ -87,7 +87,7 @@ createContextSelector({
 ## Usage Example
 
 ```typescript
-import { createContextSelector } from './primitives/contextSelector'
+import { createContextSelector } from '$src/components/proseMirror/plugins/primitives/contextSelector/index.ts'
 
 const selector = createContextSelector({
   id: 'thread-context-selector',
@@ -150,7 +150,7 @@ This enables thread-specific visualizations:
 ### Integration Example
 
 ```typescript
-import { getThreadPositionInfo } from './aiChatThreadPlugin'
+import { getThreadPositionInfo } from '$src/components/proseMirror/plugins/aiChatThreadPlugin.ts'
 
 // In NodeView creation
 const threadPosInfo = getThreadPositionInfo(view, threadId)

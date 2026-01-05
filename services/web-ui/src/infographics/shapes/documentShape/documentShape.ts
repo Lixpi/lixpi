@@ -3,9 +3,9 @@
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { setupContextGradient, drawContextSelection } from './documentContextSelection.ts'
-import { drawDocumentThreadShape, setupThreadGradient } from './documentThreadShape.ts'
-import { drawDocumentContentBlock } from './documentContentBlock.ts'
+import { setupContextGradient, drawContextSelection } from '$src/infographics/shapes/documentShape/documentContextSelection.ts'
+import { drawDocumentThreadShape, setupThreadGradient } from '$src/infographics/shapes/documentShape/documentThreadShape.ts'
+import { drawDocumentContentBlock } from '$src/infographics/shapes/documentShape/documentContentBlock.ts'
 
 // Creates the context shape SVG from scratch using modular primitives
 // Returns complete SVG string with gradient and all shapes

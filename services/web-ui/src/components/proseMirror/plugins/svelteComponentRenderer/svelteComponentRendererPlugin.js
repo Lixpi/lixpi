@@ -1,5 +1,5 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
-import { SvelteComponentRenderer } from './svelteComponentRenderer.js'
+import { SvelteComponentRenderer } from '$src/components/proseMirror/plugins/svelteComponentRenderer/svelteComponentRenderer.js'
 
 export const createSvelteComponentRendererPlugin = (SvelteComponent, nodeName, defaultAttrs = {}) => {
     const key = new PluginKey(nodeName)

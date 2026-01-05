@@ -1,4 +1,5 @@
 import path from "path"
+import { pathToFileURL } from "url"
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
@@ -32,32 +33,25 @@ export default defineConfig({
         // END
     },
 
-
-    // https://stackoverflow.com/questions/75056422/how-to-use-vitepreprocess-with-global-scss-mixins-in-sveltekit
-    // css: {
-    //     preprocessorOptions: {
-    //         scss: {
-    //             additionalData: `
-    //                 @use "/src/sass/_variables.scss" as *;
-    //                 @use "/src/sass/_transitions.scss" as *;
-    //                 @use "/src/sass/themes/themes.scss" as *;
-    //             `,
-
-    //         },
-    //     },
-    // },
-    // build: {
-    //     rollupOptions: {
-    //         onwarn: (warning, handler) => {
-    //             const { code, frame } = warning;
-
-    //             // Suppress css-unused-selector warnings from shape.css
-    //             if (code === "css-unused-selector" && frame && frame.includes("shape")) {
-    //                 return;
-    //             }
-    //             handler(warning);
-    //         }
-    //     }
-    // }
-    // END https://stackoverflow.com/questions/75056422/how-to-use-vitepreprocess-with-global-scss-mixins-in-sveltekit
+    // SASS $src alias - same as TypeScript/JavaScript aliases
+    // https://sass-lang.com/documentation/js-api/interfaces/importer/
+    css: {
+        preprocessorOptions: {
+            scss: {
+                importers: [{
+                    findFileUrl(url: string) {
+                        if (url.startsWith('$src/')) {
+                            const resolved = path.resolve('./src', url.slice(5))
+                            return pathToFileURL(resolved)
+                        }
+                        if (url.startsWith('$lib/')) {
+                            const resolved = path.resolve('./packages/shadcn-svelte/lib', url.slice(5))
+                            return pathToFileURL(resolved)
+                        }
+                        return null
+                    }
+                }],
+            },
+        },
+    },
 })

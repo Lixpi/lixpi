@@ -1,15 +1,15 @@
 
-import { html } from '../../../components/domTemplates.ts'
-import { createConnectorRenderer } from '../infographics/connectors/index.ts'
+import { html } from '$src/utils/domTemplates.ts'
+import { createConnectorRenderer } from '$src/infographics/connectors/index.ts'
 import {
     createIconShape,
     createContextShapeSVG,
     startContextSelectionAnimation,
     startThreadGradientAnimation
-} from '../infographics/shapes/index.ts'
-import { createToggleSwitch } from '../infographics/shapes/toggleSwitch/index.ts'
-import { aiLightBulbIcon, contextIcon, documentIcon } from '../../../../../svgIcons/index.ts'
-import { ENTRANCE_ANIMATION_DURATION } from '../infographics/animationConstants.ts'
+} from '$src/infographics/shapes/index.ts'
+import { createToggleSwitch } from '$src/infographics/shapes/toggleSwitch/index.ts'
+import { aiLightBulbIcon, contextIcon, documentIcon } from '$src/svgIcons/index.ts'
+import { ENTRANCE_ANIMATION_DURATION } from '$src/infographics/animationConstants.ts'
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'

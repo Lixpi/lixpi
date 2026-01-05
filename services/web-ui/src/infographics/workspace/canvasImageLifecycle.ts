@@ -1,5 +1,5 @@
 import type { CanvasState, ImageCanvasNode } from '@lixpi/constants'
-import { deleteImage } from '../../utils/imageUtils.ts'
+import { deleteImage } from '$src/utils/imageUtils.ts'
 
 type TrackedCanvasImage = {
     fileId: string

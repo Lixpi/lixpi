@@ -30,9 +30,9 @@
     import FilePlusIcon from "@lucide/svelte/icons/file-plus";
     // import { Separator } from "$lib/registry/new-york/ui/separator/index.js";
 
-	// import { mailStore } from "../store.js";
-	// import type { Mail } from "../data.js";
-	// import { formatTimeAgo } from "../utils.js";
+	// import { mailStore } from "$src/components/store.js";
+	// import type { Mail } from "$src/components/data.js";
+	// import { formatTimeAgo } from "$src/components/utils.js";
 	import { cn } from "$lib/utils.ts";
 	import { Badge } from "$lib/registry/new-york/ui/badge/index.ts";
 	import { ScrollArea } from "$lib/registry/new-york/ui/scroll-area/index.ts";
@@ -254,7 +254,7 @@
 <style lang="scss">
     //NOTE Shared SASS variables available globally
 
-    @import "../../sass/_helpers";
+    @import "$src/sass/_helpers";
 
     aside {
         // background: $sidbarBackgroundColor;

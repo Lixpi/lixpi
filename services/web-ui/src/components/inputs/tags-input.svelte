@@ -7,14 +7,14 @@
         tagIcon,
         plusIcon,
         xIcon
-    } from '../../svgIcons'
+    } from '$src/svgIcons'
 
-    import { popOutTransition, fadeTransition } from '../../constants/svelteAnimationTransitions'
+    import { popOutTransition, fadeTransition } from '$src/constants/svelteAnimationTransitions'
 
-    import OrganizationService from '../../services/organization-service.js'
-    import DocumentService from '../../services/document-service.ts'
+    import OrganizationService from '$src/services/organization-service.js'
+    import DocumentService from '$src/services/document-service.ts'
 
-    import { userStore } from '../../stores/userStore.js'
+    import { userStore } from '$src/stores/userStore.js'
 
     let {
         selectedTags = $bindable([]),

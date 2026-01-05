@@ -8,7 +8,7 @@ import {
 } from '@lixpi/constants'
 
 import type { ReadonlyDeep } from 'type-fest'
-import { deepFreeze } from '../helpers/deepfreeze.ts'
+import { deepFreeze } from '$src/helpers/deepfreeze.ts'
 
 type Meta = {
     loadingStatus: LoadingStatus

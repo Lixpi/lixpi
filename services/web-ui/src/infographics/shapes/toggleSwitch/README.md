@@ -62,7 +62,7 @@ Creates and renders a toggle switch within a D3 SVG selection.
 
 ```typescript
 import { select } from 'd3-selection'
-import { createToggleSwitch } from './primitives/infographics/shapes/toggleSwitch'
+import { createToggleSwitch } from '$src/infographics/shapes/toggleSwitch/index.ts'
 
 const svg = select('svg')
 const g = svg.append('g')

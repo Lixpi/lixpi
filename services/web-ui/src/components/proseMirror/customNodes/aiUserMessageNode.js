@@ -3,7 +3,7 @@ import {
     microphoneIcon,
     trashBinIcon,
     checkMarkIcon
-} from '../../../svgIcons/index.ts'
+} from '$src/svgIcons/index.ts'
 
 export const aiUserMessageNodeType = 'aiUserMessage'
 

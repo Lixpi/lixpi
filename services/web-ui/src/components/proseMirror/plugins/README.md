@@ -4,7 +4,7 @@ This is the shared guide for plugins in our ProseMirror app. Keep generic stuff 
 
 If you want a concrete example, check `aiChatThreadPlugin/README.md`.
 
-Direct link: `./aiChatThreadPlugin/README.md`.
+Direct link: `$src/components/proseMirror/plugins/aiChatThreadPlugin/README.md`.
 
 ## Folder layout (typical)
 
@@ -25,16 +25,15 @@ plugins/
 			index.ts                 # public API
 
 	README.md                   # this file (shared patterns)
-
-components/
-	domTemplates.ts             # shared html() templating helper (htm)
 ```
+
+**Shared utilities:** `$src/utils/domTemplates.ts` provides the `html` templating helper (htm).
 
 ## Core patterns we follow
 
 - Node spec + NodeView live together. Each NodeView builds its DOM with templates and owns its events. No random DOM poking from the plugin class.
 - UI is decoration-first. Visual states come from classes via `DecorationSet` (placeholders, keyboard feedback, boundary highlights, etc.). NodeViews render structure; decorations toggle classes.
-- Templating uses `htm` via our `html` helper from `components/domTemplates.ts`. No JSX, no VDOM. Tagged templates → direct DOM.
+- Templating uses `htm` via our `html` helper from `$src/utils/domTemplates.ts`. No JSX, no VDOM. Tagged templates → direct DOM.
 - The plugin class does orchestration only: selection checks, content extraction, transactions, streaming insertions, state flags.
 - **Reuse primitives**: For common UI patterns (dropdowns, modals, tooltips), use or create reusable primitives in `primitives/` rather than duplicating code across plugins. Primitives exist outside the document schema as UI controls.
 - Keep code small and obvious. If it feels like "framework", you're over-engineering it.
@@ -302,7 +301,7 @@ return {
 Import once and use everywhere:
 
 ```ts
-import { html } from '../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 const el = html`
 	<div className="btn" onclick=${onClick}>

@@ -11,6 +11,7 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     DOCUMENTS: 'Documents',
     DOCUMENTS_META: 'Documents-Meta',
     DOCUMENTS_ACCESS_LIST: 'Documents-Access-List',
+    AI_CHAT_THREADS: 'AI-Chat-Threads',
     AI_TOKENS_USAGE_TRANSACTIONS: 'AI-Tokens-Usage-Transactions',
     FINANCIAL_TRANSACTIONS: 'Financial-Transactions',
     AI_TOKENS_USAGE_REPORTS: 'AI-Tokens-Usage-Reports',

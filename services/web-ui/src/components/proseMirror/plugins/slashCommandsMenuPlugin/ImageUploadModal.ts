@@ -1,7 +1,7 @@
-import { createEl } from '../../components/domTemplates.ts'
+import { createEl } from '$src/utils/domTemplates.ts'
 import type { EditorView } from 'prosemirror-view'
-import AuthService from '../../../../services/auth-service.ts'
-import RouterService from '../../../../services/router-service.ts'
+import AuthService from '$src/services/auth-service.ts'
+import RouterService from '$src/services/router-service.ts'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 

@@ -2,7 +2,7 @@
 // Provides both XYFlow standard paths and custom path types
 
 import { getBezierPath, getStraightPath, getSmoothStepPath, Position } from '@xyflow/system'
-import type { PathType, ComputedPath, AnchorPosition } from './types.ts'
+import type { PathType, ComputedPath, AnchorPosition } from '$src/infographics/connectors/types.ts'
 
 // Convert our simplified anchor position to XYFlow's Position enum
 function toXYFlowPosition(position: AnchorPosition): Position {

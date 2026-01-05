@@ -21,8 +21,8 @@ A universal floating selection-based bubble menu for ProseMirror that shows cont
 ## Usage
 
 ```typescript
-import { bubbleMenuPlugin } from './plugins/bubbleMenuPlugin/index.ts'
-import './plugins/bubbleMenuPlugin/bubbleMenu.scss'
+import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
+import '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenu.scss'
 
 // Add to your EditorState plugins
 const plugins = [
@@ -101,7 +101,7 @@ The bubble menu is defined via a structured list in `bubbleMenuItems.ts`, making
 - Text wrap buttons: None, Wrap Left, Wrap Right
 - Action buttons: Blockquote, Delete
 
-Each button is built with `createEl` from `components/domTemplates.ts` so markup is centralized and readable.
+Each button is built with `createEl` from `$src/utils/domTemplates.ts` so markup is centralized and readable.
 
 ### Mobile Considerations
 

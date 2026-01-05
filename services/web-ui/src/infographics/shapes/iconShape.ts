@@ -1,8 +1,8 @@
 // Icon shape factory
 // Creates NodeConfig for an SVG icon within a foreignObject container
 
-import type { IconShapeParams } from './types.ts'
-import type { NodeConfig } from '../connectors/types.ts'
+import type { IconShapeParams } from '$src/infographics/shapes/types.ts'
+import type { NodeConfig } from '$src/infographics/connectors/types.ts'
 
 // Factory function that creates a properly configured NodeConfig for an icon
 export function createIconShape(params: IconShapeParams): NodeConfig {

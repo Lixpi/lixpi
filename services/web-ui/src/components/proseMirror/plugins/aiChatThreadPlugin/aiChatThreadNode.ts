@@ -12,16 +12,16 @@ import { keyboardMacCommandIcon,
     contextFilledIcon,
     documentIcon,
     eyeSlashIcon
-} from '../../../../svgIcons/index.ts'
+} from '$src/svgIcons/index.ts'
 import { TextSelection } from 'prosemirror-state'
-import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from './aiChatThreadPluginConstants.ts'
-import { html } from '../../components/domTemplates.ts'
-import { aiModelsStore } from '../../../../stores/aiModelsStore.js'
-import { documentStore } from '../../../../stores/documentStore.js'
-import { createPureDropdown } from '../primitives/dropdown/index.ts'
-import { createInfoBubble } from '../primitives/infoBubble/index.ts'
-import { createContextSelector } from '../primitives/contextSelector/index.ts'
-import { getThreadPositionInfo } from './threadPositionUtils.ts'
+import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import { html } from '$src/utils/domTemplates.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.js'
+import { documentStore } from '$src/stores/documentStore.js'
+import { createPureDropdown } from '$src/components/proseMirror/plugins/primitives/dropdown/index.ts'
+import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/index.ts'
+import { createContextSelector } from '$src/components/proseMirror/plugins/primitives/contextSelector/index.ts'
+import { getThreadPositionInfo } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/threadPositionUtils.ts'
 
 export const aiChatThreadNodeType = 'aiChatThread'
 

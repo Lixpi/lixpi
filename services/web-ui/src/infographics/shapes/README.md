@@ -29,7 +29,7 @@ type ShapeRenderer = {
 ### Separation of Concerns
 
 - **Shapes** (this module): Visual rendering only
-- **Connectors** (`../connectors`): Edge/arrow rendering
+- **Connectors** (`$src/infographics/connectors`): Edge/arrow rendering
 - **Consumer** (e.g., contextSelector): Layout, state, orchestration
 
 ## Available Shapes
@@ -39,7 +39,7 @@ type ShapeRenderer = {
 Renders a capsule thread/document chip with a chamfered left wedge. The shape can display horizontal document lines **or** a label string.
 
 ```typescript
-import { createThreadShape } from './shapes'
+import { createThreadShape } from '$src/infographics/shapes/index.ts'
 
 const thread = createThreadShape({
     id: 'doc-1',
@@ -76,7 +76,7 @@ const anchors = thread.getAnchors()
 Renders an SVG icon in a foreignObject container.
 
 ```typescript
-import { createIconShape } from './shapes'
+import { createIconShape } from '$src/infographics/shapes/index.ts'
 
 const icon = createIconShape({
     id: 'llm',
@@ -101,7 +101,7 @@ icon.render(shapesGroup)
 Renders text content in a rounded rectangle.
 
 ```typescript
-import { createLabelShape } from './shapes'
+import { createLabelShape } from '$src/infographics/shapes/index.ts'
 
 const label = createLabelShape({
     id: 'context',
@@ -129,8 +129,8 @@ Typical workflow for building an infographic:
 
 ```typescript
 import { select } from 'd3-selection'
-import { createThreadShape, createIconShape, createLabelShape } from './shapes'
-import { createConnectorRenderer } from './connectors'
+import { createThreadShape, createIconShape, createLabelShape } from '$src/infographics/shapes/index.ts'
+import { createConnectorRenderer } from '$src/infographics/connectors/index.ts'
 
 // 1. Create container
 const container = document.querySelector('.visualization')

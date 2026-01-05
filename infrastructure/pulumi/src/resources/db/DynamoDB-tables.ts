@@ -175,6 +175,19 @@ export const getTableDefinitions = () => [
         hashKey: 'provider',
         rangeKey: 'model',
     },
+    {
+        name: getDynamoDbTableStageName('AI_CHAT_THREADS', ORG_NAME, STAGE),
+        attributes: [
+            { name: 'workspaceId', type: 'S' as const },
+            { name: 'threadId', type: 'S' as const },
+            { name: 'createdAt', type: 'N' as const },
+        ],
+        hashKey: 'workspaceId',
+        rangeKey: 'threadId',
+        localSecondaryIndexes: [
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
+        ],
+    },
 ]
 
 export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) => {
@@ -330,6 +343,17 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         }),
         tags: { Name: tableDefs[12].name },
     }, resourceOpts)
+
+    const aiChatThreadsTable = new aws.dynamodb.Table(tableDefs[13].name, {
+        ...tableDefs[13],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[13].name },
+    }, resourceOpts)
     // END Billing -------------------------------------------------------------------
 
     // Create parameter outputs
@@ -346,6 +370,8 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         documentsTableName: documentsTable.name,
         documentsMetaTableName: documentsMetaTable.name,
         documentsAccessListTableName: documentsAccessListTable.name,
+
+        aiChatThreadsTableName: aiChatThreadsTable.name,
 
         aiTokensUsageTransactionsTableName: aiTokensUsageTransactionsTable.name,
         aiTokensUsageReportsTableName: aiTokensUsageReportsTable.name,
@@ -367,6 +393,8 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         documentsTable,
         documentsMetaTable,
         documentsAccessListTable,
+
+        aiChatThreadsTable,
 
         aiTokensUsageTransactionsTable,
         aiTokensUsageReportsTable,

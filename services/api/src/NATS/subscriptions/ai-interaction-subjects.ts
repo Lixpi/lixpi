@@ -36,12 +36,13 @@ export const aiInteractionSubjects = [
                 },
                 messages,
                 aiModel,
-                threadId,
-                documentId,
+                workspaceId,
+                aiChatThreadId,
                 organizationId
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
-                documentId: string
+                workspaceId: string
+                aiChatThreadId: string
                 organizationId: string
             } & AiInteractionChatSendMessagePayload
 
@@ -56,14 +57,14 @@ export const aiInteractionSubjects = [
                     err('AI model meta info not found in the database', { aiModel })
 
                     // Publish error directly to client
-                    natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${documentId}`, {
+                    natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`, {
                         error: `AI model not found: ${aiModel}`
                     })
                     return
                 }
 
-                // One stream per thread - use documentId:threadId as unique key
-                const instanceKey = threadId ? `${documentId}:${threadId}` : documentId
+                // One stream per thread - use workspaceId:aiChatThreadId as unique key
+                const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
                 infoStr([
                     chalk.cyan('🚀 [AI_INTERACTION] GATEWAY'),
@@ -78,13 +79,14 @@ export const aiInteractionSubjects = [
                 natsService.publish(AI_INTERACTION_SUBJECTS.CHAT_PROCESS, {
                     messages,
                     aiModelMetaInfo,
-                    threadId,
-                    documentId,
+                    workspaceId,
+                    aiChatThreadId,
                     eventMeta: {
                         userId,
                         stripeCustomerId,
                         organizationId,
-                        documentId
+                        workspaceId,
+                        aiChatThreadId
                     }
                 })
 
@@ -99,7 +101,7 @@ export const aiInteractionSubjects = [
                 err('❌ [AI_INTERACTION] GATEWAY ERROR:', error)
 
                 // Publish error to client
-                natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${documentId}`, {
+                natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`, {
                     error: error instanceof Error ? error.message : String(error)
                 })
             }
@@ -124,15 +126,16 @@ export const aiInteractionSubjects = [
                 user: {
                     userId
                 },
-                documentId,
-                threadId
+                workspaceId,
+                aiChatThreadId
             } = data as {
                 user: { userId: string }
-                documentId: string
-            } & AiInteractionChatStopMessagePayload
+                workspaceId: string
+                aiChatThreadId: string
+            }
 
             const natsService = await NATS_Service.getInstance()
-            const instanceKey = threadId ? `${documentId}:${threadId}` : documentId
+            const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
             infoStr([
                 chalk.yellow('🛑 [AI_INTERACTION] GATEWAY'),
@@ -143,8 +146,8 @@ export const aiInteractionSubjects = [
 
             // Relay stop request to llm-api service
             natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_STOP}.${instanceKey}`, {
-                documentId,
-                threadId,
+                workspaceId,
+                aiChatThreadId,
                 userId
             })
 
@@ -175,13 +178,13 @@ export const aiInteractionSubjects = [
 
             const natsService = await NATS_Service.getInstance()
 
-            // Extract documentId from instanceKey (format: documentId or documentId:threadId)
-            const documentId = instanceKey.split(':')[0]
+            // Extract workspaceId and aiChatThreadId from instanceKey (format: workspaceId:aiChatThreadId)
+            const [workspaceId, aiChatThreadId] = instanceKey.split(':')
 
             err('❌ [AI_INTERACTION] ERROR from llm-api:', { instanceKey, error })
 
             // Forward error to client
-            natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${documentId}`, {
+            natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`, {
                 error
             })
         }

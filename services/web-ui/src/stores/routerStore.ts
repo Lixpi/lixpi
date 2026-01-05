@@ -9,7 +9,7 @@ import {
 import type { Router } from '$src/services/router-service.ts'
 
 import type { ReadonlyDeep } from 'type-fest'
-import { deepFreeze } from '../helpers/deepfreeze.ts'
+import { deepFreeze } from '$src/helpers/deepfreeze.ts'
 
 type Meta = {
     loadingStatus: LoadingStatus

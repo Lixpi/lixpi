@@ -7,7 +7,7 @@ import {
 } from '@lixpi/constants'
 
 import type { ReadonlyDeep } from 'type-fest'
-import { deepFreeze } from '../helpers/deepfreeze.ts'
+import { deepFreeze } from '$src/helpers/deepfreeze.ts'
 
 type Meta = {
     loadingStatus: LoadingStatus
@@ -22,6 +22,7 @@ export type Services = {
     organizationService: any
     workspaceService: any
     documentService: any
+    aiChatThreadService: any
 }
 
 type NatsStore = {
@@ -42,6 +43,7 @@ const nats: ReadonlyDeep<NatsStore> = deepFreeze({
         organizationService: null,
         workspaceService: null,
         documentService: null,
+        aiChatThreadService: null,
     }
 })
 

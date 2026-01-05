@@ -1,4 +1,4 @@
-@import '../../sass/_variables.scss';
+@import '$src/sass/_variables.scss';
 
 .workspace-canvas {
     width: 100%;
@@ -119,20 +119,15 @@
 }
 
 .workspace-image-node {
+    // Override document-node defaults for images
     background: transparent;
     border-radius: 4px;
     overflow: visible;
-    position: relative;
+    box-shadow: none;
+    padding: 0;
 
-    &:hover .document-resize-handle {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    &.is-selected .document-resize-handle,
-    &.is-resizing .document-resize-handle {
-        opacity: 1;
-        pointer-events: auto;
+    &:hover {
+        box-shadow: none;
     }
 
     &.is-resizing {
@@ -313,6 +308,17 @@
     background: transparent;
 }
 
+// AI chat thread editor container - extends document-node-editor
+.ai-chat-thread-node-editor {
+    flex: 1;
+    overflow: auto;
+    min-height: 100px;
+    border-radius: 0 0 8px 8px;
+    padding: 0;
+    box-sizing: border-box;
+    cursor: text;
+}
+
 .workspace-document-node.is-dragging .document-drag-overlay {
     cursor: move;
 }
@@ -375,4 +381,123 @@
     &.is-dragging svg {
         transform: rotate(0deg) scale(1.2);
     }
+}
+
+// Workspace edges
+.workspace-edges-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 5;
+    // Container passes events through to nodes below
+    pointer-events: none;
+
+    .connector-svg {
+        // SVG itself doesn't block events
+        pointer-events: none;
+
+        .workspace-edge-node {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        // Edges group
+        .connector-edges {
+            pointer-events: none;
+        }
+
+        // Visible edge paths should not block clicks
+        .connector-edge {
+            pointer-events: none;
+        }
+
+        // Markers should not block clicks
+        marker, defs {
+            pointer-events: none;
+        }
+
+        // Node rects in edges group
+        .connector-nodes {
+            pointer-events: none;
+        }
+
+        // Default edge color
+        .workspace-edge {
+            stroke: $steelBlue;
+        }
+
+        // Arrowhead markers
+        .connector-arrowhead {
+            fill: $steelBlue;
+            stroke: $steelBlue;
+        }
+
+        .workspace-edge.is-selected {
+            stroke: $steelBlue;
+        }
+
+        .workspace-edge-temp {
+            stroke: rgba($steelBlue, 0.6);
+        }
+    }
+}
+
+.workspace-edge-endpoints-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 25;
+    pointer-events: none;
+}
+
+.workspace-edge-endpoint {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: calc(12px / var(--zoom-scale, 1));
+    height: calc(12px / var(--zoom-scale, 1));
+    border-radius: 999px;
+    background: white;
+    border: calc(2px / var(--zoom-scale, 1)) solid $nightBlue;
+    pointer-events: auto;
+    cursor: crosshair;
+}
+
+// Connection handles on nodes
+.workspace-handle {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(10px / var(--zoom-scale, 1));
+    height: calc(10px / var(--zoom-scale, 1));
+    border-radius: 999px;
+    background: $nightBlue;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 18;
+    transition: opacity 0.15s ease-out;
+
+    &:hover {
+        transform: translate(-50%, -50%) scale(1.2);
+    }
+}
+
+.workspace-handle.left {
+    left: 0;
+}
+
+.workspace-handle.right {
+    left: 100%;
+}
+
+// Show handles on hover for all node types
+.workspace-document-node:hover .workspace-handle,
+.workspace-image-node:hover .workspace-handle,
+.workspace-ai-chat-thread-node:hover .workspace-handle,
+.workspace-document-node.is-selected .workspace-handle,
+.workspace-image-node.is-selected .workspace-handle,
+.workspace-ai-chat-thread-node.is-selected .workspace-handle {
+    opacity: 1;
+    pointer-events: auto;
 }

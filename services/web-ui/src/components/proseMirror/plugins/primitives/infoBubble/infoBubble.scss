@@ -1,5 +1,5 @@
 /* Import base infoBubble styles */
-@import './_infoBubble-mixins.scss';
+@import '$src/components/proseMirror/plugins/primitives/infoBubble/_infoBubble-mixins.scss';
 
 /* InfoBubble Primitive Styles */
 .info-bubble-wrapper {

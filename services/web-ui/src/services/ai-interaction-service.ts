@@ -6,31 +6,29 @@ import type { AiModelId, AiInteractionChatSendMessagePayload, AiInteractionChatS
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
 
-import AuthService from './auth-service.ts'
+import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
-import { documentStore } from '$src/stores/documentStore.ts'
-
 
 export default class AiInteractionService {
-    instanceKey: string
+    workspaceId: string
+    aiChatThreadId: string
     segmentsReceiver: any
     markdownStreamParser: any
     markdownStreamParserUnsubscribe: any
-    currentThreadId: string | null
     currentAiProvider: string | null
 
-    constructor(instanceKey: string) {
-        this.instanceKey = instanceKey
+    constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
+        this.workspaceId = workspaceId
+        this.aiChatThreadId = aiChatThreadId
         this.segmentsReceiver = SegmentsReceiver
-        this.currentThreadId = null
         this.currentAiProvider = null
 
-        this.initNatsSubscriptions();
+        this.initNatsSubscriptions()
     }
 
     initMarkdownParser() {
@@ -39,26 +37,25 @@ export default class AiInteractionService {
             if (this.markdownStreamParserUnsubscribe) {
                 this.markdownStreamParserUnsubscribe()
             }
-            MarkdownStreamParser.removeInstance(this.instanceKey)
+            MarkdownStreamParser.removeInstance(this.aiChatThreadId)
         }
 
         // Initialize markdown stream parser (exact replication of backend pattern)
-        this.markdownStreamParser = MarkdownStreamParser.getInstance(this.instanceKey)
+        this.markdownStreamParser = MarkdownStreamParser.getInstance(this.aiChatThreadId)
 
         // Subscribe to parsed segments from the markdown stream parser
         this.markdownStreamParserUnsubscribe = this.markdownStreamParser.subscribeToTokenParse((parsedSegment, unsubscribe) => {
-            // Emit parsed content to segmentsReceiver with aiProvider and threadId
+            // Emit parsed content to segmentsReceiver with aiProvider and aiChatThreadId
             this.segmentsReceiver.receiveSegment({
                 ...parsedSegment,
                 aiProvider: this.currentAiProvider,
-                threadId: this.currentThreadId
+                aiChatThreadId: this.aiChatThreadId
             })
 
             // Cleanup on stream end
             if (parsedSegment.status === 'END_STREAM') {
                 unsubscribe()
-                MarkdownStreamParser.removeInstance(this.instanceKey)
-                this.currentThreadId = null
+                MarkdownStreamParser.removeInstance(this.aiChatThreadId)
                 this.currentAiProvider = null
             }
         })
@@ -66,39 +63,43 @@ export default class AiInteractionService {
 
     async initNatsSubscriptions() {
         try {
-            servicesStore.getData('nats')!.getSubscriptions(['ai.interaction.chat.receiveMessage.*']).forEach(sub => sub.unsubscribe())    // Unsubscribe from all previous subscriptions to avoid duplicate receives
+            // Unsubscribe from all previous subscriptions to avoid duplicate receives
+            servicesStore.getData('nats')!.getSubscriptions(['ai.interaction.chat.receiveMessage.*.*']).forEach(sub => sub.unsubscribe())
 
-            if (!this.instanceKey)
-                throw new Error('aiChat this.instanceKey is `undefined` !!!')
+            if (!this.workspaceId || !this.aiChatThreadId)
+                throw new Error('AiInteractionService requires workspaceId and aiChatThreadId')
 
-            this.subscribeToChatMessages(this.instanceKey);
+            this.subscribeToChatMessages()
         } catch (error) {
-            console.error('Failed to initialize NATS service:', error);
+            console.error('Failed to initialize NATS service:', error)
         }
     }
 
-    async subscribeToChatMessages(documentId: string) {
-        servicesStore.getData('nats')!.subscribe(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${documentId}`, (data, msg) => {
-            this.onChatMessageResponse(data);
-        })
+    async subscribeToChatMessages() {
+        // Subscribe to responses for this specific workspace and thread
+        servicesStore.getData('nats')!.subscribe(
+            `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`,
+            (data, msg) => {
+                this.onChatMessageResponse(data)
+            }
+        )
     }
 
 
     onChatMessageResponse(data: any) {
         if(data?.error) {
             alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
-            return;
+            return
         }
 
-        const { content, threadId } = data
+        const { content } = data
 
         if (!content) {
             console.error('No content in AI chat message:', data)
             return
         }
 
-        // Track current threadId and aiProvider for parser callback
-        this.currentThreadId = threadId
+        // Track current aiProvider for parser callback
         if (content.aiProvider) {
             this.currentAiProvider = content.aiProvider
         }
@@ -118,26 +119,26 @@ export default class AiInteractionService {
         }
     }
 
-    async sendChatMessage({ messages, aiModel, threadId }: AiInteractionChatSendMessagePayload) {
+    async sendChatMessage({ messages, aiModel }: Omit<AiInteractionChatSendMessagePayload, 'threadId'>) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
 
         const payload = {
             token: await AuthService.getTokenSilently(),
-            documentId: this.instanceKey,
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
             messages,
             aiModel,
-            threadId,
             organizationId
         }
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)
     }
 
-    async stopChatMessage({ threadId }: AiInteractionChatStopMessagePayload) {
+    async stopChatMessage() {
         const payload = {
             token: await AuthService.getTokenSilently(),
-            documentId: this.instanceKey,
-            threadId
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId
         }
 
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE, payload)

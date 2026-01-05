@@ -50,7 +50,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread'
 
 type CanvasNodePosition = {
     x: number
@@ -81,7 +81,15 @@ export type ImageCanvasNode = {
     dimensions: CanvasNodeDimensions
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode
+export type AiChatThreadCanvasNode = {
+    nodeId: string
+    type: 'aiChatThread'
+    referenceId: string
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -89,9 +97,18 @@ export type CanvasViewport = {
     zoom: number
 }
 
+export type WorkspaceEdge = {
+    edgeId: string
+    sourceNodeId: string
+    targetNodeId: string
+    sourceHandle?: string
+    targetHandle?: string
+}
+
 export type CanvasState = {
     viewport: CanvasViewport
     nodes: CanvasNode[]
+    edges: WorkspaceEdge[]
 }
 
 export type Workspace = {
@@ -309,3 +326,14 @@ export type FinancialTransaction = {
     createdAt: number
 }
 
+export type AiChatThreadStatus = 'active' | 'paused' | 'completed'
+
+export type AiChatThread = {
+    workspaceId: string
+    threadId: string
+    content: object
+    aiModel: string
+    status: AiChatThreadStatus
+    createdAt: number
+    updatedAt: number
+}

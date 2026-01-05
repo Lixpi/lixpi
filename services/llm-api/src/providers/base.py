@@ -39,8 +39,8 @@ class ProviderState(TypedDict, total=False):
         - messages: List of conversation messages
         - ai_model_meta_info: AI model configuration and pricing
         - event_meta: Event metadata (userId, organizationId, etc.)
-        - thread_id: Thread identifier
-        - document_id: Document identifier
+        - workspace_id: Workspace identifier
+        - ai_chat_thread_id: AI chat thread identifier
         - instance_key: Unique key for this provider instance
         - provider: Provider name ('OpenAI' or 'Anthropic')
         - model_version: Specific model version to use
@@ -59,8 +59,8 @@ class ProviderState(TypedDict, total=False):
     messages: list
     ai_model_meta_info: Dict[str, Any]
     event_meta: Dict[str, Any]
-    thread_id: Optional[str]
-    document_id: str
+    workspace_id: str
+    ai_chat_thread_id: str
     instance_key: str
     provider: str
     model_version: str
@@ -142,8 +142,8 @@ class BaseLLMProvider(ABC):
                 'messages': request_data.get('messages', []),
                 'ai_model_meta_info': request_data.get('aiModelMetaInfo', {}),
                 'event_meta': request_data.get('eventMeta', {}),
-                'thread_id': request_data.get('threadId'),
-                'document_id': request_data.get('documentId'),
+                'workspace_id': request_data.get('workspaceId'),
+                'ai_chat_thread_id': request_data.get('aiChatThreadId'),
                 'instance_key': self.instance_key,
                 'provider': self.get_provider_name(),
                 'model_version': request_data.get('aiModelMetaInfo', {}).get('modelVersion'),
@@ -168,14 +168,20 @@ class BaseLLMProvider(ABC):
 
         except asyncio.TimeoutError:
             logger.error(f"Circuit breaker triggered: Request exceeded {settings.LLM_TIMEOUT_SECONDS}s timeout")
+            workspace_id = request_data.get('workspaceId')
+            ai_chat_thread_id = request_data.get('aiChatThreadId')
             await self._publish_error(
-                request_data.get('documentId'),
+                workspace_id,
+                ai_chat_thread_id,
                 f"Circuit breaker triggered: Processing timeout exceeded ({settings.LLM_TIMEOUT_SECONDS // 60} minutes)"
             )
         except Exception as e:
             logger.error(f"Error processing LLM request: {e}", exc_info=True)
+            workspace_id = request_data.get('workspaceId')
+            ai_chat_thread_id = request_data.get('aiChatThreadId')
             await self._publish_error(
-                request_data.get('documentId'),
+                workspace_id,
+                ai_chat_thread_id,
                 str(e)
             )
 
@@ -212,8 +218,11 @@ class BaseLLMProvider(ABC):
         if not state.get('messages'):
             raise ValueError("messages list is required")
 
-        if not state.get('document_id'):
-            raise ValueError("document_id is required")
+        if not state.get('workspace_id'):
+            raise ValueError("workspace_id is required")
+
+        if not state.get('ai_chat_thread_id'):
+            raise ValueError("ai_chat_thread_id is required")
 
         logger.info(f"✅ Request validation passed for {self.instance_key}")
         return state
@@ -238,7 +247,7 @@ class BaseLLMProvider(ABC):
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
             state['error'] = str(e)
-            await self._publish_stream_end(state['document_id'], state.get('thread_id'))
+            await self._publish_stream_end(state['workspace_id'], state['ai_chat_thread_id'])
             raise
         finally:
             state['stream_active'] = False
@@ -296,80 +305,81 @@ class BaseLLMProvider(ABC):
 
     async def _publish_stream_start(
         self,
-        document_id: str,
-        thread_id: Optional[str] = None
+        workspace_id: str,
+        ai_chat_thread_id: str
     ) -> None:
         """
         Publish stream start marker to the client.
 
         Args:
-            document_id: Document identifier
-            thread_id: Optional thread identifier
+            workspace_id: Workspace identifier
+            ai_chat_thread_id: AI chat thread identifier
         """
         self.nats_client.publish(
-            f"ai.interaction.chat.receiveMessage.{document_id}",
+            f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
                 'content': {
                     'status': StreamStatus.START_STREAM,
                     'aiProvider': self.get_provider_name()
                 },
-                'threadId': thread_id
+                'aiChatThreadId': ai_chat_thread_id
             }
         )
 
     async def _publish_stream_chunk(
         self,
-        document_id: str,
-        text: str,
-        thread_id: Optional[str] = None
+        workspace_id: str,
+        ai_chat_thread_id: str,
+        text: str
     ) -> None:
         """
         Publish a streaming chunk to the client.
 
         Args:
-            document_id: Document identifier
+            workspace_id: Workspace identifier
+            ai_chat_thread_id: AI chat thread identifier
             text: Text content to stream
-            thread_id: Optional thread identifier
         """
         self.nats_client.publish(
-            f"ai.interaction.chat.receiveMessage.{document_id}",
+            f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
                 'content': {
                     'text': text,
                     'status': StreamStatus.STREAMING,
                     'aiProvider': self.get_provider_name()
                 },
-                'threadId': thread_id
+                'aiChatThreadId': ai_chat_thread_id
             }
         )
 
     async def _publish_stream_end(
         self,
-        document_id: str,
-        thread_id: Optional[str] = None
+        workspace_id: str,
+        ai_chat_thread_id: str
     ) -> None:
         """
         Publish stream end marker to the client.
 
         Args:
-            document_id: Document identifier
-            thread_id: Optional thread identifier
+            workspace_id: Workspace identifier
+            ai_chat_thread_id: AI chat thread identifier
         """
         self.nats_client.publish(
-            f"ai.interaction.chat.receiveMessage.{document_id}",
+            f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
                 'content': {
                     'text': '',
                     'status': StreamStatus.END_STREAM,
                     'aiProvider': self.get_provider_name()
                 },
-                'threadId': thread_id
+                'aiChatThreadId': ai_chat_thread_id
             }
         )
 
     async def _publish_error(
         self,
-        instance_key: str,
+        workspace_id: str,
+        ai_chat_thread_id: str,
         error_message: str,
         error_code: Optional[str] = None,
         error_type: Optional[str] = None
@@ -378,11 +388,13 @@ class BaseLLMProvider(ABC):
         Publish error back to services/api.
 
         Args:
-            instance_key: Instance key (documentId or documentId:threadId)
+            workspace_id: Workspace identifier
+            ai_chat_thread_id: AI chat thread identifier
             error_message: Error message
             error_code: Optional error code from provider
             error_type: Optional error type from provider
         """
+        instance_key = f"{workspace_id}:{ai_chat_thread_id}"
         error_data = {
             'error': error_message,
             'instanceKey': instance_key

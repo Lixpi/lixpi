@@ -1,0 +1,209 @@
+@use "sass:color";
+
+// =============================
+// Loading Placeholder Component
+// =============================
+// A reusable loading spinner component for indicating content loading state.
+// Used for lazy-loaded canvas nodes and other async operations.
+//
+// Structure:
+//   .loading-placeholder (container with optional overlay)
+//     .loader (animated spinner element)
+
+// 1) Placement - Container positioning and sizing
+// ------------------------------------------------
+@mixin loadingPlaceholderPlacement($config: ()) {
+    $defaults: (
+        zIndex: 99
+    );
+
+    $s: map-merge($defaults, $config);
+
+    .loading-placeholder {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: map-get($s, zIndex);
+    }
+}
+
+// 2) Overlay - Background overlay styling
+// ----------------------------------------
+@mixin loadingPlaceholderOverlay($config: ()) {
+    $defaults: (
+        overlayBgLight: rgba(255, 255, 255, 0.8),
+        overlayBgDark: rgba(0, 0, 0, 0.6),
+        overlayBlur: 4px
+    );
+
+    $s: map-merge($defaults, $config);
+
+    .loading-placeholder {
+        &.with-overlay {
+            backdrop-filter: blur(map-get($s, overlayBlur));
+
+            &.theme-light {
+                background: map-get($s, overlayBgLight);
+            }
+
+            &.theme-dark {
+                background: map-get($s, overlayBgDark);
+            }
+        }
+    }
+}
+
+// 3) Spinner - Animated loader styling
+// -------------------------------------
+@mixin loadingPlaceholderSpinner($config: ()) {
+    $defaults: (
+        primaryColor: #1e3a5f, // nightBlue
+        secondaryColor: #ff6b6b, // redPink
+        borderWidth: 4px,
+        animationDurationOuter: 1500ms,
+        animationDurationInner: 500ms
+    );
+
+    $s: map-merge($defaults, $config);
+
+    .loader {
+        position: relative;
+        border-radius: 50%;
+        display: inline-block;
+        border-top: map-get($s, borderWidth) solid map-get($s, primaryColor);
+        border-right: map-get($s, borderWidth) solid transparent;
+        box-sizing: border-box;
+        animation: loading-placeholder-rotation map-get($s, animationDurationOuter) linear infinite;
+
+        &::after {
+            content: '';
+            box-sizing: border-box;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border-left: map-get($s, borderWidth) solid map-get($s, secondaryColor);
+            border-bottom: map-get($s, borderWidth) solid transparent;
+            animation: loading-placeholder-rotation map-get($s, animationDurationInner) linear infinite reverse;
+        }
+    }
+
+    @keyframes loading-placeholder-rotation {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+}
+
+// 4) Sizes - Spinner size variants
+// ---------------------------------
+@mixin loadingPlaceholderSizes($config: ()) {
+    $defaults: (
+        sizeSmall: 24px,
+        sizeMedium: 40px,
+        sizeLarge: 60px
+    );
+
+    $s: map-merge($defaults, $config);
+
+    .loading-placeholder {
+        &.size-small .loader {
+            width: map-get($s, sizeSmall);
+            height: map-get($s, sizeSmall);
+        }
+
+        &.size-medium .loader {
+            width: map-get($s, sizeMedium);
+            height: map-get($s, sizeMedium);
+        }
+
+        &.size-large .loader {
+            width: map-get($s, sizeLarge);
+            height: map-get($s, sizeLarge);
+        }
+    }
+}
+
+// 5) Error State - Error message and retry button styling
+// --------------------------------------------------------
+@mixin loadingPlaceholderError($config: ()) {
+    $defaults: (
+        errorTextColor: #dc2626,
+        errorTextColorDark: #fca5a5,
+        retryBgColor: #1e3a5f,
+        retryTextColor: #ffffff,
+        retryHoverBgColor: #2d4a6f,
+        fontFamily: inherit,
+        fontSize: 14px,
+        buttonPaddingX: 16px,
+        buttonPaddingY: 8px,
+        buttonBorderRadius: 6px
+    );
+
+    $s: map-merge($defaults, $config);
+
+    .loading-placeholder.error-state {
+        .error-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .error-message {
+            font-family: map-get($s, fontFamily);
+            font-size: map-get($s, fontSize);
+            text-align: center;
+            max-width: 280px;
+        }
+
+        &.theme-light .error-message {
+            color: map-get($s, errorTextColor);
+        }
+
+        &.theme-dark .error-message {
+            color: map-get($s, errorTextColorDark);
+        }
+
+        .retry-button {
+            font-family: map-get($s, fontFamily);
+            font-size: map-get($s, fontSize);
+            padding: map-get($s, buttonPaddingY) map-get($s, buttonPaddingX);
+            background-color: map-get($s, retryBgColor);
+            color: map-get($s, retryTextColor);
+            border: none;
+            border-radius: map-get($s, buttonBorderRadius);
+            cursor: pointer;
+            transition: background-color 150ms ease;
+
+            &:hover {
+                background-color: map-get($s, retryHoverBgColor);
+            }
+
+            &:focus {
+                outline: 2px solid map-get($s, retryBgColor);
+                outline-offset: 2px;
+            }
+        }
+    }
+}
+
+// Full component mixin combining all parts
+// -----------------------------------------
+@mixin loadingPlaceholder($config: ()) {
+    @include loadingPlaceholderPlacement($config);
+    @include loadingPlaceholderOverlay($config);
+    @include loadingPlaceholderSpinner($config);
+    @include loadingPlaceholderSizes($config);
+    @include loadingPlaceholderError($config);
+}

@@ -1,12 +1,12 @@
 # AI Chat Thread Plugin
 
-Adds ChatGPT-style conversations directly inside ProseMirror documents. Users can type messages, hit Cmd+Enter (or Ctrl+Enter on Windows), and get AI responses streamed back in real-time.
+Provides the ProseMirror editor experience for AI chat threads on the workspace canvas. Each AI chat thread is a **standalone canvas node** with its own editor instance, AI service connection, and persistence. Users type messages, hit Cmd+Enter (or Ctrl+Enter on Windows), and get AI responses streamed back in real-time.
 
-This README reflects the current implementation, including dropdowns (AI model selector and thread context selector) that exist outside the document schema as UI controls.
+This README reflects the current implementation where AI chat threads are first-class canvas nodes (not embedded in documents).
 
 ## What it does
 
-This plugin lets you embed chat threads anywhere in a document. Each thread can contain:
+This plugin powers the editor inside AI chat thread canvas nodes. Each thread can contain:
 - Regular paragraphs (user messages)
 - Code blocks (for sharing code)
 - AI responses (streamed from your backend)
@@ -17,7 +17,7 @@ When a user hits Cmd+Enter or clicks the send button, the plugin:
 3. Shows streaming AI responses as they come in
 4. Handles all the animations and visual feedback
 
-Perfect for documentation with interactive examples, notebooks with AI assistance, or any app where you want conversational AI embedded in rich text.
+AI chat threads live as independent canvas nodes alongside documents and images. Each thread has its own `AiInteractionService` instance for streaming, with routing based on `workspaceId` + `threadId`.
 
 ## Technical Architecture
 
@@ -105,32 +105,40 @@ sequenceDiagram
     participant EV as EditorView
     participant PL as Plugin
     participant CE as ContentExtractor
-    participant CB as Callback
+    participant AIS as AiInteractionService
+    participant NATS as NATS
+    participant API as API Service
+    participant LLM as llm-api (Python)
     participant SR as SegmentsReceiver
     participant SI as StreamingInserter
 
     U->>EV: Cmd+Enter or click send
     EV->>PL: Transaction with USE_AI_CHAT_META
     PL->>CE: getActiveThreadContent(state)
-    CE->>CE: Walk up DOM hierarchy to find aiChatThread
     CE->>CE: Extract all child blocks with collectFormattedText
     CE->>CE: Convert to messages with toMessages()
     CE-->>PL: ThreadContent[] → Messages[]
-    PL->>CB: callback(messages)
+    PL->>AIS: onAiChatSubmit({ messages, aiModel })
+    AIS->>NATS: publish(CHAT_SEND_MESSAGE, { workspaceId, aiChatThreadId, messages })
+    NATS->>API: Route to handler
+    API->>NATS: publish(CHAT_PROCESS, {...})
+    NATS->>LLM: Route to Python
 
-    Note over CB: Your backend connects to SegmentsReceiver
+    Note over AIS: Subscribed to<br/>receiveMessage.{workspaceId}.{threadId}
 
-    SR->>PL: START_STREAM event
-    PL->>PL: handleStreamStart()
-    PL->>EV: Insert aiResponseMessage + set isReceiving
-
-    loop Streaming chunks
+    loop Streaming Response
+        LLM->>NATS: publish(receiveMessage.{workspaceId}.{threadId}, chunk)
+        NATS->>AIS: Deliver to subscriber
+        AIS->>SR: Emit segment event
         SR->>PL: STREAMING event with segment
         PL->>SI: insertBlockContent/insertInlineContent
         SI->>EV: Insert content into response node
     end
 
-    SR->>PL: END_STREAM event
+    LLM->>NATS: END_STREAM
+    NATS->>AIS: End signal
+    AIS->>SR: END_STREAM event
+    SR->>PL: END_STREAM
     PL->>EV: Clear isReceiving + stop animations
 ```
 
@@ -190,14 +198,14 @@ This format follows modern prompt engineering best practices (per OpenAI/Anthrop
 
 ## DOM Template System
 
-We use `htm` for declarative DOM in NodeViews. The shared helper lives at `../../components/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `../README.md` (see “Templating & NodeViews”).
+We use `htm` for declarative DOM in NodeViews. The shared helper lives at `$src/utils/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `$src/components/proseMirror/plugins/README.md` (see "Templating & NodeViews").
 
-More generic patterns and folder layout guidance: `../README.md`.
+More generic patterns and folder layout guidance: `$src/components/proseMirror/plugins/README.md`.
 
 Quick taste, this is how buttons are built now:
 
 ```ts
-import { html } from '../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 const button = html`
   <div className="ai-submit-button" onclick=${handleClick}>
@@ -231,35 +239,29 @@ The NodeView simply:
 
 ## Quick setup
 
-```typescript
-import { createAiChatThreadPlugin, aiChatThreadNodeSpec, aiResponseMessageNodeSpec } from './aiChatThreadPlugin'
+AI chat thread editors are created by `WorkspaceCanvas.ts` when rendering thread canvas nodes:
 
-// Add to your schema
-const schema = new Schema({
-  nodes: {
-    doc: { content: 'block+' },
-    paragraph: paragraphSpec,
-    aiChatThread: aiChatThreadNodeSpec,
-    aiResponseMessage: aiResponseMessageNodeSpec
-  }
+```typescript
+// Each AI chat thread canvas node gets its own editor and service
+const aiService = new AiInteractionService({
+    workspaceId,
+    aiChatThreadId: node.referenceId
 })
 
-// Create the plugin
-const plugin = createAiChatThreadPlugin(
-  async (messages) => {
-    // Your AI streaming setup here
-    console.log('Sending to AI:', messages)
-    // Trigger your streaming implementation
-    // Plugin will listen for SegmentsReceiver events automatically
-  },
-  { titlePlaceholder: 'Document title...', paragraphPlaceholder: 'Type your message...' }
-)
-
-// Add to editor
-const view = new EditorView(document.querySelector('#editor'), {
-  state: EditorState.create({ schema, plugins: [plugin] })
+const editor = new ProseMirrorEditor({
+    editorMountElement: editorContainer,
+    initialVal: thread.content,
+    documentType: 'aiChatThread',  // Enables AI chat thread schema
+    onAiChatSubmit: ({ messages, aiModel }) => {
+        aiService.sendChatMessage({ messages, aiModel })
+    },
+    onAiChatStop: () => {
+        aiService.stopChatMessage()
+    }
 })
 ```
+
+The `documentType: 'aiChatThread'` parameter configures the schema and keybindings for AI chat context.
 
 ## Streaming Protocol
 
@@ -329,12 +331,15 @@ sequenceDiagram
     participant U as User
     participant E as Editor
     participant P as Plugin
-    participant A as AI Backend
+    participant AIS as AiInteractionService
+    participant NATS as NATS → llm-api
 
     U->>E: Types message and hits Cmd+Enter
     E->>P: Extracts thread content
-    P->>A: Sends messages to your callback
-    A-->>P: Streams response chunks
+    P->>AIS: sendChatMessage({ messages, aiModel })
+    AIS->>NATS: Publish to backend
+    NATS-->>AIS: Stream response via receiveMessage.{workspaceId}.{threadId}
+    AIS-->>P: SegmentsReceiver events
     P->>E: Inserts AI response with animations
 ```
 
@@ -417,7 +422,7 @@ This pattern follows our decoration-first approach: visual states come from clas
 
 - `aiChatThreadPluginConstants.ts` - Shared `PluginKey` to avoid identity mismatch and circular imports between NodeView and plugin. Import this key in both places and call `AI_CHAT_THREAD_PLUGIN_KEY.getState(view.state)` when needed.
 
-- `../primitives/dropdown/` - Dropdown primitive (outside document schema):
+- `$src/components/proseMirror/plugins/primitives/dropdown/` - Dropdown primitive (outside document schema):
   - `pureDropdown.ts` - Factory function creating dropdowns with {dom, update, destroy} API
   - Uses `infoBubble` primitive for state management
   - `index.ts` - Clean exports
@@ -425,11 +430,11 @@ This pattern follows our decoration-first approach: visual states come from clas
   - Used by aiChatThreadNode for AI model and context selectors
   - See `primitives/dropdown/README.md` for full documentation
 
-- `../../components/domTemplates.ts` - **NEW** Shared DOM template utilities:
+- `$src/utils/domTemplates.ts` - Shared DOM template utilities:
   - TypeScript class-based `DOMTemplateBuilder` with proper typing
   - `html` template function using htm/mini for zero-overhead DOM creation
   - Handles events, styles, data attributes, innerHTML
-  - Available across all ProseMirror components, not just this plugin
+  - Available across all components, not just ProseMirror plugins
 
 - `ai-chat-thread.scss` - All the styling and animations
 - `index.ts` - Exports everything
@@ -704,7 +709,7 @@ case 'Cohere':
 Want to use templates in other ProseMirror components?
 
 ```typescript
-import { html } from '../../components/domTemplates.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 const myNodeView = html`
   <div className="my-component" onclick=${handleClick}>
@@ -729,4 +734,4 @@ Set `IS_RECEIVING_TEMP_DEBUG_STATE = true` at the top of the plugin to keep the 
 
 ---
 
-That's the plugin! It's pretty complex but handles a lot of edge cases around cursor positioning, content extraction, and smooth streaming UX. The hardest part is usually getting the streaming events from your AI backend wired up correctly.
+That's the plugin! It powers the editor experience for AI chat thread canvas nodes, handling content extraction, streaming responses, and the interactive UI. The `AiInteractionService` handles all NATS communication using the `workspaceId + threadId` routing pattern.

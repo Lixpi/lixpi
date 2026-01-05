@@ -20,18 +20,25 @@
 		"DELETE_WORKSPACE": "workspace.delete",
 		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
 		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
-		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments"
-	},
-	"WORKSPACE_IMAGE_SUBJECTS": {
-		"DELETE_IMAGE": "workspace.image.delete"
-	},
-	"DOCUMENT_SUBJECTS": {
-		"CREATE_DOCUMENT": "document.create",
-		"GET_DOCUMENT": "document.get",
-		"UPDATE_DOCUMENT": "document.update",
-		"DELETE_DOCUMENT": "document.delete",
-		"ADD_TAG_TO_DOCUMENT": "document.addTag",
-		"REMOVE_TAG_FROM_DOCUMENT": "document.removeTag"
+		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments",
+		"IMAGE_SUBJECTS": {
+			"DELETE_IMAGE": "workspace.image.delete"
+		},
+		"DOCUMENT_SUBJECTS": {
+			"CREATE_DOCUMENT": "workspace.document.create",
+			"GET_DOCUMENT": "workspace.document.get",
+			"UPDATE_DOCUMENT": "workspace.document.update",
+			"DELETE_DOCUMENT": "workspace.document.delete",
+			"ADD_TAG_TO_DOCUMENT": "workspace.document.addTag",
+			"REMOVE_TAG_FROM_DOCUMENT": "workspace.document.removeTag"
+		},
+		"AI_CHAT_THREAD_SUBJECTS": {
+			"CREATE_AI_CHAT_THREAD": "workspace.aiChatThread.create",
+			"GET_AI_CHAT_THREAD": "workspace.aiChatThread.get",
+			"UPDATE_AI_CHAT_THREAD": "workspace.aiChatThread.update",
+			"DELETE_AI_CHAT_THREAD": "workspace.aiChatThread.delete",
+			"GET_WORKSPACE_AI_CHAT_THREADS": "workspace.aiChatThread.getByWorkspace"
+		}
 	},
 	"ORGANIZATION_SUBJECTS": {
 		"GET_ORGANIZATION": "organization.get",

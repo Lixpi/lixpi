@@ -48,13 +48,7 @@
 
 
 	import Search from "@lucide/svelte/icons/search";
-	// import { primaryRoutes, secondaryRoutes } from "../config.js";
-	// import { mailStore } from "../store.js";
-	// import type { Account, Mail } from "../data.js";
-	// import AccountSwitcher from "./account-switcher.svelte";
-	// import MailDisplay from "./mail-display.svelte";
-	// import MailList from "./mail-list.svelte";
-	// import Nav from "./nav.svelte";
+
 	import { cn } from "$lib/utils.ts";
 	import { Input } from '$lib/registry/new-york/ui/input/index.ts';
 	import * as Resizable from '$lib/registry/new-york/ui/resizable/index.ts';
@@ -285,7 +279,7 @@
 <style global lang="scss">
     //NOTE Shared SASS variables available globally
 
-    @import '../../sass/styles.scss';
+    @import '$src/sass/styles.scss';
 
     // .content-wrapper {
     //     height: 100vh;

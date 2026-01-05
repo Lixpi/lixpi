@@ -14,7 +14,7 @@
 <div>
     <input
         id={checkboxId}
-        type="checkbox" 
+        type="checkbox"
         bind:checked={checked}
     />
     <label for={checkboxId}>
@@ -24,7 +24,7 @@
 </div>
 
 <style lang="scss"> //NOTE Shared SASS variables available globally
-@import "../../sass/_helpers";
+@import "$src/sass/_helpers";
 
 $checkboxSize: 18px;
 $checkboxPrimaryColor: $nightBlue;
@@ -64,7 +64,7 @@ input {
         background: $checkboxTickMarkColor;
         width: 2px;
         height: 2px;
-        box-shadow: 
+        box-shadow:
             2px 0 0 $checkboxTickMarkColor,
             4px 0 0 $checkboxTickMarkColor,
             4px -2px 0 $checkboxTickMarkColor,

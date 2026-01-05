@@ -1,0 +1,19 @@
+@use "loadingPlaceholder-mixins" as *;
+
+// =============================
+// Loading Placeholder Styles
+// =============================
+// Default implementation using the component mixins.
+
+@include loadingPlaceholder((
+    primaryColor: $nightBlue,
+    secondaryColor: $redPink,
+    overlayBgLight: rgba(255, 255, 255, 0.85),
+    overlayBgDark: rgba(0, 0, 0, 0.65),
+    overlayBlur: 6px,
+    borderWidth: 4px,
+    sizeSmall: 24px,
+    sizeMedium: 40px,
+    sizeLarge: 60px,
+    zIndex: 99
+));

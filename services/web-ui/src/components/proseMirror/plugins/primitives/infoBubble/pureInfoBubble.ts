@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { html } from '../../../components/domTemplates.ts'
-import { infoBubbleStateManager } from './infoBubbleStateManager.ts'
+import { html } from '$src/utils/domTemplates.ts'
+import { infoBubbleStateManager } from '$src/components/proseMirror/plugins/primitives/infoBubble/infoBubbleStateManager.ts'
 
 type InfoBubbleConfig = {
     id: string

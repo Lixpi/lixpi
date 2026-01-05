@@ -28,21 +28,25 @@ def get_ai_interaction_subjects(registry):
     async def _handler_chat_process(data, msg):
         try:
             # Extract request data
-            document_id = data.get('documentId')
-            thread_id = data.get('threadId', '')
+            workspace_id = data.get('workspaceId')
+            ai_chat_thread_id = data.get('aiChatThreadId')
             ai_model_meta_info = data.get('aiModelMetaInfo', {})
             provider_name = ai_model_meta_info.get('provider')
 
-            if not document_id:
-                err("Missing documentId in request")
+            if not workspace_id:
+                err("Missing workspaceId in request")
+                return
+
+            if not ai_chat_thread_id:
+                err("Missing aiChatThreadId in request")
                 return
 
             if not provider_name:
                 err("Missing provider in aiModelMetaInfo")
                 return
 
-            # Create instance key
-            instance_key = f"{document_id}:{thread_id}" if thread_id else document_id
+            # Create instance key using workspaceId:aiChatThreadId
+            instance_key = f"{workspace_id}:{ai_chat_thread_id}"
 
             info(f"Processing chat request for {instance_key} using {provider_name}")
 
@@ -59,7 +63,9 @@ def get_ai_interaction_subjects(registry):
             err(f"Error handling chat process: {e}")
 
             # Publish error back to services/api
-            instance_key = data.get('documentId', 'unknown')
+            workspace_id = data.get('workspaceId', 'unknown')
+            ai_chat_thread_id = data.get('aiChatThreadId', 'unknown')
+            instance_key = f"{workspace_id}:{ai_chat_thread_id}"
             registry.nats_client.publish(
                 f"{CHAT_ERROR}.{instance_key}",
                 {

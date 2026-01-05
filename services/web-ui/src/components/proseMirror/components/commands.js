@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
-import { nodeTypes } from "../customNodes"
-import { aiChatThreadNodeType } from '../plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
+import { nodeTypes } from "$src/components/proseMirror/customNodes"
+import { aiChatThreadNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 
 export const useAiInput = (state, dispatch) => {
     const attrs = {}

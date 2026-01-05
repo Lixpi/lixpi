@@ -1,32 +1,47 @@
 # Workspace Canvas
 
-This module renders the main workspace view—a zoomable, pannable canvas where documents and images appear as draggable, resizable cards.
+This module renders the main workspace view—a zoomable, pannable canvas where documents, images, and AI chat threads appear as draggable, resizable cards.
 
 ## What It Does
 
-When you open a workspace, you see a canvas. On that canvas are nodes (documents or images). You can:
+When you open a workspace, you see a canvas. On that canvas are nodes (documents, images, or AI chat threads). You can:
 
 - **Pan** the canvas by clicking and dragging empty space (or two-finger scroll on trackpad)
 - **Zoom** with pinch gestures or Ctrl+scroll
-- **Drag** nodes by grabbing the overlay (top bar for documents, anywhere for images)
+- **Drag** nodes by grabbing the overlay (top bar for documents/threads, anywhere for images)
 - **Resize** nodes from any corner (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
+- **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
+- **Add AI Chats** via the toolbar button which creates a new AI chat thread
+- **Connect nodes** by dragging from a node's right handle to another node's left handle (arrow points in drag direction)
+- **Select edges** by clicking the connector line
+- **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
+- **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
 
 ## Node Types
 
 ### Document Nodes
-- Contain embedded ProseMirror editors
+- Contain embedded ProseMirror editors with `documentType: 'document'`
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
+- Support block-level content (paragraphs, headings, lists, etc.)
 
 ### Image Nodes
 - Display uploaded images from workspace storage
 - Have a full-area drag overlay
 - Resize preserves aspect ratio (stored when image is uploaded)
 - Automatically deleted from storage when removed from canvas
+
+### AI Chat Thread Nodes
+- Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
+- Have a drag overlay at the top (20px)
+- Free resize (no aspect ratio constraint)
+- Each thread has its own `AiInteractionService` instance for AI messaging
+- Support streaming AI responses with real-time token parsing
+- Content is persisted separately from documents in the AI-Chat-Threads table
 
 ## Architecture
 
@@ -36,34 +51,44 @@ flowchart TB
         WC[WorkspaceCanvas.svelte]
         WS[workspaceStore]
         DS[documentsStore]
+        TS[aiChatThreadsStore]
     end
 
     subgraph Core["Framework-Agnostic Core"]
         CC[createWorkspaceCanvas]
         PZ[XYPanZoom instance]
+        ECM[WorkspaceConnectionManager]
         DN[Document Nodes]
         IN[Image Nodes]
+        TN[AI Chat Thread Nodes]
         PM[ProseMirror Editors]
+        AIS[AiInteractionService]
         IL[Canvas Image Lifecycle]
     end
 
     subgraph Backend["Backend Services"]
         NS[NATS Service]
         API[Workspace API]
+        LLMAPI[llm-api Python]
         OBJ[NATS Object Store]
     end
 
     WC -->|"paneEl, viewportEl"| CC
-    WC -->|"canvasState, documents"| CC
+    WC -->|"canvasState, documents, threads"| CC
     CC -->|"onCanvasStateChange"| WC
     WC -->|"persistCanvasState"| WS
     WS -->|"updateCanvasState"| NS
     NS --> API
 
     CC --> PZ
+    CC --> ECM
     CC --> DN
     CC --> IN
+    CC --> TN
     DN --> PM
+    TN --> PM
+    TN --> AIS
+    AIS -->|"streaming"| LLMAPI
     CC --> IL
     IL -->|"deleteImage"| NS
     NS -->|"DELETE_IMAGE"| OBJ
@@ -137,7 +162,7 @@ Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoot
 
 ### Image Lifecycle
 
-When an image node is removed from the canvas, the `canvasImageLifecycle` tracker detects the change and triggers deletion from NATS Object Store via the `WORKSPACE_IMAGE_SUBJECTS.DELETE_IMAGE` NATS subject.
+When an image node is removed from the canvas, the `canvasImageLifecycle` tracker detects the change and triggers deletion from NATS Object Store via the `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE` NATS subject.
 
 ### Drag and Resize
 
@@ -157,6 +182,17 @@ After mouse-up, we re-enable panning and commit the new position/dimensions via 
 Note: viewport transforms are only re-applied when the saved viewport actually changes. This prevents temporary zoom/pan flashes when unrelated canvas updates (for example, image onload corrections) occur.
 
 Rendering note: full re-renders are triggered when node structure or document load state changes; position/dimension updates are handled directly in the DOM during drag/resize to avoid unnecessary work.
+
+### Workspace Edges
+
+Edges are stored in `canvasState.edges` and rendered using the existing infographics connector renderer. Connection interactions are handled by `WorkspaceConnectionManager.ts` using `@xyflow/system`'s `XYHandle`.
+
+- Node DOM elements get left/right connection handles (target/source)
+- Edge direction follows the drag direction (arrow points toward the node you dragged TO)
+- Clicking an edge selects it; when selected, endpoint handles appear for reconnection
+- Dragging an endpoint shows the edge following the cursor (original edge is hidden during reconnect)
+- Dropping an endpoint on another node reconnects the edge; dropping in empty space deletes it
+- Deleting an edge updates `canvasState.edges` via the normal persistence flow
 
 ### ProseMirror Integration
 
@@ -187,7 +223,8 @@ sequenceDiagram
 | File | Purpose |
 |------|---------|
 | `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers |
-| `workspace-canvas.scss` | All styles for canvas, nodes, handles, editors |
+| `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, edge rendering, selection/deletion |
+| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 
 ## CSS Classes
@@ -199,11 +236,14 @@ sequenceDiagram
 | `.workspace-viewport` | Transformed container for nodes |
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
+| `.workspace-ai-chat-thread-node` | Individual AI chat thread card |
 | `.document-drag-overlay` | Top bar for dragging documents |
+| `.ai-chat-thread-drag-overlay` | Top bar for dragging AI chat threads |
 | `.image-drag-overlay` | Full-area overlay for dragging images |
-| `.document-node-editor` | ProseMirror container |
+| `.document-node-editor` | ProseMirror container for documents |
+| `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
 | `.image-node-content` | Image container |
 | `.image-node-img` | The actual img element |
-| `.document-resize-handle` | Corner resize controls (shared by both node types) |
+| `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |

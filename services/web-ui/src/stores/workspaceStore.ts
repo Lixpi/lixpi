@@ -9,7 +9,7 @@ import {
 } from '@lixpi/constants'
 
 import type { ReadonlyDeep } from 'type-fest'
-import { deepFreeze } from '../helpers/deepfreeze.ts'
+import { deepFreeze } from '$src/helpers/deepfreeze.ts'
 
 type Meta = {
     loadingStatus: LoadingStatus
@@ -26,7 +26,8 @@ type WorkspaceStore = {
 
 const defaultCanvasState: CanvasState = {
     viewport: { x: 0, y: 0, zoom: 1 },
-    nodes: []
+    nodes: [],
+    edges: []
 }
 
 const workspace: ReadonlyDeep<WorkspaceStore> = deepFreeze({

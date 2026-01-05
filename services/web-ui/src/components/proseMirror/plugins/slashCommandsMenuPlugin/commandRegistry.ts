@@ -4,9 +4,9 @@ import {
     codeBlockIcon,
     imageIcon,
     documentIcon,
-} from '../../../../svgIcons/index.ts'
-import { ImageUploadModal } from './ImageUploadModal.ts'
-import RouterService from '../../../../services/router-service.ts'
+} from '$src/svgIcons/index.ts'
+import { ImageUploadModal } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/ImageUploadModal.ts'
+import RouterService from '$src/services/router-service.ts'
 
 type SlashCommand = {
     name: string

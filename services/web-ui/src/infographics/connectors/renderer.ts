@@ -1,7 +1,7 @@
 // Core connector rendering engine
 // Coordinates nodes, edges, and markers using D3 and XYFlow utilities
 
-import './connectors.scss'
+import '$src/infographics/connectors/connectors.scss'
 import { select } from 'd3-selection'
 import type {
     ConnectorConfig,
@@ -12,9 +12,9 @@ import type {
     NodeAnchors,
     AnchorPosition,
     MarkerType
-} from './types.ts'
-import { createMarkers, getMarkerUrl, collectMarkerTypes } from './markers.ts'
-import { computePath, applyOffset } from './paths.ts'
+} from '$src/infographics/connectors/types.ts'
+import { createMarkers, getMarkerUrl, collectMarkerTypes } from '$src/infographics/connectors/markers.ts'
+import { computePath, applyOffset } from '$src/infographics/connectors/paths.ts'
 
 // Compute anchor points for a node based on its shape and dimensions
 function computeNodeAnchors(node: NodeConfig): NodeAnchors {

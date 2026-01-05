@@ -1,6 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 import { TextSelection } from 'prosemirror-state'
-import { nodeTypes } from '../customNodes'
+import { nodeTypes } from '$src/components/proseMirror/customNodes'
 
 const key = new PluginKey('aiUserInputPlugin')
 // const transactionName = `insert:${nodeTypes.aiUserMessageNodeType}`
