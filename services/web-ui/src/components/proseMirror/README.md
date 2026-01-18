@@ -48,6 +48,7 @@ Custom nodes (in `customNodes/`):
 - `aiChatThreadNode` (`aiChatThread`): the single chat container that holds the conversation. Current content expression: `(paragraph | heading | blockquote | code_block | aiResponseMessage)+`. New code does not insert `aiUserMessage` here.
 - `aiResponseMessageNode` (`aiResponseMessage`): assistant message with provider avatar, animation controls, and a contentDOM placeholder; `aiResponseMessageNodeView` manages Claude animation frames using node attrs (`isInitialRenderAnimation`, `isReceivingAnimation`, `currentFrame`). Content expression: `(paragraph | block)*` so it can start empty and be filled by streaming.
 - `aiUserMessageNode` (`aiUserMessage`, legacy): styled bubble with user avatar; kept for backward compatibility in old documents. New flows do not create this node.
+- **User messages**: rendered as plain `paragraph` nodes inside `aiChatThread` and styled as Telegram-like outgoing bubbles in `plugins/aiChatThreadPlugin/ai-chat-thread.scss` using the `speechBubbleTail` mixin from `components/_ProseMirrorMixings.scss`.
 - `code_block` override (`codeBlockNode`): prosemirror spec extended with `theme` attr and DOM `data-theme`. Rendering and interaction are delegated to a CodeMirror 6 node view (plugin).
 - `taskRowNode` exists but currently a placeholder without DOM hooks; kept for future Svelte component rendering.
 

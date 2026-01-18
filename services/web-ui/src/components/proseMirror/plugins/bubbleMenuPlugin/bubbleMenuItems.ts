@@ -68,6 +68,7 @@ type Command = (state: EditorView['state'], dispatch?: EditorView['dispatch']) =
 const wrapNoneIcon = '<svg fill="none" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="6" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="1.5"/></svg>'
 const wrapLeftIcon = '<svg fill="none" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="6" width="6" height="8" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="11" y1="6" x2="17" y2="6" stroke="currentColor" stroke-width="1.5"/><line x1="11" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="11" y1="14" x2="17" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="17" x2="17" y2="17" stroke="currentColor" stroke-width="1.5"/></svg>'
 const wrapRightIcon = '<svg fill="none" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg"><rect x="11" y="6" width="6" height="8" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><line x1="3" y1="6" x2="9" y2="6" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="10" x2="9" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="14" x2="9" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="17" x2="17" y2="17" stroke="currentColor" stroke-width="1.5"/></svg>'
+const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>'
 
 // =============================================================================
 // MENU CONFIGURATION
@@ -135,7 +136,7 @@ type ImageWrapItem = MenuItemBase & {
 type ImageActionItem = MenuItemBase & {
     type: 'imageAction'
     key: string
-    action: 'delete' | 'blockquote'
+    action: 'delete' | 'blockquote' | 'createVariant'
     icon: string
     title: string
     iconSize: number
@@ -196,6 +197,7 @@ const MENU_ITEMS: MenuItem[] = [
     { type: 'separator', context: ['image'] },
 
     // Image actions
+    { type: 'imageAction', key: 'createVariant', action: 'createVariant', icon: magicIcon, title: 'Create variant', iconSize: 17, context: ['image'] },
     { type: 'imageAction', key: 'imageBlockquote', action: 'blockquote', icon: blockquoteIcon, title: 'Wrap in blockquote', iconSize: 17, context: ['image'] },
     { type: 'imageAction', key: 'imageDelete', action: 'delete', icon: trashBinIcon, title: 'Delete image', iconSize: 16, context: ['image'] },
 ]
@@ -476,6 +478,17 @@ function createImageActionButton(
         const { pos, node } = imageInfo
 
         switch (item.action) {
+            case 'createVariant': {
+                // Check if image has AI-related attrs (is an AI-generated image)
+                if (node.attrs.revisedPrompt || node.attrs.responseId) {
+                    view.dom.dispatchEvent(new CustomEvent('create-ai-image-variant', {
+                        detail: { node, pos },
+                        bubbles: true
+                    }))
+                }
+                bubbleMenuView.forceHide()
+                break
+            }
             case 'delete': {
                 const tr = view.state.tr.delete(pos, pos + node.nodeSize)
                 view.dispatch(tr)

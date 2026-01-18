@@ -70,6 +70,15 @@ export type DocumentCanvasNode = {
     dimensions: CanvasNodeDimensions
 }
 
+export type ImageGenerationSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto'
+
+export type ImageGeneratedByMetadata = {
+    aiChatThreadId: string
+    responseId: string
+    aiModel: AiModelId
+    revisedPrompt: string
+}
+
 export type ImageCanvasNode = {
     nodeId: string
     type: 'image'
@@ -79,6 +88,7 @@ export type ImageCanvasNode = {
     aspectRatio: number
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+    generatedBy?: ImageGeneratedByMetadata
 }
 
 export type AiChatThreadCanvasNode = {
@@ -187,6 +197,12 @@ export type AiInteractionChatSendMessagePayload = {
     threadId: string
 }
 
+export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
+    enableImageGeneration: boolean
+    imageSize?: ImageGenerationSize
+    previousResponseId?: string
+}
+
 export type AiInteractionChatStopMessagePayload = {
     threadId: string
 }
@@ -291,6 +307,12 @@ export type TokensUsageEvent = {
     }
     total: {
         usageTokens: number
+        purchasedFor: string
+        soldToClientFor: string
+    }
+    image?: {
+        generatedCount: number
+        size: string
         purchasedFor: string
         soldToClientFor: string
     }

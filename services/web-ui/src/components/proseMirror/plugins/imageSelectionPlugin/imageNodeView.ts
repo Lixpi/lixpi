@@ -2,6 +2,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView, NodeView } from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
 import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
+import AuthService from '$src/services/auth-service.ts'
 
 type ImageAlignment = 'left' | 'center' | 'right'
 type TextWrap = 'none' | 'left' | 'right'
@@ -11,6 +12,35 @@ type ImageNodeViewOptions = {
     node: ProseMirrorNode
     view: EditorView
     getPos: () => number | undefined
+}
+
+// Build image src with auth token if needed
+async function buildImageSrc(src: string): Promise<string> {
+    if (!src) return ''
+
+    // Data URLs or blob URLs don't need auth
+    if (src.startsWith('data:') || src.startsWith('blob:')) {
+        return src
+    }
+
+    // Full URLs that already have tokens
+    if (src.startsWith('http') && src.includes('token=')) {
+        return src
+    }
+
+    // API paths need auth token
+    if (src.startsWith('/api/')) {
+        const token = await AuthService.getTokenSilently()
+        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+        return `${API_BASE_URL}${src}?token=${encodeURIComponent(token)}`
+    }
+
+    // External URLs or already full URLs
+    if (src.startsWith('http')) {
+        return src
+    }
+
+    return src
 }
 
 export class ImageNodeView implements NodeView {
@@ -27,11 +57,13 @@ export class ImageNodeView implements NodeView {
 
     private originalAspectRatio = 1
     private isResizing = false
+    private currentSrcAttr = '' // Track the original src attr to avoid redundant updates
 
     constructor({ node, view, getPos }: ImageNodeViewOptions) {
         this.node = node
         this.view = view
         this.getPos = getPos
+        this.currentSrcAttr = node.attrs.src || ''
 
         // Create figure wrapper
         this.figure = document.createElement('figure')
@@ -40,7 +72,8 @@ export class ImageNodeView implements NodeView {
 
         // Create image element
         this.img = document.createElement('img')
-        this.img.src = node.attrs.src
+        // Set src asynchronously to handle auth token
+        this.updateImageSrc(node.attrs.src)
         if (node.attrs.alt) this.img.alt = node.attrs.alt
         if (node.attrs.title) this.img.title = node.attrs.title
         if (node.attrs.fileId) this.img.dataset.fileId = node.attrs.fileId
@@ -74,6 +107,17 @@ export class ImageNodeView implements NodeView {
         this.figure.addEventListener('click', this.handleClick)
 
         this.dom = this.figure
+    }
+
+    private async updateImageSrc(src: string): Promise<void> {
+        if (src === this.currentSrcAttr && this.img.src) {
+            return // No change needed
+        }
+        this.currentSrcAttr = src
+        const resolvedSrc = await buildImageSrc(src)
+        if (this.img.src !== resolvedSrc) {
+            this.img.src = resolvedSrc
+        }
     }
 
     private buildClassName(): string {
@@ -203,10 +247,9 @@ export class ImageNodeView implements NodeView {
 
         this.node = node
 
-        // Update image attributes
-        if (node.attrs.src !== this.img.src) {
-            this.img.src = node.attrs.src
-        }
+        // Update image src asynchronously to handle auth token
+        this.updateImageSrc(node.attrs.src)
+
         if (node.attrs.alt !== this.img.alt) {
             this.img.alt = node.attrs.alt || ''
         }

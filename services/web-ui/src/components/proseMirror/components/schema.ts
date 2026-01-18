@@ -90,7 +90,12 @@ export const nodes = {
       workspaceId: {default: null},
       width: {default: null},
       alignment: {default: 'left'},
-      textWrap: {default: 'none'}
+      textWrap: {default: 'none'},
+      // AI-generated image attributes
+      revisedPrompt: {default: null},
+      responseId: {default: null},
+      aiModel: {default: null},
+      isPartial: {default: false}
     },
     group: "block",
     draggable: true,

@@ -11,7 +11,8 @@ import { keyboardMacCommandIcon,
     chevronDownIcon,
     contextFilledIcon,
     documentIcon,
-    eyeSlashIcon
+    eyeSlashIcon,
+    imageIcon
 } from '$src/svgIcons/index.ts'
 import { TextSelection } from 'prosemirror-state'
 import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
@@ -44,7 +45,12 @@ export const aiChatThreadNodeSpec = {
         // Collapsed state - content is hidden but still receives streaming updates
         isCollapsed: { default: false },
         // Workspace selection state - whether this thread is selected for workspace context
-        workspaceSelected: { default: false }
+        workspaceSelected: { default: false },
+        // Image generation settings
+        imageGenerationEnabled: { default: false },
+        imageGenerationSize: { default: '1024x1024' }, // 1024x1024, 1536x1024, 1024x1536, auto
+        // Previous response ID for multi-turn image editing
+        previousResponseId: { default: '' }
     },
     parseDOM: [
         {
@@ -55,7 +61,10 @@ export const aiChatThreadNodeSpec = {
                 aiModel: dom.getAttribute('data-ai-model') || '',
                 threadContext: dom.getAttribute('data-thread-context') || 'Thread',
                 isCollapsed: dom.getAttribute('data-is-collapsed') === 'true',
-                workspaceSelected: dom.getAttribute('data-workspace-selected') === 'true'
+                workspaceSelected: dom.getAttribute('data-workspace-selected') === 'true',
+                imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
+                imageGenerationSize: dom.getAttribute('data-image-generation-size') || '1024x1024',
+                previousResponseId: dom.getAttribute('data-previous-response-id') || ''
             })
         }
     ],
@@ -68,7 +77,10 @@ export const aiChatThreadNodeSpec = {
             'data-ai-model': node.attrs.aiModel,
             'data-thread-context': node.attrs.threadContext,
             'data-is-collapsed': node.attrs.isCollapsed,
-            'data-workspace-selected': node.attrs.workspaceSelected
+            'data-workspace-selected': node.attrs.workspaceSelected,
+            'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
+            'data-image-generation-size': node.attrs.imageGenerationSize,
+            'data-previous-response-id': node.attrs.previousResponseId
         },
         0
     ]
@@ -112,11 +124,15 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
     // Create AI submit button
     const submitButton = createAiSubmitButton(view, threadId, getPos)
 
+    // Create image generation toggle
+    const imageGenToggle = createImageGenerationToggle(view, node, getPos, threadId)
+
     // Create thread boundary indicator for context visualization
     const { boundaryIndicator: threadBoundaryIndicator, collapseToggleIcon, infoBubble, contextSelector } = createThreadBoundaryIndicator(dom, view, threadId, getPos, node.attrs.isCollapsed)
 
-    // Append controls to controls container (flex layout: model, submit)
+    // Append controls to controls container (flex layout: model, image toggle, submit)
     controlsContainer.appendChild(modelSelectorDropdown.dom)
+    controlsContainer.appendChild(imageGenToggle.dom)
     controlsContainer.appendChild(submitButton)
 
     // Append all elements to main wrapper
@@ -258,6 +274,12 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
                 console.log('[AI_DBG][THREAD.nodeView.update] isCollapsed attr changed', { from: node.attrs.isCollapsed, to: updatedNode.attrs.isCollapsed, threadId: updatedNode.attrs.threadId })
                 // Note: The .collapsed class on wrapper is managed by decorations in the plugin
                 // We don't need to manually sync any classes here
+            }
+
+            // Sync image generation settings to toggle
+            if (node.attrs.imageGenerationEnabled !== updatedNode.attrs.imageGenerationEnabled ||
+                node.attrs.imageGenerationSize !== updatedNode.attrs.imageGenerationSize) {
+                imageGenToggle.update(updatedNode)
             }
 
             node = updatedNode
@@ -632,4 +654,87 @@ function createAiSubmitButton(view, threadId, getPos) {
             </div>
         </div>
     `
+}
+
+// Helper function to create image generation toggle button
+function createImageGenerationToggle(view, node, getPos, threadId) {
+    const IMAGE_SIZES = [
+        { value: '1024x1024', label: '1:1' },
+        { value: '1536x1024', label: '3:2' },
+        { value: '1024x1536', label: '2:3' },
+        { value: 'auto', label: 'Auto' }
+    ]
+
+    let isEnabled = node.attrs.imageGenerationEnabled || false
+    let currentSize = node.attrs.imageGenerationSize || '1024x1024'
+
+    const container = document.createElement('div')
+    container.className = 'image-generation-toggle'
+    container.setAttribute('data-enabled', String(isEnabled))
+
+    const toggleButton = document.createElement('button')
+    toggleButton.className = 'image-toggle-btn'
+    toggleButton.innerHTML = imageIcon
+    toggleButton.title = isEnabled ? 'Image generation enabled' : 'Enable image generation'
+
+    const sizeSelector = document.createElement('select')
+    sizeSelector.className = 'image-size-selector'
+    IMAGE_SIZES.forEach(size => {
+        const option = document.createElement('option')
+        option.value = size.value
+        option.textContent = size.label
+        if (size.value === currentSize) option.selected = true
+        sizeSelector.appendChild(option)
+    })
+
+    toggleButton.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const pos = getPos()
+        if (pos === undefined) return
+
+        const threadNode = view.state.doc.nodeAt(pos)
+        if (!threadNode) return
+
+        const newEnabled = !threadNode.attrs.imageGenerationEnabled
+        const newAttrs = { ...threadNode.attrs, imageGenerationEnabled: newEnabled }
+        const tr = view.state.tr.setNodeMarkup(pos, undefined, newAttrs)
+        view.dispatch(tr)
+
+        isEnabled = newEnabled
+        container.setAttribute('data-enabled', String(isEnabled))
+        toggleButton.title = isEnabled ? 'Image generation enabled' : 'Enable image generation'
+    })
+
+    sizeSelector.addEventListener('change', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const pos = getPos()
+        if (pos === undefined) return
+
+        const threadNode = view.state.doc.nodeAt(pos)
+        if (!threadNode) return
+
+        const newSize = (e.target as HTMLSelectElement).value
+        const newAttrs = { ...threadNode.attrs, imageGenerationSize: newSize }
+        const tr = view.state.tr.setNodeMarkup(pos, undefined, newAttrs)
+        view.dispatch(tr)
+
+        currentSize = newSize
+    })
+
+    container.appendChild(toggleButton)
+    container.appendChild(sizeSelector)
+
+    const update = (newNode) => {
+        isEnabled = newNode.attrs.imageGenerationEnabled || false
+        currentSize = newNode.attrs.imageGenerationSize || '1024x1024'
+        container.setAttribute('data-enabled', String(isEnabled))
+        toggleButton.title = isEnabled ? 'Image generation enabled' : 'Enable image generation'
+        sizeSelector.value = currentSize
+    }
+
+    return { dom: container, update }
 }

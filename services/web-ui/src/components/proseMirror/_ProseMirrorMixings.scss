@@ -67,3 +67,73 @@
         }
     }
 }
+
+// Speech bubble tail mixin - creates a "pigtail" curved tail like in Telegram/iMessage
+// Based on: https://codepen.io/AllThingsSmitty/pen/jommGQ
+@mixin speechBubbleTail($config: ()) {
+    $defaults: (
+        position: 'left',           // 'left' or 'right' - which side the tail appears
+        bubbleColor: #e5e5ea,       // background color of the bubble
+        backgroundColor: #fff,      // color behind the bubble (to "cut out" the tail curve)
+        tailSize: 1rem,             // size of the tail
+        tailOffset: -0.35rem,       // horizontal offset from edge
+        bottomOffset: -0.1rem       // vertical position from bottom
+    );
+
+    $settings: map-merge($defaults, $config);
+
+    $position: map-get($settings, position);
+    $bubbleColor: map-get($settings, bubbleColor);
+    $backgroundColor: map-get($settings, backgroundColor);
+    $tailSize: map-get($settings, tailSize);
+    $tailOffset: map-get($settings, tailOffset);
+    $bottomOffset: map-get($settings, bottomOffset);
+
+    position: relative;
+    overflow: visible;
+
+    &::before,
+    &::after {
+        bottom: $bottomOffset;
+        content: "";
+        height: $tailSize;
+        position: absolute;
+        z-index: 1;
+    }
+
+    @if $position == 'left' {
+        &::before {
+            border-bottom-right-radius: 0.8rem 0.7rem;
+            border-left: $tailSize solid $bubbleColor;
+            left: $tailOffset;
+            transform: translate(0, -0.1rem);
+            background: $bubbleColor;
+        }
+
+        &::after {
+            border-bottom-right-radius: 0.5rem;
+            left: 20px;
+            transform: translate(-30px, -2px);
+            width: 10px;
+            background-color: $backgroundColor;
+            z-index: 2;
+        }
+    } @else {
+        &::before {
+            border-bottom-left-radius: 0.8rem 0.7rem;
+            border-right: $tailSize solid $bubbleColor;
+            right: $tailOffset;
+            transform: translate(0, -0.1rem);
+            background: $bubbleColor;
+        }
+
+        &::after {
+            border-bottom-left-radius: 0.5rem;
+            right: 20px;
+            transform: translate(30px, -2px);
+            width: 10px;
+            background-color: $backgroundColor;
+            z-index: 2;
+        }
+    }
+}

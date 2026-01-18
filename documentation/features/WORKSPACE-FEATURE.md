@@ -773,6 +773,325 @@ When nodes are connected TO an AI chat thread (incoming edges), the AI chat auto
 
 ---
 
+## AI Image Generation
+
+This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears inline in the chat conversation. From there, the user can click "Add to Canvas" to place the image as a standalone canvas node with an automatic edge connecting it back to the chat thread that created it.
+
+Multi-turn editing is supported: users can continue refining an image within the same thread (OpenAI maintains the conversation context via `previous_response_id`), or click "Edit in New Thread" on any generated image to spawn a dedicated editing thread positioned to the right of that image on the canvas.
+
+### How It Works
+
+1. User enables "Image Generation" mode in an AI chat thread's settings
+2. User types a prompt like "Create a logo for a coffee shop"
+3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
+4. OpenAI streams back partial images (up to 3) as the generation progresses
+5. The chat shows a spinner, then replaces it with each partial image as it arrives
+6. On completion, the final image appears with action buttons
+7. Clicking "Add to Canvas" uploads the image to storage and creates both an `ImageCanvasNode` and an edge from the chat thread to the new image
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Thread as AI Chat Thread
+    participant AIS as AiInteractionService
+    participant API as API Gateway
+    participant LLM as llm-api (Python)
+    participant OpenAI as OpenAI API
+    participant Canvas as WorkspaceCanvas
+    participant Storage as Object Store
+
+    User->>Thread: Enable image generation + type prompt
+    Thread->>AIS: sendChatMessage({ enableImageGeneration, imageSize, ... })
+    AIS->>API: CHAT_SEND_MESSAGE
+    API->>LLM: CHAT_PROCESS (with image options)
+    LLM->>OpenAI: responses.create({ tools: [image_generation], ... })
+
+    loop Partial Images (0-3)
+        OpenAI->>LLM: image_generation_call.partial_image
+        LLM->>AIS: IMAGE_PARTIAL { partialIndex, base64 }
+        AIS->>Thread: Replace spinner with partial
+    end
+
+    OpenAI->>LLM: image_generation_call (completed)
+    LLM->>AIS: IMAGE_COMPLETE { responseId, revisedPrompt, base64 }
+    AIS->>Thread: Insert aiGeneratedImage node with action buttons
+
+    User->>Thread: Click "Add to Canvas"
+    Thread->>Canvas: handleAddGeneratedImageToCanvas(...)
+    Canvas->>Storage: POST /api/images/:workspaceId (hash-dedupe)
+    Storage-->>Canvas: { fileId, src }
+    Canvas->>Canvas: Create ImageCanvasNode + WorkspaceEdge
+    Canvas->>Canvas: Persist canvasState
+```
+
+### Image Settings
+
+When image generation is enabled, users can pick a size:
+
+| Option | Dimensions | Use Case |
+|--------|------------|----------|
+| Square | 1024×1024 | Logos, icons, profile pictures |
+| Landscape | 1536×1024 | Banners, headers, wide scenes |
+| Portrait | 1024×1536 | Posters, phone wallpapers, tall scenes |
+| Auto | Model decides | Let the AI pick based on prompt |
+
+Quality is always set to maximum (`high`), input fidelity is `high` (preserves details when editing existing images), and content moderation is set to `low` to avoid unnecessary restrictions. Users don't need to configure these—they're hardcoded for the best possible output.
+
+### Storage & Deduplication
+
+Generated images are stored in NATS Object Store just like uploaded images. To avoid duplicates (e.g., if someone clicks "Add to Canvas" twice), the upload endpoint computes a SHA-256 hash of the image content and uses `hash-{sha256}` as the `fileId`. Before writing, it checks if that fileId already exists—if so, it skips the upload and returns the existing URL.
+
+### Multi-Turn Image Editing
+
+OpenAI's Responses API supports iterative refinement through `previous_response_id`. There are two ways to do this:
+
+**Thread-level continuity**: The AI chat thread stores the last `responseId` from any image generation. Subsequent messages in the same thread automatically reference it, so saying "make the background blue" knows which image you're talking about.
+
+**Per-image editing**: Each generated image carries its own `responseId`. Clicking "Edit in New Thread" creates a fresh AI chat thread with that specific `responseId` as its starting point. The new thread appears to the right of the image on the canvas, with an edge connecting them (image → new thread). This lets you branch off and try different directions without polluting the original conversation.
+
+### Canvas Integration
+
+When "Add to Canvas" is clicked:
+
+1. The base64 image is uploaded to storage (with hash-based deduplication)
+2. The source AI chat thread node is found on the canvas
+3. A new `ImageCanvasNode` is created at position `(threadNode.x + threadNode.width + 50, threadNode.y)`
+4. The image node includes `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
+5. A `WorkspaceEdge` is created from the thread's right handle to the image's left handle
+6. Both the new node and edge are persisted atomically
+
+When "Edit in New Thread" is clicked on a canvas image node:
+
+1. A new AI chat thread is created with `previousResponseId` set to the image's `generatedBy.responseId`
+2. The thread is positioned at `(imageNode.x + imageNode.width + 50, imageNode.y)`
+3. An edge connects the image (right) to the new thread (left)
+4. This forms a horizontal chain: `[Original Thread] → [Image] → [Edit Thread]`
+
+---
+
+## AI Image Generation — Implementation Plan
+
+### Phase 1: Shared Types & Constants
+
+Update the constants package so both TypeScript and Python services understand image generation payloads and stream events.
+
+- [x] **Update `packages/lixpi/constants/ts/types.ts`**
+    - [x] Add `ImageGenerationSize` type: `'1024x1024' | '1536x1024' | '1024x1536' | 'auto'`
+    - [x] Add `ImageGeneratedByMetadata` type with fields: `aiChatThreadId`, `responseId`, `aiModel`, `revisedPrompt`
+    - [x] Extend `ImageCanvasNode` with optional `generatedBy?: ImageGeneratedByMetadata`
+    - [x] Add `AiInteractionImageGenerationPayload` extending chat payload with:
+        - `enableImageGeneration: boolean`
+        - `imageSize: ImageGenerationSize`
+        - `previousResponseId?: string` (for multi-turn editing)
+    - [x] Extend `TokensUsageEvent` with optional `image` field:
+        - `generatedCount: number`
+        - `size: string`
+        - `purchasedFor: string`
+        - `soldToClientFor: string`
+
+- [x] **Update `packages/lixpi/constants/ai-interaction-constants.json`**
+    - [x] Add `IMAGE_PARTIAL` to `STREAM_STATUS`
+    - [x] Add `IMAGE_COMPLETE` to `STREAM_STATUS`
+
+- [x] **Update `packages/lixpi/constants/python/__init__.py`** (if needed)
+    - [x] The JSON reload picks up the new constants automatically
+
+### Phase 2: Backend — OpenAI Provider Changes ✅
+
+Extend the Python LLM service to handle image generation requests and stream partial/complete images back to the client.
+
+- [x] **Update `services/llm-api/src/providers/openai/provider.py`**
+    - [x] Check for `enable_image_generation` flag in incoming request
+    - [x] When enabled, inject `image_generation` tool with hardcoded settings:
+        ```python
+        {
+            "type": "image_generation",
+            "quality": "high",
+            "moderation": "low",
+            "input_fidelity": "high",
+            "partial_images": 3,
+            "size": request.get("image_size", "auto")
+        }
+        ```
+    - [x] Handle `previous_response_id` in request — pass it to `client.responses.create()` for multi-turn editing
+    - [x] In the streaming loop, detect `response.image_generation_call.partial_image` events:
+        - Extract `partial_image_b64` and `partial_image_index`
+        - Publish to NATS with status `IMAGE_PARTIAL`
+    - [x] Detect `response.image_generation_call` completion (when `result` is present):
+        - Extract final `result` (base64), `revised_prompt`
+        - Publish to NATS with status `IMAGE_COMPLETE` including `response_id`
+
+- [x] **Update usage calculation in `services/llm-api/src/providers/base.py` or `usage_reporter.py`**
+    - [x] Extract image token usage from response
+    - [x] Include image-specific fields in the usage report for cost tracking
+
+- [ ] **Add image generation tests**
+    - [ ] Test basic image generation request/response flow
+    - [ ] Test partial image streaming
+    - [ ] Test multi-turn editing with `previous_response_id`
+    - [ ] Test usage calculation for image tokens
+
+### Phase 3: Frontend — AI Interaction Service ✅
+
+Update the client-side service that handles NATS subscriptions to understand image stream events.
+
+- [x] **Update `services/web-ui/src/services/ai-interaction-service.ts`**
+    - [x] Extend `onChatMessageResponse()` to check for `IMAGE_PARTIAL` status:
+        - Forward to `segmentsReceiver` with new segment type `image_partial`
+        - Include `partialIndex` and `imageBase64` in payload
+    - [x] Handle `IMAGE_COMPLETE` status:
+        - Forward to `segmentsReceiver` with segment type `image_complete`
+        - Include `responseId`, `revisedPrompt`, `imageBase64`
+    - [x] Store thread-level `lastResponseId` on `IMAGE_COMPLETE` for conversation continuity
+    - [x] Update `sendChatMessage()` to accept `enableImageGeneration`, `imageSize`, `previousResponseId` options
+
+- [x] **Bypass text parser for image events**
+    - [x] Image events emit directly to segmentsReceiver, bypassing markdown parser
+
+### Phase 4: Frontend — ProseMirror Node for Generated Images ✅
+
+Create a new ProseMirror node type that renders generated images inline in AI chat threads.
+
+- [x] **Create `aiGeneratedImage` node in `services/web-ui/src/components/proseMirror/plugins/aiChatThreadPlugin/`**
+    - [x] Define node spec with attrs:
+        - `imageData: string` (base64)
+        - `revisedPrompt: string`
+        - `responseId: string`
+        - `aiModel: string`
+        - `isPartial: boolean`
+        - `partialIndex: number`
+    - [x] Create NodeView class:
+        - [x] Initially render a spinner/preloader element
+        - [x] On `isPartial: true` updates, replace with the partial image
+        - [x] On `isPartial: false` (complete), show final image with action buttons
+        - [x] "Add to Canvas" button — calls `onAddToCanvas(imageData, responseId, revisedPrompt, aiModel)`
+        - [x] "Edit in New Thread" button — calls `onEditInNewThread(responseId)`
+        - [x] Show `revisedPrompt` as caption below image
+
+- [x] **Wire `SegmentsReceiver` to insert/update `aiGeneratedImage` nodes**
+    - [x] On `image_partial` segment: insert or update node with `isPartial: true`
+    - [x] On `image_complete` segment: update node to `isPartial: false`, add final data
+
+- [x] **Add styles in `ai-chat-thread.scss`**
+    - [x] Spinner/preloader animation
+    - [x] Image container with rounded corners, subtle shadow
+    - [x] Action button bar (semi-transparent overlay at bottom)
+    - [x] Hover states for buttons
+
+### Phase 5: Frontend — Image Generation Toggle in Thread UI ✅
+
+Let users enable image generation mode and pick a size.
+
+- [x] **Update AI chat thread settings dropdown**
+    - [x] Add "Enable Image Generation" toggle/checkbox
+    - [x] When enabled, show size selector dropdown:
+        - Square (1024×1024)
+        - Landscape (1536×1024)
+        - Portrait (1024×1536)
+        - Auto
+    - [x] Store `enableImageGeneration` and `imageSize` as thread attributes (persisted in DB)
+
+- [x] **Pass settings through to `AiInteractionService.sendChatMessage()`**
+    - [x] Read from thread attrs when submitting
+    - [x] Include `previousResponseId` from thread state if available
+
+### Phase 6: Backend — Hash-Based Image Deduplication ✅
+
+Prevent storing duplicate images when the same generated image is added to canvas multiple times.
+
+- [x] **Update `/api/images/:workspaceId` POST endpoint in `services/api`**
+    - [x] Accept optional `useContentHash` field in request body
+    - [x] If enabled, compute SHA-256 hash of the uploaded buffer
+    - [x] Use `hash-{sha256}` as `fileId` instead of random UUID
+    - [x] Before calling `putObject()`, check if fileId already exists:
+        - If exists, skip upload, return existing URL with `{ isDuplicate: true }`
+        - If not, proceed with upload
+    - [x] Return `{ fileId, url, isDuplicate }` in response
+
+- [x] **Update client-side upload to send hash when available**
+    - [x] Include `useContentHash: true` in form data for AI-generated images
+
+### Phase 7: Frontend — Canvas Integration (Add to Canvas) ✅
+
+Wire up the "Add to Canvas" button to create image nodes and edges.
+
+- [x] **Add `handleAddGeneratedImageToCanvas()` via `setAiGeneratedImageCallbacks`**
+    - [x] Parameters: `imageBase64`, `responseId`, `revisedPrompt`, `aiModel`
+    - [x] Upload to `/api/images/:workspaceId` with `useContentHash: true`
+    - [x] Find the source AI chat thread node in `canvasState.nodes`
+    - [x] Calculate new position: `{ x: threadNode.x + threadNode.width + 50, y: threadNode.y }`
+    - [x] Create `ImageCanvasNode` with `generatedBy` metadata
+    - [x] Create `WorkspaceEdge` from thread to image
+    - [x] Update `canvasState` with both new node and edge
+    - [x] Persist via `onCanvasStateChange()`
+
+- [x] **Expose callback from `WorkspaceCanvas.ts` to ProseMirror**
+    - [x] Use `setAiGeneratedImageCallbacks()` to wire callbacks at canvas level
+    - [x] The callback is callable from the `aiGeneratedImage` NodeView
+
+### Phase 8: Frontend — Edit in New Thread ✅
+
+Wire up the "Edit in New Thread" button to spawn a new thread for per-image editing.
+
+- [x] **Add `handleEditImageInNewThread()` via `setAiGeneratedImageCallbacks`**
+    - [x] Parameters: `responseId`
+    - [x] Find the image node by `generatedBy.responseId`
+    - [x] Create new AI chat thread via `aiChatThreadService.createAiChatThread()`:
+        - Set `previousResponseId` attribute
+        - Set `imageGenerationEnabled: true`
+        - Set initial content hint "Describe how you want to edit this image..."
+    - [x] Calculate position: `{ x: imageNode.x + imageNode.width + 50, y: imageNode.y }`
+    - [x] Create `AiChatThreadCanvasNode` at that position
+    - [x] Create `WorkspaceEdge` from image to new thread
+    - [x] Persist via `onCanvasStateChange()`
+
+- [x] **Button in `aiGeneratedImageNode` NodeView**
+    - [x] "Edit in New Thread" button with pencil icon
+    - [x] Calls `onEditInNewThread(responseId)` callback
+
+### Phase 9: Token Usage Tracking ✅
+
+Make sure image generation costs are tracked separately for billing purposes.
+
+- [x] **Update `UsageReporter` with `report_image_usage()` method**
+    - [x] Track image size, quality, and count
+    - [x] Calculate costs using image pricing from AI model config
+
+- [x] **Update `_calculate_usage()` in base provider**
+    - [x] Check for `image_usage` in state
+    - [x] Call `report_image_usage()` when present
+
+- [x] **Set `image_usage` in OpenAI provider when images are generated**
+    - [x] Include size and quality fields
+
+### Phase 10: Testing & Polish
+
+- [ ] **Manual testing checklist**
+    - [ ] Generate an image in a chat thread — verify spinner → partials → final
+    - [ ] Click "Add to Canvas" — verify image node appears to the right with edge
+    - [ ] Click "Add to Canvas" again on same image — verify no duplicate in storage (hash dedupe)
+    - [ ] Continue conversation in same thread — verify multi-turn editing works
+    - [ ] Click "Edit in New Thread" on canvas image — verify new thread spawns with edge
+    - [ ] Send message in edit thread — verify it references the original image
+    - [ ] Delete image node from canvas — verify storage cleanup (if no other references)
+    - [ ] Test all three size options
+    - [ ] Test with very long prompts
+    - [ ] Test stopping generation mid-stream
+
+- [ ] **Edge cases**
+    - [ ] What if the AI doesn't generate an image (just responds with text)?
+    - [ ] What if image generation fails or times out?
+    - [ ] What if user navigates away during generation?
+    - [ ] What about concurrent image generations in multiple threads?
+
+- [ ] **Performance**
+    - [ ] Partial images can be large — ensure no memory leaks from base64 handling
+    - [ ] Consider adding a loading state to "Add to Canvas" button during upload
+
+---
+
 ## Follow-up Tasks
 
 The following items are pending implementation:

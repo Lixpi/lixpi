@@ -26,16 +26,25 @@ const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
 // ========== TYPE DEFINITIONS ==========
 
-import type { AiInteractionChatSendMessagePayload, AiInteractionChatStopMessagePayload } from '@lixpi/constants'
+import type { AiInteractionChatSendMessagePayload, AiInteractionChatStopMessagePayload, ImageGenerationSize } from '@lixpi/constants'
 
-type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload) => void
+type ImageOptions = {
+    imageGenerationEnabled: boolean
+    imageGenerationSize: ImageGenerationSize
+    previousResponseId?: string
+}
+
+type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM'
+type ImageSegmentType = 'image_partial' | 'image_complete'
 type SegmentEvent = {
-    status: StreamStatus
+    status?: StreamStatus
+    type?: ImageSegmentType
     aiProvider?: string
     threadId?: string
+    aiChatThreadId?: string
     segment?: {
         segment: string
         styles: string[]
@@ -43,6 +52,11 @@ type SegmentEvent = {
         level?: number
         isBlockDefining: boolean
     }
+    imageUrl?: string
+    fileId?: string
+    partialIndex?: number
+    responseId?: string
+    revisedPrompt?: string
 }
 type ThreadContent = { nodeType: string; textContent: string }
 type AiChatThreadPluginState = {
@@ -493,21 +507,248 @@ class AiChatThreadPluginClass {
 
     private startStreaming(view: EditorView): void {
         this.unsubscribeFromSegments = SegmentsReceiver.subscribeToeceiveSegment((event: SegmentEvent) => {
-            const { status, aiProvider, segment, threadId } = event
+            const { status, type, aiProvider, segment, threadId, aiChatThreadId } = event
+            const effectiveThreadId = threadId || aiChatThreadId
             const { state, dispatch } = view
 
+            // Handle image generation events
+            if (type === 'image_partial') {
+                this.handleImagePartial(view, event)
+                return
+            }
+
+            if (type === 'image_complete') {
+                this.handleImageComplete(view, event)
+                return
+            }
+
+            // Handle text streaming events
             switch (status) {
                 case 'START_STREAM':
-                    console.log('🔴 [PLUGIN] START_STREAM', { threadId, aiProvider })
-                    this.handleStreamStart(state, dispatch, aiProvider, threadId)
+                    console.log('🔴 [PLUGIN] START_STREAM', { effectiveThreadId, aiProvider })
+                    this.handleStreamStart(state, dispatch, aiProvider, effectiveThreadId)
                     break
                 case 'STREAMING':
-                    if (segment) this.handleStreaming(state, dispatch, segment, threadId, aiProvider)
+                    if (segment) this.handleStreaming(state, dispatch, segment, effectiveThreadId, aiProvider)
                     break
                 case 'END_STREAM':
-                    console.log('🟢 [PLUGIN] END_STREAM', { threadId })
-                    this.handleStreamEnd(state, dispatch, threadId)
+                    console.log('🟢 [PLUGIN] END_STREAM', { effectiveThreadId })
+                    this.handleStreamEnd(state, dispatch, effectiveThreadId)
                     break
+            }
+        })
+    }
+
+    private handleImagePartial(view: EditorView, event: SegmentEvent): void {
+        const { imageUrl, fileId, partialIndex, aiChatThreadId, aiProvider } = event
+        console.log('🖼️ [PLUGIN] handleImagePartial called:', { imageUrl, fileId, partialIndex, aiChatThreadId })
+        if (!imageUrl || !aiChatThreadId) {
+            console.log('🖼️ [PLUGIN] handleImagePartial: missing imageUrl or aiChatThreadId, returning')
+            return
+        }
+
+        const { state, dispatch } = view
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
+        if (!threadInfo) {
+            console.log('🖼️ [PLUGIN] handleImagePartial: no threadInfo found for', aiChatThreadId)
+            return
+        }
+        console.log('🖼️ [PLUGIN] handleImagePartial: threadInfo found:', threadInfo)
+
+        // Check if we already have a partial image node being updated
+        let existingImagePos: number | null = null
+        let existingImageNode: ProseMirrorNode | null = null
+
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+            if (node.type.name === 'image' && node.attrs.isPartial) {
+                // Check if this image is in the correct thread
+                const $pos = state.doc.resolve(pos)
+                // If nested, we walk up to find the thread
+                for (let depth = $pos.depth; depth > 0; depth--) {
+                    const parentNode = $pos.node(depth)
+                    if (parentNode.type.name === aiChatThreadNodeType) {
+                        if (parentNode.attrs.threadId === aiChatThreadId) {
+                            existingImagePos = pos
+                            existingImageNode = node
+                        }
+                        break
+                    }
+                }
+            }
+            return existingImagePos === null
+        })
+
+        let tr = state.tr
+
+        if (existingImagePos !== null && existingImageNode) {
+            console.log('🖼️ [PLUGIN] handleImagePartial: updating existing image node at pos', existingImagePos)
+            // Update existing partial image node
+            tr.setNodeMarkup(existingImagePos, null, {
+                ...existingImageNode.attrs,
+                src: imageUrl,
+                fileId: fileId || null,
+            })
+        } else {
+            console.log('🖼️ [PLUGIN] handleImagePartial: creating NEW image node')
+
+            // Try to find a target AI response message in the thread
+            const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
+            // Use standard image node with AI-related attrs
+            const imageNode = state.schema.nodes.image.create({
+                src: imageUrl,
+                fileId: fileId || null,
+                isPartial: true,
+            })
+
+            if (responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
+                 console.log('🖼️ [PLUGIN] handleImagePartial: inserting into existing response node')
+                 const insertionPos = responseNodeInfo.endOfNodePos - 1
+                 tr.insert(insertionPos, imageNode)
+            } else {
+                 console.log('🖼️ [PLUGIN] handleImagePartial: creating NEW response node with image')
+                 // Create new response node wrapping the image
+                 const responseNode = state.schema.nodes[aiResponseMessageNodeType].create(
+                     { aiProvider: aiProvider || 'OpenAI' },
+                     [imageNode]
+                 )
+                 tr.insert(threadInfo.insertPos, responseNode)
+            }
+        }
+
+        if (tr.docChanged) {
+            console.log('🖼️ [PLUGIN] handleImagePartial: dispatching transaction')
+            dispatch(tr)
+        } else {
+            console.log('🖼️ [PLUGIN] handleImagePartial: doc NOT changed, skipping dispatch')
+        }
+    }
+
+    private handleImageComplete(view: EditorView, event: SegmentEvent): void {
+        const { imageUrl, fileId, responseId, revisedPrompt, aiChatThreadId, aiProvider } = event
+        console.log('🖼️ [PLUGIN] handleImageComplete called:', { imageUrl, fileId, responseId, aiChatThreadId })
+        if (!imageUrl || !aiChatThreadId) return
+
+        const { state, dispatch } = view
+
+        // Find existing partial image node in this thread
+        let existingImagePos: number | null = null
+        let existingImageNode: ProseMirrorNode | null = null
+
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+            if (node.type.name === 'image' && node.attrs.isPartial) {
+                const $pos = state.doc.resolve(pos)
+                for (let depth = $pos.depth; depth > 0; depth--) {
+                    const parentNode = $pos.node(depth)
+                    if (parentNode.type.name === aiChatThreadNodeType) {
+                        if (parentNode.attrs.threadId === aiChatThreadId) {
+                            existingImagePos = pos
+                            existingImageNode = node
+                        }
+                        break
+                    }
+                }
+            }
+            return existingImagePos === null
+        })
+
+        let tr = state.tr
+
+        if (existingImagePos !== null && existingImageNode) {
+            // Update existing node to complete state
+            const mappedPos = tr.mapping.map(existingImagePos)
+            tr.setNodeMarkup(mappedPos, null, {
+                src: imageUrl,
+                fileId: fileId || null,
+                revisedPrompt: revisedPrompt || null,
+                responseId: responseId || null,
+                aiModel: aiProvider || null,
+                isPartial: false,
+            })
+
+            // Handle revised prompt insertion
+            if (revisedPrompt) {
+                 const $pos = state.doc.resolve(mappedPos)
+                 const parent = $pos.parent
+                 if (parent.type.name === aiResponseMessageNodeType) {
+                      const index = $pos.index()
+                      const childBefore = index > 0 ? parent.child(index - 1) : null
+
+                      if (!childBefore || (childBefore.type.name === 'paragraph' && !childBefore.textContent.trim())) {
+                           const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
+                           tr.insert(mappedPos, p)
+                      }
+                 }
+            }
+        } else {
+            console.log('🖼️ [PLUGIN] handleImageComplete: creating NEW complete image node')
+            // Use standard image node with AI attrs
+            const imageNode = state.schema.nodes.image.create({
+                src: imageUrl,
+                fileId: fileId || null,
+                revisedPrompt: revisedPrompt || null,
+                responseId: responseId || null,
+                aiModel: aiProvider || null,
+                isPartial: false,
+            })
+
+            let contentNodes: ProseMirrorNode[] = [imageNode]
+            if (revisedPrompt) {
+                const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
+                contentNodes = [p, imageNode]
+            }
+
+            const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
+
+            if (responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
+                 const insertionPos = responseNodeInfo.endOfNodePos - 1
+                 tr.insert(insertionPos, Fragment.from(contentNodes))
+            } else {
+                 const responseNode = state.schema.nodes[aiResponseMessageNodeType].create(
+                     { aiProvider: aiProvider || 'OpenAI' },
+                     Fragment.from(contentNodes)
+                 )
+                 const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
+                 if (threadInfo) {
+                    tr.insert(threadInfo.insertPos, responseNode)
+                 }
+            }
+        }
+
+        if (tr.docChanged) {
+            dispatch(tr)
+        }
+    }
+
+    private handleCreateVariantRequest(view: EditorView, node: ProseMirrorNode, pos: number): void {
+        const { revisedPrompt, aiModel } = node.attrs
+        if (!revisedPrompt) return
+
+        // Find the thread ID
+        const $pos = view.state.doc.resolve(pos)
+        let threadId: string | undefined
+
+        for (let d = $pos.depth; d > 0; d--) {
+            const n = $pos.node(d)
+            if (n.type.name === aiChatThreadNodeType) {
+                threadId = n.attrs.threadId
+                break
+            }
+        }
+
+        if (!threadId) return
+
+        console.log('🖼️ [PLUGIN] Creating variant for thread:', threadId)
+
+        // Use the handler to trigger new generation
+        // Note: we trust the handler to resolve the correct model if omitted,
+        // or we use a default appropriate for images (e.g. gpt-4o/dall-e-3)
+        this.props.sendAiRequestHandler({
+            message: `Create a variant of this image: ${revisedPrompt}`,
+            threadId,
+            aiChatThreadId: threadId,
+            imageOptions: {
+                imageGenerationEnabled: true,
+                imageGenerationSize: '1024x1024'
             }
         })
     }
@@ -810,8 +1051,15 @@ class AiChatThreadPluginClass {
 
         if (!threadNode) return
 
-        // Extract thread attributes
-        const { aiModel = '', threadContext = 'Thread', threadId: threadIdFromNode = '' } = threadNode.attrs
+        // Extract thread attributes including image generation settings
+        const {
+            aiModel = '',
+            threadContext = 'Thread',
+            threadId: threadIdFromNode = '',
+            imageGenerationEnabled = false,
+            imageGenerationSize = '1024x1024',
+            previousResponseId = ''
+        } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 
         // Validate AI model selected
@@ -825,7 +1073,14 @@ class AiChatThreadPluginClass {
         const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
 
-        this.sendAiRequestHandler({ messages, aiModel, threadId })
+        // Build image generation options if enabled
+        const imageOptions = imageGenerationEnabled ? {
+            imageGenerationEnabled: true,
+            imageGenerationSize,
+            previousResponseId: previousResponseId || undefined
+        } : undefined
+
+        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions })
     }
 
     private handleStopRequest(transaction: Transaction): void {
@@ -1066,6 +1321,22 @@ class AiChatThreadPluginClass {
                         aiChatThreadNodeView(node, view, getPos),
                     [aiResponseMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiResponseMessageNodeView(node, view, getPos),
+                },
+                view: (editorView: EditorView) => {
+                    const handleCreateVariant = (e: Event) => {
+                        const customEvent = e as CustomEvent
+                        const { node, pos } = customEvent.detail
+                        this.handleCreateVariantRequest(editorView, node, pos)
+                    }
+
+                    editorView.dom.addEventListener('create-ai-image-variant', handleCreateVariant)
+
+                    return {
+                        update: () => {},
+                        destroy: () => {
+                            editorView.dom.removeEventListener('create-ai-image-variant', handleCreateVariant)
+                        }
+                    }
                 }
             }
         })
@@ -1079,16 +1350,33 @@ export { getThreadPositionInfo } from '$src/components/proseMirror/plugins/aiCha
 
 // ========== FACTORY FUNCTION ==========
 
+type AiGeneratedImageCallbacks = {
+    onAddToCanvas?: (data: {
+        imageBase64: string
+        responseId: string
+        revisedPrompt: string
+        aiModel: string
+    }) => void
+    onEditInNewThread?: (responseId: string) => void
+}
+
 // Factory function to create the AI Chat Thread plugin
 export function createAiChatThreadPlugin({
     sendAiRequestHandler,
     stopAiRequestHandler,
-    placeholders
+    placeholders,
+    imageCallbacks
 }: {
     sendAiRequestHandler: SendAiRequestHandler
     stopAiRequestHandler: StopAiRequestHandler
     placeholders: PlaceholderOptions
+    imageCallbacks?: AiGeneratedImageCallbacks
 }): Plugin {
+    // Set image generation callbacks if provided
+    if (imageCallbacks) {
+        setAiGeneratedImageCallbacks(imageCallbacks)
+    }
+
     const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders })
     return pluginInstance.create()
 }

@@ -18,7 +18,8 @@
     import {
         LoadingStatus,
         type AiChatSendMessagePayload,
-        type AiChatStopMessagePayload
+        type AiChatStopMessagePayload,
+        type ImageGenerationSize
     } from '@lixpi/constants'
 
     import Spinner from `$src/components/spinner.svelte`
@@ -38,7 +39,12 @@
     const documentService = new DocumentService()
 
 
-    const onAiChatSubmit = ({ messages, aiModel, threadId }: AiChatSendMessagePayload) => {
+    type ImageOptions = {
+        imageGenerationEnabled: boolean
+        imageGenerationSize: ImageGenerationSize
+    }
+
+    const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions }: AiChatSendMessagePayload & { imageOptions?: ImageOptions }) => {
         // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiInteractionInstance})
 
         if (!aiInteractionInstance) {
@@ -48,7 +54,13 @@
             return false
         }
 
-        aiInteractionInstance.sendChatMessage({ messages, aiModel, threadId })
+        aiInteractionInstance.sendChatMessage({
+            messages,
+            aiModel,
+            enableImageGeneration: imageOptions?.imageGenerationEnabled,
+            imageSize: imageOptions?.imageGenerationSize,
+            previousResponseId: imageOptions?.previousResponseId
+        })
     }
 
     const onAiChatStop = ({ threadId }: AiChatStopMessagePayload) => {

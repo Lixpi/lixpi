@@ -191,11 +191,12 @@ class AiChatThreadService {
         }
     }
 
-    public async createAiChatThread({ workspaceId, content, aiModel }: { workspaceId: string; content: any; aiModel: string }): Promise<AiChatThread | null> {
+    public async createAiChatThread({ workspaceId, threadId, content, aiModel }: { workspaceId: string; threadId: string; content: any; aiModel: string }): Promise<AiChatThread | null> {
         try {
             const thread: any = await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.CREATE_AI_CHAT_THREAD, {
                 token: await AuthService.getTokenSilently(),
                 workspaceId,
+                threadId,
                 content,
                 aiModel
             })

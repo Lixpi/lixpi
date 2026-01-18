@@ -118,6 +118,37 @@
     }
 }
 
+/* Animated gradient background is rendered via Canvas (see shiftingGradientRenderer.ts) */
+.workspace-ai-chat-thread-node {
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+
+    /* Optional pattern overlay (renderer reads these CSS vars) */
+    --gradient-pattern-alpha: 0.22;
+    --gradient-pattern-tint: rgba(18, 62, 112, 0.85);
+    --gradient-pattern-scale: 1;
+    /* Set this to enable a pattern overlay, e.g. url('/patterns/your-pattern.png') */
+    /* --gradient-pattern-url: url('/patterns/your-pattern.png'); */
+
+    .shifting-gradient-canvas {
+        border-radius: inherit;
+    }
+}
+
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor {
+    position: relative;
+    z-index: 1;
+    background: transparent !important;
+}
+
+/* Override the white background from ProseMirror.scss - make fully transparent */
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .editor,
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
+    background: transparent !important;
+}
+
+
 .workspace-image-node {
     // Override document-node defaults for images
     background: transparent;

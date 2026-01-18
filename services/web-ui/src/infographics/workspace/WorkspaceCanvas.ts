@@ -6,6 +6,7 @@ import {
     type Viewport,
     type Transform,
 } from '@xyflow/system'
+import { v4 as uuidv4 } from 'uuid'
 import {
     type CanvasState,
     type CanvasNode,
@@ -16,6 +17,7 @@ import {
     type WorkspaceEdge,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
+import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
@@ -24,6 +26,8 @@ import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/component
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
+import AuthService from '$src/services/auth-service.ts'
+import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -39,6 +43,8 @@ type AiChatThreadEditorEntry = {
     editor: any
     aiService: AiInteractionService
     containerEl: HTMLElement
+    gradientCleanup?: () => void
+    triggerGradientAnimation?: () => void
 }
 
 type WorkspaceCanvasCallbacks = {
@@ -111,6 +117,169 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Image lifecycle tracker - handles deletion of orphaned images
     const canvasImageLifecycle = createCanvasImageLifecycleTracker()
     canvasImageLifecycle.initializeFromCanvasState(currentCanvasState)
+
+    // Set up callbacks for AI-generated images
+    setAiGeneratedImageCallbacks({
+        onAddToCanvas: async (data) => {
+            const { imageUrl, fileId, responseId, revisedPrompt, aiModel } = data
+
+            // Image is already uploaded to storage by llm-api service
+            // imageUrl is the API path like /api/images/workspaceId/fileId
+            const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+            const token = await AuthService.getTokenSilently()
+
+            // Find the source AI thread to position the new image next to it
+            const existingNodes = currentCanvasState?.nodes || []
+            let sourceThreadNode: CanvasNode | undefined
+            for (const n of existingNodes) {
+                if (n.type === 'aiChatThread') {
+                    // This is a simplified approach - in practice we'd track which thread generated the image
+                    sourceThreadNode = n
+                    break
+                }
+            }
+
+            // Calculate position to the right of the source thread
+            const newX = sourceThreadNode
+                ? sourceThreadNode.position.x + sourceThreadNode.dimensions.width + 50
+                : 50 + (existingNodes.length % 3) * 450
+            const newY = sourceThreadNode
+                ? sourceThreadNode.position.y
+                : 50 + Math.floor(existingNodes.length / 3) * 400
+
+            // Calculate dimensions based on image aspect ratio (we use 1:1 for generated images by default)
+            const width = 400
+            const height = 400 // Default to square for DALL-E images
+
+            const imageNode: ImageCanvasNode = {
+                nodeId: `node-${fileId}`,
+                type: 'image',
+                fileId,
+                workspaceId,
+                src: `${API_BASE_URL}${imageUrl}?token=${token}`,
+                aspectRatio: 1,
+                position: { x: newX, y: newY },
+                dimensions: { width, height },
+                generatedBy: {
+                    responseId,
+                    aiModel,
+                    revisedPrompt
+                }
+            }
+
+            const newCanvasState: CanvasState = {
+                viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                edges: currentCanvasState?.edges ?? [],
+                nodes: [...existingNodes, imageNode]
+            }
+
+            // Create edge from source thread to image if we found the source
+            if (sourceThreadNode) {
+                const newEdge: WorkspaceEdge = {
+                    edgeId: `edge-${sourceThreadNode.nodeId}-${imageNode.nodeId}`,
+                    source: sourceThreadNode.nodeId,
+                    target: imageNode.nodeId
+                }
+                newCanvasState.edges = [...(newCanvasState.edges || []), newEdge]
+            }
+
+            onCanvasStateChange?.(newCanvasState)
+        },
+        onEditInNewThread: async (responseId) => {
+            // Create a new AI chat thread specifically for editing this image
+            const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+            if (!aiChatThreadService) {
+                console.error('AI Chat Thread service not available')
+                return
+            }
+
+            try {
+                // Generate threadId on frontend to ensure content and DB record match
+                const threadId = uuidv4()
+
+                // Create empty AI chat thread with reference to the source image
+                const initialContent = {
+                    type: 'doc',
+                    content: [
+                        {
+                            type: 'documentTitle',
+                            content: [{ type: 'text', text: 'Edit Image' }]
+                        },
+                        {
+                            type: 'aiChatThread',
+                            attrs: {
+                                threadId,
+                                imageGenerationEnabled: true,
+                                // Store the previous response ID for multi-turn editing
+                                previousResponseId: responseId
+                            },
+                            content: [
+                                {
+                                    type: 'paragraph',
+                                    content: [{ type: 'text', text: 'Describe how you want to edit this image...' }]
+                                }
+                            ]
+                        }
+                    ]
+                }
+
+                const thread = await aiChatThreadService.createAiChatThread({
+                    workspaceId,
+                    threadId,
+                    content: initialContent,
+                    aiModel: 'openai:gpt-4o' // Default to OpenAI for image editing
+                })
+
+                if (thread) {
+                    // Find the source image node to position the new thread next to it
+                    const existingNodes = currentCanvasState?.nodes || []
+                    let sourceImageNode: CanvasNode | undefined
+                    for (const n of existingNodes) {
+                        if (n.type === 'image' && (n as ImageCanvasNode).generatedBy?.responseId === responseId) {
+                            sourceImageNode = n
+                            break
+                        }
+                    }
+
+                    // Calculate position to the right of the source image
+                    const newX = sourceImageNode
+                        ? sourceImageNode.position.x + sourceImageNode.dimensions.width + 50
+                        : 50 + (existingNodes.length % 3) * 450
+                    const newY = sourceImageNode
+                        ? sourceImageNode.position.y
+                        : 50 + Math.floor(existingNodes.length / 3) * 400
+
+                    const threadNode: AiChatThreadCanvasNode = {
+                        nodeId: `node-${thread.threadId}`,
+                        type: 'aiChatThread',
+                        referenceId: thread.threadId,
+                        position: { x: newX, y: newY },
+                        dimensions: { width: 400, height: 500 }
+                    }
+
+                    const newCanvasState: CanvasState = {
+                        viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                        edges: currentCanvasState?.edges ?? [],
+                        nodes: [...existingNodes, threadNode]
+                    }
+
+                    // Create edge from source image to edit thread if we found the source
+                    if (sourceImageNode) {
+                        const newEdge: WorkspaceEdge = {
+                            edgeId: `edge-${sourceImageNode.nodeId}-${threadNode.nodeId}`,
+                            source: sourceImageNode.nodeId,
+                            target: threadNode.nodeId
+                        }
+                        newCanvasState.edges = [...(newCanvasState.edges || []), newEdge]
+                    }
+
+                    onCanvasStateChange?.(newCanvasState)
+                }
+            } catch (error) {
+                console.error('Failed to create edit thread:', error)
+            }
+        }
+    })
 
     // Visibility detection for lazy loading
     function isNodeInViewport(node: CanvasNode, viewport: Viewport): boolean {
@@ -804,6 +973,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'document-drag-overlay nopan'
 
+        // Add animated gradient background
+        const gradient = createShiftingGradientBackground(nodeEl)
+
         const editorContainer = document.createElement('div')
         editorContainer.className = 'ai-chat-thread-node-editor nopan'
         nodeEl.appendChild(editorContainer)
@@ -830,7 +1002,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         })
                     },
                     onProjectTitleChange: () => {},
-                    onAiChatSubmit: async ({ messages, aiModel }: any) => {
+                    onAiChatSubmit: async ({ messages, aiModel, imageOptions }: any) => {
+                        // Trigger gradient animation on message send
+                        gradient.triggerAnimation()
+
                         try {
                             // Extract context from connected nodes
                             const aiChatThreadService = servicesStore.getData('aiChatThreadService')
@@ -842,7 +1017,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 ? [contextMessage, ...messages]
                                 : messages
 
-                            aiService.sendChatMessage({ messages: messagesWithContext, aiModel })
+                            aiService.sendChatMessage({
+                                messages: messagesWithContext,
+                                aiModel,
+                                enableImageGeneration: imageOptions?.imageGenerationEnabled,
+                                imageSize: imageOptions?.imageGenerationSize,
+                                previousResponseId: imageOptions?.previousResponseId
+                            })
                         } catch (error) {
                             console.error('Failed to gather context from connected nodes:', error)
                             // Re-throw to let the UI show an error state
@@ -857,7 +1038,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadEditors.set(node.referenceId, {
                     editor,
                     aiService,
-                    containerEl: nodeEl
+                    containerEl: nodeEl,
+                    gradientCleanup: gradient.destroy,
+                    triggerGradientAnimation: gradient.triggerAnimation
                 })
 
                 loadedNodeIds.add(node.nodeId)
@@ -952,9 +1135,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         documentEditors.clear()
 
-        for (const [, { editor, aiService }] of threadEditors) {
+        for (const [, { editor, aiService, gradientCleanup }] of threadEditors) {
             if (editor?.destroy) editor.destroy()
             if (aiService?.disconnect) aiService.disconnect()
+            if (gradientCleanup) gradientCleanup()
         }
         threadEditors.clear()
 
@@ -1140,9 +1324,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (aiService?.disconnect) aiService.disconnect()
             }
             documentEditors.clear()
-            for (const [, { editor, aiService }] of threadEditors) {
+            for (const [, { editor, aiService, gradientCleanup }] of threadEditors) {
                 if (editor?.destroy) editor.destroy()
                 if (aiService?.disconnect) aiService.disconnect()
+                if (gradientCleanup) gradientCleanup()
             }
             threadEditors.clear()
             canvasImageLifecycle.destroy()

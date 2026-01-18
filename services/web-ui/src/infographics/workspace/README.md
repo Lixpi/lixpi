@@ -40,6 +40,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
+- Display an animated 4-color gradient background on the canvas for visual separation
 - Each thread has its own `AiInteractionService` instance for AI messaging
 - Support streaming AI responses with real-time token parsing
 - Content is persisted separately from documents in the AI-Chat-Threads table
@@ -281,3 +282,11 @@ sequenceDiagram
 | `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |
+
+## AI Chat Thread Background
+
+AI chat thread nodes display an animated shifting gradient background. The gradient is rendered to a small 60×80 pixel bitmap and scaled up with bilinear interpolation for smooth, low-cost rendering. The canvas element is injected as the first child of `.workspace-ai-chat-thread-node` with class `.shifting-gradient-canvas`.
+
+The gradient uses 4 color points with inverse distance weighting and a subtle swirl distortion for an organic feel. When sending a message, the gradient animates to the next phase position.
+
+For full technical details, color customization, and the color analysis tool, see [Shifting Gradient Background](../../../documentation/features/SHIFTING-GRADIENT.md).

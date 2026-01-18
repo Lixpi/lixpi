@@ -2,6 +2,7 @@
 
 import { Router } from 'express'
 import { v4 as uuid } from 'uuid'
+import { createHash } from 'crypto'
 import multer from 'multer'
 
 import NATS_Service from '@lixpi/nats-service'
@@ -104,6 +105,7 @@ const validateWorkspaceAccess = async (req: any, res: any, next: any) => {
 }
 
 // POST /api/images/:workspaceId - Upload an image
+// Supports hash-based deduplication for AI-generated images
 router.post(
     '/:workspaceId',
     authenticateRequest,
@@ -112,12 +114,42 @@ router.post(
     async (req: any, res: any) => {
         const { workspaceId } = req.params
         const file = req.file
+        const useContentHash = req.body?.useContentHash === 'true'
 
         if (!file) {
             return res.status(400).json({ error: 'No file provided' })
         }
 
-        const fileId = uuid()
+        // Generate fileId: content-hash for AI images, UUID for regular uploads
+        let fileId: string
+        let isDuplicate = false
+
+        if (useContentHash) {
+            // Use SHA-256 hash of content as fileId for deduplication
+            const hash = createHash('sha256').update(file.buffer).digest('hex')
+            fileId = `hash-${hash}`
+
+            // Check if this hash already exists in workspace files
+            const workspace = req.workspace
+            const existingFile = workspace.files?.find((f: DocumentFile) => f.id === fileId)
+
+            if (existingFile) {
+                // File already exists, return existing info without re-uploading
+                isDuplicate = true
+                info(`Duplicate image detected: ${fileId} (skipping upload)`)
+
+                return res.json({
+                    fileId,
+                    url: `/api/images/${workspaceId}/${fileId}`,
+                    size: existingFile.size,
+                    mimeType: existingFile.mimeType,
+                    isDuplicate: true
+                })
+            }
+        } else {
+            fileId = uuid()
+        }
+
         const bucketName = getWorkspaceBucketName(workspaceId)
 
         try {
@@ -143,13 +175,14 @@ router.post(
 
             await Workspace.addFile({ workspaceId, file: fileMetadata })
 
-            info(`Image uploaded: ${bucketName}/${fileId} (${file.size} bytes)`)
+            info(`Image uploaded: ${bucketName}/${fileId} (${file.size} bytes)${useContentHash ? ' [hash-based]' : ''}`)
 
             res.json({
                 fileId,
                 url: `/api/images/${workspaceId}/${fileId}`,
                 size: file.size,
-                mimeType: file.mimetype
+                mimeType: file.mimetype,
+                isDuplicate: false
             })
         } catch (e: any) {
             err(`Image upload failed for workspace ${workspaceId}:`, e)
@@ -194,6 +227,97 @@ router.get(
         } catch (e: any) {
             err(`Image retrieval failed for ${workspaceId}/${fileId}:`, e)
             return res.status(500).json({ error: 'Failed to retrieve image' })
+        }
+    }
+)
+
+// POST /api/images/internal/:workspaceId - Internal upload endpoint for service-to-service calls
+// No authentication required - only accessible from internal network (e.g., llm-api)
+router.post(
+    '/internal/:workspaceId',
+    upload.single('file'),
+    async (req: any, res: any) => {
+        const { workspaceId } = req.params
+        const file = req.file
+        const useContentHash = req.body?.useContentHash === 'true'
+
+        if (!file) {
+            return res.status(400).json({ error: 'No file provided' })
+        }
+
+        // Verify workspace exists (internal call, no user access check)
+        const workspace = await Workspace.getWorkspaceInternal({ workspaceId })
+
+        if (!workspace) {
+            return res.status(404).json({ error: 'Workspace not found' })
+        }
+
+        // Generate fileId: content-hash for AI images, UUID for regular uploads
+        let fileId: string
+        let isDuplicate = false
+
+        if (useContentHash) {
+            // Use SHA-256 hash of content as fileId for deduplication
+            const hash = createHash('sha256').update(file.buffer).digest('hex')
+            fileId = `hash-${hash}`
+
+            // Check if this hash already exists in workspace files
+            const existingFile = workspace.files?.find((f: DocumentFile) => f.id === fileId)
+
+            if (existingFile) {
+                // File already exists, return existing info without re-uploading
+                isDuplicate = true
+                info(`Duplicate image detected: ${fileId} (skipping upload)`)
+
+                return res.json({
+                    fileId,
+                    url: `/api/images/${workspaceId}/${fileId}`,
+                    size: existingFile.size,
+                    mimeType: existingFile.mimeType,
+                    isDuplicate: true
+                })
+            }
+        } else {
+            fileId = uuid()
+        }
+
+        const bucketName = getWorkspaceBucketName(workspaceId)
+
+        try {
+            const natsService = NATS_Service.getInstance()
+            if (!natsService) {
+                return res.status(503).json({ error: 'Storage service unavailable' })
+            }
+
+            // Store in Object Store
+            await natsService.putObject(bucketName, fileId, file.buffer, {
+                name: fileId,
+                description: file.originalname || 'ai-generated-image.png'
+            })
+
+            // Update workspace's files array
+            const fileMetadata: DocumentFile = {
+                id: fileId,
+                name: file.originalname || 'ai-generated-image.png',
+                mimeType: file.mimetype,
+                size: file.size,
+                uploadedAt: Date.now()
+            }
+
+            await Workspace.addFile({ workspaceId, file: fileMetadata })
+
+            info(`Image uploaded (internal): ${bucketName}/${fileId} (${file.size} bytes)${useContentHash ? ' [hash-based]' : ''}`)
+
+            res.json({
+                fileId,
+                url: `/api/images/${workspaceId}/${fileId}`,
+                size: file.size,
+                mimeType: file.mimetype,
+                isDuplicate: false
+            })
+        } catch (e: any) {
+            err(`Internal image upload failed for workspace ${workspaceId}:`, e)
+            return res.status(500).json({ error: 'Failed to upload image' })
         }
     }
 )

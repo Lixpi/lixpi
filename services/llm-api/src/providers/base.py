@@ -4,12 +4,15 @@ Defines the common workflow: validate → stream → calculate_usage → cleanup
 """
 
 import asyncio
+import base64
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, Any, Optional, AsyncIterator, TypedDict
 from enum import Enum
+from io import BytesIO
 
+import httpx
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
@@ -29,6 +32,8 @@ class StreamStatus(str, Enum):
     STREAMING = _STREAM_STATUS.get("STREAMING", "STREAMING")
     END_STREAM = _STREAM_STATUS.get("END_STREAM", "END_STREAM")
     ERROR = _STREAM_STATUS.get("ERROR", "ERROR")
+    IMAGE_PARTIAL = _STREAM_STATUS.get("IMAGE_PARTIAL", "IMAGE_PARTIAL")
+    IMAGE_COMPLETE = _STREAM_STATUS.get("IMAGE_COMPLETE", "IMAGE_COMPLETE")
 
 
 class ProviderState(TypedDict, total=False):
@@ -55,6 +60,10 @@ class ProviderState(TypedDict, total=False):
         - ai_vendor_request_id: Request ID from AI provider
         - ai_request_received_at: Request start timestamp
         - ai_request_finished_at: Request end timestamp
+        - enable_image_generation: Whether image generation is enabled
+        - image_size: Size for image generation
+        - previous_response_id: Previous response ID for multi-turn editing
+        - image_usage: Image generation usage statistics
     """
     messages: list
     ai_model_meta_info: Dict[str, Any]
@@ -75,6 +84,10 @@ class ProviderState(TypedDict, total=False):
     ai_vendor_request_id: Optional[str]
     ai_request_received_at: int
     ai_request_finished_at: Optional[int]
+    enable_image_generation: Optional[bool]
+    image_size: Optional[str]
+    previous_response_id: Optional[str]
+    image_usage: Optional[Dict[str, Any]]
 
 
 class BaseLLMProvider(ABC):
@@ -158,6 +171,10 @@ class BaseLLMProvider(ABC):
                 'ai_vendor_request_id': None,
                 'ai_request_received_at': int(datetime.now().timestamp() * 1000),
                 'ai_request_finished_at': None,
+                'enable_image_generation': request_data.get('enableImageGeneration', False),
+                'image_size': request_data.get('imageSize', 'auto'),
+                'previous_response_id': request_data.get('previousResponseId'),
+                'image_usage': None,
             }
 
             # Run workflow with timeout (circuit breaker)
@@ -268,22 +285,37 @@ class BaseLLMProvider(ABC):
             return state
 
         usage = state.get('usage', {})
-        if not usage:
-            logger.warning("No usage data available")
-            return state
+        image_usage = state.get('image_usage')
 
-        try:
-            self.usage_reporter.report_tokens_usage(
-                event_meta=state['event_meta'],
-                ai_model_meta_info=state['ai_model_meta_info'],
-                ai_vendor_request_id=state.get('ai_vendor_request_id', 'unknown'),
-                ai_vendor_model_name=state['model_version'],
-                usage=usage,
-                ai_request_received_at=state['ai_request_received_at'],
-                ai_request_finished_at=state['ai_request_finished_at']
-            )
-        except Exception as e:
-            logger.error(f"Failed to report usage: {e}")
+        # Report text token usage if available
+        if usage:
+            try:
+                self.usage_reporter.report_tokens_usage(
+                    event_meta=state['event_meta'],
+                    ai_model_meta_info=state['ai_model_meta_info'],
+                    ai_vendor_request_id=state.get('ai_vendor_request_id', 'unknown'),
+                    ai_vendor_model_name=state['model_version'],
+                    usage=usage,
+                    ai_request_received_at=state['ai_request_received_at'],
+                    ai_request_finished_at=state['ai_request_finished_at']
+                )
+            except Exception as e:
+                logger.error(f"Failed to report token usage: {e}")
+
+        # Report image usage if available
+        if image_usage:
+            try:
+                self.usage_reporter.report_image_usage(
+                    event_meta=state['event_meta'],
+                    ai_model_meta_info=state['ai_model_meta_info'],
+                    ai_vendor_request_id=state.get('ai_vendor_request_id', 'unknown'),
+                    image_size=image_usage.get('size', 'auto'),
+                    image_quality=image_usage.get('quality', 'high'),
+                    ai_request_received_at=state['ai_request_received_at'],
+                    ai_request_finished_at=state['ai_request_finished_at']
+                )
+            except Exception as e:
+                logger.error(f"Failed to report image usage: {e}")
 
         return state
 
@@ -370,6 +402,134 @@ class BaseLLMProvider(ABC):
                 'content': {
                     'text': '',
                     'status': StreamStatus.END_STREAM,
+                    'aiProvider': self.get_provider_name()
+                },
+                'aiChatThreadId': ai_chat_thread_id
+            }
+        )
+
+    async def _upload_image_to_storage(
+        self,
+        workspace_id: str,
+        image_base64: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Upload a base64-encoded image to the API's image storage.
+
+        Args:
+            workspace_id: Workspace identifier
+            image_base64: Base64-encoded image data (PNG)
+
+        Returns:
+            Upload result with fileId and url, or None on failure
+        """
+        try:
+            # Decode base64 to bytes
+            image_bytes = base64.b64decode(image_base64)
+
+            # Create multipart form data
+            files = {
+                'file': ('generated-image.png', BytesIO(image_bytes), 'image/png')
+            }
+            data = {
+                'useContentHash': 'true'  # Enable deduplication
+            }
+
+            # Upload to API internal endpoint (no auth required for service-to-service calls)
+            api_url = f"http://lixpi-api:3000/api/images/internal/{workspace_id}"
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    api_url,
+                    files=files,
+                    data=data
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"Image uploaded: {result.get('fileId')} (duplicate: {result.get('isDuplicate', False)})")
+                    return result
+                else:
+                    logger.error(f"Image upload failed: {response.status_code} - {response.text}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"Failed to upload image: {e}", exc_info=True)
+            return None
+
+    async def _publish_image_partial(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str,
+        image_base64: str,
+        partial_index: int
+    ) -> None:
+        """
+        Upload and publish a partial image during streaming generation.
+
+        Args:
+            workspace_id: Workspace identifier
+            ai_chat_thread_id: AI chat thread identifier
+            image_base64: Base64-encoded partial image data
+            partial_index: Index of this partial (0, 1, 2, ...)
+        """
+        # Upload image to storage first
+        upload_result = await self._upload_image_to_storage(workspace_id, image_base64)
+
+        if not upload_result:
+            logger.warning(f"Failed to upload partial image {partial_index}, skipping")
+            return
+
+        logger.info(f"Publishing IMAGE_PARTIAL event: partialIndex={partial_index}, url={upload_result['url']}")
+        self.nats_client.publish(
+            f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
+            {
+                'content': {
+                    'status': StreamStatus.IMAGE_PARTIAL,
+                    'imageUrl': upload_result['url'],
+                    'fileId': upload_result['fileId'],
+                    'partialIndex': partial_index,
+                    'aiProvider': self.get_provider_name()
+                },
+                'aiChatThreadId': ai_chat_thread_id
+            }
+        )
+
+    async def _publish_image_complete(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str,
+        image_base64: str,
+        response_id: str,
+        revised_prompt: str
+    ) -> None:
+        """
+        Upload and publish a completed generated image.
+
+        Args:
+            workspace_id: Workspace identifier
+            ai_chat_thread_id: AI chat thread identifier
+            image_base64: Base64-encoded final image data
+            response_id: OpenAI response ID for multi-turn editing
+            revised_prompt: The prompt as revised/interpreted by the model
+        """
+        # Upload image to storage first
+        upload_result = await self._upload_image_to_storage(workspace_id, image_base64)
+
+        if not upload_result:
+            logger.error("Failed to upload completed image")
+            return
+
+        logger.info(f"Publishing IMAGE_COMPLETE event: url={upload_result['url']}, responseId={response_id}")
+        self.nats_client.publish(
+            f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
+            {
+                'content': {
+                    'status': StreamStatus.IMAGE_COMPLETE,
+                    'imageUrl': upload_result['url'],
+                    'fileId': upload_result['fileId'],
+                    'responseId': response_id,
+                    'revisedPrompt': revised_prompt,
                     'aiProvider': self.get_provider_name()
                 },
                 'aiChatThreadId': ai_chat_thread_id
