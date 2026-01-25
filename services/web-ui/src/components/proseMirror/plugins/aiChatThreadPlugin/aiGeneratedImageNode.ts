@@ -47,7 +47,7 @@ export const aiGeneratedImageNodeSpec = {
     },
 }
 
-type AiGeneratedImageCallbacks = {
+export type AiGeneratedImageCallbacks = {
     onAddToCanvas?: (data: {
         imageUrl: string
         fileId: string

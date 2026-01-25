@@ -68,72 +68,41 @@
     }
 }
 
-// Speech bubble tail mixin - creates a "pigtail" curved tail like in Telegram/iMessage
-// Based on: https://codepen.io/AllThingsSmitty/pen/jommGQ
+// Speech bubble tail mixin - creates a curved tail like in modern messaging apps
+// Uses SVG mask technique so it works on any background (including gradients)
 @mixin speechBubbleTail($config: ()) {
     $defaults: (
-        position: 'left',           // 'left' or 'right' - which side the tail appears
+        position: 'right',          // 'left' or 'right' - which side the tail appears
         bubbleColor: #e5e5ea,       // background color of the bubble
-        backgroundColor: #fff,      // color behind the bubble (to "cut out" the tail curve)
-        tailSize: 1rem,             // size of the tail
-        tailOffset: -0.35rem,       // horizontal offset from edge
-        bottomOffset: -0.1rem       // vertical position from bottom
     );
 
     $settings: map-merge($defaults, $config);
 
     $position: map-get($settings, position);
     $bubbleColor: map-get($settings, bubbleColor);
-    $backgroundColor: map-get($settings, backgroundColor);
-    $tailSize: map-get($settings, tailSize);
-    $tailOffset: map-get($settings, tailOffset);
-    $bottomOffset: map-get($settings, bottomOffset);
 
     position: relative;
     overflow: visible;
 
-    &::before,
+    // The tail is a small curved hook at the bottom corner
+    // Uses clip-path for the curved shape - no background color dependency
     &::after {
-        bottom: $bottomOffset;
         content: "";
-        height: $tailSize;
         position: absolute;
-        z-index: 1;
-    }
+        bottom: 0;
+        width: 12px;
+        height: 11px;
+        background-color: $bubbleColor;
 
-    @if $position == 'left' {
-        &::before {
-            border-bottom-right-radius: 0.8rem 0.7rem;
-            border-left: $tailSize solid $bubbleColor;
-            left: $tailOffset;
-            transform: translate(0, -0.1rem);
-            background: $bubbleColor;
-        }
-
-        &::after {
-            border-bottom-right-radius: 0.5rem;
-            left: 20px;
-            transform: translate(-30px, -2px);
-            width: 10px;
-            background-color: $backgroundColor;
-            z-index: 2;
-        }
-    } @else {
-        &::before {
-            border-bottom-left-radius: 0.8rem 0.7rem;
-            border-right: $tailSize solid $bubbleColor;
-            right: $tailOffset;
-            transform: translate(0, -0.1rem);
-            background: $bubbleColor;
-        }
-
-        &::after {
-            border-bottom-left-radius: 0.5rem;
-            right: 20px;
-            transform: translate(30px, -2px);
-            width: 10px;
-            background-color: $backgroundColor;
-            z-index: 2;
+        @if $position == 'right' {
+            right: -7px;
+            // Curved tail shape using clip-path polygon with smooth curve simulation
+            // The shape: starts wide at top (connects to bubble), curves to a point at bottom-right
+            clip-path: path('M 0 0 L 0 6.5 C 0 9.5 5 11 12 11 C 8.5 10 7.5 8.5 6.5 6.5 C 5.5 4.5 3 2 0 0 Z');
+        } @else {
+            left: -7px;
+            // Mirrored for left side
+            clip-path: path('M 12 0 L 12 6.5 C 12 9.5 7 11 0 11 C 3.5 10 4.5 8.5 5.5 6.5 C 6.5 4.5 9 2 12 0 Z');
         }
     }
 }

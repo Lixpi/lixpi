@@ -1,15 +1,6 @@
 # ProseMirror UI Knowledge Base
 
-This document is the canonical, deep-dive reference for the ProseMirror-based editor powering complex UI in this project. It explains schema composition, custom nodes and node views, plugins, input rules, keymaps, the top menu, and the AI chat pipe    - Maintains an "end of aiResponse node" pointer scoped to the specific thread. If the node is missing (timing), it creates it with the same rules as START_STREAM.
-  - END_STREAM with `threadId`: clears animation flags on the `aiResponseMessage` node in the specific thread.
-- **Concurrent streams**: Maintains `receivingThreadIds: Set<string>` to track multiple active streams across different threads simultaneously.ne with streaming. It’s written for engineers and AI agents to reason about## Edge cases and invariants
-
-- Document shape: The first node is always `documentTitle`, followed by a single `aiChatThread`.
-- aiResponse streaming insertion locates the most recent `aiResponseMessage` within the target thread (identified by `threadId`) and calculates `endOfNodePos`. Only one empty paragraph is kept immediately after it, and the cursor is moved there on creation.
-- **Multiple concurrent streams ARE supported**: Each thread can have independent AI streaming via `threadId` parameter. The plugin maintains a `Set<string>` of active `receivingThreadIds` to track concurrent streams across different threads.
-- CodeMirror selection sync: Avoid infinite loops by guarding with `this.updating` and focus checks; keep `forwardUpdate` fast.
-- Mod-A behavior intentionally excludes the title from "select all" when cursor isn't in the title; consider that in bulk ops.
-- `aiUserMessage` is deprecated in new flows and not allowed inside the `aiChatThread` by schema.tem and extend it safely.
+This document is the canonical, deep-dive reference for the ProseMirror-based editor powering complex UI in this project. It explains schema composition, custom nodes and node views, plugins, input rules, keymaps, the top menu, and the AI chat pipeline with streaming. It's written for engineers and AI agents to reason about the system and extend it safely.
 
 
 ## High-level overview
@@ -20,6 +11,7 @@ This document is the canonical, deep-dive reference for the ProseMirror-based ed
 - Transaction meta flags (e.g., `use:aiChat`, `insert:<nodeType>`) are the core intra-plugin signaling mechanism.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
   Svelte[ProseMirror.svelte] -->|instantiates| PMEditor[ProseMirrorEditor]
   PMEditor -->|builds| Schema[schema.ts + nodesBuilder]
@@ -28,103 +20,117 @@ flowchart LR
     EditorView -->|doc JSON| DocumentService
     Svelte --> AiInteractionService
     AiInteractionService --> SegmentsReceiver
-    SegmentsReceiver -->|events| AiChatPlugin
-    AiChatPlugin -->|insert nodes/marks| EditorView
+    SegmentsReceiver -->|events| aiChatThreadPlugin
+    aiChatThreadPlugin -->|insert nodes/marks| EditorView
     EditorView --> BubbleMenu[bubbleMenuPlugin]
 ```
 
 
 ## Schema and custom nodes
 
-Base schema is defined in `components/schema.ts` (extended CommonMark-like schema, adds `strikethrough` mark) and then extended via `nodesBuilder` in `components/editor.js` by injecting custom nodes before `paragraph`. The document always begins with a title and then a single chat thread container:
+Base schema is defined in `components/schema.ts` (extended CommonMark-like schema, adds `strikethrough` mark) and then extended via `nodesBuilder` in `components/editor.js`.
 
-- doc content: `documentTitle aiChatThread`
-- `nodesBuilder` merges `customNodes/index.js` specs in a defined order.
+We have two editor modes with different document shapes:
 
-Custom nodes (in `customNodes/`):
+- Regular documents (`documentType: 'document'`)
+  - doc content: `documentTitle block+`
+- AI chat threads (`documentType: 'aiChatThread'`)
+  - doc content: `documentTitle aiChatThread+`
 
-- `documentTitleNode` (`documentTitle`): h1 title, non-selectable, defining.
-- `aiUserInputNode` (`aiUserInput`, deprecated): a block container for user's AI prompt and inline control buttons (Stop, Regenerate, Close). Marked for removal; kept for backward compatibility in old documents.
-- `aiChatThreadNode` (`aiChatThread`): the single chat container that holds the conversation. Current content expression: `(paragraph | heading | blockquote | code_block | aiResponseMessage)+`. New code does not insert `aiUserMessage` here.
-- `aiResponseMessageNode` (`aiResponseMessage`): assistant message with provider avatar, animation controls, and a contentDOM placeholder; `aiResponseMessageNodeView` manages Claude animation frames using node attrs (`isInitialRenderAnimation`, `isReceivingAnimation`, `currentFrame`). Content expression: `(paragraph | block)*` so it can start empty and be filled by streaming.
-- `aiUserMessageNode` (`aiUserMessage`, legacy): styled bubble with user avatar; kept for backward compatibility in old documents. New flows do not create this node.
-- **User messages**: rendered as plain `paragraph` nodes inside `aiChatThread` and styled as Telegram-like outgoing bubbles in `plugins/aiChatThreadPlugin/ai-chat-thread.scss` using the `speechBubbleTail` mixin from `components/_ProseMirrorMixings.scss`.
-- `code_block` override (`codeBlockNode`): prosemirror spec extended with `theme` attr and DOM `data-theme`. Rendering and interaction are delegated to a CodeMirror 6 node view (plugin).
-- `taskRowNode` exists but currently a placeholder without DOM hooks; kept for future Svelte component rendering.
+`nodesBuilder` does two important things:
+
+- Adds *new* custom nodes before `paragraph` (so they behave like normal block nodes).
+- Updates *existing* base nodes (e.g. `code_block`) **in place** to preserve the base schema order. This avoids ProseMirror picking `code_block` as the “default block” when leaving the title.
+
+Custom nodes are intentionally split by responsibility:
+
+- Base custom nodes (always present via `customNodes/index.js`):
+  - `documentTitleNode` (`documentTitle`): h1 title, non-selectable, defining.
+  - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
+  - `taskRowNode`: placeholder for future Svelte-backed rendering.
+
+- AI chat nodes (only present in `documentType: 'aiChatThread'` via `plugins/aiChatThreadPlugin/`):
+  - `aiChatThreadNode` (`aiChatThread`): conversation container. Content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`.
+  - `aiUserMessageNode` (`aiUserMessage`): sent user message bubble. Content: `(paragraph | block)+`. Attributes: `id, createdAt`.
+  - `aiUserInputNode` (`aiUserInput`): sticky composer at the end of the thread. Content: `(paragraph | block)+`.
+  - `aiResponseMessageNode` (`aiResponseMessage`): assistant message. Content: `(paragraph | block)*` so it can start empty and be filled by streaming.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TD
   A[doc] --> B[documentTitle]
   A --> T[aiChatThread]
-  T --> P[paragraph]
-  T --> CB[code_block]
+  T --> UM[aiUserMessage]
   T --> R[aiResponseMessage]
+  T --> UI[aiUserInput]
+  UM --> UMC["(paragraph | block)+"]
   R --> RP["(paragraph | block)*"]
+  UI --> UIC["(paragraph | block)+"]
 ```
 
 Notes
 - Groups: Custom nodes belong to `block` and integrate seamlessly with base block nodes.
-- NodeViews: `aiResponseMessageNodeView` is exposed from `customNodes/index.js` and plugged-in by `aiChatPlugin`; `aiUserMessageNodeView` remains for legacy docs but is not used in new flows; `code_block` node view is provided by the codeBlock plugin; `dropdown` node view is provided by the dropdown primitive plugin.
-
-```mermaid
-flowchart TD
-  A[doc] --> B[documentTitle]
-  A --> T[aiChatThread]
-  T --> P[paragraph]
-  T --> R[aiResponseMessage]
-  R --> RP["(paragraph | block)*"]
-```
-
-Notes
-- Groups: Custom nodes belong to `block` and integrate seamlessly with base block nodes.
-- NodeViews: `aiResponseMessageNodeView` is exposed from `customNodes/index.js` and plugged-in by `aiChatPlugin`; `aiUserMessageNodeView` remains for legacy docs but is not used in new flows; `code_block` node view is provided by the codeBlock plugin.
+- NodeViews: AI chat thread NodeViews live inside `plugins/aiChatThreadPlugin/`. `code_block` node view is provided by the codeBlock plugin.
 
 
 ## Editor construction (`components/editor.js`)
 
-- Creates `Schema` with `nodesBuilder(schema, customNodes)` and base `marks`.
+- Creates a `Schema` based on `documentType`:
+  - Regular documents use only base `customNodes`.
+  - AI chat threads extend base `customNodes` with AI chat node specs from `aiChatThreadPlugin`.
 - Initializes `EditorView` with:
-  - Initial doc from either JSON (`initialVal`) or parsing `content` element.
+  - Initial doc via `createInitialDocument(...)`:
+    - Regular docs: parse from `initialVal` JSON or DOM `content`.
+    - AI chat threads: parse JSON if valid, otherwise create a schema-valid doc using `createAndFill()` and the provided `threadId`.
   - Plugin list (order matters):
-    - `statePlugin`: bubbles doc JSON changes to Svelte and emits project title changes.
-    - `focusPlugin`: tracks focus and toggles editable state.
-    - `bubbleMenuPlugin`: floating selection-based menu (Bold, Italic, Strikethrough, Code, Link, Headings, Code Block, Blockquote).
-    - `buildInputRules`: smart quotes, ellipsis, em-dash, blockquote/lists/heading; code fence rule is handled by codeBlock plugin.
-    - `keymap(buildKeymap)`, `keymap(baseKeymap)`: custom shortcuts including a special Mod-A behavior and standard PM bindings.
-    - `dropCursor`, `gapCursor`, `history` standard UX.
-    - AI stack: `createAiChatPlugin`, `createAiUserInputPlugin`, `aiTriggerPlugin`.
-    - `editorPlaceholderPlugin`: placeholders for empty title and first paragraph.
-    - `createCodeBlockPlugin` + `codeBlockInputRule`: CodeMirror integration and ``` fences.
-    - `activeNodePlugin`: tracks the current node type and attrs.
+    - `statePlugin`, `focusPlugin`, `bubbleMenuPlugin`, `linkTooltipPlugin`, `slashCommandsMenuPlugin`
+    - `imageLifecyclePlugin`, `imageSelectionPlugin`
+    - `buildInputRules`, `keymap(buildKeymap)`, `keymap(baseKeymap)`, `dropCursor`, `gapCursor`, `history`
+    - `createCodeBlockPlugin` + `codeBlockInputRule` (CodeMirror integration and ``` fences)
+    - `activeNodePlugin`
+    - AI stack (AI chat threads only): `createAiChatThreadPlugin`
 
 
 ## Transaction meta signaling: contract
 
 Meta flags are string keys placed on transactions and observed by `appendTransaction` or `apply` in plugins.
 
-- `insert:<nodeType>`: request a node insertion by type-specific plugin.
-  - Example: `insert:aiUserInput` from `commands.js`.
-- `insert:${nodeTypes.aiUserMessageNodeType}`: aiUserInput plugin emits this to materialize a user message block using the captured content.
-- `use:aiChat` with `{pos}`: triggers AI chat flow in `aiChatPlugin` starting at position `pos`.
+- `insert:<nodeType>`: request a node insertion by a type-specific plugin (only if some plugin actually handles it).
+  - Example: `insert:aiChatThread` when creating a new thread node on the canvas.
+- `use:aiChat` with `{ threadId, nodePos }`: triggers AI chat flow in `aiChatThreadPlugin` for a specific thread.
+- `stop:aiChat` with `{ threadId }`: stops streaming for a specific thread.
 - `insertCodeBlock` (via code fence input rule): instructs codeBlock plugin to replace the current paragraph with a code_block.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant User
   participant KeymapCommands as "Keymap/Commands"
   participant Plugins
   participant EditorView
-
-  User->>Keymap/Commands: triggers action
-  Keymap/Commands->>EditorView: dispatch tr.setMeta(key, payload)
-  EditorView->>Plugins: appendTransaction/apply
-  Plugins->>EditorView: mutate doc (insert nodes, marks, selections)
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 1: INTENT
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(220, 236, 233)
+      Note over User, EditorView: PHASE 1 - INTENT
+      User->>KeymapCommands: triggers action
+      KeymapCommands->>EditorView: dispatch tr.setMeta(key, payload)
+  end
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 2: APPLY
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(195, 222, 221)
+      Note over User, EditorView: PHASE 2 - APPLY
+      EditorView->>Plugins: appendTransaction/apply
+      Plugins->>EditorView: mutate doc (insert nodes, marks, selections)
+  end
 ```
 
 
 ## Plugins (behavioral map)
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph LR
   subgraph PM Plugins
     SP[statePlugin]
@@ -135,23 +141,15 @@ graph LR
     DC[dropCursor]
     GC[gapCursor]
     HS[history]
-    AT[aiTriggerPlugin]
-    AU[aiUserInputPlugin]
-  AM["aiUserMessagePlugin (legacy)"]
-    AC[aiChatPlugin]
-    EP[editorPlaceholderPlugin]
   CBP["codeBlockPlugin + inputRule"]
     AN[activeNodePlugin]
+    ACT[aiChatThreadPlugin]
   end
 
-  KM-- Mod-Enter -->AT
-  AT-- setMeta use:aiChat -->AC
-  AU-- Enter inside aiUserInput -->AM
-  AM-- insert aiUserMessage (legacy) -->EditorView
-  AC-- START/STREAM/END -->EditorView
+  KM-- setMeta use:aiChat -->ACT
+  ACT-- START/STREAM/END -->EditorView
   CBP-- CM6 NodeView and code fences -->EditorView
   SP-- docChanged --> Svelte
-  EP-- decorations --> EditorView
   BM-- floating menu --> EditorView
 ```
 
@@ -161,10 +159,6 @@ graph LR
 
 ### focusPlugin (`plugins/focusPlugin.js`)
 - Listens to DOM focus/blur and sets plugin meta. Callback toggles `editable` prop based on `isDisabled`.
-
-### editorPlaceholderPlugin (`plugins/editorPlaceholderPlugin.js`)
-- Decorates empty `documentTitle` with `data-placeholder: options.titlePlaceholder`.
-- Decorates the first empty paragraph only when it’s the sole block after the title.
 
 ### activeNodePlugin (`plugins/activeNodePlugin.js`)
 - Tracks `{ nodeType, nodeAttrs }` of the parent of current selection for UI state, styling, or debugging.
@@ -188,6 +182,7 @@ A floating selection-based formatting menu with transform-aware positioning. App
 - `index.ts` - Public exports
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TD
   BMP[bubbleMenuPlugin] --> BMV[BubbleMenuView]
   BMV --> TP[Transform-aware positioning]
@@ -232,13 +227,32 @@ graph TD
 - Input rule `codeBlockInputRule(schema)`: converts ``` line to code_block and inserts an empty paragraph after.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant PM as ProseMirror
   participant CM as CodeMirror NodeView
-  PM->>CM: NodeView constructed with node.textContent
-  CM->>PM: forwardUpdate (changes) -> tr.replaceWith / delete
-  PM->>CM: syncProseMirrorSelection (when PM selection enters CM)
-  CM->>PM: syncCodeMirrorSelection (when CM selection hits edges)
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 1: INIT
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(220, 236, 233)
+      Note over PM, CM: PHASE 1 - INIT
+      PM->>CM: NodeView constructed with node.textContent
+  end
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 2: SYNC EDITS
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(195, 222, 221)
+      Note over PM, CM: PHASE 2 - SYNC EDITS
+      CM->>PM: forwardUpdate (changes) -> tr.replaceWith / delete
+  end
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 3: SELECTION MIRRORING
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(246, 199, 179)
+      Note over PM, CM: PHASE 3 - SELECTION MIRRORING
+      PM->>CM: syncProseMirrorSelection (when PM selection enters CM)
+      CM->>PM: syncCodeMirrorSelection (when CM selection hits edges)
+  end
 ```
 
 
@@ -262,80 +276,93 @@ Note: The editor currently ships with the TaskRow Svelte renderer commented out 
 
 ## AI interactions and streaming
 
-### aiTriggerPlugin (`plugins/aiTriggerPlugin.js`)
-- Captures Mod+Enter. Dispatches tr with `setMeta('use:aiChat', {pos})`.
+### aiChatThreadPlugin (`plugins/aiChatThreadPlugin/`)
 
-### aiUserInputPlugin (`plugins/aiUserInputPlugin.js`)
-- NodeView for `aiUserInput`: renders content area plus control buttons.
-- Enter (no Shift) inside `aiUserInput`:
-  1) Replace current `aiUserInput` with a fresh empty one; set selection inside it.
-  2) Emit `insert:aiUserMessage` with captured content at original position.
-  3) Set plugin meta `pendingAiChatTransaction: true` and remember insertion position.
-  4) In `appendTransaction`, when `pending...` is seen, emit `use:aiChat` with stored pos and clear the flag.
-- Backticks handling: typing/pasting ``` inside aiUserInput converts to `code_block`.
+The main plugin orchestrating AI chat functionality. All AI chat logic is consolidated here.
 
-### aiUserMessagePlugin (`plugins/aiUserMessagePlugin.js`) — legacy
-- On `insert:aiUserMessage`, creates a user message node at `pos` (content provided).
-- Kept for backward compatibility; new chat thread flow does not use this plugin or node.
+**Schema nodes managed by this plugin:**
+- `aiChatThread` - Container with content: `(aiUserMessage | aiResponseMessage)* aiUserInput`
+- `aiUserInput` - Sticky composer at the end of the thread with controls (model selector, image toggle, submit button)
+- `aiUserMessage` - Sent user message bubble with `id` and `createdAt` attributes
+- `aiResponseMessage` - AI response with provider avatar and streaming animations
 
-### aiChatPlugin (`plugins/aiChatPlugin.js`)
-- On `use:aiChat` with `{threadId, nodePos}` meta, transforms the current thread into a compact messages array: groups blocks by role (assistant when node type is `aiResponseMessage`, else user) and reduces adjacent same-role blocks.
-- Calls the provided callback with the transformed messages and `threadId` (Svelte wires it to `AiInteractionService`).
-- Subscribes to an external `SegmentsReceiver` stream with **multi-thread support**:
-  - START_STREAM with `threadId`: inserts an empty `aiResponseMessage` in the specific thread (no inner paragraph) with animation flags and provider; ensures exactly one empty paragraph immediately after and moves the cursor into it.
-  - STREAMING with `threadId`: for each segment:
-    - Uses `threadId` to scope response node search to the correct thread
-    - Applies marks from `segment.styles` -> strong/em/strikethrough/code.
-    - Inserts block structure for `header`, `paragraph`, or `codeBlock` segments; otherwise appends text with marks.
-    - Maintains an “end of aiResponse node” pointer to insert at correct positions. If the node is missing (timing), it creates it with the same rules as START_STREAM.
-  - END_STREAM: clears animation flags on the `aiResponseMessage` node.
+**Message submission flow:**
+1. User types in `aiUserInput` composer and presses Cmd/Ctrl+Enter or clicks submit
+2. Plugin extracts composer content, creates an `aiUserMessage` node before the composer
+3. Clears the composer content
+4. Dispatches `USE_AI_CHAT_META` with messages, threadId, and model info
+5. Plugin calls `onAiChatSubmit` callback with the message array
+
+**Streaming response handling:**
+- Subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` for streaming events
+- START_STREAM: inserts empty `aiResponseMessage` before `aiUserInput` with animation flags
+- STREAMING: inserts text/blocks into the response node, handles marks and block types
+- END_STREAM: clears animation flags, finalizes response
+
+See `plugins/aiChatThreadPlugin/README.md` for complete documentation.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant UI as User
-  participant AU as aiUserInputPlugin
-  participant AT as aiTriggerPlugin
-  participant AC as aiChatPlugin
-  participant S as AiInteractionServiceService
+  participant Plugin as aiChatThreadPlugin
+  participant S as AiInteractionService
   participant SR as SegmentsReceiver
-  UI->>AU: Enter in aiUserInput
-  AU->>EditorView: insert:aiUserMessage(pos, content)
-  AU->>EditorView: set pendingAiChatTransaction
-  AU->>EditorView: appendTransaction -> use:aiChat(pos)
-  AT-->>AC: (also can trigger) use:aiChat(pos)
-  AC->>S: onAiChatSubmit(messages)
-  SR-->>AC: START_STREAM(provider)
-  AC->>EditorView: insert aiResponseMessage + ensureEmptyParagraph + moveCursor
-  SR-->>AC: STREAMING(segments)
-  AC->>EditorView: insert text/blocks with marks into aiResponseMessage
-  SR-->>AC: END_STREAM
-  AC->>EditorView: turn off animations
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 1: SUBMIT
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(220, 236, 233)
+      Note over UI, SR: PHASE 1 - SUBMIT
+      UI->>Plugin: Cmd+Enter in aiUserInput
+      Plugin->>Plugin: Create aiUserMessage from composer content
+      Plugin->>Plugin: Clear composer
+      Plugin->>S: onAiChatSubmit(messages, aiModel)
+  end
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 2: STREAM
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(195, 222, 221)
+      Note over UI, SR: PHASE 2 - STREAM
+      SR-->>Plugin: START_STREAM(provider, threadId)
+      Plugin->>Plugin: Insert aiResponseMessage before aiUserInput
+      SR-->>Plugin: STREAMING(segments)
+      Plugin->>Plugin: Insert text/blocks into aiResponseMessage
+  end
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 3: COMPLETE
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(246, 199, 179)
+      Note over UI, SR: PHASE 3 - COMPLETE
+      SR-->>Plugin: END_STREAM
+      Plugin->>Plugin: Clear animations
+  end
 ```
 
 
 ## Commands
 
-- `components/commands.js` exports `useAiInput(state, dispatch)` which dispatches `insert:aiUserInput` to materialize an input box at the selection.
+- `components/commands.js` exports helpers for programmatic document manipulation.
 
 
 ## Svelte integration (`ProseMirror.svelte`)
 
-- Instantiates `ProseMirrorEditor` with initial doc JSON and three callbacks:
+- Instantiates `ProseMirrorEditor` with initial doc JSON and callbacks:
   - `onEditorChange(json)`: debounced save via `DocumentService.updateDocument` and store flags.
   - `onProjectTitleChange(title)`: immediate title sync to stores and persistence.
-  - `onAiChatSubmit(messages)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).r`).
+  - `onAiChatSubmit(messages, aiModel)`: forwards to `AiInteractionService.sendChatMessage` (which feeds `SegmentsReceiver`).
+  - `onAiChatStop()`: stops active AI streaming.
 - Manages teardown on unmount and re-creation when document metadata changes.
-- Renders a model selector UI.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
   Svelte --> PMEditor
   PMEditor -->|statePlugin| onEditorChange
   PMEditor -->|title change| onProjectTitleChange
-  PMEditor -->|aiChatPlugin| onAiChatSubmit
+  PMEditor -->|aiChatThreadPlugin| onAiChatSubmit
   onEditorChange --> DocumentService
   onProjectTitleChange --> DocumentService & Stores
-  onAiChatSubmit --> AiInteractionService --> SegmentsReceiver --> aiChatPlugintPlugin
+  onAiChatSubmit --> AiInteractionService --> SegmentsReceiver --> aiChatThreadPlugin
 ```
 
 
@@ -353,7 +380,7 @@ flowchart LR
 ## Styling hooks (non-exhaustive)
 
 - Bubble menu: `.bubble-menu`, `.bubble-menu-content`, `.bubble-menu-button`, `.bubble-menu-dropdown`, `.bubble-menu-separator`.
-- AI nodes: `.ai-user-input-wrapper`, `.ai-user-input`, `.ai-user-message(-decorator)`, `.ai-response-message(-wrapper)`, `.user-avatar`, `.node-render-animation`, `.node-receiving-animation`.
+- AI nodes: `.ai-chat-thread-wrapper`, `.ai-user-input-wrapper`, `.ai-user-input-content`, `.ai-user-message-wrapper`, `.ai-response-message(-wrapper)`, `.user-avatar`, `.node-render-animation`, `.node-receiving-animation`.
 - Code blocks: `.code-block-wrapper`; selection decorations apply `inline.selected` class.
 - Placeholders: `.empty-node-placeholder[data-placeholder]` is applied as a node decoration.
 
@@ -367,19 +394,21 @@ flowchart LR
 - Add a NodeView:
   - Provide a function in `customNodes/index.js` and add it in a plugin under `props.nodeViews[<nodeType>]`.
 - React to Mod+Enter differently:
-  - Update `aiTriggerPlugin` or add a key to `buildKeymap`.
+  - Update `buildKeymap` or the `aiChatThreadPlugin` meta handling.
 - Add a new AI streaming style:
-  - Extend `aiChatPlugin` style mapping (`segment.styles` → PM marks) or add block handlers for new segment types.
+  - Extend `aiChatThreadPlugin` style mapping (`segment.styles` → PM marks) or add block handlers for new segment types.
 
 
 ## Edge cases and invariants
 
-- Document shape: The first node is always `documentTitle`, followed by a single `aiChatThread`.
-- aiResponse streaming insertion locates the most recent `aiResponseMessage` and calculates `endOfNodePos`. Only one empty paragraph is kept immediately after it, and the cursor is moved there on creation.
-- Multiple parallel streams are not supported (assumes one active stream per thread).
+- Regular document shape: The first node is always `documentTitle`, followed by one or more `block` nodes.
+- AI chat thread shape: The first node is always `documentTitle`, followed by one or more `aiChatThread` nodes.
+- Thread shape: `aiChatThread` content is `(aiUserMessage | aiResponseMessage)* aiUserInput`. The `aiUserInput` composer is always the last child.
+- aiResponse streaming insertion locates the most recent `aiResponseMessage` within the target thread (identified by `threadId`) and calculates `endOfNodePos`. Only one empty paragraph is kept immediately after it, and the cursor is moved there on creation.
+- **Multiple concurrent streams ARE supported**: Each thread can have independent AI streaming via `threadId` parameter. The plugin maintains a `Set<string>` of active `receivingThreadIds` to track concurrent streams across different threads.
 - CodeMirror selection sync: Avoid infinite loops by guarding with `this.updating` and focus checks; keep `forwardUpdate` fast.
-- Mod-A behavior intentionally excludes the title from “select all” when cursor isn’t in the title; consider that in bulk ops.
-- `aiUserMessage` is deprecated in new flows and not allowed inside the `aiChatThread` by schema.
+- Mod-A behavior intentionally excludes the title from "select all" when cursor isn't in the title; consider that in bulk ops.
+- Fresh AI chat thread documents are created using ProseMirror's `createAndFill()` to satisfy the schema content expression and to attach the correct `threadId`.
 
 
 ## Deprecated code (for reference only)
@@ -415,86 +444,22 @@ flowchart LR
 - Add a menu entry if user-facing.
 - If your feature flows through AI, produce/consume transaction meta consistently and consider streaming updates.
 
-## Current Feature in Progress
+## Current Architecture Summary
 
-**Feature**: Single AI Chat Thread Document Structure
+**AI Chat Thread Document Structure**
 
-**What we're building**: Instead of having a document with multiple paragraphs and blocks, we're changing it so the entire document content lives inside one AI chat thread container. This makes the whole document feel like one continuous AI conversation space.
+The document structure uses a single AI chat thread container:
+- Document starts with a title (`documentTitle`), then contains an `aiChatThread` node
+- Thread content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`
+- `aiUserInput` is a sticky composer that's always the last child of the thread
+- `aiUserMessage` nodes represent sent user messages (created when user submits from composer)
+- `aiResponseMessage` nodes contain AI responses (created during streaming)
 
-**The goal**:
-- Document starts with a title, then everything else goes inside a single chat thread
-- Users can type directly in the thread (with placeholder text when empty)
-- Thread has controls like Pause and Close buttons in a header
-- The thread can contain any content - paragraphs, code blocks, nested threads, etc.
-
-**What we've done**:
-- Changed the document structure to always have exactly one thread container
-- Made sure users can click inside and start typing immediately
-- Added placeholder text that shows when the thread is empty
-- Thread controls work without breaking the typing experience
-- Organized the CSS properly in separate files
-- Updated `aiChatThread` schema to `(aiResponseMessage | paragraph)+` so assistant messages are structured and `aiUserMessage` is excluded from new content
-- Updated `aiResponseMessage` schema to `(paragraph | block)*` to start empty during START_STREAM
-- START_STREAM now creates an empty `aiResponseMessage`, ensures exactly one trailing empty paragraph, and moves the cursor there
-- STREAMING fallback creates the node with the same rules if missing, then appends content safely
-- Fixed regressions: removed redundant inner paragraph in responses, eliminated double trailing paragraphs, restored cursor placement after responses
-
-**Current state**: Working — AI responses render inside `aiChatThread` as `aiResponseMessage`, exactly one paragraph follows, and the cursor moves there. Typing and placeholders behave as expected. `aiUserMessage` remains for legacy docs only.
-
-## Tracking current progress
-
-**Session Goal**: Create single AI chat thread document structure
-
-**Changes made in order**:
-
-1. **CSS Fix** - User reported wrong CSS change (font-family instead of padding)
-   - Restored padding on AI message classes
-   - Removed incorrect font-family addition
-
-2. **CSS Organization** - User requested modular structure
-   - Created `scss/custom-nodes/ai-chat-thread.scss`
-   - Moved thread styles out of main ProseMirror.scss
-   - Added clean import
-
-3. **README Documentation** - User asked to track progress
-   - Added "Tracking current progress" section
-
-4. **Schema Change** - User wanted single thread container for all content
-   - Changed doc structure from `documentTitle (paragraph | block)+`
-   - To `documentTitle aiChatThread`
-   - All content now lives inside the thread
-
-5. **Cursor/Placeholder Issues** - User couldn't type in thread, no placeholder
-   - Fixed aiChatThread node flags (isolating/defining = false)
-   - Updated placeholder plugin to detect empty paragraph inside thread
-   - Added CSS for placeholder visibility with trailing break
-
-6. **NodeView Problems** - Thread controls vs typing conflicts
-   - Temporarily disabled NodeView to test core functionality
-   - Re-enabled with proper focus handling and click events
-   - Added mousedown preventDefault for buttons
-
-7. **Schema Validation** - Empty document creation failed
-   - Changed thread content from `block+` (required) to `block*` (optional)
-   - Allows ProseMirror to create empty threads automatically
-
-8. **Enter Key Bug** - Pressing Enter created code blocks instead of paragraphs
-   - Fixed by changing thread content from `block*` to `paragraph+`
-   - Now threads must contain paragraphs, forcing proper Enter behavior
-   - Removed hacky keydown handler - let ProseMirror handle it naturally
-
-9. **Schema Alignment** - Structure assistant messages inside thread
-   - Changed `aiChatThread` content to `(aiResponseMessage | paragraph)+`
-   - Deprecated `aiUserMessage` in new code; legacy nodes still supported outside current flow
-10. **aiResponseMessage Spec** - Allow empty shell for streaming
-  - Changed content to `(paragraph | block)*`
-  - NodeView animations unchanged
-11. **Streaming Insertion Fixes** - Eliminate glitches
-  - START_STREAM creates empty `aiResponseMessage`, ensures exactly one trailing empty paragraph, moves cursor there
-  - STREAMING fallback mirrors START_STREAM if node missing; then appends content safely
-  - Fixed double-paragraph issue and removed inner empty paragraph regression
-
-**Current state**: Working — single-thread chat with structured assistant messages, stable streaming, and correct cursor/paragraph behavior.
+**Key design decisions**:
+- Fresh documents are created using ProseMirror's `createAndFill()` which auto-populates required nodes based on schema
+- The editor accepts a `threadId` parameter to ensure the `aiChatThread` node has the correct ID for streaming routing
+- Streaming events (START_STREAM, STREAMING, END_STREAM) are scoped by `threadId` for multi-thread support
+- Controls (model selector, image toggle, submit button) live in the `aiUserInput` NodeView, outside the document schema
 
 ---
 This knowledge base is hand-audited against the current codebase (see paths above) and aims to be stable, specific, and actionable for future development.

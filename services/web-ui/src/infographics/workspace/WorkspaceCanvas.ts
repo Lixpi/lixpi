@@ -994,6 +994,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     initialVal: thread.content,
                     isDisabled: false,
                     documentType: 'aiChatThread',
+                    threadId: node.referenceId,
                     onEditorChange: (value: any) => {
                         onAiChatThreadContentChange?.({
                             workspaceId,

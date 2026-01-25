@@ -1,10 +1,10 @@
 import { v4 as uuidv4 } from 'uuid'
-import { nodeTypes } from "$src/components/proseMirror/customNodes"
 import { aiChatThreadNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
+import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 
 export const useAiInput = (state, dispatch) => {
     const attrs = {}
-    const tr = state.tr.setMeta(`insert:${nodeTypes.aiUserInputNodeType}`, attrs)
+    const tr = state.tr.setMeta(`insert:${aiUserInputNodeType}`, attrs)
 
     if (dispatch) {
         dispatch(tr)

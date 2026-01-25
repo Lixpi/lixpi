@@ -17,6 +17,7 @@ On top of that, there's a swirl distortion applied to the coordinates before the
 ### The Algorithm
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Initialization
         COLORS[4 Color Points] --> POSITIONS[8 Phase Positions]
@@ -55,6 +56,7 @@ The animation uses a cubic bezier easing curve (`0.33, 0, 0, 1`) which gives it 
 ## Architecture
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Singleton["ShiftingGradientRenderer (Singleton)"]
         OC[Offscreen Canvas 60×80]
@@ -134,6 +136,7 @@ random-useful-things/image-color-analysis-tool/advanced_gradient_color_analysis.
 ### What It Does
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
     subgraph Input
         IMG[Reference Image]
@@ -261,27 +264,56 @@ Many gradient wallpapers have decorative pattern overlays (icons, doodles, etc.)
 When an AI chat thread node is created on the workspace canvas, it subscribes to the gradient renderer:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant Node as AI Chat Thread Node
     participant Renderer as ShiftingGradientRenderer
     participant Canvas as Background Canvas
 
-    Node->>Canvas: Create canvas element
-    Node->>Renderer: subscribe(canvas)
-    Renderer->>Canvas: Initial draw
-
-    loop Animation Loop
-        Renderer->>Renderer: Check animation state
-        Renderer->>Renderer: Render to offscreen
-        Renderer->>Canvas: drawImage (scaled)
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: SUBSCRIBE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over Node, Canvas: PHASE 1 - SUBSCRIBE — Canvas creation and initial subscription
+        Node->>Canvas: Create canvas element
+        Node->>Renderer: subscribe(canvas)
+        activate Renderer
+        Renderer-->>Canvas: Initial draw
+        deactivate Renderer
     end
 
-    Note over Node: When sending message...
-    Node->>Renderer: nextPhase()
-    Renderer->>Renderer: Start phase transition
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: ANIMATION LOOP
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over Node, Canvas: PHASE 2 - ANIMATION LOOP — Continuous draw using offscreen bitmap
+        loop Animation Loop
+            activate Renderer
+            Renderer->>Renderer: Check animation state
+            Renderer->>Renderer: Render to offscreen
+            Renderer-->>Canvas: drawImage (scaled)
+            deactivate Renderer
+        end
+    end
 
-    Note over Node: When node removed...
-    Node->>Renderer: unsubscribe(canvas)
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: PHASE TRANSITIONS
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(242, 234, 224)
+        Note over Node, Canvas: PHASE 3 - PHASE TRANSITIONS — Phase shift on user action
+        Node->>Renderer: nextPhase()
+        activate Renderer
+        Renderer->>Renderer: Start phase transition
+        deactivate Renderer
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 4: TEARDOWN
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over Node, Canvas: PHASE 4 - TEARDOWN — Cleanup when node is removed
+        Node->>Renderer: unsubscribe(canvas)
+    end
 ```
 
 ### Visibility Optimization

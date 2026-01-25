@@ -67,7 +67,6 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         <div className="ai-response-message-wrapper">
             <div className="ai-response-message">
                 <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
-                <div className="ai-response-message-boundaries-indicator"></div>
                 <div className="ai-response-message-spinner" aria-hidden="true"></div>
                 <div className="ai-response-message-content"></div>
             </div>
@@ -77,7 +76,6 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     // Get references to the nested elements for manipulation
     const aiResponseMessageContainer = parentWrapper.querySelector('.ai-response-message')
     const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
-    const messageBoundariesIndicator = parentWrapper.querySelector('.ai-response-message-boundaries-indicator')
     const spinnerElement = parentWrapper.querySelector('.ai-response-message-spinner')
     const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
 
@@ -137,7 +135,6 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
         // Toggle classes for animations
         responseMessageContent.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
-        messageBoundariesIndicator.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
         userAvatarContainer.classList.toggle('node-receiving-animation', node.attrs.isReceivingAnimation)
     }
 

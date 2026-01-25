@@ -152,7 +152,7 @@ export default class AiInteractionService {
         if (content.status === STREAM_STATUS.START_STREAM) {
             // Initialize fresh parser instance for this stream
             this.initMarkdownParser()
-            // startParsing() will emit START_STREAM event internally via subscribeToTokenParse callback
+            // startParsing() emits START_STREAM event via subscribeToTokenParse callback
             this.markdownStreamParser.startParsing()
         } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
             // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
