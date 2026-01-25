@@ -102,7 +102,7 @@ stateDiagram-v2
 ## Data Flow & Content Extraction
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant U as User
   participant EV as EditorView
@@ -122,11 +122,16 @@ sequenceDiagram
   rect rgb(220, 236, 233)
     Note over U, SI: PHASE 1 - PREPARE MESSAGE
     U->>EV: Cmd+Enter or click send
+    activate EV
     EV->>PL: Transaction with USE_AI_CHAT_META
+    activate PL
     PL->>CE: getActiveThreadContent(state)
+    activate CE
     CE->>CE: Extract all child blocks with collectFormattedText
     CE->>CE: Convert to messages with toMessages()
     CE-->>PL: ThreadContent[] → Messages[]
+    deactivate CE
+    deactivate EV
   end
 
   %% ═══════════════════════════════════════════════════════════════
@@ -135,10 +140,14 @@ sequenceDiagram
   rect rgb(195, 222, 221)
     Note over U, SI: PHASE 2 - SEND
     PL->>AIS: onAiChatSubmit({ messages, aiModel })
+    activate AIS
     AIS->>NATS: publish(CHAT_SEND_MESSAGE, { workspaceId, aiChatThreadId, messages })
     NATS->>API: Route to handler
+    activate API
     API->>NATS: publish(CHAT_PROCESS, {...})
+    deactivate API
     NATS->>LLM: Route to Python
+    activate LLM
   end
 
   %% ═══════════════════════════════════════════════════════════════
@@ -150,10 +159,15 @@ sequenceDiagram
       LLM->>NATS: publish(receiveMessage.{workspaceId}.{threadId}, chunk)
       NATS->>AIS: Deliver to subscriber
       AIS->>SR: Emit segment event
+      activate SR
       SR->>PL: STREAMING event with segment
       PL->>SI: insertBlockContent/insertInlineContent
+      activate SI
       SI->>EV: Insert content into response node
+      deactivate SI
+      deactivate SR
     end
+    deactivate LLM
   end
 
   %% ═══════════════════════════════════════════════════════════════
@@ -166,6 +180,8 @@ sequenceDiagram
     AIS->>SR: END_STREAM event
     SR->>PL: END_STREAM
     PL->>EV: Clear isReceiving + stop animations
+    deactivate AIS
+    deactivate PL
   end
 ```
 
@@ -329,7 +345,7 @@ stateDiagram-v2
 ## User experience
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant U as User
   participant E as Editor
@@ -342,8 +358,12 @@ sequenceDiagram
   rect rgb(220, 236, 233)
     Note over U, NATS: PHASE 1 - SUBMIT
     U->>E: Types message and hits Cmd+Enter
+    activate E
     E->>P: Extracts thread content
+    activate P
     P->>AIS: sendChatMessage({ messages, aiModel })
+    activate AIS
+    deactivate E
   end
 
   %% ═══════════════════════════════════════════════════════════════
@@ -352,7 +372,9 @@ sequenceDiagram
   rect rgb(195, 222, 221)
     Note over U, NATS: PHASE 2 - STREAM
     AIS->>NATS: Publish to backend
+    activate NATS
     NATS-->>AIS: Stream response via receiveMessage.{workspaceId}.{threadId}
+    deactivate NATS
     AIS-->>P: SegmentsReceiver events
   end
 
@@ -362,6 +384,8 @@ sequenceDiagram
   rect rgb(242, 234, 224)
     Note over U, NATS: PHASE 3 - RENDER
     P->>E: Inserts AI response with animations
+    deactivate AIS
+    deactivate P
   end
 ```
 

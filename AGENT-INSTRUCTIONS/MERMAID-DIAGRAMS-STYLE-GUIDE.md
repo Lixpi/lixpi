@@ -20,13 +20,18 @@ All diagrams use the **"In the Sunshine"** pastel palette:
 | Color | Hex | RGB | Usage |
 |-------|-----|-----|-------|
 | Mint | `#DCECE9` | `rgb(220, 236, 233)` | Tertiary backgrounds, Phase 1 rect blocks |
-| Light Teal | `#C3DEDD` | `rgb(195, 222, 221)` | Secondary backgrounds, Phase 2 rect blocks, activations |
+| Light Teal | `#C3DEDD` | `rgb(195, 222, 221)` | Secondary backgrounds, Phase 2 rect blocks |
 | Cream | `#F2EAE0` | `rgb(242, 234, 224)` | Phase 3 rect backgrounds |
 | Peach | `#F6C7B3` | `rgb(246, 199, 179)` | Primary nodes, Phase 4 rect blocks, participant boxes |
+| **Dusty Sage** | `#B5C9B5` | `rgb(181, 201, 181)` | **ACTIVATIONS ONLY** — must use this color |
 | Teal | `#82B2C0` | — | Notes, tertiary borders |
 | Terracotta | `#d4956a` | — | Borders, arrows, lines |
 | Dark Brown | `#5a3a2a` | — | Text on peach backgrounds |
 | Dark Teal | `#1a3a47` | — | Text on teal backgrounds |
+
+> ⚠️ **CRITICAL: Activation Color**
+>
+> The **Dusty Sage** (`#B5C9B5`) color is specifically reserved for activation bars in sequence diagrams. This muted green provides clear visual distinction from all phase background colors. **Never use Light Teal or any phase color for activations** — they will blend into the phase backgrounds and become invisible.
 
 ### Phase Color Progression
 
@@ -54,7 +59,7 @@ When using `rect` blocks for phases in sequence diagrams, use this progression:
 ### Sequence Diagram Theme
 
 ```
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 ```
 
 ### ER Diagram Theme
@@ -170,6 +175,66 @@ Redis[(Redis<br/>Sessions / Rate Limits)]
 - **Multi-service interactions**: Show service-to-service communication
 - **State transitions with timing**: When order matters
 
+---
+
+### ⚠️ CRITICAL REQUIREMENTS FOR SEQUENCE DIAGRAMS
+
+Every sequence diagram **MUST** follow these mandatory requirements:
+
+#### 1. Full-Width Phase Titles with `Note over`
+
+Each phase block **MUST** have a title that spans the full width of the diagram using `Note over FirstParticipant, LastParticipant:`. This ensures:
+- No empty/dead space on dark backgrounds
+- Clear visual separation between phases
+- Consistent professional appearance
+
+```
+rect rgb(220, 236, 233)
+    Note over Client, Database: PHASE 1 - CONNECTION
+    %% interactions here
+end
+```
+
+**❌ WRONG — Note over single participant (leaves empty space):**
+```
+Note over Server: Phase 1
+```
+
+**✅ CORRECT — Note spans first to last participant:**
+```
+Note over Client, Database: PHASE 1 - CONNECTION
+```
+
+#### 2. Activations Are Mandatory
+
+Every sequence diagram **MUST** include `activate`/`deactivate` pairs to show when participants are actively processing. Activations use **Dusty Sage** (`#B5C9B5`) color which is visually distinct from all phase backgrounds.
+
+**❌ WRONG — No activations:**
+```
+Client->>Server: request
+Server->>Database: query
+Database-->>Server: result
+Server-->>Client: response
+```
+
+**✅ CORRECT — With activations:**
+```
+Client->>Server: request
+activate Server
+Server->>Database: query
+activate Database
+Database-->>Server: result
+deactivate Database
+Server-->>Client: response
+deactivate Server
+```
+
+#### 3. Phase Blocks with Colored Backgrounds
+
+Every logical phase **MUST** be wrapped in a `rect rgb(...)` block with the appropriate phase color.
+
+---
+
 ### Structure Guidelines
 
 #### 1. Define Participants First
@@ -201,22 +266,26 @@ Use `as` for readable display names while keeping IDs short.
 
 **Phase block structure:**
 
+> ⚠️ **IMPORTANT:** The `Note over` MUST span from the FIRST participant to the LAST participant in the diagram to create a full-width phase title bar. This prevents empty/dead space on dark backgrounds.
+
 ```
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE NAME IN CAPS
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
-        Note over Client, Database: Phase Name
+        Note over Client, Database: PHASE 1 - Phase Name
         %% All interactions for this phase go here
         Client->>Server: request
+        activate Server
         Server-->>Client: response
+        deactivate Server
     end
 ```
 
 **Complete sequence diagram example:**
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant Client
     participant Server
@@ -272,11 +341,13 @@ sequenceDiagram
 **Rules:**
 1. Comment separators (`%% ═══...`) before each phase for readability in source
 2. Each `rect` block must use the RGB value, not hex (e.g., `rgb(220, 236, 233)` not `#DCECE9`)
-3. `Note over` at the start of each rect to label the phase
+3. **`Note over` MUST span first-to-last participant** to create full-width phase title (e.g., `Note over Client, Database:`)
 4. Keep `alt/else` blocks INSIDE the `rect` block they belong to
-5. `activate`/`deactivate` can span multiple phases but keep them balanced
+5. **Every diagram MUST have `activate`/`deactivate` pairs** — keep them balanced
 
 #### 3. Use Activations to Show Processing
+
+> ⚠️ **MANDATORY:** All sequence diagrams must include activations. The activation color is **Dusty Sage** (`#B5C9B5`), specifically chosen to be visually distinct from all phase background colors.
 
 Activations indicate when a participant is actively processing:
 
@@ -490,7 +561,7 @@ graph TB
 ### Sequence Diagram Template
 
 ```
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant Client
     participant Server
@@ -549,11 +620,20 @@ stateDiagram-v2
 
 Before finalizing a diagram, verify:
 
+### Sequence Diagram Checklist (CRITICAL)
+
+- [ ] **Theme initialization** with `activationBkgColor: '#B5C9B5'` (Dusty Sage)
+- [ ] **Every phase has a `rect rgb(...)` block** with appropriate color
+- [ ] **Phase titles use `Note over FirstParticipant, LastParticipant:`** — MUST span full width
+- [ ] **Activations are present** — every processing participant has `activate`/`deactivate` pairs
+- [ ] **Activations are balanced** — every `activate` has a matching `deactivate`
+- [ ] **No empty spaces** — phase title bars fill the diagram width
+
+### General Checklist
+
 - [ ] Theme initialization is included at the top
 - [ ] Colors match the "In the Sunshine" palette
 - [ ] Node names are descriptive and consistent with code
-- [ ] Sequence diagrams use `rect` blocks for phases
-- [ ] Activations are balanced (activate/deactivate pairs)
 - [ ] Complex flows include explanatory notes
 - [ ] Diagram is accompanied by a descriptive table
 - [ ] Diagram fits within reasonable size limits

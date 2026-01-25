@@ -168,7 +168,7 @@ type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode
 ### Opening a Workspace
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Sidebar
@@ -213,7 +213,7 @@ sequenceDiagram
 ### Creating a Document
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Canvas
@@ -253,7 +253,7 @@ sequenceDiagram
 ### Adding an Image
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Svelte as WorkspaceCanvas.svelte
@@ -267,11 +267,17 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over User, WSvc: PHASE 1 - UPLOAD — User picks an image
         User->>Svelte: Click "+ Add Image"
+        activate Svelte
         Svelte->>Modal: show()
+        deactivate Svelte
         User->>Modal: Select/drop image file
+        activate Modal
         Modal->>API: POST file (multipart)
+        activate API
         API->>ObjStore: putObject(fileId, buffer)
         API-->>Modal: { fileId, url }
+        deactivate API
+        deactivate Modal
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -280,8 +286,10 @@ sequenceDiagram
     rect rgb(195, 222, 221)
         Note over User, WSvc: PHASE 2 - CREATE NODE
         Modal-->>Svelte: onComplete({ fileId, src })
+        activate Svelte
         Svelte->>Svelte: Load image to get aspectRatio
         Svelte->>Svelte: Create ImageCanvasNode
+        deactivate Svelte
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -289,8 +297,12 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(242, 234, 224)
         Note over User, WSvc: PHASE 3 - PERSIST
+        activate Svelte
         Svelte->>WSvc: updateCanvasState()
+        activate WSvc
+        deactivate WSvc
         Svelte->>Svelte: Re-render with new image node
+        deactivate Svelte
     end
 ```
 
@@ -301,7 +313,7 @@ Note: after an image is uploaded the client loads it to determine the natural as
 When an image node is removed from the canvas (either by user action or programmatically):
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas.ts
@@ -315,7 +327,9 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over User, ObjStore: PHASE 1 - REMOVE — User deletes image from canvas
         User->>Canvas: Remove image node
+        activate Canvas
         Canvas->>Canvas: commitCanvasState(newState)
+        deactivate Canvas
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -324,8 +338,10 @@ sequenceDiagram
     rect rgb(195, 222, 221)
         Note over User, ObjStore: PHASE 2 - DETECT
         Canvas->>Tracker: trackCanvasState(newState)
+        activate Tracker
         Tracker->>Tracker: Compare previous vs current
         Tracker->>Tracker: Detect removed image
+        deactivate Tracker
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -333,17 +349,21 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(246, 199, 179)
         Note over User, ObjStore: PHASE 3 - DELETE
+        activate Tracker
         Tracker->>NATS: DELETE_IMAGE request
         NATS->>API: Handle deletion
+        activate API
         API->>ObjStore: deleteObject(fileId)
         API->>API: Remove from workspace.files
+        deactivate API
+        deactivate Tracker
     end
 ```
 
 ### Editing Content
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant ProseMirror
@@ -356,6 +376,8 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over User, DSvc: PHASE 1 - EDIT — User edits content
         User->>ProseMirror: Type content
+        activate ProseMirror
+        deactivate ProseMirror
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -364,8 +386,12 @@ sequenceDiagram
     rect rgb(195, 222, 221)
         Note over User, DSvc: PHASE 2 - PROPAGATE
         ProseMirror->>Canvas: onEditorChange(content)
+        activate Canvas
         Canvas->>Svelte: onDocumentContentChange()
+        activate Svelte
         Svelte->>DSvc: updateDocument()
+        deactivate Svelte
+        deactivate Canvas
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -373,14 +399,16 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(246, 199, 179)
         Note over User, DSvc: PHASE 3 - PERSIST
+        activate DSvc
         DSvc->>DSvc: NATS request (debounced)
+        deactivate DSvc
     end
 ```
 
 ### Moving a Document
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas.ts
@@ -393,10 +421,12 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over User, WSvc: PHASE 1 - DRAG
         User->>Canvas: Mousedown on drag overlay
+        activate Canvas
         Canvas->>Canvas: Disable pan, track mouse
         User->>Canvas: Mousemove
         Canvas->>Canvas: Update node position (DOM)
         User->>Canvas: Mouseup
+        deactivate Canvas
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -405,8 +435,12 @@ sequenceDiagram
     rect rgb(195, 222, 221)
         Note over User, WSvc: PHASE 2 - SAVE
         Canvas->>Svelte: onCanvasStateChange(newNodes)
+        activate Svelte
         Svelte->>Store: updateCanvasState()
         Svelte->>WSvc: updateCanvasState()
+        activate WSvc
+        deactivate WSvc
+        deactivate Svelte
     end
 ```
 
@@ -627,7 +661,7 @@ flowchart TB
 AI chat threads use a workspace-scoped routing pattern for streaming responses:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant Editor as AI Chat Thread Editor
     participant AIS as AiInteractionService
@@ -641,6 +675,7 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over Editor, LLM: PHASE 1 - REQUEST
         Editor->>AIS: sendChatMessage({ messages, aiModel })
+        activate AIS
         AIS->>NATS: publish(CHAT_SEND_MESSAGE, {<br/>  workspaceId,<br/>  aiChatThreadId,<br/>  messages,<br/>  aiModel<br/>})
     end
 
@@ -656,6 +691,7 @@ sequenceDiagram
         API->>NATS: publish(CHAT_PROCESS, {...})
         deactivate API
         NATS->>LLM: Route to Python
+        activate LLM
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -668,6 +704,8 @@ sequenceDiagram
             NATS->>AIS: Deliver to subscriber
             AIS->>Editor: Insert content via SegmentsReceiver
         end
+        deactivate LLM
+        deactivate AIS
     end
 ```
 
@@ -732,7 +770,7 @@ flowchart TB
 ### Connection Flow
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Handle as Source Handle DOM
@@ -746,9 +784,13 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over User, Target: PHASE 1 - START DRAG
         User->>Handle: pointerdown
+        activate Handle
         Handle->>XYH: Call with params
+        activate XYH
         XYH->>WCM: updateConnection(inProgress)
+        activate WCM
         WCM->>SVG: Render temp line from source
+        deactivate Handle
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -772,8 +814,10 @@ sequenceDiagram
         User->>Target: pointerup over valid handle
         XYH->>XYH: isValidConnection check
         XYH->>WCM: onConnect({ source, target })
+        deactivate XYH
         WCM->>WCM: Add edge to state
         WCM->>SVG: Render permanent edge
+        deactivate WCM
     end
 ```
 
@@ -884,7 +928,7 @@ When an edge is selected, small draggable circles appear at the source and targe
 Edge changes follow the same pattern as node changes:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant WCM as WorkspaceConnectionManager
@@ -899,7 +943,9 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over User, NATS: PHASE 1 - ADD EDGE LOCALLY
         User->>WCM: Complete connection (onConnect)
+        activate WCM
         WCM->>WC: Add edge to local state
+        deactivate WCM
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -907,9 +953,13 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
         Note over User, NATS: PHASE 2 - UPDATE STORES
+        activate WC
         WC->>Svelte: onCanvasStateChange({ nodes, edges })
+        activate Svelte
         Svelte->>Store: updateCanvasState()
         Svelte->>WSvc: updateCanvasState()
+        deactivate Svelte
+        deactivate WC
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -917,7 +967,9 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(246, 199, 179)
         Note over User, NATS: PHASE 3 - PERSIST
+        activate WSvc
         WSvc->>NATS: WORKSPACE.UPDATE_CANVAS_STATE
+        deactivate WSvc
     end
 ```
 
@@ -974,7 +1026,7 @@ Multi-turn editing is supported: users can continue refining an image within the
 ### Data Flow
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Thread as AI Chat Thread
@@ -990,10 +1042,15 @@ sequenceDiagram
     rect rgb(220, 236, 233)
         Note over User, Storage: PHASE 1 - REQUEST
         User->>Thread: Enable image generation + type prompt
+        activate Thread
         Thread->>AIS: sendChatMessage({ enableImageGeneration, imageSize, ... })
+        activate AIS
         AIS->>API: CHAT_SEND_MESSAGE
+        activate API
         API->>LLM: CHAT_PROCESS (with image options)
+        activate LLM
         LLM->>OpenAI: responses.create({ tools: [image_generation], ... })
+        deactivate Thread
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -1014,8 +1071,11 @@ sequenceDiagram
     rect rgb(242, 234, 224)
         Note over User, Storage: PHASE 3 - COMPLETE
         OpenAI->>LLM: image_generation_call (completed)
+        deactivate LLM
         LLM->>AIS: IMAGE_COMPLETE { responseId, revisedPrompt, base64 }
+        deactivate API
         AIS->>Thread: Insert aiGeneratedImage node with action buttons
+        deactivate AIS
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -1024,11 +1084,17 @@ sequenceDiagram
     rect rgb(246, 199, 179)
         Note over User, Storage: PHASE 4 - ADD TO CANVAS
         User->>Thread: Click "Add to Canvas"
+        activate Thread
         Thread->>Canvas: handleAddGeneratedImageToCanvas(...)
+        activate Canvas
         Canvas->>Storage: POST /api/images/:workspaceId (hash-dedupe)
+        activate Storage
         Storage-->>Canvas: { fileId, src }
+        deactivate Storage
         Canvas->>Canvas: Create ImageCanvasNode + WorkspaceEdge
         Canvas->>Canvas: Persist canvasState
+        deactivate Canvas
+        deactivate Thread
     end
 ```
 

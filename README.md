@@ -146,6 +146,7 @@ Lixpi AI Bridge is a real-time AI-powered document collaboration platform built 
 ## High-Level System Overview
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
     WebUI["🌐 Web UI"] <-->|WebSocket| NATS["⚡ NATS"]
     NATS <--> API["⚙️ Main API"]
@@ -195,29 +196,63 @@ Examples:
 ## Authentication Flow
 
 ```mermaid
-flowchart TB
-    subgraph Step1["1️⃣ Get Token"]
-        A["Web UI"] -->|OAuth2| B["Auth0"]
-        B -->|JWT| A
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
+sequenceDiagram
+    participant WebUI as Web UI
+    participant Auth0 as Auth0
+    participant NATS as NATS
+    participant AuthCallout as Auth Callout
+    participant AuthSvc as @lixpi/auth-service
+    participant API as API
+    participant LLM as LLM API
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: GET TOKEN
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over WebUI, LLM: PHASE 1 - GET TOKEN
+        WebUI->>Auth0: OAuth2 login
+        activate Auth0
+        Auth0-->>WebUI: JWT token
+        deactivate Auth0
     end
 
-    subgraph Step2["2️⃣ Connect to NATS"]
-        C["Web UI"] -->|JWT| D["NATS"]
-        D -->|validate| E["Auth Callout"]
-        E -->|verify| F["@lixpi/auth-service"]
-        F -->|JWKS| G["Auth0"]
-        F -->|✓| E
-        E -->|signed JWT| D
-        D -->|connected| C
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: CONNECT TO NATS
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over WebUI, LLM: PHASE 2 - CONNECT TO NATS
+        WebUI->>NATS: Connect with JWT
+        activate NATS
+        NATS->>AuthCallout: Validate token
+        activate AuthCallout
+        AuthCallout->>AuthSvc: Verify JWT
+        activate AuthSvc
+        AuthSvc->>Auth0: Fetch JWKS
+        Auth0-->>AuthSvc: Public keys
+        AuthSvc-->>AuthCallout: ✓ Valid
+        deactivate AuthSvc
+        AuthCallout-->>NATS: Signed response JWT
+        deactivate AuthCallout
+        NATS-->>WebUI: Connected
+        deactivate NATS
     end
 
-    subgraph Step3["3️⃣ Make Requests"]
-        H["Web UI"] --> I["NATS"]
-        I --> J["API"] --> K[(DB)]
-        I --> L["LLM API"] --> M(("AI"))
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: MAKE REQUESTS
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(242, 234, 224)
+        Note over WebUI, LLM: PHASE 3 - MAKE REQUESTS
+        WebUI->>NATS: Request
+        activate NATS
+        NATS->>API: Route to API
+        activate API
+        deactivate API
+        NATS->>LLM: Route to LLM API
+        activate LLM
+        deactivate LLM
+        deactivate NATS
     end
-
-    Step1 --> Step2 --> Step3
 ```
 
 Only API can access the database directly. LLM API must publish messages through NATS if it needs to persist data — a tradeoff for simpler access control.
@@ -229,6 +264,7 @@ All token verification is handled by `@lixpi/auth-service`, a shared package use
 - **API HTTP endpoints** — validates Bearer tokens on REST calls
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Clients
         WebUI["Web UI"]
@@ -267,20 +303,55 @@ flowchart TB
 ## AI Chat Flow
 
 ```mermaid
-flowchart TB
-    subgraph Step1["1️⃣ Request: Web UI → API"]
-        A["Web UI"] -->|sendMessage| B["NATS"] --> C["API"]
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
+sequenceDiagram
+    participant WebUI as Web UI
+    participant NATS as NATS
+    participant API as API
+    participant LLM as LLM API
+    participant AI as AI Provider
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: REQUEST
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over WebUI, AI: PHASE 1 - REQUEST — Web UI sends message to API
+        WebUI->>NATS: sendMessage { messages, aiModel }
+        activate NATS
+        NATS->>API: Route to handler
+        activate API
+        API->>API: Validate token & enrich data
+        deactivate NATS
     end
 
-    subgraph Step2["2️⃣ Forward: API → LLM API"]
-        D["API"] -->|process| E["NATS"] --> F["LLM API"] --> G(("AI"))
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: FORWARD TO LLM
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over WebUI, AI: PHASE 2 - FORWARD — API routes to LLM API
+        API->>NATS: process { messages, modelConfig }
+        activate NATS
+        NATS->>LLM: Route to LLM worker
+        activate LLM
+        LLM->>AI: Stream request
+        activate AI
+        deactivate API
+        deactivate NATS
     end
 
-    subgraph Step3["3️⃣ Response: Direct Stream to Client"]
-        H(("AI")) -->|tokens| I["LLM API"] -->|receiveMessage| J["NATS"] --> K["Web UI"]
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: STREAM RESPONSE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over WebUI, AI: PHASE 3 - STREAM — Tokens flow directly to client
+        loop Token Streaming
+            AI-->>LLM: Token chunk
+            LLM->>NATS: receiveMessage.{threadId} { chunk }
+            NATS-->>WebUI: Deliver token
+        end
+        deactivate AI
+        deactivate LLM
     end
-
-    Step1 --> Step2 --> Step3
 ```
 
 **Key insight:** Response tokens stream directly from LLM API → NATS → Web UI, bypassing the API service for minimal latency.
@@ -306,6 +377,7 @@ Instead of using traditional external load balancers (like Nginx or AWS ALB), we
 When multiple instances of a service subscribe to the same subject with the same queue group name, NATS automatically distributes messages among them.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
     Client["Web UI / Client"] -->|Request| NATS["⚡ NATS Cluster"]
 

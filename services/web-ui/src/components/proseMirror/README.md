@@ -102,7 +102,7 @@ Meta flags are string keys placed on transactions and observed by `appendTransac
 - `insertCodeBlock` (via code fence input rule): instructs codeBlock plugin to replace the current paragraph with a code_block.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant User
   participant KeymapCommands as "Keymap/Commands"
@@ -114,15 +114,21 @@ sequenceDiagram
   rect rgb(220, 236, 233)
       Note over User, EditorView: PHASE 1 - INTENT
       User->>KeymapCommands: triggers action
+      activate KeymapCommands
       KeymapCommands->>EditorView: dispatch tr.setMeta(key, payload)
+      deactivate KeymapCommands
   end
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 2: APPLY
   %% ═══════════════════════════════════════════════════════════════
   rect rgb(195, 222, 221)
       Note over User, EditorView: PHASE 2 - APPLY
+      activate EditorView
       EditorView->>Plugins: appendTransaction/apply
+      activate Plugins
       Plugins->>EditorView: mutate doc (insert nodes, marks, selections)
+      deactivate Plugins
+      deactivate EditorView
   end
 ```
 
@@ -227,7 +233,7 @@ graph TD
 - Input rule `codeBlockInputRule(schema)`: converts ``` line to code_block and inserts an empty paragraph after.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant PM as ProseMirror
   participant CM as CodeMirror NodeView
@@ -237,6 +243,7 @@ sequenceDiagram
   rect rgb(220, 236, 233)
       Note over PM, CM: PHASE 1 - INIT
       PM->>CM: NodeView constructed with node.textContent
+      activate CM
   end
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 2: SYNC EDITS
@@ -244,6 +251,8 @@ sequenceDiagram
   rect rgb(195, 222, 221)
       Note over PM, CM: PHASE 2 - SYNC EDITS
       CM->>PM: forwardUpdate (changes) -> tr.replaceWith / delete
+      activate PM
+      deactivate PM
   end
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 3: SELECTION MIRRORING
@@ -252,6 +261,8 @@ sequenceDiagram
       Note over PM, CM: PHASE 3 - SELECTION MIRRORING
       PM->>CM: syncProseMirrorSelection (when PM selection enters CM)
       CM->>PM: syncCodeMirrorSelection (when CM selection hits edges)
+      deactivate CM
+  end
   end
 ```
 
@@ -302,7 +313,7 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 See `plugins/aiChatThreadPlugin/README.md` for complete documentation.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#C3DEDD', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
   participant UI as User
   participant Plugin as aiChatThreadPlugin
@@ -314,9 +325,11 @@ sequenceDiagram
   rect rgb(220, 236, 233)
       Note over UI, SR: PHASE 1 - SUBMIT
       UI->>Plugin: Cmd+Enter in aiUserInput
+      activate Plugin
       Plugin->>Plugin: Create aiUserMessage from composer content
       Plugin->>Plugin: Clear composer
       Plugin->>S: onAiChatSubmit(messages, aiModel)
+      activate S
   end
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 2: STREAM
@@ -324,6 +337,7 @@ sequenceDiagram
   rect rgb(195, 222, 221)
       Note over UI, SR: PHASE 2 - STREAM
       SR-->>Plugin: START_STREAM(provider, threadId)
+      activate SR
       Plugin->>Plugin: Insert aiResponseMessage before aiUserInput
       SR-->>Plugin: STREAMING(segments)
       Plugin->>Plugin: Insert text/blocks into aiResponseMessage
@@ -334,7 +348,10 @@ sequenceDiagram
   rect rgb(246, 199, 179)
       Note over UI, SR: PHASE 3 - COMPLETE
       SR-->>Plugin: END_STREAM
+      deactivate SR
       Plugin->>Plugin: Clear animations
+      deactivate S
+      deactivate Plugin
   end
 ```
 
