@@ -3,9 +3,13 @@
 @import '$src/sass/components/animations';
 @import '$src/components/proseMirror/plugins/primitives/dropdown/dropdown.scss';
 @import '$src/components/proseMirror/plugins/primitives/infoBubble/infoBubble.scss';
-@import '$src/components/proseMirror/plugins/primitives/contextSelector/contextSelector.scss';
 
 $aiChatThreadMinHeight: 50px;
+
+// User message bubble colors
+$userMessageBubbleColor: linear-gradient(135deg, #636d75 0%, #6c747c 100%);
+$userMessageBubbleSolidColor: #6a7279; // Solid fallback for the tail
+$userMessageTextColor: #fff;
 
 // ========== AI CHAT THREAD WRAPPER ==========
 .ai-chat-thread-wrapper {
@@ -13,139 +17,82 @@ $aiChatThreadMinHeight: 50px;
     margin-top: 2rem;
     min-height: $aiChatThreadMinHeight;
 
+    // Reserve space so the sticky composer doesn't cover content
+    padding-bottom: 5rem;
+
     // ===== THREAD CONTENT =====
     .ai-chat-thread-content {
         position: relative;
+
+        // Reserve space so sticky composer doesn't cover last message
+        padding-bottom: 3.25rem;
     }
 
-    // ===== THREAD BOUNDARY SYSTEM =====
-    .ai-thread-boundary-indicator {
-        position: absolute;
-        right: -71px;
-        top: -6px;
-        // width: 32px;
-        width: 60px;
-        height: 32px;
-        // border: 1px solid red;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border-radius: 50%;
-        z-index: 3;
-        // cursor: pointer;
-
-        // Add invisible hover area that extends to cover the collapse toggle
-        &::after {
-            content: '';
-            position: absolute;
-            width: 60px; // Extended width to cover both elements
-            height: 62px;
-            pointer-events: auto; // Extends hover area
-            // background: rgba(189, 173, 141, .2);
-            z-index: 0; // Behind children so they can receive clicks
-            // cursor: move;
-        }
-
-        .ai-thread-boundary-icon {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            z-index: 1; // Above ::after
-            cursor: pointer;
-
-            svg {
-                width: 20px;
-                height: 20px;
-                fill: $nightBlue;
-                transition: pupOutTransition(all, 150ms);
-            }
-        }
-
-        // Collapse toggle icon - appears on hover
-        .ai-thread-collapse-toggle {
-            margin-left: .15rem;
-            width: 20px;
-            height: 20px;
-            opacity: 0;
-            transition: hoverTransition(opacity, 200ms);
-            cursor: pointer;
-            position: relative;
-            z-index: 2; // Above ::after so it can receive clicks
-
-            .collapse-icon {
-                display: block;
-            }
-
-            svg {
-                width: 20px;
-                height: 20px;
-                fill: lighten($nightBlue, 30%); // Lighter in expanded state
-            }
-
-            // Click feedback animation - collapsing (going from expanded to collapsed)
-            &.click-feedback svg {
-                @include clickToggleFeedbackAnimation((
-                    startColor: lighten($nightBlue, 30%),
-                    flashColor: lighten($nightBlue, 15%),
-                    endColor: $nightBlue
-                ));
-            }
-        }
-
-        // Show collapse toggle on boundary indicator hover
-        &:hover .ai-thread-collapse-toggle {
-            opacity: 1;
-            pointer-events: auto;
-        }
+    // ===== USER MESSAGE (SENT) =====
+    .ai-user-message-wrapper {
+        display: block;
+        margin: 0.6rem 0;
     }
 
-    .ai-thread-boundary-indicator-line {
-        position: absolute;
-        right: -15px;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: $steelBlue;
-        opacity: 0;
-        transform: scaleY(0);
-        min-height: $aiChatThreadMinHeight;
-        transform-origin: top;
-        transition: pupOutTransition(all, 200ms);
-        z-index: 5;
-        pointer-events: none;
+    .ai-user-message {
+        display: table;
+        max-width: 85%;
+        margin-left: auto;
+        margin-right: 1rem;
+        padding: 0.6rem 1rem;
+        background: $userMessageBubbleColor;
+        color: $userMessageTextColor;
+        border-radius: 18px 18px 12px 18px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        line-height: 1.5;
+        word-wrap: break-word;
 
-        @include boundaryPointerTriangle((
-            direction: 'left',
-            anchor: 'bottom',
-            horizontalOffset: 0px,
-            verticalOffset: 2px,
-            size: 2px,
-            color: $steelBlue,
-            accentColor: $nightBlue
+        @include speechBubbleTail((
+            position: 'right',
+            bubbleColor: $userMessageBubbleSolidColor
         ));
     }
 
-    // ===== AI CHAT THREAD CONTROLS CONTAINER =====
-    .ai-chat-thread-controls {
-        position: absolute;
-        bottom: -0.75rem;
-        right: -.17rem;
+    .ai-user-message-content {
+        > *:first-child { margin-top: 0; }
+        > *:last-child { margin-bottom: 0; }
+    }
+
+    // ===== USER INPUT (COMPOSER) =====
+    .ai-user-input-wrapper {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        margin-top: 1rem;
+        padding: 0.9rem 1rem;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.65);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+    }
+
+    .ai-user-input-content {
+        min-height: 44px;
+
+        // Make the typing area look like an input, but still full rich text
+        > *:first-child { margin-top: 0; }
+        > *:last-child { margin-bottom: 0; }
+    }
+
+    .ai-user-input-controls {
         display: flex;
         align-items: center;
+        justify-content: flex-end;
         gap: 0.2rem;
-        // z-index: 3;
+        margin-top: 0.4rem;
 
-        // All dropdown wrappers inside controls use natural flex flow
         .dropdown-menu-tag-pill-wrapper {
             position: relative;
         }
     }
 
-    // ===== AI SUBMIT BUTTON =====
+    // ===== SUBMIT BUTTON =====
     .ai-submit-button {
         position: relative; // ensure absolutely positioned state layers anchor here
         display: inline-flex;
@@ -225,15 +172,83 @@ $aiChatThreadMinHeight: 50px;
         }
     }
 
-    // ===== INTERACTION STATES =====
+    // ===== IMAGE GENERATION TOGGLE =====
+    .image-generation-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        opacity: 0.6;
+        transition: hoverTransition(opacity, 200ms);
 
-    // Thread boundary visibility
-    &.thread-boundary-visible {
-        .ai-thread-boundary-indicator-line {
+        &:hover {
             opacity: 1;
-            transform: scaleY(1);
+        }
+
+        &[data-enabled="true"] {
+            opacity: 1;
+
+            .image-toggle-btn {
+                background: rgba($steelBlue, 0.15);
+
+                svg {
+                    fill: $steelBlue;
+                }
+            }
+
+            .image-size-selector {
+                display: block;
+            }
+        }
+
+        .image-toggle-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            transition: hoverTransition(all, 200ms);
+
+            svg {
+                width: 16px;
+                height: 16px;
+                fill: $nightBlue;
+                transition: hoverTransition(fill, 150ms);
+            }
+
+            &:hover {
+                background: rgba($nightBlue, 0.1);
+            }
+        }
+
+        .image-size-selector {
+            display: none;
+            font-size: 11px;
+            padding: 2px 6px;
+            border: 1px solid rgba($nightBlue, 0.3);
+            border-radius: 4px;
+            background: rgba(#fff, 0.9);
+            color: $nightBlue;
+            cursor: pointer;
+            outline: none;
+            transition: hoverTransition(all, 200ms);
+
+            &:hover,
+            &:focus {
+                border-color: $steelBlue;
+            }
+
+            option {
+                background: #fff;
+                color: $nightBlue;
+            }
         }
     }
+
+    // ===== INTERACTION STATES =====
 
     // Submit button hover (when not receiving)
     &:not(.receiving) .ai-submit-button:hover {
@@ -291,76 +306,6 @@ $aiChatThreadMinHeight: 50px;
             }
         }
     }
-
-    // ===== COLLAPSED STATE =====
-    // When collapsed, show 50px preview with fade-out gradient at bottom
-    &.collapsed {
-        .ai-chat-thread-content {
-            max-height: 60px;
-            overflow: hidden;
-            position: relative;
-
-            // Fade-out gradient overlay - starts earlier, fades drastically at bottom
-            &::after {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 100%;
-                background: linear-gradient(to bottom,
-                    rgba(255, 255, 255, 0) 0%,
-                    rgba(255, 255, 255, 0) 33%,
-                    rgba(255, 255, 255, 0.3) 57%,
-                    rgba(255, 255, 255, 0.7) 74%,
-                    rgba(255, 255, 255, 0.95) 88%,
-                    rgba(255, 255, 255, 1) 96%,
-                    rgba(255, 255, 255, 1) 100%
-                );
-                pointer-events: none;
-                z-index: 2;
-            }
-        }
-
-        .ai-thread-boundary-indicator {
-            .ai-thread-boundary-icon {
-                svg {
-                    fill: lighten($nightBlue, 20%);
-                }
-            }
-
-            // When collapsed, use darker color for toggle icon
-            .ai-thread-collapse-toggle svg {
-                fill: $nightBlue; // Darker in collapsed state
-            }
-
-            // Click feedback animation - expanding (going from collapsed to expanded)
-            .ai-thread-collapse-toggle.click-feedback svg {
-                @include clickToggleFeedbackAnimation((
-                    startColor: $nightBlue,
-                    flashColor: lighten($nightBlue, 15%),
-                    endColor: lighten($nightBlue, 30%)
-                ));
-            }
-        }
-
-
-        .ai-thread-boundary-indicator-line {
-            background: lighten($steelBlue, 20%)
-        }
-
-        .ai-chat-thread-controls {
-            display: none;
-        }
-
-        &:hover {
-            cursor: move;
-
-            .ai-thread-boundary-indicator-line {
-                background: $steelBlue;
-            }
-        }
-    }
 }
 
 $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
@@ -379,7 +324,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         border-radius: 99px;
         position: absolute;
         user-select: none;
-        left: -55px;
+        left: -36px;
         bottom: 0.01rem;
         cursor: default;
 
@@ -389,10 +334,10 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
         // Assistant providers
         &.assistant-anthropic {
-            left: -55.5px;
+            left: -36.5px;
 
             svg {
-                fill: #D97757;
+                // fill: #D97757;;
                 width: 21.5px;
                 height: 21.5px;
             }
@@ -400,10 +345,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
         &.assistant-openai {
             overflow: hidden;
-
-            svg {
-                fill: $aiGreen;
-            }
 
             &.node-receiving-animation svg {
                 animation: heartbeatAnimation 1.5s infinite;
@@ -418,7 +359,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         z-index: 2;
         margin: 0;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         padding: 0;
         gap: 0.4rem;
 
@@ -450,36 +391,22 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             ));
         }
 
-        // Boundary indicator
-        .ai-response-message-boundaries-indicator {
-            position: absolute;
-            left: -21px;
-            display: block;
-            height: 100%;
-            width: $aiResponseMessageIndicatorBoundariesWidth;
-            transition: height 400ms cubic-bezier(0.19, 1, 0.22, 1);
-            background-color: $aiResponseMessageIndicatorColor;
-            border-radius: 100px;
-
-            @include boundaryPointerTriangle((
-                direction: 'left',
-                anchor: 'bottom',
-                horizontalOffset: 0px,
-                verticalOffset: 8px,
-                size: 2px,
-                color: $aiResponseMessageIndicatorColor,
-                accentColor: $aiResponseMessageIndicatorAccentPointerColor
-            ));
-
-            &.node-render-animation {
-                animation: popOutAndGrow 300ms cubic-bezier(0.19, 1, 0.22, 1);
-            }
-        }
-
         // Message content
         .ai-response-message-content {
-            padding: 0;
+            padding: 0.5rem 1rem;
             min-height: $aiResponseMessageEmptyNodeMinHeight;
+            background: #fff;
+            color: #2a2d2f;
+            border-radius: 18px 18px 18px 12px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+            max-width: 85%;
+            word-wrap: break-word;
+            position: relative;
+
+            @include speechBubbleTail((
+                position: 'left',
+                bubbleColor: #fff
+            ));
 
             &.node-render-animation {
                 animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
@@ -491,5 +418,146 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 }
             }
         }
+    }
+}
+
+// ========== AI GENERATED IMAGE ==========
+.ai-generated-image-wrapper {
+    margin: 1rem 0;
+
+    .ai-generated-image-container {
+        position: relative;
+        // background: rgba($nightBlue, 0.03);
+        border-radius: 12px;
+        overflow: hidden;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+
+        &.is-partial {
+            .ai-generated-image-content {
+                filter: blur(8px);
+                opacity: 0.7;
+            }
+        }
+    }
+
+    .ai-generated-image-spinner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        z-index: 2;
+
+        &.is-active {
+            display: flex;
+        }
+
+        .spinner-ring {
+            width: 48px;
+            height: 48px;
+            border: 3px solid rgba($nightBlue, 0.1);
+            border-top-color: $nightBlue;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .spinner-text {
+            font-size: 0.875rem;
+            color: rgba($nightBlue, 0.6);
+        }
+    }
+
+    .ai-generated-image-content {
+        max-width: 100%;
+        max-height: 512px;
+        object-fit: contain;
+        display: none;
+        transition: filter 0.3s ease, opacity 0.3s ease;
+
+        &.is-visible {
+            display: block;
+        }
+    }
+
+    .ai-generated-image-actions {
+        display: none;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.5));
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        justify-content: center;
+
+        &.is-visible {
+            display: flex;
+        }
+
+        button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+
+            svg {
+                flex-shrink: 0;
+            }
+        }
+
+        .add-to-canvas-btn {
+            background: white;
+            color: $nightBlue;
+
+            &:hover {
+                background: darken(white, 5%);
+                transform: translateY(-1px);
+            }
+        }
+
+        .edit-in-thread-btn {
+            background: rgba(white, 0.2);
+            color: white;
+            backdrop-filter: blur(4px);
+
+            &:hover {
+                background: rgba(white, 0.3);
+                transform: translateY(-1px);
+            }
+        }
+    }
+
+    .ai-generated-image-prompt {
+        display: none;
+        padding: 0.75rem 1rem;
+        font-size: 0.8rem;
+        color: rgba($nightBlue, 0.6);
+        background: rgba($nightBlue, 0.03);
+        border-top: 1px solid rgba($nightBlue, 0.1);
+        font-style: italic;
+        line-height: 1.4;
+
+        &.is-visible {
+            display: block;
+        }
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
     }
 }

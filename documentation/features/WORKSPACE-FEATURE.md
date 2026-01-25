@@ -19,6 +19,7 @@ A workspace is the primary container where users organize and edit their documen
 ## System Architecture
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Client["Browser"]
         subgraph Svelte["Svelte Components"]
@@ -167,6 +168,7 @@ type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode
 ### Opening a Workspace
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Sidebar
@@ -174,39 +176,84 @@ sequenceDiagram
     participant WSvc as WorkspaceService
     participant DSvc as DocumentService
     participant Canvas
-
-    User->>Sidebar: Click workspace
-    Sidebar->>Router: navigateTo(/workspace/:id)
-    Router->>WSvc: getWorkspace()
-    WSvc->>WSvc: Fetch via NATS
-    WSvc->>workspaceStore: setDataValues()
-    Router->>DSvc: getWorkspaceDocuments()
-    DSvc->>documentsStore: setDocuments()
-    Canvas->>Canvas: render(canvasState, documents)
+    participant workspaceStore
+    participant documentsStore
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: NAVIGATION
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, documentsStore: PHASE 1 - NAVIGATION — User chooses a workspace
+        User->>Sidebar: Click workspace
+        Sidebar->>Router: navigateTo(/workspace/:id)
+    end
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: DATA FETCH
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, documentsStore: PHASE 2 - DATA FETCH
+        activate WSvc
+        Router->>WSvc: getWorkspace()
+        WSvc->>WSvc: Fetch via NATS
+        WSvc-->>workspaceStore: setDataValues()
+        deactivate WSvc
+        activate DSvc
+        Router->>DSvc: getWorkspaceDocuments()
+        DSvc-->>documentsStore: setDocuments()
+        deactivate DSvc
+    end
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: RENDER
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(242, 234, 224)
+        Note over User, documentsStore: PHASE 3 - RENDER — Render with loaded state
+        Canvas->>Canvas: render(canvasState, documents)
+    end
 ```
 
 ### Creating a Document
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Canvas
     participant DSvc as DocumentService
     participant WSvc as WorkspaceService
-
-    User->>Canvas: Click "+ New Document"
-    Canvas->>DSvc: createDocument()
-    DSvc->>DSvc: NATS request
-    DSvc->>documentsStore: addDocuments()
-    DSvc-->>Canvas: Return document
-    Canvas->>Canvas: Calculate position
-    Canvas->>WSvc: updateCanvasState()
-    Canvas->>Canvas: Re-render with new node
+    participant documentsStore
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: REQUEST
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, documentsStore: PHASE 1 - REQUEST — User initiates document creation
+        User->>Canvas: Click "+ New Document"
+        Canvas->>DSvc: createDocument()
+    end
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: BACKEND WORK
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, documentsStore: PHASE 2 - BACKEND WORK
+        activate DSvc
+        DSvc->>DSvc: NATS request
+        DSvc-->>documentsStore: addDocuments()
+        DSvc-->>Canvas: Return document
+        deactivate DSvc
+    end
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: RENDER
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(242, 234, 224)
+        Note over User, documentsStore: PHASE 3 - RENDER
+        Canvas->>Canvas: Calculate position
+        Canvas->>WSvc: updateCanvasState()
+        Canvas->>Canvas: Re-render with new node
+    end
 ```
 
 ### Adding an Image
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Svelte as WorkspaceCanvas.svelte
@@ -214,27 +261,59 @@ sequenceDiagram
     participant API as /api/images/:workspaceId
     participant ObjStore as NATS Object Store
     participant WSvc as WorkspaceService
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: UPLOAD
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, WSvc: PHASE 1 - UPLOAD — User picks an image
+        User->>Svelte: Click "+ Add Image"
+        activate Svelte
+        Svelte->>Modal: show()
+        deactivate Svelte
+        User->>Modal: Select/drop image file
+        activate Modal
+        Modal->>API: POST file (multipart)
+        activate API
+        API->>ObjStore: putObject(fileId, buffer)
+        API-->>Modal: { fileId, url }
+        deactivate API
+        deactivate Modal
+    end
 
-    User->>Svelte: Click "+ Add Image"
-    Svelte->>Modal: show()
-    User->>Modal: Select/drop image file
-    Modal->>API: POST file (multipart)
-    API->>ObjStore: putObject(fileId, buffer)
-    API-->>Modal: { fileId, url }
-    Modal->>Svelte: onComplete({ fileId, src })
-    Svelte->>Svelte: Load image to get aspectRatio
-    Svelte->>Svelte: Create ImageCanvasNode
-    Svelte->>WSvc: updateCanvasState()
-    Svelte->>Svelte: Re-render with new image node
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: CREATE NODE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, WSvc: PHASE 2 - CREATE NODE
+        Modal-->>Svelte: onComplete({ fileId, src })
+        activate Svelte
+        Svelte->>Svelte: Load image to get aspectRatio
+        Svelte->>Svelte: Create ImageCanvasNode
+        deactivate Svelte
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: PERSIST
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(242, 234, 224)
+        Note over User, WSvc: PHASE 3 - PERSIST
+        activate Svelte
+        Svelte->>WSvc: updateCanvasState()
+        activate WSvc
+        deactivate WSvc
+        Svelte->>Svelte: Re-render with new image node
+        deactivate Svelte
+    end
+```
 
 Note: after an image is uploaded the client loads it to determine the natural aspect ratio. On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing and the UI computes resize handle size/offsets dynamically so handles remain visually consistent regardless of canvas zoom.
-```
 
 ### Deleting an Image
 
 When an image node is removed from the canvas (either by user action or programmatically):
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas.ts
@@ -242,54 +321,127 @@ sequenceDiagram
     participant NATS as NATS Client
     participant API as API Service
     participant ObjStore as NATS Object Store
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: REMOVE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, ObjStore: PHASE 1 - REMOVE — User deletes image from canvas
+        User->>Canvas: Remove image node
+        activate Canvas
+        Canvas->>Canvas: commitCanvasState(newState)
+        deactivate Canvas
+    end
 
-    User->>Canvas: Remove image node
-    Canvas->>Canvas: commitCanvasState(newState)
-    Note: committing canvas state persists corrected dimensions and triggers the image lifecycle tracker which will detect removed fileIds and call `deleteImage` to remove orphaned files from storage.
-    Canvas->>Tracker: trackCanvasState(newState)
-    Tracker->>Tracker: Compare previous vs current
-    Tracker->>Tracker: Detect removed image
-    Tracker->>NATS: DELETE_IMAGE request
-    NATS->>API: Handle deletion
-    API->>ObjStore: deleteObject(fileId)
-    API->>API: Remove from workspace.files
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: DETECT
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, ObjStore: PHASE 2 - DETECT
+        Canvas->>Tracker: trackCanvasState(newState)
+        activate Tracker
+        Tracker->>Tracker: Compare previous vs current
+        Tracker->>Tracker: Detect removed image
+        deactivate Tracker
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: DELETE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over User, ObjStore: PHASE 3 - DELETE
+        activate Tracker
+        Tracker->>NATS: DELETE_IMAGE request
+        NATS->>API: Handle deletion
+        activate API
+        API->>ObjStore: deleteObject(fileId)
+        API->>API: Remove from workspace.files
+        deactivate API
+        deactivate Tracker
+    end
 ```
 
 ### Editing Content
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant ProseMirror
     participant Canvas as WorkspaceCanvas.ts
     participant Svelte as WorkspaceCanvas.svelte
     participant DSvc as DocumentService
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: EDIT
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, DSvc: PHASE 1 - EDIT — User edits content
+        User->>ProseMirror: Type content
+        activate ProseMirror
+        deactivate ProseMirror
+    end
 
-    User->>ProseMirror: Type content
-    ProseMirror->>Canvas: onEditorChange(content)
-    Canvas->>Svelte: onDocumentContentChange()
-    Svelte->>DSvc: updateDocument()
-    DSvc->>DSvc: NATS request (debounced)
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: PROPAGATE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, DSvc: PHASE 2 - PROPAGATE
+        ProseMirror->>Canvas: onEditorChange(content)
+        activate Canvas
+        Canvas->>Svelte: onDocumentContentChange()
+        activate Svelte
+        Svelte->>DSvc: updateDocument()
+        deactivate Svelte
+        deactivate Canvas
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: PERSIST
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over User, DSvc: PHASE 3 - PERSIST
+        activate DSvc
+        DSvc->>DSvc: NATS request (debounced)
+        deactivate DSvc
+    end
 ```
 
 ### Moving a Document
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas.ts
     participant Svelte
     participant Store as workspaceStore
     participant WSvc as WorkspaceService
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: DRAG
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, WSvc: PHASE 1 - DRAG
+        User->>Canvas: Mousedown on drag overlay
+        activate Canvas
+        Canvas->>Canvas: Disable pan, track mouse
+        User->>Canvas: Mousemove
+        Canvas->>Canvas: Update node position (DOM)
+        User->>Canvas: Mouseup
+        deactivate Canvas
+    end
 
-    User->>Canvas: Mousedown on drag overlay
-    Canvas->>Canvas: Disable pan, track mouse
-    User->>Canvas: Mousemove
-    Canvas->>Canvas: Update node position (DOM)
-    User->>Canvas: Mouseup
-    Canvas->>Svelte: onCanvasStateChange(newNodes)
-    Svelte->>Store: updateCanvasState()
-    Svelte->>WSvc: updateCanvasState()
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: SAVE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, WSvc: PHASE 2 - SAVE
+        Canvas->>Svelte: onCanvasStateChange(newNodes)
+        activate Svelte
+        Svelte->>Store: updateCanvasState()
+        Svelte->>WSvc: updateCanvasState()
+        activate WSvc
+        deactivate WSvc
+        deactivate Svelte
+    end
 ```
 
 ## Frontend Stores
@@ -377,6 +529,7 @@ AI chat threads belonging to the current workspace.
 ## Rendering Pipeline
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
     subgraph Input
         CS[canvasState]
@@ -465,6 +618,7 @@ This ensures orphaned images don't accumulate in storage.
 Canvas nodes store dimensions in `canvasState` but content is fetched only when nodes enter the viewport. This optimizes initial workspace load and memory usage for large workspaces.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Initialization
         WS[Workspace Load] --> CS[Fetch canvasState]
@@ -507,27 +661,51 @@ flowchart TB
 AI chat threads use a workspace-scoped routing pattern for streaming responses:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant Editor as AI Chat Thread Editor
     participant AIS as AiInteractionService
     participant NATS as NATS
     participant API as API Gateway
     participant LLM as llm-api (Python)
-
     Note over AIS: Subscribes to<br/>receiveMessage.{workspaceId}.{threadId}
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: REQUEST
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over Editor, LLM: PHASE 1 - REQUEST
+        Editor->>AIS: sendChatMessage({ messages, aiModel })
+        activate AIS
+        AIS->>NATS: publish(CHAT_SEND_MESSAGE, {<br/>  workspaceId,<br/>  aiChatThreadId,<br/>  messages,<br/>  aiModel<br/>})
+    end
 
-    Editor->>AIS: sendChatMessage({ messages, aiModel })
-    AIS->>NATS: publish(CHAT_SEND_MESSAGE, {<br/>  workspaceId,<br/>  aiChatThreadId,<br/>  messages,<br/>  aiModel<br/>})
-    NATS->>API: Route to handler
-    API->>API: Validate workspace access
-    API->>API: Fetch AI model pricing
-    API->>NATS: publish(CHAT_PROCESS, {...})
-    NATS->>LLM: Route to Python
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: VALIDATE & ROUTE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over Editor, LLM: PHASE 2 - VALIDATE & ROUTE
+        activate API
+        NATS->>API: Route to handler
+        API->>API: Validate workspace access
+        API->>API: Fetch AI model pricing
+        API->>NATS: publish(CHAT_PROCESS, {...})
+        deactivate API
+        NATS->>LLM: Route to Python
+        activate LLM
+    end
 
-    loop Streaming Response
-        LLM->>NATS: publish(receiveMessage.{workspaceId}.{threadId}, chunk)
-        NATS->>AIS: Deliver to subscriber
-        AIS->>Editor: Insert content via SegmentsReceiver
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: STREAM
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over Editor, LLM: PHASE 3 - STREAM
+        loop Streaming Response
+            LLM->>NATS: publish(receiveMessage.{workspaceId}.{threadId}, chunk)
+            NATS->>AIS: Deliver to subscriber
+            AIS->>Editor: Insert content via SegmentsReceiver
+        end
+        deactivate LLM
+        deactivate AIS
     end
 ```
 
@@ -551,6 +729,7 @@ Visual connections (edges/arrows) between canvas nodes allow users to show relat
 ### Architecture
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph "Data Layer"
         CS[CanvasState]
@@ -591,6 +770,7 @@ flowchart TB
 ### Connection Flow
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant Handle as Source Handle DOM
@@ -598,24 +778,47 @@ sequenceDiagram
     participant WCM as WorkspaceConnectionManager
     participant SVG as Edge SVG Layer
     participant Target as Target Handle DOM
-
-    User->>Handle: pointerdown
-    Handle->>XYH: Call with params
-    XYH->>WCM: updateConnection(inProgress)
-    WCM->>SVG: Render temp line from source
-
-    loop Mouse Move
-        User->>XYH: pointermove
-        XYH->>XYH: Find closest valid handle
-        XYH->>WCM: updateConnection(newPosition)
-        WCM->>SVG: Update temp line endpoint
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: START DRAG
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, Target: PHASE 1 - START DRAG
+        User->>Handle: pointerdown
+        activate Handle
+        Handle->>XYH: Call with params
+        activate XYH
+        XYH->>WCM: updateConnection(inProgress)
+        activate WCM
+        WCM->>SVG: Render temp line from source
+        deactivate Handle
     end
 
-    User->>Target: pointerup over valid handle
-    XYH->>XYH: isValidConnection check
-    XYH->>WCM: onConnect({ source, target })
-    WCM->>WCM: Add edge to state
-    WCM->>SVG: Render permanent edge
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: MOVE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, Target: PHASE 2 - MOVE
+        loop Mouse Move
+            User->>XYH: pointermove
+            XYH->>XYH: Find closest valid handle
+            XYH->>WCM: updateConnection(newPosition)
+            WCM->>SVG: Update temp line endpoint
+        end
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: COMPLETE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over User, Target: PHASE 3 - COMPLETE
+        User->>Target: pointerup over valid handle
+        XYH->>XYH: isValidConnection check
+        XYH->>WCM: onConnect({ source, target })
+        deactivate XYH
+        WCM->>WCM: Add edge to state
+        WCM->>SVG: Render permanent edge
+        deactivate WCM
+    end
 ```
 
 ### WorkspaceConnectionManager
@@ -623,6 +826,7 @@ sequenceDiagram
 Lives at `src/infographics/workspace/WorkspaceConnectionManager.ts`. This is the brain of the connection system.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 classDiagram
     class WorkspaceConnectionManager {
         -nodeLookup: Map~string, InternalNodeBase~
@@ -687,6 +891,7 @@ Handles are:
 Edges are rendered as SVG paths using `createConnectorRenderer` from `src/infographics/connectors/`. The edge layer sits below node cards but above the canvas background.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
     subgraph "Z-Order (bottom to top)"
         BG[Canvas Background]
@@ -707,6 +912,7 @@ Edge styling:
 ### Edge Selection and Deletion
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 stateDiagram-v2
     [*] --> Unselected
     Unselected --> Selected: Click on edge
@@ -722,6 +928,7 @@ When an edge is selected, small draggable circles appear at the source and targe
 Edge changes follow the same pattern as node changes:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
     participant WCM as WorkspaceConnectionManager
@@ -730,14 +937,209 @@ sequenceDiagram
     participant Store as workspaceStore
     participant WSvc as WorkspaceService
     participant NATS
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: ADD EDGE LOCALLY
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, NATS: PHASE 1 - ADD EDGE LOCALLY
+        User->>WCM: Complete connection (onConnect)
+        activate WCM
+        WCM->>WC: Add edge to local state
+        deactivate WCM
+    end
 
-    User->>WCM: Complete connection (onConnect)
-    WCM->>WC: Add edge to local state
-    WC->>Svelte: onCanvasStateChange({ nodes, edges })
-    Svelte->>Store: updateCanvasState()
-    Svelte->>WSvc: updateCanvasState()
-    WSvc->>NATS: WORKSPACE.UPDATE_CANVAS_STATE
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: UPDATE STORES
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, NATS: PHASE 2 - UPDATE STORES
+        activate WC
+        WC->>Svelte: onCanvasStateChange({ nodes, edges })
+        activate Svelte
+        Svelte->>Store: updateCanvasState()
+        Svelte->>WSvc: updateCanvasState()
+        deactivate Svelte
+        deactivate WC
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: PERSIST
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over User, NATS: PHASE 3 - PERSIST
+        activate WSvc
+        WSvc->>NATS: WORKSPACE.UPDATE_CANVAS_STATE
+        deactivate WSvc
+    end
 ```
+
+---
+
+## AI Chat Context from Connected Nodes
+
+When nodes are connected TO an AI chat thread (incoming edges), the AI chat automatically extracts their content and passes it to the AI model. This includes text from documents, text from other AI chat threads, and images (converted to base64). Context is extracted by walking the edge graph backwards from the AI chat node, collecting all connected content recursively.
+
+### How It Works
+
+1. **Edge Traversal** — When a user sends a message in an AI chat thread, `AiChatThreadService.extractConnectedContext()` finds all nodes connected via incoming edges (recursively)
+2. **Content Extraction** — Documents and AI threads have their ProseMirror content parsed for text; embedded images are also extracted. Standalone image nodes are fetched and converted to base64
+3. **Message Building** — `buildContextMessage()` formats the extracted context as a multimodal message with interleaved text and images
+4. **API Format** — All content uses the OpenAI Responses API format (`input_text`, `input_image` blocks) as the canonical format. The `llm-api` service converts to provider-specific formats (e.g., Anthropic) as needed
+
+### Multimodal Content Format
+
+```typescript
+// Text content block
+{ type: 'input_text'; text: string }
+
+// Image content block
+{ type: 'input_image'; image_url: string; detail?: 'auto' | 'low' | 'high' }
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `services/web-ui/src/services/ai-chat-thread-service.ts` | Context extraction (`extractConnectedContext`, `buildContextMessage`) |
+| `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` | Integration point (`onAiChatSubmit` calls context extraction) |
+| `services/llm-api/src/utils/attachments.py` | Attachment format conversion for LLM providers |
+| `packages/lixpi/constants/ts/types.ts` | Shared multimodal types (`TextContentBlock`, `ImageContentBlock`) |
+
+---
+
+## AI Image Generation
+
+This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears inline in the chat conversation. From there, the user can click "Add to Canvas" to place the image as a standalone canvas node with an automatic edge connecting it back to the chat thread that created it.
+
+Multi-turn editing is supported: users can continue refining an image within the same thread (OpenAI maintains the conversation context via `previous_response_id`), or click "Edit in New Thread" on any generated image to spawn a dedicated editing thread positioned to the right of that image on the canvas.
+
+### How It Works
+
+1. User enables "Image Generation" mode in an AI chat thread's settings
+2. User types a prompt like "Create a logo for a coffee shop"
+3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
+4. OpenAI streams back partial images (up to 3) as the generation progresses
+5. The chat shows a spinner, then replaces it with each partial image as it arrives
+6. On completion, the final image appears with action buttons
+7. Clicking "Add to Canvas" uploads the image to storage and creates both an `ImageCanvasNode` and an edge from the chat thread to the new image
+
+### Data Flow
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
+sequenceDiagram
+    participant User
+    participant Thread as AI Chat Thread
+    participant AIS as AiInteractionService
+    participant API as API Gateway
+    participant LLM as llm-api (Python)
+    participant OpenAI as OpenAI API
+    participant Canvas as WorkspaceCanvas
+    participant Storage as Object Store
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: REQUEST
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(220, 236, 233)
+        Note over User, Storage: PHASE 1 - REQUEST
+        User->>Thread: Enable image generation + type prompt
+        activate Thread
+        Thread->>AIS: sendChatMessage({ enableImageGeneration, imageSize, ... })
+        activate AIS
+        AIS->>API: CHAT_SEND_MESSAGE
+        activate API
+        API->>LLM: CHAT_PROCESS (with image options)
+        activate LLM
+        LLM->>OpenAI: responses.create({ tools: [image_generation], ... })
+        deactivate Thread
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: STREAM PARTIALS
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(195, 222, 221)
+        Note over User, Storage: PHASE 2 - STREAM PARTIALS
+        loop Partial Images (0-3)
+            OpenAI->>LLM: image_generation_call.partial_image
+            LLM->>AIS: IMAGE_PARTIAL { partialIndex, base64 }
+            AIS->>Thread: Replace spinner with partial
+        end
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: COMPLETE
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(242, 234, 224)
+        Note over User, Storage: PHASE 3 - COMPLETE
+        OpenAI->>LLM: image_generation_call (completed)
+        deactivate LLM
+        LLM->>AIS: IMAGE_COMPLETE { responseId, revisedPrompt, base64 }
+        deactivate API
+        AIS->>Thread: Insert aiGeneratedImage node with action buttons
+        deactivate AIS
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 4: ADD TO CANVAS
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(246, 199, 179)
+        Note over User, Storage: PHASE 4 - ADD TO CANVAS
+        User->>Thread: Click "Add to Canvas"
+        activate Thread
+        Thread->>Canvas: handleAddGeneratedImageToCanvas(...)
+        activate Canvas
+        Canvas->>Storage: POST /api/images/:workspaceId (hash-dedupe)
+        activate Storage
+        Storage-->>Canvas: { fileId, src }
+        deactivate Storage
+        Canvas->>Canvas: Create ImageCanvasNode + WorkspaceEdge
+        Canvas->>Canvas: Persist canvasState
+        deactivate Canvas
+        deactivate Thread
+    end
+```
+
+### Image Settings
+
+When image generation is enabled, users can pick a size:
+
+| Option | Dimensions | Use Case |
+|--------|------------|----------|
+| Square | 1024×1024 | Logos, icons, profile pictures |
+| Landscape | 1536×1024 | Banners, headers, wide scenes |
+| Portrait | 1024×1536 | Posters, phone wallpapers, tall scenes |
+| Auto | Model decides | Let the AI pick based on prompt |
+
+Quality is always set to maximum (`high`), input fidelity is `high` (preserves details when editing existing images), and content moderation is set to `low` to avoid unnecessary restrictions. Users don't need to configure these—they're hardcoded for the best possible output.
+
+### Storage & Deduplication
+
+Generated images are stored in NATS Object Store just like uploaded images. To avoid duplicates (e.g., if someone clicks "Add to Canvas" twice), the upload endpoint computes a SHA-256 hash of the image content and uses `hash-{sha256}` as the `fileId`. Before writing, it checks if that fileId already exists—if so, it skips the upload and returns the existing URL.
+
+### Multi-Turn Image Editing
+
+OpenAI's Responses API supports iterative refinement through `previous_response_id`. There are two ways to do this:
+
+**Thread-level continuity**: The AI chat thread stores the last `responseId` from any image generation. Subsequent messages in the same thread automatically reference it, so saying "make the background blue" knows which image you're talking about.
+
+**Per-image editing**: Each generated image carries its own `responseId`. Clicking "Edit in New Thread" creates a fresh AI chat thread with that specific `responseId` as its starting point. The new thread appears to the right of the image on the canvas, with an edge connecting them (image → new thread). This lets you branch off and try different directions without polluting the original conversation.
+
+### Canvas Integration
+
+When "Add to Canvas" is clicked:
+
+1. The base64 image is uploaded to storage (with hash-based deduplication)
+2. The source AI chat thread node is found on the canvas
+3. A new `ImageCanvasNode` is created at position `(threadNode.x + threadNode.width + 50, threadNode.y)`
+4. The image node includes `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
+5. A `WorkspaceEdge` is created from the thread's right handle to the image's left handle
+6. Both the new node and edge are persisted atomically
+
+When "Edit in New Thread" is clicked on a canvas image node:
+
+1. A new AI chat thread is created with `previousResponseId` set to the image's `generatedBy.responseId`
+2. The thread is positioned at `(imageNode.x + imageNode.width + 50, imageNode.y)`
+3. An edge connects the image (right) to the new thread (left)
+4. This forms a horizontal chain: `[Original Thread] → [Image] → [Edit Thread]`
 
 ---
 

@@ -1,0 +1,196 @@
+// ===== BOUNDARY AND COLLAPSE STYLES =====
+// Extracted from ai-chat-thread.scss
+// These styles were used for the thread boundary indicator system which showed:
+// - A vertical line on the right side of AI chat threads
+// - Icons for info bubble and collapse toggle
+// - Collapsed state with fade-out gradient
+
+@import '$src/components/proseMirror/ProseMirrorMixings.scss';
+@import '$src/sass/components/animations';
+
+// ===== THREAD BOUNDARY SYSTEM =====
+.ai-thread-boundary-indicator {
+    position: absolute;
+    right: -71px;
+    top: -6px;
+    width: 60px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border-radius: 50%;
+    z-index: 3;
+
+    // Add invisible hover area that extends to cover the collapse toggle
+    &::after {
+        content: '';
+        position: absolute;
+        width: 60px; // Extended width to cover both elements
+        height: 62px;
+        pointer-events: auto; // Extends hover area
+        z-index: 0; // Behind children so they can receive clicks
+    }
+
+    .ai-thread-boundary-icon {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 1; // Above ::after
+        cursor: pointer;
+
+        svg {
+            width: 20px;
+            height: 20px;
+            fill: $nightBlue;
+            transition: pupOutTransition(all, 150ms);
+        }
+    }
+
+    // Collapse toggle icon - appears on hover
+    .ai-thread-collapse-toggle {
+        margin-left: .15rem;
+        width: 20px;
+        height: 20px;
+        opacity: 0;
+        transition: hoverTransition(opacity, 200ms);
+        cursor: pointer;
+        position: relative;
+        z-index: 2; // Above ::after so it can receive clicks
+
+        .collapse-icon {
+            display: block;
+        }
+
+        svg {
+            width: 20px;
+            height: 20px;
+            fill: lighten($nightBlue, 30%); // Lighter in expanded state
+        }
+
+        // Click feedback animation - collapsing (going from expanded to collapsed)
+        // Uses iOS-style tactile feedback with smooth color transitions
+        &.click-feedback svg {
+            @include clickToggleFeedbackAnimation((
+                startColor: lighten($nightBlue, 30%),
+                flashColor: lighten($nightBlue, 15%),
+                endColor: $nightBlue
+            ));
+        }
+    }
+
+    // Show collapse toggle on boundary indicator hover
+    &:hover .ai-thread-collapse-toggle {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
+.ai-thread-boundary-indicator-line {
+    position: absolute;
+    right: -15px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: $steelBlue;
+    opacity: 0;
+    transform: scaleY(0);
+    min-height: 50px; // $aiChatThreadMinHeight
+    transform-origin: top;
+    transition: pupOutTransition(all, 200ms);
+    z-index: 5;
+    pointer-events: none;
+
+    // Triangle pointer at bottom of boundary line
+    @include boundaryPointerTriangle((
+        direction: 'left',
+        anchor: 'bottom',
+        horizontalOffset: 0px,
+        verticalOffset: 2px,
+        size: 2px,
+        color: $steelBlue,
+        accentColor: $nightBlue
+    ));
+}
+
+// Thread boundary visibility - applied via decoration when hovering
+.ai-chat-thread-wrapper.thread-boundary-visible {
+    .ai-thread-boundary-indicator-line {
+        opacity: 1;
+        transform: scaleY(1);
+    }
+}
+
+// ===== COLLAPSED STATE =====
+// When collapsed, show 60px preview with fade-out gradient at bottom
+// Content stays in DOM for streaming - only hidden visually
+.ai-chat-thread-wrapper.collapsed {
+    .ai-chat-thread-content {
+        max-height: 60px;
+        overflow: hidden;
+        position: relative;
+
+        // Fade-out gradient overlay - starts earlier, fades drastically at bottom
+        &::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            background: linear-gradient(to bottom,
+                rgba(255, 255, 255, 0) 0%,
+                rgba(255, 255, 255, 0) 33%,
+                rgba(255, 255, 255, 0.3) 57%,
+                rgba(255, 255, 255, 0.7) 74%,
+                rgba(255, 255, 255, 0.95) 88%,
+                rgba(255, 255, 255, 1) 96%,
+                rgba(255, 255, 255, 1) 100%
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+    }
+
+    .ai-thread-boundary-indicator {
+        .ai-thread-boundary-icon {
+            svg {
+                fill: lighten($nightBlue, 20%);
+            }
+        }
+
+        // When collapsed, use darker color for toggle icon
+        .ai-thread-collapse-toggle svg {
+            fill: $nightBlue; // Darker in collapsed state
+        }
+
+        // Click feedback animation - expanding (going from collapsed to expanded)
+        .ai-thread-collapse-toggle.click-feedback svg {
+            @include clickToggleFeedbackAnimation((
+                startColor: $nightBlue,
+                flashColor: lighten($nightBlue, 15%),
+                endColor: lighten($nightBlue, 30%)
+            ));
+        }
+    }
+
+
+    .ai-thread-boundary-indicator-line {
+        background: lighten($steelBlue, 20%)
+    }
+
+    .ai-chat-thread-controls {
+        display: none;
+    }
+
+    &:hover {
+        cursor: move;
+
+        .ai-thread-boundary-indicator-line {
+            background: $steelBlue;
+        }
+    }
+}

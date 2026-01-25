@@ -15,6 +15,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Add images** via the toolbar button which opens an upload modal
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
 - **Connect nodes** by dragging from a node's right handle to another node's left handle (arrow points in drag direction)
+- **Provide AI context** by connecting documents/images to an AI chat thread—connected content is automatically sent to the AI
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 - **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
@@ -39,9 +40,11 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
+- Display an animated 4-color gradient background on the canvas for visual separation
 - Each thread has its own `AiInteractionService` instance for AI messaging
 - Support streaming AI responses with real-time token parsing
 - Content is persisted separately from documents in the AI-Chat-Threads table
+- Automatically extract context from connected nodes (documents, images, other threads) when sending messages
 
 ## Architecture
 
@@ -66,6 +69,11 @@ flowchart TB
         IL[Canvas Image Lifecycle]
     end
 
+    subgraph Services["Services Layer"]
+        ATS[AiChatThreadService]
+        CTX[Context Extraction]
+    end
+
     subgraph Backend["Backend Services"]
         NS[NATS Service]
         API[Workspace API]
@@ -88,6 +96,11 @@ flowchart TB
     DN --> PM
     TN --> PM
     TN --> AIS
+    CC -->|"onAiChatSubmit"| ATS
+    ATS --> CTX
+    CTX -->|"reads edges, nodes"| WS
+    CTX -->|"reads content"| DS
+    CTX -->|"reads content"| TS
     AIS -->|"streaming"| LLMAPI
     CC --> IL
     IL -->|"deleteImage"| NS
@@ -194,6 +207,28 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 - Dropping an endpoint on another node reconnects the edge; dropping in empty space deletes it
 - Deleting an edge updates `canvasState.edges` via the normal persistence flow
 
+### AI Chat Context Extraction
+
+When a user sends a message in an AI chat thread, the system extracts content from all nodes connected via incoming edges. This provides context to the AI model without requiring copy/paste.
+
+```mermaid
+flowchart LR
+    DOC[Document Node] -->|edge| AI[AI Chat Thread]
+    IMG[Image Node] -->|edge| AI
+    OTHER[Other AI Thread] -->|edge| AI
+    AI -->|extractConnectedContext| CTX[ExtractedContext]
+    CTX -->|buildContextMessage| MSG[Multimodal Message]
+```
+
+The extraction flow:
+
+1. **Edge traversal** — `AiChatThreadService.extractConnectedContext(nodeId)` finds all nodes connected via incoming edges, recursively following the graph
+2. **Content extraction** — Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64
+3. **Message building** — `buildContextMessage()` formats context as multimodal content blocks (`input_text` for text, `input_image` for images)
+4. **Submission** — The context message is prepended to the user's messages before sending to the AI
+
+The context extraction logic lives in `AiChatThreadService`, not in the canvas module, since it's business logic rather than rendering.
+
 ### ProseMirror Integration
 
 Each document node instantiates a `ProseMirrorEditor`. The editor container has `.nopan` so clicking inside doesn't pan the canvas. Content changes fire `onDocumentContentChange` which the Svelte layer forwards to `DocumentService`.
@@ -247,3 +282,11 @@ sequenceDiagram
 | `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |
+
+## AI Chat Thread Background
+
+AI chat thread nodes display an animated shifting gradient background. The gradient is rendered to a small 60×80 pixel bitmap and scaled up with bilinear interpolation for smooth, low-cost rendering. The canvas element is injected as the first child of `.workspace-ai-chat-thread-node` with class `.shifting-gradient-canvas`.
+
+The gradient uses 4 color points with inverse distance weighting and a subtle swirl distortion for an organic feel. When sending a message, the gradient animates to the next phase position.
+
+For full technical details, color customization, and the color analysis tool, see [Shifting Gradient Background](../../../documentation/features/SHIFTING-GRADIENT.md).

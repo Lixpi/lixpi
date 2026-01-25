@@ -70,6 +70,15 @@ export type DocumentCanvasNode = {
     dimensions: CanvasNodeDimensions
 }
 
+export type ImageGenerationSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto'
+
+export type ImageGeneratedByMetadata = {
+    aiChatThreadId: string
+    responseId: string
+    aiModel: AiModelId
+    revisedPrompt: string
+}
+
 export type ImageCanvasNode = {
     nodeId: string
     type: 'image'
@@ -79,6 +88,7 @@ export type ImageCanvasNode = {
     aspectRatio: number
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+    generatedBy?: ImageGeneratedByMetadata
 }
 
 export type AiChatThreadCanvasNode = {
@@ -175,11 +185,22 @@ export type SubscriptionBalanceUpdateEvent = {
     amount: string
 }
 
-// AI Chat message types
+// AI Chat message types - multimodal support (OpenAI Responses API format)
+export type TextContentBlock = { type: 'input_text'; text: string }
+export type ImageContentBlock = { type: 'input_image'; image_url: string; detail?: 'auto' | 'low' | 'high' }
+export type MessageContentBlock = TextContentBlock | ImageContentBlock
+export type MessageContent = string | MessageContentBlock[]
+
 export type AiInteractionChatSendMessagePayload = {
-    messages: Array<{ role: string; content: string }>
+    messages: Array<{ role: string; content: MessageContent }>
     aiModel: AiModelId
     threadId: string
+}
+
+export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
+    enableImageGeneration: boolean
+    imageSize?: ImageGenerationSize
+    previousResponseId?: string
 }
 
 export type AiInteractionChatStopMessagePayload = {
@@ -286,6 +307,12 @@ export type TokensUsageEvent = {
     }
     total: {
         usageTokens: number
+        purchasedFor: string
+        soldToClientFor: string
+    }
+    image?: {
+        generatedCount: number
+        size: string
         purchasedFor: string
         soldToClientFor: string
     }

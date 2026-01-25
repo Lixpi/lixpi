@@ -69,6 +69,7 @@ export const aiChatThreadSubjects = [
             const {
                 user: { userId },
                 workspaceId,
+                threadId,
                 content,
                 aiModel
             } = data
@@ -80,6 +81,7 @@ export const aiChatThreadSubjects = [
 
             const thread = await AiChatThread.createAiChatThread({
                 workspaceId,
+                threadId,
                 content,
                 aiModel
             })

@@ -16,15 +16,17 @@ import { gapCursor } from "prosemirror-gapcursor"
 // Plugins
 import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
 import focusPlugin from '$src/components/proseMirror/plugins/focusPlugin.js'
-import { createAiUserInputPlugin } from '$src/components/proseMirror/plugins/aiUserInputPlugin.js' //TODO: deprecated, remove
-import { createAiUserMessagePlugin } from '$src/components/proseMirror/plugins/aiUserMessagePlugin.js'
 import lockCursorPositionPlugin from '$src/components/proseMirror/plugins/lockCursorPositionPlugin.js'
 import {
     createAiChatThreadPlugin,
     aiChatThreadNodeType,
     aiChatThreadNodeSpec,
     aiResponseMessageNodeType,
-    aiResponseMessageNodeSpec
+    aiResponseMessageNodeSpec,
+    aiUserInputNodeType,
+    aiUserInputNodeSpec,
+    aiUserMessageNodeType,
+    aiUserMessageNodeSpec
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
 import { createCodeBlockPlugin, codeBlockInputRule } from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
 import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNodePlugin"
@@ -71,8 +73,18 @@ const nodesBuilder = (schema, supportedNodes, documentType) => {
         content: docContent,
         marks: "_",
     })
+
+    // IMPORTANT: Preserve base schema order when overriding existing nodes.
+    // If we add (or re-add) existing textblocks like `code_block` *before* `paragraph`,
+    // ProseMirror's default block selection can pick `code_block` when you press Enter
+    // out of the title, which makes regular documents feel broken.
     nodesKeys.forEach((nodeKey) => {
-        extendedSchema = extendedSchema.addBefore("paragraph", nodeKey, supportedNodes[nodeKey])
+        const spec = supportedNodes[nodeKey]
+        if (extendedSchema.get(nodeKey)) {
+            extendedSchema = extendedSchema.update(nodeKey, spec)
+        } else {
+            extendedSchema = extendedSchema.addBefore("paragraph", nodeKey, spec)
+        }
     })
     return extendedSchema
 }
@@ -84,6 +96,7 @@ export class ProseMirrorEditor {
         initialVal = {},
         isDisabled,
         documentType = DOCUMENT_TYPE.DOCUMENT,
+        threadId,
         onEditorChange,
         onProjectTitleChange,
         onAiChatSubmit,
@@ -95,11 +108,10 @@ export class ProseMirrorEditor {
         this.onAiChatStop = onAiChatStop
         this.isDisabled = isDisabled
         this.documentType = documentType
+        this.threadId = threadId
         this.editorSchema = this.createSchema()
 
-        const initialDocContent = Object.keys(initialVal ?? {}).length > 0
-            ? this.editorSchema.nodeFromJSON(initialVal)
-            : DOMParser.fromSchema(this.editorSchema).parse(content);
+        const initialDocContent = this.createInitialDocument(initialVal, content)
 
         this.editorView = new EditorView(editorMountElement, {
             state: EditorState.create({
@@ -110,13 +122,40 @@ export class ProseMirrorEditor {
         })
     }
 
-    createSchema() {
-        // Combine custom nodes with plugin nodes for schema building
-        const allNodes = {
-            ...customNodes,
-            [aiChatThreadNodeType]: aiChatThreadNodeSpec,
-            [aiResponseMessageNodeType]: aiResponseMessageNodeSpec
+    createInitialDocument(initialVal, content) {
+        const hasValidContent = initialVal && typeof initialVal === 'object' && Object.keys(initialVal).length > 0
+
+        if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
+            if (hasValidContent) {
+                try {
+                    const doc = this.editorSchema.nodeFromJSON(initialVal)
+                    doc.check()
+                    return doc
+                } catch (e) {
+                    console.warn('Invalid AI chat thread content, creating fresh document:', e)
+                }
+            }
+
+            const titleNode = this.editorSchema.nodes.documentTitle.createAndFill()
+            const threadNode = this.editorSchema.nodes.aiChatThread.createAndFill({ threadId: this.threadId })
+            return this.editorSchema.nodes.doc.create(null, [titleNode, threadNode])
         }
+
+        return hasValidContent
+            ? this.editorSchema.nodeFromJSON(initialVal)
+            : DOMParser.fromSchema(this.editorSchema).parse(content)
+    }
+
+    createSchema() {
+        const allNodes = this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD
+            ? {
+                ...customNodes,
+                [aiChatThreadNodeType]: aiChatThreadNodeSpec,
+                [aiResponseMessageNodeType]: aiResponseMessageNodeSpec,
+                [aiUserInputNodeType]: aiUserInputNodeSpec,
+                [aiUserMessageNodeType]: aiUserMessageNodeSpec
+            }
+            : { ...customNodes }
 
         return new Schema({
             nodes: nodesBuilder(schema, allNodes, this.documentType),
@@ -156,8 +195,7 @@ export class ProseMirrorEditor {
                         titlePlaceholder: 'New document',
                         paragraphPlaceholder: 'Type something and hit Cmd+Enter on Mac or Ctrl+Enter on PC to send it to AI.\n'
                     }
-                }),
-                createAiUserInputPlugin(val => {})
+                })
             )
         }
 

@@ -1,7 +1,12 @@
 'use strict'
 
 import { NATS_SUBJECTS, AI_INTERACTION_CONSTANTS } from '@lixpi/constants'
-import type { AiModelId, AiInteractionChatSendMessagePayload, AiInteractionChatStopMessagePayload } from '@lixpi/constants'
+import type {
+    AiModelId,
+    AiInteractionChatSendMessagePayload,
+    AiInteractionChatStopMessagePayload,
+    ImageGenerationSize
+} from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
@@ -14,6 +19,12 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 
+type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
+    enableImageGeneration?: boolean
+    imageSize?: ImageGenerationSize
+    previousResponseId?: string
+}
+
 export default class AiInteractionService {
     workspaceId: string
     aiChatThreadId: string
@@ -21,12 +32,14 @@ export default class AiInteractionService {
     markdownStreamParser: any
     markdownStreamParserUnsubscribe: any
     currentAiProvider: string | null
+    lastResponseId: string | null
 
     constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
         this.workspaceId = workspaceId
         this.aiChatThreadId = aiChatThreadId
         this.segmentsReceiver = SegmentsReceiver
         this.currentAiProvider = null
+        this.lastResponseId = null
 
         this.initNatsSubscriptions()
     }
@@ -104,11 +117,42 @@ export default class AiInteractionService {
             this.currentAiProvider = content.aiProvider
         }
 
+        // Handle image generation events (bypass markdown parser)
+        if (content.status === STREAM_STATUS.IMAGE_PARTIAL) {
+            console.log('[AI_INTERACTION] IMAGE_PARTIAL received:', content)
+            this.segmentsReceiver.receiveSegment({
+                type: 'image_partial',
+                imageUrl: content.imageUrl,
+                fileId: content.fileId,
+                partialIndex: content.partialIndex,
+                aiProvider: this.currentAiProvider,
+                aiChatThreadId: this.aiChatThreadId
+            })
+            return
+        }
+
+        if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
+            console.log('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
+            // Store response ID for multi-turn editing
+            this.lastResponseId = content.responseId
+
+            this.segmentsReceiver.receiveSegment({
+                type: 'image_complete',
+                imageUrl: content.imageUrl,
+                fileId: content.fileId,
+                responseId: content.responseId,
+                revisedPrompt: content.revisedPrompt,
+                aiProvider: this.currentAiProvider,
+                aiChatThreadId: this.aiChatThreadId
+            })
+            return
+        }
+
         // Route raw tokens through markdown parser (exact replication of backend pattern)
         if (content.status === STREAM_STATUS.START_STREAM) {
             // Initialize fresh parser instance for this stream
             this.initMarkdownParser()
-            // startParsing() will emit START_STREAM event internally via subscribeToTokenParse callback
+            // startParsing() emits START_STREAM event via subscribeToTokenParse callback
             this.markdownStreamParser.startParsing()
         } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
             // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
@@ -119,11 +163,17 @@ export default class AiInteractionService {
         }
     }
 
-    async sendChatMessage({ messages, aiModel }: Omit<AiInteractionChatSendMessagePayload, 'threadId'>) {
+    async sendChatMessage({
+        messages,
+        aiModel,
+        enableImageGeneration,
+        imageSize,
+        previousResponseId
+    }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
 
-        const payload = {
+        const payload: Record<string, any> = {
             token: await AuthService.getTokenSilently(),
             workspaceId: this.workspaceId,
             aiChatThreadId: this.aiChatThreadId,
@@ -131,7 +181,29 @@ export default class AiInteractionService {
             aiModel,
             organizationId
         }
+
+        // Add image generation options if enabled
+        if (enableImageGeneration) {
+            payload.enableImageGeneration = true
+            payload.imageSize = imageSize || 'auto'
+
+            // Use provided previousResponseId or fall back to thread's lastResponseId
+            if (previousResponseId) {
+                payload.previousResponseId = previousResponseId
+            } else if (this.lastResponseId) {
+                payload.previousResponseId = this.lastResponseId
+            }
+        }
+
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)
+    }
+
+    getLastResponseId(): string | null {
+        return this.lastResponseId
+    }
+
+    setLastResponseId(responseId: string | null) {
+        this.lastResponseId = responseId
     }
 
     async stopChatMessage() {

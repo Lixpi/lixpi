@@ -67,3 +67,42 @@
         }
     }
 }
+
+// Speech bubble tail mixin - creates a curved tail like in modern messaging apps
+// Uses SVG mask technique so it works on any background (including gradients)
+@mixin speechBubbleTail($config: ()) {
+    $defaults: (
+        position: 'right',          // 'left' or 'right' - which side the tail appears
+        bubbleColor: #e5e5ea,       // background color of the bubble
+    );
+
+    $settings: map-merge($defaults, $config);
+
+    $position: map-get($settings, position);
+    $bubbleColor: map-get($settings, bubbleColor);
+
+    position: relative;
+    overflow: visible;
+
+    // The tail is a small curved hook at the bottom corner
+    // Uses clip-path for the curved shape - no background color dependency
+    &::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        width: 12px;
+        height: 11px;
+        background-color: $bubbleColor;
+
+        @if $position == 'right' {
+            right: -7px;
+            // Curved tail shape using clip-path polygon with smooth curve simulation
+            // The shape: starts wide at top (connects to bubble), curves to a point at bottom-right
+            clip-path: path('M 0 0 L 0 6.5 C 0 9.5 5 11 12 11 C 8.5 10 7.5 8.5 6.5 6.5 C 5.5 4.5 3 2 0 0 Z');
+        } @else {
+            left: -7px;
+            // Mirrored for left side
+            clip-path: path('M 12 0 L 12 6.5 C 12 9.5 7 11 0 11 C 3.5 10 4.5 8.5 5.5 6.5 C 6.5 4.5 9 2 12 0 Z');
+        }
+    }
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte'
+    import { v4 as uuidv4 } from 'uuid'
     import {
         type Viewport
     } from '@xyflow/system'
@@ -206,7 +207,10 @@
         }
 
         try {
-            // Create empty AI chat thread content with required paragraph child
+            // Generate threadId on frontend to ensure content and DB record match
+            const threadId = uuidv4()
+
+            // Create empty AI chat thread content with the generated threadId
             const initialContent = {
                 type: 'doc',
                 content: [
@@ -216,7 +220,7 @@
                     },
                     {
                         type: 'aiChatThread',
-                        attrs: { threadId: null },
+                        attrs: { threadId },
                         content: [
                             {
                                 type: 'paragraph'
@@ -228,6 +232,7 @@
 
             const thread = await aiChatThreadService.createAiChatThread({
                 workspaceId,
+                threadId,
                 content: initialContent,
                 aiModel: 'anthropic:claude-sonnet-4-20250514'
             })

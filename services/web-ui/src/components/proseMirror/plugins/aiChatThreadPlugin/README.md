@@ -24,6 +24,7 @@ AI chat threads live as independent canvas nodes alongside documents and images.
 The plugin follows a modular architecture where each node type encapsulates its own UI and behavior using declarative DOM templates:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TD
     A[AiChatThreadPluginClass] --> B[KeyboardHandler]
     A --> C[ContentExtractor]
@@ -75,6 +76,7 @@ graph TD
 ### Plugin State Machine
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 stateDiagram-v2
     [*] --> Idle: Initialize plugin
     Idle --> KeyboardFeedback: User presses Mod key
@@ -100,95 +102,108 @@ stateDiagram-v2
 ## Data Flow & Content Extraction
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
-    participant U as User
-    participant EV as EditorView
-    participant PL as Plugin
-    participant CE as ContentExtractor
-    participant AIS as AiInteractionService
-    participant NATS as NATS
-    participant API as API Service
-    participant LLM as llm-api (Python)
-    participant SR as SegmentsReceiver
-    participant SI as StreamingInserter
+  participant U as User
+  participant EV as EditorView
+  participant PL as Plugin
+  participant CE as ContentExtractor
+  participant AIS as AiInteractionService
+  participant NATS as NATS
+  participant API as API Service
+  participant LLM as llm-api (Python)
+  participant SR as SegmentsReceiver
+  participant SI as StreamingInserter
+  Note over AIS: Subscribed to<br/>receiveMessage.{workspaceId}.{threadId}
 
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 1: PREPARE MESSAGE
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(220, 236, 233)
+    Note over U, SI: PHASE 1 - PREPARE MESSAGE
     U->>EV: Cmd+Enter or click send
+    activate EV
     EV->>PL: Transaction with USE_AI_CHAT_META
+    activate PL
     PL->>CE: getActiveThreadContent(state)
+    activate CE
     CE->>CE: Extract all child blocks with collectFormattedText
     CE->>CE: Convert to messages with toMessages()
     CE-->>PL: ThreadContent[] → Messages[]
+    deactivate CE
+    deactivate EV
+  end
+
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 2: SEND
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(195, 222, 221)
+    Note over U, SI: PHASE 2 - SEND
     PL->>AIS: onAiChatSubmit({ messages, aiModel })
+    activate AIS
     AIS->>NATS: publish(CHAT_SEND_MESSAGE, { workspaceId, aiChatThreadId, messages })
     NATS->>API: Route to handler
+    activate API
     API->>NATS: publish(CHAT_PROCESS, {...})
+    deactivate API
     NATS->>LLM: Route to Python
+    activate LLM
+  end
 
-    Note over AIS: Subscribed to<br/>receiveMessage.{workspaceId}.{threadId}
-
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 3: STREAM
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(246, 199, 179)
+    Note over U, SI: PHASE 3 - STREAM
     loop Streaming Response
-        LLM->>NATS: publish(receiveMessage.{workspaceId}.{threadId}, chunk)
-        NATS->>AIS: Deliver to subscriber
-        AIS->>SR: Emit segment event
-        SR->>PL: STREAMING event with segment
-        PL->>SI: insertBlockContent/insertInlineContent
-        SI->>EV: Insert content into response node
+      LLM->>NATS: publish(receiveMessage.{workspaceId}.{threadId}, chunk)
+      NATS->>AIS: Deliver to subscriber
+      AIS->>SR: Emit segment event
+      activate SR
+      SR->>PL: STREAMING event with segment
+      PL->>SI: insertBlockContent/insertInlineContent
+      activate SI
+      SI->>EV: Insert content into response node
+      deactivate SI
+      deactivate SR
     end
+    deactivate LLM
+  end
 
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 4: COMPLETE
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(242, 234, 224)
+    Note over U, SI: PHASE 4 - COMPLETE
     LLM->>NATS: END_STREAM
     NATS->>AIS: End signal
     AIS->>SR: END_STREAM event
     SR->>PL: END_STREAM
     PL->>EV: Clear isReceiving + stop animations
+    deactivate AIS
+    deactivate PL
+  end
 ```
 
 ### Schema Nodes
 
 **`aiChatThread`** - Container for entire conversation
-- Content: `(paragraph | heading | blockquote | code_block | aiResponseMessage)+`
+- Content: `(aiUserMessage | aiResponseMessage)* aiUserInput` (composer is always last)
 - Attributes:
   - `threadId: string | null` - Unique identifier for the thread
   - `status: 'active'|'paused'|'completed'` - Thread lifecycle state
   - `aiModel: string` - Selected AI model (e.g., "Anthropic:claude-3-5-sonnet")
-  - `threadContext: string` - Context scope ('Thread', 'Document', or 'Workspace')
-  - `isCollapsed: boolean` - Whether thread content is visually hidden (default: false)
-  - `workspaceSelected: boolean` - Whether this thread is included in Workspace context mode (default: false)
-- DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model][data-thread-context][data-is-collapsed][data-workspace-selected]`
+- DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model]`
 
-## Thread Context Modes
+**`aiUserMessage`** - Sent user message bubble
+- Content: `(paragraph | block)+`
+- Attributes: `id, createdAt`
+- DOM: `div.ai-user-message`
 
-Each thread has a **context selector** that determines what content is sent to the AI when submitting a message:
-
-### Thread Mode (Default)
-Only content from the current thread is included. Best for isolated conversations.
-
-### Document Mode
-Content from **all threads** in the document is included. Each thread's content is wrapped in XML tags for clear separation:
-```
-<thread id="abc123">
-[user message]
-[assistant response]
-</thread>
-<thread id="def456">
-[user message]
-...
-</thread>
-```
-
-### Workspace Mode
-Selective thread inclusion. Users can toggle which threads to include via checkboxes in the context selector UI.
-
-**Key behaviors:**
-- The **current thread** (where the submit button was clicked) is **always included** - its toggle is checked and disabled (grayed out)
-- Other threads can be toggled on/off via their `workspaceSelected` attribute
-- Uses the same XML tag format as Document mode for consistent parsing
-
-**XML Separator Format:**
-Content from multiple threads uses semantic XML tags rather than plain text separators:
-- Opening tag: `<thread id="threadId">`
-- Closing tag: `</thread>`
-
-This format follows modern prompt engineering best practices (per OpenAI/Anthropic guidelines) and won't conflict with user-typed content.
+**`aiUserInput`** - Sticky composer (rich-text) at the end of the thread
+- Content: `(paragraph | block)+`
+- DOM: `div.ai-user-input-wrapper`
+- Behavior: NodeView renders the controls (model selector, image toggle, submit/stop) alongside `contentDOM`.
 
 **`aiResponseMessage`** - Individual AI responses
 - Content: `(paragraph | block)*` (empty allowed for streaming shell)
@@ -214,14 +229,15 @@ const button = html`
 `
 ```
 
-### AI Model & Context Selector Dropdowns
+### Composer Controls
 
-The thread NodeView includes two dropdowns for configuring the AI conversation:
+The `aiUserInput` NodeView renders the conversation controls:
 
 1. **AI Model Selector** - Choose which AI model to use (GPT-4, Claude, etc.)
-2. **Thread Context Selector** - Choose context scope (workspace, document, etc.)
+2. **Image Toggle** - Enable/disable image generation
+3. **Submit/Stop** - Send the current composer content (or stop streaming)
 
-Both dropdowns are **UI controls outside the document schema**:
+These controls are **UI elements outside the document schema**:
 - **Not part of the document schema** - Zero NodeSpec involvement, never serialized
 - **Rendered directly to controls container** - No transactions, no decorations needed
 - **State managed via singleton** - `infoBubbleStateManager` handles open/close coordination
@@ -231,7 +247,7 @@ Both dropdowns are **UI controls outside the document schema**:
 The NodeView simply:
 1. Calls `createPureDropdown()` with configuration (options, onSelect callback, theme)
 2. Appends the returned `dom` element to `controlsContainer`
-3. Calls `update()` when thread attributes change
+3. Writes selected model to `aiChatThread.attrs.aiModel` via `tr.setNodeMarkup(threadPos, ...)`
 4. Calls `destroy()` in NodeView cleanup
 5. Uses `ignoreMutation()` to prevent NodeView recreation when dropdown opens/closes
 
@@ -252,6 +268,7 @@ const editor = new ProseMirrorEditor({
     editorMountElement: editorContainer,
     initialVal: thread.content,
     documentType: 'aiChatThread',  // Enables AI chat thread schema
+    threadId: node.referenceId,    // Required for fresh document creation with correct threadId
     onAiChatSubmit: ({ messages, aiModel }) => {
         aiService.sendChatMessage({ messages, aiModel })
     },
@@ -261,7 +278,7 @@ const editor = new ProseMirrorEditor({
 })
 ```
 
-The `documentType: 'aiChatThread'` parameter configures the schema and keybindings for AI chat context.
+The `documentType: 'aiChatThread'` parameter configures the schema and keybindings for AI chat context. The `threadId` parameter is used when creating fresh documents (via `createAndFill()`) to ensure the `aiChatThread` node has the correct `threadId` attribute for streaming routing.
 
 ## Streaming Protocol
 
@@ -274,47 +291,48 @@ The plugin subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` and expec
 ### Streaming Lifecycle
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 stateDiagram-v2
-    [*] --> WaitingForStream
-    WaitingForStream --> StreamStarted: START_STREAM
+  [*] --> WaitingForStream
+  WaitingForStream --> StreamStarted: START_STREAM
 
-    state StreamStarted {
-        [*] --> CreateResponseNode
-        CreateResponseNode --> InsertNode: aiResponseMessage created
-        InsertNode --> EnsureTrailingParagraph
-        EnsureTrailingParagraph --> SetReceivingState
-        SetReceivingState --> ReadyForContent
+  state StreamStarted {
+    [*] --> CreateResponseNode
+    CreateResponseNode --> InsertNode: aiResponseMessage created
+    InsertNode --> EnsureTrailingParagraph
+    EnsureTrailingParagraph --> SetReceivingState
+    SetReceivingState --> ReadyForContent
+  }
+
+  ReadyForContent --> ProcessingSegment: STREAMING event
+
+  state ProcessingSegment {
+    [*] --> CheckSegmentType
+    CheckSegmentType --> InsertBlock: isBlockDefining=true
+    CheckSegmentType --> InsertInline: isBlockDefining=false
+
+    state InsertBlock {
+      [*] --> CreateParagraph: type=paragraph
+      [*] --> CreateHeader: type=header
+      [*] --> CreateCodeBlock: type=codeBlock
+      CreateParagraph --> ApplyMarks
+      CreateHeader --> ApplyMarks
+      CreateCodeBlock --> ApplyMarks
     }
 
-    ReadyForContent --> ProcessingSegment: STREAMING event
-
-    state ProcessingSegment {
-        [*] --> CheckSegmentType
-        CheckSegmentType --> InsertBlock: isBlockDefining=true
-        CheckSegmentType --> InsertInline: isBlockDefining=false
-
-        state InsertBlock {
-            [*] --> CreateParagraph: type=paragraph
-            [*] --> CreateHeader: type=header
-            [*] --> CreateCodeBlock: type=codeBlock
-            CreateParagraph --> ApplyMarks
-            CreateHeader --> ApplyMarks
-            CreateCodeBlock --> ApplyMarks
-        }
-
-        state InsertInline {
-            [*] --> CreateTextNode: type=text
-            [*] --> CreateLineBreak: content=\n
-            CreateTextNode --> ApplyMarks
-            CreateLineBreak --> [*]
-        }
-
-        ApplyMarks --> [*]
+    state InsertInline {
+      [*] --> CreateTextNode: type=text
+      [*] --> CreateLineBreak: content=\n
+      CreateTextNode --> ApplyMarks
+      CreateLineBreak --> [*]
     }
 
-    ProcessingSegment --> ReadyForContent: Continue streaming
-    ReadyForContent --> StreamEnded: END_STREAM
-    StreamEnded --> [*]: Clear isReceiving, stop animations
+    ApplyMarks --> [*]
+  }
+
+  ProcessingSegment --> ReadyForContent: Continue streaming
+  ReadyForContent --> StreamEnded: END_STREAM
+  StreamEnded --> [*]: Clear isReceiving, stop animations
 ```
 
 **Content Type Handlers:**
@@ -327,84 +345,80 @@ stateDiagram-v2
 ## User experience
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
-    participant U as User
-    participant E as Editor
-    participant P as Plugin
-    participant AIS as AiInteractionService
-    participant NATS as NATS → llm-api
-
+  participant U as User
+  participant E as Editor
+  participant P as Plugin
+  participant AIS as AiInteractionService
+  participant NATS as NATS → llm-api
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 1: SUBMIT
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(220, 236, 233)
+    Note over U, NATS: PHASE 1 - SUBMIT
     U->>E: Types message and hits Cmd+Enter
+    activate E
     E->>P: Extracts thread content
+    activate P
     P->>AIS: sendChatMessage({ messages, aiModel })
+    activate AIS
+    deactivate E
+  end
+
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 2: STREAM
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(195, 222, 221)
+    Note over U, NATS: PHASE 2 - STREAM
     AIS->>NATS: Publish to backend
+    activate NATS
     NATS-->>AIS: Stream response via receiveMessage.{workspaceId}.{threadId}
+    deactivate NATS
     AIS-->>P: SegmentsReceiver events
+  end
+
+  %% ═══════════════════════════════════════════════════════════════
+  %% PHASE 3: RENDER
+  %% ═══════════════════════════════════════════════════════════════
+  rect rgb(242, 234, 224)
+    Note over U, NATS: PHASE 3 - RENDER
     P->>E: Inserts AI response with animations
+    deactivate AIS
+    deactivate P
+  end
 ```
 
 Users see:
 - A floating "send" button that appears on hover
 - Keyboard shortcuts (Cmd/Ctrl + Enter) with visual feedback
-- Thread boundaries when hovering (shows conversation scope)
-- **Collapsible threads**: A collapse toggle icon (eye slash) appears on hover next to the boundary indicator
-  - Click the toggle icon to collapse/expand thread content with iOS-style feedback animation
-  - Collapsed threads hide content visually but still receive AI streaming updates
-  - Icon color changes based on state: lighter when expanded, darker when collapsed
-  - Smooth color transitions during collapse/expand actions
-  - This maintains document integrity while providing a clean UI for managing long conversations
 - Different avatars for different AI providers
 - Smooth animations as responses stream in
 - A "stop" button while AI is responding (currently TODO)
-
-## Collapsible Threads
-
-Threads can be collapsed to hide their content while preserving the ability to receive streaming updates.
-
-### How It Works
-
-**State Management:**
-- The `isCollapsed` boolean attribute is stored directly on the `aiChatThread` node
-- A separate collapse toggle icon (eye slash) appears on hover next to the boundary indicator
-- Clicking the toggle icon dispatches a transaction with `toggleCollapse` meta
-- The plugin's `appendTransaction` handler updates the node's `isCollapsed` attribute
-- Decorations apply a `collapsed` CSS class to the wrapper based on the attribute value
-
-**Visual Behavior:**
-- Collapse toggle icon appears only when hovering over the thread boundary area
-- Icon color indicates state: lighter (`lighten($nightBlue, 30%)`) when expanded, darker (`$nightBlue`) when collapsed
-- Click triggers iOS-style feedback animation with smooth color transitions
-- CSS `display: none` hides `.ai-chat-thread-content` when wrapper has `collapsed` class
-- Controls hidden when collapsed for cleaner UI
-- The boundary indicator shows info dropdown on click (separate from collapse functionality)
-
-**Click Feedback Animation:**
-The toggle icon uses a reusable SCSS mixin for iOS-style tactile feedback with smooth color transitions and subtle scale animation.
-
-**Critical Design Choice:**
-The `contentDOM` stays in the DOM tree even when collapsed. This ensures:
-1. **Streaming continues**: ProseMirror can insert AI response nodes into collapsed threads
-2. **No document corruption**: The document structure remains consistent
-3. **Fast toggle**: Expanding/collapsing is just a CSS change, no DOM reconstruction
-
-**Implementation Flow:**
-User clicks toggle icon → transaction updates node attribute → decorations apply CSS class → content hidden but remains in DOM for streaming.
-
-This pattern follows our decoration-first approach: visual states come from classes via decorations, not by manipulating the document structure.
 
 ## Files in this plugin
 
 - `aiChatThreadNode.ts` - Thread container node (self-contained):
   - Exports node schema AND its NodeView implementation
+  - Content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`
   - Uses `html` template literals for clean UI creation
-  - Creates boundary indicator with info dropdown (click-triggered)
-  - Creates collapse toggle icon (eye slash) that appears on hover next to boundary indicator
-  - Handles click events for collapse/expand with iOS-style animation feedback
-  - Creates submit button and **dropdown UI controls**
-  - `createAiModelSelectorDropdown()` and `createThreadContextDropdown()` use `createPureDropdown()` primitive
+  - Handles hover events and focus management
+
+- `aiUserInputNode.ts` - Sticky composer node (self-contained):
+  - Exports node schema AND its NodeView implementation
+  - Always the last child of `aiChatThread`
+  - Content: `(paragraph | block)+` for rich-text input
+  - NodeView renders controls (model selector, image toggle, submit/stop) alongside `contentDOM`
+  - `createAiModelSelectorDropdown()` uses `createPureDropdown()` primitive
   - Dropdowns appended directly to controlsContainer (not inserted via transactions)
-  - `ignoreMutation()` prevents NodeView recreation when dropdowns open/close
-  - Handles hover events and focus management for non-dropdown elements
+  - `ignoreMutation()` prevents NodeView recreation when controls are manipulated
+
+- `aiUserMessageNode.ts` - Sent user message node (self-contained):
+  - Exports node schema AND its NodeView implementation
+  - Content: `(paragraph | block)+`
+  - Attributes: `id, createdAt` for message identification
+  - Rendered as a styled chat bubble (right-aligned)
+  - Created when user submits content from the composer
 
 - `aiResponseMessageNode.ts` - AI response node (self-contained):
   - Exports node schema AND its NodeView implementation
@@ -420,6 +434,11 @@ This pattern follows our decoration-first approach: visual states come from clas
   - Decoration system (placeholders, boundaries)
   - No UI rendering - delegates to node-specific NodeViews and primitive components
 
+- `aiChatThreadControls.ts` - UI control factories:
+  - `createAiModelSelectorDropdown()` - AI model picker dropdown
+  - `createImageGenerationToggle()` - Image generation on/off toggle
+  - `createAiSubmitButton()` - Submit/stop button
+
 - `aiChatThreadPluginConstants.ts` - Shared `PluginKey` to avoid identity mismatch and circular imports between NodeView and plugin. Import this key in both places and call `AI_CHAT_THREAD_PLUGIN_KEY.getState(view.state)` when needed.
 
 - `$src/components/proseMirror/plugins/primitives/dropdown/` - Dropdown primitive (outside document schema):
@@ -427,7 +446,7 @@ This pattern follows our decoration-first approach: visual states come from clas
   - Uses `infoBubble` primitive for state management
   - `index.ts` - Clean exports
   - Zero ProseMirror dependencies - framework-agnostic pure DOM
-  - Used by aiChatThreadNode for AI model and context selectors
+  - Used by aiUserInputNode for AI model selector
   - See `primitives/dropdown/README.md` for full documentation
 
 - `$src/utils/domTemplates.ts` - Shared DOM template utilities:
@@ -463,9 +482,9 @@ class ContentExtractor {
 ```
 
 **Message Conversion Logic:**
-1. Walk each top-level block in the thread
+1. Walk each top-level block in the thread (excluding `aiUserInput` composer)
 2. Extract formatted text (preserves newlines, wraps code_block in ```)
-3. Determine role: `aiResponseMessage` → `assistant`, everything else → `user`
+3. Determine role: `aiResponseMessage` → `assistant`, `aiUserMessage` → `user`
 4. Merge consecutive blocks with same role
 5. Return clean message array for AI API
 
@@ -581,7 +600,6 @@ const parentWrapper = html`
   <div className="ai-response-message-wrapper">
     <div className="ai-response-message">
       <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
-      <div className="ai-response-message-boundaries-indicator"></div>
       <div className="ai-response-message-content"></div>
     </div>
   </div>
@@ -590,6 +608,8 @@ const parentWrapper = html`
 // Get DOM references for dynamic updates
 const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
 const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
+
+// Response message content is styled as a white chat bubble with a left-side tail
 ```
 
 **Anthropic Animation System:**

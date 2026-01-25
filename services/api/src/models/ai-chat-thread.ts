@@ -48,14 +48,15 @@ export default {
 
     createAiChatThread: async ({
         workspaceId,
+        threadId,
         content,
         aiModel
-    }: Pick<AiChatThread, 'workspaceId' | 'content' | 'aiModel'>): Promise<AiChatThread | undefined> => {
+    }: Pick<AiChatThread, 'workspaceId' | 'threadId' | 'content' | 'aiModel'>): Promise<AiChatThread | undefined> => {
         const currentDate = new Date().getTime()
 
         const newThread: AiChatThread = {
             workspaceId,
-            threadId: uuid(),
+            threadId,
             content,
             aiModel,
             status: 'active',

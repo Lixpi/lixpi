@@ -7,11 +7,11 @@ import logging
 from typing import Dict, Any
 
 from anthropic import AsyncAnthropic
-from langchain_core.messages import HumanMessage, SystemMessage
 
 from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt, format_user_message_with_hack
 from config import settings
+from utils.attachments import convert_attachments_for_provider, AttachmentFormat
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +56,16 @@ class AnthropicProvider(BaseLLMProvider):
         workspace_id = state['workspace_id']
         ai_chat_thread_id = state['ai_chat_thread_id']
 
-        # Apply Anthropic-specific code block formatting hack to last user message
+        # Convert messages to Anthropic format (handles multimodal content)
         formatted_messages = []
         for i, msg in enumerate(messages):
             content = msg.get('content', '')
 
-            # Apply hack to the last user message
-            if i == len(messages) - 1 and msg.get('role') == 'user':
+            # Convert OpenAI-style content blocks to Anthropic format
+            content = convert_attachments_for_provider(content, AttachmentFormat.ANTHROPIC)
+
+            # Apply hack to the last user message (only for string content)
+            if i == len(messages) - 1 and msg.get('role') == 'user' and isinstance(content, str):
                 content = format_user_message_with_hack(content, 'Anthropic')
 
             formatted_messages.append({
@@ -71,7 +74,7 @@ class AnthropicProvider(BaseLLMProvider):
             })
 
         logger.info(f"Streaming from Anthropic model: {model_version}")
-        logger.debug(f"Messages: {[{'role': m['role'], 'length': len(m['content'])} for m in formatted_messages]}")
+        logger.debug(f"Messages count: {len(formatted_messages)}")
 
         try:
             # Publish stream start event

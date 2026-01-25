@@ -316,5 +316,21 @@ export default {
         }
     },
 
+    getWorkspaceInternal: async ({
+        workspaceId
+    }: { workspaceId: string }): Promise<Workspace | null> => {
+        const workspace = await dynamoDBService.getItem({
+            tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+            key: { workspaceId },
+            origin: `model::Workspace->getInternal(${workspaceId})`
+        })
+
+        if (!workspace || Object.keys(workspace).length === 0) {
+            return null
+        }
+
+        return workspace as Workspace
+    },
+
     getBucketName: getWorkspaceBucketName
 }
