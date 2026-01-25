@@ -23,7 +23,7 @@ All diagrams use the **"In the Sunshine"** pastel palette:
 | Light Teal | `#C3DEDD` | `rgb(195, 222, 221)` | Secondary backgrounds, Phase 2 rect blocks |
 | Cream | `#F2EAE0` | `rgb(242, 234, 224)` | Phase 3 rect backgrounds |
 | Peach | `#F6C7B3` | `rgb(246, 199, 179)` | Primary nodes, Phase 4 rect blocks, participant boxes |
-| **Dusty Sage** | `#B5C9B5` | `rgb(181, 201, 181)` | **ACTIVATIONS ONLY** — must use this color |
+| **Dusty Sage** | `#9DC49D` | `rgb(181, 201, 181)` | **ACTIVATIONS ONLY** — must use this color |
 | Teal | `#82B2C0` | — | Notes, tertiary borders |
 | Terracotta | `#d4956a` | — | Borders, arrows, lines |
 | Dark Brown | `#5a3a2a` | — | Text on peach backgrounds |
@@ -31,7 +31,9 @@ All diagrams use the **"In the Sunshine"** pastel palette:
 
 > ⚠️ **CRITICAL: Activation Color**
 >
-> The **Dusty Sage** (`#B5C9B5`) color is specifically reserved for activation bars in sequence diagrams. This muted green provides clear visual distinction from all phase background colors. **Never use Light Teal or any phase color for activations** — they will blend into the phase backgrounds and become invisible.
+> The **Dusty Sage** (`#9DC49D`) color is specifically reserved for activation bars in sequence diagrams. This muted green provides clear visual distinction from all phase background colors. **Never use Light Teal or any phase color for activations** — they will blend into the phase backgrounds and become invisible.
+>
+> **Important:** Set BOTH `activationBkgColor` AND `activationBorderColor` to `#9DC49D`. This makes the border invisible, creating a clean look without the orange accent border.
 
 ### Phase Color Progression
 
@@ -59,7 +61,7 @@ When using `rect` blocks for phases in sequence diagrams, use this progression:
 ### Sequence Diagram Theme
 
 ```
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 ```
 
 ### ER Diagram Theme
@@ -207,7 +209,7 @@ Note over Client, Database: PHASE 1 - CONNECTION
 
 #### 2. Activations Are Mandatory
 
-Every sequence diagram **MUST** include `activate`/`deactivate` pairs to show when participants are actively processing. Activations use **Dusty Sage** (`#B5C9B5`) color which is visually distinct from all phase backgrounds.
+Every sequence diagram **MUST** include `activate`/`deactivate` pairs to show when participants are actively processing. Activations use **Dusty Sage** (`#9DC49D`) color which is visually distinct from all phase backgrounds.
 
 **❌ WRONG — No activations:**
 ```
@@ -285,7 +287,7 @@ Use `as` for readable display names while keeping IDs short.
 **Complete sequence diagram example:**
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant Client
     participant Server
@@ -347,7 +349,7 @@ sequenceDiagram
 
 #### 3. Use Activations to Show Processing
 
-> ⚠️ **MANDATORY:** All sequence diagrams must include activations. The activation color is **Dusty Sage** (`#B5C9B5`), specifically chosen to be visually distinct from all phase background colors.
+> ⚠️ **MANDATORY:** All sequence diagrams must include activations. The activation color is **Dusty Sage** (`#9DC49D`), specifically chosen to be visually distinct from all phase background colors.
 
 Activations indicate when a participant is actively processing:
 
@@ -561,7 +563,7 @@ graph TB
 ### Sequence Diagram Template
 
 ```
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#d4956a', 'activationBkgColor': '#B5C9B5', 'sequenceNumberColor': '#5a3a2a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant Client
     participant Server
@@ -622,7 +624,7 @@ Before finalizing a diagram, verify:
 
 ### Sequence Diagram Checklist (CRITICAL)
 
-- [ ] **Theme initialization** with `activationBkgColor: '#B5C9B5'` (Dusty Sage)
+- [ ] **Theme initialization** with `activationBkgColor: '#9DC49D'` AND `activationBorderColor: '#9DC49D'` (both Dusty Sage — matching colors hide the border)
 - [ ] **Every phase has a `rect rgb(...)` block** with appropriate color
 - [ ] **Phase titles use `Note over FirstParticipant, LastParticipant:`** — MUST span full width
 - [ ] **Activations are present** — every processing participant has `activate`/`deactivate` pairs
