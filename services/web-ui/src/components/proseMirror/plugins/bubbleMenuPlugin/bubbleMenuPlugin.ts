@@ -199,7 +199,9 @@ class BubbleMenuView {
     private getImageElement(): HTMLImageElement | null {
         const { selection } = this.view.state
         if (!(selection instanceof NodeSelection)) return null
-        if (selection.node.type.name !== 'image') return null
+
+        const nodeType = selection.node.type.name
+        if (nodeType !== 'image' && nodeType !== 'aiGeneratedImage') return null
 
         const nodeDom = this.view.nodeDOM(selection.from)
         if (!nodeDom) return null
@@ -224,7 +226,9 @@ class BubbleMenuView {
     private getImageWrapper(): HTMLElement | null {
         const { selection } = this.view.state
         if (!(selection instanceof NodeSelection)) return null
-        if (selection.node.type.name !== 'image') return null
+
+        const nodeType = selection.node.type.name
+        if (nodeType !== 'image' && nodeType !== 'aiGeneratedImage') return null
 
         const nodeDom = this.view.nodeDOM(selection.from)
         if (!nodeDom) return null

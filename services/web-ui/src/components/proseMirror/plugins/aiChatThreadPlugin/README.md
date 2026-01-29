@@ -211,6 +211,23 @@ sequenceDiagram
 - DOM: `div.ai-response-message[data-ai-provider]`
 - Empty shells render a horizontal spinner placeholder so the layout keeps height while the first tokens stream in.
 
+**`aiGeneratedImage`** - AI-generated images (from DALL-E, etc.)
+- Content: Empty (atom node)
+- Attributes:
+  - `imageData: string` - Image URL or base64 data
+  - `fileId: string` - Server-side file reference
+  - `workspaceId: string` - Workspace containing the image (for NATS object store access)
+  - `revisedPrompt: string` - The revised prompt used by the AI
+  - `responseId: string` - Response ID for tracking
+  - `aiModel: string` - Model that generated the image
+  - `isPartial: boolean` - True while image is still generating
+  - `width: string | null` - Width percentage (e.g., "50%")
+  - `alignment: 'left' | 'center' | 'right'` - Image alignment
+  - `textWrap: 'none' | 'left' | 'right'` - Text wrap mode
+- DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
+- **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
+- **MULTI-MODAL CONTEXT:** When extracting thread content for AI requests, AI-generated images are included as `nats-obj://workspace-{workspaceId}-files/{fileId}` references, enabling the LLM to reference previously generated images in the conversation.
+
 ## DOM Template System
 
 We use `htm` for declarative DOM in NodeViews. The shared helper lives at `$src/utils/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `$src/components/proseMirror/plugins/README.md` (see "Templating & NodeViews").
@@ -463,12 +480,15 @@ Users see:
 ## Core Helper Classes
 
 ### ContentExtractor
-Handles thread content analysis and message conversion:
+Handles thread content analysis and message conversion with multi-modal support:
 
 ```typescript
 class ContentExtractor {
   // Recursively extracts text while preserving code block formatting
   static collectFormattedText(node: PMNode): string
+
+  // Extracts text AND image references from a message block
+  static collectContentWithImages(node: PMNode): { text: string; images: ImageReference[] }
 
   // Simple text extraction fallback
   static collectText(node: PMNode): string
@@ -476,17 +496,23 @@ class ContentExtractor {
   // Finds active thread by walking up DOM hierarchy from cursor
   static getActiveThreadContent(state: EditorState): ThreadContent[]
 
-  // Converts thread blocks to AI messages, merging consecutive roles
-  static toMessages(items: ThreadContent[]): Array<{ role: string; content: string }>
+  // Builds NATS object store URL for image reference
+  static buildImageUrl(ref: ImageReference): string
+
+  // Converts thread blocks to AI messages (multi-modal format when images present)
+  static toMessages(items: ThreadContent[]): Message[]
 }
 ```
 
 **Message Conversion Logic:**
 1. Walk each top-level block in the thread (excluding `aiUserInput` composer)
-2. Extract formatted text (preserves newlines, wraps code_block in ```)
+2. Extract formatted text AND AI-generated image references (with `fileId` and `workspaceId`)
 3. Determine role: `aiResponseMessage` → `assistant`, `aiUserMessage` → `user`
-4. Merge consecutive blocks with same role
-5. Return clean message array for AI API
+4. Merge consecutive text-only blocks with same role
+5. For messages with images, return multi-modal content format:
+   - Text parts: `{ type: 'text', text: '...' }`
+   - Image parts: `{ type: 'image_url', image_url: { url: 'nats-obj://workspace-{workspaceId}-files/{fileId}' } }`
+6. Return message array ready for any LLM provider (provider-agnostic)
 
 ### PositionFinder
 Document position utilities for content insertion:

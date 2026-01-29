@@ -139,13 +139,18 @@ await startNatsAuthCalloutService({
                 pub: {
                     allow: [
                         "ai.interaction.chat.error.>",           // Publish errors back to API
-                        "ai.interaction.chat.receiveMessage.>"     // Stream LLM responses to web-ui
+                        "ai.interaction.chat.receiveMessage.>",  // Stream LLM responses to web-ui
+                        "$JS.API.>",                             // JetStream API for object store access
+                        "$JS.FC.>",                              // JetStream flow control for large objects
+                        "$JS.ACK.>"                              // JetStream acknowledgements
                     ]
                 },
                 sub: {
                     allow: [
-                        "ai.interaction.chat.process",            // Subscribe to chat processing requests
-                        "ai.interaction.chat.stop.>"              // Subscribe to stop requests
+                        "ai.interaction.chat.process",           // Subscribe to chat processing requests
+                        "ai.interaction.chat.stop.>",            // Subscribe to stop requests
+                        "_INBOX.>",                              // Reply inbox for JetStream requests
+                        "$JS.>"                                  // All JetStream subjects for object store
                     ]
                 }
             }

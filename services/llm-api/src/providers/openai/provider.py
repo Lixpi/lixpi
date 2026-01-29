@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt
 from config import settings
-from utils.attachments import convert_attachments_for_provider, AttachmentFormat
+from utils.attachments import convert_attachments_for_provider, AttachmentFormat, resolve_image_urls
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +60,14 @@ class OpenAIProvider(BaseLLMProvider):
 
         enable_image_generation = state.get('enable_image_generation', False)
         image_size = state.get('image_size', 'auto')
-        previous_response_id = state.get('previous_response_id')
 
         # Prepare input array from messages with attachment conversion
         input_messages = []
         for msg in messages:
             content = msg.get('content', '')
-            # Convert attachments to OpenAI format (validates and normalizes)
+            # First resolve any NATS object store references to base64
+            content = await resolve_image_urls(content, self.nats_client)
+            # Then convert attachments to OpenAI format (validates and normalizes)
             content = convert_attachments_for_provider(content, AttachmentFormat.OPENAI)
             input_messages.append({
                 'role': msg.get('role', 'user'),
@@ -83,8 +84,6 @@ class OpenAIProvider(BaseLLMProvider):
         logger.debug(f"Input messages count: {len(input_messages)}")
         if enable_image_generation:
             logger.info(f"Image generation enabled with size: {image_size}")
-        if previous_response_id:
-            logger.info(f"Multi-turn editing with previous_response_id: {previous_response_id}")
 
         try:
             # Publish stream start event
@@ -104,10 +103,6 @@ class OpenAIProvider(BaseLLMProvider):
             # Add tools if image generation is enabled
             if tools:
                 request_kwargs['tools'] = tools
-
-            # Add previous_response_id for multi-turn image editing
-            if previous_response_id:
-                request_kwargs['previous_response_id'] = previous_response_id
 
             # Create streaming response using Responses API
             stream = await self.client.responses.create(**request_kwargs)
@@ -227,10 +222,12 @@ class OpenAIProvider(BaseLLMProvider):
         return [{
             'type': 'image_generation',
             'quality': 'high',
+            # 'quality': 'low',
             'moderation': 'low',
             'input_fidelity': 'high',
             'partial_images': 3,
             'size': image_size if image_size else 'auto'
+            # 'size': '1024x1024'
         }]
 
     async def _handle_image_generation_output(

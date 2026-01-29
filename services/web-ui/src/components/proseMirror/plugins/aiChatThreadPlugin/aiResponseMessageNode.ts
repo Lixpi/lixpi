@@ -67,8 +67,10 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         <div className="ai-response-message-wrapper">
             <div className="ai-response-message">
                 <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
-                <div className="ai-response-message-spinner" aria-hidden="true"></div>
-                <div className="ai-response-message-content"></div>
+                <div className="ai-response-message-bubble">
+                    <div className="ai-response-message-spinner" aria-hidden="true"></div>
+                    <div className="ai-response-message-content"></div>
+                </div>
             </div>
         </div>
     `
@@ -77,6 +79,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     const aiResponseMessageContainer = parentWrapper.querySelector('.ai-response-message')
     const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
     const spinnerElement = parentWrapper.querySelector('.ai-response-message-spinner')
+    const bubbleElement = parentWrapper.querySelector('.ai-response-message-bubble')
     const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
 
     // // Create an accept button
@@ -141,6 +144,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     const updateSpinnerState = () => {
         const isWaitingForContent = node.childCount === 0 && node.attrs.isReceivingAnimation
 
+        bubbleElement.classList.toggle('is-waiting', isWaitingForContent)
         aiResponseMessageContainer.classList.toggle('is-empty', isWaitingForContent)
 
         if (spinnerElement) {

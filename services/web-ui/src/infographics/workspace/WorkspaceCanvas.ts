@@ -966,6 +966,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createAiChatThreadNode(node: AiChatThreadCanvasNode, thread: AiChatThread | undefined): HTMLElement {
+        console.log('📋 [WORKSPACE] createAiChatThreadNode called:', {
+            nodeId: node.nodeId,
+            referenceId: node.referenceId,
+            hasThread: !!thread,
+            hasContent: thread ? thread.content !== undefined : false,
+            contentType: thread?.content ? typeof thread.content : 'undefined',
+            contentPreview: thread?.content ? JSON.stringify(thread.content).substring(0, 300) : 'no content'
+        })
+
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
             'workspace-ai-chat-thread-node',
@@ -981,6 +990,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         nodeEl.appendChild(editorContainer)
 
         if (thread && thread.content !== undefined) {
+            console.log('📋 [WORKSPACE] Creating ProseMirrorEditor with thread content')
             try {
                 // Create AiInteractionService for this thread
                 const aiService = new AiInteractionService({

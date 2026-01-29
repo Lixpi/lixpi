@@ -10,8 +10,13 @@ export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponse
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 
-// Export setAiGeneratedImageCallbacks for workspace canvas integration
-export { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
+// Export aiGeneratedImage node for schema and NodeView registration
+export {
+    aiGeneratedImageNodeType,
+    aiGeneratedImageNodeSpec,
+    aiGeneratedImageNodeView,
+    setAiGeneratedImageCallbacks
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
 // Export all from plugin
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'

@@ -14,6 +14,11 @@ type ImageNodeViewOptions = {
     getPos: () => number | undefined
 }
 
+// Get the image source from node attrs (handles both 'src' and 'imageData' attributes)
+function getImageSrcAttr(node: ProseMirrorNode): string {
+    return node.attrs.src || node.attrs.imageData || ''
+}
+
 // Build image src with auth token if needed
 async function buildImageSrc(src: string): Promise<string> {
     if (!src) return ''
@@ -63,7 +68,7 @@ export class ImageNodeView implements NodeView {
         this.node = node
         this.view = view
         this.getPos = getPos
-        this.currentSrcAttr = node.attrs.src || ''
+        this.currentSrcAttr = getImageSrcAttr(node)
 
         // Create figure wrapper
         this.figure = document.createElement('figure')
@@ -73,7 +78,7 @@ export class ImageNodeView implements NodeView {
         // Create image element
         this.img = document.createElement('img')
         // Set src asynchronously to handle auth token
-        this.updateImageSrc(node.attrs.src)
+        this.updateImageSrc(getImageSrcAttr(node))
         if (node.attrs.alt) this.img.alt = node.attrs.alt
         if (node.attrs.title) this.img.title = node.attrs.title
         if (node.attrs.fileId) this.img.dataset.fileId = node.attrs.fileId
@@ -248,7 +253,7 @@ export class ImageNodeView implements NodeView {
         this.node = node
 
         // Update image src asynchronously to handle auth token
-        this.updateImageSrc(node.attrs.src)
+        this.updateImageSrc(getImageSrcAttr(node))
 
         if (node.attrs.alt !== this.img.alt) {
             this.img.alt = node.attrs.alt || ''
