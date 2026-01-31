@@ -75,6 +75,7 @@ type ConnectorRenderer = {
 type EdgeAnchor = {
   nodeId: string      // logical grouping ID (optional semantic grouping)
   position: 'left' | 'right' | 'top' | 'bottom' | 'center'
+  t?: number          // Position along the side (0=start, 1=end, 0.5=center). Default: 0.5
   offset?: { x?: number; y?: number }
 }
 
@@ -82,16 +83,33 @@ type EdgeConfig = {
   id: string
   source: EdgeAnchor
   target: EdgeAnchor
-  pathType?: 'bezier' | 'straight' | 'smoothstep' | 'horizontal-bezier'
+  pathType?: 'bezier' | 'straight' | 'smoothstep' | 'horizontal-bezier' | 'orthogonal'
   marker?: 'arrowhead' | 'arrowhead-muted' | 'circle' | 'none'
   markerStart?: 'arrowhead' | 'arrowhead-muted' | 'circle' | 'none'
   curvature?: number
+  borderRadius?: number  // Corner rounding for 'orthogonal' paths (default: 8)
   lineStyle?: 'solid' | 'dashed'
   strokeWidth?: number
   strokeDasharray?: string
   className?: string // semantic extension (DON'T replace internal geometry classes)
 }
 ```
+
+### Flexible Anchor Positioning
+
+By default, edges connect at the center of a node's side (t=0.5). Use the `t` parameter to position anchors anywhere along a side:
+
+```typescript
+// Connect from top portion of source to bottom portion of target
+connector.addEdge({
+  id: 'flexible-edge',
+  source: { nodeId: 'A', position: 'right', t: 0.2 },  // Near top (20% from top)
+  target: { nodeId: 'B', position: 'left', t: 0.8 },   // Near bottom (80% from top)
+  pathType: 'orthogonal'
+})
+```
+
+For left/right sides, `t=0` is top and `t=1` is bottom. For top/bottom sides, `t=0` is left and `t=1` is right.
 
 ### Add an Edge
 
@@ -216,6 +234,11 @@ This system wraps XYFlow's battle-tested edge utilities:
 - `getBezierPath` — Curved edges with configurable curvature
 - `getStraightPath` — Direct line connections
 - `getSmoothStepPath` — Orthogonal routing with rounded corners
+
+Additionally, custom path types are available:
+
+- `horizontal-bezier` — Symmetric S-curve for horizontal flows
+- `orthogonal` — Circuit board style: horizontal → vertical → horizontal with rounded corners (default for workspace edges)
 
 All paths respect anchor positions (left, right, top, bottom) and compute proper control points automatically.
 

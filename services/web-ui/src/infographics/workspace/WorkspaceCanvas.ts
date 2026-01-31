@@ -25,6 +25,7 @@ import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/c
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
@@ -756,9 +757,42 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 y: parseFloat(nodeEl.style.top)
             }
 
-            const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) =>
+            // First update the dragged node's position
+            let updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) =>
                 n.nodeId === nodeId ? { ...n, position: newPosition } : n
             )
+
+            // Apply collision detection to resolve any overlapping nodes
+            const nodeBoxes = updatedNodes.map((n: CanvasNode) => ({
+                id: n.nodeId,
+                x: n.position.x,
+                y: n.position.y,
+                width: n.dimensions.width,
+                height: n.dimensions.height
+            }))
+
+            const { nodes: movedNodes, hasChanges } = resolveCollisions(nodeBoxes, {
+                iterations: 50,
+                overlapThreshold: 0.5,
+                margin: 20
+            })
+
+            // Apply collision-resolved positions
+            if (hasChanges) {
+                updatedNodes = updatedNodes.map((n: CanvasNode) => {
+                    const newPos = movedNodes.get(n.nodeId)
+                    if (newPos) {
+                        // Update DOM element position immediately
+                        const movedNodeEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
+                        if (movedNodeEl) {
+                            movedNodeEl.style.left = `${newPos.x}px`
+                            movedNodeEl.style.top = `${newPos.y}px`
+                        }
+                        return { ...n, position: newPos }
+                    }
+                    return n
+                })
+            }
 
             commitCanvasState({
                 ...currentCanvasState,

@@ -14,6 +14,7 @@ export type PathType =
     | 'straight'            // XYFlow getStraightPath (direct line)
     | 'smoothstep'          // XYFlow getSmoothStepPath (orthogonal with rounded corners)
     | 'horizontal-bezier'   // Custom symmetric S-curve for horizontal flows
+    | 'orthogonal'          // Circuit board style: horizontal → vertical → horizontal with rounded corners
 
 // Marker (arrowhead) style
 export type MarkerType = 'arrowhead' | 'arrowhead-muted' | 'circle' | 'none'
@@ -22,7 +23,8 @@ export type MarkerType = 'arrowhead' | 'arrowhead-muted' | 'circle' | 'none'
 export type EdgeAnchor = {
     nodeId: string
     position: AnchorPosition
-    offset?: { x?: number; y?: number }  // Fine-tune anchor position
+    t?: number                               // Position along the side (0=start, 1=end, 0.5=center). Default: 0.5
+    offset?: { x?: number; y?: number }      // Fine-tune anchor position in pixels
 }
 
 // Edge configuration with source/target and styling
@@ -37,9 +39,13 @@ export type EdgeConfig = {
     markerSize?: number          // Arrowhead size in pixels (default: 7)
     markerOffset?: { source?: number; target?: number }  // Gap between edge end and node (default: 5 for both)
     curvature?: number           // For bezier/smoothstep paths (default: 0.25)
+    borderRadius?: number        // For orthogonal paths corner rounding (default: 8)
     lineStyle?: 'solid' | 'dashed'  // Line style (default: 'solid')
     strokeWidth?: number         // Line thickness in pixels (default: 1.2)
     strokeDasharray?: string     // For custom dash patterns (overrides lineStyle if provided)
+    bendPoints?: Array<{ x: number; y: number }>  // elkjs-computed waypoints for orthogonal routing
+    laneIndex?: number           // Index within edges sharing same target (for vertical lane ordering)
+    laneCount?: number           // Total edges sharing same target
 }
 
 export type NodeShape = 'rect' | 'circle' | 'foreignObject' | 'path'

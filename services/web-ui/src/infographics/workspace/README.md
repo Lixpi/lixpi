@@ -19,6 +19,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 - **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
+- **Reposition edge anchor points** by selecting an edge and dragging the circular handles vertically along the node's side
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
 

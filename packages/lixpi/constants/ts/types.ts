@@ -113,6 +113,8 @@ export type WorkspaceEdge = {
     targetNodeId: string
     sourceHandle?: string
     targetHandle?: string
+    sourceT?: number  // Position along source side (0=start, 1=end, 0.5=center). Default: 0.5
+    targetT?: number  // Position along target side (0=start, 1=end, 0.5=center). Default: 0.5
 }
 
 export type CanvasState = {

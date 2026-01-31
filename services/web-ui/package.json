@@ -53,6 +53,7 @@
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
+        "elkjs": "*",
         "@auth0/auth0-spa-js": "*",
         "@codemirror/autocomplete": "*",
         "@codemirror/commands": "*",

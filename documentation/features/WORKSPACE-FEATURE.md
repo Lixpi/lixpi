@@ -120,8 +120,12 @@ type WorkspaceEdge = {
     targetNodeId: string
     sourceHandle?: string  // e.g., 'right'
     targetHandle?: string  // e.g., 'left'
+    sourceT?: number       // Position along source side (0=top, 1=bottom, 0.5=center). Default: 0.5
+    targetT?: number       // Position along target side (0=top, 1=bottom, 0.5=center). Default: 0.5
 }
 ```
+
+The `sourceT` and `targetT` properties allow edges to attach at any vertical position along a node's side, not just the center. When a user creates a connection by dragging, the `t` values are computed from the pointer position where they started and dropped.
 
 ### CanvasNode
 

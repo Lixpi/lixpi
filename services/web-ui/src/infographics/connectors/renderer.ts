@@ -11,12 +11,14 @@ import type {
     EdgeConfig,
     NodeAnchors,
     AnchorPosition,
-    MarkerType
+    MarkerType,
+    EdgeAnchor
 } from '$src/infographics/connectors/types.ts'
 import { createMarkers, getMarkerUrl, collectMarkerTypes } from '$src/infographics/connectors/markers.ts'
 import { computePath, applyOffset } from '$src/infographics/connectors/paths.ts'
 
 // Compute anchor points for a node based on its shape and dimensions
+// These are the default center positions for each side
 function computeNodeAnchors(node: NodeConfig): NodeAnchors {
     const { x, y, width, height, anchorOverrides } = node
     const centerX = x + width / 2
@@ -40,6 +42,43 @@ function computeNodeAnchors(node: NodeConfig): NodeAnchors {
     }
 
     return anchors
+}
+
+// Compute anchor coordinate for an edge anchor, supporting flexible positioning via 't' parameter
+// t=0 is start of side, t=1 is end of side, t=0.5 (default) is center
+function computeAnchorCoordinate(
+    anchor: EdgeAnchor,
+    node: NodeConfig
+): { x: number; y: number } {
+    const { x, y, width, height } = node
+    const t = anchor.t ?? 0.5  // Default to center
+
+    let coord: { x: number; y: number }
+
+    switch (anchor.position) {
+        case 'left':
+            // Left side: x is fixed, y varies from top (t=0) to bottom (t=1)
+            coord = { x, y: y + height * t }
+            break
+        case 'right':
+            // Right side: x is fixed at right edge, y varies from top (t=0) to bottom (t=1)
+            coord = { x: x + width, y: y + height * t }
+            break
+        case 'top':
+            // Top side: y is fixed, x varies from left (t=0) to right (t=1)
+            coord = { x: x + width * t, y }
+            break
+        case 'bottom':
+            // Bottom side: y is fixed at bottom, x varies from left (t=0) to right (t=1)
+            coord = { x: x + width * t, y: y + height }
+            break
+        case 'center':
+        default:
+            coord = { x: x + width / 2, y: y + height / 2 }
+            break
+    }
+
+    return coord
 }
 
 // Render a single node using D3
@@ -203,6 +242,7 @@ function renderNode(
 function renderEdge(
     gEdges: ConnectorState['gEdges'],
     edge: EdgeConfig,
+    nodes: Map<string, NodeConfig>,
     anchors: Map<string, NodeAnchors>,
     instanceId: string
 ): void {
@@ -217,26 +257,31 @@ function renderEdge(
         markerSize = 7,
         markerOffset = {},
         curvature = 0.25,
+        borderRadius = 8,
         lineStyle = 'solid',
         strokeWidth = 1.2,
-        strokeDasharray
+        strokeDasharray,
+        bendPoints,
+        laneIndex = 0,
+        laneCount = 1
     } = edge
 
     // Extract marker offsets with defaults
     const sourceMarkerOffset = markerOffset.source ?? 5
     const targetMarkerOffset = markerOffset.target ?? 5
 
-    // Get source and target anchor coordinates
-    const sourceNode = anchors.get(source.nodeId)
-    const targetNode = anchors.get(target.nodeId)
+    // Get source and target nodes
+    const sourceNodeConfig = nodes.get(source.nodeId)
+    const targetNodeConfig = nodes.get(target.nodeId)
 
-    if (!sourceNode || !targetNode) {
-        console.warn(`[Connector] Missing anchor for edge ${id}: source=${source.nodeId}, target=${target.nodeId}`)
+    if (!sourceNodeConfig || !targetNodeConfig) {
+        console.warn(`[Connector] Missing node for edge ${id}: source=${source.nodeId}, target=${target.nodeId}`)
         return
     }
 
-    const sourceAnchor = sourceNode[source.position]
-    const targetAnchor = targetNode[target.position]
+    // Compute anchor coordinates with flexible 't' positioning
+    const sourceAnchor = computeAnchorCoordinate(source, sourceNodeConfig)
+    const targetAnchor = computeAnchorCoordinate(target, targetNodeConfig)
 
     // Apply offsets if specified
     let sourceCoords = applyOffset(sourceAnchor.x, sourceAnchor.y, source.offset)
@@ -278,7 +323,7 @@ function renderEdge(
         }
     }
 
-    // Compute path
+    // Compute path with node avoidance for orthogonal paths
     const { path } = computePath(
         pathType,
         sourceCoords.x,
@@ -287,7 +332,14 @@ function renderEdge(
         targetCoords.y,
         source.position,
         target.position,
-        curvature
+        curvature,
+        borderRadius,
+        bendPoints,
+        nodes,           // Pass all nodes for obstacle avoidance
+        source.nodeId,   // Source node ID to exclude from obstacles
+        target.nodeId,   // Target node ID to exclude from obstacles
+        laneIndex,       // Lane index for vertical segment ordering
+        laneCount        // Total lanes sharing same target
     )
 
     // Create path element with styling
@@ -443,7 +495,7 @@ export function createConnectorRenderer(config: ConnectorConfig): ConnectorRende
 
             // Render edges
             for (const edge of state.edges.values()) {
-                renderEdge(state.gEdges, edge, state.anchors, state.instanceId)
+                renderEdge(state.gEdges, edge, state.nodes, state.anchors, state.instanceId)
             }
         },
 

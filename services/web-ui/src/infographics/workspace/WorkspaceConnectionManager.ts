@@ -23,6 +23,7 @@ import {
 } from '$src/infographics/connectors/index.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { computeEdgeRoutes } from '$src/infographics/connectors/elkRouting.ts'
 
 import type {
 	CanvasNode,
@@ -73,6 +74,18 @@ function getEdgeAnchorPositions(edge: WorkspaceEdge): { source: 'left' | 'right'
 	return { source, target }
 }
 
+// Compute anchor 't' value based on pointer Y position relative to the node side
+// Returns value between 0 (top) and 1 (bottom) for left/right sides
+function computeTFromPointerPosition(
+	pointerY: number,
+	nodeTop: number,
+	nodeHeight: number
+): number {
+	const relativeY = pointerY - nodeTop
+	const t = Math.max(0, Math.min(1, relativeY / nodeHeight))
+	return t
+}
+
 function isSameConnection(
 	a: WorkspaceEdge,
 	b: { sourceNodeId: string; targetNodeId: string; sourceHandle?: string | null; targetHandle?: string | null }
@@ -81,6 +94,114 @@ function isSameConnection(
 		a.targetNodeId === b.targetNodeId &&
 		(a.sourceHandle ?? null) === (b.sourceHandle ?? null) &&
 		(a.targetHandle ?? null) === (b.targetHandle ?? null)
+}
+
+// Compute spread-out t values for edges that share the same node+side
+// This prevents multiple edges from converging to the exact same point
+// Edges are ordered by the OTHER node's Y position to prevent line crossings
+// (higher source Y = lower t on target, so lines don't cross)
+// Also computes lane indices for vertical segment ordering
+type SpreadResult = {
+	sourceT: number
+	targetT: number
+	laneIndex: number      // Index within edges sharing same target (0 = topmost source)
+	laneCount: number      // Total edges sharing same target
+	sourceY: number        // Source node center Y for lane calculation
+}
+
+function computeSpreadTValues(
+	edges: WorkspaceEdge[],
+	nodes: CanvasNode[]
+): Map<string, SpreadResult> {
+	const result = new Map<string, SpreadResult>()
+	const nodeMap = new Map(nodes.map(n => [n.nodeId, n]))
+
+	// Group edges by source node+side
+	const sourceGroups = new Map<string, WorkspaceEdge[]>()
+	// Group edges by target node+side
+	const targetGroups = new Map<string, WorkspaceEdge[]>()
+
+	for (const edge of edges) {
+		const sourceKey = `${edge.sourceNodeId}:${edge.sourceHandle ?? 'right'}`
+		const targetKey = `${edge.targetNodeId}:${edge.targetHandle ?? 'left'}`
+
+		if (!sourceGroups.has(sourceKey)) sourceGroups.set(sourceKey, [])
+		if (!targetGroups.has(targetKey)) targetGroups.set(targetKey, [])
+
+		sourceGroups.get(sourceKey)!.push(edge)
+		targetGroups.get(targetKey)!.push(edge)
+
+		const sourceNode = nodeMap.get(edge.sourceNodeId)
+		const sourceY = sourceNode ? sourceNode.position.y + sourceNode.dimensions.height / 2 : 0
+
+		// Initialize with stored or default values
+		result.set(edge.edgeId, {
+			sourceT: edge.sourceT ?? 0.5,
+			targetT: edge.targetT ?? 0.5,
+			laneIndex: 0,
+			laneCount: 1,
+			sourceY
+		})
+	}
+
+	// Spread source t values for edges sharing the same source node+side
+	// Sort by TARGET node's Y position so lines don't cross
+	for (const [, group] of sourceGroups) {
+		if (group.length <= 1) continue
+
+		// Sort by target node Y position (smaller Y = higher on screen = smaller t)
+		group.sort((a, b) => {
+			const aTarget = nodeMap.get(a.targetNodeId)
+			const bTarget = nodeMap.get(b.targetNodeId)
+			const aY = aTarget ? aTarget.position.y + aTarget.dimensions.height / 2 : 0
+			const bY = bTarget ? bTarget.position.y + bTarget.dimensions.height / 2 : 0
+			return aY - bY
+		})
+
+		// Spread evenly between 0.35 and 0.65 (subtle spread near center)
+		const count = group.length
+		const margin = 0.35
+		const range = 1 - 2 * margin
+		const step = count > 1 ? range / (count - 1) : 0
+
+		for (let i = 0; i < group.length; i++) {
+			const edge = group[i]
+			const values = result.get(edge.edgeId)!
+			values.sourceT = count === 1 ? 0.5 : margin + i * step
+		}
+	}
+
+	// Spread target t values for edges sharing the same target node+side
+	// Sort by SOURCE node's Y position so lines don't cross
+	// Also assign lane indices for vertical segment ordering
+	for (const [, group] of targetGroups) {
+		if (group.length <= 1) continue
+
+		// Sort by source node Y position (smaller Y = higher on screen = smaller t)
+		group.sort((a, b) => {
+			const aSource = nodeMap.get(a.sourceNodeId)
+			const bSource = nodeMap.get(b.sourceNodeId)
+			const aY = aSource ? aSource.position.y + aSource.dimensions.height / 2 : 0
+			const bY = bSource ? bSource.position.y + bSource.dimensions.height / 2 : 0
+			return aY - bY
+		})
+
+		// Spread evenly between 0.35 and 0.65 (subtle spread near center)
+		const count = group.length
+		const margin = 0.35
+		const range = 1 - 2 * margin
+		const step = count > 1 ? range / (count - 1) : 0
+
+		for (let i = 0; i < group.length; i++) {
+			const edge = group[i]
+			const values = result.get(edge.edgeId)!
+			values.targetT = count === 1 ? 0.5 : margin + i * step
+			values.laneIndex = i
+			values.laneCount = count
+		}
+	}
+
+	return result
 }
 
 export class WorkspaceConnectionManager {
@@ -100,6 +221,9 @@ export class WorkspaceConnectionManager {
 
 	private reconnectingEdge: { edgeId: string; edgeUpdaterType: HandleType } | null = null
 
+	// elkjs edge routing
+	private edgeBendPoints: Map<string, Array<{ x: number; y: number }>> = new Map()
+
 	public constructor(config: ConnectionManagerConfig) {
 		this.config = config
 
@@ -110,6 +234,7 @@ export class WorkspaceConnectionManager {
 		this.config.edgesLayerEl.style.position = 'absolute'
 		this.config.edgesLayerEl.style.top = '0'
 		this.config.edgesLayerEl.style.left = '0'
+
 	}
 
 	public syncNodes(canvasNodes: CanvasNode[]) {
@@ -128,6 +253,9 @@ export class WorkspaceConnectionManager {
 			nodeOrigin: [0, 0],
 			elevateNodesOnSelect: false
 		})
+
+		// Trigger edge routing recalculation
+		this.scheduleEdgeRouting()
 	}
 
 	public registerNodeElement(nodeId: string, nodeElement: HTMLDivElement) {
@@ -150,6 +278,9 @@ export class WorkspaceConnectionManager {
 		if (this.selectedEdgeId && !edges.some((e) => e.edgeId === this.selectedEdgeId)) {
 			this.selectEdge(null)
 		}
+
+		// Trigger edge routing recalculation
+		this.scheduleEdgeRouting()
 	}
 
 	public onHandlePointerDown(event: MouseEvent | TouchEvent, meta: HandleMeta) {
@@ -234,12 +365,33 @@ export class WorkspaceConnectionManager {
 				const toNodeId = fromNodeId === connection.source ? connection.target : connection.source
 				const toHandleId = fromNodeId === connection.source ? connection.targetHandle : connection.sourceHandle
 
+				// Compute t values based on where user clicked/dropped
+				let sourceT = 0.5
+				let targetT = 0.5
+
+				const sourceNode = this.nodes.find(n => n.nodeId === fromNodeId)
+				const targetNode = this.nodes.find(n => n.nodeId === toNodeId)
+
+				// Compute source t from the drag start position
+				if (sourceNode && this.connectionInProgress?.fromHandle) {
+					const handleY = this.connectionInProgress.fromHandle.y
+					sourceT = computeTFromPointerPosition(handleY, sourceNode.position.y, sourceNode.dimensions.height)
+				}
+
+				// Compute target t from the drop position
+				if (targetNode && this.connectionInProgress?.toHandle) {
+					const handleY = this.connectionInProgress.toHandle.y
+					targetT = computeTFromPointerPosition(handleY, targetNode.position.y, targetNode.dimensions.height)
+				}
+
 				const nextEdge: WorkspaceEdge = {
 					edgeId: generateEdgeId(),
 					sourceNodeId: fromNodeId,
 					targetNodeId: toNodeId,
 					sourceHandle: fromHandleId ?? undefined,
 					targetHandle: toHandleId ?? undefined,
+					sourceT,
+					targetT,
 				}
 
 				this.config.onEdgesChange([...this.edges, nextEdge])
@@ -267,14 +419,37 @@ export class WorkspaceConnectionManager {
 
 				const updatedEdge: WorkspaceEdge = { ...edgeToUpdate }
 
+				// Get the node being reconnected to
+				const reconnectedNode = this.nodes.find(n => n.nodeId === finalState.toNode!.id)
+
 				// Reconnect logic: edgeUpdaterType tells us which end is being moved
 				// 'source' means moving the source end, 'target' means moving the target end
 				if (this.reconnectingEdge.edgeUpdaterType === 'source') {
 					updatedEdge.sourceNodeId = finalState.toNode.id
 					updatedEdge.sourceHandle = finalState.toHandle?.id ?? undefined
+					// Compute t from drop position
+					if (reconnectedNode && finalState.toHandle) {
+						updatedEdge.sourceT = computeTFromPointerPosition(
+							finalState.toHandle.y,
+							reconnectedNode.position.y,
+							reconnectedNode.dimensions.height
+						)
+					} else {
+						updatedEdge.sourceT = 0.5
+					}
 				} else {
 					updatedEdge.targetNodeId = finalState.toNode.id
 					updatedEdge.targetHandle = finalState.toHandle?.id ?? undefined
+					// Compute t from drop position
+					if (reconnectedNode && finalState.toHandle) {
+						updatedEdge.targetT = computeTFromPointerPosition(
+							finalState.toHandle.y,
+							reconnectedNode.position.y,
+							reconnectedNode.dimensions.height
+						)
+					} else {
+						updatedEdge.targetT = 0.5
+					}
 				}
 
 				// Validate again (avoid creating duplicates via reconnect)
@@ -310,6 +485,48 @@ export class WorkspaceConnectionManager {
 
 	public deselect() {
 		this.selectEdge(null)
+	}
+
+	// Compute elkjs edge routing immediately (real-time)
+	private async computeEdgeRoutingImmediate() {
+		if (this.edges.length === 0 || this.nodes.length === 0) {
+			this.edgeBendPoints.clear()
+			return
+		}
+
+		// Build NodeConfig array for elkjs
+		const nodeConfigs: NodeConfig[] = this.nodes.map(n => ({
+			id: n.nodeId,
+			shape: 'rect' as const,
+			x: n.position.x,
+			y: n.position.y,
+			width: n.dimensions.width,
+			height: n.dimensions.height
+		}))
+
+		// Build EdgeConfig array for elkjs with spread t values
+		const spreadTValues = computeSpreadTValues(this.edges, this.nodes)
+		const edgeConfigs: EdgeConfig[] = this.edges.map(e => {
+			const { source, target } = getEdgeAnchorPositions(e)
+			const tValues = spreadTValues.get(e.edgeId)
+			return {
+				id: e.edgeId,
+				source: { nodeId: e.sourceNodeId, position: source, t: tValues?.sourceT ?? e.sourceT ?? 0.5 },
+				target: { nodeId: e.targetNodeId, position: target, t: tValues?.targetT ?? e.targetT ?? 0.5 }
+			}
+		})
+
+		try {
+			this.edgeBendPoints = await computeEdgeRoutes(nodeConfigs, edgeConfigs)
+			this.render()
+		} catch (error) {
+			console.error('elkjs edge routing failed:', error)
+		}
+	}
+
+	// Trigger edge routing computation
+	private scheduleEdgeRouting() {
+		void this.computeEdgeRoutingImmediate()
 	}
 
 	private computeRenderBounds(): RenderBounds | null {
@@ -427,6 +644,10 @@ export class WorkspaceConnectionManager {
 		const { strokeWidth: scaledStrokeWidth, markerSize: scaledMarkerSize, markerOffset: scaledMarkerOffset } =
 			getEdgeScaledSizes(zoom)
 
+		// Compute spread-out t values for edges sharing the same node+side
+		// This prevents multiple edges from converging to the exact same point
+		const spreadTValues = computeSpreadTValues(this.edges, this.nodes)
+
 		// Add committed edges (skip the one being reconnected)
 		for (const e of this.edges) {
 			// Hide the edge being reconnected - it will be shown as in-progress line
@@ -437,16 +658,31 @@ export class WorkspaceConnectionManager {
 			const { source, target } = getEdgeAnchorPositions(e)
 			const isSelected = e.edgeId === this.selectedEdgeId
 
+			// Use spread t values to prevent convergence, fall back to stored values
+			const tValues = spreadTValues.get(e.edgeId)
+			const sourceT = tValues?.sourceT ?? e.sourceT ?? 0.5
+			const targetT = tValues?.targetT ?? e.targetT ?? 0.5
+
+			// Get elkjs-computed bend points for this edge (offset to render coordinates)
+			const absoluteBendPoints = this.edgeBendPoints.get(e.edgeId)
+			const bendPoints = absoluteBendPoints?.map(bp => ({
+				x: bp.x - offsetX,
+				y: bp.y - offsetY
+			}))
+
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
-				source: { nodeId: e.sourceNodeId, position: source },
-				target: { nodeId: e.targetNodeId, position: target },
-				pathType: 'horizontal-bezier',
+				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
+				target: { nodeId: e.targetNodeId, position: target, t: targetT },
+				pathType: 'orthogonal',
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
 				markerOffset: scaledMarkerOffset,
 				strokeWidth: isSelected ? scaledStrokeWidth * 1.5 : scaledStrokeWidth,
-				className: `workspace-edge ${isSelected ? 'is-selected' : ''}`
+				className: `workspace-edge ${isSelected ? 'is-selected' : ''}`,
+				bendPoints,
+				laneIndex: tValues?.laneIndex ?? 0,
+				laneCount: tValues?.laneCount ?? 1
 			}
 
 			this.connector.addEdge(edgeConfig)
@@ -509,7 +745,7 @@ export class WorkspaceConnectionManager {
 				id: '__workspace-temp-edge',
 				source: { nodeId: sourceNodeId, position: sourcePosition },
 				target: { nodeId: tempNodeId, position: 'center' },
-				pathType: 'horizontal-bezier',
+				pathType: 'orthogonal',
 				marker: isReconnecting ? 'arrowhead' : 'none',
 				markerSize: isReconnecting ? scaledMarkerSize : undefined,
 				markerOffset: isReconnecting ? scaledMarkerOffset : undefined,
@@ -522,7 +758,153 @@ export class WorkspaceConnectionManager {
 
 		this.connector.render()
 
+		this.renderAnchorPointHandles(offsetX, offsetY)
 		this.attachEdgeInteractionHandlers()
+	}
+
+	// Render draggable anchor points at edge endpoints for the selected edge
+	private renderAnchorPointHandles(offsetX: number, offsetY: number) {
+		// Remove any existing anchor handles
+		const existingHandles = this.config.edgesLayerEl.querySelectorAll('.edge-anchor-handle')
+		existingHandles.forEach(h => h.remove())
+
+		if (!this.selectedEdgeId) return
+
+		const selectedEdge = this.edges.find(e => e.edgeId === this.selectedEdgeId)
+		if (!selectedEdge) return
+
+		const sourceNode = this.nodes.find(n => n.nodeId === selectedEdge.sourceNodeId)
+		const targetNode = this.nodes.find(n => n.nodeId === selectedEdge.targetNodeId)
+		if (!sourceNode || !targetNode) return
+
+		const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg')
+		if (!svg) return
+
+		const { source: sourcePos, target: targetPos } = getEdgeAnchorPositions(selectedEdge)
+		const sourceT = selectedEdge.sourceT ?? 0.5
+		const targetT = selectedEdge.targetT ?? 0.5
+
+		// Get current zoom for sizing
+		const transform = this.config.getTransform()
+		const zoom = transform[2]
+		const handleRadius = 6 / zoom
+
+		// Create source anchor handle
+		const sourceX = sourcePos === 'left'
+			? sourceNode.position.x - offsetX
+			: sourceNode.position.x + sourceNode.dimensions.width - offsetX
+		const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT - offsetY
+
+		const sourceHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+		sourceHandle.setAttribute('cx', String(sourceX))
+		sourceHandle.setAttribute('cy', String(sourceY))
+		sourceHandle.setAttribute('r', String(handleRadius))
+		sourceHandle.setAttribute('class', 'edge-anchor-handle edge-anchor-source')
+		sourceHandle.setAttribute('data-edge-id', selectedEdge.edgeId)
+		sourceHandle.setAttribute('data-anchor-type', 'source')
+		svg.appendChild(sourceHandle)
+
+		// Create target anchor handle
+		const targetX = targetPos === 'left'
+			? targetNode.position.x - offsetX
+			: targetNode.position.x + targetNode.dimensions.width - offsetX
+		const targetY = targetNode.position.y + targetNode.dimensions.height * targetT - offsetY
+
+		const targetHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+		targetHandle.setAttribute('cx', String(targetX))
+		targetHandle.setAttribute('cy', String(targetY))
+		targetHandle.setAttribute('r', String(handleRadius))
+		targetHandle.setAttribute('class', 'edge-anchor-handle edge-anchor-target')
+		targetHandle.setAttribute('data-edge-id', selectedEdge.edgeId)
+		targetHandle.setAttribute('data-anchor-type', 'target')
+		svg.appendChild(targetHandle)
+
+		// Add drag handlers
+		this.attachAnchorDragHandlers(sourceHandle, selectedEdge, sourceNode, 'source', offsetX, offsetY)
+		this.attachAnchorDragHandlers(targetHandle, selectedEdge, targetNode, 'target', offsetX, offsetY)
+	}
+
+	private attachAnchorDragHandlers(
+		handle: SVGCircleElement,
+		edge: WorkspaceEdge,
+		node: CanvasNode,
+		anchorType: 'source' | 'target',
+		offsetX: number,
+		offsetY: number
+	) {
+		let isDragging = false
+		let startY = 0
+
+		const onPointerDown = (e: PointerEvent) => {
+			e.preventDefault()
+			e.stopPropagation()
+			isDragging = true
+			startY = e.clientY
+			handle.setPointerCapture(e.pointerId)
+			handle.classList.add('is-dragging')
+		}
+
+		const onPointerMove = (e: PointerEvent) => {
+			if (!isDragging) return
+			e.preventDefault()
+
+			const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg') as SVGSVGElement | null
+			if (!svg) return
+
+			const ctm = svg.getScreenCTM()
+			if (!ctm) return
+
+			const svgPoint = svg.createSVGPoint()
+			svgPoint.x = e.clientX
+			svgPoint.y = e.clientY
+			const point = svgPoint.matrixTransform(ctm.inverse())
+
+			// Constrain Y to node bounds
+			const nodeTop = node.position.y - offsetY
+			const nodeBottom = nodeTop + node.dimensions.height
+			const clampedY = Math.max(nodeTop, Math.min(nodeBottom, point.y))
+
+			handle.setAttribute('cy', String(clampedY))
+		}
+
+		const onPointerUp = (e: PointerEvent) => {
+			if (!isDragging) return
+			isDragging = false
+			handle.releasePointerCapture(e.pointerId)
+			handle.classList.remove('is-dragging')
+
+			// Compute final t value
+			const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg') as SVGSVGElement | null
+			if (!svg) return
+
+			const ctm = svg.getScreenCTM()
+			if (!ctm) return
+
+			const svgPoint = svg.createSVGPoint()
+			svgPoint.x = e.clientX
+			svgPoint.y = e.clientY
+			const point = svgPoint.matrixTransform(ctm.inverse())
+
+			const nodeTop = node.position.y - offsetY
+			const clampedY = Math.max(nodeTop, Math.min(nodeTop + node.dimensions.height, point.y))
+			const newT = (clampedY - nodeTop) / node.dimensions.height
+
+			// Update edge
+			const updatedEdge: WorkspaceEdge = { ...edge }
+			if (anchorType === 'source') {
+				updatedEdge.sourceT = newT
+			} else {
+				updatedEdge.targetT = newT
+			}
+
+			const nextEdges = this.edges.map(e => e.edgeId === updatedEdge.edgeId ? updatedEdge : e)
+			this.config.onEdgesChange(nextEdges)
+		}
+
+		handle.addEventListener('pointerdown', onPointerDown)
+		handle.addEventListener('pointermove', onPointerMove)
+		handle.addEventListener('pointerup', onPointerUp)
+		handle.addEventListener('pointercancel', onPointerUp)
 	}
 
 	private paneClickHandler: ((e: MouseEvent) => void) | null = null
@@ -572,6 +954,7 @@ export class WorkspaceConnectionManager {
 	}
 
 	public destroy() {
+		this.edgeBendPoints.clear()
 		this.connector?.destroy()
 		this.connector = null
 		this.config.edgesLayerEl.replaceChildren()
