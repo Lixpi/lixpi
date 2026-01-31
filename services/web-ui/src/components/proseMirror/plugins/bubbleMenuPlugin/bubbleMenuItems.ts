@@ -33,7 +33,7 @@ export function getSelectionContext(view: EditorView): SelectionContext {
     const { selection } = view.state
 
     if (selection instanceof NodeSelection) {
-        if (selection.node.type.name === 'image') {
+        if (selection.node.type.name === 'image' || selection.node.type.name === 'aiGeneratedImage') {
             return 'image'
         }
         return 'none'
@@ -224,7 +224,10 @@ function getBlockWrapCommand(schema: Schema, nodeName: string): Command | null {
 function getSelectedImageNode(view: EditorView): { pos: number; node: ProseMirrorNode } | null {
     const { selection } = view.state
     if (!(selection instanceof NodeSelection)) return null
-    if (selection.node.type.name !== 'image') return null
+
+    const nodeType = selection.node.type.name
+    if (nodeType !== 'image' && nodeType !== 'aiGeneratedImage') return null
+
     return { pos: selection.from, node: selection.node }
 }
 

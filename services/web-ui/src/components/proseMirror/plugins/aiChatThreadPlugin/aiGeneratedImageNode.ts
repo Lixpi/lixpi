@@ -1,6 +1,7 @@
 import { gptAvatarIcon } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
+import { NodeSelection } from 'prosemirror-state'
 
 export const aiGeneratedImageNodeType = 'aiGeneratedImage'
 
@@ -8,11 +9,16 @@ export const aiGeneratedImageNodeSpec = {
     attrs: {
         imageData: { default: '' },
         fileId: { default: '' },
+        workspaceId: { default: '' },
         revisedPrompt: { default: '' },
         responseId: { default: '' },
         aiModel: { default: '' },
         isPartial: { default: true },
         partialIndex: { default: 0 },
+        // Image display attributes (same as regular image node)
+        width: { default: null },
+        alignment: { default: 'left' },
+        textWrap: { default: 'none' },
     },
     group: 'block',
     draggable: false,
@@ -24,11 +30,15 @@ export const aiGeneratedImageNodeSpec = {
                 return {
                     imageData: dom.getAttribute('data-image-data') || '',
                     fileId: dom.getAttribute('data-file-id') || '',
+                    workspaceId: dom.getAttribute('data-workspace-id') || '',
                     revisedPrompt: dom.getAttribute('data-revised-prompt') || '',
                     responseId: dom.getAttribute('data-response-id') || '',
                     aiModel: dom.getAttribute('data-ai-model') || '',
                     isPartial: dom.getAttribute('data-is-partial') === 'true',
                     partialIndex: parseInt(dom.getAttribute('data-partial-index') || '0', 10),
+                    width: dom.getAttribute('data-width') || null,
+                    alignment: dom.getAttribute('data-alignment') || 'left',
+                    textWrap: dom.getAttribute('data-text-wrap') || 'none',
                 }
             },
         },
@@ -38,11 +48,15 @@ export const aiGeneratedImageNodeSpec = {
             class: 'ai-generated-image',
             'data-image-data': node.attrs.imageData,
             'data-file-id': node.attrs.fileId,
+            'data-workspace-id': node.attrs.workspaceId,
             'data-revised-prompt': node.attrs.revisedPrompt,
             'data-response-id': node.attrs.responseId,
             'data-ai-model': node.attrs.aiModel,
             'data-is-partial': String(node.attrs.isPartial),
             'data-partial-index': String(node.attrs.partialIndex),
+            'data-width': node.attrs.width || '',
+            'data-alignment': node.attrs.alignment || 'left',
+            'data-text-wrap': node.attrs.textWrap || 'none',
         }]
     },
 }
@@ -80,6 +94,21 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     const container = wrapper.querySelector('.ai-generated-image-container') as HTMLElement
     const spinnerElement = wrapper.querySelector('.ai-generated-image-spinner') as HTMLElement
     const imageElement = wrapper.querySelector('.ai-generated-image-content') as HTMLImageElement
+
+    // Click handler to select the node (needed for bubble menu)
+    const handleClick = (event: MouseEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+
+        const pos = getPos()
+        if (pos === undefined) return
+
+        const tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos))
+        view.dispatch(tr)
+        view.focus()
+    }
+
+    wrapper.addEventListener('click', handleClick)
 
     const updateDisplay = async () => {
         const { imageData, revisedPrompt, responseId, aiModel, isPartial } = node.attrs
@@ -139,7 +168,9 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
             updateDisplay()
             return true
         },
-        destroy: () => {},
+        destroy: () => {
+            wrapper.removeEventListener('click', handleClick)
+        },
         stopEvent: (event: Event) => {
             return false
         },

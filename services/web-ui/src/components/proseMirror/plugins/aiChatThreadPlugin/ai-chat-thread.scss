@@ -367,46 +367,56 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             min-height: $aiResponseMessageEmptyNodeMinHeight;
             align-items: flex-start;
             padding-top: 0rem;
-            padding-left: 1rem;;
+            padding-left: 1rem;
         }
 
-        .ai-response-message-spinner {
-            display: none;
-            pointer-events: none;
-            flex: 0 0 auto;
-            margin: 0.25rem 0;
-        }
-
-        &.is-empty .ai-response-message-spinner,
-        .ai-response-message-spinner.is-active {
-            display: inline-flex;
-            @include horizontalSpinnerAnimation((
-                size: .5rem,
-                color: $aiResponseMessageIndicatorColor,
-                duration: 1000ms,
-                delayStep: 150ms,
-                gap: 1rem,
-                shadowOffset: -0.85rem,
-                fontSize: 20px
-            ));
-        }
-
-        // Message content
-        .ai-response-message-content {
-            padding: 0.5rem 1rem;
-            min-height: $aiResponseMessageEmptyNodeMinHeight;
+        // Bubble wrapper contains spinner and content
+        .ai-response-message-bubble {
+            display: flex;
+            flex-direction: column;
             background: #fff;
-            color: #2a2d2f;
             border-radius: 18px 18px 18px 12px;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
             max-width: 85%;
-            word-wrap: break-word;
+            min-height: $aiResponseMessageEmptyNodeMinHeight;
+            min-width: 5rem; // Ensure space for spinner
             position: relative;
+            overflow: visible; // Prevent clipping spinner dots
 
             @include speechBubbleTail((
                 position: 'left',
                 bubbleColor: #fff
             ));
+
+            // Spinner inside the bubble
+            .ai-response-message-spinner {
+                display: none;
+                pointer-events: none;
+            }
+
+            &.is-waiting .ai-response-message-spinner {
+                display: block;
+                height: 1.5rem;
+                width: 3rem; // Space for the 3 dots
+                margin: 0.5rem 1.5rem 0.5rem 2.5rem; // Extra left margin for ::before
+                @include horizontalSpinnerAnimation((
+                    size: .5rem,
+                    color: $aiResponseMessageIndicatorColor,
+                    duration: 1000ms,
+                    delayStep: 150ms,
+                    gap: 1rem,
+                    shadowOffset: -0.85rem,
+                    fontSize: 20px
+                ));
+            }
+        }
+
+        // Message content
+        .ai-response-message-content {
+            padding: 0.5rem 1rem;
+            color: #2a2d2f;
+            word-wrap: break-word;
+            position: relative;
 
             &.node-render-animation {
                 animation: popOut 400ms cubic-bezier(0.19, 1, 0.22, 1);
@@ -433,8 +443,8 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         min-height: 200px;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        align-items: flex-start;
+        justify-content: flex-start;
 
         &.is-partial {
             .ai-generated-image-content {

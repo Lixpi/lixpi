@@ -86,7 +86,6 @@ class ProviderState(TypedDict, total=False):
     ai_request_finished_at: Optional[int]
     enable_image_generation: Optional[bool]
     image_size: Optional[str]
-    previous_response_id: Optional[str]
     image_usage: Optional[Dict[str, Any]]
 
 
@@ -173,7 +172,6 @@ class BaseLLMProvider(ABC):
                 'ai_request_finished_at': None,
                 'enable_image_generation': request_data.get('enableImageGeneration', False),
                 'image_size': request_data.get('imageSize', 'auto'),
-                'previous_response_id': request_data.get('previousResponseId'),
                 'image_usage': None,
             }
 

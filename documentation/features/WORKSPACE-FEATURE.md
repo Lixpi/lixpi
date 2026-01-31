@@ -1117,11 +1117,16 @@ Generated images are stored in NATS Object Store just like uploaded images. To a
 
 ### Multi-Turn Image Editing
 
-OpenAI's Responses API supports iterative refinement through `previous_response_id`. There are two ways to do this:
+Multi-turn image editing uses a **provider-agnostic approach** by including AI-generated images directly in the conversation history. When an image is generated and displayed in the thread:
 
-**Thread-level continuity**: The AI chat thread stores the last `responseId` from any image generation. Subsequent messages in the same thread automatically reference it, so saying "make the background blue" knows which image you're talking about.
+1. The `aiGeneratedImage` node stores `fileId` and `workspaceId` attributes
+2. When extracting thread content for subsequent messages, `ContentExtractor.collectContentWithImages()` finds these images
+3. Images are included in the messages array as `nats-obj://workspace-{workspaceId}-files/{fileId}` references
+4. The LLM API fetches images from NATS Object Store and converts to base64 before sending to any provider
 
-**Per-image editing**: Each generated image carries its own `responseId`. Clicking "Edit in New Thread" creates a fresh AI chat thread with that specific `responseId` as its starting point. The new thread appears to the right of the image on the canvas, with an edge connecting them (image → new thread). This lets you branch off and try different directions without polluting the original conversation.
+**Thread-level continuity**: All AI-generated images in the thread are automatically included in subsequent requests. Saying "make the background blue" works because the previous image is part of the conversation context.
+
+**Per-image editing**: Clicking "Edit in New Thread" creates a fresh AI chat thread with an edge connecting the image to the new thread. The connected image becomes part of the new thread's context via the workspace edge system.
 
 ### Canvas Integration
 
@@ -1136,9 +1141,9 @@ When "Add to Canvas" is clicked:
 
 When "Edit in New Thread" is clicked on a canvas image node:
 
-1. A new AI chat thread is created with `previousResponseId` set to the image's `generatedBy.responseId`
-2. The thread is positioned at `(imageNode.x + imageNode.width + 50, imageNode.y)`
-3. An edge connects the image (right) to the new thread (left)
+1. A new AI chat thread is created and positioned at `(imageNode.x + imageNode.width + 50, imageNode.y)`
+2. An edge connects the image (right) to the new thread (left)
+3. The connected image is automatically included in the new thread's context via `extractConnectedContext()`
 4. This forms a horizontal chain: `[Original Thread] → [Image] → [Edit Thread]`
 
 ---

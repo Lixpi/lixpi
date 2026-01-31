@@ -8,6 +8,15 @@ export default defineConfig({
     plugins: [
         svelte(),
     ],
+    test: {
+        environment: 'happy-dom',
+        globals: true,
+        include: ['src/**/*.test.ts'],
+        alias: {
+            $src: path.resolve("./src"),
+            $lib: path.resolve("./packages/shadcn-svelte/lib"),
+        },
+    },
     server: {    // This fixes watch mode on Windows
         host: true,
         strictPort: true,

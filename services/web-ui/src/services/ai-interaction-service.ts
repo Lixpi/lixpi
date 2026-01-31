@@ -22,7 +22,6 @@ import { organizationStore } from '$src/stores/organizationStore.ts'
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
     enableImageGeneration?: boolean
     imageSize?: ImageGenerationSize
-    previousResponseId?: string
 }
 
 export default class AiInteractionService {
@@ -32,14 +31,12 @@ export default class AiInteractionService {
     markdownStreamParser: any
     markdownStreamParserUnsubscribe: any
     currentAiProvider: string | null
-    lastResponseId: string | null
 
     constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
         this.workspaceId = workspaceId
         this.aiChatThreadId = aiChatThreadId
         this.segmentsReceiver = SegmentsReceiver
         this.currentAiProvider = null
-        this.lastResponseId = null
 
         this.initNatsSubscriptions()
     }
@@ -124,6 +121,7 @@ export default class AiInteractionService {
                 type: 'image_partial',
                 imageUrl: content.imageUrl,
                 fileId: content.fileId,
+                workspaceId: this.workspaceId,
                 partialIndex: content.partialIndex,
                 aiProvider: this.currentAiProvider,
                 aiChatThreadId: this.aiChatThreadId
@@ -133,13 +131,12 @@ export default class AiInteractionService {
 
         if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
             console.log('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
-            // Store response ID for multi-turn editing
-            this.lastResponseId = content.responseId
 
             this.segmentsReceiver.receiveSegment({
                 type: 'image_complete',
                 imageUrl: content.imageUrl,
                 fileId: content.fileId,
+                workspaceId: this.workspaceId,
                 responseId: content.responseId,
                 revisedPrompt: content.revisedPrompt,
                 aiProvider: this.currentAiProvider,
@@ -167,8 +164,7 @@ export default class AiInteractionService {
         messages,
         aiModel,
         enableImageGeneration,
-        imageSize,
-        previousResponseId
+        imageSize
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
@@ -186,24 +182,9 @@ export default class AiInteractionService {
         if (enableImageGeneration) {
             payload.enableImageGeneration = true
             payload.imageSize = imageSize || 'auto'
-
-            // Use provided previousResponseId or fall back to thread's lastResponseId
-            if (previousResponseId) {
-                payload.previousResponseId = previousResponseId
-            } else if (this.lastResponseId) {
-                payload.previousResponseId = this.lastResponseId
-            }
         }
 
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)
-    }
-
-    getLastResponseId(): string | null {
-        return this.lastResponseId
-    }
-
-    setLastResponseId(responseId: string | null) {
-        this.lastResponseId = responseId
     }
 
     async stopChatMessage() {

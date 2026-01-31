@@ -11,7 +11,7 @@ from anthropic import AsyncAnthropic
 from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt, format_user_message_with_hack
 from config import settings
-from utils.attachments import convert_attachments_for_provider, AttachmentFormat
+from utils.attachments import convert_attachments_for_provider, AttachmentFormat, resolve_image_urls
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,9 @@ class AnthropicProvider(BaseLLMProvider):
         for i, msg in enumerate(messages):
             content = msg.get('content', '')
 
-            # Convert OpenAI-style content blocks to Anthropic format
+            # First resolve any NATS object store references to base64
+            content = await resolve_image_urls(content, self.nats_client)
+            # Then convert OpenAI-style content blocks to Anthropic format
             content = convert_attachments_for_provider(content, AttachmentFormat.ANTHROPIC)
 
             # Apply hack to the last user message (only for string content)

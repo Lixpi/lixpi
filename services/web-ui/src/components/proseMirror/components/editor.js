@@ -26,7 +26,10 @@ import {
     aiUserInputNodeType,
     aiUserInputNodeSpec,
     aiUserMessageNodeType,
-    aiUserMessageNodeSpec
+    aiUserMessageNodeSpec,
+    aiGeneratedImageNodeType,
+    aiGeneratedImageNodeSpec,
+    aiGeneratedImageNodeView
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
 import { createCodeBlockPlugin, codeBlockInputRule } from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
 import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNodePlugin"
@@ -125,19 +128,33 @@ export class ProseMirrorEditor {
     createInitialDocument(initialVal, content) {
         const hasValidContent = initialVal && typeof initialVal === 'object' && Object.keys(initialVal).length > 0
 
+        console.log('📝 [EDITOR] createInitialDocument called:', {
+            documentType: this.documentType,
+            threadId: this.threadId,
+            hasValidContent,
+            initialValKeys: initialVal ? Object.keys(initialVal) : null,
+            initialValType: initialVal?.type
+        })
+
         if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
             if (hasValidContent) {
                 try {
+                    console.log('📝 [EDITOR] Attempting to parse initialVal as AI chat thread:', JSON.stringify(initialVal, null, 2).substring(0, 500))
                     const doc = this.editorSchema.nodeFromJSON(initialVal)
+                    console.log('📝 [EDITOR] Successfully created doc from JSON, running check()...')
                     doc.check()
+                    console.log('📝 [EDITOR] doc.check() passed, returning doc')
                     return doc
                 } catch (e) {
-                    console.warn('Invalid AI chat thread content, creating fresh document:', e)
+                    console.warn('📝 [EDITOR] Invalid AI chat thread content, creating fresh document:', e)
+                    console.warn('📝 [EDITOR] Failed initialVal:', JSON.stringify(initialVal, null, 2))
                 }
             }
 
+            console.log('📝 [EDITOR] Creating fresh AI chat thread document with threadId:', this.threadId)
             const titleNode = this.editorSchema.nodes.documentTitle.createAndFill()
             const threadNode = this.editorSchema.nodes.aiChatThread.createAndFill({ threadId: this.threadId })
+            console.log('📝 [EDITOR] Created threadNode:', threadNode?.toString())
             return this.editorSchema.nodes.doc.create(null, [titleNode, threadNode])
         }
 
@@ -153,7 +170,8 @@ export class ProseMirrorEditor {
                 [aiChatThreadNodeType]: aiChatThreadNodeSpec,
                 [aiResponseMessageNodeType]: aiResponseMessageNodeSpec,
                 [aiUserInputNodeType]: aiUserInputNodeSpec,
-                [aiUserMessageNodeType]: aiUserMessageNodeSpec
+                [aiUserMessageNodeType]: aiUserMessageNodeSpec,
+                [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec
             }
             : { ...customNodes }
 

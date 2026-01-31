@@ -40,8 +40,7 @@ export const aiInteractionSubjects = [
                 aiChatThreadId,
                 organizationId,
                 enableImageGeneration,
-                imageSize,
-                previousResponseId
+                imageSize
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
                 workspaceId: string
@@ -49,7 +48,6 @@ export const aiInteractionSubjects = [
                 organizationId: string
                 enableImageGeneration?: boolean
                 imageSize?: string
-                previousResponseId?: string
             } & AiInteractionChatSendMessagePayload
 
             const [provider, model] = (aiModel as string).split(':')
@@ -89,7 +87,6 @@ export const aiInteractionSubjects = [
                     aiChatThreadId,
                     enableImageGeneration,
                     imageSize,
-                    previousResponseId,
                     eventMeta: {
                         userId,
                         stripeCustomerId,

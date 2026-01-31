@@ -9,10 +9,17 @@
         "serve": "http-server ./dist -p 5173",
         "build-and-serve": "pnpm run build && pnpm run serve",
         "preview": "vite preview",
+        "test": "vitest",
+        "test:ui": "vitest --ui",
+        "test:run": "vitest run",
         "svelte-check": "svelte-check --tsconfig ./tsconfig.json --output human-verbose",
         "svelte-check:watch": "svelte-check --tsconfig ./tsconfig.json --output human-verbose --watch"
     },
     "devDependencies": {
+        "vitest": "^2.1.0",
+        "@vitest/ui": "^2.1.0",
+        "happy-dom": "^15.0.0",
+        "prosemirror-test-builder": "^1.1.1",
         "bits-ui": "^1.3.10",
         "@sveltejs/adapter-static": "*",
         "@sveltejs/vite-plugin-svelte": "*",

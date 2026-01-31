@@ -45,8 +45,14 @@ const plugins = [
 The menu detects selection type using `getSelectionContext()`:
 
 - `'text'` - Text selection (non-empty)
-- `'image'` - NodeSelection of an image node
+- `'image'` - NodeSelection of an image node (`image` or `aiGeneratedImage`)
 - `'none'` - Empty selection or unsupported node type
+
+**IMPORTANT:** When adding new image-like node types, you MUST update:
+1. `getSelectionContext()` in `bubbleMenuItems.ts` - to return `'image'` context
+2. `getSelectedImageNode()` in `bubbleMenuItems.ts` - to return the node for actions
+3. `getImageElement()` and `getImageWrapper()` in `bubbleMenuPlugin.ts` - for positioning
+4. The new node spec must include `alignment`, `textWrap`, and `width` attributes
 
 Each menu item has a `context` array specifying which contexts it appears in.
 

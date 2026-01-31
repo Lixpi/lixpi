@@ -16,6 +16,13 @@ export function imageSelectionPlugin(): Plugin {
                         view,
                         getPos: getPos as () => number | undefined
                     })
+                },
+                aiGeneratedImage(node, view, getPos) {
+                    return new ImageNodeView({
+                        node,
+                        view,
+                        getPos: getPos as () => number | undefined
+                    })
                 }
             }
         }

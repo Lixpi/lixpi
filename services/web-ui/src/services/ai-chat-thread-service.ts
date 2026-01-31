@@ -30,11 +30,15 @@ export type ContextItem = {
     title?: string
     content: string
     parentNodeId?: string
+    // For images stored in NATS object store
+    fileId?: string
+    workspaceId?: string
 }
 
 export type ExtractedContext = ContextItem[]
 
 export type TextContentBlock = { type: 'input_text'; text: string }
+// image_url is a nats-obj:// reference that LLM API fetches from NATS object store
 export type ImageContentBlock = { type: 'input_image'; image_url: string; detail?: 'auto' | 'low' | 'high' }
 export type MessageContentBlock = TextContentBlock | ImageContentBlock
 
@@ -129,20 +133,6 @@ function extractContentFromProseMirror(content: string | object): ExtractedConte
     } catch {
         return { text: '', imageSrcs: [] }
     }
-}
-
-async function fetchImageAsBase64(src: string): Promise<string> {
-    const response = await fetch(src)
-    if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`)
-    }
-    const blob = await response.blob()
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result as string)
-        reader.onerror = () => reject(new Error('Failed to convert image to base64'))
-        reader.readAsDataURL(blob)
-    })
 }
 
 class AiChatThreadService {
@@ -298,22 +288,24 @@ class AiChatThreadService {
                     }
 
                     for (let i = 0; i < imageSrcs.length; i++) {
-                        const base64DataUrl = await fetchImageAsBase64(imageSrcs[i])
+                        // Pass the image URL directly - LLM API will fetch it
                         context.push({
                             type: 'image',
                             nodeId: `${node.nodeId}-embedded-${i}`,
                             parentNodeId: node.nodeId,
-                            content: base64DataUrl,
+                            content: imageSrcs[i], // Original URL
                         })
                     }
                 }
             } else if (node.type === 'image') {
                 const imgNode = node as ImageCanvasNode
-                const base64DataUrl = await fetchImageAsBase64(imgNode.src)
+                // Pass fileId and workspaceId - LLM API fetches directly from NATS object store
                 context.push({
                     type: 'image',
                     nodeId: node.nodeId,
-                    content: base64DataUrl,
+                    content: '', // Not used for canvas images
+                    fileId: imgNode.fileId,
+                    workspaceId: imgNode.workspaceId,
                 })
             } else if (node.type === 'aiChatThread') {
                 const threadNode = node as AiChatThreadCanvasNode
@@ -331,12 +323,12 @@ class AiChatThreadService {
                     }
 
                     for (let i = 0; i < imageSrcs.length; i++) {
-                        const base64DataUrl = await fetchImageAsBase64(imageSrcs[i])
+                        // Pass the image URL directly - LLM API will fetch it
                         context.push({
                             type: 'image',
                             nodeId: `${node.nodeId}-embedded-${i}`,
                             parentNodeId: node.nodeId,
-                            content: base64DataUrl,
+                            content: imageSrcs[i], // Original URL
                         })
                     }
                 }
@@ -380,22 +372,33 @@ class AiChatThreadService {
 
             const embeddedImages = embeddedImagesByParent.get(item.nodeId) || []
             for (const img of embeddedImages) {
+                // Build nats-obj:// reference for images with fileId, otherwise use content directly
+                let imageUrl = img.content
+                if (img.fileId && img.workspaceId) {
+                    imageUrl = `nats-obj://workspace-${img.workspaceId}-files/${img.fileId}`
+                }
                 contentBlocks.push({
                     type: 'input_image',
-                    image_url: img.content,
+                    image_url: imageUrl,
                     detail: 'auto',
                 })
             }
         }
 
         for (const item of standaloneImages) {
+            // Build nats-obj:// reference for images with fileId
+            let imageUrl = item.content
+            if (item.fileId && item.workspaceId) {
+                imageUrl = `nats-obj://workspace-${item.workspaceId}-files/${item.fileId}`
+            }
+
             contentBlocks.push({
                 type: 'input_text',
                 text: JSON.stringify({ type: 'standalone_image' }),
             })
             contentBlocks.push({
                 type: 'input_image',
-                image_url: item.content,
+                image_url: imageUrl,
                 detail: 'auto',
             })
         }
