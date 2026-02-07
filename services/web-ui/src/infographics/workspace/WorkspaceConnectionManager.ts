@@ -139,14 +139,17 @@ function computeSpreadTValues(
 
 		// Dynamic auto-align: If source Y hits the target node, FORCE straight line alignment
 		// This ensures that even during dragging or node moving, the line attempts to stay straight
+		// For off-axis nodes, we clamp to the nearest corner (top/bottom) instead of snapping to center
 		if (sourceNode && targetNode) {
 			const targetTop = targetNode.position.y
 			const targetHeight = targetNode.dimensions.height
-			// Check if source center is within target vertical bounds (sourcing from a center point)
-			// We give it a tiny padding to avoid weird edge behaviors at exact corners
-			if (sourceY >= targetTop && sourceY <= targetTop + targetHeight) {
-				targetT = (sourceY - targetTop) / targetHeight
-			}
+
+			// Calculate ideal straight-line projection
+			const idealT = (sourceY - targetTop) / targetHeight
+
+			// Clamp to be within the node side (0-1), leaving a small margin (0.05)
+			// effectively snapping to the top or bottom corner if the source is outside vertical bounds
+			targetT = Math.max(0.05, Math.min(0.95, idealT))
 		}
 
 		// Initialize with values

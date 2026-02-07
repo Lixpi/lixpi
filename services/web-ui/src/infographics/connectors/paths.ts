@@ -276,7 +276,7 @@ function buildOrthogonalPath(
     sourceY: number,
     targetX: number,
     targetY: number,
-    borderRadius: number = 8,
+    borderRadius: number = 24,
     bendPoints?: Array<{ x: number; y: number }>,
     obstacleNodes?: NodeBounds[],
     sourceNodeId?: string,

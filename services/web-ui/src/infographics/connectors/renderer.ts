@@ -257,7 +257,7 @@ function renderEdge(
         markerSize = 7,
         markerOffset = {},
         curvature = 0.25,
-        borderRadius = 8,
+        borderRadius = 24,
         lineStyle = 'solid',
         strokeWidth = 1.2,
         strokeDasharray,
