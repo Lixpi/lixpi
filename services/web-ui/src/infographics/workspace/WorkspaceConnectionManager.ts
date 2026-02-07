@@ -23,7 +23,6 @@ import {
 } from '$src/infographics/connectors/index.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
-import { computeEdgeRoutes } from '$src/infographics/connectors/elkRouting.ts'
 
 import type {
 	CanvasNode,
@@ -132,12 +131,28 @@ function computeSpreadTValues(
 		targetGroups.get(targetKey)!.push(edge)
 
 		const sourceNode = nodeMap.get(edge.sourceNodeId)
+		const targetNode = nodeMap.get(edge.targetNodeId)
 		const sourceY = sourceNode ? sourceNode.position.y + sourceNode.dimensions.height / 2 : 0
 
-		// Initialize with stored or default values
+		// Default to stored T or 0.5
+		let targetT = edge.targetT ?? 0.5
+
+		// Dynamic auto-align: If source Y hits the target node, FORCE straight line alignment
+		// This ensures that even during dragging or node moving, the line attempts to stay straight
+		if (sourceNode && targetNode) {
+			const targetTop = targetNode.position.y
+			const targetHeight = targetNode.dimensions.height
+			// Check if source center is within target vertical bounds (sourcing from a center point)
+			// We give it a tiny padding to avoid weird edge behaviors at exact corners
+			if (sourceY >= targetTop && sourceY <= targetTop + targetHeight) {
+				targetT = (sourceY - targetTop) / targetHeight
+			}
+		}
+
+		// Initialize with values
 		result.set(edge.edgeId, {
 			sourceT: edge.sourceT ?? 0.5,
-			targetT: edge.targetT ?? 0.5,
+			targetT,
 			laneIndex: 0,
 			laneCount: 1,
 			sourceY
@@ -186,16 +201,13 @@ function computeSpreadTValues(
 			return aY - bY
 		})
 
-		// Spread evenly between 0.35 and 0.65 (subtle spread near center)
+		// Assign lane indices
+		// We DO NOT override targetT here anymore. We prioritize standard straight lines.
+		// If lines overlap, laneIndex will separate their vertical segments.
 		const count = group.length
-		const margin = 0.35
-		const range = 1 - 2 * margin
-		const step = count > 1 ? range / (count - 1) : 0
-
 		for (let i = 0; i < group.length; i++) {
 			const edge = group[i]
 			const values = result.get(edge.edgeId)!
-			values.targetT = count === 1 ? 0.5 : margin + i * step
 			values.laneIndex = i
 			values.laneCount = count
 		}
@@ -220,9 +232,6 @@ export class WorkspaceConnectionManager {
 	private connectionInProgress: ConnectionInProgress | null = null
 
 	private reconnectingEdge: { edgeId: string; edgeUpdaterType: HandleType } | null = null
-
-	// elkjs edge routing
-	private edgeBendPoints: Map<string, Array<{ x: number; y: number }>> = new Map()
 
 	public constructor(config: ConnectionManagerConfig) {
 		this.config = config
@@ -253,9 +262,6 @@ export class WorkspaceConnectionManager {
 			nodeOrigin: [0, 0],
 			elevateNodesOnSelect: false
 		})
-
-		// Trigger edge routing recalculation
-		this.scheduleEdgeRouting()
 	}
 
 	public registerNodeElement(nodeId: string, nodeElement: HTMLDivElement) {
@@ -278,9 +284,6 @@ export class WorkspaceConnectionManager {
 		if (this.selectedEdgeId && !edges.some((e) => e.edgeId === this.selectedEdgeId)) {
 			this.selectEdge(null)
 		}
-
-		// Trigger edge routing recalculation
-		this.scheduleEdgeRouting()
 	}
 
 	public onHandlePointerDown(event: MouseEvent | TouchEvent, meta: HandleMeta) {
@@ -365,23 +368,27 @@ export class WorkspaceConnectionManager {
 				const toNodeId = fromNodeId === connection.source ? connection.target : connection.source
 				const toHandleId = fromNodeId === connection.source ? connection.targetHandle : connection.sourceHandle
 
-				// Compute t values based on where user clicked/dropped
-				let sourceT = 0.5
+				// Source always attaches at center of side (t=0.5).
+				const sourceT = 0.5
 				let targetT = 0.5
 
+				// Try to make a straight horizontal line by aligning target anchor
+				// with the source Y. If source Y falls within the target node's
+				// vertical range, adjust targetT so both endpoints share the same Y.
+				// This gives perfectly straight lines whenever geometrically possible.
 				const sourceNode = this.nodes.find(n => n.nodeId === fromNodeId)
 				const targetNode = this.nodes.find(n => n.nodeId === toNodeId)
 
-				// Compute source t from the drag start position
-				if (sourceNode && this.connectionInProgress?.fromHandle) {
-					const handleY = this.connectionInProgress.fromHandle.y
-					sourceT = computeTFromPointerPosition(handleY, sourceNode.position.y, sourceNode.dimensions.height)
-				}
+				if (sourceNode && targetNode) {
+					const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT
+					const targetTop = targetNode.position.y
+					const targetBottom = targetTop + targetNode.dimensions.height
 
-				// Compute target t from the drop position
-				if (targetNode && this.connectionInProgress?.toHandle) {
-					const handleY = this.connectionInProgress.toHandle.y
-					targetT = computeTFromPointerPosition(handleY, targetNode.position.y, targetNode.dimensions.height)
+					if (sourceY >= targetTop && sourceY <= targetBottom) {
+						// Source Y is within target node range — straight line!
+						targetT = (sourceY - targetTop) / targetNode.dimensions.height
+					}
+					// Otherwise targetT stays 0.5, producing a 3-point connector
 				}
 
 				const nextEdge: WorkspaceEdge = {
@@ -485,48 +492,6 @@ export class WorkspaceConnectionManager {
 
 	public deselect() {
 		this.selectEdge(null)
-	}
-
-	// Compute elkjs edge routing immediately (real-time)
-	private async computeEdgeRoutingImmediate() {
-		if (this.edges.length === 0 || this.nodes.length === 0) {
-			this.edgeBendPoints.clear()
-			return
-		}
-
-		// Build NodeConfig array for elkjs
-		const nodeConfigs: NodeConfig[] = this.nodes.map(n => ({
-			id: n.nodeId,
-			shape: 'rect' as const,
-			x: n.position.x,
-			y: n.position.y,
-			width: n.dimensions.width,
-			height: n.dimensions.height
-		}))
-
-		// Build EdgeConfig array for elkjs with spread t values
-		const spreadTValues = computeSpreadTValues(this.edges, this.nodes)
-		const edgeConfigs: EdgeConfig[] = this.edges.map(e => {
-			const { source, target } = getEdgeAnchorPositions(e)
-			const tValues = spreadTValues.get(e.edgeId)
-			return {
-				id: e.edgeId,
-				source: { nodeId: e.sourceNodeId, position: source, t: tValues?.sourceT ?? e.sourceT ?? 0.5 },
-				target: { nodeId: e.targetNodeId, position: target, t: tValues?.targetT ?? e.targetT ?? 0.5 }
-			}
-		})
-
-		try {
-			this.edgeBendPoints = await computeEdgeRoutes(nodeConfigs, edgeConfigs)
-			this.render()
-		} catch (error) {
-			console.error('elkjs edge routing failed:', error)
-		}
-	}
-
-	// Trigger edge routing computation
-	private scheduleEdgeRouting() {
-		void this.computeEdgeRoutingImmediate()
 	}
 
 	private computeRenderBounds(): RenderBounds | null {
@@ -663,13 +628,6 @@ export class WorkspaceConnectionManager {
 			const sourceT = tValues?.sourceT ?? e.sourceT ?? 0.5
 			const targetT = tValues?.targetT ?? e.targetT ?? 0.5
 
-			// Get elkjs-computed bend points for this edge (offset to render coordinates)
-			const absoluteBendPoints = this.edgeBendPoints.get(e.edgeId)
-			const bendPoints = absoluteBendPoints?.map(bp => ({
-				x: bp.x - offsetX,
-				y: bp.y - offsetY
-			}))
-
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
 				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
@@ -680,7 +638,6 @@ export class WorkspaceConnectionManager {
 				markerOffset: scaledMarkerOffset,
 				strokeWidth: isSelected ? scaledStrokeWidth * 1.5 : scaledStrokeWidth,
 				className: `workspace-edge ${isSelected ? 'is-selected' : ''}`,
-				bendPoints,
 				laneIndex: tValues?.laneIndex ?? 0,
 				laneCount: tValues?.laneCount ?? 1
 			}
@@ -741,14 +698,18 @@ export class WorkspaceConnectionManager {
 				sourcePosition = this.connectionInProgress.fromHandle.position as 'left' | 'right'
 			}
 
+			// Use horizontal-bezier for in-progress edges:
+			// - No obstacle avoidance means no wrapping around intermediate/target nodes
+			// - Smooth S-curve from source center to cursor position
+			// - Committed edges use 'orthogonal' with proper routing after drop
 			const tempEdge: EdgeConfig = {
 				id: '__workspace-temp-edge',
 				source: { nodeId: sourceNodeId, position: sourcePosition },
 				target: { nodeId: tempNodeId, position: 'center' },
-				pathType: 'orthogonal',
+				pathType: 'horizontal-bezier',
 				marker: isReconnecting ? 'arrowhead' : 'none',
 				markerSize: isReconnecting ? scaledMarkerSize : undefined,
-				markerOffset: isReconnecting ? scaledMarkerOffset : undefined,
+				markerOffset: { source: 0, target: 0 },
 				strokeWidth: scaledStrokeWidth,
 				lineStyle: isReconnecting ? 'solid' : 'dashed',
 				className: `workspace-edge ${isReconnecting ? '' : 'workspace-edge-temp'}`
@@ -954,7 +915,6 @@ export class WorkspaceConnectionManager {
 	}
 
 	public destroy() {
-		this.edgeBendPoints.clear()
 		this.connector?.destroy()
 		this.connector = null
 		this.config.edgesLayerEl.replaceChildren()

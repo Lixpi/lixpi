@@ -284,14 +284,22 @@ function buildOrthogonalPath(
     laneIndex: number = 0,
     laneCount: number = 1
 ): string {
-    // If no bend points provided (or empty), create an obstacle-avoiding path
-    // Uses node avoidance to prevent ANY segment from crossing nodes
+    // If no bend points provided (or empty), compute an orthogonal path
     if (!bendPoints || bendPoints.length === 0) {
         // Filter out source and target nodes from obstacles
         const filteredObstacles = obstacleNodes?.filter(
             n => n.id !== sourceNodeId && n.id !== targetNodeId
         ) ?? []
 
+        const verticalDist = Math.abs(targetY - sourceY)
+        const horizontalDist = Math.abs(targetX - sourceX)
+
+        // Straight horizontal line when endpoints are at the same Y
+        if (verticalDist < 2 && horizontalDist > 1) {
+            return `M ${sourceX},${sourceY} L ${targetX},${targetY}`
+        }
+
+        // Otherwise use obstacle-aware 3-point routing
         // Find a safe vertical lane that avoids all intermediate nodes
         let midX = findSafeVerticalLane(sourceX, sourceY, targetX, targetY, filteredObstacles)
 
