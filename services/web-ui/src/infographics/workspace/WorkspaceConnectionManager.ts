@@ -20,6 +20,7 @@ import {
 	type ConnectorRenderer,
 	type EdgeConfig,
 	type NodeConfig,
+	type PathType,
 } from '$src/infographics/connectors/index.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
@@ -28,6 +29,10 @@ import type {
 	CanvasNode,
 	WorkspaceEdge,
 } from '@lixpi/constants'
+
+// Switch between 'orthogonal' (3-point circuit style) and 'horizontal-bezier' (smooth curves)
+// const CONNECTION_STYLE: PathType = 'orthogonal'
+const CONNECTION_STYLE: PathType = 'horizontal-bezier'
 
 type HandleMeta = {
 	nodeId: string
@@ -635,7 +640,7 @@ export class WorkspaceConnectionManager {
 				id: e.edgeId,
 				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
 				target: { nodeId: e.targetNodeId, position: target, t: targetT },
-				pathType: 'orthogonal',
+				pathType: CONNECTION_STYLE,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
 				markerOffset: scaledMarkerOffset,

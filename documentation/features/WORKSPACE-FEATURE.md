@@ -127,6 +127,15 @@ type WorkspaceEdge = {
 
 The `sourceT` and `targetT` properties allow edges to attach at any vertical position along a node's side, not just the center. When a user creates a connection by dragging, the `t` values are computed from the pointer position where they started and dropped.
 
+### Connection Routing
+
+The `WorkspaceConnectionManager` handles the visual rendering logic for edges.
+
+- **Routing Style**: Configured via the `CONNECTION_STYLE` constant. Defaults to `'orthogonal'` (circuit-board style) but can be switched to `'horizontal-bezier'` (smooth curves).
+- **Auto-Alignment**: If a source node is vertically aligned with its target, the connection automatically snaps to a perfectly straight horizontal line by adjusting the `targetT` value.
+- **Corner Snapping**: If nodes are not aligned, the connector snaps to the nearest top/bottom corner (t=0.05 or t=0.95) to minimize diagonal visual clutter.
+- **Drag Visualization**: While dragging, connections use a smooth bezier curve to distinguish them from committed orthogonal edges.
+
 ### CanvasNode
 
 Canvas nodes use a discriminated union based on the `type` field:
