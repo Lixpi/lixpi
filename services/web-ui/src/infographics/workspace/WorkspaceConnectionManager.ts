@@ -34,6 +34,15 @@ import type {
 // const CONNECTION_STYLE: PathType = 'orthogonal'
 const CONNECTION_STYLE: PathType = 'horizontal-bezier'
 
+const PROXIMITY_THRESHOLD = 1200
+
+type ProximityCandidate = {
+	sourceNodeId: string
+	sourceHandle: 'left' | 'right'
+	targetNodeId: string
+	targetHandle: 'left' | 'right'
+}
+
 type HandleMeta = {
 	nodeId: string
 	handleId: string
@@ -240,6 +249,8 @@ export class WorkspaceConnectionManager {
 	private connectionInProgress: ConnectionInProgress | null = null
 
 	private reconnectingEdge: { edgeId: string; edgeUpdaterType: HandleType } | null = null
+
+	private proximityCandidate: ProximityCandidate | null = null
 
 	public constructor(config: ConnectionManagerConfig) {
 		this.config = config
@@ -725,6 +736,24 @@ export class WorkspaceConnectionManager {
 			this.connector.addEdge(tempEdge)
 		}
 
+		// Draw potential proximity connection
+		if (this.proximityCandidate && !this.connectionInProgress) {
+			const ghostEdge: EdgeConfig = {
+				id: '__workspace-proximity-edge',
+				source: { nodeId: this.proximityCandidate.sourceNodeId, position: this.proximityCandidate.sourceHandle },
+				target: { nodeId: this.proximityCandidate.targetNodeId, position: this.proximityCandidate.targetHandle },
+				pathType: CONNECTION_STYLE,
+				marker: 'arrowhead',
+				markerSize: scaledMarkerSize,
+				markerOffset: { source: 0, target: 0 },
+				strokeWidth: Math.max(scaledStrokeWidth, 2), // Ensure visibility
+				lineStyle: 'dashed',
+				className: 'workspace-edge workspace-edge-temp'
+			}
+			// console.log('[ConnectionManager] Adding proximity ghost edge', ghostEdge)
+			this.connector.addEdge(ghostEdge)
+		}
+
 		this.connector.render()
 
 		this.renderAnchorPointHandles(offsetX, offsetY)
@@ -920,6 +949,104 @@ export class WorkspaceConnectionManager {
 		}
 
 		this.config.paneEl.addEventListener('click', this.paneClickHandler)
+	}
+
+	public checkProximity(
+		nodeId: string,
+		position: { x: number; y: number },
+		dimensions: { width: number; height: number }
+	) {
+		const draggedNode = this.nodes.find(n => n.nodeId === nodeId)
+		if (!draggedNode) {
+            // console.warn('[Proximity] Dragged node not found in this.nodes', nodeId)
+            return
+        }
+
+		let closestCandidate: ProximityCandidate | null = null
+		let minDistance = PROXIMITY_THRESHOLD
+
+		for (const other of this.nodes) {
+			if (other.nodeId === nodeId) continue
+
+			// Calculate handles for the dragged node
+			const draggedLeft = { x: position.x, y: position.y + dimensions.height / 2 }
+			const draggedRight = { x: position.x + dimensions.width, y: position.y + dimensions.height / 2 }
+
+			// Calculate handles for the other node
+			const otherLeft = { x: other.position.x, y: other.position.y + other.dimensions.height / 2 }
+			const otherRight = { x: other.position.x + other.dimensions.width, y: other.position.y + other.dimensions.height / 2 }
+
+			// Check Connection: Dragged Right (Source) -> Other Left (Target)
+			// Rule: Target (Other) must be aiChatThread
+			// Rule: No existing connection between these nodes (in this direction)
+			if (other.type === 'aiChatThread') {
+				const hasExisting = this.edges.some(e => e.sourceNodeId === nodeId && e.targetNodeId === other.nodeId)
+				if (!hasExisting) {
+					const d1 = Math.hypot(draggedRight.x - otherLeft.x, draggedRight.y - otherLeft.y)
+					if (d1 < minDistance) {
+						minDistance = d1
+						closestCandidate = {
+							sourceNodeId: nodeId,
+							sourceHandle: 'right',
+							targetNodeId: other.nodeId,
+							targetHandle: 'left'
+						}
+					}
+				}
+			}
+
+			// Check Connection: Other Right (Source) -> Dragged Left (Target)
+			// Rule: Target (Dragged) must be aiChatThread
+			// Rule: No existing connection between these nodes (in this direction)
+			if (draggedNode.type === 'aiChatThread') {
+				const hasExisting = this.edges.some(e => e.sourceNodeId === other.nodeId && e.targetNodeId === nodeId)
+				if (!hasExisting) {
+					const d2 = Math.hypot(otherRight.x - draggedLeft.x, otherRight.y - draggedLeft.y)
+					if (d2 < minDistance) {
+						minDistance = d2
+						closestCandidate = {
+							sourceNodeId: other.nodeId,
+							sourceHandle: 'right',
+							targetNodeId: nodeId,
+							targetHandle: 'left'
+						}
+					}
+				}
+			}
+		}
+
+		if (
+			this.proximityCandidate?.sourceNodeId !== closestCandidate?.sourceNodeId ||
+			this.proximityCandidate?.targetNodeId !== closestCandidate?.targetNodeId
+		) {
+            console.log('[Proximity] Candidate update:', closestCandidate ? 'FOUND' : 'LOST', closestCandidate)
+			this.proximityCandidate = closestCandidate
+		}
+	}
+
+	public commitProximityConnection() {
+		if (!this.proximityCandidate) {
+            // console.log('[Proximity] No candidate to commit')
+            return
+        }
+
+        console.log('[Proximity] Committing connection!', this.proximityCandidate)
+
+		const newEdge: WorkspaceEdge = {
+			edgeId: generateEdgeId(),
+			sourceNodeId: this.proximityCandidate.sourceNodeId,
+			sourceHandle: this.proximityCandidate.sourceHandle,
+			targetNodeId: this.proximityCandidate.targetNodeId,
+			targetHandle: this.proximityCandidate.targetHandle,
+			// Default orthogonal routing for committed edges
+			sourceT: 0.5,
+			targetT: 0.5
+		}
+
+		const nextEdges = [...this.edges, newEdge]
+		this.config.onEdgesChange(nextEdges)
+
+		this.proximityCandidate = null
 	}
 
 	public destroy() {

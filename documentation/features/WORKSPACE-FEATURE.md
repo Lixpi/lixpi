@@ -135,6 +135,7 @@ The `WorkspaceConnectionManager` handles the visual rendering logic for edges.
 - **Auto-Alignment**: If a source node is vertically aligned with its target, the connection automatically snaps to a perfectly straight horizontal line by adjusting the `targetT` value.
 - **Corner Snapping**: If nodes are not aligned, the connector snaps to the nearest top/bottom corner (t=0.05 or t=0.95) to minimize diagonal visual clutter.
 - **Drag Visualization**: While dragging, connections use a smooth bezier curve to distinguish them from committed orthogonal edges.
+- **Proximity Connect**: Dragging a node (Document/Image) near an AI Chat Thread automatically suggests a connection with a dashed "ghost" line. Dropping the node creates the link. The proximity threshold is 1200px, and it prevents duplicate connections.
 
 ### CanvasNode
 

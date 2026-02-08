@@ -14,7 +14,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
-- **Connect nodes** by dragging from a node's right handle to another node's left handle (arrow points in drag direction)
+- **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
 - **Provide AI context** by connecting documents/images to an AI chat thread—connected content is automatically sent to the AI
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
@@ -203,6 +203,7 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
+- **Proximity Connect**: Dragging a node near an AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (1200px threshold)
 - Clicking an edge selects it; when selected, endpoint handles appear for reconnection
 - Dragging an endpoint shows the edge following the cursor (original edge is hidden during reconnect)
 - Dropping an endpoint on another node reconnects the edge; dropping in empty space deletes it

@@ -726,21 +726,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodeEl.style.left = `${startLeft + deltaX}px`
             nodeEl.style.top = `${startTop + deltaY}px`
 
+            const currentPos = {
+                x: parseFloat(nodeEl.style.left),
+                y: parseFloat(nodeEl.style.top)
+            }
+            const currentDims = {
+                width: nodeEl.offsetWidth,
+                height: nodeEl.offsetHeight
+            }
+
             liveNodeOverrides.set(nodeId, {
-                position: {
-                    x: parseFloat(nodeEl.style.left),
-                    y: parseFloat(nodeEl.style.top)
-                },
-                dimensions: {
-                    width: nodeEl.offsetWidth,
-                    height: nodeEl.offsetHeight
-                }
+                position: currentPos,
+                dimensions: currentDims
             })
+
+            connectionManager?.checkProximity(nodeId, currentPos, currentDims)
+
             scheduleEdgesRender()
         }
 
         const handleMouseUp = () => {
             nodeEl.classList.remove('is-dragging')
+
+            // Try to convert any proximity candidate into a real connection
+            connectionManager?.commitProximityConnection()
+
             draggingNodeId = null
 
             liveNodeOverrides.delete(nodeId)
