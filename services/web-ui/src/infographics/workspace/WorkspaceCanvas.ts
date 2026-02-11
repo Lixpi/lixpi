@@ -1222,7 +1222,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 continue
             }
 
-            addConnectionHandlesToNode(nodeEl, node.nodeId)
+            // addConnectionHandlesToNode(nodeEl, node.nodeId)
             viewportEl.appendChild(nodeEl)
 
             // Register after insertion so bounds are measurable

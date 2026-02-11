@@ -632,7 +632,7 @@ export class WorkspaceConnectionManager {
 
 		// Compute spread-out t values for edges sharing the same node+side
 		// This prevents multiple edges from converging to the exact same point
-		
+
 		// If we handle proximity, include the ghost edge in calculations so it behaves exactly like a real edge
 		const effectiveEdges = [...this.edges]
 		if (this.proximityCandidate && !this.connectionInProgress) {
@@ -767,23 +767,23 @@ export class WorkspaceConnectionManager {
 		if (this.proximityCandidate && !this.connectionInProgress) {
             // Retrieve computed values or fall back to candidate/default
             const computed = spreadTValues.get('__workspace-proximity-temp')
-			
+
 			const ghostEdge: EdgeConfig = {
 				id: '__workspace-proximity-edge',
-				source: { 
-					nodeId: this.proximityCandidate.sourceNodeId, 
+				source: {
+					nodeId: this.proximityCandidate.sourceNodeId,
 					position: this.proximityCandidate.sourceHandle,
 					t: computed?.sourceT ?? this.proximityCandidate.sourceT
 				},
-				target: { 
-					nodeId: this.proximityCandidate.targetNodeId, 
+				target: {
+					nodeId: this.proximityCandidate.targetNodeId,
 					position: this.proximityCandidate.targetHandle,
-					t: computed?.targetT ?? this.proximityCandidate.targetT 
+					t: computed?.targetT ?? this.proximityCandidate.targetT
 				},
 				pathType: CONNECTION_STYLE,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
-				markerOffset: { source: 0, target: 0 },
+				markerOffset: scaledMarkerOffset,
 				strokeWidth: Math.max(scaledStrokeWidth, 2), // Ensure visibility
 				lineStyle: 'dashed',
 				className: 'workspace-edge workspace-edge-temp'
@@ -804,60 +804,8 @@ export class WorkspaceConnectionManager {
 		const existingHandles = this.config.edgesLayerEl.querySelectorAll('.edge-anchor-handle')
 		existingHandles.forEach(h => h.remove())
 
-		if (!this.selectedEdgeId) return
-
-		const selectedEdge = this.edges.find(e => e.edgeId === this.selectedEdgeId)
-		if (!selectedEdge) return
-
-		const sourceNode = this.nodes.find(n => n.nodeId === selectedEdge.sourceNodeId)
-		const targetNode = this.nodes.find(n => n.nodeId === selectedEdge.targetNodeId)
-		if (!sourceNode || !targetNode) return
-
-		const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg')
-		if (!svg) return
-
-		const { source: sourcePos, target: targetPos } = getEdgeAnchorPositions(selectedEdge)
-		const sourceT = selectedEdge.sourceT ?? 0.5
-		const targetT = selectedEdge.targetT ?? 0.5
-
-		// Get current zoom for sizing
-		const transform = this.config.getTransform()
-		const zoom = transform[2]
-		const handleRadius = 6 / zoom
-
-		// Create source anchor handle
-		const sourceX = sourcePos === 'left'
-			? sourceNode.position.x - offsetX
-			: sourceNode.position.x + sourceNode.dimensions.width - offsetX
-		const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT - offsetY
-
-		const sourceHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
-		sourceHandle.setAttribute('cx', String(sourceX))
-		sourceHandle.setAttribute('cy', String(sourceY))
-		sourceHandle.setAttribute('r', String(handleRadius))
-		sourceHandle.setAttribute('class', 'edge-anchor-handle edge-anchor-source')
-		sourceHandle.setAttribute('data-edge-id', selectedEdge.edgeId)
-		sourceHandle.setAttribute('data-anchor-type', 'source')
-		svg.appendChild(sourceHandle)
-
-		// Create target anchor handle
-		const targetX = targetPos === 'left'
-			? targetNode.position.x - offsetX
-			: targetNode.position.x + targetNode.dimensions.width - offsetX
-		const targetY = targetNode.position.y + targetNode.dimensions.height * targetT - offsetY
-
-		const targetHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
-		targetHandle.setAttribute('cx', String(targetX))
-		targetHandle.setAttribute('cy', String(targetY))
-		targetHandle.setAttribute('r', String(handleRadius))
-		targetHandle.setAttribute('class', 'edge-anchor-handle edge-anchor-target')
-		targetHandle.setAttribute('data-edge-id', selectedEdge.edgeId)
-		targetHandle.setAttribute('data-anchor-type', 'target')
-		svg.appendChild(targetHandle)
-
-		// Add drag handlers
-		this.attachAnchorDragHandlers(sourceHandle, selectedEdge, sourceNode, 'source', offsetX, offsetY)
-		this.attachAnchorDragHandlers(targetHandle, selectedEdge, targetNode, 'target', offsetX, offsetY)
+        // User requested removal of all connector points interactors
+		return
 	}
 
 	private attachAnchorDragHandlers(

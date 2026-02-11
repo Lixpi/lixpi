@@ -65,7 +65,7 @@ export type EdgeScalingConfig = {
 const defaultEdgeConfig: Required<EdgeScalingConfig> = {
 	baseStrokeWidth: 2,
 	baseMarkerSize: 16,
-	baseMarkerOffset: { source: 6, target: 12 }
+	baseMarkerOffset: { source: 6, target: 19 }
 }
 
 // Calculates edge/connector sizes scaled for the current zoom level.
