@@ -41,6 +41,8 @@ type ProximityCandidate = {
 	sourceHandle: 'left' | 'right'
 	targetNodeId: string
 	targetHandle: 'left' | 'right'
+    sourceT?: number
+    targetT?: number
 }
 
 type HandleMeta = {
@@ -630,7 +632,32 @@ export class WorkspaceConnectionManager {
 
 		// Compute spread-out t values for edges sharing the same node+side
 		// This prevents multiple edges from converging to the exact same point
-		const spreadTValues = computeSpreadTValues(this.edges, this.nodes)
+		
+		// If we handle proximity, include the ghost edge in calculations so it behaves exactly like a real edge
+		const effectiveEdges = [...this.edges]
+		if (this.proximityCandidate && !this.connectionInProgress) {
+			const ghostEdgeData: WorkspaceEdge = {
+				edgeId: '__workspace-proximity-temp', // Use consistent ID
+				sourceNodeId: this.proximityCandidate.sourceNodeId,
+				sourceHandle: this.proximityCandidate.sourceHandle,
+				targetNodeId: this.proximityCandidate.targetNodeId,
+				targetHandle: this.proximityCandidate.targetHandle,
+				sourceT: 0.5,
+				targetT: 0.5
+			}
+			effectiveEdges.push(ghostEdgeData)
+		}
+
+		const spreadTValues = computeSpreadTValues(effectiveEdges, this.nodes)
+
+		// Update proximity candidate T-values with computed ones so commit uses them too
+		if (this.proximityCandidate && !this.connectionInProgress) {
+			const computed = spreadTValues.get('__workspace-proximity-temp')
+			if (computed) {
+				this.proximityCandidate.sourceT = computed.sourceT
+				this.proximityCandidate.targetT = computed.targetT
+			}
+		}
 
 		// Add committed edges (skip the one being reconnected)
 		for (const e of this.edges) {
@@ -738,10 +765,21 @@ export class WorkspaceConnectionManager {
 
 		// Draw potential proximity connection
 		if (this.proximityCandidate && !this.connectionInProgress) {
+            // Retrieve computed values or fall back to candidate/default
+            const computed = spreadTValues.get('__workspace-proximity-temp')
+			
 			const ghostEdge: EdgeConfig = {
 				id: '__workspace-proximity-edge',
-				source: { nodeId: this.proximityCandidate.sourceNodeId, position: this.proximityCandidate.sourceHandle },
-				target: { nodeId: this.proximityCandidate.targetNodeId, position: this.proximityCandidate.targetHandle },
+				source: { 
+					nodeId: this.proximityCandidate.sourceNodeId, 
+					position: this.proximityCandidate.sourceHandle,
+					t: computed?.sourceT ?? this.proximityCandidate.sourceT
+				},
+				target: { 
+					nodeId: this.proximityCandidate.targetNodeId, 
+					position: this.proximityCandidate.targetHandle,
+					t: computed?.targetT ?? this.proximityCandidate.targetT 
+				},
 				pathType: CONNECTION_STYLE,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
@@ -1038,9 +1076,9 @@ export class WorkspaceConnectionManager {
 			sourceHandle: this.proximityCandidate.sourceHandle,
 			targetNodeId: this.proximityCandidate.targetNodeId,
 			targetHandle: this.proximityCandidate.targetHandle,
-			// Default orthogonal routing for committed edges
-			sourceT: 0.5,
-			targetT: 0.5
+			// Use the calculated T values so strict position matches ghost edge (no jump)
+			sourceT: this.proximityCandidate.sourceT ?? 0.5,
+			targetT: this.proximityCandidate.targetT ?? 0.5
 		}
 
 		const nextEdges = [...this.edges, newEdge]
