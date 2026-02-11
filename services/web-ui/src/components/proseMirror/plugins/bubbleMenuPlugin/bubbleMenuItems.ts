@@ -3,6 +3,7 @@ import type { Schema, Node as ProseMirrorNode } from 'prosemirror-model'
 import { toggleMark, wrapIn, setBlockType } from 'prosemirror-commands'
 import { NodeSelection } from 'prosemirror-state'
 import { createEl } from '$src/utils/domTemplates.ts'
+import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 import {
     boldIcon,
     italicIcon,
@@ -565,10 +566,8 @@ function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView):
 // MAIN BUILDER FUNCTION
 // =============================================================================
 
-export type MenuItemElement = {
-    element: HTMLElement
+export type MenuItemElement = BubbleMenuItem & {
     context: SelectionContext[]
-    update?: () => void
 }
 
 export function buildBubbleMenuItems(

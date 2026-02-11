@@ -29,6 +29,8 @@ import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
+import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
+import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -118,6 +120,81 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Image lifecycle tracker - handles deletion of orphaned images
     const canvasImageLifecycle = createCanvasImageLifecycleTracker()
     canvasImageLifecycle.initializeFromCanvasState(currentCanvasState)
+
+    // Canvas bubble menu for image nodes (delete, create variant)
+    let canvasBubbleMenu: BubbleMenu | null = null
+    let canvasBubbleMenuItems: ReturnType<typeof buildCanvasBubbleMenuItems> | null = null
+
+    function initCanvasBubbleMenu() {
+        canvasBubbleMenuItems = buildCanvasBubbleMenuItems({
+            onDeleteNode: (nodeId) => {
+                if (!currentCanvasState) return
+                const updatedNodes = currentCanvasState.nodes.filter((n: CanvasNode) => n.nodeId !== nodeId)
+                const updatedEdges = currentCanvasState.edges.filter(
+                    (e: WorkspaceEdge) => e.sourceNodeId !== nodeId && e.targetNodeId !== nodeId
+                )
+                selectNode(null)
+                commitCanvasState({ ...currentCanvasState, nodes: updatedNodes, edges: updatedEdges })
+            },
+            onCreateVariant: (nodeId) => {
+                const node = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
+                if (node && node.type === 'image') {
+                    viewportEl.dispatchEvent(new CustomEvent('canvas-create-image-variant', {
+                        detail: { nodeId, node },
+                        bubbles: true,
+                    }))
+                }
+            },
+            onHide: () => {
+                canvasBubbleMenu?.forceHide()
+            },
+        })
+
+        canvasBubbleMenu = new BubbleMenu({
+            parentEl: paneEl,
+            items: canvasBubbleMenuItems.items,
+        })
+    }
+
+    function showCanvasBubbleMenuForNode(nodeId: string) {
+        if (!canvasBubbleMenu || !canvasBubbleMenuItems || !currentCanvasState) return
+
+        const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
+        if (!node || node.type !== 'image') {
+            canvasBubbleMenu.hide()
+            return
+        }
+
+        canvasBubbleMenuItems.setActiveNodeId(nodeId)
+
+        const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement
+        if (!nodeEl) return
+
+        const imgEl = nodeEl.querySelector('img') as HTMLImageElement
+        const targetEl = imgEl || nodeEl
+        const targetRect = targetEl.getBoundingClientRect()
+
+        const position: BubbleMenuPositionRequest = { targetRect, placement: 'below' }
+        canvasBubbleMenu.show(CANVAS_IMAGE_CONTEXT, position)
+    }
+
+    function hideCanvasBubbleMenu() {
+        canvasBubbleMenuItems?.setActiveNodeId(null)
+        canvasBubbleMenu?.hide()
+    }
+
+    function repositionCanvasBubbleMenu() {
+        if (!canvasBubbleMenu?.isVisible || !selectedNodeId) return
+
+        const nodeEl = viewportEl?.querySelector(`[data-node-id="${selectedNodeId}"]`) as HTMLElement
+        if (!nodeEl) return
+
+        const imgEl = nodeEl.querySelector('img') as HTMLImageElement
+        const targetEl = imgEl || nodeEl
+        const targetRect = targetEl.getBoundingClientRect()
+
+        canvasBubbleMenu.reposition({ targetRect, placement: 'below' })
+    }
 
     // Set up callbacks for AI-generated images
     setAiGeneratedImageCallbacks({
@@ -345,6 +422,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             updateVisibleNodes()
             // Ensure edges keep up with autopan + zoom changes
             scheduleEdgesRender()
+            // Reposition bubble menu to follow image during pan/zoom
+            repositionCanvasBubbleMenu()
             onViewportChange?.(vp)
         }),
         ...options.panZoomConfig
@@ -367,6 +446,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectedEdgeId = null
             connectionManager?.deselect()
             updateEdgeEndpointHandles()
+            showCanvasBubbleMenuForNode(nodeId)
+        } else {
+            hideCanvasBubbleMenu()
         }
     }
 
@@ -743,6 +825,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager?.checkProximity(nodeId, currentPos, currentDims)
 
             scheduleEdgesRender()
+            repositionCanvasBubbleMenu()
         }
 
         const handleMouseUp = () => {
@@ -808,6 +891,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ...currentCanvasState,
                 nodes: updatedNodes
             })
+
+            // Final reposition after collision resolution may have moved the node
+            repositionCanvasBubbleMenu()
         }
 
         document.addEventListener('mousemove', handleMouseMove)
@@ -912,6 +998,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             })
             scheduleEdgesRender()
+            repositionCanvasBubbleMenu()
         }
 
         const handleMouseUp = () => {
@@ -946,6 +1033,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ...currentCanvasState,
                 nodes: updatedNodes
             })
+
+            // Final reposition at new size
+            repositionCanvasBubbleMenu()
         }
 
         document.addEventListener('mousemove', handleMouseMove)
@@ -1322,6 +1412,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     window.addEventListener('keydown', onKeyDown)
 
     initializePanZoom()
+    initCanvasBubbleMenu()
     renderNodes()
 
     return {
@@ -1386,6 +1477,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             threadEditors.clear()
             canvasImageLifecycle.destroy()
+            canvasBubbleMenu?.destroy()
+            canvasBubbleMenu = null
         }
     }
 }

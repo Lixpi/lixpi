@@ -1,6 +1,7 @@
 import { Plugin, PluginKey, NodeSelection } from 'prosemirror-state'
+import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView } from 'prosemirror-view'
-import { createEl } from '$src/utils/domTemplates.ts'
+import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuItems.ts'
 import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.js'
 
@@ -14,42 +15,37 @@ type BubbleMenuViewOptions = {
 
 class BubbleMenuView {
     private view: EditorView
-    private menu: HTMLElement
-    private menuContent: HTMLElement
-    private preventHide = false
+    private bubbleMenu: BubbleMenu
+    private menuItems: MenuItemElement[] = []
     private updateDebounceTimer: ReturnType<typeof setTimeout> | null = null
     private readonly debounceDelay: number
     private linkInputPanel: HTMLElement | null = null
     private isLinkInputActive = false
     private isSelecting = false
-    private menuItems: MenuItemElement[] = []
     private currentContext: SelectionContext = 'none'
-    private scrollContainer: HTMLElement | Window = window
     private activeImageWrapper: HTMLElement | null = null
-    private menuParent: HTMLElement | null = null
 
     constructor({ view }: BubbleMenuViewOptions) {
         this.view = view
         this.debounceDelay = isTouchDevice() ? 350 : 200
 
-        this.menu = createEl('div', {
-            className: 'bubble-menu',
-            role: 'toolbar',
-            'aria-label': 'Formatting toolbar',
-            tabIndex: 0,
-            style: {
-                position: 'absolute',
-                visibility: 'hidden',
-                zIndex: '100',
+        const { items, linkInputPanel } = buildBubbleMenuItems(this.view, this)
+        this.menuItems = items
+        this.linkInputPanel = linkInputPanel
+
+        const menuParent = view.dom.parentNode as HTMLElement
+
+        this.bubbleMenu = new BubbleMenu({
+            parentEl: menuParent,
+            items: this.menuItems,
+            panels: this.linkInputPanel ? [this.linkInputPanel] : [],
+            onHide: () => {
+                this.currentContext = 'none'
+                this.closeLinkInput()
+                this.activeImageWrapper?.classList.remove('pm-image-menu-active')
+                this.activeImageWrapper = null
             },
         })
-
-        this.menuContent = createEl('div', { className: 'bubble-menu-content' })
-        this.menu.appendChild(this.menuContent)
-
-        this.buildMenu()
-
-        this.menu.addEventListener('mousedown', this.handleMenuMouseDown)
 
         // Track selection state
         view.dom.addEventListener('mousedown', this.handleEditorMouseDown)
@@ -59,18 +55,6 @@ class BubbleMenuView {
 
         // Listen for image resize events
         view.dom.addEventListener('image-resize', this.handleImageResize)
-
-        // Listen for scroll events to reposition menu
-        this.scrollContainer = this.findScrollContainer(view.dom)
-        this.scrollContainer.addEventListener('scroll', this.handleScroll, { passive: true })
-
-        // Append to editor's parent - menu will scale with the transformed viewport
-        this.menuParent = view.dom.parentNode as HTMLElement
-        this.menuParent?.appendChild(this.menu)
-
-        if (isTouchDevice()) {
-            window.visualViewport?.addEventListener('resize', this.handleViewportResize)
-        }
     }
 
     // Expose view for image actions
@@ -78,43 +62,9 @@ class BubbleMenuView {
         return this.view
     }
 
-    private buildMenu(): void {
-        const { items, linkInputPanel } = buildBubbleMenuItems(this.view, this)
-        this.menuItems = items
-        this.linkInputPanel = linkInputPanel
-
-        // Add all items to content (visibility controlled by context)
-        for (const item of items) {
-            this.menuContent.appendChild(item.element)
-        }
-
-        if (this.linkInputPanel) {
-            this.menu.appendChild(this.linkInputPanel)
-        }
-    }
-
-    private updateVisibleItems(context: SelectionContext): void {
-        this.currentContext = context
-
-        // Show/hide items based on context
-        for (const item of this.menuItems) {
-            const isVisible = item.context.includes(context)
-            item.element.style.display = isVisible ? '' : 'none'
-        }
-    }
-
-    private handleMenuMouseDown = (event: MouseEvent): void => {
-        this.preventHide = true
-
-        const target = event.target as HTMLElement
-        if (target.closest('.bubble-menu-button') || target.closest('.bubble-menu-dropdown')) {
-            event.preventDefault()
-        }
-    }
-
     private handleEditorMouseDown = (): void => {
         this.isSelecting = true
-        this.hide()
+        this.bubbleMenu.hide()
     }
 
     private handleEditorTouchStart = (): void => {
@@ -136,43 +86,22 @@ class BubbleMenuView {
     }
 
     private handleImageResize = (): void => {
-        if (this.currentContext === 'image' && this.menu.classList.contains('is-visible')) {
-            this.updatePosition()
+        if (this.currentContext === 'image' && this.bubbleMenu.isVisible) {
+            const position = this.getPositionRequest()
+            if (position) this.bubbleMenu.reposition(position)
         }
-    }
-
-    private handleScroll = (): void => {
-        if (this.menu.classList.contains('is-visible')) {
-            this.updatePosition()
-        }
-    }
-
-    private findScrollContainer(element: HTMLElement): HTMLElement | Window {
-        let current: HTMLElement | null = element
-        while (current) {
-            const style = getComputedStyle(current)
-            if (style.overflow === 'auto' || style.overflow === 'scroll' || style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                return current
-            }
-            current = current.parentElement
-        }
-        return window
     }
 
     private showIfNeeded(): void {
         const context = getSelectionContext(this.view)
         if (context !== 'none' && this.shouldShow(context) && !this.isSelecting) {
-            this.updateVisibleItems(context)
-            this.show()
-            this.updateMenuState()
-            this.updatePosition()
-        }
-    }
-
-    private handleViewportResize = (): void => {
-        const context = getSelectionContext(this.view)
-        if (context !== 'none' && this.shouldShow(context)) {
-            this.updatePosition()
+            this.currentContext = context
+            const position = this.getPositionRequest()
+            if (position) {
+                this.bubbleMenu.show(context, position)
+                this.markImageActive()
+                this.updateMenuState()
+            }
         }
     }
 
@@ -241,136 +170,30 @@ class BubbleMenuView {
         return null
     }
 
-    private findTransformedAncestor(): { element: HTMLElement; scale: number } | null {
-        // Walk up the DOM tree to find an ancestor with a CSS transform
-        let current: HTMLElement | null = this.menuParent
-        while (current) {
-            const style = getComputedStyle(current)
-            const transform = style.transform
-            if (transform && transform !== 'none') {
-                const match = transform.match(/matrix\(([^,]+),/)
-                if (match) {
-                    return { element: current, scale: parseFloat(match[1]) }
-                }
-            }
-            current = current.parentElement
-        }
-        return null
-    }
-
-    private screenToLocal(screenX: number, screenY: number): { x: number; y: number } {
-        // Convert screen coordinates to local coordinates relative to menuParent
-        // accounting for CSS transforms on ancestor elements
-        if (!this.menuParent) {
-            return { x: screenX, y: screenY }
-        }
-
-        const parentRect = this.menuParent.getBoundingClientRect()
-        const transformInfo = this.findTransformedAncestor()
-        const scale = transformInfo?.scale ?? 1
-
-        // parentRect is already in screen coordinates (post-transform)
-        // So the offset from screen to parent is just the difference
-        // But we need to divide by scale to get local coordinates
-        const localX = (screenX - parentRect.left) / scale
-        const localY = (screenY - parentRect.top) / scale
-
-        return { x: localX, y: localY }
-    }
-
-    private getScale(): number {
-        const transformInfo = this.findTransformedAncestor()
-        return transformInfo?.scale ?? 1
-    }
-
-    private updatePosition(retryCount = 0): void {
-        const scale = this.getScale()
-
+    private getPositionRequest(): BubbleMenuPositionRequest | null {
         if (this.currentContext === 'image') {
-            // Position below the image, centered
             const imgElement = this.getImageElement()
-            if (!imgElement) {
-                // After undo, the DOM might not be ready yet - retry a few times
-                if (retryCount < 3) {
-                    requestAnimationFrame(() => this.updatePosition(retryCount + 1))
-                }
-                return
+            if (!imgElement) return null
+            return {
+                targetRect: imgElement.getBoundingClientRect(),
+                placement: 'below',
             }
-
-            const imageRect = imgElement.getBoundingClientRect()
-
-            // Measure toolbar
-            this.menu.style.visibility = 'hidden'
-            this.menu.style.display = 'flex'
-            const toolbarRect = this.menu.getBoundingClientRect()
-            const toolbarWidthLocal = toolbarRect.width / scale
-
-            // Center toolbar horizontally below the image (in screen coords)
-            const imageCenterX = imageRect.left + imageRect.width / 2
-            const toolbarScreenLeft = imageCenterX - toolbarRect.width / 2
-            const toolbarScreenTop = imageRect.bottom + 8 * scale
-
-            // Convert to local coordinates
-            const local = this.screenToLocal(toolbarScreenLeft, toolbarScreenTop)
-
-            // Clamp to parent bounds (in local coordinates)
-            const parentRect = this.menuParent?.getBoundingClientRect()
-            const parentWidthLocal = parentRect ? parentRect.width / scale : window.innerWidth
-            const maxLeft = parentWidthLocal - toolbarWidthLocal - 8
-            const clampedLeft = Math.max(8, Math.min(local.x, maxLeft))
-
-            Object.assign(this.menu.style, {
-                left: `${clampedLeft}px`,
-                top: `${local.y}px`,
-                visibility: 'visible',
-            })
-        } else {
-            // Position above text selection
-            const { state } = this.view
-            const { from, to } = state.selection
-
-            const start = this.view.coordsAtPos(from)
-            const end = this.view.coordsAtPos(to)
-
-            // Measure menu
-            this.menu.style.visibility = 'hidden'
-            this.menu.style.display = 'flex'
-            const menuRect = this.menu.getBoundingClientRect()
-            const menuWidthLocal = menuRect.width / scale
-
-            // Calculate center of selection in screen coords
-            const selectionLeft = Math.min(start.left, end.left)
-            const selectionRight = Math.max(start.right, end.right)
-            const selectionTop = Math.min(start.top, end.top)
-            const selectionBottom = Math.max(start.bottom, end.bottom)
-            const selectionCenterX = (selectionLeft + selectionRight) / 2
-
-            // Position menu above selection, centered (in screen coords)
-            const menuScreenLeft = selectionCenterX - menuRect.width / 2
-            const menuScreenTop = selectionTop - menuRect.height - 8 * scale
-
-            // Convert to local coordinates
-            const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
-
-            // Clamp horizontal position
-            const parentRect = this.menuParent?.getBoundingClientRect()
-            const parentWidthLocal = parentRect ? parentRect.width / scale : window.innerWidth
-            const maxLeft = parentWidthLocal - menuWidthLocal - 8
-            const clampedLeft = Math.max(8, Math.min(local.x, maxLeft))
-
-            // Check if menu would go above parent bounds, flip to below
-            let finalY = local.y
-            if (local.y < 8) {
-                const belowScreenTop = selectionBottom + 8 * scale
-                finalY = this.screenToLocal(0, belowScreenTop).y
-            }
-
-            Object.assign(this.menu.style, {
-                left: `${clampedLeft}px`,
-                top: `${finalY}px`,
-                visibility: 'visible',
-            })
         }
+
+        // Text context: compute selection bounding rect
+        const { state } = this.view
+        const { from, to } = state.selection
+
+        const start = this.view.coordsAtPos(from)
+        const end = this.view.coordsAtPos(to)
+
+        const left = Math.min(start.left, end.left)
+        const right = Math.max(start.right, end.right)
+        const top = Math.min(start.top, end.top)
+        const bottom = Math.max(start.bottom, end.bottom)
+
+        const targetRect = new DOMRect(left, top, right - left, bottom - top)
+        return { targetRect, placement: 'above' }
     }
 
     update(): void {
@@ -378,17 +201,21 @@ class BubbleMenuView {
             return
         }
 
-        const wasVisible = this.menu.classList.contains('is-visible')
+        const wasVisible = this.bubbleMenu.isVisible
         const context = getSelectionContext(this.view)
 
-        if (this.preventHide) {
-            this.preventHide = false
+        if (this.bubbleMenu.preventHide) {
+            this.bubbleMenu.preventHide = false
+            this.currentContext = context !== 'none' ? context : this.currentContext
             this.updateMenuState()
             this.markImageActive()
             // Reposition after state change (e.g., alignment changed)
-            requestAnimationFrame(() => {
-                this.updatePosition()
-            })
+            const position = this.getPositionRequest()
+            if (position) {
+                requestAnimationFrame(() => {
+                    this.bubbleMenu.reposition(position)
+                })
+            }
             return
         }
 
@@ -399,18 +226,17 @@ class BubbleMenuView {
         const shouldBeVisible = context !== 'none' && this.shouldShow(context)
 
         if (shouldBeVisible && !wasVisible) {
-            this.updateVisibleItems(context)
-            this.show()
-            this.markImageActive()
-            this.updateMenuState()
-            // Use requestAnimationFrame to ensure DOM is updated before positioning
-            requestAnimationFrame(() => {
-                this.updatePosition()
-            })
+            this.currentContext = context
+            const position = this.getPositionRequest()
+            if (position) {
+                this.bubbleMenu.show(context, position)
+                this.markImageActive()
+                this.updateMenuState()
+            }
         } else if (shouldBeVisible && wasVisible) {
             // Context might have changed
             if (context !== this.currentContext) {
-                this.updateVisibleItems(context)
+                this.currentContext = context
             }
 
             if (this.updateDebounceTimer) {
@@ -418,17 +244,18 @@ class BubbleMenuView {
             }
             this.updateDebounceTimer = setTimeout(() => {
                 this.updateMenuState()
-                this.updatePosition()
+                const position = this.getPositionRequest()
+                if (position) this.bubbleMenu.updateContext(context, position)
             }, this.debounceDelay)
         } else if (!shouldBeVisible) {
-            this.hide()
+            this.bubbleMenu.hide()
         }
     }
 
     private updateMenuState(): void {
         if (this.currentContext === 'text') {
             // Update mark button states
-            const buttons = this.menu.querySelectorAll('.bubble-menu-button')
+            const buttons = this.bubbleMenu.element.querySelectorAll('.bubble-menu-button')
             buttons.forEach((button) => {
                 const updateFn = (button as HTMLElement).dataset.update
                 if (updateFn) {
@@ -460,13 +287,7 @@ class BubbleMenuView {
         return state.doc.rangeHasMark(from, to, type)
     }
 
-    private show(): void {
-        this.menu.style.visibility = 'visible'
-        this.menu.classList.add('is-visible')
-    }
-
     private markImageActive(): void {
-        // Mark image as menu-active to keep selection visible
         if (this.currentContext === 'image') {
             const wrapper = this.getImageWrapper()
             if (wrapper && wrapper !== this.activeImageWrapper) {
@@ -477,20 +298,8 @@ class BubbleMenuView {
         }
     }
 
-    private hide(): void {
-        this.menu.style.visibility = 'hidden'
-        this.menu.classList.remove('is-visible')
-        this.currentContext = 'none'
-        this.closeLinkInput()
-
-        // Remove menu-active state from image
-        this.activeImageWrapper?.classList.remove('pm-image-menu-active')
-        this.activeImageWrapper = null
-    }
-
     forceHide(): void {
-        this.preventHide = false
-        this.hide()
+        this.bubbleMenu.forceHide()
     }
 
     showLinkInput(): void {
@@ -557,12 +366,9 @@ class BubbleMenuView {
         this.view.dom.removeEventListener('mousedown', this.handleEditorMouseDown)
         this.view.dom.removeEventListener('touchstart', this.handleEditorTouchStart)
         this.view.dom.removeEventListener('image-resize', this.handleImageResize)
-        this.scrollContainer.removeEventListener('scroll', this.handleScroll)
         document.removeEventListener('mouseup', this.handleDocumentMouseUp)
         document.removeEventListener('touchend', this.handleDocumentTouchEnd)
-        window.visualViewport?.removeEventListener('resize', this.handleViewportResize)
-        this.menu.removeEventListener('mousedown', this.handleMenuMouseDown)
-        this.menu.remove()
+        this.bubbleMenu.destroy()
     }
 }
 

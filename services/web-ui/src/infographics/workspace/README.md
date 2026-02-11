@@ -255,14 +255,27 @@ sequenceDiagram
     Service->>Backend: NATS request
 ```
 
+## Canvas Bubble Menu
+
+When an image node is selected on the canvas, a bubble menu appears below it — the same shared `BubbleMenu` component used in ProseMirror editors. The menu provides context-specific actions for canvas elements.
+
+### Image Node Actions
+- **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
+- **Delete** — removes the node and its associated edges from canvas state
+
+The bubble menu automatically hides during drag and resize operations, and repositions itself when the selected image moves.
+
+Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` class is from `$src/components/bubbleMenu/`.
+
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers |
+| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration |
 | `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, edge rendering, selection/deletion |
 | `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
+| `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image actions) |
 
 ## CSS Classes
 
