@@ -31,6 +31,7 @@ import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
+import { downloadImage } from '$src/utils/downloadImage.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -143,6 +144,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         detail: { nodeId, node },
                         bubbles: true,
                     }))
+                }
+            },
+            onDownloadImage: (nodeId) => {
+                const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
+                const imgEl = nodeEl?.querySelector('img') as HTMLImageElement | null
+                if (imgEl?.src) {
+                    downloadImage(imgEl.src, { getAuthToken: () => AuthService.getTokenSilently() })
                 }
             },
             onHide: () => {

@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { createEl } from '$src/utils/domTemplates.ts'
-import { trashBinIcon } from '$src/svgIcons/index.ts'
+import { trashBinIcon, downloadIcon } from '$src/svgIcons/index.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'
@@ -17,6 +17,7 @@ const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" s
 type CanvasBubbleMenuCallbacks = {
     onDeleteNode: (nodeId: string) => void
     onCreateVariant: (nodeId: string) => void
+    onDownloadImage: (nodeId: string) => void
     onHide: () => void
 }
 
@@ -67,6 +68,18 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
 
+    const downloadButton = createCanvasButton({
+        icon: downloadIcon,
+        title: 'Download image',
+        iconSize: 16,
+        onClick: () => {
+            if (activeNodeId) {
+                callbacks.onDownloadImage(activeNodeId)
+                callbacks.onHide()
+            }
+        },
+    })
+
     const deleteButton = createCanvasButton({
         icon: trashBinIcon,
         title: 'Delete image',
@@ -81,6 +94,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
 
     const items: BubbleMenuItem[] = [
         { element: createVariantButton, context: [CANVAS_IMAGE_CONTEXT] },
+        { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
     ]
 

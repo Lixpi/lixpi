@@ -19,12 +19,13 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
     const callbacks = {
         onDeleteNode: vi.fn(),
         onCreateVariant: vi.fn(),
+        onDownloadImage: vi.fn(),
         onHide: vi.fn(),
     }
 
-    it('returns exactly 2 items', () => {
+    it('returns exactly 3 items', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items).toHaveLength(2)
+        expect(items).toHaveLength(3)
     })
 
     it('all items have canvasImage context', () => {
@@ -39,9 +40,14 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[0].element.getAttribute('title')).toBe('Create variant')
     })
 
-    it('second item is Delete button', () => {
+    it('second item is Download button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[1].element.getAttribute('title')).toBe('Delete image')
+        expect(items[1].element.getAttribute('title')).toBe('Download image')
+    })
+
+    it('third item is Delete button', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[2].element.getAttribute('title')).toBe('Delete image')
     })
 
     it('items are HTMLButtonElement instances with bubble-menu-button class', () => {
@@ -61,6 +67,7 @@ describe('buildCanvasBubbleMenuItems — activeNodeId', () => {
     const callbacks = {
         onDeleteNode: vi.fn(),
         onCreateVariant: vi.fn(),
+        onDownloadImage: vi.fn(),
         onHide: vi.fn(),
     }
 
@@ -92,6 +99,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
             onCreateVariant: vi.fn(),
+            onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
@@ -104,16 +112,50 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
     })
 
+    it('Download fires onDownloadImage + onHide with active node', () => {
+        const callbacks = {
+            onDeleteNode: vi.fn(),
+            onCreateVariant: vi.fn(),
+            onDownloadImage: vi.fn(),
+            onHide: vi.fn(),
+        }
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+        setActiveNodeId('img-3')
+
+        items[1].element.click()
+
+        expect(callbacks.onDownloadImage).toHaveBeenCalledWith('img-3')
+        expect(callbacks.onHide).toHaveBeenCalledOnce()
+        expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
+        expect(callbacks.onCreateVariant).not.toHaveBeenCalled()
+    })
+
+    it('Download does nothing when no activeNodeId', () => {
+        const callbacks = {
+            onDeleteNode: vi.fn(),
+            onCreateVariant: vi.fn(),
+            onDownloadImage: vi.fn(),
+            onHide: vi.fn(),
+        }
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+
+        items[1].element.click()
+
+        expect(callbacks.onDownloadImage).not.toHaveBeenCalled()
+        expect(callbacks.onHide).not.toHaveBeenCalled()
+    })
+
     it('Delete fires onDeleteNode + onHide with active node', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
             onCreateVariant: vi.fn(),
+            onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
         setActiveNodeId('img-2')
 
-        items[1].element.click()
+        items[2].element.click()
 
         expect(callbacks.onDeleteNode).toHaveBeenCalledWith('img-2')
         expect(callbacks.onHide).toHaveBeenCalledOnce()
@@ -124,6 +166,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
             onCreateVariant: vi.fn(),
+            onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
         const { items } = buildCanvasBubbleMenuItems(callbacks)
@@ -139,11 +182,12 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
             onCreateVariant: vi.fn(),
+            onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
         const { items } = buildCanvasBubbleMenuItems(callbacks)
 
-        items[1].element.click()
+        items[2].element.click()
 
         expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
         expect(callbacks.onHide).not.toHaveBeenCalled()

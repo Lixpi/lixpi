@@ -30,7 +30,7 @@ The `BubbleMenuView` class adapts the core `BubbleMenu` for ProseMirror:
 The `WorkspaceCanvas` creates a `BubbleMenu` for canvas image nodes:
 - Uses `'canvasImage'` context
 - Positions below the selected image node element
-- Provides Delete and Create Variant actions
+- Provides Create Variant, Download, and Delete actions
 - Shows when an image node is selected, hides on deselection/drag/resize
 
 ## Usage

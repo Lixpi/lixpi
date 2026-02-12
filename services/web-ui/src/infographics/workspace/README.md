@@ -261,6 +261,7 @@ When an image node is selected on the canvas, a bubble menu appears below it —
 
 ### Image Node Actions
 - **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
+- **Download** — fetches the image as a blob and triggers a browser download via `downloadImage()` utility
 - **Delete** — removes the node and its associated edges from canvas state
 
 The bubble menu automatically hides during drag and resize operations, and repositions itself when the selected image moves.
