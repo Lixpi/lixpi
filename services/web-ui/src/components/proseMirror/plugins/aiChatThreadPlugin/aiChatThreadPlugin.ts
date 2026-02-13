@@ -23,7 +23,7 @@ import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import type { AiModelId } from '@lixpi/constants'
 
-import { setAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
+import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
 import { dispatchSendAiChatFromUserInput } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadSend.ts'
 import { findUserInputInThread } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPositionUtils.ts'
@@ -589,204 +589,85 @@ class AiChatThreadPluginClass {
 
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {
         const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
-        console.log('🖼️ [PLUGIN] handleImagePartial called:', { imageUrl, fileId, partialIndex, aiChatThreadId })
-        if (!imageUrl || !aiChatThreadId) {
-            console.log('🖼️ [PLUGIN] handleImagePartial: missing imageUrl or aiChatThreadId, returning')
-            return
-        }
+        if (!imageUrl || !aiChatThreadId) return
 
-        const { state, dispatch } = view
+        const { state } = view
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
 
         // Only process events for threads that exist in THIS document
-        if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
-            return
-        }
-        // Check if we already have a partial image node being updated
-        let existingImagePos: number | null = null
-        let existingImageNode: ProseMirrorNode | null = null
+        if (!threadInfo) return
 
-        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-            if (node.type.name === aiGeneratedImageNodeType && node.attrs.isPartial) {
-                // Check if this image is in the correct thread
-                const $pos = state.doc.resolve(pos)
-                for (let depth = $pos.depth; depth > 0; depth--) {
-                    const parentNode = $pos.node(depth)
-                    if (parentNode.type.name === aiChatThreadNodeType) {
-                        if (parentNode.attrs.threadId === aiChatThreadId) {
-                            existingImagePos = pos
-                            existingImageNode = node
-                        }
-                        break
-                    }
-                }
-            }
-            return existingImagePos === null
+        // Delegate to canvas-side handler — image appears as a canvas node, not inline
+        const callbacks = getAiGeneratedImageCallbacks()
+        callbacks.onImagePartialToCanvas?.({
+            threadId: aiChatThreadId,
+            imageUrl,
+            fileId: fileId || '',
+            workspaceId: workspaceId || '',
+            partialIndex: partialIndex || 0,
+            aiProvider: aiProvider || '',
         })
-
-        let tr = state.tr
-
-        if (existingImagePos !== null && existingImageNode) {
-            console.log('🖼️ [PLUGIN] handleImagePartial: updating existing image node at pos', existingImagePos)
-            // Update existing partial image node
-            tr.setNodeMarkup(existingImagePos, null, {
-                ...existingImageNode.attrs,
-                imageData: imageUrl,
-                fileId: fileId || null,
-            })
-        } else {
-            console.log('🖼️ [PLUGIN] handleImagePartial: creating NEW aiGeneratedImage node')
-
-            // Try to find a target AI response message in the thread
-            const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
-            // Use aiGeneratedImage node with proper attrs
-            const imageNode = state.schema.nodes[aiGeneratedImageNodeType].create({
-                imageData: imageUrl,
-                fileId: fileId || null,
-                workspaceId: workspaceId || null,
-                isPartial: true,
-            })
-
-            if (responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
-                 console.log('🖼️ [PLUGIN] handleImagePartial: inserting into existing response node')
-                 const insertionPos = responseNodeInfo.endOfNodePos - 1
-                 tr.insert(insertionPos, imageNode)
-            } else {
-                 console.log('🖼️ [PLUGIN] handleImagePartial: creating NEW response node with image')
-                 // Create new response node wrapping the image
-                 // Set isReceivingAnimation so findResponseNode can find it for image_complete
-                 const responseNode = state.schema.nodes[aiResponseMessageNodeType].create(
-                     {
-                         aiProvider: aiProvider || 'OpenAI',
-                         isReceivingAnimation: true
-                     },
-                     [imageNode]
-                 )
-                 tr.insert(threadInfo.insertPos, responseNode)
-            }
-        }
-
-        if (tr.docChanged) {
-            console.log('🖼️ [PLUGIN] handleImagePartial: dispatching transaction')
-            dispatch(tr)
-        } else {
-            console.log('🖼️ [PLUGIN] handleImagePartial: doc NOT changed, skipping dispatch')
-        }
     }
 
     private handleImageComplete(view: EditorView, event: SegmentEvent): void {
         const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider } = event
-        console.log('🖼️ [PLUGIN] handleImageComplete called:', { imageUrl, fileId, responseId, aiChatThreadId })
         if (!imageUrl || !aiChatThreadId) return
 
         const { state, dispatch } = view
 
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
-        if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
-            return
-        }
+        if (!threadInfo) return
 
-        // Find existing partial image node in this thread
-        let existingImagePos: number | null = null
-        let existingImageNode: ProseMirrorNode | null = null
+        // Find the current receiving response message node to:
+        // 1. Insert revised prompt text into it
+        // 2. Read its `id` attr for sourceMessageId on the canvas edge
+        let responseMessageId = ''
+        const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
 
-        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-            if (node.type.name === aiGeneratedImageNodeType && node.attrs.isPartial) {
-                const $pos = state.doc.resolve(pos)
-                for (let depth = $pos.depth; depth > 0; depth--) {
-                    const parentNode = $pos.node(depth)
-                    if (parentNode.type.name === aiChatThreadNodeType) {
-                        // Only match the exact threadId
-                        if (parentNode.attrs.threadId === aiChatThreadId) {
-                            existingImagePos = pos
-                            existingImageNode = node
+        if (responseNodeInfo.found && responseNodeInfo.endOfNodePos !== undefined) {
+            // Walk ancestors of the endOfNodePos to find the response node and its id
+            state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+                if (node.type.name === aiResponseMessageNodeType) {
+                    // Verify this response is in the correct thread
+                    const $pos = state.doc.resolve(pos)
+                    for (let depth = $pos.depth; depth > 0; depth--) {
+                        const parentNode = $pos.node(depth)
+                        if (parentNode.type.name === aiChatThreadNodeType) {
+                            if (parentNode.attrs?.threadId === aiChatThreadId && node.attrs.isReceivingAnimation) {
+                                responseMessageId = node.attrs.id || ''
+                            }
+                            break
                         }
-                        break
                     }
                 }
+                return !responseMessageId // stop if found
+            })
+        }
+
+        // Insert revised prompt as text into the response message (keeps conversation readable)
+        if (revisedPrompt && responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
+            const tr = state.tr
+            const insertionPos = responseNodeInfo.endOfNodePos - 1
+            const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
+            tr.insert(insertionPos, p)
+            if (tr.docChanged) {
+                dispatch(tr)
             }
-            return existingImagePos === null
+        }
+
+        // Delegate image placement to the canvas
+        const callbacks = getAiGeneratedImageCallbacks()
+        callbacks.onImageCompleteToCanvas?.({
+            threadId: aiChatThreadId,
+            imageUrl,
+            fileId: fileId || '',
+            workspaceId: workspaceId || '',
+            responseId: responseId || '',
+            revisedPrompt: revisedPrompt || '',
+            aiModel: aiProvider || '',
+            responseMessageId,
         })
-
-        let tr = state.tr
-
-        if (existingImagePos !== null && existingImageNode) {
-            // Update existing node to complete state
-            console.log('🖼️ [PLUGIN] handleImageComplete: updating existing aiGeneratedImage node at pos', existingImagePos)
-            const mappedPos = tr.mapping.map(existingImagePos)
-            tr.setNodeMarkup(mappedPos, null, {
-                imageData: imageUrl,
-                fileId: fileId || null,
-                workspaceId: workspaceId || null,
-                revisedPrompt: revisedPrompt || null,
-                responseId: responseId || null,
-                aiModel: aiProvider || null,
-                isPartial: false,
-            })
-
-            // Handle revised prompt insertion
-            if (revisedPrompt) {
-                 const $pos = state.doc.resolve(mappedPos)
-                 const parent = $pos.parent
-                 if (parent.type.name === aiResponseMessageNodeType) {
-                      const index = $pos.index()
-                      const childBefore = index > 0 ? parent.child(index - 1) : null
-
-                      if (!childBefore || (childBefore.type.name === 'paragraph' && !childBefore.textContent.trim())) {
-                           const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-                           tr.insert(mappedPos, p)
-                      }
-                 }
-            }
-        } else {
-            console.log('🖼️ [PLUGIN] handleImageComplete: no existing partial image found, checking for existing response node')
-            // Use aiGeneratedImage node with proper attrs
-            const imageNode = state.schema.nodes[aiGeneratedImageNodeType].create({
-                imageData: imageUrl,
-                fileId: fileId || null,
-                workspaceId: workspaceId || null,
-                revisedPrompt: revisedPrompt || null,
-                responseId: responseId || null,
-                aiModel: aiProvider || null,
-                isPartial: false,
-            })
-
-            let contentNodes: ProseMirrorNode[] = [imageNode]
-            if (revisedPrompt) {
-                const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-                contentNodes = [p, imageNode]
-            }
-
-            // Look for an existing receiving response node to add images to
-            const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
-            console.log('🖼️ [PLUGIN] handleImageComplete: responseNodeInfo:', responseNodeInfo)
-
-            if (responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
-                 console.log('🖼️ [PLUGIN] handleImageComplete: inserting into EXISTING response node')
-                 const insertionPos = responseNodeInfo.endOfNodePos - 1
-                 tr.insert(insertionPos, Fragment.from(contentNodes))
-            } else {
-                 console.log('🖼️ [PLUGIN] handleImageComplete: creating NEW response node (no existing found)')
-                 const responseNode = state.schema.nodes[aiResponseMessageNodeType].create(
-                     {
-                         aiProvider: aiProvider || 'OpenAI',
-                         isReceivingAnimation: true  // Mark as receiving so subsequent images go here
-                     },
-                     Fragment.from(contentNodes)
-                 )
-                 const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
-                 if (threadInfo) {
-                    tr.insert(threadInfo.insertPos, responseNode)
-                 }
-            }
-        }
-
-        if (tr.docChanged) {
-            dispatch(tr)
-        }
     }
 
     private handleCreateVariantRequest(view: EditorView, node: ProseMirrorNode, pos: number): void {
@@ -834,7 +715,9 @@ class AiChatThreadPluginClass {
 
         const { insertPos } = threadInfo
 
+        const responseMessageId = `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
         const aiResponseNode = state.schema.nodes[aiResponseMessageNodeType].create({
+            id: responseMessageId,
             isInitialRenderAnimation: true,
             isReceivingAnimation: true,
             aiProvider

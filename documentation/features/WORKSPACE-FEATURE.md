@@ -122,10 +122,13 @@ type WorkspaceEdge = {
     targetHandle?: string  // e.g., 'left'
     sourceT?: number       // Position along source side (0=top, 1=bottom, 0.5=center). Default: 0.5
     targetT?: number       // Position along target side (0=top, 1=bottom, 0.5=center). Default: 0.5
+    sourceMessageId?: string  // Links edge to a specific aiResponseMessage (by its id attr) within the source AI chat thread
 }
 ```
 
 The `sourceT` and `targetT` properties allow edges to attach at any vertical position along a node's side, not just the center. When a user creates a connection by dragging, the `t` values are computed from the pointer position where they started and dropped.
+
+The `sourceMessageId` property enables precise per-response-message tracking for AI-generated images. When an AI chat thread generates an image, the resulting canvas image node is connected back to the thread via an edge whose `sourceMessageId` identifies the specific `aiResponseMessage` that produced it. This allows context extraction to associate images with their originating conversation turns.
 
 ### Connection Routing
 
@@ -133,9 +136,18 @@ The `WorkspaceConnectionManager` handles the visual rendering logic for edges.
 
 - **Routing Style**: Configured via the `CONNECTION_STYLE` constant. Defaults to `'orthogonal'` (circuit-board style) but can be switched to `'horizontal-bezier'` (smooth curves).
 - **Auto-Alignment**: If a source node is vertically aligned with its target, the connection automatically snaps to a perfectly straight horizontal line by adjusting the `targetT` value.
+- **Message-Level Anchoring**: When an edge has a `sourceMessageId` (connecting a specific AI response to an image), the renderer dynamically calculates `sourceT` to anchor the arrow exactly to the message bubble in the DOM. It also intelligently adjusts `targetT` to ensure the arrow points in a straight line to the target image height, preventing the "diving arrow" effect.
 - **Corner Snapping**: If nodes are not aligned, the connector snaps to the nearest top/bottom corner (t=0.05 or t=0.95) to minimize diagonal visual clutter.
 - **Drag Visualization**: While dragging, connections use a smooth bezier curve to distinguish them from committed orthogonal edges.
 - **Proximity Connect**: Dragging a node (Document/Image) near an AI Chat Thread automatically suggests a connection with a dashed "ghost" line. Dropping the node creates the link. The proximity threshold is 1200px, and it prevents duplicate connections.
+
+### AI Generated Content Layout
+
+When an AI thread generates images, the workspace manages their placement automatically to maintain a clean layout:
+
+- **Positioning**: Images are placed 50px to the right of their source thread.
+- **Stacking**: Multiple images from the same thread are stacked vertically. The first image aligns with the top of the thread, and subsequent images are placed below the previous one with a 30px gap.
+- **Race Condition Handling**: The layout engine tracks synchronous "partial" image states to ensure that simultaneous updates (e.g., partial stream + final completion) do not cause images to overlap or skip positional slots.
 
 ### CanvasNode
 
@@ -1023,7 +1035,7 @@ When nodes are connected TO an AI chat thread (incoming edges), the AI chat auto
 
 ## AI Image Generation
 
-This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears inline in the chat conversation. From there, the user can click "Add to Canvas" to place the image as a standalone canvas node with an automatic edge connecting it back to the chat thread that created it.
+This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears directly as a canvas node positioned to the right of the AI chat thread, connected by an edge whose `sourceMessageId` links it to the specific `aiResponseMessage` that produced it. The revised prompt text is inserted as text inside the AI response message to keep the conversation readable.
 
 Multi-turn editing is supported: users can continue refining an image within the same thread (OpenAI maintains the conversation context via `previous_response_id`), or click "Edit in New Thread" on any generated image to spawn a dedicated editing thread positioned to the right of that image on the canvas.
 
@@ -1033,9 +1045,10 @@ Multi-turn editing is supported: users can continue refining an image within the
 2. User types a prompt like "Create a logo for a coffee shop"
 3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
 4. OpenAI streams back partial images (up to 3) as the generation progresses
-5. The chat shows a spinner, then replaces it with each partial image as it arrives
-6. On completion, the final image appears with action buttons
-7. Clicking "Add to Canvas" uploads the image to storage and creates both an `ImageCanvasNode` and an edge from the chat thread to the new image
+5. Each partial creates/updates the canvas image node in real-time (progressive preview)
+6. On completion, the canvas node is finalized with full metadata and an edge (including `sourceMessageId`) connects the AI response to the image
+7. The revised prompt text appears inside the AI response message in the chat thread
+8. Multiple generated images from the same thread stack vertically to the right with 30px gaps
 
 ### Data Flow
 
@@ -1068,47 +1081,32 @@ sequenceDiagram
     end
 
     %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 2: STREAM PARTIALS
+    %% PHASE 2: STREAM PARTIALS → CANVAS
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over User, Storage: PHASE 2 - STREAM PARTIALS
+        Note over User, Storage: PHASE 2 - STREAM PARTIALS TO CANVAS
         loop Partial Images (0-3)
             OpenAI->>LLM: image_generation_call.partial_image
-            LLM->>AIS: IMAGE_PARTIAL { partialIndex, base64 }
-            AIS->>Thread: Replace spinner with partial
+            LLM->>AIS: IMAGE_PARTIAL { partialIndex, imageUrl, fileId }
+            AIS->>Thread: Plugin routes to canvas callback
+            Thread->>Canvas: onImagePartialToCanvas(...)
+            Canvas->>Canvas: Create/update ImageCanvasNode + edge
         end
     end
 
     %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3: COMPLETE
+    %% PHASE 3: COMPLETE → CANVAS + REVISED PROMPT IN CHAT
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(242, 234, 224)
         Note over User, Storage: PHASE 3 - COMPLETE
         OpenAI->>LLM: image_generation_call (completed)
         deactivate LLM
-        LLM->>AIS: IMAGE_COMPLETE { responseId, revisedPrompt, base64 }
+        LLM->>AIS: IMAGE_COMPLETE { responseId, revisedPrompt, imageUrl, fileId }
         deactivate API
-        AIS->>Thread: Insert aiGeneratedImage node with action buttons
+        AIS->>Thread: Plugin inserts revised prompt text into response
+        Thread->>Canvas: onImageCompleteToCanvas({ ..., responseMessageId })
+        Canvas->>Canvas: Finalize ImageCanvasNode + set edge.sourceMessageId
         deactivate AIS
-    end
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 4: ADD TO CANVAS
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(246, 199, 179)
-        Note over User, Storage: PHASE 4 - ADD TO CANVAS
-        User->>Thread: Click "Add to Canvas"
-        activate Thread
-        Thread->>Canvas: handleAddGeneratedImageToCanvas(...)
-        activate Canvas
-        Canvas->>Storage: POST /api/images/:workspaceId (hash-dedupe)
-        activate Storage
-        Storage-->>Canvas: { fileId, src }
-        deactivate Storage
-        Canvas->>Canvas: Create ImageCanvasNode + WorkspaceEdge
-        Canvas->>Canvas: Persist canvasState
-        deactivate Canvas
-        deactivate Thread
     end
 ```
 
@@ -1127,31 +1125,35 @@ Quality is always set to maximum (`high`), input fidelity is `high` (preserves d
 
 ### Storage & Deduplication
 
-Generated images are stored in NATS Object Store just like uploaded images. To avoid duplicates (e.g., if someone clicks "Add to Canvas" twice), the upload endpoint computes a SHA-256 hash of the image content and uses `hash-{sha256}` as the `fileId`. Before writing, it checks if that fileId already exists—if so, it skips the upload and returns the existing URL.
+Generated images are stored in NATS Object Store just like uploaded images. To avoid duplicates, the upload endpoint computes a SHA-256 hash of the image content and uses `hash-{sha256}` as the `fileId`. Before writing, it checks if that fileId already exists—if so, it skips the upload and returns the existing URL.
 
 ### Multi-Turn Image Editing
 
-Multi-turn image editing uses a **provider-agnostic approach** by including AI-generated images directly in the conversation history. When an image is generated and displayed in the thread:
+Multi-turn image editing uses a **provider-agnostic approach** by leveraging canvas edges with `sourceMessageId` to maintain precise image-to-response associations. When an image is generated:
 
-1. The `aiGeneratedImage` node stores `fileId` and `workspaceId` attributes
-2. When extracting thread content for subsequent messages, `ContentExtractor.collectContentWithImages()` finds these images
-3. Images are included in the messages array as `nats-obj://workspace-{workspaceId}-files/{fileId}` references
-4. The LLM API fetches images from NATS Object Store and converts to base64 before sending to any provider
+1. The image appears as an `ImageCanvasNode` on the canvas, connected to the AI chat thread via an edge
+2. The edge's `sourceMessageId` links the image to the specific `aiResponseMessage` that produced it
+3. When extracting connected context for follow-up messages, `extractConnectedContext()` traverses incoming edges and includes image nodes with their `sourceMessageId` metadata
+4. The LLM API fetches images from NATS Object Store via `nats-obj://` references and converts to base64 before sending to any provider
 
-**Thread-level continuity**: All AI-generated images in the thread are automatically included in subsequent requests. Saying "make the background blue" works because the previous image is part of the conversation context.
+**Thread-level continuity**: All AI-generated images connected to the thread are automatically included in subsequent requests via the workspace edge system. Saying "make the background blue" works because the previous image is part of the connected context.
 
 **Per-image editing**: Clicking "Edit in New Thread" creates a fresh AI chat thread with an edge connecting the image to the new thread. The connected image becomes part of the new thread's context via the workspace edge system.
 
 ### Canvas Integration
 
-When "Add to Canvas" is clicked:
+When the AI generates an image:
 
-1. The base64 image is uploaded to storage (with hash-based deduplication)
-2. The source AI chat thread node is found on the canvas
-3. A new `ImageCanvasNode` is created at position `(threadNode.x + threadNode.width + 50, threadNode.y)`
-4. The image node includes `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
-5. A `WorkspaceEdge` is created from the thread's right handle to the image's left handle
-6. Both the new node and edge are persisted atomically
+1. `IMAGE_PARTIAL` events create an `ImageCanvasNode` on the canvas, positioned to the right of the source thread
+2. The `partialImageTracker` Map records the pending partial SYNCHRONOUSLY before any async work to prevent race conditions with `IMAGE_COMPLETE`
+3. Progressive partial previews update the canvas node's image in real-time via direct DOM updates
+4. `IMAGE_COMPLETE` finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
+5. A `WorkspaceEdge` connects the thread to the image with `sourceMessageId` identifying the specific `aiResponseMessage` (the response node gets a unique `id` when created by `handleStreamStart`)
+6. Multiple images from the same thread stack vertically with 30px gaps
+7. Collision resolution runs after finalization to push apart any overlapping nodes
+8. The revised prompt text is inserted as a paragraph inside the AI response message in the editor
+
+**Editor preservation during image generation:** Adding image nodes to the canvas triggers a state persistence round-trip through the Svelte store. Normally this causes `renderNodes()` which destroys all editors. During image generation, `commitCanvasStatePreservingEditors()` is used instead — it updates the internal structure key immediately so the Svelte `$effect`'s `render()` call sees no structural change and skips the destructive `renderNodes()`. The DOM is managed manually via `appendImageNodeToDOM()`. This keeps active streaming editors alive.
 
 When "Edit in New Thread" is clicked on a canvas image node:
 

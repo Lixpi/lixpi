@@ -241,6 +241,7 @@ export class WorkspaceConnectionManager {
 	private readonly nodeLookup: NodeLookup<InternalNodeBase> = new Map()
 	private readonly parentLookup: ParentLookup<InternalNodeBase> = new Map()
 
+	private nodeElements: Map<string, HTMLElement> = new Map()
 	private nodes: CanvasNode[] = []
 	private edges: WorkspaceEdge[] = []
 
@@ -286,6 +287,7 @@ export class WorkspaceConnectionManager {
 	}
 
 	public registerNodeElement(nodeId: string, nodeElement: HTMLDivElement) {
+		this.nodeElements.set(nodeId, nodeElement)
 		const updates = new Map([
 			[nodeId, { id: nodeId, nodeElement }]
 		])
@@ -515,6 +517,29 @@ export class WorkspaceConnectionManager {
 		this.selectEdge(null)
 	}
 
+	private computeMessageSourceT(nodeId: string, messageId: string): number | null {
+		const nodeEl = this.nodeElements.get(nodeId)
+		if (!nodeEl) return null
+
+		const messageEl = nodeEl.querySelector(`[data-message-id="${messageId}"]`)
+		if (!messageEl) return null
+
+		// Calculate relative Y position
+		const nodeRect = nodeEl.getBoundingClientRect()
+		const msgRect = messageEl.getBoundingClientRect()
+
+		// Center of the message element
+		const msgCenterY = msgRect.top + msgRect.height / 2
+
+		// Relative to node top
+		const relativeY = msgCenterY - nodeRect.top
+
+		// Convert to T value (0-1)
+		const t = relativeY / nodeRect.height
+
+		return Math.max(0, Math.min(1, t))
+	}
+
 	private computeRenderBounds(): RenderBounds | null {
 		if (!this.edges.length && !this.connectionInProgress) {
 			return null
@@ -671,8 +696,29 @@ export class WorkspaceConnectionManager {
 
 			// Use spread t values to prevent convergence, fall back to stored values
 			const tValues = spreadTValues.get(e.edgeId)
-			const sourceT = tValues?.sourceT ?? e.sourceT ?? 0.5
-			const targetT = tValues?.targetT ?? e.targetT ?? 0.5
+			let sourceT = tValues?.sourceT ?? e.sourceT ?? 0.5
+			let targetT = tValues?.targetT ?? e.targetT ?? 0.5
+
+			// If sourceMessageId is present, try to anchor to that specific message
+			if (e.sourceMessageId) {
+				const computedT = this.computeMessageSourceT(e.sourceNodeId, e.sourceMessageId)
+				if (computedT !== null) {
+					sourceT = computedT
+
+					// Re-calculate targetT to align with the specific message source height
+					// This prevents the arrow from pointing to the bottom of the target when the thread is long
+					const sourceNode = this.nodes.find(n => n.nodeId === e.sourceNodeId)
+					const targetNode = this.nodes.find(n => n.nodeId === e.targetNodeId)
+					if (sourceNode && targetNode) {
+						const sourceY = sourceNode.position.y + (sourceNode.dimensions.height * sourceT)
+						const targetTop = targetNode.position.y
+						const targetHeight = targetNode.dimensions.height
+
+						const idealT = (sourceY - targetTop) / targetHeight
+						targetT = Math.max(0.05, Math.min(0.95, idealT))
+					}
+				}
+			}
 
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,

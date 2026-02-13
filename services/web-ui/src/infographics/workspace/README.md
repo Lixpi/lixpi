@@ -46,6 +46,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Support streaming AI responses with real-time token parsing
 - Content is persisted separately from documents in the AI-Chat-Threads table
 - Automatically extract context from connected nodes (documents, images, other threads) when sending messages
+- **AI-generated images appear as separate canvas nodes** positioned to the right of the thread, not inline in the conversation. A connector edge links the thread to the image, with `sourceMessageId` on the edge tracking which specific `aiResponseMessage` produced the image. Progressive partial previews update the canvas node in real-time during generation. The revised prompt text is still inserted as text inside the AI response message to keep conversation context readable.
 
 ## Architecture
 

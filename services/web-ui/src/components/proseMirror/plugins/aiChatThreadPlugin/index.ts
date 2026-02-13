@@ -15,7 +15,8 @@ export {
     aiGeneratedImageNodeType,
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeView,
-    setAiGeneratedImageCallbacks
+    setAiGeneratedImageCallbacks,
+    getAiGeneratedImageCallbacks
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
 // Export all from plugin

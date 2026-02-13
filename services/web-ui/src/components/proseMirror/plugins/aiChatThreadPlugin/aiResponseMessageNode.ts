@@ -77,6 +77,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
     // Get references to the nested elements for manipulation
     const aiResponseMessageContainer = parentWrapper.querySelector('.ai-response-message')
+    parentWrapper.setAttribute('data-message-id', node.attrs.id)
     const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
     const spinnerElement = parentWrapper.querySelector('.ai-response-message-spinner')
     const bubbleElement = parentWrapper.querySelector('.ai-response-message-bubble')
@@ -166,6 +167,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             }
 
             node = updatedNode    // Update the node reference and refresh the animation
+            parentWrapper.setAttribute('data-message-id', node.attrs.id)
             updateAnimation()    // Update the animation state
             updateSpinnerState()
 

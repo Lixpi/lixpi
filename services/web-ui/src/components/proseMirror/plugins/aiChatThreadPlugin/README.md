@@ -226,7 +226,8 @@ sequenceDiagram
   - `textWrap: 'none' | 'left' | 'right'` - Text wrap mode
 - DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
 - **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
-- **MULTI-MODAL CONTEXT:** When extracting thread content for AI requests, AI-generated images are included as `nats-obj://workspace-{workspaceId}-files/{fileId}` references, enabling the LLM to reference previously generated images in the conversation.
+- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements instead of inline in the chat. The plugin delegates image events to `WorkspaceCanvas.ts` via `onImagePartialToCanvas` / `onImageCompleteToCanvas` callbacks. A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it. The revised prompt text is inserted as a paragraph in the AI response message.
+- **MULTI-MODAL CONTEXT:** Connected canvas images are included in AI requests via the workspace edge system (`ai-chat-thread-service.ts` → `extractConnectedContext()`). Legacy inline `aiGeneratedImage` nodes in older threads are still extracted via `ContentExtractor.collectContentWithImages()` for backwards compatibility.
 
 ## DOM Template System
 
@@ -444,10 +445,18 @@ Users see:
   - Streaming animation states (receiving/idle)
   - Boundary strip decoration
 
+- `aiGeneratedImageNode.ts` - AI-generated image node and canvas callback system:
+  - Exports ProseMirror node spec for `aiGeneratedImage` (atom node)
+  - Manages global `AiGeneratedImageCallbacks` via `setAiGeneratedImageCallbacks()` / `getAiGeneratedImageCallbacks()`
+  - Callbacks include `onImagePartialToCanvas`, `onImageCompleteToCanvas`, `onAddToCanvas`, `onEditInNewThread`
+  - `WorkspaceCanvas.ts` registers these callbacks to receive image events from the plugin
+  - The plugin calls `getAiGeneratedImageCallbacks()` during streaming to delegate image placement to the canvas
+
 - `aiChatThreadPlugin.ts` - Main orchestration logic:
   - Plugin state and lifecycle management
   - Content extraction and message conversion
   - Streaming event handling and DOM insertion
+  - Image generation delegates to canvas via `getAiGeneratedImageCallbacks()` (partial previews and final images appear as canvas nodes, not inline)
   - Decoration system (placeholders, boundaries)
   - No UI rendering - delegates to node-specific NodeViews and primitive components
 
@@ -513,6 +522,10 @@ class ContentExtractor {
    - Text parts: `{ type: 'text', text: '...' }`
    - Image parts: `{ type: 'image_url', image_url: { url: 'nats-obj://workspace-{workspaceId}-files/{fileId}' } }`
 6. Return message array ready for any LLM provider (provider-agnostic)
+
+**Dual Image Context Paths:**
+- **Canvas edges (primary):** New AI-generated images live as `ImageCanvasNode` on the canvas, connected via `WorkspaceEdge` with `sourceMessageId`. The `ai-chat-thread-service.ts` → `extractConnectedContext()` traverses these edges and includes connected images in AI requests.
+- **Inline nodes (legacy/backwards compat):** Older threads may still contain inline `aiGeneratedImage` ProseMirror nodes. `collectContentWithImages()` extracts these as `nats-obj://` references. Both paths produce the same provider-agnostic format for the LLM API.
 
 ### PositionFinder
 Document position utilities for content insertion:
