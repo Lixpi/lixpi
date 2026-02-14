@@ -86,12 +86,7 @@
     display: flex;
     flex-direction: column;
     overflow: visible;
-    transition: box-shadow 0.15s ease;
     position: relative;
-
-    &:hover {
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16), 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
 
     &:hover .document-resize-handle {
         opacity: 1;
@@ -106,7 +101,6 @@
 
     &.is-selected,
     &:focus-within {
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
         outline: none;
     }
 
@@ -151,16 +145,10 @@
 
 
 .workspace-image-node {
-    // Override document-node defaults for images
     background: transparent;
     border-radius: 4px;
     overflow: visible;
-    box-shadow: none;
     padding: 0;
-
-    &:hover {
-        box-shadow: none;
-    }
 
     &.is-resizing {
         user-select: none;
