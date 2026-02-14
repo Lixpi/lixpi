@@ -1,14 +1,12 @@
-/**
- * ShiftingGradientRenderer - Animated freeform gradient background
- *
- * Inspired by animated freeform gradient wallpapers found in modern messaging apps.
- * - Renders to 60x80 bitmap, scaled up with bilinear interpolation
- * - 4 color points with inverse distance weighting (distance^4 falloff)
- * - Swirl distortion effect for organic feel
- * - 8 phase positions, animation triggered on message send
- *
- * @see documentation/features/SHIFTING-GRADIENT.md for full technical details
- */
+// ShiftingGradientRenderer - Animated freeform gradient background
+//
+// Inspired by animated freeform gradient wallpapers found in modern messaging apps.
+// - Renders to 60x80 bitmap, scaled up with bilinear interpolation
+// - 4 color points with inverse distance weighting (distance^4 falloff)
+// - Swirl distortion effect for organic feel
+// - 8 phase positions, animation triggered on message send
+//
+// See documentation/features/SHIFTING-GRADIENT.md for full technical details
 
 // Dreamy sky pastel colors inspired by desert sunset palette.
 // Ultra-light versions for a soft, airy sky look.
@@ -115,9 +113,7 @@ class ShiftingGradientRenderer {
         return ShiftingGradientRenderer.instance
     }
 
-    /**
-     * Subscribe a canvas element to receive gradient updates
-     */
+    // Subscribe a canvas element to receive gradient updates
     subscribe(canvas: HTMLCanvasElement): void {
         if (this.subscribedCanvases.has(canvas)) return
 
@@ -146,9 +142,7 @@ class ShiftingGradientRenderer {
         }
     }
 
-    /**
-     * Unsubscribe a canvas element from gradient updates
-     */
+    // Unsubscribe a canvas element from gradient updates
     unsubscribe(canvas: HTMLCanvasElement): void {
         this.subscribedCanvases.delete(canvas)
 
@@ -160,9 +154,7 @@ class ShiftingGradientRenderer {
         }
     }
 
-    /**
-     * Set visibility of a subscribed canvas (for IntersectionObserver)
-     */
+    // Set visibility of a subscribed canvas (for IntersectionObserver)
     setVisibility(canvas: HTMLCanvasElement, visible: boolean): void {
         const entry = this.subscribedCanvases.get(canvas)
         if (entry) {
@@ -170,9 +162,7 @@ class ShiftingGradientRenderer {
         }
     }
 
-    /**
-     * Trigger transition to next phase (called on message send)
-     */
+    // Trigger transition to next phase (called on message send)
     nextPhase(): void {
         // Decrement phase and interpolate between phases
         const next = (this.currentPhase - 1 + 8) % 8
@@ -260,9 +250,7 @@ class ShiftingGradientRenderer {
         }))
     }
 
-    /**
-     * Render the gradient to the offscreen canvas
-     */
+    // Render the gradient to the offscreen canvas
     private renderGradient(): void {
         const positions = this.getInterpolatedPositions()
         const data = this.imageData.data
@@ -427,9 +415,7 @@ class ShiftingGradientRenderer {
         this.pattern = { image: img, options: resolved }
     }
 
-    /**
-     * Clean up resources
-     */
+    // Clean up resources
     destroy(): void {
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId)
@@ -441,9 +427,7 @@ class ShiftingGradientRenderer {
     }
 }
 
-/**
- * Creates and attaches a shifting gradient background canvas to a container element
- */
+// Creates and attaches a shifting gradient background canvas to a container element
 export function createShiftingGradientBackground(container: HTMLElement): {
     canvas: HTMLCanvasElement
     destroy: () => void
@@ -539,9 +523,7 @@ export function createShiftingGradientBackground(container: HTMLElement): {
     }
 }
 
-/**
- * Get the singleton renderer instance for manual control
- */
+// Get the singleton renderer instance for manual control
 export function getShiftingGradientRenderer(): ShiftingGradientRenderer {
     return ShiftingGradientRenderer.getInstance()
 }
