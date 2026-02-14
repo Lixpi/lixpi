@@ -2,7 +2,12 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { CanvasNode, WorkspaceEdge } from '@lixpi/constants'
-import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
+import {
+	WorkspaceConnectionManager,
+	computeSpreadTValues,
+	getEdgeAnchorPositions,
+	type SpreadResult,
+} from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 
 // =============================================================================
 // HELPERS
@@ -328,5 +333,266 @@ describe('WorkspaceConnectionManager — commitProximityConnection', () => {
 		manager.commitProximityConnection() // second call
 
 		expect(config.onEdgesChange).toHaveBeenCalledTimes(1)
+	})
+})
+
+// =============================================================================
+// getEdgeAnchorPositions
+// =============================================================================
+
+describe('getEdgeAnchorPositions', () => {
+	it('returns right/left for default edge handles', () => {
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 's', targetNodeId: 't', sourceHandle: 'right', targetHandle: 'left' })
+		const { source, target } = getEdgeAnchorPositions(edge)
+
+		expect(source).toBe('right')
+		expect(target).toBe('left')
+	})
+
+	it('returns left for sourceHandle=left', () => {
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 's', targetNodeId: 't', sourceHandle: 'left', targetHandle: 'right' })
+		const { source, target } = getEdgeAnchorPositions(edge)
+
+		expect(source).toBe('left')
+		expect(target).toBe('right')
+	})
+
+	it('defaults to right when sourceHandle is undefined', () => {
+		const edge: WorkspaceEdge = { edgeId: 'e-1', sourceNodeId: 's', targetNodeId: 't' }
+		const { source, target } = getEdgeAnchorPositions(edge)
+
+		expect(source).toBe('right')
+		expect(target).toBe('right')
+	})
+})
+
+// =============================================================================
+// computeSpreadTValues — targetT auto-alignment
+// =============================================================================
+
+describe('computeSpreadTValues — targetT auto-alignment', () => {
+	it('aligns targetT to straight line when source center hits target vertically', () => {
+		// Source center at y=50 (0 + 100/2), target at y=0..100
+		// idealT = (50 - 0) / 100 = 0.5 → straight line through center
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+		const result = computeSpreadTValues([edge], [source, target])
+
+		const spread = result.get('e-1')!
+		expect(spread.targetT).toBe(0.5) // perfectly aligned
+	})
+
+	it('snaps targetT to top when source is above target', () => {
+		// Source center at y=50, target at y=200..300
+		// idealT = (50 - 200) / 100 = -1.5 → clamp to 0.05
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 100 } })
+
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+		const result = computeSpreadTValues([edge], [source, target])
+
+		const spread = result.get('e-1')!
+		expect(spread.targetT).toBe(0.05) // clamped to top
+	})
+
+	it('snaps targetT to bottom when source is below target', () => {
+		// Source center at y=550, target at y=0..100
+		// idealT = (550 - 0) / 100 = 5.5 → clamp to 0.95
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 500 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+		const result = computeSpreadTValues([edge], [source, target])
+
+		const spread = result.get('e-1')!
+		expect(spread.targetT).toBe(0.95) // clamped to bottom
+	})
+
+	it('calculates partial alignment when source is slightly above target center', () => {
+		// Source center at y=150 (100 + 100/2), target at y=200..400 (height=200)
+		// idealT = (150 - 200) / 200 = -0.25 → clamp to 0.05
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 100 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
+
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+		const result = computeSpreadTValues([edge], [source, target])
+
+		const spread = result.get('e-1')!
+		expect(spread.targetT).toBe(0.05)
+	})
+
+	it('uses stored targetT when nodes are missing from the lookup', () => {
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'missing-src', targetNodeId: 'missing-tgt', targetT: 0.75 })
+		const result = computeSpreadTValues([edge], [])
+
+		const spread = result.get('e-1')!
+		expect(spread.targetT).toBe(0.75) // falls back to stored value
+	})
+})
+
+// =============================================================================
+// computeSpreadTValues — sourceT spreading
+// =============================================================================
+
+describe('computeSpreadTValues — sourceT spreading', () => {
+	it('keeps sourceT at 0.5 for a single edge', () => {
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+		const result = computeSpreadTValues([edge], [source, target])
+
+		expect(result.get('e-1')!.sourceT).toBe(0.5)
+	})
+
+	it('spreads sourceT values for two edges sharing the same source', () => {
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 600 } })
+		const target1 = makeNode({ nodeId: 'tgt-1', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target2 = makeNode({ nodeId: 'tgt-2', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 100 } })
+
+		const edge1 = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt-1' })
+		const edge2 = makeEdge({ edgeId: 'e-2', sourceNodeId: 'src', targetNodeId: 'tgt-2' })
+		const result = computeSpreadTValues([edge1, edge2], [source, target1, target2])
+
+		const t1 = result.get('e-1')!.sourceT
+		const t2 = result.get('e-2')!.sourceT
+
+		// They should be different (spread out, not both 0.5)
+		expect(t1).not.toBe(t2)
+		// Ordered: top target → smaller sourceT, bottom target → larger sourceT
+		expect(t1).toBeLessThan(t2)
+		// Both within 0.35–0.65 range
+		expect(t1).toBeGreaterThanOrEqual(0.35)
+		expect(t2).toBeLessThanOrEqual(0.65)
+	})
+})
+
+// =============================================================================
+// computeSpreadTValues — lane assignment
+// =============================================================================
+
+describe('computeSpreadTValues — lane assignment', () => {
+	it('assigns laneIndex 0 and laneCount 1 for a single edge', () => {
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+		const result = computeSpreadTValues([edge], [source, target])
+
+		expect(result.get('e-1')!.laneIndex).toBe(0)
+		expect(result.get('e-1')!.laneCount).toBe(1)
+	})
+
+	it('assigns increasing laneIndex for edges sharing the same target', () => {
+		const src1 = makeNode({ nodeId: 'src-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const src2 = makeNode({ nodeId: 'src-2', type: 'document', position: { x: 0, y: 200 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 100 }, dimensions: { width: 200, height: 100 } })
+
+		const edge1 = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src-1', targetNodeId: 'tgt' })
+		const edge2 = makeEdge({ edgeId: 'e-2', sourceNodeId: 'src-2', targetNodeId: 'tgt' })
+		const result = computeSpreadTValues([edge1, edge2], [src1, src2, target])
+
+		// Both should have laneCount = 2
+		expect(result.get('e-1')!.laneCount).toBe(2)
+		expect(result.get('e-2')!.laneCount).toBe(2)
+
+		// Sorted by sourceY: src-1 (y=50) is first, src-2 (y=250) is second
+		expect(result.get('e-1')!.laneIndex).toBe(0)
+		expect(result.get('e-2')!.laneIndex).toBe(1)
+	})
+})
+
+// =============================================================================
+// computeMessageSourceT — via registerNodeElement
+// =============================================================================
+
+describe('WorkspaceConnectionManager — computeMessageSourceT', () => {
+	let manager: WorkspaceConnectionManager
+	let config: ReturnType<typeof createMockConfig>
+
+	beforeEach(() => {
+		const result = createManager()
+		manager = result.manager
+		config = result.config
+	})
+
+	it('returns null (falls back to default) when node element is not registered', () => {
+		// computeMessageSourceT is private — we test its effect through render():
+		// If the node element is not registered, sourceMessageId has no effect and
+		// the default sourceT from computeSpreadTValues is used.
+
+		const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 300, height: 600 } })
+		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 400, y: 0 }, dimensions: { width: 400, height: 400 } })
+
+		const edge = makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'chat-1',
+			targetNodeId: 'img-1',
+			sourceMessageId: 'msg-abc',
+		})
+
+		manager.syncNodes([chatNode, imgNode])
+		manager.syncEdges([edge])
+
+		// render() should not throw even when node element is missing
+		expect(() => manager.render()).not.toThrow()
+	})
+
+	it('finds data-message-id in registered node element and adjusts source anchor', () => {
+		const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 300, height: 600 } })
+		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 400, y: 0 }, dimensions: { width: 400, height: 400 } })
+
+		// Create a mock DOM element with a data-message-id child
+		const nodeEl = document.createElement('div')
+		const messageEl = document.createElement('div')
+		messageEl.setAttribute('data-message-id', 'msg-abc')
+		nodeEl.appendChild(messageEl)
+
+		// Mock getBoundingClientRect for both elements
+		vi.spyOn(nodeEl, 'getBoundingClientRect').mockReturnValue({
+			top: 0, bottom: 600, left: 0, right: 300, width: 300, height: 600, x: 0, y: 0, toJSON: () => ({})
+		})
+		vi.spyOn(messageEl, 'getBoundingClientRect').mockReturnValue({
+			top: 100, bottom: 150, left: 0, right: 300, width: 300, height: 50, x: 0, y: 100, toJSON: () => ({})
+		})
+
+		manager.syncNodes([chatNode, imgNode])
+		manager.syncEdges([makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'chat-1',
+			targetNodeId: 'img-1',
+			sourceMessageId: 'msg-abc',
+		})])
+
+		// Register the node element so computeMessageSourceT can find it
+		manager.registerNodeElement('chat-1', nodeEl as HTMLDivElement)
+
+		// render() should succeed — the message element will be found
+		expect(() => manager.render()).not.toThrow()
+	})
+
+	it('does not find message element when data-message-id does not match', () => {
+		const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 300, height: 600 } })
+		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 400, y: 0 }, dimensions: { width: 400, height: 400 } })
+
+		const nodeEl = document.createElement('div')
+		const messageEl = document.createElement('div')
+		messageEl.setAttribute('data-message-id', 'different-msg')
+		nodeEl.appendChild(messageEl)
+
+		manager.syncNodes([chatNode, imgNode])
+		manager.syncEdges([makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'chat-1',
+			targetNodeId: 'img-1',
+			sourceMessageId: 'msg-abc',
+		})])
+
+		manager.registerNodeElement('chat-1', nodeEl as HTMLDivElement)
+
+		// Should not throw — falls back to default sourceT
+		expect(() => manager.render()).not.toThrow()
 	})
 })

@@ -83,7 +83,7 @@ function toRendererPoint(point: { x: number; y: number }, transform: Transform) 
 	}
 }
 
-function getEdgeAnchorPositions(edge: WorkspaceEdge): { source: 'left' | 'right'; target: 'left' | 'right' } {
+export function getEdgeAnchorPositions(edge: WorkspaceEdge): { source: 'left' | 'right'; target: 'left' | 'right' } {
 	const source = edge.sourceHandle === 'left' ? 'left' : 'right'
 	const target = edge.targetHandle === 'left' ? 'left' : 'right'
 	return { source, target }
@@ -116,7 +116,7 @@ function isSameConnection(
 // Edges are ordered by the OTHER node's Y position to prevent line crossings
 // (higher source Y = lower t on target, so lines don't cross)
 // Also computes lane indices for vertical segment ordering
-type SpreadResult = {
+export type SpreadResult = {
 	sourceT: number
 	targetT: number
 	laneIndex: number      // Index within edges sharing same target (0 = topmost source)
@@ -124,7 +124,7 @@ type SpreadResult = {
 	sourceY: number        // Source node center Y for lane calculation
 }
 
-function computeSpreadTValues(
+export function computeSpreadTValues(
 	edges: WorkspaceEdge[],
 	nodes: CanvasNode[]
 ): Map<string, SpreadResult> {
