@@ -27,6 +27,7 @@ import { WorkspaceConnectionManager } from '$src/infographics/workspace/Workspac
 import { getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeImagePositionNextToThread, countExistingImagesForThread } from '$src/infographics/workspace/imagePositioning.ts'
+import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
@@ -111,6 +112,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedEdgeId: string | null = null
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
+    const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
     const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
 
@@ -698,8 +700,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         selectedNodeId = nodeId
 
         if (nodeId) {
-            const newNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`)
+            const newNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
             newNode?.classList.add('is-selected')
+            if (newNode) {
+                nodeLayerManager.bringToFront(newNode)
+            }
         }
 
         if (nodeId) {
