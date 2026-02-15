@@ -32,6 +32,8 @@ type PureDropdownConfig = {
     renderTitleForSelectedValue?: boolean
     enableTagFilter?: boolean
     availableTags?: string[]
+    mountToBody?: boolean
+    disableAutoPositioning?: boolean
     onSelect: (option: DropdownOption) => void
 }
 
@@ -40,7 +42,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
         id,
         selectedValue,
         options,
-    theme = 'dark',
+        theme = 'dark',
         buttonIcon = chevronDownIcon,
         ignoreColorValuesForOptions = false,
         ignoreColorValuesForSelectedValue = false,
@@ -48,6 +50,8 @@ export function createPureDropdown(config: PureDropdownConfig) {
         renderIconForOptions = true,
         renderTitleForSelectedValue = true,
         enableTagFilter = false,
+        mountToBody = false,
+        disableAutoPositioning = false,
         onSelect
     } = config
 
@@ -121,7 +125,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Render options list based on current filter (single source of truth)
     const renderOptionsList = () => {
-        const submenuList = dom.querySelector('.submenu')
+        const submenuList = infoBubble?.dom?.querySelector('.submenu')
         if (!submenuList) return
 
         const filteredOptions = getFilteredOptions()
@@ -143,7 +147,9 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Update tag filter UI to show active state
     const updateTagFilterUI = () => {
-        const tagFilterElements = dom.querySelectorAll('.tag-filter-item')
+        const tagFilterElements = infoBubble?.dom?.querySelectorAll('.tag-filter-item')
+        if (!tagFilterElements) return
+
         tagFilterElements.forEach(el => {
             const tag = el.getAttribute('data-tag')
             if (tag && activeFilterTags.has(tag)) {
@@ -204,6 +210,8 @@ export function createPureDropdown(config: PureDropdownConfig) {
         headerContent,
         bodyContent,
         visible: false,
+        className: 'dropdown-menu-popover',
+        disableAutoPositioning,
         onOpen: () => {
             dom.classList.add('dropdown-open')
         },
@@ -212,9 +220,13 @@ export function createPureDropdown(config: PureDropdownConfig) {
         }
     })
 
-    // Append info bubble to dropdown
-    const dropdownMenu = dom.querySelector('.dots-dropdown-menu')
-    dropdownMenu.appendChild(infoBubble.dom)
+    // Append info bubble to dropdown or body
+    if (mountToBody) {
+        document.body.appendChild(infoBubble.dom)
+    } else {
+        const dropdownMenu = dom.querySelector('.dots-dropdown-menu')
+        dropdownMenu.appendChild(infoBubble.dom)
+    }
 
     // Update selected value display
     const updateSelectedDisplay = () => {

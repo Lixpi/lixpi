@@ -61,7 +61,9 @@ createPureDropdown({
   renderIconForOptions?: boolean,
   renderTitleForSelectedValue?: boolean,
   enableTagFilter?: boolean,
-  availableTags?: ['tag1', 'tag2']
+  availableTags?: ['tag1', 'tag2'],
+  mountToBody?: boolean,
+  disableAutoPositioning?: boolean
 })
 // Returns: { dom: HTMLElement, update: (option) => void, destroy: () => void }
 ```
@@ -76,6 +78,8 @@ createPureDropdown({
 - `buttonIcon`: SVG icon for dropdown button (default: chevron)
 - `enableTagFilter`: Show tag filter in dropdown header (default: false)
 - `availableTags`: Tags for filtering options
+- `mountToBody`: Appends bubble to `document.body` when `true`, otherwise nests it under the trigger container
+- `disableAutoPositioning`: Disables viewport `top/left` placement and relies on CSS placement while keeping arrow-to-anchor alignment
 - Various rendering flags for icons, colors, titles
 
 **Note**: `renderPosition` is deprecated and removed. The dropdown now uses InfoBubble's smart auto-flip logic instead.

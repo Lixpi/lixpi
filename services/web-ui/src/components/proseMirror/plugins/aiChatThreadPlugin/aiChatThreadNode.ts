@@ -6,9 +6,10 @@ export const aiChatThreadNodeType = 'aiChatThread'
 
 export const aiChatThreadNodeSpec = {
     group: 'block',
-    // Thread is a pure container: messages + a dedicated input node always at the end
-    // New documents start with only `aiUserInput`.
-    content: '(aiUserMessage | aiResponseMessage)* aiUserInput',
+    // Thread is a pure conversation container: messages only.
+    // The composer input is now a separate floating canvas element.
+    // Starts empty — messages are added when the user submits from the floating input.
+    content: '(aiUserMessage | aiResponseMessage)*',
     defining: false, // Changed to false to allow better cursor interaction
     draggable: false,
     isolating: false, // Changed to false to allow cursor interaction

@@ -34,6 +34,8 @@ import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRen
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
+import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
+import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageToggle } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -205,6 +207,139 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const targetRect = targetEl.getBoundingClientRect()
 
         canvasBubbleMenu.reposition({ targetRect, placement: 'below' })
+    }
+
+    // ========== FLOATING AI PROMPT INPUT ==========
+
+    let floatingInputEl: HTMLDivElement | null = null
+    let floatingInputEditor: any = null
+    let floatingInputGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
+
+    const promptInputController = new AiPromptInputController({
+        workspaceId,
+        getCanvasState: () => currentCanvasState,
+        persistCanvasState: (state: CanvasState) => {
+            commitCanvasState(state)
+        },
+        createAiChatThread: async (params) => {
+            const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+            if (!aiChatThreadService) return null
+            return aiChatThreadService.createAiChatThread(params)
+        },
+        onAiSubmit: (threadId, payload) => {
+            const entry = threadEditors.get(threadId)
+            if (!entry) return
+
+            // Trigger gradient animation on the target thread
+            entry.triggerGradientAnimation?.()
+
+            // The actual AI request is triggered by USE_AI_CHAT_META dispatch
+            // which the controller already handles via injectMessageAndSubmit
+        },
+        onAiStop: (threadId) => {
+            const entry = threadEditors.get(threadId)
+            if (!entry) return
+            entry.aiService.stopChatMessage()
+        },
+    })
+
+    function createFloatingInput(): void {
+        if (floatingInputEl) return
+
+        floatingInputEl = document.createElement('div')
+        floatingInputEl.className = 'ai-prompt-input-floating nopan'
+        floatingInputEl.style.position = 'absolute'
+        floatingInputEl.style.display = 'none'
+        floatingInputEl.style.zIndex = '9999'
+        floatingInputEl.style.width = '400px'
+
+        // Add gradient background
+        floatingInputGradient = createShiftingGradientBackground(floatingInputEl)
+
+        const editorContainer = document.createElement('div')
+        editorContainer.className = 'floating-input-editor nopan'
+        floatingInputEl.appendChild(editorContainer)
+
+        // Pass generic control factories directly — the NodeView builds the
+        // controls adapter internally from view+getPos, so by the time these
+        // are called the controls arg already has the right interface.
+        const controlFactories = {
+            createModelDropdown: createGenericAiModelDropdown,
+            createImageToggle: createGenericImageToggle,
+            createSubmitButton: createGenericSubmitButton,
+        }
+
+        floatingInputEditor = new ProseMirrorEditor({
+            editorMountElement: editorContainer,
+            content: document.createElement('div'),
+            initialVal: {},
+            isDisabled: false,
+            documentType: 'aiPromptInput',
+            onEditorChange: () => {},
+            onProjectTitleChange: () => {},
+            onPromptSubmit: (data: any) => {
+                promptInputController.submitMessage({
+                    contentJSON: data.contentJSON,
+                    aiModel: data.aiModel,
+                    imageOptions: data.imageOptions,
+                })
+            },
+            onPromptStop: () => {
+                promptInputController.stopStreaming()
+            },
+            isPromptReceiving: () => promptInputController.isReceiving(),
+            promptControlFactories: controlFactories,
+        })
+
+        // Append to the pane element (outside viewport transform, tracks pane coordinates)
+        viewportEl.appendChild(floatingInputEl)
+    }
+
+    function showFloatingInput(nodeId: string): void {
+        if (!floatingInputEl) createFloatingInput()
+        if (!floatingInputEl || !currentCanvasState) return
+
+        const targetCanvasNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
+        if (!targetCanvasNode) return
+
+        // Set the controller target
+        const refId = (targetCanvasNode as any).referenceId || nodeId
+        promptInputController.setTarget({
+            nodeId,
+            type: targetCanvasNode.type,
+            referenceId: refId,
+        })
+
+        positionFloatingInput(targetCanvasNode)
+        floatingInputEl.style.display = 'block'
+    }
+
+    function hideFloatingInput(): void {
+        if (floatingInputEl) {
+            floatingInputEl.style.display = 'none'
+        }
+        promptInputController.setTarget(null)
+    }
+
+    function positionFloatingInput(targetNode: CanvasNode): void {
+        if (!floatingInputEl) return
+
+        // Position below the target node in canvas coordinates
+        const inputX = targetNode.position.x
+        const inputY = targetNode.position.y + (targetNode.dimensions?.height ?? 400) + 16
+
+        floatingInputEl.style.left = `${inputX}px`
+        floatingInputEl.style.top = `${inputY}px`
+        floatingInputEl.style.width = `${targetNode.dimensions?.width ?? 400}px`
+    }
+
+    function repositionFloatingInput(): void {
+        if (!floatingInputEl || floatingInputEl.style.display === 'none' || !selectedNodeId || !currentCanvasState) return
+
+        const targetNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === selectedNodeId)
+        if (targetNode) {
+            positionFloatingInput(targetNode)
+        }
     }
 
     // Set up callbacks for AI-generated images
@@ -553,8 +688,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             },
                             content: [
                                 {
-                                    type: 'paragraph',
-                                    content: [{ type: 'text', text: 'Describe how you want to edit this image...' }]
+                                    type: 'aiUserMessage',
+                                    attrs: { id: uuidv4(), createdAt: Date.now() },
+                                    content: [
+                                        {
+                                            type: 'paragraph',
+                                            content: [{ type: 'text', text: 'Describe how you want to edit this image...' }]
+                                        }
+                                    ]
                                 }
                             ]
                         }
@@ -712,8 +853,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager?.deselect()
             updateEdgeEndpointHandles()
             showCanvasBubbleMenuForNode(nodeId)
+            showFloatingInput(nodeId)
         } else {
             hideCanvasBubbleMenu()
+            hideFloatingInput()
         }
     }
 
@@ -1091,6 +1234,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             scheduleEdgesRender()
             repositionCanvasBubbleMenu()
+
+            // Reposition floating input to follow dragged node
+            if (floatingInputEl && floatingInputEl.style.display !== 'none' && nodeId === selectedNodeId) {
+                const inputY = currentPos.y + currentDims.height + 16
+                floatingInputEl.style.left = `${currentPos.x}px`
+                floatingInputEl.style.top = `${inputY}px`
+                floatingInputEl.style.width = `${currentDims.width}px`
+            }
         }
 
         const handleMouseUp = () => {
@@ -1453,6 +1604,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     triggerGradientAnimation: gradient.triggerAnimation
                 })
 
+                // Register with the prompt input controller so it can inject messages
+                promptInputController.registerThreadEditor(node.referenceId, {
+                    editorView: editor.editorView,
+                    triggerGradientAnimation: gradient.triggerAnimation,
+                })
+
                 loadedNodeIds.add(node.nodeId)
             } catch (error) {
                 console.error('Failed to create AI chat thread editor:', error)
@@ -1545,10 +1702,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         documentEditors.clear()
 
-        for (const [, { editor, aiService, gradientCleanup }] of threadEditors) {
+        for (const [threadId, { editor, aiService, gradientCleanup }] of threadEditors) {
             if (editor?.destroy) editor.destroy()
             if (aiService?.disconnect) aiService.disconnect()
             if (gradientCleanup) gradientCleanup()
+            promptInputController.unregisterThreadEditor(threadId)
         }
         threadEditors.clear()
 
@@ -1735,15 +1893,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (aiService?.disconnect) aiService.disconnect()
             }
             documentEditors.clear()
-            for (const [, { editor, aiService, gradientCleanup }] of threadEditors) {
+            for (const [threadId, { editor, aiService, gradientCleanup }] of threadEditors) {
                 if (editor?.destroy) editor.destroy()
                 if (aiService?.disconnect) aiService.disconnect()
                 if (gradientCleanup) gradientCleanup()
+                promptInputController.unregisterThreadEditor(threadId)
             }
             threadEditors.clear()
             canvasImageLifecycle.destroy()
             canvasBubbleMenu?.destroy()
             canvasBubbleMenu = null
+
+            // Clean up floating input
+            if (floatingInputEditor?.destroy) floatingInputEditor.destroy()
+            floatingInputGradient?.destroy()
+            floatingInputEl?.remove()
+            floatingInputEl = null
+            floatingInputEditor = null
+            floatingInputGradient = null
+            promptInputController.destroy()
         }
     }
 }

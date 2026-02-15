@@ -23,14 +23,19 @@ import {
     aiChatThreadNodeSpec,
     aiResponseMessageNodeType,
     aiResponseMessageNodeSpec,
-    aiUserInputNodeType,
-    aiUserInputNodeSpec,
     aiUserMessageNodeType,
     aiUserMessageNodeSpec,
     aiGeneratedImageNodeType,
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeView
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
+// aiUserInput is kept in the schema for legacy content migration but no longer imported here
+import { aiUserInputNodeType, aiUserInputNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
+import {
+    createAiPromptInputPlugin,
+    aiPromptInputNodeType,
+    aiPromptInputNodeSpec
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin'
 import { createCodeBlockPlugin, codeBlockInputRule } from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
 import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNodePlugin"
 
@@ -53,7 +58,8 @@ import { defaultAttrs as defautSubtaskAttrs } from '$src/components/proseMirror/
 // Document type constants
 const DOCUMENT_TYPE = {
     DOCUMENT: 'document',
-    AI_CHAT_THREAD: 'aiChatThread'
+    AI_CHAT_THREAD: 'aiChatThread',
+    AI_PROMPT_INPUT: 'aiPromptInput'
 }
 
 // `nodesBuilder` extends the base ProseMirror `schema` with custom node types defined in `supportedNodes`.
@@ -67,9 +73,15 @@ const nodesBuilder = (schema, supportedNodes, documentType) => {
     // Determine doc content based on documentType
     // - 'document': Regular documents with title and block content
     // - 'aiChatThread': AI chat thread with title and aiChatThread nodes
-    const docContent = documentType === DOCUMENT_TYPE.AI_CHAT_THREAD
-        ? `${documentTitleNodeType} ${aiChatThreadNodeType}+`
-        : `${documentTitleNodeType} block+`
+    // - 'aiPromptInput': Floating AI prompt input (single aiPromptInput node)
+    let docContent
+    if (documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
+        docContent = `${documentTitleNodeType} ${aiChatThreadNodeType}+`
+    } else if (documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
+        docContent = `${aiPromptInputNodeType}`
+    } else {
+        docContent = `${documentTitleNodeType} block+`
+    }
 
     let extendedSchema = schema.spec.nodes
     .update('doc', {
@@ -103,12 +115,20 @@ export class ProseMirrorEditor {
         onEditorChange,
         onProjectTitleChange,
         onAiChatSubmit,
-        onAiChatStop
+        onAiChatStop,
+        onPromptSubmit,
+        onPromptStop,
+        isPromptReceiving,
+        promptControlFactories
     }) {
         this.onEditorChange = onEditorChange
         this.onProjectTitleChange = onProjectTitleChange
         this.onAiChatSubmit = onAiChatSubmit
         this.onAiChatStop = onAiChatStop
+        this.onPromptSubmit = onPromptSubmit
+        this.onPromptStop = onPromptStop
+        this.isPromptReceiving = isPromptReceiving
+        this.promptControlFactories = promptControlFactories
         this.isDisabled = isDisabled
         this.documentType = documentType
         this.threadId = threadId
@@ -135,6 +155,12 @@ export class ProseMirrorEditor {
             initialValKeys: initialVal ? Object.keys(initialVal) : null,
             initialValType: initialVal?.type
         })
+
+        if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
+            // Floating prompt input — always create fresh
+            const inputNode = this.editorSchema.nodes[aiPromptInputNodeType].createAndFill()
+            return this.editorSchema.nodes.doc.create(null, [inputNode])
+        }
 
         if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
             if (hasValidContent) {
@@ -164,16 +190,24 @@ export class ProseMirrorEditor {
     }
 
     createSchema() {
-        const allNodes = this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD
-            ? {
+        let allNodes
+        if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD) {
+            allNodes = {
                 ...customNodes,
                 [aiChatThreadNodeType]: aiChatThreadNodeSpec,
                 [aiResponseMessageNodeType]: aiResponseMessageNodeSpec,
+                // aiUserInput kept in schema for legacy content migration
                 [aiUserInputNodeType]: aiUserInputNodeSpec,
                 [aiUserMessageNodeType]: aiUserMessageNodeSpec,
                 [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec
             }
-            : { ...customNodes }
+        } else if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
+            allNodes = {
+                [aiPromptInputNodeType]: aiPromptInputNodeSpec
+            }
+        } else {
+            allNodes = { ...customNodes }
+        }
 
         return new Schema({
             nodes: nodesBuilder(schema, allNodes, this.documentType),
@@ -213,6 +247,21 @@ export class ProseMirrorEditor {
                         titlePlaceholder: 'New document',
                         paragraphPlaceholder: 'Type something and hit Cmd+Enter on Mac or Ctrl+Enter on PC to send it to AI.\n'
                     }
+                })
+            )
+        }
+
+        // Add aiPromptInput-specific plugin for the floating input editor
+        if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
+            basePlugins.push(
+                createAiPromptInputPlugin({
+                    onSubmit: (data) => this.onPromptSubmit?.(data),
+                    onStop: () => this.onPromptStop?.(),
+                    isReceiving: () => this.isPromptReceiving?.() ?? false,
+                    createModelDropdown: this.promptControlFactories?.createModelDropdown,
+                    createImageToggle: this.promptControlFactories?.createImageToggle,
+                    createSubmitButton: this.promptControlFactories?.createSubmitButton,
+                    placeholderText: 'Type something and hit Cmd+Enter to send…'
                 })
             )
         }

@@ -58,6 +58,7 @@ createInfoBubble({
   onOpen?: () => void,                    // NEW: Called when bubble opens
   onClose?: () => void,                   // NEW: Called when bubble closes
   closeOnClickOutside?: boolean,          // NEW: Default true
+  disableAutoPositioning?: boolean,       // NEW: Keep bubble position CSS-driven, only arrow alignment updates
   offset?: { x?: number, y?: number },    // NEW: Optional pixel offset applied to computed position
   arrowCrossOffset?: number,              // NEW: Optional distance of arrow from edge (overrides default 8px)
   className?: string
@@ -85,6 +86,7 @@ createInfoBubble({
 - **`onOpen`**: Callback executed when bubble opens
 - **`onClose`**: Callback executed when bubble closes
 - **`closeOnClickOutside`**: Whether to close when clicking outside (default: true)
+- **`disableAutoPositioning`**: When `true`, skips viewport `top/left` placement, keeps arrow styling unchanged, and shifts the bubble wrapper in CSS space so the arrow tip aligns to `positioningAnchor`.
 - **`offset`**: Spacing from anchor in pixels. Defaults to `{ x: 0, y: 20 }`. The `y` value creates spacing in the arrow's direction (e.g., 20px below anchor for `arrowSide='top'`).
 - **`arrowCrossOffset`**: Optional distance (in pixels) of the arrow from the bubble's edge. Defaults to `8px` (from CSS). Use this when you have a larger `border-radius` on the bubble to prevent the arrow from visually conflicting with rounded corners. For example, if `border-radius: 10px`, use `arrowCrossOffset: 20` to move the arrow further from the corner.
 - `className`: Optional CSS class to add to the wrapper element

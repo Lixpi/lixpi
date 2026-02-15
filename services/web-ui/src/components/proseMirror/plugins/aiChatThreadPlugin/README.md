@@ -188,22 +188,22 @@ sequenceDiagram
 ### Schema Nodes
 
 **`aiChatThread`** - Container for entire conversation
-- Content: `(aiUserMessage | aiResponseMessage)* aiUserInput` (composer is always last)
+- Content: `(aiUserMessage | aiResponseMessage)+` (pure conversation log, no inline composer)
 - Attributes:
   - `threadId: string | null` - Unique identifier for the thread
   - `status: 'active'|'paused'|'completed'` - Thread lifecycle state
   - `aiModel: string` - Selected AI model (e.g., "Anthropic:claude-3-5-sonnet")
 - DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model]`
+- **Note:** User input is handled by the separate `aiPromptInputPlugin` which renders as a floating canvas element below the selected node. See `aiPromptInputPlugin/` for details.
 
 **`aiUserMessage`** - Sent user message bubble
 - Content: `(paragraph | block)+`
 - Attributes: `id, createdAt`
 - DOM: `div.ai-user-message`
 
-**`aiUserInput`** - Sticky composer (rich-text) at the end of the thread
-- Content: `(paragraph | block)+`
-- DOM: `div.ai-user-input-wrapper`
-- Behavior: NodeView renders the controls (model selector, image toggle, submit/stop) alongside `contentDOM`.
+**`aiUserInput`** - **DEPRECATED / LEGACY ONLY** — Previously the sticky composer at the end of the thread. Now replaced by the separate `aiPromptInputPlugin` which renders as a floating canvas element.
+- The node type spec is kept in the schema for legacy content migration — old thread documents that still contain `aiUserInput` will have it silently stripped in `appendTransaction`.
+- New threads no longer include `aiUserInput` in their content.
 
 **`aiResponseMessage`** - Individual AI responses
 - Content: `(paragraph | block)*` (empty allowed for streaming shell)
@@ -249,27 +249,11 @@ const button = html`
 
 ### Composer Controls
 
-The `aiUserInput` NodeView renders the conversation controls:
+The composer controls (AI model selector, image toggle, submit/stop button) have been **extracted into generic reusable factories** in `primitives/aiControls/`. They are now used by the separate `aiPromptInputPlugin` NodeView.
 
-1. **AI Model Selector** - Choose which AI model to use (GPT-4, Claude, etc.)
-2. **Image Toggle** - Enable/disable image generation
-3. **Submit/Stop** - Send the current composer content (or stop streaming)
+The thread plugin no longer renders any composer controls — it is purely a conversation log renderer and streaming orchestrator.
 
-These controls are **UI elements outside the document schema**:
-- **Not part of the document schema** - Zero NodeSpec involvement, never serialized
-- **Rendered directly to controls container** - No transactions, no decorations needed
-- **State managed via singleton** - `infoBubbleStateManager` handles open/close coordination
-- **Created by DOM factory** - `createPureDropdown()` from `primitives/dropdown`
-- **Reusable primitive** - Same dropdown used across different plugins
-
-The NodeView simply:
-1. Calls `createPureDropdown()` with configuration (options, onSelect callback, theme)
-2. Appends the returned `dom` element to `controlsContainer`
-3. Writes selected model to `aiChatThread.attrs.aiModel` via `tr.setNodeMarkup(threadPos, ...)`
-4. Calls `destroy()` in NodeView cleanup
-5. Uses `ignoreMutation()` to prevent NodeView recreation when dropdown opens/closes
-
-**Why outside the schema?** Previously dropdowns were document nodes, causing flicker (rendered in contentDOM, then relocated), complex state management via decorations, and unnecessary involvement in document transactions. Keeping them outside the schema means they render instantly in the correct location with simple, direct state management.
+See `$src/components/proseMirror/plugins/aiPromptInputPlugin/` for the floating input implementation and `$src/components/proseMirror/plugins/primitives/aiControls/` for the reusable control factories.
 
 ## Quick setup
 
