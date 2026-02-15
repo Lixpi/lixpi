@@ -118,6 +118,8 @@
     position: relative;
     padding: 0;
     overflow: hidden;
+    box-shadow: var(--ai-chat-thread-node-box-shadow, none);
+    border: var(--ai-chat-thread-node-border, none);
 
     /* Optional pattern overlay (renderer reads these CSS vars) */
     --gradient-pattern-alpha: 0.22;

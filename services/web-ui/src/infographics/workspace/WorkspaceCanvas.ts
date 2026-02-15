@@ -32,6 +32,7 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
 import { webUiSettings } from '$src/webUiSettings.ts'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
@@ -1665,6 +1666,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             { threadId: node.referenceId }
         )
         dragOverlay.className = 'document-drag-overlay nopan'
+
+        // Apply theme settings as CSS variables on the thread node
+        nodeEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
+        nodeEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
 
         // Add animated gradient background (controlled by settings flag)
         const gradient = webUiSettings.useShiftingGradientBackgroundOnAiChatThreadNode
