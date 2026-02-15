@@ -16,6 +16,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
 - **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
 - **Provide AI context** by connecting documents/images to an AI chat thread—connected content is automatically sent to the AI
+- **Use the floating prompt input** to send prompts to the currently selected node; for non-thread nodes, the input appears on selection and hides on deselect
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 - **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
@@ -46,6 +47,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Support streaming AI responses with real-time token parsing
 - Content is persisted separately from documents in the AI-Chat-Threads table
 - Automatically extract context from connected nodes (documents, images, other threads) when sending messages
+- Each AI chat thread node always has its own floating prompt input visible below it, regardless of selection state; these per-thread inputs automatically target the correct thread and follow the node during drag and resize
 - **AI-generated images appear as separate canvas nodes** positioned to the right of the thread, not inline in the conversation. A connector edge links the thread to the image, with `sourceMessageId` on the edge tracking which specific `aiResponseMessage` produced the image. Progressive partial previews update the canvas node in real-time during generation. The revised prompt text is still inserted as text inside the AI response message to keep conversation context readable.
 
 ## Architecture
