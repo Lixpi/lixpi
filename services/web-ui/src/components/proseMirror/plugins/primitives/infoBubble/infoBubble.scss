@@ -21,17 +21,42 @@
         @include infoBubbleTheme((
             surfaceBg: $offWhite,
             surfaceFg: $nightBlue,
-            bubbleShadow: $dropdownLightThemeSubmenuBoxShadow,
+            bubbleRadius: 4px,
+            bubbleShadow: (0 1px 3px 1px rgba(0,0,0,0.15), 0 1px 2px 0 rgba(0,0,0,0.3)),
             borderLightnessAdjustment: -10%
         ));
     }
 
     &.theme-dark {
         @include infoBubbleTheme((
-            surfaceBg: $steelBlue,
-            surfaceFg: $offWhite,
-            bubbleShadow: $dropdownDarkThemeSubmenuBoxShadow,
+            // In our app, `theme-dark` is used for controls on light surfaces.
+            // Keep the popover surface light (like M3 menus) and rely on violet
+            // state layers for interaction.
+            surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
+            surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+            bubbleRadius: 8px,
+            bubbleShadow: (0 2px 6px 2px rgba(0,0,0,0.15), 0 1px 2px 0 rgba(0,0,0,0.3)),
             borderLightnessAdjustment: -10%
         ));
+    }
+
+    // Dropdown-specific: hide arrow, use M3 menu container style
+    &.dropdown-menu-popover {
+        .bubble-wrapper {
+            border-radius: 10px !important;
+        }
+
+        .bubble-container {
+            // Keep a subtle border on light surfaces (matches your screenshot)
+            border: 1px solid rgba($dropdownDarkThemeSubmenuTextColor, 0.18) !important;
+            border-radius: 10px !important;
+
+            // Override arrow pseudo-elements regardless of data-arrow-side attribute
+            &:before,
+            &:after {
+                display: none !important;
+                content: none !important;
+            }
+        }
     }
 }

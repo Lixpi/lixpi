@@ -7,39 +7,35 @@
 @import "$src/components/proseMirror/plugins/primitives/infoBubble/_infoBubble-mixins.scss";
 
 // =============================
-// Dropdown Chip (Tag Pill) Component
+// Dropdown Component — M3-Inspired
 // =============================
-// A dropdown component with a clickable trigger button that shows a floating menu.
-// This component handles ONLY the TRIGGER BUTTON and DROPDOWN ITEMS.
-// The floating container (bubble) is handled by infoBubble mixins.
+// A dropdown component built on Material Design 3 menu principles:
+// - Surface container background with level-2 elevation
+// - 48dp item height with 12dp horizontal padding
+// - State layer ripple on hover/press (8%/12% opacity)
+// - Staggered item fade-in animation on open
+// - Leading icon support (24dp) with on-surface-variant color
+// - Round container corners (4dp baseline, 16dp expressive)
 //
 // Architecture:
 // - Trigger button: dropdownTriggerStructure + dropdownTriggerTheme
 // - Floating container: infoBubblePlacement + infoBubbleStructure + infoBubbleTheme
 // - Dropdown items: dropdownItemsStructure + dropdownItemsTheme
 // - Tag filter: dropdownTagFilter (optional feature)
-//
-// Usage Example:
-//   @include dropdownTriggerStructure((fontSize: .9rem));
-//   @include dropdownItemsStructure((itemFontSize: .83rem));
-//   @include infoBubblePlacement((rightOffset: 0px, topOffset: 32px));
-//   @include infoBubbleStructure((arrowSide: 'top', bubbleOverflow: visible));
-//   @include infoBubbleTheme((arrowSide: 'top', surfaceBg: #333, surfaceFg: #fff));
-//   @include tagPillDropdownDarkTheme();
 
 // 1) Trigger button structure (layout + motion; no colors)
 @mixin dropdownTriggerStructure($config: ()) {
     $defaults: (
-        svgSize: 1.3rem,
-        triggerHeight: 23px,
-        triggerPadding: 0.2rem 0.3rem,
-        triggerRadius: 4px,
-        fontSize: 1rem,
+        svgSize: 1.1rem,
+        triggerHeight: 28px,
+        triggerPadding: 4px 8px,
+        triggerRadius: 8px,
+        fontSize: 0.8125rem,
         fontWeight: 500,
-        iconMargin: 0 .4rem 0 .2rem,
+        iconMargin: 0 6px 0 0,
         iconSize: 16px,
-        hoverDuration: 70ms,
-        hoverEasing: cubic-bezier(0.19, 1, 0.22, 1)
+        hoverDuration: 120ms,
+        hoverEasing: cubic-bezier(0.2, 0, 0, 1)
     );
     $s: map-merge($defaults, $config);
 
@@ -49,7 +45,7 @@
 
         :global(svg) {
             height: map-get($s, svgSize);
-            width: calc(#{map-get($s, svgSize)} - .2rem);
+            width: map-get($s, svgSize);
         }
 
         button {
@@ -65,24 +61,27 @@
             width: auto;
             font-size: map-get($s, fontSize);
             font-weight: map-get($s, fontWeight);
+            letter-spacing: 0.01em;
             white-space: nowrap;
-            transition: background map-get($s, hoverDuration) map-get($s, hoverEasing);
+            position: relative;
+            overflow: hidden;
+            transition:
+                background map-get($s, hoverDuration) map-get($s, hoverEasing),
+                color map-get($s, hoverDuration) map-get($s, hoverEasing);
 
+            // State layer (M3 ripple underlay)
             &:before {
                 content: "";
                 display: block;
-                width: 0px;
-                height: 0px;
-                border-radius: map-get($s, triggerRadius);
                 position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                transition: pupOutTransition(all, 130ms);
+                inset: 0;
+                border-radius: map-get($s, triggerRadius);
+                opacity: 0;
+                transition: opacity map-get($s, hoverDuration) map-get($s, hoverEasing);
             }
 
             span {
-                z-index: 9;
+                z-index: 1;
                 position: relative;
 
                 &.selected-option-icon {
@@ -97,20 +96,27 @@
                     font-weight: map-get($s, fontWeight);
                 }
 
-                &.state-indicator :global(svg) {
-                    margin: 0;
-                    padding: 0;
-                    transition: fill map-get($s, hoverDuration) map-get($s, hoverEasing);
-                    position: relative;
-                    z-index: 9;
+                &.state-indicator {
+                    margin-left: 2px;
+
+                    :global(svg) {
+                        margin: 0;
+                        padding: 0;
+                        transition:
+                            fill map-get($s, hoverDuration) map-get($s, hoverEasing),
+                            transform 200ms cubic-bezier(0.2, 0, 0, 1);
+                        position: relative;
+                        z-index: 1;
+                    }
                 }
             }
 
-            &:hover {
-                &:before {
-                    width: 100%;
-                    height: 100%;
-                }
+            &:hover:before {
+                opacity: 0.08;
+            }
+
+            &:active:before {
+                opacity: 0.12;
             }
 
             &:focus {
@@ -120,15 +126,8 @@
             }
         }
 
-        // Active state behavior (no colors)
+        // Active/open state
         &.is-active {
-            button {
-                &:before {
-                    width: 100%;
-                    height: 100%;
-                }
-            }
-
             .submenu {
                 display: block;
             }
@@ -136,90 +135,139 @@
     }
 }
 
-// 2) Dropdown items structure
-// Structure for list items inside the bubble body
+// 2) Dropdown items structure — M3 list item layout
 @mixin dropdownItemsStructure($config: ()) {
     $defaults: (
-        itemPadding: .4rem .7rem .4rem .4rem,
-        itemFontSize: .9rem,
-        itemIconSize: .8rem,
-        itemIconMargin: 0 .4rem 0 0,
-        itemTransition: all 30ms cubic-bezier(0.19, 1, 0.22, 1)
+        itemPadding: 0 12px,
+        itemHeight: 44px,
+        itemFontSize: 0.875rem,
+        itemFontWeight: 400,
+        itemIconSize: 20px,
+        itemIconMargin: 0 12px 0 0,
+        itemTransition: background 100ms cubic-bezier(0.2, 0, 0, 1),
+        itemGap: 0
     );
     $s: map-merge($defaults, $config);
 
-    // Map dropdown's .submenu to infoBubble's .bubble-body child
     .bubble-body {
         .submenu {
             list-style: none;
-            padding: 0;
+            padding: 4px 0;
             margin: 0;
 
             li {
-                margin: 0;
+                // Two-color highlight pulled from the shifting gradient palette.
+                // Left uses a slightly darker tone than #FFF5FA.
+                $shiftingGradientSimple: linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%);
+
+                margin: 2px 6px;
                 padding: map-get($s, itemPadding);
-                vertical-align: middle;
+                height: map-get($s, itemHeight);
+                display: flex;
+                align-items: center;
                 font-size: map-get($s, itemFontSize);
-                text-transform: capitalize;
+                font-weight: map-get($s, itemFontWeight);
+                letter-spacing: 0.01em;
+                text-transform: none;
                 cursor: pointer;
+                position: relative;
+                overflow: hidden;
                 transition: map-get($s, itemTransition);
+                border-radius: 12px;
+                background: transparent;
 
                 :global(svg) {
                     height: map-get($s, itemIconSize);
                     width: map-get($s, itemIconSize);
+                    flex-shrink: 0;
                     padding: 0;
                     margin: map-get($s, itemIconMargin);
                 }
+
+                // State layer overlay for hover/press (M3 pattern)
+                &::after {
+                    content: "";
+                    position: absolute;
+                    inset: 0;
+                    opacity: 0;
+                    transition: opacity 100ms cubic-bezier(0.2, 0, 0, 1);
+                    pointer-events: none;
+                }
+
+                &:hover::after {
+                    opacity: 0;
+                }
+
+                &:active::after {
+                    opacity: 0;
+                }
+
+                &:hover {
+                    background-image: $shiftingGradientSimple;
+                    background-repeat: no-repeat;
+                    background-size: 100% 100%;
+                }
+
+                &[data-selected='true'] {
+                    font-weight: 500;
+                    background-image: $shiftingGradientSimple;
+                    background-repeat: no-repeat;
+                    background-size: 100% 100%;
+
+                    &::after {
+                        opacity: 0;
+                    }
+
+                    &:hover::after,
+                    &:active::after {
+                        opacity: 0;
+                    }
+                }
             }
 
-            // Support for header item (darker strip at top of list)
+            // Header item styling
             li[data-type='header'] {
+                margin: 0;
+                border-radius: 0;
                 cursor: default;
                 align-items: flex-start;
+                height: auto;
+                padding: 8px 12px;
+
+                &::after {
+                    display: none; // No state layer on headers
+                }
 
                 .header-text {
                     display: flex;
                     flex-direction: column;
                     line-height: 1.15;
-                    gap: .15rem;
+                    gap: 2px;
 
                     .header-meta {
-                        font-size: calc(#{map-get($s, itemFontSize)} - 0.35rem);
-                        opacity: .8;
+                        font-size: 0.75rem;
+                        opacity: 0.6;
                         text-transform: none;
-                        margin: .1rem 0;
+                        font-weight: 400;
                     }
                 }
-            }
-
-            // Ensure top/bottom items visually conform to bubble radius
-            li:first-child {
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-            }
-
-            li:last-child {
-                border-bottom-left-radius: 4px;
-                border-bottom-right-radius: 4px;
             }
         }
     }
 }
 
-// 4) Trigger button theming
-// ONLY handles trigger button colors - bubble is separate
+// 3) Trigger button theming
 @mixin dropdownTriggerTheme($config: ()) {
     $defaults: (
-        glyphBase: null,               // default icon fill for trigger
-        triggerBg: null,               // ripple/underlay
-        hoverGlyphFill: null,          // optional color for trigger icon on hover
-        activeIndicatorFill: null,     // color of state-indicator icon when active
-        invertIndicatorOnActive: false // whether to flip chevron when active
+        glyphBase: null,
+        triggerBg: null,
+        hoverGlyphFill: null,
+        activeIndicatorFill: null,
+        invertIndicatorOnActive: false
     );
     $s: map-merge($defaults, $config);
 
     .dots-dropdown-menu {
-        // Trigger button icon theming
         :global(svg) {
             fill: map-get($s, glyphBase);
         }
@@ -238,17 +286,19 @@
             }
         }
 
-        // Active state for trigger button
+        // Active/open state
         &.is-active {
             button {
                 @if map-get($s, invertIndicatorOnActive) {
                     span.state-indicator :global(svg) {
-                        transform: scale(-1, -1);
+                        transform: rotate(180deg);
                     }
                 }
 
-                span.state-indicator :global(svg) {
-                    fill: map-get($s, activeIndicatorFill);
+                @if map-get($s, activeIndicatorFill) {
+                    span.state-indicator :global(svg) {
+                        fill: map-get($s, activeIndicatorFill);
+                    }
                 }
 
                 &:hover {
@@ -263,14 +313,13 @@
     }
 }
 
-// 5) Dropdown items theming
-// Theme for list items inside the bubble body
+// 4) Dropdown items theming — M3 surface/on-surface color system
 @mixin dropdownItemsTheme($config: ()) {
     $defaults: (
         surfaceBg: #fff,
-        surfaceFg: #333,
-        itemIconColor: #151515,
-        borderLightnessAdjustment: -10%,
+        surfaceFg: #1d1b20,
+        itemIconColor: #49454f,
+        stateLayerColor: #1d1b20,
         hoverLightnessAdjustment: -6%
     );
     $s: map-merge($defaults, $config);
@@ -278,8 +327,10 @@
     .bubble-body {
         .submenu {
             li {
-                &:hover {
-                    background: color.adjust(map-get($s, surfaceBg), $lightness: map-get($s, hoverLightnessAdjustment));
+                color: map-get($s, surfaceFg);
+
+                &::after {
+                    background: map-get($s, stateLayerColor);
                 }
 
                 :global(svg) {
@@ -289,77 +340,100 @@
 
             // Header item theming
             li[data-type='header'] {
-                background: color.adjust(map-get($s, surfaceBg), $lightness: map-get($s, borderLightnessAdjustment));
+                background: color.adjust(map-get($s, surfaceBg), $lightness: map-get($s, hoverLightnessAdjustment));
 
                 &:hover {
-                    background: color.adjust(map-get($s, surfaceBg), $lightness: map-get($s, borderLightnessAdjustment));
+                    background: color.adjust(map-get($s, surfaceBg), $lightness: map-get($s, hoverLightnessAdjustment));
                 }
 
                 .header-text .header-meta {
-                    color: rgba(map-get($s, surfaceFg), 0.75);
+                    color: rgba(map-get($s, surfaceFg), 0.6);
                 }
             }
-
-            // Note: .with-header class can be added to .bubble-container to indicate header presence,
-            // allowing infoBubbleTheme to adjust arrow color to match header background
         }
     }
 }
 
-// 6) Tag filter styling (uses infoBubble's .bubble-header)
+// 5) Tag filter styling
 @mixin dropdownTagFilter($config: ()) {
     $defaults: (
         surfaceBg: #fff,
-        surfaceFg: #333,
+        surfaceFg: #1d1b20,
         hoverLightnessAdjustment: -6%,
-        borderLightnessAdjustment: -10%
+        borderLightnessAdjustment: -10%,
+        accentColor: rgba(100, 150, 255, 1)
     );
     $s: map-merge($defaults, $config);
 
-    // Map dropdown's tag-filter to infoBubble's .bubble-header
     .bubble-header {
         .tag-filter {
-            // margin-bottom: .3rem;
-
             .tag-filter-title {
-                font-size: 0.75rem;
+                font-size: 0.6rem;
                 font-weight: 500;
-                color: $offWhite;
-                margin-bottom: 0.5rem;
-                letter-spacing: 0.5px;
+                color: rgba(map-get($s, surfaceFg), 0.6);
+                margin-bottom: 2px;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
             }
 
             .tag-filter-list {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 0.4rem;
+                gap: 3px;
 
                 .tag-filter-item {
-                    display: inline-block;
-                    padding: 0.15rem 0.3rem;
-                    font-size: 0.7rem;
+                    // Keep chips consistent with item highlight.
+                    $shiftingGradientSimple: linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%);
+
+                    display: inline-flex;
+                    align-items: center;
+                    height: 24px;
+                    padding: 0 10px;
+                    font-size: 0.6rem;
                     font-weight: 500;
-                    border: 1px solid color.adjust(map-get($s, surfaceBg), $lightness: 8%);
-                    border-radius: 10px;
+                    letter-spacing: 0.01em;
+                    border: 1px solid rgba(map-get($s, surfaceFg), 0.28);
+                    border-radius: 8px; // M3 chip radius
                     cursor: pointer;
-                    transition: all 0.15s ease;
-                    opacity: 0.6;
-                    color: $offWhite;
+                    transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), border-color 150ms cubic-bezier(0.2, 0, 0, 1), color 150ms cubic-bezier(0.2, 0, 0, 1);
+                    opacity: 1;
+                    color: map-get($s, surfaceFg);
+                    background: transparent;
+
+                    &::before {
+                        content: "";
+                        display: none;
+                        width: 12px;
+                        margin-right: 6px;
+                        text-align: center;
+                        font-size: 0.75rem;
+                        line-height: 1;
+                    }
 
                     &:hover {
-                        opacity: 1;
-                        background-color: color.adjust(map-get($s, surfaceBg), $lightness: map-get($s, hoverLightnessAdjustment));
-                        border-color: color.adjust(map-get($s, surfaceBg), $lightness: 15%);
+                        background-image: $shiftingGradientSimple;
+                        background-repeat: no-repeat;
+                        background-size: 100% 100%;
+                        border-color: rgba(map-get($s, accentColor), 0.40);
                     }
 
                     &.active {
-                        opacity: 1;
-                        background-color: rgba(100, 150, 255, 0.2);
-                        border-color: rgba(100, 150, 255, 0.5);
-                        color: rgba(150, 200, 255, 1);
+                        background-image: $shiftingGradientSimple;
+                        background-repeat: no-repeat;
+                        background-size: 100% 100%;
+                        border-color: rgba(map-get($s, accentColor), 0.60);
+                        color: map-get($s, accentColor);
+
+                        &:hover {
+                            background-image: $shiftingGradientSimple;
+                        }
+
+                        &::before {
+                            display: inline-block;
+                            content: "✓";
+                        }
                     }
 
-                    // Click feedback animation
                     &.click-feedback {
                         @include clickToggleFeedbackAnimation((
                             startColor: rgba(map-get($s, surfaceFg), 0.65),
@@ -374,48 +448,59 @@
 }
 
 // -----------------------------
-// Convenience theme presets
+// Theme presets
 // -----------------------------
 @mixin tagPillDropdownLightTheme($config: ()) {
+    $accentViolet: color.adjust($editableElementHoverColor, $hue: 55deg, $saturation: 20%, $lightness: 10%);
+
     @include dropdownTriggerTheme(map-merge((
         glyphBase: $offWhite,
-        triggerBg: $offWhite,
-        hoverGlyphFill: $nightBlue,
-        activeIndicatorFill: $offWhite,
+        triggerBg: $accentViolet,
+        hoverGlyphFill: $accentViolet,
+        activeIndicatorFill: $accentViolet,
         invertIndicatorOnActive: false
     ), $config));
 
     @include dropdownItemsTheme(map-merge((
         surfaceBg: $offWhite,
-        itemIconColor: #151515,
+        surfaceFg: #1d1b20,
+        itemIconColor: #49454f,
+        stateLayerColor: $accentViolet,
         hoverLightnessAdjustment: -6%
     ), $config));
 
     @include dropdownTagFilter(map-merge((
         surfaceBg: $offWhite,
         surfaceFg: $nightBlue,
+        accentColor: $accentViolet,
         hoverLightnessAdjustment: -6%
     ), $config));
 }
 
 @mixin tagPillDropdownDarkTheme($config: ()) {
+    $accentViolet: color.adjust($editableElementHoverColor, $hue: 55deg, $saturation: 20%, $lightness: 10%);
+
     @include dropdownTriggerTheme(map-merge((
-        glyphBase: $steelBlue,
-        triggerBg: transparent,
+        glyphBase: $dropdownDarkThemeSubmenuTextColor,
+        triggerBg: #f1edf8,
+        // Don't recolor the chevron just because the dropdown opens/hovered.
         hoverGlyphFill: null,
-        activeIndicatorFill: $steelBlue,
+        activeIndicatorFill: null,
         invertIndicatorOnActive: true
     ), $config));
 
     @include dropdownItemsTheme(map-merge((
-        surfaceBg: $steelBlue,
-        itemIconColor: $offWhite,
+        surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
+        surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+        itemIconColor: $dropdownDarkThemeIconColor,
+        stateLayerColor: $accentViolet,
         hoverLightnessAdjustment: -6%
     ), $config));
 
     @include dropdownTagFilter(map-merge((
-        surfaceBg: $steelBlue,
-        surfaceFg: $offWhite,
+        surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
+        surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+        accentColor: $accentViolet,
         hoverLightnessAdjustment: -6%
     ), $config));
 }

@@ -412,6 +412,7 @@ Users see:
   - Content: `(paragraph | block)+` for rich-text input
   - NodeView renders controls (model selector, image toggle, submit/stop) alongside `contentDOM`
   - `createAiModelSelectorDropdown()` uses `createPureDropdown()` primitive
+  - `webUiSettings.useModalityFilterOnModelSelectorDropdown` toggles the modality filter chips in the model selector dropdown (currently disabled)
   - Dropdowns appended directly to controlsContainer (not inserted via transactions)
   - `ignoreMutation()` prevents NodeView recreation when controls are manipulated
 

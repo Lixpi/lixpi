@@ -332,9 +332,12 @@ createInfoBubble({
 Uses the generic infoBubble SCSS mixins:
 - `infoBubblePlacement()` - positioning
 - `infoBubbleStructure()` - shape and arrow
-- `infoBubbleTheme()` - colors and shadows
+- `infoBubbleTheme()` - colors and shadows (M3 level-2 elevation by default)
 
 Arrow positioning is controlled via `data-arrow-side` attribute, not CSS classes.
+
+Dropdown-specific overrides in `infoBubble.scss`:
+- `.dropdown-menu-popover` hides the arrow and removes the border (M3 menus are borderless elevated surfaces)
 
 
 ## Notes

@@ -10,6 +10,7 @@
 import { html } from '$src/utils/domTemplates.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { createPureDropdown } from '$src/components/proseMirror/plugins/primitives/dropdown/index.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 
 import type { EditorView } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
@@ -110,8 +111,8 @@ export function createAiModelSelectorDropdown(view: EditorView, getPos: () => nu
         ignoreColorValuesForSelectedValue: false,
         renderIconForSelectedValue: false,
         renderIconForOptions: true,
-        enableTagFilter: true,
-        availableTags,
+        enableTagFilter: webUiSettings.useModalityFilterOnModelSelectorDropdown,
+        availableTags: webUiSettings.useModalityFilterOnModelSelectorDropdown ? availableTags : [],
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             const inputPos = getPos()

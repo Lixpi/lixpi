@@ -2,6 +2,7 @@
 import { html } from '$src/utils/domTemplates.ts'
 import { chevronDownIcon } from '$src/svgIcons/index.ts'
 import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/pureInfoBubble.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 
 // Inject fill color utility (same as original dropdown)
 function injectFillColor(svg: string, color: string): string {
@@ -61,6 +62,11 @@ export function createPureDropdown(config: PureDropdownConfig) {
     let allOptions = [...options]
     let infoBubble: any = null // Will be initialized after button is created
 
+    const modalityFilterEnabled = Boolean(
+        enableTagFilter
+        && webUiSettings.useModalityFilterOnModelSelectorDropdown
+    )
+
     // Prevent ProseMirror from handling mousedown on dropdown
     const preventProseMirrorEdit = (e: Event) => {
         e.preventDefault()
@@ -89,7 +95,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Filter options based on active tags
     const getFilteredOptions = () => {
-        if (!enableTagFilter || activeFilterTags.size === 0) {
+        if (!modalityFilterEnabled || activeFilterTags.size === 0) {
             return allOptions
         }
         return allOptions.filter(option => {
@@ -100,6 +106,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Handle tag filter click
     const handleTagFilterClick = (e: Event, tag: string) => {
+        if (!modalityFilterEnabled) return
         e.preventDefault()
         e.stopPropagation()
 
@@ -132,9 +139,14 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
         submenuList.innerHTML = ''
         filteredOptions.forEach(option => {
+            const isSelected =
+                option === currentSelectedValue
+                || option.title === currentSelectedValue?.title
+
             const li = html`
                 <li
                     class="flex justify-start items-center"
+                    data-selected=${isSelected ? 'true' : 'false'}
                     onclick=${(e: Event) => optionClickHandler(e, option)}
                 >
                     ${renderIconForOptions && option.icon ? html`<span innerHTML=${ignoreColorValuesForOptions ? option.icon : injectFillColor(option.icon, option.color)}></span>` : ''}
@@ -161,7 +173,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
     }
 
     // Build header content (if tag filter enabled)
-    const headerContent = enableTagFilter && availableTags.length > 0 ? html`
+    const headerContent = modalityFilterEnabled && availableTags.length > 0 ? html`
         <div class="tag-filter" onmousedown=${preventProseMirrorEdit}>
             <div class="tag-filter-title">Filter by modality:</div>
             <div class="tag-filter-list">
@@ -176,8 +188,14 @@ export function createPureDropdown(config: PureDropdownConfig) {
         </div>
     ` : null
 
+    // Stop scroll propagation to prevent canvas pan/zoom
+    const stopScrollPropagation = (e: Event) => {
+        e.stopPropagation()
+        // Do not prevent default, otherwise scrolling itself breaks
+    }
+
     // Build body content (dropdown items)
-    const bodyContent = html`<ul class="submenu"></ul>`
+    const bodyContent = html`<ul class="submenu" onwheel=${stopScrollPropagation}></ul>`
 
     // Build dropdown wrapper with button first
     const dom = html`
@@ -198,6 +216,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Get button reference to use as anchor
     const button = dom.querySelector('button') as HTMLElement
+    const dotsMenu = dom.querySelector('.dots-dropdown-menu') as HTMLElement
 
     // Create info bubble with button as anchor
     const positioningAnchor = dom.querySelector('.state-indicator') as HTMLElement
@@ -214,9 +233,11 @@ export function createPureDropdown(config: PureDropdownConfig) {
         disableAutoPositioning,
         onOpen: () => {
             dom.classList.add('dropdown-open')
+            dotsMenu?.classList.add('is-active')
         },
         onClose: () => {
             dom.classList.remove('dropdown-open')
+            dotsMenu?.classList.remove('is-active')
         }
     })
 
