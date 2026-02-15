@@ -31,6 +31,7 @@ import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
@@ -266,8 +267,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         floatingInputEl.style.zIndex = '9999'
         floatingInputEl.style.width = '400px'
 
-        // Add gradient background
-        floatingInputGradient = createShiftingGradientBackground(floatingInputEl)
+        // Add gradient background (controlled by settings flag)
+        if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
+            floatingInputGradient = createShiftingGradientBackground(floatingInputEl)
+        }
 
         const editorContainer = document.createElement('div')
         editorContainer.className = 'floating-input-editor nopan'
@@ -352,7 +355,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         el.style.zIndex = '9999'
         el.dataset.threadNodeId = node.nodeId
 
-        const gradient = createShiftingGradientBackground(el)
+        const gradient = webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode
+            ? createShiftingGradientBackground(el)
+            : null
 
         const editorContainer = document.createElement('div')
         editorContainer.className = 'floating-input-editor nopan'
@@ -1661,8 +1666,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'document-drag-overlay nopan'
 
-        // Add animated gradient background
-        const gradient = createShiftingGradientBackground(nodeEl)
+        // Add animated gradient background (controlled by settings flag)
+        const gradient = webUiSettings.useShiftingGradientBackgroundOnAiChatThreadNode
+            ? createShiftingGradientBackground(nodeEl)
+            : null
 
         const editorContainer = document.createElement('div')
         editorContainer.className = 'ai-chat-thread-node-editor nopan'
@@ -1693,8 +1700,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     },
                     onProjectTitleChange: () => {},
                     onAiChatSubmit: async ({ messages, aiModel, imageOptions }: any) => {
-                        // Trigger gradient animation on message send
-                        gradient.triggerAnimation()
+                        // Trigger gradient animation on message send (thread node + floating input)
+                        gradient?.triggerAnimation()
+                        threadFloatingInputs.get(node.nodeId)?.gradient?.triggerAnimation()
 
                         try {
                             // Extract context from connected nodes
@@ -1729,14 +1737,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     editor,
                     aiService,
                     containerEl: nodeEl,
-                    gradientCleanup: gradient.destroy,
-                    triggerGradientAnimation: gradient.triggerAnimation
+                    gradientCleanup: gradient?.destroy,
+                    triggerGradientAnimation: () => {
+                        gradient?.triggerAnimation()
+                        threadFloatingInputs.get(node.nodeId)?.gradient?.triggerAnimation()
+                    },
                 })
 
                 // Register with the prompt input controller so it can inject messages
                 promptInputController.registerThreadEditor(node.referenceId, {
                     editorView: editor.editorView,
-                    triggerGradientAnimation: gradient.triggerAnimation,
+                    triggerGradientAnimation: () => {
+                        gradient?.triggerAnimation()
+                        threadFloatingInputs.get(node.nodeId)?.gradient?.triggerAnimation()
+                    },
                 })
 
                 loadedNodeIds.add(node.nodeId)

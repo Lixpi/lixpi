@@ -9,6 +9,7 @@ import {
     claudeAnimatedFrameIcon,
 } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 // Define the unique type name for this custom node
 export const aiResponseMessageNodeType = 'aiResponseMessage'
@@ -81,6 +82,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
     const spinnerElement = parentWrapper.querySelector('.ai-response-message-spinner')
     const bubbleElement = parentWrapper.querySelector('.ai-response-message-bubble')
+    bubbleElement.style.setProperty('--ai-response-bubble-color', webUiThemeSettings.aiResponseMessageBubbleColor)
     const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
 
     // // Create an accept button

@@ -308,4 +308,9 @@ AI chat thread nodes display an animated shifting gradient background. The gradi
 
 The gradient uses 4 color points with inverse distance weighting and a subtle swirl distortion for an organic feel. When sending a message, the gradient animates to the next phase position.
 
+Both the thread node gradient and the floating user-input gradient are controlled by feature flags in `webUiSettings.ts`:
+
+- `useShiftingGradientBackgroundOnAiChatThreadNode` (default `false`) — gradient on the AI chat thread canvas node itself.
+- `useShiftingGradientBackgroundOnAiUserInputNode` (default `true`) — gradient on the floating AI prompt input nodes.
+
 For full technical details, color customization, and the color analysis tool, see [Shifting Gradient Background](../../../documentation/features/SHIFTING-GRADIENT.md).
