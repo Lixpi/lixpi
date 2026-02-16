@@ -48,7 +48,10 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Content is persisted separately from documents in the AI-Chat-Threads table
 - Automatically extract context from connected nodes (documents, images, other threads) when sending messages
 - Each AI chat thread node always has its own floating prompt input visible below it, regardless of selection state; these per-thread inputs automatically target the correct thread and follow the node during drag and resize
-- **AI-generated images appear as separate canvas nodes** positioned to the right of the thread, not inline in the conversation. A connector edge links the thread to the image, with `sourceMessageId` on the edge tracking which specific `aiResponseMessage` produced the image. Progressive partial previews update the canvas node in real-time during generation. The revised prompt text is still inserted as text inside the AI response message to keep conversation context readable.
+- **AI-generated images** can appear in two modes controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
+    - **Anchored mode** (default, setting = `false`): Images are separate canvas nodes that visually overlap the right side of the AI chat thread node. Width is constrained to roughly 68% of the thread width, and each image is continuously re-aligned to the target response bubble as streamed text changes message proportions. The image moves with the thread during drag, and can be detached by dragging its center outside the thread bounds. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image/thread pairs.
+  - **Connector line mode** (setting = `true`): Images appear as separate canvas nodes positioned to the right of the thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image.
+  - In both modes, progressive partial previews update the canvas node in real-time during generation, and the revised prompt text is inserted as text inside the AI response message.
 
 ## Architecture
 
@@ -280,6 +283,9 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image actions) |
+| `imagePositioning.ts` | Computes image placement positions (next-to-thread and overlapping-thread modes) |
+| `anchoredImageManager.ts` | Tracks which images are anchored to which threads; manages anchor lifecycle |
+| `nodeLayering.ts` | Z-index management for bringing nodes to front |
 
 ## CSS Classes
 
@@ -298,6 +304,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
 | `.image-node-content` | Image container |
 | `.image-node-img` | The actual img element |
+| `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
+
 | `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |

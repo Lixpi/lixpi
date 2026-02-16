@@ -97,66 +97,70 @@ export default class AiInteractionService {
 
 
     onChatMessageResponse(data: any) {
-        if(data?.error) {
-            alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
-            return
-        }
+        try {
+            if (data?.error) {
+                alert(`Failed to receive chat message: \n${JSON.stringify(data.error)}`)
+                return
+            }
 
-        const { content } = data
+            const { content } = data
 
-        if (!content) {
-            console.error('No content in AI chat message:', data)
-            return
-        }
+            if (!content) {
+                console.error('No content in AI chat message:', data)
+                return
+            }
 
-        // Track current aiProvider for parser callback
-        if (content.aiProvider) {
-            this.currentAiProvider = content.aiProvider
-        }
+            // Track current aiProvider for parser callback
+            if (content.aiProvider) {
+                this.currentAiProvider = content.aiProvider
+            }
 
-        // Handle image generation events (bypass markdown parser)
-        if (content.status === STREAM_STATUS.IMAGE_PARTIAL) {
-            console.log('[AI_INTERACTION] IMAGE_PARTIAL received:', content)
-            this.segmentsReceiver.receiveSegment({
-                type: 'image_partial',
-                imageUrl: content.imageUrl,
-                fileId: content.fileId,
-                workspaceId: this.workspaceId,
-                partialIndex: content.partialIndex,
-                aiProvider: this.currentAiProvider,
-                aiChatThreadId: this.aiChatThreadId
-            })
-            return
-        }
+            // Handle image generation events (bypass markdown parser)
+            if (content.status === STREAM_STATUS.IMAGE_PARTIAL) {
+                console.log('[AI_INTERACTION] IMAGE_PARTIAL received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_partial',
+                    imageUrl: content.imageUrl,
+                    fileId: content.fileId,
+                    workspaceId: this.workspaceId,
+                    partialIndex: content.partialIndex,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
 
-        if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
-            console.log('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
+            if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
+                console.log('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
 
-            this.segmentsReceiver.receiveSegment({
-                type: 'image_complete',
-                imageUrl: content.imageUrl,
-                fileId: content.fileId,
-                workspaceId: this.workspaceId,
-                responseId: content.responseId,
-                revisedPrompt: content.revisedPrompt,
-                aiProvider: this.currentAiProvider,
-                aiChatThreadId: this.aiChatThreadId
-            })
-            return
-        }
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_complete',
+                    imageUrl: content.imageUrl,
+                    fileId: content.fileId,
+                    workspaceId: this.workspaceId,
+                    responseId: content.responseId,
+                    revisedPrompt: content.revisedPrompt,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
 
-        // Route raw tokens through markdown parser (exact replication of backend pattern)
-        if (content.status === STREAM_STATUS.START_STREAM) {
-            // Initialize fresh parser instance for this stream
-            this.initMarkdownParser()
-            // startParsing() emits START_STREAM event via subscribeToTokenParse callback
-            this.markdownStreamParser.startParsing()
-        } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
-            // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
-            this.markdownStreamParser.parseToken(content.text)
-        } else if (content.status === STREAM_STATUS.END_STREAM) {
-            // stopParsing() will emit END_STREAM event internally via subscribeToTokenParse callback
-            this.markdownStreamParser.stopParsing()
+            // Route raw tokens through markdown parser (exact replication of backend pattern)
+            if (content.status === STREAM_STATUS.START_STREAM) {
+                // Initialize fresh parser instance for this stream
+                this.initMarkdownParser()
+                // startParsing() emits START_STREAM event via subscribeToTokenParse callback
+                this.markdownStreamParser.startParsing()
+            } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
+                // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
+                this.markdownStreamParser.parseToken(content.text)
+            } else if (content.status === STREAM_STATUS.END_STREAM) {
+                // stopParsing() will emit END_STREAM event internally via subscribeToTokenParse callback
+                this.markdownStreamParser.stopParsing()
+            }
+        } catch (error) {
+            console.error('[AI_INTERACTION] onChatMessageResponse failed:', { data }, error)
         }
     }
 

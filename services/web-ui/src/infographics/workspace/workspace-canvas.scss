@@ -160,6 +160,17 @@
         cursor: move;
     }
 
+    // Anchored mode: image overlaps the AI chat thread node
+    &.workspace-image-node--anchored {
+        pointer-events: auto;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+
+        .image-node-img {
+            border-radius: 6px;
+        }
+    }
+
     .image-node-img {
         display: block;
         width: 100%;

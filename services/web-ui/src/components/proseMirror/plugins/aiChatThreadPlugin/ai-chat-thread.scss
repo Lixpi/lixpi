@@ -383,6 +383,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             min-width: 5rem; // Ensure space for spinner
             position: relative;
             overflow: visible; // Prevent clipping spinner dots
+            transition: max-width 0.3s ease-in-out;
 
             @include speechBubbleTail((
                 position: 'left',
@@ -577,3 +578,4 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         transform: rotate(360deg);
     }
 }
+

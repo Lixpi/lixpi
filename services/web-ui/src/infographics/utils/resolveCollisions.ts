@@ -13,6 +13,7 @@ type CollisionOptions = {
     iterations?: number        // Max iterations (default: 50)
     overlapThreshold?: number  // Minimum overlap to trigger resolution (default: 0.5)
     margin?: number            // Extra spacing around nodes (default: 20)
+    excludePairs?: Set<string> // Set of "nodeIdA-nodeIdB" pairs to skip collision resolution for
 }
 
 type CollisionResult = {
@@ -28,7 +29,8 @@ export function resolveCollisions(
     const {
         iterations = 50,
         overlapThreshold = 0.5,
-        margin = 20
+        margin = 20,
+        excludePairs
     } = options
 
     // Create mutable boxes with margin applied
@@ -52,6 +54,11 @@ export function resolveCollisions(
             for (let j = i + 1; j < boxes.length; j++) {
                 const A = boxes[i]
                 const B = boxes[j]
+
+                // Skip excluded pairs (e.g. anchored images overlapping their thread)
+                if (excludePairs && (excludePairs.has(`${A.id}-${B.id}`) || excludePairs.has(`${B.id}-${A.id}`))) {
+                    continue
+                }
 
                 // Calculate center positions
                 const centerAX = A.x + A.width * 0.5

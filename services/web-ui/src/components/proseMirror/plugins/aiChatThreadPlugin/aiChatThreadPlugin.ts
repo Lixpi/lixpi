@@ -21,6 +21,7 @@ import { aiUserMessageNodeType, aiUserMessageNodeView } from '$src/components/pr
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 import type { AiModelId } from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
@@ -588,25 +589,29 @@ class AiChatThreadPluginClass {
     }
 
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {
-        const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
-        if (!imageUrl || !aiChatThreadId) return
+        try {
+            const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
+            if (!imageUrl || !aiChatThreadId) return
 
-        const { state } = view
-        const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
+            const { state } = view
+            const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
 
-        // Only process events for threads that exist in THIS document
-        if (!threadInfo) return
+            // Only process events for threads that exist in THIS document
+            if (!threadInfo) return
 
-        // Delegate to canvas-side handler — image appears as a canvas node, not inline
-        const callbacks = getAiGeneratedImageCallbacks()
-        callbacks.onImagePartialToCanvas?.({
-            threadId: aiChatThreadId,
-            imageUrl,
-            fileId: fileId || '',
-            workspaceId: workspaceId || '',
-            partialIndex: partialIndex || 0,
-            aiProvider: aiProvider || '',
-        })
+            // Delegate to canvas-side handler — image appears as a canvas node, not inline
+            const callbacks = getAiGeneratedImageCallbacks()
+            callbacks.onImagePartialToCanvas?.({
+                threadId: aiChatThreadId,
+                imageUrl,
+                fileId: fileId || '',
+                workspaceId: workspaceId || '',
+                partialIndex: partialIndex || 0,
+                aiProvider: aiProvider || ''
+            })
+        } catch (error) {
+            console.error('🟥 [PLUGIN] handleImagePartial failed', { event }, error)
+        }
     }
 
     private handleImageComplete(view: EditorView, event: SegmentEvent): void {
@@ -626,34 +631,36 @@ class AiChatThreadPluginClass {
         const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
 
         if (responseNodeInfo.found && responseNodeInfo.endOfNodePos !== undefined) {
-            // Walk ancestors of the endOfNodePos to find the response node and its id
-            state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-                if (node.type.name === aiResponseMessageNodeType) {
-                    // Verify this response is in the correct thread
-                    const $pos = state.doc.resolve(pos)
-                    for (let depth = $pos.depth; depth > 0; depth--) {
-                        const parentNode = $pos.node(depth)
-                        if (parentNode.type.name === aiChatThreadNodeType) {
-                            if (parentNode.attrs?.threadId === aiChatThreadId && node.attrs.isReceivingAnimation) {
-                                responseMessageId = node.attrs.id || ''
-                            }
-                            break
-                        }
-                    }
-                }
-                return !responseMessageId // stop if found
-            })
+            const $endPos = state.doc.resolve(responseNodeInfo.endOfNodePos)
+            const node = $endPos.nodeBefore
+            if (node && node.type.name === aiResponseMessageNodeType) {
+                responseMessageId = node.attrs.id || ''
+            }
         }
 
+        // Re-find positions if state changed (though relative positions inside the node shouldn't change, absolutes might)
+        // But since we only modified attributes of the node we just found, we can proceed carefully.
+        // Better to re-resolve if we want to be 100% safe, but let's see.
+        // Actually, inserting text inside the node changes its size.
+
         // Insert revised prompt as text into the response message (keeps conversation readable)
-        if (revisedPrompt && responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
-            const tr = state.tr
-            const insertionPos = responseNodeInfo.endOfNodePos - 1
-            const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-            tr.insert(insertionPos, p)
-            if (tr.docChanged) {
-                dispatch(tr)
-            }
+        if (revisedPrompt && responseMessageId) {
+             // We need to re-find the response node end position because the document might have changed (though unlikely to affect position *before* it, but safer)
+             // However, setNodeMarkup doesn't change document length so positions are stable.
+             // BUT, we MUST use the new state to create the transaction.
+
+             // Let's re-locate the end position to be safe if we want to insert at end
+             const updatedResponseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
+
+             if (updatedResponseNodeInfo.found && updatedResponseNodeInfo.endOfNodePos) {
+                const tr = state.tr
+                const insertionPos = updatedResponseNodeInfo.endOfNodePos - 1
+                const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
+                tr.insert(insertionPos, p)
+                if (tr.docChanged) {
+                    dispatch(tr)
+                }
+             }
         }
 
         // Delegate image placement to the canvas
