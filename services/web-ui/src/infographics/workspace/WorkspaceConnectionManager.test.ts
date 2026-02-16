@@ -191,6 +191,24 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 		expect(config.onEdgesChange).not.toHaveBeenCalled()
 	})
 
+	it('does NOT trigger proximity if existing edge connects dragged node to ANY other node', () => {
+		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
+		const chatNode1 = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 300, y: 50 }, dimensions: { width: 200, height: 100 } })
+		const chatNode2 = makeNode({ nodeId: 'chat-2', type: 'aiChatThread', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 100 } })
+
+		const existingEdge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'img-1', targetNodeId: 'chat-2' })
+
+		manager.syncNodes([imgNode, chatNode1, chatNode2])
+		manager.syncEdges([existingEdge])
+
+		// Drag near chat-1 (which has no connection yet)
+		// But because img-1 is connected to chat-2, it should NOT trigger proximity for chat-1
+		manager.checkProximity('img-1', { x: 150, y: 50 }, { width: 200, height: 100 })
+		manager.commitProximityConnection()
+
+		expect(config.onEdgesChange).not.toHaveBeenCalled()
+	})
+
 	// -------------------------------------------------------------------------
 	// Distance threshold
 	// -------------------------------------------------------------------------

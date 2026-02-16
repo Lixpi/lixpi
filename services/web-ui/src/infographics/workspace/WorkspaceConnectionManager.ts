@@ -997,50 +997,56 @@ export class WorkspaceConnectionManager {
 		let closestCandidate: ProximityCandidate | null = null
 		let minDistance = PROXIMITY_THRESHOLD
 
-		for (const other of this.nodes) {
-			if (other.nodeId === nodeId) continue
+		// Only trigger proximity connect if the dragged node has NO existing connections (either incoming or outgoing)
+		// This prevents "ghost" connections from appearing when dragging nodes that are already part of a graph (e.g. AI images).
+		const hasExistingConnections = this.edges.some(e => e.sourceNodeId === nodeId || e.targetNodeId === nodeId)
 
-			// Calculate handles for the dragged node
-			const draggedLeft = { x: position.x, y: position.y + dimensions.height / 2 }
-			const draggedRight = { x: position.x + dimensions.width, y: position.y + dimensions.height / 2 }
+		if (!hasExistingConnections) {
+			for (const other of this.nodes) {
+				if (other.nodeId === nodeId) continue
 
-			// Calculate handles for the other node
-			const otherLeft = { x: other.position.x, y: other.position.y + other.dimensions.height / 2 }
-			const otherRight = { x: other.position.x + other.dimensions.width, y: other.position.y + other.dimensions.height / 2 }
+				// Calculate handles for the dragged node
+				const draggedLeft = { x: position.x, y: position.y + dimensions.height / 2 }
+				const draggedRight = { x: position.x + dimensions.width, y: position.y + dimensions.height / 2 }
 
-			// Check Connection: Dragged Right (Source) -> Other Left (Target)
-			// Rule: Target (Other) must be aiChatThread
-			// Rule: No existing connection between these nodes (in this direction)
-			if (other.type === 'aiChatThread') {
-				const hasExisting = this.edges.some(e => e.sourceNodeId === nodeId && e.targetNodeId === other.nodeId)
-				if (!hasExisting) {
-					const d1 = Math.hypot(draggedRight.x - otherLeft.x, draggedRight.y - otherLeft.y)
-					if (d1 < minDistance) {
-						minDistance = d1
-						closestCandidate = {
-							sourceNodeId: nodeId,
-							sourceHandle: 'right',
-							targetNodeId: other.nodeId,
-							targetHandle: 'left'
+				// Calculate handles for the other node
+				const otherLeft = { x: other.position.x, y: other.position.y + other.dimensions.height / 2 }
+				const otherRight = { x: other.position.x + other.dimensions.width, y: other.position.y + other.dimensions.height / 2 }
+
+				// Check Connection: Dragged Right (Source) -> Other Left (Target)
+				// Rule: Target (Other) must be aiChatThread
+				// Rule: No existing connection between these nodes (in this direction)
+				if (other.type === 'aiChatThread') {
+					const hasExisting = this.edges.some(e => e.sourceNodeId === nodeId && e.targetNodeId === other.nodeId)
+					if (!hasExisting) {
+						const d1 = Math.hypot(draggedRight.x - otherLeft.x, draggedRight.y - otherLeft.y)
+						if (d1 < minDistance) {
+							minDistance = d1
+							closestCandidate = {
+								sourceNodeId: nodeId,
+								sourceHandle: 'right',
+								targetNodeId: other.nodeId,
+								targetHandle: 'left'
+							}
 						}
 					}
 				}
-			}
 
-			// Check Connection: Other Right (Source) -> Dragged Left (Target)
-			// Rule: Target (Dragged) must be aiChatThread
-			// Rule: No existing connection between these nodes (in this direction)
-			if (draggedNode.type === 'aiChatThread') {
-				const hasExisting = this.edges.some(e => e.sourceNodeId === other.nodeId && e.targetNodeId === nodeId)
-				if (!hasExisting) {
-					const d2 = Math.hypot(otherRight.x - draggedLeft.x, otherRight.y - draggedLeft.y)
-					if (d2 < minDistance) {
-						minDistance = d2
-						closestCandidate = {
-							sourceNodeId: other.nodeId,
-							sourceHandle: 'right',
-							targetNodeId: nodeId,
-							targetHandle: 'left'
+				// Check Connection: Other Right (Source) -> Dragged Left (Target)
+				// Rule: Target (Dragged) must be aiChatThread
+				// Rule: No existing connection between these nodes (in this direction)
+				if (draggedNode.type === 'aiChatThread') {
+					const hasExisting = this.edges.some(e => e.sourceNodeId === other.nodeId && e.targetNodeId === nodeId)
+					if (!hasExisting) {
+						const d2 = Math.hypot(otherRight.x - draggedLeft.x, otherRight.y - draggedLeft.y)
+						if (d2 < minDistance) {
+							minDistance = d2
+							closestCandidate = {
+								sourceNodeId: other.nodeId,
+								sourceHandle: 'right',
+								targetNodeId: nodeId,
+								targetHandle: 'left'
+							}
 						}
 					}
 				}
