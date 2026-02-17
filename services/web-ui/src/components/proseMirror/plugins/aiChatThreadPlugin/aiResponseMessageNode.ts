@@ -162,6 +162,16 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     return {
         dom: parentWrapper, // The outer DOM node of the node view
         contentDOM: responseMessageContent, // The DOM node that holds the node's content
+        ignoreMutation: (mutation) => {
+            // Ignore style attribute changes on the wrapper (e.g. marginBottom set
+            // by applyAnchoredImageSpacing in WorkspaceCanvas). Without this,
+            // ProseMirror's internal MutationObserver would detect the style change
+            // and trigger a DOM reconciliation that wipes the externally-set margin.
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                return true
+            }
+            return false
+        },
         update: (updatedNode) => {
             // Check if the updated node is still of the same type
             if (updatedNode.type.name !== aiResponseMessageNodeType) {

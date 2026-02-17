@@ -408,6 +408,7 @@ Users see:
   - Content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`
   - Uses `html` template literals for clean UI creation
   - Handles hover events and focus management
+  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set `height` (grown by `applyAnchoredImageSpacing` in `WorkspaceCanvas.ts`)
 
 - `aiUserInputNode.ts` - Sticky composer node (self-contained):
   - Exports node schema AND its NodeView implementation
@@ -425,6 +426,7 @@ Users see:
   - Attributes: `id, createdAt` for message identification
   - Rendered as a styled chat bubble (right-aligned)
   - Created when user submits content from the composer
+  - `ignoreMutation()` returns `true` for style attribute changes for consistency with other thread NodeViews
 
 - `aiResponseMessageNode.ts` - AI response node (self-contained):
   - Exports node schema AND its NodeView implementation
@@ -432,6 +434,7 @@ Users see:
   - Provider-specific avatars (Claude, GPT) with animations
   - Streaming animation states (receiving/idle)
   - Boundary strip decoration
+  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set `marginBottom` (set by `applyAnchoredImageSpacing` in `WorkspaceCanvas.ts` to push subsequent messages below overlapping anchored images)
 
 - `aiGeneratedImageNode.ts` - AI-generated image node and canvas callback system:
   - Exports ProseMirror node spec for `aiGeneratedImage` (atom node)

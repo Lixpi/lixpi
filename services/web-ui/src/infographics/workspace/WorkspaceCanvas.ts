@@ -607,6 +607,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // If image extends below message, add margin to push next content down
             const overhang = imageBottom - msgBottom + OVERLAP_GAP_Y
+            console.log('🔶 [SPACING]', { responseMessageId, imgTop, imgHeight, imageBottom, threadTop, zoom, msgBottomRelative, msgBottom, overhang, willApply: overhang > 0 })
             if (overhang > 0) {
                 msgEl.style.marginBottom = `${overhang}px`
             }
