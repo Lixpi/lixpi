@@ -138,7 +138,7 @@
 .workspace-ai-chat-thread-node {
     position: relative;
     padding: 0;
-    overflow: visible;
+    overflow: hidden;
     box-shadow: var(--ai-chat-thread-node-box-shadow, none);
     border: var(--ai-chat-thread-node-border, none);
 
@@ -151,6 +151,17 @@
 
     .shifting-gradient-canvas {
         border-radius: inherit;
+    }
+
+    // Position resize handles inside the node boundary (overflow: hidden clips anything outside)
+    .document-resize-top-left {
+        top: 0;
+        left: 0;
+    }
+
+    .document-resize-top-right {
+        top: 0;
+        right: 0;
     }
 }
 

@@ -546,15 +546,94 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         })
 
-        if (!hasChanges) return
+        if (!hasChanges) {
+            applyAnchoredImageSpacing(threadNodeId)
+            return
+        }
 
-        commitCanvasStatePreservingEditors({
-            ...currentCanvasState,
-            nodes: updatedNodes,
-        })
+        // Update currentCanvasState with new image positions BEFORE spacing,
+        // so applyAnchoredImageSpacing can grow the thread height and the
+        // single commit below persists everything (positions + height).
+        currentCanvasState = { ...currentCanvasState, nodes: updatedNodes }
+        applyAnchoredImageSpacing(threadNodeId)
+
+        commitCanvasStatePreservingEditors(currentCanvasState)
 
         scheduleEdgesRender()
         repositionCanvasBubbleMenu()
+    }
+    // are pushed below the overlapping anchored image.
+    function applyAnchoredImageSpacing(threadNodeId: string): void {
+        if (!currentCanvasState) return
+        if (webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) return
+
+        const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${threadNodeId}"]`) as HTMLElement | null
+        if (!threadNodeEl) return
+
+        const anchors = anchoredImageManager.getAnchorsForThread(threadNodeId)
+
+        // Clear all previous spacers first
+        const allMessageEls = threadNodeEl.querySelectorAll('[data-message-id]') as NodeListOf<HTMLElement>
+        for (const el of allMessageEls) {
+            el.style.marginBottom = ''
+        }
+
+        if (anchors.length === 0) return
+
+        // Use DOM positions (always up-to-date, even during live resize)
+        const threadTop = parseFloat(threadNodeEl.style.top) || 0
+        const threadRect = threadNodeEl.getBoundingClientRect()
+        const zoom = threadRect.width / threadNodeEl.offsetWidth || 1
+
+        for (const anchor of anchors) {
+            const responseMessageId = anchor.responseMessageId
+            if (!responseMessageId) continue
+
+            const imgEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
+            if (!imgEl) continue
+
+            const msgEl = threadNodeEl.querySelector(`[data-message-id="${responseMessageId}"]`) as HTMLElement | null
+            if (!msgEl) continue
+
+            // Image bottom in canvas coordinates (style.top + offsetHeight are unzoomed)
+            const imgTop = parseFloat(imgEl.style.top) || 0
+            const imgHeight = imgEl.offsetHeight
+            const imageBottom = imgTop + imgHeight
+
+            // Message bottom in canvas coordinates
+            const msgRect = msgEl.getBoundingClientRect()
+            const msgBottomRelative = (msgRect.bottom - threadRect.top) / zoom
+            const msgBottom = threadTop + msgBottomRelative
+
+            // If image extends below message, add margin to push next content down
+            const overhang = imageBottom - msgBottom + OVERLAP_GAP_Y
+            if (overhang > 0) {
+                msgEl.style.marginBottom = `${overhang}px`
+            }
+        }
+
+        // After setting margins, grow thread if content is clipped by overflow:hidden
+        const contentHeight = threadNodeEl.scrollHeight
+        const currentHeight = threadNodeEl.offsetHeight
+        if (contentHeight > currentHeight) {
+            threadNodeEl.style.height = `${contentHeight}px`
+
+            // Update in-memory canvas state so callers that commit afterwards
+            // will persist the grown height in a single commit.
+            const nodeIdx = currentCanvasState.nodes.findIndex((n: CanvasNode) => n.nodeId === threadNodeId)
+            if (nodeIdx >= 0) {
+                const updatedNode = {
+                    ...currentCanvasState.nodes[nodeIdx],
+                    dimensions: { ...currentCanvasState.nodes[nodeIdx].dimensions, height: contentHeight }
+                }
+                currentCanvasState = {
+                    ...currentCanvasState,
+                    nodes: currentCanvasState.nodes.map((n: CanvasNode, i: number) => i === nodeIdx ? updatedNode : n)
+                }
+            }
+
+            repositionAllThreadFloatingInputs()
+        }
     }
 
     function scheduleAnchoredImagesRealign(threadNodeId: string): void {
@@ -684,6 +763,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         onImagePartialToCanvas: async (data) => {
             const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId } = data
+            console.log('🖼️ [CANVAS] onImagePartialToCanvas', { threadId, fileId, hasExisting: partialImageTracker.has(threadId) })
 
             // Check tracker SYNCHRONOUSLY before any await to prevent race with onImageCompleteToCanvas
             const existing = partialImageTracker.get(threadId)
@@ -807,6 +887,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 // Reposition thread floating input after height change
                 repositionAllThreadFloatingInputs()
+                applyAnchoredImageSpacing(sourceThread.nodeId)
             } else {
                 const newCanvasState: CanvasState = {
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
@@ -820,6 +901,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         onImageCompleteToCanvas: async (data) => {
             const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, responseMessageId } = data
+            console.log('🖼️ [CANVAS] onImageCompleteToCanvas', { threadId, fileId, responseMessageId, hasPartial: partialImageTracker.has(threadId) })
 
             // Read tracker SYNCHRONOUSLY before any await
             const partial = partialImageTracker.get(threadId)
@@ -911,12 +993,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             n.nodeId === partial.nodeId ? { ...n, position: { x, y } } : n
                         )
 
-                        commitCanvasState({
-                            viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                            nodes: repositionedNodes,
-                            edges,
-                        })
-
                         const imgNodeEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"]`) as HTMLElement | null
                         if (imgNodeEl) {
                             imgNodeEl.style.left = `${x}px`
@@ -932,6 +1008,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             responseMessageId,
                             imageHeight: imgHeight,
                         })
+
+                        // Apply spacing before commit so grown height is persisted
+                        currentCanvasState = {
+                            viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                            nodes: repositionedNodes,
+                            edges,
+                        }
+                        applyAnchoredImageSpacing(sourceThread.nodeId)
+                        commitCanvasState(currentCanvasState)
                     }
                 }
             } else {
@@ -1041,11 +1126,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     ? { ...imageNode, position: collisionResult.nodes.get(nodeId) ? { x: collisionResult.nodes.get(nodeId)!.x, y: collisionResult.nodes.get(nodeId)!.y } : imageNode.position }
                     : imageNode
 
-                commitCanvasStatePreservingEditors({
+                // Set state but don't commit yet — spacing may grow thread height
+                currentCanvasState = {
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
                     nodes: resolvedNodes,
                     edges: newEdges,
-                })
+                }
                 appendImageNodeToDOM(resolvedImageNode)
 
                 if (useAnchored) {
@@ -1064,8 +1150,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         nodeLayerManager.bringToFront(imgNodeEl)
                     }
 
+                    // Apply spacing before commit so grown height is persisted
+                    applyAnchoredImageSpacing(sourceThread.nodeId)
                     repositionAllThreadFloatingInputs()
                 }
+
+                commitCanvasStatePreservingEditors(currentCanvasState)
             }
         },
 
@@ -2013,6 +2103,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     imgEl.style.width = `${imgW}px`
                     imgEl.style.height = `${imgH}px`
                 }
+                applyAnchoredImageSpacing(nodeId)
             }
         }
 
@@ -2103,10 +2194,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // No spacer dispatch needed — images are side-by-side
             }
 
-            commitCanvasState({
-                ...currentCanvasState,
-                nodes: updatedNodes
-            })
+            // Apply spacing before commit so the grown height is persisted
+            currentCanvasState = { ...currentCanvasState, nodes: updatedNodes }
+            applyAnchoredImageSpacing(nodeId)
+
+            commitCanvasState(currentCanvasState)
 
             // Final reposition at new size
             repositionCanvasBubbleMenu()
@@ -2452,6 +2544,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
 
             // No spacer dispatch needed — images are positioned side-by-side with text
+            // Apply anchored image spacing to push messages below images
+            const threadsWithAnchors = new Set<string>()
+            for (const node of currentCanvasState.nodes) {
+                if (node.type !== 'image') continue
+                const anchor = anchoredImageManager.getAnchor(node.nodeId)
+                if (anchor) threadsWithAnchors.add(anchor.threadNodeId)
+            }
+            for (const tid of threadsWithAnchors) {
+                applyAnchoredImageSpacing(tid)
+            }
         }
     }
 

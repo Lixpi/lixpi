@@ -555,10 +555,22 @@ class AiChatThreadPluginClass {
     // ========== STREAMING MANAGEMENT ==========
 
     private startStreaming(view: EditorView): void {
+        console.log('🟣 [PLUGIN] startStreaming called', {
+            docSize: view.state.doc.content.size,
+            viewDom: view.dom?.parentElement?.className,
+            stackTrace: new Error().stack?.split('\\n').slice(1, 5).join(' → ')
+        })
         this.unsubscribeFromSegments = SegmentsReceiver.subscribeToeceiveSegment((event: SegmentEvent) => {
             const { status, type, aiProvider, segment, threadId, aiChatThreadId } = event
             const effectiveThreadId = threadId || aiChatThreadId
             const { state, dispatch } = view
+
+            console.log('🔵 [PLUGIN] Segment event received', {
+                status, type, effectiveThreadId,
+                hasSegment: !!segment,
+                docSize: state.doc.content.size,
+                viewDestroyed: (view as any).destroyed ?? 'unknown'
+            })
 
             // Handle image generation events
             if (type === 'image_partial') {
@@ -715,8 +727,15 @@ class AiChatThreadPluginClass {
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
 
+        console.log('🔴 [PLUGIN] handleStreamStart', {
+            threadId,
+            threadInfoFound: !!threadInfo,
+            insertPos: threadInfo?.insertPos,
+            docSize: state.doc.content.size
+        })
+
         if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
+            console.warn('🔴 [PLUGIN] handleStreamStart: thread NOT found in doc, skipping', { threadId })
             return
         }
 
@@ -741,9 +760,10 @@ class AiChatThreadPluginClass {
             // Set receiving state for this specific thread
             if (threadId) {
                 tr.setMeta('setReceiving', { threadId, receiving: true })
-                console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos })
+                console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos, responseMessageId })
             }
             dispatch(tr)
+            console.log('🔴 [PLUGIN] handleStreamStart dispatch done', { threadId, docSizeAfter: tr.doc.content.size })
         } catch (error) {
             console.error('Error inserting aiResponseMessage:', error)
         }
@@ -761,12 +781,21 @@ class AiChatThreadPluginClass {
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
+            console.warn('🟠 [PLUGIN] handleStreaming: thread NOT found in doc, skipping', { threadId })
             return
         }
 
         let tr = state.tr
         let responseInfo = PositionFinder.findResponseNode(state, threadId)
+
+        console.log('🟠 [PLUGIN] handleStreaming', {
+            threadId,
+            responseFound: responseInfo.found,
+            endOfNodePos: responseInfo.endOfNodePos,
+            childCount: responseInfo.childCount,
+            segmentType: segment.type,
+            segmentContent: segment.segment?.substring(0, 50)
+        })
 
         // Create response node if missing in the correct thread
         if (!responseInfo.found) {
@@ -1202,6 +1231,9 @@ class AiChatThreadPluginClass {
 
                 return {
                     destroy: () => {
+                        console.log('🟣 [PLUGIN] destroy called — unsubscribing from segments', {
+                            hadSubscription: !!this.unsubscribeFromSegments
+                        })
                         if (this.unsubscribeFromSegments) {
                             this.unsubscribeFromSegments()
                         }
