@@ -99,6 +99,27 @@
         pointer-events: auto;
     }
 
+    // On AI chat thread nodes, only show each handle on its own hover
+    &.workspace-ai-chat-thread-node {
+        &:hover .document-resize-handle {
+            opacity: 0;
+            pointer-events: auto;
+        }
+
+        .document-resize-handle:hover {
+            opacity: 1;
+        }
+
+        &.is-resizing .document-resize-handle {
+            opacity: 0;
+            pointer-events: auto;
+
+            &.is-dragging {
+                opacity: 1;
+            }
+        }
+    }
+
     &.is-selected,
     &:focus-within {
         outline: none;
@@ -117,7 +138,7 @@
 .workspace-ai-chat-thread-node {
     position: relative;
     padding: 0;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: var(--ai-chat-thread-node-box-shadow, none);
     border: var(--ai-chat-thread-node-border, none);
 
@@ -413,6 +434,22 @@
     &:hover svg,
     &.is-dragging svg {
         transform: rotate(0deg) scale(1.2);
+    }
+}
+
+// Bottom resize handles on the per-thread floating AI input
+.ai-prompt-input-thread-persistent {
+    // Only show each handle on its own hover
+    .document-resize-handle {
+        pointer-events: auto;
+    }
+
+    .document-resize-handle:hover {
+        opacity: 1;
+    }
+
+    &.thread-hovered .document-resize-handle {
+        pointer-events: auto;
     }
 }
 

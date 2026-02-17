@@ -450,6 +450,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
 
         positionElementBelowNode(el, node)
+
+        // Add bottom resize handles to the floating input (they control the thread node's height)
+        el.appendChild(createResizeHandle(nodeId, 'bottom-left'))
+        el.appendChild(createResizeHandle(nodeId, 'bottom-right'))
+
         viewportEl.appendChild(el)
 
         threadFloatingInputs.set(nodeId, {
@@ -1325,7 +1330,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectNode(node.nodeId)
         })
 
+        const isAiChatThread = node.type === 'aiChatThread'
         for (const corner of RESIZE_CORNERS) {
+            // For aiChatThread nodes, bottom handles go on the floating input instead
+            if (isAiChatThread && corner.startsWith('bottom')) continue
             nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
         }
 
@@ -1976,6 +1984,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadEntry.el.style.top = `${pos.y + dims.height + 16}px`
                 threadEntry.el.style.width = `${dims.width}px`
             }
+
+            // Real-time anchored image repositioning during thread resize
+            if (resizeAnchorsForThread.length > 0) {
+                const liveThreadDims = { width: nodeEl.offsetWidth, height: nodeEl.offsetHeight }
+                const liveThreadPos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
+                const liveThread = {
+                    ...(currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId) as AiChatThreadCanvasNode),
+                    position: liveThreadPos,
+                    dimensions: liveThreadDims,
+                }
+                for (const anchor of resizeAnchorsForThread) {
+                    const imgEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
+                    if (!imgEl) continue
+
+                    const { x: imgX, y: imgY, constrainedWidth: imgW } = computeImagePositionOverlappingThread(
+                        liveThread,
+                        anchor.responseMessageId || '',
+                        nodeEl
+                    )
+                    const imgElement = imgEl.querySelector('img') as HTMLImageElement | null
+                    const ar = imgElement?.naturalWidth && imgElement?.naturalHeight
+                        ? imgElement.naturalWidth / imgElement.naturalHeight : 1
+                    const imgH = imgW / ar
+
+                    imgEl.style.left = `${imgX}px`
+                    imgEl.style.top = `${imgY}px`
+                    imgEl.style.width = `${imgW}px`
+                    imgEl.style.height = `${imgH}px`
+                }
+            }
         }
 
         const handleMouseUp = () => {
@@ -2266,6 +2304,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Create the always-visible per-thread floating prompt input
         createThreadFloatingInput(node)
+
+        // Sync hover state: when thread node is hovered, also show resize handles on floating input
+        nodeEl.addEventListener('mouseenter', () => {
+            const entry = threadFloatingInputs.get(node.nodeId)
+            if (entry) entry.el.classList.add('thread-hovered')
+        })
+        nodeEl.addEventListener('mouseleave', () => {
+            const entry = threadFloatingInputs.get(node.nodeId)
+            if (entry) entry.el.classList.remove('thread-hovered')
+        })
 
         return nodeEl
     }
