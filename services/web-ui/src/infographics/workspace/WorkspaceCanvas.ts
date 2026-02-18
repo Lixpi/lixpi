@@ -114,11 +114,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
     let anchoredRealignRaf: number | null = null
+    let autoGrowRaf: number | null = null
     let selectedNodeId: string | null = null
     let selectedEdgeId: string | null = null
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     const pendingAnchoredRealignThreadNodeIds: Set<string> = new Set()
+    const pendingAutoGrowThreadNodeIds: Set<string> = new Set()
     const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
     const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
@@ -613,11 +615,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // After setting margins, grow thread if content is clipped by overflow:hidden
-        const contentHeight = threadNodeEl.scrollHeight
+        // After setting margins, grow thread if content is clipped by overflow:hidden.
+        // Temporarily remove the fixed height to measure the natural content height.
         const currentHeight = threadNodeEl.offsetHeight
-        if (contentHeight > currentHeight) {
-            threadNodeEl.style.height = `${contentHeight}px`
+        const savedHeight = threadNodeEl.style.height
+        threadNodeEl.style.height = 'auto'
+        const naturalHeight = threadNodeEl.offsetHeight
+        threadNodeEl.style.height = savedHeight
+
+        if (naturalHeight > currentHeight) {
+            threadNodeEl.style.height = `${naturalHeight}px`
 
             // Update in-memory canvas state so callers that commit afterwards
             // will persist the grown height in a single commit.
@@ -625,7 +632,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (nodeIdx >= 0) {
                 const updatedNode = {
                     ...currentCanvasState.nodes[nodeIdx],
-                    dimensions: { ...currentCanvasState.nodes[nodeIdx].dimensions, height: contentHeight }
+                    dimensions: { ...currentCanvasState.nodes[nodeIdx].dimensions, height: naturalHeight }
                 }
                 currentCanvasState = {
                     ...currentCanvasState,
@@ -651,6 +658,59 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             for (const nodeId of nodeIds) {
                 realignAnchoredImagesForThread(nodeId)
+            }
+        })
+    }
+
+    function autoGrowThreadNode(threadNodeId: string): void {
+        if (!currentCanvasState) return
+
+        const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${threadNodeId}"]`) as HTMLElement | null
+        if (!threadNodeEl) return
+
+        // Measure the natural height the thread needs by temporarily removing
+        // the fixed height constraint. The flex column container will size to
+        // fit its children (the editor shrinks to its content via flex:1).
+        // Reading offsetHeight forces a synchronous reflow but no repaint.
+        const currentHeight = threadNodeEl.offsetHeight
+        const savedHeight = threadNodeEl.style.height
+        threadNodeEl.style.height = 'auto'
+        const naturalHeight = threadNodeEl.offsetHeight
+        threadNodeEl.style.height = savedHeight
+
+        if (naturalHeight <= currentHeight) return
+
+        threadNodeEl.style.height = `${naturalHeight}px`
+
+        const nodeIdx = currentCanvasState.nodes.findIndex((n: CanvasNode) => n.nodeId === threadNodeId)
+        if (nodeIdx >= 0) {
+            const updatedNode = {
+                ...currentCanvasState.nodes[nodeIdx],
+                dimensions: { ...currentCanvasState.nodes[nodeIdx].dimensions, height: naturalHeight }
+            }
+            currentCanvasState = {
+                ...currentCanvasState,
+                nodes: currentCanvasState.nodes.map((n: CanvasNode, i: number) => i === nodeIdx ? updatedNode : n)
+            }
+        }
+
+        commitCanvasStatePreservingEditors(currentCanvasState)
+        repositionAllThreadFloatingInputs()
+        scheduleEdgesRender()
+    }
+
+    function scheduleThreadAutoGrow(threadNodeId: string): void {
+        pendingAutoGrowThreadNodeIds.add(threadNodeId)
+        if (autoGrowRaf !== null) return
+
+        autoGrowRaf = requestAnimationFrame(() => {
+            autoGrowRaf = null
+
+            const nodeIds = Array.from(pendingAutoGrowThreadNodeIds)
+            pendingAutoGrowThreadNodeIds.clear()
+
+            for (const nodeId of nodeIds) {
+                autoGrowThreadNode(nodeId)
             }
         })
     }
@@ -2323,6 +2383,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             threadId: node.referenceId,
                             content: value
                         })
+                        scheduleThreadAutoGrow(node.nodeId)
                         scheduleAnchoredImagesRealign(node.nodeId)
                     },
                     onProjectTitleChange: () => {},
@@ -2736,6 +2797,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 anchoredRealignRaf = null
             }
             pendingAnchoredRealignThreadNodeIds.clear()
+            if (autoGrowRaf !== null) {
+                cancelAnimationFrame(autoGrowRaf)
+                autoGrowRaf = null
+            }
+            pendingAutoGrowThreadNodeIds.clear()
             connectionManager?.destroy()
             connectionManager = null
             if (panZoom) {
