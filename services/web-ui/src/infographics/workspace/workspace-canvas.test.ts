@@ -432,6 +432,14 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain('--rail-thread-height')
 	})
 
+	it('repositionThreadRail hides boundary circle when thread is hidden', () => {
+		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('workspace-thread-rail__boundary-circle')
+		expect(fnBody).toContain("isHidden ? 'none' : ''")
+	})
+
 	it('resize handler updates --rail-thread-height CSS var', () => {
 		expect(ts).toMatch(/resizeRail\.style\.setProperty\('--rail-thread-height'/)
 	})

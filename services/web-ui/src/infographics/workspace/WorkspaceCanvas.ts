@@ -604,6 +604,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         rail.style.height = `${totalHeight}px`
         rail.style.setProperty('--rail-thread-height', `${threadHeight}px`)
 
+        const boundaryCircle = rail.querySelector('.workspace-thread-rail__boundary-circle') as HTMLElement | null
+        if (boundaryCircle) {
+            boundaryCircle.style.display = isHidden ? 'none' : ''
+        }
+
         connectionManager?.setRailHeight(nodeId, totalHeight)
     }
 
