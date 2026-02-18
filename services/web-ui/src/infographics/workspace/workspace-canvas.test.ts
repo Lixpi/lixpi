@@ -478,4 +478,17 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/onAskAi.*async|async.*onAskAi/)
 		expect(ts).toContain('createAiChatThread')
 	})
+
+	it('passes onReceivingStateChange callback to ProseMirrorEditor', () => {
+		expect(ts).toContain('onReceivingStateChange')
+		// The callback must bridge plugin state to promptInputController
+		expect(ts).toMatch(/onReceivingStateChange.*promptInputController\.setReceiving|promptInputController\.setReceiving.*onReceivingStateChange/s)
+	})
+
+	it('onReceivingStateChange calls promptInputController.setReceiving with threadId and receiving', () => {
+		// Find the onReceivingStateChange callback block and verify it passes both args
+		const callbackMatch = ts.match(/onReceivingStateChange:\s*\(threadId.*?receiving.*?\)\s*=>\s*\{[^}]*\}/s)
+		expect(callbackMatch).not.toBeNull()
+		expect(callbackMatch![0]).toContain('promptInputController.setReceiving(threadId, receiving)')
+	})
 })

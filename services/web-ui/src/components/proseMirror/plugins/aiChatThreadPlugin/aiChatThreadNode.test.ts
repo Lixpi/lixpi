@@ -1,6 +1,7 @@
 'use strict'
 
 import { describe, it, expect, vi } from 'vitest'
+import { EditorState } from 'prosemirror-state'
 import {
     doc,
     p,
@@ -13,6 +14,8 @@ import {
     aiChatThreadNodeSpec,
     aiChatThreadNodeView,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
+import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
+import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 
 // =============================================================================
 // Helper: instantiate aiChatThreadNodeView with minimal mocks
@@ -276,5 +279,97 @@ describe('aiChatThreadNodeSpec — schema', () => {
         expect(domOutput[1]['data-thread-id']).toBe('thread-dom-1')
         expect(domOutput[1]['data-status']).toBe('active')
         expect(domOutput[2]).toBe(0)
+    })
+})
+
+// =============================================================================
+// aiChatThreadPlugin — onReceivingStateChange callback
+// =============================================================================
+
+describe('aiChatThreadPlugin — onReceivingStateChange callback', () => {
+    function createPluginWithCallback(onReceivingStateChange: (threadId: string, receiving: boolean) => void) {
+        return createAiChatThreadPlugin({
+            sendAiRequestHandler: vi.fn(),
+            stopAiRequestHandler: vi.fn(),
+            placeholders: { titlePlaceholder: 'Title', paragraphPlaceholder: 'Type here…' },
+            onReceivingStateChange,
+        })
+    }
+
+    function createStateWithPlugin(plugin: ReturnType<typeof createPluginWithCallback>) {
+        return EditorState.create({
+            doc: doc(thread({ threadId: 'thread-1' }, p('hello'))),
+            schema,
+            plugins: [plugin],
+        })
+    }
+
+    it('calls onReceivingStateChange when setReceiving meta is dispatched with receiving=true', () => {
+        const callback = vi.fn()
+        const plugin = createPluginWithCallback(callback)
+        const state = createStateWithPlugin(plugin)
+
+        const tr = state.tr.setMeta('setReceiving', { threadId: 'thread-1', receiving: true })
+        state.apply(tr)
+
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(callback).toHaveBeenCalledWith('thread-1', true)
+    })
+
+    it('calls onReceivingStateChange when setReceiving meta is dispatched with receiving=false', () => {
+        const callback = vi.fn()
+        const plugin = createPluginWithCallback(callback)
+        const state = createStateWithPlugin(plugin)
+
+        // First set receiving=true
+        const tr1 = state.tr.setMeta('setReceiving', { threadId: 'thread-1', receiving: true })
+        const state2 = state.apply(tr1)
+
+        // Then set receiving=false
+        const tr2 = state2.tr.setMeta('setReceiving', { threadId: 'thread-1', receiving: false })
+        state2.apply(tr2)
+
+        expect(callback).toHaveBeenCalledTimes(2)
+        expect(callback).toHaveBeenCalledWith('thread-1', false)
+    })
+
+    it('does not call onReceivingStateChange for transactions without setReceiving meta', () => {
+        const callback = vi.fn()
+        const plugin = createPluginWithCallback(callback)
+        const state = createStateWithPlugin(plugin)
+
+        // Dispatch a regular transaction (insertText)
+        const tr = state.tr.insertText('x', 2)
+        state.apply(tr)
+
+        expect(callback).not.toHaveBeenCalled()
+    })
+
+    it('does not throw when onReceivingStateChange is not provided', () => {
+        const plugin = createAiChatThreadPlugin({
+            sendAiRequestHandler: vi.fn(),
+            stopAiRequestHandler: vi.fn(),
+            placeholders: { titlePlaceholder: 'Title', paragraphPlaceholder: 'Type here…' },
+        })
+        const state = EditorState.create({
+            doc: doc(thread({ threadId: 'thread-1' }, p('hello'))),
+            schema,
+            plugins: [plugin],
+        })
+
+        const tr = state.tr.setMeta('setReceiving', { threadId: 'thread-1', receiving: true })
+        expect(() => state.apply(tr)).not.toThrow()
+    })
+
+    it('updates plugin state receivingThreadIds when setReceiving meta is dispatched', () => {
+        const callback = vi.fn()
+        const plugin = createPluginWithCallback(callback)
+        const state = createStateWithPlugin(plugin)
+
+        const tr = state.tr.setMeta('setReceiving', { threadId: 'thread-1', receiving: true })
+        const newState = state.apply(tr)
+
+        const pluginState = AI_CHAT_THREAD_PLUGIN_KEY.getState(newState)
+        expect(pluginState.receivingThreadIds.has('thread-1')).toBe(true)
     })
 })
