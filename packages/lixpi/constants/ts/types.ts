@@ -77,6 +77,7 @@ export type ImageGeneratedByMetadata = {
     responseId: string
     aiModel: AiModelId
     revisedPrompt: string
+    responseMessageId?: string
 }
 
 export type ImageCanvasNode = {
