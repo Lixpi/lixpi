@@ -62,8 +62,8 @@ describe('webUiThemeSettings — defaults', () => {
 		expect(webUiThemeSettings.aiChatThreadRailEdgeMargin).toBe(0.025)
 	})
 
-	it('aiChatThreadRailMinSlideHeight defaults to 0', () => {
-		expect(webUiThemeSettings.aiChatThreadRailMinSlideHeight).toBe(0)
+	it('aiChatThreadRailMinSlideHeight defaults to 120', () => {
+		expect(webUiThemeSettings.aiChatThreadRailMinSlideHeight).toBe(120)
 	})
 })
 

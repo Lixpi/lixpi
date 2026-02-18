@@ -404,10 +404,10 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 	})
 
 	it('snaps targetT to top when source is above target', () => {
-		// Source center at y=50, target at y=200..300
-		// idealT = (50 - 200) / 100 = -1.5 → clamp to 0.025
+		// Source center at y=50, target at y=200..400
+		// idealT = (50 - 200) / 200 = -0.75 → clamp to 0.025
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
-		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
 
 		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 		const result = computeSpreadTValues([edge], [source, target])
@@ -417,10 +417,10 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 	})
 
 	it('snaps targetT to bottom when source is below target', () => {
-		// Source center at y=550, target at y=0..100
-		// idealT = (550 - 0) / 100 = 5.5 → clamp to 0.975
+		// Source center at y=550, target at y=0..200
+		// idealT = (550 - 0) / 200 = 2.75 → clamp to 0.975
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 500 }, dimensions: { width: 200, height: 100 } })
-		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 200 } })
 
 		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 		const result = computeSpreadTValues([edge], [source, target])
@@ -459,7 +459,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		try {
 			// Source far above target → should clamp to 0.1 (not 0.025)
 			const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
-			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 500 }, dimensions: { width: 200, height: 100 } })
+			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 500 }, dimensions: { width: 200, height: 200 } })
 			const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 			const result = computeSpreadTValues([edge], [source, target])
 
