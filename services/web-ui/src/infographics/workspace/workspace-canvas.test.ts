@@ -211,3 +211,60 @@ describe('AI chat thread — auto-grow TS infrastructure', () => {
 		expect(destroyBody).toContain('pendingAutoGrowThreadNodeIds')
 	})
 })
+
+// =============================================================================
+// AI chat thread — empty thread hidden until messages appear
+// =============================================================================
+
+describe('AI chat thread — empty thread visibility', () => {
+	const ts = loadTs()
+
+	it('defines threadContentHasMessages helper', () => {
+		expect(ts).toMatch(/function\s+threadContentHasMessages\s*\(\s*content:\s*any\s*\):\s*boolean/)
+	})
+
+	it('defines hiddenEmptyThreadNodeIds set', () => {
+		expect(ts).toMatch(/const\s+hiddenEmptyThreadNodeIds:\s*Set<string>\s*=\s*new\s+Set/)
+	})
+
+	it('defines updateThreadNodeVisibility function', () => {
+		expect(ts).toMatch(/function\s+updateThreadNodeVisibility\s*\(/)
+	})
+
+	it('updateThreadNodeVisibility checks for message wrapper elements', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('ai-user-message-wrapper')
+		expect(fnBody).toContain('ai-response-message-wrapper')
+	})
+
+	it('createAiChatThreadNode hides node when thread has no messages', () => {
+		expect(ts).toMatch(/threadContentHasMessages[\s\S]*?nodeEl\.style\.display\s*=\s*'none'/)
+	})
+
+	it('onEditorChange calls updateThreadNodeVisibility', () => {
+		expect(ts).toMatch(/onEditorChange[\s\S]*?updateThreadNodeVisibility/)
+	})
+
+	it('positionElementBelowNode accounts for hidden thread nodes', () => {
+		const fnMatch = ts.match(/function\s+positionElementBelowNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('hiddenEmptyThreadNodeIds')
+	})
+
+	it('renderNodes clears hiddenEmptyThreadNodeIds', () => {
+		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
+		expect(renderMatch).not.toBeNull()
+		const renderBody = renderMatch![0]
+		expect(renderBody).toContain('hiddenEmptyThreadNodeIds.clear()')
+	})
+
+	it('destroy() clears hiddenEmptyThreadNodeIds', () => {
+		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
+		expect(destroyMatch).not.toBeNull()
+		const destroyBody = destroyMatch![0]
+		expect(destroyBody).toContain('hiddenEmptyThreadNodeIds')
+	})
+})

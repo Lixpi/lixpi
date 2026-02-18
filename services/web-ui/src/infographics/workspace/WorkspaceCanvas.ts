@@ -470,7 +470,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function positionElementBelowNode(el: HTMLElement, node: CanvasNode): void {
         el.style.left = `${node.position.x}px`
-        el.style.top = `${node.position.y + (node.dimensions?.height ?? 400) + 16}px`
+        // When the thread node is hidden (no messages), position the floating
+        // input at the node's top instead of below it.
+        const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)
+        const topOffset = isHidden ? 0 : (node.dimensions?.height ?? 400) + 16
+        el.style.top = `${node.position.y + topOffset}px`
         el.style.width = `${node.dimensions?.width ?? 400}px`
     }
 
@@ -663,6 +667,40 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     const AI_CHAT_THREAD_MIN_HEIGHT = 150
+
+    function threadContentHasMessages(content: any): boolean {
+        if (!content || typeof content !== 'object') return false
+        const nodes = content.content
+        if (!Array.isArray(nodes)) return false
+        for (const node of nodes) {
+            if (node.type === 'aiChatThread') {
+                const children = node.content
+                if (Array.isArray(children) && children.length > 0) return true
+            }
+        }
+        return false
+    }
+
+    // Tracks thread nodes that are hidden because they have no messages yet
+    const hiddenEmptyThreadNodeIds: Set<string> = new Set()
+
+    function updateThreadNodeVisibility(nodeId: string, threadNodeEl: HTMLElement): void {
+        const hasMessages = threadNodeEl.querySelector('.ai-user-message-wrapper, .ai-response-message-wrapper') !== null
+        const wasHidden = hiddenEmptyThreadNodeIds.has(nodeId)
+
+        if (hasMessages && wasHidden) {
+            // Show the thread node — messages have appeared
+            threadNodeEl.style.display = ''
+            hiddenEmptyThreadNodeIds.delete(nodeId)
+            repositionAllThreadFloatingInputs()
+            scheduleThreadAutoGrow(nodeId)
+        } else if (!hasMessages && !wasHidden) {
+            // Hide the thread node — no messages
+            threadNodeEl.style.display = 'none'
+            hiddenEmptyThreadNodeIds.add(nodeId)
+            repositionAllThreadFloatingInputs()
+        }
+    }
 
     function autoGrowThreadNode(threadNodeId: string): void {
         if (!currentCanvasState) return
@@ -2385,6 +2423,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             threadId: node.referenceId,
                             content: value
                         })
+                        updateThreadNodeVisibility(node.nodeId, nodeEl)
                         scheduleThreadAutoGrow(node.nodeId)
                         scheduleAnchoredImagesRealign(node.nodeId)
                     },
@@ -2460,6 +2499,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } else {
             // Show loading placeholder until content is loaded
             editorContainer.appendChild(createLoadingPlaceholder().dom)
+        }
+
+        // Hide the thread node if it has no messages yet
+        if (thread && !threadContentHasMessages(thread.content)) {
+            nodeEl.style.display = 'none'
+            hiddenEmptyThreadNodeIds.add(node.nodeId)
         }
 
         // Create the always-visible per-thread floating prompt input
@@ -2561,6 +2606,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Clear loaded node tracking on full re-render
         loadedNodeIds.clear()
+        hiddenEmptyThreadNodeIds.clear()
 
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((t) => [t.threadId, t]))
@@ -2811,6 +2857,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 autoGrowRaf = null
             }
             pendingAutoGrowThreadNodeIds.clear()
+            hiddenEmptyThreadNodeIds.clear()
             connectionManager?.destroy()
             connectionManager = null
             if (panZoom) {
