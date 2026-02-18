@@ -15,6 +15,13 @@ function loadScss(): string {
 	)
 }
 
+function loadTs(): string {
+	return readFileSync(
+		resolve(__dirname, 'WorkspaceCanvas.ts'),
+		'utf-8'
+	)
+}
+
 function extractBlock(scss: string, selector: string): string {
 	const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 	const pattern = new RegExp(`${escapedSelector}\\s*\\{`)
@@ -92,5 +99,115 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const anchoredBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--anchored')
 		const anchoredShadows = extractBoxShadowValues(anchoredBlock)
 		expect(anchoredShadows).toHaveLength(1)
+	})
+})
+
+// =============================================================================
+// AI chat thread — auto-grow CSS overrides
+// =============================================================================
+
+describe('AI chat thread — workspace CSS overrides for auto-grow', () => {
+	const scss = loadScss()
+
+	it('zeroes padding-bottom on .ai-chat-thread-wrapper inside workspace thread', () => {
+		const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper')
+		expect(block).toMatch(/padding-bottom:\s*0/)
+	})
+
+	it('zeroes padding-bottom on .ai-chat-thread-content inside workspace thread', () => {
+		const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-chat-thread-content')
+		expect(block).toMatch(/padding-bottom:\s*0/)
+	})
+
+	it('hides the in-editor composer (.ai-user-input-wrapper) inside workspace thread', () => {
+		const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-user-input-wrapper')
+		expect(block).toMatch(/display:\s*none/)
+	})
+
+	it('overrides ProseMirror min-height to 0 inside workspace thread', () => {
+		// There are two rules with this selector — search the raw SCSS for
+		// the min-height declaration scoped to the workspace thread.
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*min-height:\s*0/)
+	})
+
+	it('sets ProseMirror padding-bottom to 1rem inside workspace thread', () => {
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*padding-bottom:\s*1rem/)
+	})
+})
+
+// =============================================================================
+// AI chat thread — auto-grow TypeScript infrastructure
+// =============================================================================
+
+describe('AI chat thread — auto-grow TS infrastructure', () => {
+	const ts = loadTs()
+
+	it('defines AI_CHAT_THREAD_MIN_HEIGHT constant', () => {
+		expect(ts).toMatch(/const\s+AI_CHAT_THREAD_MIN_HEIGHT\s*=\s*\d+/)
+	})
+
+	it('defines autoGrowThreadNode function', () => {
+		expect(ts).toMatch(/function\s+autoGrowThreadNode\s*\(\s*threadNodeId:\s*string\s*\)/)
+	})
+
+	it('defines scheduleThreadAutoGrow function', () => {
+		expect(ts).toMatch(/function\s+scheduleThreadAutoGrow\s*\(\s*threadNodeId:\s*string\s*\)/)
+	})
+
+	it('autoGrowThreadNode measures natural height using height:auto technique', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("threadNodeEl.style.height = 'auto'")
+		expect(fnBody).toContain('threadNodeEl.offsetHeight')
+	})
+
+	it('autoGrowThreadNode enforces minimum height via AI_CHAT_THREAD_MIN_HEIGHT', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('AI_CHAT_THREAD_MIN_HEIGHT')
+	})
+
+	it('autoGrowThreadNode can both grow and shrink (no grow-only guard)', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		// Must use === (skip if equal) not <= (skip if smaller — grow only)
+		expect(fnBody).toMatch(/naturalHeight\s*===\s*currentHeight/)
+		expect(fnBody).not.toMatch(/naturalHeight\s*<=\s*currentHeight/)
+	})
+
+	it('autoGrowThreadNode calls commitCanvasStatePreservingEditors', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('commitCanvasStatePreservingEditors')
+	})
+
+	it('autoGrowThreadNode calls repositionAllThreadFloatingInputs', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('repositionAllThreadFloatingInputs')
+	})
+
+	it('onEditorChange calls scheduleThreadAutoGrow', () => {
+		expect(ts).toMatch(/onEditorChange[\s\S]*?scheduleThreadAutoGrow/)
+	})
+
+	it('renderNodes schedules auto-grow for all thread nodes', () => {
+		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
+		expect(renderMatch).not.toBeNull()
+		const renderBody = renderMatch![0]
+		expect(renderBody).toContain('scheduleThreadAutoGrow')
+	})
+
+	it('destroy() cleans up autoGrowRaf and pendingAutoGrowThreadNodeIds', () => {
+		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
+		expect(destroyMatch).not.toBeNull()
+		const destroyBody = destroyMatch![0]
+		expect(destroyBody).toContain('autoGrowRaf')
+		expect(destroyBody).toContain('pendingAutoGrowThreadNodeIds')
 	})
 })

@@ -662,6 +662,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    const AI_CHAT_THREAD_MIN_HEIGHT = 150
+
     function autoGrowThreadNode(threadNodeId: string): void {
         if (!currentCanvasState) return
 
@@ -675,10 +677,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const currentHeight = threadNodeEl.offsetHeight
         const savedHeight = threadNodeEl.style.height
         threadNodeEl.style.height = 'auto'
-        const naturalHeight = threadNodeEl.offsetHeight
+        const naturalHeight = Math.max(threadNodeEl.offsetHeight, AI_CHAT_THREAD_MIN_HEIGHT)
         threadNodeEl.style.height = savedHeight
 
-        if (naturalHeight <= currentHeight) return
+        if (naturalHeight === currentHeight) return
 
         threadNodeEl.style.height = `${naturalHeight}px`
 
@@ -2655,6 +2657,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             for (const tid of threadsWithAnchors) {
                 applyAnchoredImageSpacing(tid)
+            }
+        }
+
+        // Auto-size all thread nodes to fit their content after initial render
+        for (const node of currentCanvasState.nodes) {
+            if (node.type === 'aiChatThread') {
+                scheduleThreadAutoGrow(node.nodeId)
             }
         }
     }
