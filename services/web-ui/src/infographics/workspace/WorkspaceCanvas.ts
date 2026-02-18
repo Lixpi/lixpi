@@ -738,7 +738,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     aiChatThreadId: sourceThreadNode?.type === 'aiChatThread' ? (sourceThreadNode as AiChatThreadCanvasNode).referenceId : '',
                     responseId,
                     aiModel: aiModel as any,
-                    revisedPrompt
+                    revisedPrompt,
+                    responseMessageId: responseMessageId || '',
                 }
             }
 
@@ -828,6 +829,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     responseId: '',
                     aiModel: '' as any,
                     revisedPrompt: '',
+                    responseMessageId: '',
                 }
             }
 
@@ -928,6 +930,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             responseId,
                             aiModel: aiModel as any,
                             revisedPrompt,
+                            responseMessageId: responseMessageId || '',
                         },
                     } satisfies ImageCanvasNode
                 })
@@ -1065,6 +1068,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         responseId,
                         aiModel: aiModel as any,
                         revisedPrompt,
+                        responseMessageId: responseMessageId || '',
                     },
                 }
 
@@ -2297,7 +2301,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         editorContainer.className = 'ai-chat-thread-node-editor nopan'
         nodeEl.appendChild(editorContainer)
 
-        if (thread && thread.content !== undefined) {
+        if (thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0) {
             console.log('📋 [WORKSPACE] Creating ProseMirrorEditor with thread content')
             try {
                 // Create AiInteractionService for this thread
@@ -2531,20 +2535,56 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
 
-        // Re-apply anchored image visual state after DOM recreation
+        // Re-derive anchored image state from `generatedBy` metadata.
+        // The anchoredImageManager is in-memory only, so on page refresh
+        // it starts empty. We must scan ImageCanvasNodes that carry
+        // generatedBy metadata and re-register them as anchored.
         if (!webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) {
-            for (const node of currentCanvasState.nodes) {
-                if (node.type !== 'image') continue
-                if (anchoredImageManager.isAnchored(node.nodeId)) {
-                    const imgEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement
-                    if (imgEl) {
-                        imgEl.classList.add('workspace-image-node--anchored')
-                        nodeLayerManager.bringToFront(imgEl)
-                    }
+            // Build a lookup: threadReferenceId → threadCanvasNode
+            const threadNodesByRef = new Map<string, AiChatThreadCanvasNode>()
+            for (const n of currentCanvasState.nodes) {
+                if (n.type === 'aiChatThread') {
+                    threadNodesByRef.set((n as AiChatThreadCanvasNode).referenceId, n as AiChatThreadCanvasNode)
                 }
             }
 
-            // No spacer dispatch needed — images are positioned side-by-side with text
+            for (const node of currentCanvasState.nodes) {
+                if (node.type !== 'image') continue
+                const imgNode = node as ImageCanvasNode
+                if (!imgNode.generatedBy) continue
+
+                const threadCanvasNode = threadNodesByRef.get(imgNode.generatedBy.aiChatThreadId)
+                if (!threadCanvasNode) continue
+
+                // Already tracked (e.g. re-render during live session) — skip re-registration
+                if (anchoredImageManager.isAnchored(imgNode.nodeId)) continue
+
+                // Use responseMessageId persisted in generatedBy metadata.
+                // This is the ProseMirror node `id` of the response message that
+                // triggered image generation — set during onImageCompleteToCanvas.
+                const responseMessageId = imgNode.generatedBy.responseMessageId || ''
+
+                anchoredImageManager.anchorImage({
+                    imageNodeId: imgNode.nodeId,
+                    threadNodeId: threadCanvasNode.nodeId,
+                    threadReferenceId: threadCanvasNode.referenceId,
+                    responseMessageId,
+                    imageHeight: imgNode.dimensions.height,
+                })
+            }
+
+            // Now apply CSS classes and bring anchored images to front
+            for (const node of currentCanvasState.nodes) {
+                if (node.type !== 'image') continue
+                if (!anchoredImageManager.isAnchored(node.nodeId)) continue
+
+                const imgEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement
+                if (imgEl) {
+                    imgEl.classList.add('workspace-image-node--anchored')
+                    nodeLayerManager.bringToFront(imgEl)
+                }
+            }
+
             // Apply anchored image spacing to push messages below images
             const threadsWithAnchors = new Set<string>()
             for (const node of currentCanvasState.nodes) {
