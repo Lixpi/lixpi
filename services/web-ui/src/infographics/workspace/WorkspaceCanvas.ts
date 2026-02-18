@@ -190,20 +190,76 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 selectNode(null)
                 commitCanvasState({ ...currentCanvasState, nodes: updatedNodes, edges: updatedEdges })
             },
-            onCreateVariant: (nodeId) => {
-                const node = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-                if (node && node.type === 'image') {
-                    viewportEl.dispatchEvent(new CustomEvent('canvas-create-image-variant', {
-                        detail: { nodeId, node },
-                        bubbles: true,
-                    }))
-                }
-            },
             onDownloadImage: (nodeId) => {
                 const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
                 const imgEl = nodeEl?.querySelector('img') as HTMLImageElement | null
                 if (imgEl?.src) {
                     downloadImage(imgEl.src, { getAuthToken: () => AuthService.getTokenSilently() })
+                }
+            },
+            onAskAi: async (nodeId) => {
+                const imageNode = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
+                if (!imageNode || imageNode.type !== 'image') return
+
+                const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+                if (!aiChatThreadService) return
+
+                try {
+                    const threadId = uuidv4()
+
+                    const initialContent = {
+                        type: 'doc',
+                        content: [
+                            {
+                                type: 'documentTitle',
+                                content: [{ type: 'text', text: 'New AI Chat' }]
+                            },
+                            {
+                                type: 'aiChatThread',
+                                attrs: { threadId },
+                                content: []
+                            }
+                        ]
+                    }
+
+                    const thread = await aiChatThreadService.createAiChatThread({
+                        workspaceId,
+                        threadId,
+                        content: initialContent,
+                        aiModel: 'anthropic:claude-sonnet-4-20250514'
+                    })
+
+                    if (thread) {
+                        const newX = imageNode.position.x + imageNode.dimensions.width + 50
+                        const newY = imageNode.position.y
+
+                        const threadNode: AiChatThreadCanvasNode = {
+                            nodeId: `node-${thread.threadId}`,
+                            type: 'aiChatThread',
+                            referenceId: thread.threadId,
+                            position: { x: newX, y: newY },
+                            dimensions: { width: 400, height: 500 }
+                        }
+
+                        const newEdge: WorkspaceEdge = {
+                            edgeId: `edge-${imageNode.nodeId}-${threadNode.nodeId}`,
+                            sourceNodeId: imageNode.nodeId,
+                            targetNodeId: threadNode.nodeId,
+                            sourceHandle: 'right',
+                            targetHandle: 'left'
+                        }
+
+                        const existingNodes = currentCanvasState?.nodes || []
+                        const newCanvasState: CanvasState = {
+                            viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                            edges: [...(currentCanvasState?.edges ?? []), newEdge],
+                            nodes: [...existingNodes, threadNode]
+                        }
+
+                        onCanvasStateChange?.(newCanvasState)
+                    }
+                } catch (error) {
+                    console.error('Failed to create AI chat thread from image:', error)
                 }
             },
             onHide: () => {
@@ -1535,14 +1591,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             updateEdgeEndpointHandles()
             showCanvasBubbleMenuForNode(nodeId)
 
-            // aiChatThread nodes have their own always-visible per-thread inputs,
-            // so only show the single floating input for non-thread node types.
+            // aiChatThread nodes have their own always-visible per-thread inputs.
+            // Image nodes use the bubble menu "Ask AI" button instead of the floating input.
+            // Only show the single floating input for document node types.
             const node = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-            if (node && node.type === 'aiChatThread') {
-                // Set controller target to this thread (for keyboard shortcuts etc.)
-                const refId = (node as AiChatThreadCanvasNode).referenceId || nodeId
-                promptInputController.setTarget({ nodeId, type: 'aiChatThread', referenceId: refId })
-                // Hide the single floating input without clearing the controller target
+            if (node && (node.type === 'aiChatThread' || node.type === 'image')) {
+                if (node.type === 'aiChatThread') {
+                    // Set controller target to this thread (for keyboard shortcuts etc.)
+                    const refId = (node as AiChatThreadCanvasNode).referenceId || nodeId
+                    promptInputController.setTarget({ nodeId, type: 'aiChatThread', referenceId: refId })
+                }
+                // Hide the single floating input
                 if (floatingInputEl) {
                     floatingInputEl.style.display = 'none'
                 }

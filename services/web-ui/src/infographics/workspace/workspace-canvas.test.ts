@@ -433,4 +433,21 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch).not.toBeNull()
 		expect(fnMatch![0]).toContain('getRailHeight')
 	})
+
+	it('selectNode hides floating input for image nodes', () => {
+		const fnMatch = ts.match(/function\s+selectNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("node.type === 'image'")
+		expect(fnBody).toContain('hideFloatingInput')
+	})
+
+	it('bubble menu callbacks include onAskAi', () => {
+		expect(ts).toContain('onAskAi')
+	})
+
+	it('onAskAi handler creates an AI chat thread and edge', () => {
+		expect(ts).toMatch(/onAskAi.*async|async.*onAskAi/)
+		expect(ts).toContain('createAiChatThread')
+	})
 })

@@ -18,7 +18,7 @@ describe('CANVAS_IMAGE_CONTEXT', () => {
 describe('buildCanvasBubbleMenuItems — structure', () => {
     const callbacks = {
         onDeleteNode: vi.fn(),
-        onCreateVariant: vi.fn(),
+        onAskAi: vi.fn(),
         onDownloadImage: vi.fn(),
         onHide: vi.fn(),
     }
@@ -35,9 +35,9 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         }
     })
 
-    it('first item is Create Variant button', () => {
+    it('first item is Ask AI button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[0].element.getAttribute('title')).toBe('Create variant')
+        expect(items[0].element.getAttribute('title')).toBe('Ask AI')
     })
 
     it('second item is Download button', () => {
@@ -66,7 +66,7 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
 describe('buildCanvasBubbleMenuItems — activeNodeId', () => {
     const callbacks = {
         onDeleteNode: vi.fn(),
-        onCreateVariant: vi.fn(),
+        onAskAi: vi.fn(),
         onDownloadImage: vi.fn(),
         onHide: vi.fn(),
     }
@@ -95,10 +95,10 @@ describe('buildCanvasBubbleMenuItems — activeNodeId', () => {
 // =============================================================================
 
 describe('buildCanvasBubbleMenuItems — click behavior', () => {
-    it('Create Variant fires onCreateVariant + onHide with active node', () => {
+    it('Ask AI fires onAskAi + onHide with active node', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
-            onCreateVariant: vi.fn(),
+            onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
@@ -107,15 +107,30 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
 
         items[0].element.click()
 
-        expect(callbacks.onCreateVariant).toHaveBeenCalledWith('img-1')
+        expect(callbacks.onAskAi).toHaveBeenCalledWith('img-1')
         expect(callbacks.onHide).toHaveBeenCalledOnce()
         expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
+    })
+
+    it('Ask AI does nothing when no activeNodeId', () => {
+        const callbacks = {
+            onDeleteNode: vi.fn(),
+            onAskAi: vi.fn(),
+            onDownloadImage: vi.fn(),
+            onHide: vi.fn(),
+        }
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+
+        items[0].element.click()
+
+        expect(callbacks.onAskAi).not.toHaveBeenCalled()
+        expect(callbacks.onHide).not.toHaveBeenCalled()
     })
 
     it('Download fires onDownloadImage + onHide with active node', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
-            onCreateVariant: vi.fn(),
+            onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
@@ -127,13 +142,12 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         expect(callbacks.onDownloadImage).toHaveBeenCalledWith('img-3')
         expect(callbacks.onHide).toHaveBeenCalledOnce()
         expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
-        expect(callbacks.onCreateVariant).not.toHaveBeenCalled()
     })
 
     it('Download does nothing when no activeNodeId', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
-            onCreateVariant: vi.fn(),
+            onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
@@ -148,7 +162,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
     it('Delete fires onDeleteNode + onHide with active node', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
-            onCreateVariant: vi.fn(),
+            onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }
@@ -159,29 +173,12 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
 
         expect(callbacks.onDeleteNode).toHaveBeenCalledWith('img-2')
         expect(callbacks.onHide).toHaveBeenCalledOnce()
-        expect(callbacks.onCreateVariant).not.toHaveBeenCalled()
-    })
-
-    it('Create Variant does nothing when no activeNodeId', () => {
-        const callbacks = {
-            onDeleteNode: vi.fn(),
-            onCreateVariant: vi.fn(),
-            onDownloadImage: vi.fn(),
-            onHide: vi.fn(),
-        }
-        const { items } = buildCanvasBubbleMenuItems(callbacks)
-        // activeNodeId is null by default
-
-        items[0].element.click()
-
-        expect(callbacks.onCreateVariant).not.toHaveBeenCalled()
-        expect(callbacks.onHide).not.toHaveBeenCalled()
     })
 
     it('Delete does nothing when no activeNodeId', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
-            onCreateVariant: vi.fn(),
+            onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
             onHide: vi.fn(),
         }

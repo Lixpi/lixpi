@@ -16,7 +16,7 @@ const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" s
 
 type CanvasBubbleMenuCallbacks = {
     onDeleteNode: (nodeId: string) => void
-    onCreateVariant: (nodeId: string) => void
+    onAskAi: (nodeId: string) => void
     onDownloadImage: (nodeId: string) => void
     onHide: () => void
 }
@@ -56,13 +56,13 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
 } {
     let activeNodeId: string | null = null
 
-    const createVariantButton = createCanvasButton({
+    const askAiButton = createCanvasButton({
         icon: magicIcon,
-        title: 'Create variant',
+        title: 'Ask AI',
         iconSize: 17,
         onClick: () => {
             if (activeNodeId) {
-                callbacks.onCreateVariant(activeNodeId)
+                callbacks.onAskAi(activeNodeId)
                 callbacks.onHide()
             }
         },
@@ -93,7 +93,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     })
 
     const items: BubbleMenuItem[] = [
-        { element: createVariantButton, context: [CANVAS_IMAGE_CONTEXT] },
+        { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
     ]
