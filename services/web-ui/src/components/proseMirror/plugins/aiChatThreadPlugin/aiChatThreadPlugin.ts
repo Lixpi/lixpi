@@ -536,20 +536,24 @@ class AiChatThreadPluginClass {
     private sendAiRequestHandler: SendAiRequestHandler
     private stopAiRequestHandler: StopAiRequestHandler
     private placeholderOptions: PlaceholderOptions
+    private onReceivingStateChange: ((threadId: string, receiving: boolean) => void) | null
     private unsubscribeFromSegments: (() => void) | null = null
 
     constructor({
         sendAiRequestHandler,
         stopAiRequestHandler,
-        placeholders
+        placeholders,
+        onReceivingStateChange
     }: {
         sendAiRequestHandler: SendAiRequestHandler
         stopAiRequestHandler: StopAiRequestHandler
         placeholders: PlaceholderOptions
+        onReceivingStateChange?: (threadId: string, receiving: boolean) => void
     }) {
         this.sendAiRequestHandler = sendAiRequestHandler
         this.stopAiRequestHandler = stopAiRequestHandler
         this.placeholderOptions = placeholders
+        this.onReceivingStateChange = onReceivingStateChange ?? null
     }
 
     // ========== STREAMING MANAGEMENT ==========
@@ -1091,6 +1095,7 @@ class AiChatThreadPluginClass {
                             } else {
                                 newSet.delete(threadId)
                             }
+                            this.onReceivingStateChange?.(threadId, receiving)
                             return {
                                 ...prev,
                                 receivingThreadIds: newSet,
@@ -1313,18 +1318,20 @@ export function createAiChatThreadPlugin({
     sendAiRequestHandler,
     stopAiRequestHandler,
     placeholders,
-    imageCallbacks
+    imageCallbacks,
+    onReceivingStateChange
 }: {
     sendAiRequestHandler: SendAiRequestHandler
     stopAiRequestHandler: StopAiRequestHandler
     placeholders: PlaceholderOptions
     imageCallbacks?: AiGeneratedImageCallbacks
+    onReceivingStateChange?: (threadId: string, receiving: boolean) => void
 }): Plugin {
     // Set image generation callbacks if provided
     if (imageCallbacks) {
         setAiGeneratedImageCallbacks(imageCallbacks)
     }
 
-    const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders })
+    const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders, onReceivingStateChange })
     return pluginInstance.create()
 }

@@ -119,7 +119,8 @@ export class ProseMirrorEditor {
         onPromptSubmit,
         onPromptStop,
         isPromptReceiving,
-        promptControlFactories
+        promptControlFactories,
+        onReceivingStateChange
     }) {
         this.onEditorChange = onEditorChange
         this.onProjectTitleChange = onProjectTitleChange
@@ -129,6 +130,7 @@ export class ProseMirrorEditor {
         this.onPromptStop = onPromptStop
         this.isPromptReceiving = isPromptReceiving
         this.promptControlFactories = promptControlFactories
+        this.onReceivingStateChange = onReceivingStateChange
         this.isDisabled = isDisabled
         this.documentType = documentType
         this.threadId = threadId
@@ -245,8 +247,9 @@ export class ProseMirrorEditor {
                     stopAiRequestHandler: val => this.onAiChatStop(val),
                     placeholders: {
                         titlePlaceholder: 'New document',
-                        paragraphPlaceholder: 'Type something and hit Cmd+Enter on Mac or Ctrl+Enter on PC to send it to AI.\n'
-                    }
+                        paragraphPlaceholder: 'I\'m your new document...'
+                    },
+                    onReceivingStateChange: this.onReceivingStateChange
                 })
             )
         }
@@ -261,7 +264,7 @@ export class ProseMirrorEditor {
                     createModelDropdown: this.promptControlFactories?.createModelDropdown,
                     createImageToggle: this.promptControlFactories?.createImageToggle,
                     createSubmitButton: this.promptControlFactories?.createSubmitButton,
-                    placeholderText: 'Type something and hit Cmd+Enter to send…'
+                    placeholderText: 'Talk to me...'
                 })
             )
         }

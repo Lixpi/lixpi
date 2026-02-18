@@ -2644,6 +2644,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     },
                     onAiChatStop: () => {
                         aiService.stopChatMessage()
+                    },
+                    onReceivingStateChange: (threadId: string, receiving: boolean) => {
+                        promptInputController.setReceiving(threadId, receiving)
                     }
                 })
 

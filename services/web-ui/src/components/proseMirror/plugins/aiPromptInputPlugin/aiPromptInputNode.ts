@@ -136,7 +136,15 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             dom.setAttribute('data-empty', String(empty))
         }
 
+        const syncReceivingState = () => {
+            const receiving = options.isReceiving()
+            controlsEl.classList.toggle('receiving', receiving)
+        }
+
         syncEmptyState(node)
+        syncReceivingState()
+
+        const receivingPollInterval = setInterval(syncReceivingState, 200)
 
         return {
             dom,
@@ -151,11 +159,13 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 if (updatedNode.type.name !== aiPromptInputNodeType) return false
                 node = updatedNode
                 syncEmptyState(updatedNode)
+                syncReceivingState()
                 modelDropdown.update()
                 imageToggle.update()
                 return true
             },
             destroy: () => {
+                clearInterval(receivingPollInterval)
                 modelDropdown.destroy?.()
             },
             stopEvent: (e: Event) => {
