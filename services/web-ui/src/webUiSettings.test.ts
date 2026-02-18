@@ -11,6 +11,7 @@ describe('webUiSettings — shape', () => {
 	it('exports a WebUiSettings type with exactly the expected keys', () => {
 		const keys = Object.keys(webUiSettings).sort()
 		expect(keys).toEqual([
+			'renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem',
 			'useModalityFilterOnModelSelectorDropdown',
 			'useShiftingGradientBackgroundOnAiChatThreadNode',
 			'useShiftingGradientBackgroundOnAiUserInputNode',

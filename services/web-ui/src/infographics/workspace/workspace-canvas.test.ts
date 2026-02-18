@@ -78,8 +78,19 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expect(docNodeBlock).not.toContain('transition:box-shadow')
 	})
 
-	it('.workspace-image-node has no own box-shadow declaration', () => {
-		const imageShadows = extractBoxShadowValues(imageNodeBlock)
-		expect(imageShadows).toHaveLength(0)
+	it('.workspace-image-node base has no own box-shadow, only anchored variant does', () => {
+		// The base .workspace-image-node must not set box-shadow.
+		// Only the nested .workspace-image-node--anchored modifier may.
+		const baseScss = imageNodeBlock.replace(
+			/&\.workspace-image-node--anchored\s*\{[^}]*\}/g,
+			''
+		)
+		const baseShadows = extractBoxShadowValues(baseScss)
+		expect(baseShadows).toHaveLength(0)
+
+		// Anchored variant is allowed to have a shadow
+		const anchoredBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--anchored')
+		const anchoredShadows = extractBoxShadowValues(anchoredBlock)
+		expect(anchoredShadows).toHaveLength(1)
 	})
 })
