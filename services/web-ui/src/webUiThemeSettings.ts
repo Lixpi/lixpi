@@ -5,6 +5,7 @@ export type WebUiThemeSettings = {
     aiChatThreadRailGradient: string
     aiChatThreadRailWidth: string
     aiChatThreadRailOffset: number
+    aiChatThreadRailEdgeMargin: number
 }
 
 export const webUiThemeSettings: WebUiThemeSettings = {
@@ -24,5 +25,9 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // Width of the visible rail line.
     aiChatThreadRailWidth: '3px',
     // Horizontal offset (in pixels) of the rail from the node's left edge.
-    aiChatThreadRailOffset: 5,
+    aiChatThreadRailOffset: -1,
+    // Fractional margin (0–0.5) from the top and bottom of the rail where connector
+    // anchor points stop sliding. E.g. 0.025 means connectors won't go closer than
+    // 2.5 % of the rail height from either end.
+    aiChatThreadRailEdgeMargin: 0.025,
 }

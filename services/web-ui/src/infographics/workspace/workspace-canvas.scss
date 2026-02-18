@@ -205,28 +205,38 @@
 }
 
 /* Vertical rail — drag handle + connection proxy running along AI chat thread + floating input */
+/* The outer .workspace-thread-rail spans the full functional height (thread + gap + floating input) */
+/* The inner __line child spans only the thread node height for visual display */
 .workspace-thread-rail {
     position: absolute;
     z-index: 10;
     pointer-events: auto;
     cursor: move;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 
-    &::before {
-        content: '';
+    &__line {
         position: absolute;
         top: 0;
-        bottom: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        width: var(--rail-width, 3px);
-        background-image: var(--rail-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
-        border-radius: 2px;
+        left: 0;
+        width: 100%;
+        height: var(--rail-thread-height, 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: var(--rail-width, 3px);
+            background-image: var(--rail-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
+            border-radius: 2px;
+        }
     }
 
-    &.is-selected::before {
+    &.is-selected .workspace-thread-rail__line::before {
         filter: brightness(1.15);
     }
 }

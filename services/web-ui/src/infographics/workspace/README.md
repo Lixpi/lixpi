@@ -48,9 +48,10 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Content is persisted separately from documents in the AI-Chat-Threads table
 - Automatically extract context from connected nodes (documents, images, other threads) when sending messages
 - Each AI chat thread node always has its own floating prompt input visible below it, regardless of selection state; these per-thread inputs automatically target the correct thread and follow the node during drag and resize
-- A **vertical rail** element spans the full height of the thread node, the gap, and the floating input. It is a sibling element in the viewport (not nested inside the thread node) tracked via the `threadRails` Map. The rail serves three purposes:
-    - **Visual boundary** — a gradient line rendered via `::before` pseudo-element, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `aiChatThreadRailGradient` and `aiChatThreadRailWidth` in `webUiThemeSettings.ts`
-    - **Drag handle** — clicking and dragging the rail moves both the thread node and its floating input (reuses `handleDragStart`)
+- A **vertical rail** element spans the full height of the thread node, the gap, and the floating input. It is a sibling element in the viewport (not nested inside the thread node) tracked via the `threadRails` Map. The rail uses a two-layer architecture:
+    - **Outer container** (`.workspace-thread-rail`) — spans the full functional height (thread + gap + floating input). Handles drag interactions and connection proxy hit areas. Invisible by itself
+    - **Inner visual line** (`.workspace-thread-rail__line`) — a child div whose height is limited to the thread node height via the `--rail-thread-height` CSS variable. Hosts the `::before` pseudo-element that renders the visible gradient line, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `aiChatThreadRailGradient` and `aiChatThreadRailWidth` in `webUiThemeSettings.ts`
+    - **Drag handle** — clicking and dragging anywhere on the full-height outer container moves both the thread node and its floating input (reuses `handleDragStart`)
     - **Connection proxy** — all connector line left-side anchors are shifted to the rail position via `railOffset` in `WorkspaceConnectionManager`, so edges visually connect to the rail rather than the node edge. The anchor Y range spans the full rail height (thread + gap + floating input) via `railHeights`, so connectors slide from the very top to the very bottom of the rail
     - The horizontal offset from the node edge is configurable via `aiChatThreadRailOffset` in `webUiThemeSettings.ts` (default 5px)
 - **AI-generated images** can appear in two modes controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
@@ -310,7 +311,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.image-node-content` | Image container |
 | `.image-node-img` | The actual img element |
 | `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
-| `.workspace-thread-rail` | Vertical rail element spanning thread + gap + floating input (drag handle, connection proxy, visual boundary) |
+| `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
+| `.workspace-thread-rail__line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
 
 | `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |

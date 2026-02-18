@@ -8,6 +8,7 @@ import {
 	getEdgeAnchorPositions,
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 // =============================================================================
 // HELPERS
@@ -447,6 +448,34 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 
 		const spread = result.get('e-1')!
 		expect(spread.targetT).toBe(0.75) // falls back to stored value
+	})
+
+	it('clamps using webUiThemeSettings.aiChatThreadRailEdgeMargin', () => {
+		const original = webUiThemeSettings.aiChatThreadRailEdgeMargin
+
+		// Temporarily set a larger margin
+		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailEdgeMargin = 0.1
+
+		try {
+			// Source far above target → should clamp to 0.1 (not 0.025)
+			const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 500 }, dimensions: { width: 200, height: 100 } })
+			const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+			const result = computeSpreadTValues([edge], [source, target])
+
+			const spread = result.get('e-1')!
+			expect(spread.targetT).toBe(0.1)
+
+			// Source far below target → should clamp to 0.9 (1 - 0.1)
+			const source2 = makeNode({ nodeId: 'src2', type: 'aiChatThread', position: { x: 0, y: 900 }, dimensions: { width: 200, height: 100 } })
+			const edge2 = makeEdge({ edgeId: 'e-2', sourceNodeId: 'src2', targetNodeId: 'tgt' })
+			const result2 = computeSpreadTValues([edge2], [source2, target])
+
+			const spread2 = result2.get('e-2')!
+			expect(spread2.targetT).toBe(0.9)
+		} finally {
+			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailEdgeMargin = original
+		}
 	})
 })
 

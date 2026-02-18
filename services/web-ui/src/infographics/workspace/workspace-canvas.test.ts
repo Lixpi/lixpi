@@ -304,14 +304,16 @@ describe('Vertical rail — CSS styling', () => {
 		expect(block).toMatch(/cursor:\s*move/)
 	})
 
-	it('has ::before pseudo-element for the visible line', () => {
+	it('has __line child with ::before pseudo-element for the visible line', () => {
+		expect(scss).toMatch(/&__line/)
 		expect(scss).toMatch(/&::before/)
 		expect(scss).toMatch(/--rail-width/)
 		expect(scss).toMatch(/--rail-gradient/)
+		expect(scss).toMatch(/--rail-thread-height/)
 	})
 
-	it('has .is-selected state', () => {
-		expect(scss).toMatch(/\.workspace-thread-rail[\s\S]*?&\.is-selected/)
+	it('has .is-selected state targeting __line::before', () => {
+		expect(scss).toMatch(/\.is-selected\s+\.workspace-thread-rail__line::before/)
 	})
 })
 
@@ -396,6 +398,22 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+updateEdgeEndpointHandles[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		expect(fnMatch![0]).toContain('RAIL_OFFSET')
+	})
+
+	it('createThreadRail creates __line child element', () => {
+		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('workspace-thread-rail__line')
+	})
+
+	it('repositionThreadRail sets --rail-thread-height CSS var', () => {
+		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('--rail-thread-height')
+	})
+
+	it('resize handler updates --rail-thread-height CSS var', () => {
+		expect(ts).toMatch(/resizeRail\.style\.setProperty\('--rail-thread-height'/)
 	})
 
 	it('repositionThreadRail calls connectionManager.setRailHeight', () => {

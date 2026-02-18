@@ -505,6 +505,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
         rail.dataset.threadNodeId = node.nodeId
 
+        const line = document.createElement('div')
+        line.className = 'workspace-thread-rail__line'
+        rail.appendChild(line)
+
         rail.addEventListener('mousedown', (e) => {
             e.preventDefault()
             e.stopPropagation()
@@ -531,6 +535,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         rail.style.left = `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
         rail.style.top = `${node.position.y}px`
         rail.style.height = `${totalHeight}px`
+        rail.style.setProperty('--rail-thread-height', `${threadHeight}px`)
 
         connectionManager?.setRailHeight(nodeId, totalHeight)
     }
@@ -2276,6 +2281,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 resizeRail.style.left = `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
                 resizeRail.style.top = `${pos.y}px`
                 resizeRail.style.height = `${totalH}px`
+                resizeRail.style.setProperty('--rail-thread-height', `${dims.height}px`)
                 connectionManager?.setRailHeight(nodeId, totalH)
             }
 

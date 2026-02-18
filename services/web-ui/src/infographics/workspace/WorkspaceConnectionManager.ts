@@ -30,6 +30,8 @@ import type {
 	WorkspaceEdge,
 } from '@lixpi/constants'
 
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+
 // Switch between 'orthogonal' (3-point circuit style) and 'horizontal-bezier' (smooth curves)
 // const CONNECTION_STYLE: PathType = 'orthogonal'
 const CONNECTION_STYLE: PathType = 'horizontal-bezier'
@@ -164,9 +166,10 @@ export function computeSpreadTValues(
 			// Calculate ideal straight-line projection
 			const idealT = (sourceY - targetTop) / targetHeight
 
-			// Clamp to be within the node side (0-1), leaving a small margin (0.025)
+			// Clamp to be within the node side (0-1), leaving a configurable margin
 			// effectively snapping to the top or bottom corner if the source is outside vertical bounds
-			targetT = Math.max(0.025, Math.min(0.975, idealT))
+			const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+			targetT = Math.max(m, Math.min(1 - m, idealT))
 		}
 
 		// Initialize with values
@@ -746,7 +749,8 @@ export class WorkspaceConnectionManager {
 						const targetHeight = targetNode.dimensions.height
 
 						const idealT = (sourceY - targetTop) / targetHeight
-						targetT = Math.max(0.025, Math.min(0.975, idealT))
+						const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+						targetT = Math.max(m, Math.min(1 - m, idealT))
 					}
 				}
 			}
