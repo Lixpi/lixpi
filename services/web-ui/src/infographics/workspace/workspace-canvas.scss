@@ -376,7 +376,7 @@
 // AI chat thread editor container - extends document-node-editor
 .ai-chat-thread-node-editor {
     flex: 1;
-    overflow: auto;
+    overflow: hidden;
     min-height: 100px;
     border-radius: 0 0 8px 8px;
     padding: 0;
