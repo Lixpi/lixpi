@@ -20,7 +20,7 @@ export const aiChatThreadNodeSpec = {
         aiModel: { default: '' },
         // Image generation settings
         imageGenerationEnabled: { default: false },
-        imageGenerationSize: { default: '1024x1024' }, // 1024x1024, 1536x1024, 1024x1536, auto
+        imageGenerationSize: { default: 'auto' }, // 1024x1024, 1536x1024, 1024x1536, auto
         // Previous response ID for multi-turn image editing
         previousResponseId: { default: '' }
     },
@@ -32,7 +32,7 @@ export const aiChatThreadNodeSpec = {
                 status: dom.getAttribute('data-status') || 'active',
                 aiModel: dom.getAttribute('data-ai-model') || '',
                 imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
-                imageGenerationSize: dom.getAttribute('data-image-generation-size') || '1024x1024',
+                imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
                 previousResponseId: dom.getAttribute('data-previous-response-id') || ''
             })
         }

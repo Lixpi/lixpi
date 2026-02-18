@@ -21,7 +21,7 @@ type AiPromptInputPluginOptions = {
     onStop: StopHandler
     isReceiving: () => boolean
     createModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createModelDropdown']
-    createImageToggle: Parameters<typeof createAiPromptInputNodeView>[0]['createImageToggle']
+    createImageSizeDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createImageSizeDropdown']
     createSubmitButton: Parameters<typeof createAiPromptInputNodeView>[0]['createSubmitButton']
     placeholderText: string
 }
@@ -54,14 +54,13 @@ function extractContentJSON(state: EditorState): any[] | null {
     return content
 }
 
-function getInputAttrs(state: EditorState): { aiModel: string; imageGenerationEnabled: boolean; imageGenerationSize: string } {
-    let attrs = { aiModel: '', imageGenerationEnabled: false, imageGenerationSize: '1024x1024' }
+function getInputAttrs(state: EditorState): { aiModel: string; imageGenerationSize: string } {
+    let attrs = { aiModel: '', imageGenerationSize: 'auto' }
     state.doc.descendants((node: ProseMirrorNode) => {
         if (node.type.name === aiPromptInputNodeType) {
             attrs = {
                 aiModel: node.attrs.aiModel || '',
-                imageGenerationEnabled: Boolean(node.attrs.imageGenerationEnabled),
-                imageGenerationSize: node.attrs.imageGenerationSize || '1024x1024',
+                imageGenerationSize: node.attrs.imageGenerationSize || 'auto',
             }
             return false
         }
@@ -107,7 +106,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         onStop,
         isReceiving,
         createModelDropdown,
-        createImageToggle,
+        createImageSizeDropdown,
         createSubmitButton,
         placeholderText,
     } = options
@@ -117,15 +116,14 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         if (!contentJSON) return
 
         const attrs = getInputAttrs(view.state)
-        const imageOptions = attrs.imageGenerationEnabled ? {
-            imageGenerationEnabled: true,
-            imageGenerationSize: attrs.imageGenerationSize,
-        } : undefined
 
         onSubmit({
             contentJSON,
             aiModel: attrs.aiModel,
-            imageOptions,
+            imageOptions: {
+                imageGenerationEnabled: true,
+                imageGenerationSize: attrs.imageGenerationSize,
+            },
         })
 
         clearInputContent(view)
@@ -182,7 +180,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     onStop,
                     isReceiving,
                     createModelDropdown,
-                    createImageToggle,
+                    createImageSizeDropdown,
                     createSubmitButton,
                 }),
             },
@@ -208,10 +206,10 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     onSubmit({
                         contentJSON,
                         aiModel: attrs.aiModel,
-                        imageOptions: attrs.imageGenerationEnabled ? {
+                        imageOptions: {
                             imageGenerationEnabled: true,
                             imageGenerationSize: attrs.imageGenerationSize,
-                        } : undefined,
+                        },
                     })
                 }
             }

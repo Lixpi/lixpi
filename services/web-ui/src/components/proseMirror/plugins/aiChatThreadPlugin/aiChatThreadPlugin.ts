@@ -1020,7 +1020,7 @@ class AiChatThreadPluginClass {
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
             imageGenerationEnabled = false,
-            imageGenerationSize = '1024x1024'
+            imageGenerationSize = 'auto'
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 

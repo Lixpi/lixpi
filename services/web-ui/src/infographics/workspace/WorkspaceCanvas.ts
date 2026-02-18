@@ -38,7 +38,7 @@ import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubb
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
-import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageToggle } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -386,7 +386,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlFactories = {
             createModelDropdown: createGenericAiModelDropdown,
-            createImageToggle: createGenericImageToggle,
+            createImageSizeDropdown: createGenericImageSizeDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
 
@@ -473,7 +473,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlFactories = {
             createModelDropdown: createGenericAiModelDropdown,
-            createImageToggle: createGenericImageToggle,
+            createImageSizeDropdown: createGenericImageSizeDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
 

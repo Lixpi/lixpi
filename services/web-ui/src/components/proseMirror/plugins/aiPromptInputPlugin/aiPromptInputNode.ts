@@ -12,16 +12,14 @@ export const aiPromptInputNodeSpec = {
     isolating: true,
     attrs: {
         aiModel: { default: '' },
-        imageGenerationEnabled: { default: false },
-        imageGenerationSize: { default: '1024x1024' },
+        imageGenerationSize: { default: 'auto' },
     },
     parseDOM: [
         {
             tag: 'div.ai-prompt-input-wrapper',
             getAttrs: (dom: HTMLElement) => ({
                 aiModel: dom.getAttribute('data-ai-model') || '',
-                imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
-                imageGenerationSize: dom.getAttribute('data-image-generation-size') || '1024x1024',
+                imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
             })
         },
     ],
@@ -31,7 +29,6 @@ export const aiPromptInputNodeSpec = {
             {
                 class: 'ai-prompt-input-wrapper',
                 'data-ai-model': node.attrs.aiModel,
-                'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
                 'data-image-generation-size': node.attrs.imageGenerationSize,
             },
             0,
@@ -50,10 +47,8 @@ type SubmitControls = {
     isReceiving: () => boolean
 }
 
-type ImageToggleControls = {
-    getImageGenerationEnabled: () => boolean
+type ImageSizeControls = {
     getImageGenerationSize: () => string
-    setImageGenerationEnabled: (enabled: boolean) => void
     setImageGenerationSize: (size: string) => void
 }
 
@@ -66,8 +61,9 @@ type AiPromptInputNodeViewOptions = {
         destroy?: () => void
         update: () => void
     }
-    createImageToggle: (controls: ImageToggleControls) => {
+    createImageSizeDropdown: (controls: ImageSizeControls, dropdownId: string) => {
         dom: HTMLElement
+        destroy?: () => void
         update: () => void
     }
     createSubmitButton: (controls: SubmitControls) => HTMLElement
@@ -106,10 +102,8 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setAiModel: (aiModel: string) => setNodeAttr(view, getPos, 'aiModel', aiModel),
         }
 
-        const imageControls: ImageToggleControls = {
-            getImageGenerationEnabled: () => Boolean(getNodeAttr(view, getPos, 'imageGenerationEnabled')),
-            getImageGenerationSize: () => getNodeAttr(view, getPos, 'imageGenerationSize') || '1024x1024',
-            setImageGenerationEnabled: (enabled: boolean) => setNodeAttr(view, getPos, 'imageGenerationEnabled', enabled),
+        const imageControls: ImageSizeControls = {
+            getImageGenerationSize: () => getNodeAttr(view, getPos, 'imageGenerationSize') || 'auto',
             setImageGenerationSize: (size: string) => setNodeAttr(view, getPos, 'imageGenerationSize', size),
         }
 
@@ -121,11 +115,11 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         // Mount controls using adapters
         const modelDropdown = options.createModelDropdown(modelControls, 'ai-prompt-input')
-        const imageToggle = options.createImageToggle(imageControls)
+        const imageSizeDropdown = options.createImageSizeDropdown(imageControls, 'ai-image-size')
         const submitButton = options.createSubmitButton(submitControls)
 
         controlsEl.appendChild(modelDropdown.dom)
-        controlsEl.appendChild(imageToggle.dom)
+        controlsEl.appendChild(imageSizeDropdown.dom)
         controlsEl.appendChild(submitButton)
 
         dom.appendChild(contentDOM)
@@ -161,12 +155,13 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 syncEmptyState(updatedNode)
                 syncReceivingState()
                 modelDropdown.update()
-                imageToggle.update()
+                imageSizeDropdown.update()
                 return true
             },
             destroy: () => {
                 clearInterval(receivingPollInterval)
                 modelDropdown.destroy?.()
+                imageSizeDropdown.destroy?.()
             },
             stopEvent: (e: Event) => {
                 // Prevent ProseMirror from stealing focus/clicks from controls

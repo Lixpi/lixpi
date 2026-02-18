@@ -2,7 +2,6 @@ import {
     sendIcon,
     pauseIcon,
     chevronDownIcon,
-    imageIcon,
     gptAvatarIcon,
     claudeIcon
 } from '$src/svgIcons/index.ts'
@@ -36,10 +35,8 @@ type SubmitControls = {
     isReceiving: () => boolean
 }
 
-type ImageToggleControls = {
-    getImageGenerationEnabled: () => boolean
+type ImageSizeControls = {
     getImageGenerationSize: () => string
-    setImageGenerationEnabled: (enabled: boolean) => void
     setImageGenerationSize: (size: string) => void
 }
 
@@ -208,64 +205,50 @@ export function createGenericSubmitButton(controls: SubmitControls) {
     `
 }
 
-export function createGenericImageToggle(controls: ImageToggleControls) {
+export function createGenericImageSizeDropdown(
+    controls: ImageSizeControls,
+    dropdownId: string
+) {
     const IMAGE_SIZES = [
-        { value: '1024x1024', label: '1:1' },
-        { value: '1536x1024', label: '3:2' },
-        { value: '1024x1536', label: '2:3' },
-        { value: 'auto', label: 'Auto' }
+        { title: '1:1', value: '1024x1024' },
+        { title: '3:2', value: '1536x1024' },
+        { title: '2:3', value: '1024x1536' },
+        { title: 'Auto', value: 'auto' },
     ]
 
-    const container = document.createElement('div')
-    container.className = 'image-generation-toggle'
+    const currentSize = controls.getImageGenerationSize()
+    const selectedValue = IMAGE_SIZES.find(s => s.value === currentSize) || IMAGE_SIZES[0]
 
-    const toggleButton = document.createElement('button')
-    toggleButton.className = 'image-toggle-btn'
-    toggleButton.innerHTML = imageIcon
-
-    const sizeSelector = document.createElement('select')
-    sizeSelector.className = 'image-size-selector'
-    IMAGE_SIZES.forEach(size => {
-        const option = document.createElement('option')
-        option.value = size.value
-        option.textContent = size.label
-        sizeSelector.appendChild(option)
+    const dropdown = createPureDropdown({
+        id: dropdownId,
+        selectedValue,
+        options: IMAGE_SIZES,
+        theme: 'dark',
+        buttonIcon: chevronDownIcon,
+        ignoreColorValuesForOptions: true,
+        ignoreColorValuesForSelectedValue: true,
+        renderIconForSelectedValue: false,
+        renderIconForOptions: false,
+        mountToBody: false,
+        disableAutoPositioning: true,
+        onSelect: (option: any) => {
+            controls.setImageGenerationSize(option.value)
+        }
     })
 
-    const syncFromState = () => {
-        const enabled = controls.getImageGenerationEnabled()
-        const size = controls.getImageGenerationSize()
-
-        container.setAttribute('data-enabled', String(enabled))
-        toggleButton.title = enabled ? 'Image generation enabled' : 'Enable image generation'
-        sizeSelector.value = size
+    const updateSelection = () => {
+        const currentSize = controls.getImageGenerationSize()
+        const matched = IMAGE_SIZES.find(s => s.value === currentSize)
+        if (matched) {
+            dropdown.update(matched)
+        }
     }
 
-    toggleButton.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-
-        const enabled = !controls.getImageGenerationEnabled()
-        controls.setImageGenerationEnabled(enabled)
-        syncFromState()
-    })
-
-    sizeSelector.addEventListener('change', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-
-        const newSize = (e.target as HTMLSelectElement).value
-        controls.setImageGenerationSize(newSize)
-        syncFromState()
-    })
-
-    container.appendChild(toggleButton)
-    container.appendChild(sizeSelector)
-
-    syncFromState()
-
     return {
-        dom: container,
-        update: () => syncFromState(),
+        dom: dropdown.dom,
+        destroy: () => {
+            dropdown.destroy?.()
+        },
+        update: updateSelection,
     }
 }

@@ -1,5 +1,5 @@
 export {
     createGenericAiModelDropdown,
     createGenericSubmitButton,
-    createGenericImageToggle,
+    createGenericImageSizeDropdown,
 } from '$src/components/proseMirror/plugins/primitives/aiControls/aiControls.ts'

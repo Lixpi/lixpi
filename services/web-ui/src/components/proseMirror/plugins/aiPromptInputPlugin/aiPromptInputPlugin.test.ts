@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import { EditorState, Transaction } from 'prosemirror-state'
 import { EditorView, DecorationSet } from 'prosemirror-view'
 import {
@@ -32,8 +34,8 @@ function createMockControlFactories() {
     const modelDropdownDom = document.createElement('div')
     modelDropdownDom.className = 'mock-model-dropdown'
 
-    const imageToggleDom = document.createElement('div')
-    imageToggleDom.className = 'mock-image-toggle'
+    const imageSizeDropdownDom = document.createElement('div')
+    imageSizeDropdownDom.className = 'mock-image-size-dropdown'
 
     const submitButtonDom = document.createElement('button')
     submitButtonDom.className = 'mock-submit-button'
@@ -44,13 +46,14 @@ function createMockControlFactories() {
             update: vi.fn(),
             destroy: vi.fn(),
         })),
-        createImageToggle: vi.fn(() => ({
-            dom: imageToggleDom,
+        createImageSizeDropdown: vi.fn(() => ({
+            dom: imageSizeDropdownDom,
             update: vi.fn(),
+            destroy: vi.fn(),
         })),
         createSubmitButton: vi.fn(() => submitButtonDom),
         modelDropdownDom,
-        imageToggleDom,
+        imageSizeDropdownDom,
         submitButtonDom,
     }
 }
@@ -63,7 +66,7 @@ function createPluginOptions(overrides: Partial<Parameters<typeof createAiPrompt
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
             placeholderText: 'Ask anything…',
             ...overrides,
@@ -107,16 +110,10 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
             expect(node.attrs.aiModel).toBe('')
         })
 
-        it('imageGenerationEnabled defaults to false', () => {
+        it('imageGenerationSize defaults to auto', () => {
             const state = createBaseEditorState(doc(promptInput(p())))
             const node = state.doc.firstChild!
-            expect(node.attrs.imageGenerationEnabled).toBe(false)
-        })
-
-        it('imageGenerationSize defaults to 1024x1024', () => {
-            const state = createBaseEditorState(doc(promptInput(p())))
-            const node = state.doc.firstChild!
-            expect(node.attrs.imageGenerationSize).toBe('1024x1024')
+            expect(node.attrs.imageGenerationSize).toBe('auto')
         })
     })
 
@@ -132,7 +129,7 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
 
         it('serializes attributes as data-* attributes', () => {
             const state = createBaseEditorState(doc(promptInput(
-                { aiModel: 'gpt-4', imageGenerationEnabled: true, imageGenerationSize: '512x512' },
+                { aiModel: 'gpt-4', imageGenerationSize: '512x512' },
                 p('Hello'),
             )))
             const node = state.doc.firstChild!
@@ -140,7 +137,6 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
             const attrs = domSpec[1]
 
             expect(attrs['data-ai-model']).toBe('gpt-4')
-            expect(attrs['data-image-generation-enabled']).toBe(true)
             expect(attrs['data-image-generation-size']).toBe('512x512')
         })
 
@@ -162,14 +158,12 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
             const el = document.createElement('div')
             el.className = 'ai-prompt-input-wrapper'
             el.setAttribute('data-ai-model', 'claude-3')
-            el.setAttribute('data-image-generation-enabled', 'true')
             el.setAttribute('data-image-generation-size', '256x256')
 
             const parseRule = aiPromptInputNodeSpec.parseDOM![0]
             const attrs = parseRule.getAttrs!(el as any) as Record<string, unknown>
 
             expect(attrs.aiModel).toBe('claude-3')
-            expect(attrs.imageGenerationEnabled).toBe(true)
             expect(attrs.imageGenerationSize).toBe('256x256')
         })
 
@@ -181,8 +175,7 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
             const attrs = parseRule.getAttrs!(el as any) as Record<string, unknown>
 
             expect(attrs.aiModel).toBe('')
-            expect(attrs.imageGenerationEnabled).toBe(false)
-            expect(attrs.imageGenerationSize).toBe('1024x1024')
+            expect(attrs.imageGenerationSize).toBe('auto')
         })
     })
 })
@@ -211,7 +204,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(node, mockView, getPos)
 
@@ -254,10 +247,10 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(controlsEl.contains(factories.modelDropdownDom)).toBe(true)
         })
 
-        it('renders image toggle inside controls', () => {
+        it('renders image size dropdown inside controls', () => {
             const { nv, factories } = createNodeView()
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
-            expect(controlsEl.contains(factories.imageToggleDom)).toBe(true)
+            expect(controlsEl.contains(factories.imageSizeDropdownDom)).toBe(true)
         })
 
         it('renders submit button inside controls', () => {
@@ -266,13 +259,13 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(controlsEl.contains(factories.submitButtonDom)).toBe(true)
         })
 
-        it('controls are ordered: dropdown, image toggle, submit', () => {
+        it('controls are ordered: dropdown, image size dropdown, submit', () => {
             const { nv, factories } = createNodeView()
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
             const children = Array.from(controlsEl.children)
 
             expect(children[0]).toBe(factories.modelDropdownDom)
-            expect(children[1]).toBe(factories.imageToggleDom)
+            expect(children[1]).toBe(factories.imageSizeDropdownDom)
             expect(children[2]).toBe(factories.submitButtonDom)
         })
     })
@@ -301,7 +294,7 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -356,7 +349,7 @@ describe('createAiPromptInputNodeView — stopEvent', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -412,7 +405,7 @@ describe('createAiPromptInputNodeView — ignoreMutation', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -463,7 +456,7 @@ describe('createAiPromptInputNodeView — update', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -493,12 +486,12 @@ describe('createAiPromptInputNodeView — update', () => {
         expect(factories.createModelDropdown.mock.results[0].value.update).toHaveBeenCalled()
     })
 
-    it('calls imageToggle.update on update', () => {
+    it('calls imageSizeDropdown.update on update', () => {
         const { nv, factories } = createNodeViewForUpdate()
         const updatedDoc = doc(promptInput(p('Updated')))
         nv.update!(updatedDoc.firstChild!)
 
-        expect(factories.createImageToggle.mock.results[0].value.update).toHaveBeenCalled()
+        expect(factories.createImageSizeDropdown.mock.results[0].value.update).toHaveBeenCalled()
     })
 })
 
@@ -517,13 +510,32 @@ describe('createAiPromptInputNodeView — destroy', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
         nv.destroy!()
 
         expect(factories.createModelDropdown.mock.results[0].value.destroy).toHaveBeenCalled()
+    })
+
+    it('calls imageSizeDropdown.destroy on destroy', () => {
+        const testDoc = doc(promptInput(p('Hello')))
+        const state = createBaseEditorState(testDoc)
+        const factories = createMockControlFactories()
+
+        const nv = createAiPromptInputNodeView({
+            onSubmit: vi.fn(),
+            onStop: vi.fn(),
+            isReceiving: vi.fn(() => false),
+            createModelDropdown: factories.createModelDropdown,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
+            createSubmitButton: factories.createSubmitButton,
+        })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
+
+        nv.destroy!()
+
+        expect(factories.createImageSizeDropdown.mock.results[0].value.destroy).toHaveBeenCalled()
     })
 })
 
@@ -542,7 +554,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -553,7 +565,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         expect(dropdownId).toBe('ai-prompt-input')
     })
 
-    it('createImageToggle receives ImageToggleControls adapter', () => {
+    it('createImageSizeDropdown receives ImageSizeControls adapter', () => {
         const factories = createMockControlFactories()
         const testDoc = doc(promptInput(p('Hello')))
         const state = createBaseEditorState(testDoc)
@@ -563,15 +575,13 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
-        expect(factories.createImageToggle).toHaveBeenCalledTimes(1)
-        const [controls] = factories.createImageToggle.mock.calls[0]
-        expect(controls).toHaveProperty('getImageGenerationEnabled')
+        expect(factories.createImageSizeDropdown).toHaveBeenCalledTimes(1)
+        const [controls] = factories.createImageSizeDropdown.mock.calls[0]
         expect(controls).toHaveProperty('getImageGenerationSize')
-        expect(controls).toHaveProperty('setImageGenerationEnabled')
         expect(controls).toHaveProperty('setImageGenerationSize')
     })
 
@@ -588,7 +598,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             onStop,
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -615,7 +625,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
     }
@@ -660,7 +670,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -691,7 +701,7 @@ describe('Visual proportions — SCSS sizing expectations', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
     }
@@ -933,12 +943,12 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
 // =============================================================================
 
 describe('createAiPromptInputPlugin — image options handling', () => {
-    it('includes imageOptions when imageGenerationEnabled is true', () => {
+    it('always includes imageOptions with imageGenerationEnabled true', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
 
         const testDoc = doc(promptInput(
-            { aiModel: 'dall-e-3', imageGenerationEnabled: true, imageGenerationSize: '512x512' },
+            { aiModel: 'dall-e-3', imageGenerationSize: '512x512' },
             p('Create an image'),
         ))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
@@ -959,12 +969,12 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         })
     })
 
-    it('omits imageOptions when imageGenerationEnabled is false', () => {
+    it('uses default imageGenerationSize when not specified', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
 
         const testDoc = doc(promptInput(
-            { aiModel: 'gpt-4', imageGenerationEnabled: false },
+            { aiModel: 'gpt-4' },
             p('Hello'),
         ))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
@@ -979,7 +989,10 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         plugin.props.handleDOMEvents!.keydown!(mockView, event)
 
         const submitCall = options.onSubmit.mock.calls[0][0]
-        expect(submitCall.imageOptions).toBeUndefined()
+        expect(submitCall.imageOptions).toEqual({
+            imageGenerationEnabled: true,
+            imageGenerationSize: 'auto',
+        })
     })
 })
 
@@ -1122,13 +1135,6 @@ describe('Visual — floating container SCSS expectations', () => {
         expect(stopIconSize / buttonSize).toBeCloseTo(0.8125, 2) // Stop icon fills ~81% of button
     })
 
-    it('SCSS image toggle button dimensions: 28x28px', () => {
-        // SCSS: .image-toggle-btn { width: 28px; height: 28px; border-radius: 6px; }
-        const toggleSize = 28
-        const submitSize = 32
-        expect(toggleSize).toBeLessThan(submitSize) // Smaller than submit for visual hierarchy
-    })
-
     it('SCSS content area has bounded max-height for scrolling', () => {
         // SCSS: .ai-prompt-input-content { max-height: 250px; overflow-y: auto; }
         const maxHeight = 250
@@ -1199,7 +1205,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1229,7 +1235,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1255,7 +1261,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1281,7 +1287,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1310,7 +1316,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
-            createImageToggle: factories.createImageToggle,
+            createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1359,35 +1365,45 @@ describe('Visual — receiving state CSS expectations', () => {
         expect(stopHoverColor).toMatch(/^#[0-9a-fA-F]{6}$/)
         // It's a red-ish color for "danger/stop" semantics
     })
+
+    it('SCSS send button and model dropdown use $nightBlue fill when input has content', () => {
+        // SCSS: &[data-empty="false"] targets controls when text is present
+        // $nightBlue is #42494f — used to indicate active state when text is present
+        const scss = readFileSync(
+            resolve(__dirname, 'ai-prompt-input.scss'),
+            'utf-8'
+        )
+        expect(scss).toContain('data-empty="false"')
+        // Send button
+        expect(scss).toMatch(/data-empty="false".*\.ai-submit-button\s+\.send-icon\s+svg/)
+        // Model dropdown button text and SVG
+        expect(scss).toMatch(/data-empty="false".*\.dropdown-menu-tag-pill-wrapper/)
+        expect(scss).toMatch(/fill:\s*\$nightBlue/)
+    })
 })
 
 // =============================================================================
 // VISUAL — IMAGE TOGGLE SCSS RENDERING EXPECTATIONS
 // =============================================================================
 
-describe('Visual — image toggle SCSS expectations', () => {
-    it('image toggle icon dimensions are proportional to button', () => {
-        // SCSS: .image-toggle-btn svg { width: 16px; height: 16px; }
-        // SCSS: .image-toggle-btn { width: 28px; height: 28px; }
-        const iconSize = 16
-        const buttonSize = 28
-        const ratio = iconSize / buttonSize
-        expect(ratio).toBeCloseTo(0.571, 2) // Icon fills ~57% of button
-    })
-
-    it('image size selector is hidden by default', () => {
-        // SCSS: .image-size-selector { display: none; }
-        // Only shown when data-enabled="true"
-        const hiddenDisplay = 'none'
-        expect(hiddenDisplay).toBe('none')
-    })
-
-    it('image size selector becomes visible when enabled', () => {
-        // SCSS: &[data-enabled="true"] .image-size-selector { display: block; }
+describe('Visual — image size dropdown SCSS expectations', () => {
+    it('image size dropdown uses same tag-pill pattern as model dropdown', () => {
+        // The image size dropdown uses createPureDropdown (tag-pill component)
+        // Same component as the model selector — consistent UI
         const el = document.createElement('div')
-        el.className = 'image-generation-toggle'
-        el.setAttribute('data-enabled', 'true')
-        expect(el.getAttribute('data-enabled')).toBe('true')
+        el.className = 'dropdown-menu-tag-pill-wrapper'
+        expect(el.classList.contains('dropdown-menu-tag-pill-wrapper')).toBe(true)
+    })
+
+    it('image size dropdown is always visible (no toggle)', () => {
+        // Images are always enabled — no toggle button, just the size dropdown
+        // The dropdown appears directly in controls without a toggle gate
+        const controls = document.createElement('div')
+        controls.className = 'ai-prompt-input-controls'
+        const dropdown = document.createElement('div')
+        dropdown.className = 'dropdown-menu-tag-pill-wrapper'
+        controls.appendChild(dropdown)
+        expect(controls.querySelector('.dropdown-menu-tag-pill-wrapper')).not.toBeNull()
     })
 })
 

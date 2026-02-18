@@ -66,7 +66,7 @@ const builderResult = builders(testSchema, {
         nodeType: 'aiPromptInput',
         aiModel: '',
         imageGenerationEnabled: false,
-        imageGenerationSize: '1024x1024',
+        imageGenerationSize: 'auto',
     },
 
     // Other blocks
