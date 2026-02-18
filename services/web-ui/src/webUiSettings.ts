@@ -3,6 +3,7 @@ export type WebUiSettings = {
     useShiftingGradientBackgroundOnAiChatThreadNode: boolean
     useShiftingGradientBackgroundOnAiUserInputNode: boolean
     renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: boolean
+    showHeaderOnAiChatThreadNodes: boolean
 }
 
 export const webUiSettings: WebUiSettings = {
@@ -14,4 +15,6 @@ export const webUiSettings: WebUiSettings = {
     useShiftingGradientBackgroundOnAiUserInputNode: true,
     // When false, AI-generated images overlap the thread node instead of being placed beside it with a connector line.
     renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: false,
+    // When false, the document title (h1) is hidden inside AI chat thread nodes on the workspace canvas.
+    showHeaderOnAiChatThreadNodes: false,
 }

@@ -12,6 +12,7 @@ describe('webUiSettings — shape', () => {
 		const keys = Object.keys(webUiSettings).sort()
 		expect(keys).toEqual([
 			'renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem',
+			'showHeaderOnAiChatThreadNodes',
 			'useModalityFilterOnModelSelectorDropdown',
 			'useShiftingGradientBackgroundOnAiChatThreadNode',
 			'useShiftingGradientBackgroundOnAiUserInputNode',
@@ -44,6 +45,10 @@ describe('webUiSettings — defaults', () => {
 
 	it('useShiftingGradientBackgroundOnAiUserInputNode defaults to true', () => {
 		expect(webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode).toBe(true)
+	})
+
+	it('showHeaderOnAiChatThreadNodes defaults to false', () => {
+		expect(webUiSettings.showHeaderOnAiChatThreadNodes).toBe(false)
 	})
 })
 

@@ -199,6 +199,11 @@
     padding-bottom: 1rem;
 }
 
+/* Hide the document title (h1) inside AI chat thread nodes on the canvas (controlled by showHeaderOnAiChatThreadNodes) */
+.workspace-ai-chat-thread-node--hide-title .document-title {
+    display: none;
+}
+
 
 .workspace-image-node {
     background: transparent;

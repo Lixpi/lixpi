@@ -268,3 +268,21 @@ describe('AI chat thread — empty thread visibility', () => {
 		expect(destroyBody).toContain('hiddenEmptyThreadNodeIds')
 	})
 })
+
+// =============================================================================
+// AI chat thread — document title hidden (controlled by setting)
+// =============================================================================
+
+describe('AI chat thread — document title hidden in workspace', () => {
+	const scss = loadScss()
+	const ts = loadTs()
+
+	it('hides .document-title via --hide-title modifier class', () => {
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node--hide-title\s+\.document-title\s*\{[^}]*display:\s*none/)
+	})
+
+	it('createAiChatThreadNode adds --hide-title class based on showHeaderOnAiChatThreadNodes setting', () => {
+		expect(ts).toContain('showHeaderOnAiChatThreadNodes')
+		expect(ts).toContain('workspace-ai-chat-thread-node--hide-title')
+	})
+})

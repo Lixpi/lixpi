@@ -2392,6 +2392,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         nodeEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
         nodeEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
 
+        // Hide the document title when the setting is off
+        if (!webUiSettings.showHeaderOnAiChatThreadNodes) {
+            nodeEl.classList.add('workspace-ai-chat-thread-node--hide-title')
+        }
+
         // Add animated gradient background (controlled by settings flag)
         const gradient = webUiSettings.useShiftingGradientBackgroundOnAiChatThreadNode
             ? createShiftingGradientBackground(nodeEl)
