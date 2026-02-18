@@ -477,6 +477,44 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailEdgeMargin = original
 		}
 	})
+
+	it('snaps targetT to 0.5 when target height is below aiChatThreadRailMinSlideHeight', () => {
+		const original = webUiThemeSettings.aiChatThreadRailMinSlideHeight
+		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = 200
+
+		try {
+			// Target height (100) is below threshold (200) → snap to center
+			const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+			const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+			const result = computeSpreadTValues([edge], [source, target])
+
+			expect(result.get('e-1')!.targetT).toBe(0.5)
+		} finally {
+			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = original
+		}
+	})
+
+	it('slides freely when target height meets aiChatThreadRailMinSlideHeight threshold', () => {
+		const original = webUiThemeSettings.aiChatThreadRailMinSlideHeight
+		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = 200
+
+		try {
+			// Target height (300) exceeds threshold (200) → slide freely
+			const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 300 } })
+			const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
+			const result = computeSpreadTValues([edge], [source, target])
+
+			// Source center at y=50, target 0..300 → idealT ≈ 0.167
+			const spread = result.get('e-1')!
+			expect(spread.targetT).not.toBe(0.5)
+			expect(spread.targetT).toBeGreaterThan(0)
+			expect(spread.targetT).toBeLessThan(1)
+		} finally {
+			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = original
+		}
+	})
 })
 
 // =============================================================================

@@ -160,16 +160,22 @@ export function computeSpreadTValues(
 		// This ensures that even during dragging or node moving, the line attempts to stay straight
 		// For off-axis nodes, we clamp to the nearest corner (top/bottom) instead of snapping to center
 		if (sourceNode && targetNode) {
-			const targetTop = targetNode.position.y
 			const targetHeight = targetNode.dimensions.height
 
-			// Calculate ideal straight-line projection
-			const idealT = (sourceY - targetTop) / targetHeight
+			// When the target is shorter than the minimum slide height, snap to center
+			if (targetHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+				targetT = 0.5
+			} else {
+				const targetTop = targetNode.position.y
 
-			// Clamp to be within the node side (0-1), leaving a configurable margin
-			// effectively snapping to the top or bottom corner if the source is outside vertical bounds
-			const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
-			targetT = Math.max(m, Math.min(1 - m, idealT))
+				// Calculate ideal straight-line projection
+				const idealT = (sourceY - targetTop) / targetHeight
+
+				// Clamp to be within the node side (0-1), leaving a configurable margin
+				// effectively snapping to the top or bottom corner if the source is outside vertical bounds
+				const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+				targetT = Math.max(m, Math.min(1 - m, idealT))
+			}
 		}
 
 		// Initialize with values
@@ -744,13 +750,18 @@ export class WorkspaceConnectionManager {
 					const sourceNode = this.nodes.find(n => n.nodeId === e.sourceNodeId)
 					const targetNode = this.nodes.find(n => n.nodeId === e.targetNodeId)
 					if (sourceNode && targetNode) {
-						const sourceY = sourceNode.position.y + (sourceNode.dimensions.height * sourceT)
-						const targetTop = targetNode.position.y
 						const targetHeight = targetNode.dimensions.height
 
-						const idealT = (sourceY - targetTop) / targetHeight
-						const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
-						targetT = Math.max(m, Math.min(1 - m, idealT))
+						if (targetHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+							targetT = 0.5
+						} else {
+							const sourceY = sourceNode.position.y + (sourceNode.dimensions.height * sourceT)
+							const targetTop = targetNode.position.y
+
+							const idealT = (sourceY - targetTop) / targetHeight
+							const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+							targetT = Math.max(m, Math.min(1 - m, idealT))
+						}
 					}
 				}
 			}

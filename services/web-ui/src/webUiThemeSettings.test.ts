@@ -15,6 +15,7 @@ describe('webUiThemeSettings — shape', () => {
 			'aiChatThreadNodeBoxShadow',
 			'aiChatThreadRailEdgeMargin',
 			'aiChatThreadRailGradient',
+			'aiChatThreadRailMinSlideHeight',
 			'aiChatThreadRailOffset',
 			'aiChatThreadRailWidth',
 			'aiResponseMessageBubbleColor',
@@ -60,6 +61,10 @@ describe('webUiThemeSettings — defaults', () => {
 	it('aiChatThreadRailEdgeMargin defaults to 0.025', () => {
 		expect(webUiThemeSettings.aiChatThreadRailEdgeMargin).toBe(0.025)
 	})
+
+	it('aiChatThreadRailMinSlideHeight defaults to 0', () => {
+		expect(webUiThemeSettings.aiChatThreadRailMinSlideHeight).toBe(0)
+	})
 })
 
 // =============================================================================
@@ -89,6 +94,7 @@ describe('webUiThemeSettings — type compatibility', () => {
 		const numericKeys: (keyof WebUiThemeSettings)[] = [
 			'aiChatThreadRailOffset',
 			'aiChatThreadRailEdgeMargin',
+			'aiChatThreadRailMinSlideHeight',
 		]
 		for (const key of numericKeys) {
 			expect(typeof webUiThemeSettings[key]).toBe('number')

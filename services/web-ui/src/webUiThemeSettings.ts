@@ -6,6 +6,7 @@ export type WebUiThemeSettings = {
     aiChatThreadRailWidth: string
     aiChatThreadRailOffset: number
     aiChatThreadRailEdgeMargin: number
+    aiChatThreadRailMinSlideHeight: number
 }
 
 export const webUiThemeSettings: WebUiThemeSettings = {
@@ -30,4 +31,7 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // anchor points stop sliding. E.g. 0.025 means connectors won't go closer than
     // 2.5 % of the rail height from either end.
     aiChatThreadRailEdgeMargin: 0.025,
+    // Minimum rail/node height (in pixels) required before connectors slide freely.
+    // Below this threshold all connectors snap to the vertical center (t = 0.5).
+    aiChatThreadRailMinSlideHeight: 120,
 }
