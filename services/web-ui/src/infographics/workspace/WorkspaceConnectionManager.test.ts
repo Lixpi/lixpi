@@ -405,7 +405,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 
 	it('snaps targetT to top when source is above target', () => {
 		// Source center at y=50, target at y=200..400
-		// idealT = (50 - 200) / 200 = -0.75 → clamp to 0.025
+		// idealT = (50 - 200) / 200 = -0.75 → clamp to 0.065
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
 		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
 
@@ -413,12 +413,12 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		const result = computeSpreadTValues([edge], [source, target])
 
 		const spread = result.get('e-1')!
-		expect(spread.targetT).toBe(0.025) // clamped to top
+		expect(spread.targetT).toBe(0.065) // clamped to top
 	})
 
 	it('snaps targetT to bottom when source is below target', () => {
 		// Source center at y=550, target at y=0..200
-		// idealT = (550 - 0) / 200 = 2.75 → clamp to 0.975
+		// idealT = (550 - 0) / 200 = 2.75 → clamp to 0.935
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 500 }, dimensions: { width: 200, height: 100 } })
 		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 200 } })
 
@@ -426,12 +426,12 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		const result = computeSpreadTValues([edge], [source, target])
 
 		const spread = result.get('e-1')!
-		expect(spread.targetT).toBe(0.975) // clamped to bottom
+		expect(spread.targetT).toBe(0.935) // clamped to bottom
 	})
 
 	it('calculates partial alignment when source is slightly above target center', () => {
 		// Source center at y=150 (100 + 100/2), target at y=200..400 (height=200)
-		// idealT = (150 - 200) / 200 = -0.25 → clamp to 0.025
+		// idealT = (150 - 200) / 200 = -0.25 → clamp to 0.065
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 100 }, dimensions: { width: 200, height: 100 } })
 		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
 
@@ -439,7 +439,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		const result = computeSpreadTValues([edge], [source, target])
 
 		const spread = result.get('e-1')!
-		expect(spread.targetT).toBe(0.025)
+		expect(spread.targetT).toBe(0.065)
 	})
 
 	it('uses stored targetT when nodes are missing from the lookup', () => {

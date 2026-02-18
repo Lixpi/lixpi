@@ -315,6 +315,11 @@ describe('Vertical rail — CSS styling', () => {
 	it('has .is-selected state targeting __line::before', () => {
 		expect(scss).toMatch(/\.is-selected\s+\.workspace-thread-rail__line::before/)
 	})
+
+	it('defines __boundary-circle positioned at bottom of __line', () => {
+		expect(scss).toMatch(/&__boundary-circle/)
+		expect(scss).toMatch(/bottom:\s*-6px/)
+	})
 })
 
 // =============================================================================
@@ -404,6 +409,21 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		expect(fnMatch![0]).toContain('workspace-thread-rail__line')
+	})
+
+	it('createThreadRail appends boundary circle to __line', () => {
+		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('workspace-thread-rail__boundary-circle')
+		expect(fnMatch![0]).toContain('aiChatThreadRailBoundaryCircle')
+	})
+
+	it('createThreadRail applies theme colors to boundary circle SVG paths', () => {
+		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('aiChatThreadRailBoundaryCircleColors')
+		expect(fnBody).toContain("setAttribute('fill'")
 	})
 
 	it('repositionThreadRail sets --rail-thread-height CSS var', () => {

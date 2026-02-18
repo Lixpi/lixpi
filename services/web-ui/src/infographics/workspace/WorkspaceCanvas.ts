@@ -19,7 +19,7 @@ import {
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
@@ -563,6 +563,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const line = document.createElement('div')
         line.className = 'workspace-thread-rail__line'
+
+        const bottomCircle = document.createElement('div')
+        bottomCircle.className = 'workspace-thread-rail__boundary-circle'
+        bottomCircle.innerHTML = aiChatThreadRailBoundaryCircle
+        const circlePaths = bottomCircle.querySelectorAll('path')
+        const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
+        if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
+        if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
+        if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
+        line.appendChild(bottomCircle)
+
         rail.appendChild(line)
 
         rail.addEventListener('mousedown', (e) => {
