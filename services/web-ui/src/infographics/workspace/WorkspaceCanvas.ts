@@ -274,6 +274,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
     const threadFloatingInputs: Map<string, ThreadFloatingInputEntry> = new Map()
 
+    // Vertical rail elements — one per AI chat thread, spanning thread + floating input
+    const RAIL_OFFSET = webUiThemeSettings.aiChatThreadRailOffset
+    const RAIL_GRAB_WIDTH = 8
+    const threadRails: Map<string, HTMLElement> = new Map()
+
     const promptInputController = new AiPromptInputController({
         workspaceId,
         getCanvasState: () => currentCanvasState,
@@ -484,8 +489,58 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
             if (node) {
                 positionElementBelowNode(entry.el, node)
+                repositionThreadRail(nodeId, node)
             }
         }
+    }
+
+    function createThreadRail(node: AiChatThreadCanvasNode): void {
+        if (threadRails.has(node.nodeId)) return
+
+        const rail = document.createElement('div')
+        rail.className = 'workspace-thread-rail nopan'
+        rail.style.position = 'absolute'
+        rail.style.width = `${RAIL_GRAB_WIDTH}px`
+        rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
+        rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
+        rail.dataset.threadNodeId = node.nodeId
+
+        rail.addEventListener('mousedown', (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleDragStart(e, node.nodeId)
+        })
+
+        repositionThreadRail(node.nodeId, node, rail)
+
+        viewportEl.appendChild(rail)
+        threadRails.set(node.nodeId, rail)
+    }
+
+    function repositionThreadRail(nodeId: string, node: CanvasNode, railEl?: HTMLElement): void {
+        const rail = railEl ?? threadRails.get(nodeId)
+        if (!rail) return
+
+        const isHidden = hiddenEmptyThreadNodeIds.has(nodeId)
+        const threadHeight = isHidden ? 0 : (node.dimensions?.height ?? 400)
+        const gap = isHidden ? 0 : 16
+        const floatingEntry = threadFloatingInputs.get(nodeId)
+        const floatingHeight = floatingEntry ? floatingEntry.el.offsetHeight : 0
+        const totalHeight = threadHeight + gap + floatingHeight
+
+        rail.style.left = `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
+        rail.style.top = `${node.position.y}px`
+        rail.style.height = `${totalHeight}px`
+
+        connectionManager?.setRailHeight(nodeId, totalHeight)
+    }
+
+    function destroyAllThreadRails(): void {
+        for (const [, rail] of threadRails) {
+            rail.remove()
+        }
+        threadRails.clear()
+        connectionManager?.clearRailHeights()
     }
 
     function realignAnchoredImagesForThread(threadNodeId: string): void {
@@ -1442,6 +1497,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (selectedNodeId) {
             const prevNode = viewportEl?.querySelector(`[data-node-id="${selectedNodeId}"]`)
             prevNode?.classList.remove('is-selected')
+
+            // Deselect the previous rail
+            const prevRail = threadRails.get(selectedNodeId)
+            if (prevRail) prevRail.classList.remove('is-selected')
         }
 
         selectedNodeId = nodeId
@@ -1459,6 +1518,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     if (anchoredEl) nodeLayerManager.bringToFront(anchoredEl)
                 }
             }
+
+            // Select the rail for this thread (if any)
+            const rail = threadRails.get(nodeId)
+            if (rail) rail.classList.add('is-selected')
         }
 
         if (nodeId) {
@@ -1602,6 +1665,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             viewportEl,
             edgesLayerEl,
             getTransform: () => lastTransform,
+            railOffset: RAIL_OFFSET,
             panBy: async ({ x, y }) => {
                 if (!panZoom) return false
                 const vp = panZoom.getViewport()
@@ -1720,13 +1784,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const sourceOnLeft = (edge.sourceHandle ?? '').startsWith('left')
         const targetOnRight = (edge.targetHandle ?? '').startsWith('right')
 
+        // Shift left-side anchors by -RAIL_OFFSET for aiChatThread nodes so
+        // edge endpoints sit on the rail instead of the node boundary.
+        // Use rail height (thread + gap + floating input) for Y computation.
+        const sourceRailShift = sourceOnLeft && sourceNode.type === 'aiChatThread' ? RAIL_OFFSET : 0
+        const targetRailShift = !targetOnRight && targetNode.type === 'aiChatThread' ? RAIL_OFFSET : 0
+        const sourceHeight = sourceNode.type === 'aiChatThread' && connectionManager
+            ? connectionManager.getRailHeight(sourceNode.nodeId) ?? sourceNode.dimensions.height
+            : sourceNode.dimensions.height
+        const targetHeight = targetNode.type === 'aiChatThread' && connectionManager
+            ? connectionManager.getRailHeight(targetNode.nodeId) ?? targetNode.dimensions.height
+            : targetNode.dimensions.height
+
         const sourceAnchor = {
-            x: sourceNode.position.x + (sourceOnLeft ? 0 : sourceNode.dimensions.width),
-            y: sourceNode.position.y + sourceNode.dimensions.height / 2
+            x: sourceNode.position.x + (sourceOnLeft ? 0 : sourceNode.dimensions.width) - sourceRailShift,
+            y: sourceNode.position.y + sourceHeight / 2
         }
         const targetAnchor = {
-            x: targetNode.position.x + (targetOnRight ? targetNode.dimensions.width : 0),
-            y: targetNode.position.y + targetNode.dimensions.height / 2
+            x: targetNode.position.x + (targetOnRight ? targetNode.dimensions.width : 0) - targetRailShift,
+            y: targetNode.position.y + targetHeight / 2
         }
 
         const createEndpoint = (params: {
@@ -1939,6 +2015,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadEntry.el.style.left = `${currentPos.x}px`
                 threadEntry.el.style.top = `${inputY}px`
                 threadEntry.el.style.width = `${currentDims.width}px`
+            }
+
+            // Reposition the vertical rail alongside the dragged thread
+            const dragRail = threadRails.get(nodeId)
+            if (dragRail) {
+                dragRail.style.left = `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
+                dragRail.style.top = `${currentPos.y}px`
+                // Update connection manager rail height during drag
+                const totalH = parseFloat(dragRail.style.height || '0')
+                if (totalH > 0) connectionManager?.setRailHeight(nodeId, totalH)
             }
         }
 
@@ -2178,6 +2264,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadEntry.el.style.left = `${pos.x}px`
                 threadEntry.el.style.top = `${pos.y + dims.height + 16}px`
                 threadEntry.el.style.width = `${dims.width}px`
+            }
+
+            // Reposition the vertical rail during resize
+            const resizeRail = threadRails.get(nodeId)
+            if (resizeRail) {
+                const pos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
+                const dims = { height: nodeEl.offsetHeight }
+                const floatingH = threadEntry ? threadEntry.el.offsetHeight : 0
+                const totalH = dims.height + 16 + floatingH
+                resizeRail.style.left = `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
+                resizeRail.style.top = `${pos.y}px`
+                resizeRail.style.height = `${totalH}px`
+                connectionManager?.setRailHeight(nodeId, totalH)
             }
 
             // Real-time anchored image repositioning during thread resize
@@ -2515,6 +2614,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Create the always-visible per-thread floating prompt input
         createThreadFloatingInput(node)
 
+        // Create the vertical rail element (drag handle + connection proxy)
+        createThreadRail(node)
+
         // Sync hover state: when thread node is hovered, also show resize handles on floating input
         nodeEl.addEventListener('mouseenter', () => {
             const entry = threadFloatingInputs.get(node.nodeId)
@@ -2608,6 +2710,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Clean up per-thread floating inputs (will be recreated for each thread node)
         destroyAllThreadFloatingInputs()
+
+        // Clean up per-thread vertical rails (will be recreated for each thread node)
+        destroyAllThreadRails()
 
         // Clear loaded node tracking on full re-render
         loadedNodeIds.clear()
@@ -2894,6 +2999,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // Clean up per-thread floating inputs
             destroyAllThreadFloatingInputs()
+
+            // Clean up per-thread vertical rails
+            destroyAllThreadRails()
 
             promptInputController.destroy()
         }

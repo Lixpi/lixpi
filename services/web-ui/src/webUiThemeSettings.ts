@@ -2,6 +2,9 @@ export type WebUiThemeSettings = {
     aiResponseMessageBubbleColor: string
     aiChatThreadNodeBoxShadow: string
     aiChatThreadNodeBorder: string
+    aiChatThreadRailGradient: string
+    aiChatThreadRailWidth: string
+    aiChatThreadRailOffset: number
 }
 
 export const webUiThemeSettings: WebUiThemeSettings = {
@@ -14,4 +17,12 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // Border around the AI chat thread canvas node.
     // Previous value: not set (inherited browser default)
     aiChatThreadNodeBorder: 'none',
+    // Gradient for the vertical rail running along AI chat thread + floating input nodes.
+    // Matches the model selector dropdown item highlight gradient.
+    // Previous value (solid color): '#dcdaf5'
+    aiChatThreadRailGradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
+    // Width of the visible rail line.
+    aiChatThreadRailWidth: '3px',
+    // Horizontal offset (in pixels) of the rail from the node's left edge.
+    aiChatThreadRailOffset: 5,
 }

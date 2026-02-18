@@ -62,6 +62,7 @@ type ConnectionManagerConfig = {
 	panBy: ({ x, y }: { x: number; y: number }) => Promise<boolean>
 	onEdgesChange: (edges: WorkspaceEdge[]) => void
 	onSelectedEdgeChange?: (edgeId: string | null) => void
+	rainOffset?: number
 }
 
 type RenderBounds = {
@@ -163,9 +164,9 @@ export function computeSpreadTValues(
 			// Calculate ideal straight-line projection
 			const idealT = (sourceY - targetTop) / targetHeight
 
-			// Clamp to be within the node side (0-1), leaving a small margin (0.05)
+			// Clamp to be within the node side (0-1), leaving a small margin (0.025)
 			// effectively snapping to the top or bottom corner if the source is outside vertical bounds
-			targetT = Math.max(0.05, Math.min(0.95, idealT))
+			targetT = Math.max(0.025, Math.min(0.975, idealT))
 		}
 
 		// Initialize with values
@@ -254,6 +255,30 @@ export class WorkspaceConnectionManager {
 	private reconnectingEdge: { edgeId: string; edgeUpdaterType: HandleType } | null = null
 
 	private proximityCandidate: ProximityCandidate | null = null
+
+	private railHeights: Map<string, number> = new Map()
+
+	public setRailHeight(nodeId: string, height: number): void {
+		this.railHeights.set(nodeId, height)
+	}
+
+	public clearRailHeights(): void {
+		this.railHeights.clear()
+	}
+
+	public getRailHeight(nodeId: string): number | undefined {
+		return this.railHeights.get(nodeId)
+	}
+
+	private nodesWithRailHeights(): CanvasNode[] {
+		if (this.railHeights.size === 0) return this.nodes
+		return this.nodes.map(n => {
+			if (n.type !== 'aiChatThread') return n
+			const railH = this.railHeights.get(n.nodeId)
+			if (railH === undefined) return n
+			return { ...n, dimensions: { ...n.dimensions, height: railH } }
+		})
+	}
 
 	public constructor(config: ConnectionManagerConfig) {
 		this.config = config
@@ -634,14 +659,20 @@ export class WorkspaceConnectionManager {
 		const offsetY = bounds.top
 
 		// Add nodes for anchor computation (hidden by CSS)
+		const railOff = this.config.railOffset ?? 0
 		for (const n of this.nodes) {
+			// For aiChatThread nodes shift the left anchor by -railOffset
+			// so connector lines attach to the vertical rail, and extend
+			// height to full rail span (thread + gap + floating input)
+			const xShift = n.type === 'aiChatThread' ? railOff : 0
+			const railH = n.type === 'aiChatThread' ? this.railHeights.get(n.nodeId) : undefined
 			const nodeConfig: NodeConfig = {
 				id: n.nodeId,
 				shape: 'rect',
-				x: n.position.x - offsetX,
+				x: n.position.x - offsetX - xShift,
 				y: n.position.y - offsetY,
-				width: n.dimensions.width,
-				height: n.dimensions.height,
+				width: n.dimensions.width + xShift,
+				height: railH ?? n.dimensions.height,
 				className: 'workspace-edge-node'
 			}
 			this.connector.addNode(nodeConfig)
@@ -673,7 +704,7 @@ export class WorkspaceConnectionManager {
 			effectiveEdges.push(ghostEdgeData)
 		}
 
-		const spreadTValues = computeSpreadTValues(effectiveEdges, this.nodes)
+		const spreadTValues = computeSpreadTValues(effectiveEdges, this.nodesWithRailHeights())
 
 		// Update proximity candidate T-values with computed ones so commit uses them too
 		if (this.proximityCandidate && !this.connectionInProgress) {
@@ -715,7 +746,7 @@ export class WorkspaceConnectionManager {
 						const targetHeight = targetNode.dimensions.height
 
 						const idealT = (sourceY - targetTop) / targetHeight
-						targetT = Math.max(0.05, Math.min(0.95, idealT))
+						targetT = Math.max(0.025, Math.min(0.975, idealT))
 					}
 				}
 			}
@@ -1002,6 +1033,7 @@ export class WorkspaceConnectionManager {
 		const hasExistingConnections = this.edges.some(e => e.sourceNodeId === nodeId || e.targetNodeId === nodeId)
 
 		if (!hasExistingConnections) {
+			const proxRailOff = this.config.railOffset ?? 0
 			for (const other of this.nodes) {
 				if (other.nodeId === nodeId) continue
 
@@ -1009,9 +1041,14 @@ export class WorkspaceConnectionManager {
 				const draggedLeft = { x: position.x, y: position.y + dimensions.height / 2 }
 				const draggedRight = { x: position.x + dimensions.width, y: position.y + dimensions.height / 2 }
 
-				// Calculate handles for the other node
-				const otherLeft = { x: other.position.x, y: other.position.y + other.dimensions.height / 2 }
+				// Calculate handles for the other node (shift left anchor by railOffset for threads)
+				const otherXShift = other.type === 'aiChatThread' ? proxRailOff : 0
+				const otherLeft = { x: other.position.x - otherXShift, y: other.position.y + other.dimensions.height / 2 }
 				const otherRight = { x: other.position.x + other.dimensions.width, y: other.position.y + other.dimensions.height / 2 }
+
+				// For dragged node as aiChatThread, shift its own left anchor
+				const draggedXShift = draggedNode.type === 'aiChatThread' ? proxRailOff : 0
+				const draggedLeftForTarget = { x: position.x - draggedXShift, y: position.y + dimensions.height / 2 }
 
 				// Check Connection: Dragged Right (Source) -> Other Left (Target)
 				// Rule: Target (Other) must be aiChatThread
@@ -1038,7 +1075,7 @@ export class WorkspaceConnectionManager {
 				if (draggedNode.type === 'aiChatThread') {
 					const hasExisting = this.edges.some(e => e.sourceNodeId === other.nodeId && e.targetNodeId === nodeId)
 					if (!hasExisting) {
-						const d2 = Math.hypot(otherRight.x - draggedLeft.x, otherRight.y - draggedLeft.y)
+						const d2 = Math.hypot(otherRight.x - draggedLeftForTarget.x, otherRight.y - draggedLeftForTarget.y)
 						if (d2 < minDistance) {
 							minDistance = d2
 							closestCandidate = {

@@ -286,3 +286,133 @@ describe('AI chat thread — document title hidden in workspace', () => {
 		expect(ts).toContain('workspace-ai-chat-thread-node--hide-title')
 	})
 })
+
+// =============================================================================
+// Vertical rail — CSS styling
+// =============================================================================
+
+describe('Vertical rail — CSS styling', () => {
+	const scss = loadScss()
+
+	it('defines .workspace-thread-rail with absolute positioning', () => {
+		const block = extractBlock(scss, '.workspace-thread-rail')
+		expect(block).toMatch(/position:\s*absolute/)
+	})
+
+	it('sets cursor: move on rail', () => {
+		const block = extractBlock(scss, '.workspace-thread-rail')
+		expect(block).toMatch(/cursor:\s*move/)
+	})
+
+	it('has ::before pseudo-element for the visible line', () => {
+		expect(scss).toMatch(/&::before/)
+		expect(scss).toMatch(/--rail-width/)
+		expect(scss).toMatch(/--rail-gradient/)
+	})
+
+	it('has .is-selected state', () => {
+		expect(scss).toMatch(/\.workspace-thread-rail[\s\S]*?&\.is-selected/)
+	})
+})
+
+// =============================================================================
+// Vertical rail — TypeScript infrastructure
+// =============================================================================
+
+describe('Vertical rail — TS infrastructure', () => {
+	const ts = loadTs()
+
+	it('defines RAIL_OFFSET from theme settings', () => {
+		expect(ts).toMatch(/const\s+RAIL_OFFSET\s*=\s*webUiThemeSettings\.aiChatThreadRailOffset/)
+	})
+
+	it('defines RAIL_GRAB_WIDTH constant', () => {
+		expect(ts).toMatch(/const\s+RAIL_GRAB_WIDTH\s*=\s*\d+/)
+	})
+
+	it('defines threadRails Map', () => {
+		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
+	})
+
+	it('defines createThreadRail function', () => {
+		expect(ts).toContain('function createThreadRail(')
+	})
+
+	it('defines repositionThreadRail function', () => {
+		expect(ts).toContain('function repositionThreadRail(')
+	})
+
+	it('defines destroyAllThreadRails function', () => {
+		expect(ts).toContain('function destroyAllThreadRails(')
+	})
+
+	it('createAiChatThreadNode calls createThreadRail', () => {
+		const fnMatch = ts.match(/function\s+createAiChatThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('createThreadRail(')
+	})
+
+	it('repositionAllThreadFloatingInputs also repositions rails', () => {
+		const fnMatch = ts.match(/function\s+repositionAllThreadFloatingInputs[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('repositionThreadRail(')
+	})
+
+	it('drag mousemove handler repositions the rail', () => {
+		expect(ts).toContain('dragRail')
+		expect(ts).toMatch(/dragRail\.style\.left/)
+	})
+
+	it('resize mousemove handler repositions the rail', () => {
+		expect(ts).toContain('resizeRail')
+		expect(ts).toMatch(/resizeRail\.style\.height/)
+	})
+
+	it('selectNode toggles is-selected on the rail', () => {
+		const fnMatch = ts.match(/function\s+selectNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("rail.classList.add('is-selected')")
+		expect(fnBody).toContain("prevRail.classList.remove('is-selected')")
+	})
+
+	it('renderNodes calls destroyAllThreadRails', () => {
+		const fnMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('destroyAllThreadRails()')
+	})
+
+	it('destroy() calls destroyAllThreadRails', () => {
+		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
+		expect(destroyMatch).not.toBeNull()
+		expect(destroyMatch![0]).toContain('destroyAllThreadRails()')
+	})
+
+	it('passes railOffset to WorkspaceConnectionManager', () => {
+		expect(ts).toMatch(/railOffset:\s*RAIL_OFFSET/)
+	})
+
+	it('edge endpoint handles apply rail offset for aiChatThread nodes', () => {
+		const fnMatch = ts.match(/function\s+updateEdgeEndpointHandles[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('RAIL_OFFSET')
+	})
+
+	it('repositionThreadRail calls connectionManager.setRailHeight', () => {
+		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('connectionManager?.setRailHeight(')
+	})
+
+	it('destroyAllThreadRails calls connectionManager.clearRailHeights', () => {
+		const fnMatch = ts.match(/function\s+destroyAllThreadRails[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
+	})
+
+	it('edge endpoint handles use getRailHeight for aiChatThread Y position', () => {
+		const fnMatch = ts.match(/function\s+updateEdgeEndpointHandles[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('getRailHeight')
+	})
+})

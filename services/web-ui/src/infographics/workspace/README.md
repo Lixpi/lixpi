@@ -48,6 +48,11 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Content is persisted separately from documents in the AI-Chat-Threads table
 - Automatically extract context from connected nodes (documents, images, other threads) when sending messages
 - Each AI chat thread node always has its own floating prompt input visible below it, regardless of selection state; these per-thread inputs automatically target the correct thread and follow the node during drag and resize
+- A **vertical rail** element spans the full height of the thread node, the gap, and the floating input. It is a sibling element in the viewport (not nested inside the thread node) tracked via the `threadRails` Map. The rail serves three purposes:
+    - **Visual boundary** — a gradient line rendered via `::before` pseudo-element, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `aiChatThreadRailGradient` and `aiChatThreadRailWidth` in `webUiThemeSettings.ts`
+    - **Drag handle** — clicking and dragging the rail moves both the thread node and its floating input (reuses `handleDragStart`)
+    - **Connection proxy** — all connector line left-side anchors are shifted to the rail position via `railOffset` in `WorkspaceConnectionManager`, so edges visually connect to the rail rather than the node edge. The anchor Y range spans the full rail height (thread + gap + floating input) via `railHeights`, so connectors slide from the very top to the very bottom of the rail
+    - The horizontal offset from the node edge is configurable via `aiChatThreadRailOffset` in `webUiThemeSettings.ts` (default 5px)
 - **AI-generated images** can appear in two modes controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
     - **Anchored mode** (default, setting = `false`): Images are separate canvas nodes that visually overlap the right side of the AI chat thread node. Width is constrained to roughly 68% of the thread width, and each image is continuously re-aligned to the target response bubble as streamed text changes message proportions. The image moves with the thread during drag, and can be detached by dragging its center outside the thread bounds. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image/thread pairs. Messages below an anchored image are pushed down via `applyAnchoredImageSpacing()` which sets `marginBottom` on the response message wrapper; this requires `ignoreMutation()` in the NodeViews (`aiResponseMessageNode`, `aiChatThreadNode`) to return `true` for style attribute mutations so ProseMirror's MutationObserver doesn't wipe the externally-set styles. **On page refresh**, the in-memory `anchoredImageManager` is re-derived from `ImageCanvasNode.generatedBy` metadata persisted in the canvas state — `renderNodes()` scans all image nodes with `generatedBy`, matches them to their source thread via `generatedBy.aiChatThreadId`, and re-registers them as anchored.
   - **Connector line mode** (setting = `true`): Images appear as separate canvas nodes positioned to the right of the thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image.
@@ -305,6 +310,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.image-node-content` | Image container |
 | `.image-node-img` | The actual img element |
 | `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
+| `.workspace-thread-rail` | Vertical rail element spanning thread + gap + floating input (drag handle, connection proxy, visual boundary) |
 
 | `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |

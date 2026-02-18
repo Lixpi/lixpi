@@ -404,7 +404,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 
 	it('snaps targetT to top when source is above target', () => {
 		// Source center at y=50, target at y=200..300
-		// idealT = (50 - 200) / 100 = -1.5 → clamp to 0.05
+		// idealT = (50 - 200) / 100 = -1.5 → clamp to 0.025
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
 		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 100 } })
 
@@ -412,12 +412,12 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		const result = computeSpreadTValues([edge], [source, target])
 
 		const spread = result.get('e-1')!
-		expect(spread.targetT).toBe(0.05) // clamped to top
+		expect(spread.targetT).toBe(0.025) // clamped to top
 	})
 
 	it('snaps targetT to bottom when source is below target', () => {
 		// Source center at y=550, target at y=0..100
-		// idealT = (550 - 0) / 100 = 5.5 → clamp to 0.95
+		// idealT = (550 - 0) / 100 = 5.5 → clamp to 0.975
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 500 }, dimensions: { width: 200, height: 100 } })
 		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
 
@@ -425,12 +425,12 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		const result = computeSpreadTValues([edge], [source, target])
 
 		const spread = result.get('e-1')!
-		expect(spread.targetT).toBe(0.95) // clamped to bottom
+		expect(spread.targetT).toBe(0.975) // clamped to bottom
 	})
 
 	it('calculates partial alignment when source is slightly above target center', () => {
 		// Source center at y=150 (100 + 100/2), target at y=200..400 (height=200)
-		// idealT = (150 - 200) / 200 = -0.25 → clamp to 0.05
+		// idealT = (150 - 200) / 200 = -0.25 → clamp to 0.025
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 100 }, dimensions: { width: 200, height: 100 } })
 		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
 
@@ -438,7 +438,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		const result = computeSpreadTValues([edge], [source, target])
 
 		const spread = result.get('e-1')!
-		expect(spread.targetT).toBe(0.05)
+		expect(spread.targetT).toBe(0.025)
 	})
 
 	it('uses stored targetT when nodes are missing from the lookup', () => {
@@ -612,5 +612,117 @@ describe('WorkspaceConnectionManager — computeMessageSourceT', () => {
 
 		// Should not throw — falls back to default sourceT
 		expect(() => manager.render()).not.toThrow()
+	})
+})
+
+// =============================================================================
+// railOffset — connection proxy for vertical rail
+// =============================================================================
+
+describe('WorkspaceConnectionManager — railOffset', () => {
+	it('config type accepts optional railOffset', () => {
+		const config = {
+			...createMockConfig(),
+			railOffset: 5,
+		}
+		const mgr = new WorkspaceConnectionManager(config)
+		expect(mgr).toBeTruthy()
+	})
+
+	it('checkProximity applies railOffset to aiChatThread left anchor', () => {
+		const config = { ...createMockConfig(), railOffset: 5 }
+		const mgr = new WorkspaceConnectionManager(config)
+
+		// Place the chat thread at x=500; with railOffset=5, its left anchor
+		// sits at x=495. An image at x=300 has its right handle at x=300+200=500.
+		// Without offset: distance = |500-500| = 0 (perfect snap)
+		// With offset: distance = |500-495| = 5 (still close enough)
+		const chatNode = makeNode({
+			nodeId: 'chat-1', type: 'aiChatThread',
+			position: { x: 500, y: 0 }, dimensions: { width: 300, height: 200 },
+		})
+		const imgNode = makeNode({
+			nodeId: 'img-1', type: 'image',
+			position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 },
+		})
+
+		mgr.syncNodes([chatNode, imgNode])
+		mgr.syncEdges([])
+
+		// Dragging the image at its current position
+		mgr.checkProximity('img-1', { x: 300, y: 0 }, { width: 200, height: 100 })
+
+		// Should find a proximity candidate (the chat thread)
+		expect((mgr as any).proximityCandidate).not.toBeNull()
+		expect((mgr as any).proximityCandidate.targetNodeId).toBe('chat-1')
+	})
+
+	it('render does not throw with railOffset set', () => {
+		const config = { ...createMockConfig(), railOffset: 5 }
+		const mgr = new WorkspaceConnectionManager(config)
+
+		const chatNode = makeNode({
+			nodeId: 'chat-1', type: 'aiChatThread',
+			position: { x: 0, y: 0 }, dimensions: { width: 300, height: 200 },
+		})
+		const imgNode = makeNode({
+			nodeId: 'img-1', type: 'image',
+			position: { x: 400, y: 0 }, dimensions: { width: 200, height: 100 },
+		})
+		const edge = makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'img-1',
+			targetNodeId: 'chat-1',
+		})
+
+		mgr.syncNodes([chatNode, imgNode])
+		mgr.syncEdges([edge])
+
+		expect(() => mgr.render()).not.toThrow()
+	})
+
+	it('setRailHeight stores height and getRailHeight retrieves it', () => {
+		const config = { ...createMockConfig(), railOffset: 5 }
+		const mgr = new WorkspaceConnectionManager(config)
+
+		expect(mgr.getRailHeight('chat-1')).toBeUndefined()
+		mgr.setRailHeight('chat-1', 500)
+		expect(mgr.getRailHeight('chat-1')).toBe(500)
+	})
+
+	it('clearRailHeights removes all stored heights', () => {
+		const config = { ...createMockConfig(), railOffset: 5 }
+		const mgr = new WorkspaceConnectionManager(config)
+
+		mgr.setRailHeight('chat-1', 500)
+		mgr.setRailHeight('chat-2', 600)
+		mgr.clearRailHeights()
+		expect(mgr.getRailHeight('chat-1')).toBeUndefined()
+		expect(mgr.getRailHeight('chat-2')).toBeUndefined()
+	})
+
+	it('render uses railHeight for aiChatThread node config height', () => {
+		const config = { ...createMockConfig(), railOffset: 5 }
+		const mgr = new WorkspaceConnectionManager(config)
+
+		const chatNode = makeNode({
+			nodeId: 'chat-1', type: 'aiChatThread',
+			position: { x: 0, y: 0 }, dimensions: { width: 300, height: 200 },
+		})
+		const imgNode = makeNode({
+			nodeId: 'img-1', type: 'image',
+			position: { x: 400, y: 0 }, dimensions: { width: 200, height: 100 },
+		})
+		const edge = makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'img-1',
+			targetNodeId: 'chat-1',
+		})
+
+		mgr.syncNodes([chatNode, imgNode])
+		mgr.syncEdges([edge])
+		mgr.setRailHeight('chat-1', 500)
+
+		expect(() => mgr.render()).not.toThrow()
 	})
 })
