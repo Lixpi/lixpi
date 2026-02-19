@@ -5,6 +5,7 @@ import {
 	ConnectionMode,
 	adoptUserNodes,
 	updateNodeInternals,
+	Position,
 	type ConnectionInProgress,
 	type Transform,
 	type NodeBase,
@@ -13,6 +14,7 @@ import {
 	type ParentLookup,
 	type HandleType,
 	type Connection,
+	type Handle,
 } from '@xyflow/system'
 
 import {
@@ -265,6 +267,8 @@ export class WorkspaceConnectionManager {
 
 	private proximityCandidate: ProximityCandidate | null = null
 
+	private menuConnectionCleanup: (() => void) | null = null
+
 	private railHeights: Map<string, number> = new Map()
 
 	public setRailHeight(nodeId: string, height: number): void {
@@ -311,7 +315,14 @@ export class WorkspaceConnectionManager {
 			width: n.dimensions.width,
 			height: n.dimensions.height,
 			// `measured` must be set for XYFlow's parseHandles to preserve existing handleBounds
-			measured: { width: n.dimensions.width, height: n.dimensions.height }
+			measured: { width: n.dimensions.width, height: n.dimensions.height },
+			// Provide synthetic handles so XYHandle can find handle bounds
+			// for programmatic connection triggers (e.g. bubble menu).
+			// Without DOM handle elements, handleBounds would otherwise be empty.
+			handles: [
+				{ id: 'left', type: 'target' as const, position: Position.Left, x: 0, y: n.dimensions.height / 2, width: 10, height: 10 },
+				{ id: 'right', type: 'source' as const, position: Position.Right, x: n.dimensions.width, y: n.dimensions.height / 2, width: 10, height: 10 },
+			],
 		}))
 
 		adoptUserNodes(xyNodes, this.nodeLookup, this.parentLookup, {
@@ -341,6 +352,250 @@ export class WorkspaceConnectionManager {
 		if (this.selectedEdgeId && !edges.some((e) => e.edgeId === this.selectedEdgeId)) {
 			this.selectEdge(null)
 		}
+	}
+
+	public startConnectionFromMenu(nodeId: string) {
+		// Cancel any existing menu connection
+		this.menuConnectionCleanup?.()
+
+		const node = this.nodeLookup.get(nodeId)
+		if (!node) {
+			console.log('[CONNECT] startConnectionFromMenu: node not found in nodeLookup for', nodeId)
+			return
+		}
+
+		const sourceHandle: Handle | null = node.internals.handleBounds?.source?.[0] ?? null
+		if (!sourceHandle) {
+			console.log('[CONNECT] startConnectionFromMenu: no sourceHandle.', {
+				handleBounds: node.internals.handleBounds,
+				source: node.internals.handleBounds?.source,
+			})
+			return
+		}
+
+		console.log('[CONNECT] startConnectionFromMenu: initiating connection from', nodeId, {
+			sourceHandle,
+			positionAbsolute: node.internals.positionAbsolute,
+		})
+
+		const fromPosition = sourceHandle.position ?? Position.Right
+		const fromX = (sourceHandle.x ?? 0) + node.internals.positionAbsolute.x + (sourceHandle.width ?? 0) / 2
+		const fromY = (sourceHandle.y ?? 0) + node.internals.positionAbsolute.y + (sourceHandle.height ?? 0) / 2
+
+		const from = { x: fromX, y: fromY }
+
+		const fromHandle: Handle = {
+			...sourceHandle,
+			nodeId,
+			type: 'source',
+			position: fromPosition,
+		}
+
+		// Don't render the in-progress line until the first mousemove.
+		// The initial `to` value is a placeholder — displaying it causes a
+		// visual glitch where the dashed line extends beyond the cursor due
+		// to coordinate-system round-trip imprecision between screen-relative
+		// and renderer coordinates. The first mousemove provides exact coords.
+		this.connectionInProgress = {
+			inProgress: true,
+			isValid: null,
+			from,
+			fromHandle,
+			fromPosition,
+			fromNode: node,
+			to: { x: 0, y: 0 },
+			toHandle: null,
+			toPosition: Position.Left,
+			toNode: null,
+		}
+
+		// Change cursor to crosshair on the pane
+		this.config.paneEl.style.cursor = 'crosshair'
+
+		let moveLogCounter = 0
+		const onMouseMove = (e: MouseEvent) => {
+			const transform = this.config.getTransform()
+			const containerBounds = this.config.paneEl.getBoundingClientRect()
+			if (!containerBounds) return
+
+			// Convert screen position to renderer coordinates (accounting for pan + zoom)
+			const screenRelX = e.clientX - containerBounds.left
+			const screenRelY = e.clientY - containerBounds.top
+			const rendererPos = {
+				x: (screenRelX - transform[0]) / transform[2],
+				y: (screenRelY - transform[1]) / transform[2],
+			}
+
+			if (moveLogCounter++ % 30 === 0) {
+				console.log('[CONNECT] mousemove', {
+					clientX: e.clientX, clientY: e.clientY,
+					screenRel: { x: screenRelX, y: screenRelY },
+					transform,
+					rendererPos,
+				})
+			}
+
+			// Find closest target handle
+			const closestHandle = this.findClosestHandle(rendererPos, fromHandle, 30)
+
+			const isValid = closestHandle ? this.isMenuConnectionValid(nodeId, closestHandle) : null
+
+			this.connectionInProgress = {
+				...this.connectionInProgress!,
+				isValid,
+				to: closestHandle && isValid
+					? { x: closestHandle.x, y: closestHandle.y }
+					: { x: screenRelX, y: screenRelY },
+				toHandle: closestHandle ?? null,
+				toPosition: closestHandle?.position ?? Position.Left,
+				toNode: closestHandle ? this.nodeLookup.get(closestHandle.nodeId) ?? null : null,
+			}
+
+			this.render()
+		}
+
+		const onMouseDown = (e: MouseEvent) => {
+			console.log('[CONNECT] onMouseDown in menu connection mode', {
+				toHandle: this.connectionInProgress?.toHandle,
+				isValid: this.connectionInProgress?.isValid,
+				target: e.target,
+			})
+			e.preventDefault()
+			e.stopPropagation()
+
+			const toHandle = this.connectionInProgress?.toHandle
+			const toNode = this.connectionInProgress?.toNode
+			const isValid = this.connectionInProgress?.isValid
+
+			cleanup()
+
+			if (toHandle && toNode && isValid) {
+				const toNodeId = toHandle.nodeId
+				const toHandleId = toHandle.id ?? 'left'
+
+				// Compute T values for straight lines when possible
+				const sourceT = 0.5
+				let targetT = 0.5
+
+				const sourceNode = this.nodes.find(n => n.nodeId === nodeId)
+				const targetNode = this.nodes.find(n => n.nodeId === toNodeId)
+
+				if (sourceNode && targetNode) {
+					const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT
+					const targetTop = targetNode.position.y
+					const targetBottom = targetTop + targetNode.dimensions.height
+
+					if (sourceY >= targetTop && sourceY <= targetBottom) {
+						targetT = (sourceY - targetTop) / targetNode.dimensions.height
+					}
+				}
+
+				const nextEdge: WorkspaceEdge = {
+					edgeId: generateEdgeId(),
+					sourceNodeId: nodeId,
+					targetNodeId: toNodeId,
+					sourceHandle: sourceHandle.id ?? 'right',
+					targetHandle: toHandleId,
+					sourceT,
+					targetT,
+				}
+
+				this.config.onEdgesChange([...this.edges, nextEdge])
+				this.selectEdge(nextEdge.edgeId)
+			}
+		}
+
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				cleanup()
+			}
+		}
+
+		const cleanup = () => {
+			document.removeEventListener('mousemove', onMouseMove)
+			document.removeEventListener('mousedown', onMouseDown, true)
+			document.removeEventListener('keydown', onKeyDown)
+			this.connectionInProgress = null
+			this.config.paneEl.style.cursor = ''
+			this.menuConnectionCleanup = null
+			this.render()
+		}
+
+		this.menuConnectionCleanup = cleanup
+
+		// Use capture for mousedown so we intercept before other handlers
+		document.addEventListener('mousemove', onMouseMove)
+		document.addEventListener('mousedown', onMouseDown, true)
+		document.addEventListener('keydown', onKeyDown)
+	}
+
+	private findClosestHandle(
+		position: { x: number; y: number },
+		fromHandle: Handle,
+		connectionRadius: number,
+	): Handle | null {
+		let closest: Handle | null = null
+		let minDist = Infinity
+
+		for (const [nodeId, node] of this.nodeLookup) {
+			const handles = [
+				...(node.internals.handleBounds?.source ?? []),
+				...(node.internals.handleBounds?.target ?? []),
+			]
+
+			for (const handle of handles) {
+				// Skip the same handle we're dragging from
+				if (handle.nodeId === fromHandle.nodeId && handle.type === fromHandle.type && handle.id === fromHandle.id) {
+					continue
+				}
+
+				const hx = (handle.x ?? 0) + node.internals.positionAbsolute.x + (handle.width ?? 0) / 2
+				const hy = (handle.y ?? 0) + node.internals.positionAbsolute.y + (handle.height ?? 0) / 2
+
+				const dist = Math.sqrt((hx - position.x) ** 2 + (hy - position.y) ** 2)
+
+				console.log('[CONNECT] findClosestHandle candidate:', {
+					nodeId,
+					handleId: handle.id,
+					handleType: handle.type,
+					handleXY: { x: handle.x, y: handle.y },
+					posAbsolute: node.internals.positionAbsolute,
+					computedCenter: { hx, hy },
+					mousePos: position,
+					dist,
+					connectionRadius,
+					withinRadius: dist <= connectionRadius,
+				})
+
+				if (dist <= connectionRadius && dist < minDist) {
+					minDist = dist
+					closest = { ...handle, x: hx, y: hy }
+				}
+			}
+		}
+
+		return closest
+	}
+
+	private isMenuConnectionValid(sourceNodeId: string, targetHandle: Handle): boolean {
+		// No self-loops
+		if (targetHandle.nodeId === sourceNodeId) return false
+
+		// No duplicates
+		const candidate = {
+			sourceNodeId,
+			targetNodeId: targetHandle.nodeId,
+			sourceHandle: 'right',
+			targetHandle: targetHandle.id ?? 'left',
+		}
+
+		for (const existing of this.edges) {
+			if (isSameConnection(existing, candidate)) {
+				return false
+			}
+		}
+
+		return true
 	}
 
 	public onHandlePointerDown(event: MouseEvent | TouchEvent, meta: HandleMeta) {
@@ -1155,5 +1410,6 @@ export class WorkspaceConnectionManager {
 		this.connectionInProgress = null
 		this.selectedEdgeId = null
 		this.reconnectingEdge = null
+		this.menuConnectionCleanup?.()
 	}
 }

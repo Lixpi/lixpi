@@ -20,12 +20,13 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         onDeleteNode: vi.fn(),
         onAskAi: vi.fn(),
         onDownloadImage: vi.fn(),
+        onTriggerConnection: vi.fn(),
         onHide: vi.fn(),
     }
 
-    it('returns exactly 3 items', () => {
+    it('returns exactly 4 items', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items).toHaveLength(3)
+        expect(items).toHaveLength(4)
     })
 
     it('all items have canvasImage context', () => {
@@ -45,9 +46,14 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[1].element.getAttribute('title')).toBe('Download image')
     })
 
-    it('third item is Delete button', () => {
+    it('third item is Connect button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[2].element.getAttribute('title')).toBe('Delete image')
+        expect(items[2].element.getAttribute('title')).toBe('Connect to node')
+    })
+
+    it('fourth item is Delete button', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[3].element.getAttribute('title')).toBe('Delete image')
     })
 
     it('items are HTMLButtonElement instances with bubble-menu-button class', () => {
@@ -68,6 +74,7 @@ describe('buildCanvasBubbleMenuItems — activeNodeId', () => {
         onDeleteNode: vi.fn(),
         onAskAi: vi.fn(),
         onDownloadImage: vi.fn(),
+        onTriggerConnection: vi.fn(),
         onHide: vi.fn(),
     }
 
@@ -100,6 +107,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
             onDeleteNode: vi.fn(),
             onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
             onHide: vi.fn(),
         }
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
@@ -117,6 +125,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
             onDeleteNode: vi.fn(),
             onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
             onHide: vi.fn(),
         }
         const { items } = buildCanvasBubbleMenuItems(callbacks)
@@ -132,6 +141,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
             onDeleteNode: vi.fn(),
             onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
             onHide: vi.fn(),
         }
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
@@ -149,6 +159,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
             onDeleteNode: vi.fn(),
             onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
             onHide: vi.fn(),
         }
         const { items } = buildCanvasBubbleMenuItems(callbacks)
@@ -159,17 +170,69 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         expect(callbacks.onHide).not.toHaveBeenCalled()
     })
 
+    it('Connect fires onTriggerConnection + onHide on click with active node', () => {
+        const callbacks = {
+            onDeleteNode: vi.fn(),
+            onAskAi: vi.fn(),
+            onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
+            onHide: vi.fn(),
+        }
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+        setActiveNodeId('img-5')
+
+        items[2].element.click()
+
+        expect(callbacks.onHide).toHaveBeenCalledOnce()
+        expect(callbacks.onTriggerConnection).toHaveBeenCalledWith('img-5')
+        expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
+    })
+
+    it('Connect calls onHide before onTriggerConnection', () => {
+        const callOrder: string[] = []
+        const callbacks = {
+            onDeleteNode: vi.fn(),
+            onAskAi: vi.fn(),
+            onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(() => callOrder.push('triggerConnection')),
+            onHide: vi.fn(() => callOrder.push('hide')),
+        }
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+        setActiveNodeId('img-5')
+
+        items[2].element.click()
+
+        expect(callOrder).toEqual(['hide', 'triggerConnection'])
+    })
+
+    it('Connect does nothing on click when no activeNodeId', () => {
+        const callbacks = {
+            onDeleteNode: vi.fn(),
+            onAskAi: vi.fn(),
+            onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
+            onHide: vi.fn(),
+        }
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+
+        items[2].element.click()
+
+        expect(callbacks.onTriggerConnection).not.toHaveBeenCalled()
+        expect(callbacks.onHide).not.toHaveBeenCalled()
+    })
+
     it('Delete fires onDeleteNode + onHide with active node', () => {
         const callbacks = {
             onDeleteNode: vi.fn(),
             onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
             onHide: vi.fn(),
         }
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
         setActiveNodeId('img-2')
 
-        items[2].element.click()
+        items[3].element.click()
 
         expect(callbacks.onDeleteNode).toHaveBeenCalledWith('img-2')
         expect(callbacks.onHide).toHaveBeenCalledOnce()
@@ -180,11 +243,12 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
             onDeleteNode: vi.fn(),
             onAskAi: vi.fn(),
             onDownloadImage: vi.fn(),
+            onTriggerConnection: vi.fn(),
             onHide: vi.fn(),
         }
         const { items } = buildCanvasBubbleMenuItems(callbacks)
 
-        items[2].element.click()
+        items[3].element.click()
 
         expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
         expect(callbacks.onHide).not.toHaveBeenCalled()

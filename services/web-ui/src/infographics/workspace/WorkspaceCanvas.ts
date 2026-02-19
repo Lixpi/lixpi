@@ -262,6 +262,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     console.error('Failed to create AI chat thread from image:', error)
                 }
             },
+            onTriggerConnection: (nodeId) => {
+                if (!connectionManager) return
+
+                connectionManager.startConnectionFromMenu(nodeId)
+            },
             onHide: () => {
                 canvasBubbleMenu?.forceHide()
             },

@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { createEl } from '$src/utils/domTemplates.ts'
-import { trashBinIcon, downloadIcon } from '$src/svgIcons/index.ts'
+import { trashBinIcon, downloadIcon, triggerNodesConnectionIcon } from '$src/svgIcons/index.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'
@@ -18,6 +18,7 @@ type CanvasBubbleMenuCallbacks = {
     onDeleteNode: (nodeId: string) => void
     onAskAi: (nodeId: string) => void
     onDownloadImage: (nodeId: string) => void
+    onTriggerConnection: (nodeId: string) => void
     onHide: () => void
 }
 
@@ -80,6 +81,26 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
 
+    const connectButton = createEl('button', {
+        className: 'bubble-menu-button',
+        type: 'button',
+        title: 'Connect to node',
+        innerHTML: triggerNodesConnectionIcon,
+    })
+    const connectSvg = connectButton.querySelector('svg')
+    if (connectSvg) {
+        connectSvg.style.width = '16px'
+        connectSvg.style.height = '16px'
+    }
+    connectButton.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (activeNodeId) {
+            callbacks.onHide()
+            callbacks.onTriggerConnection(activeNodeId)
+        }
+    })
+
     const deleteButton = createCanvasButton({
         icon: trashBinIcon,
         title: 'Delete image',
@@ -95,6 +116,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     const items: BubbleMenuItem[] = [
         { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
+        { element: connectButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
     ]
 

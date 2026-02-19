@@ -479,6 +479,14 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toContain('createAiChatThread')
 	})
 
+	it('bubble menu callbacks include onTriggerConnection', () => {
+		expect(ts).toContain('onTriggerConnection')
+	})
+
+	it('onTriggerConnection triggers connection via startConnectionFromMenu', () => {
+		expect(ts).toMatch(/onTriggerConnection.*startConnectionFromMenu|startConnectionFromMenu.*onTriggerConnection/s)
+	})
+
 	it('passes onReceivingStateChange callback to ProseMirrorEditor', () => {
 		expect(ts).toContain('onReceivingStateChange')
 		// The callback must bridge plugin state to promptInputController
