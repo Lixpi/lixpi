@@ -11,6 +11,7 @@ describe('webUiSettings — shape', () => {
 	it('exports a WebUiSettings type with exactly the expected keys', () => {
 		const keys = Object.keys(webUiSettings).sort()
 		expect(keys).toEqual([
+			'proximityConnectThreshold',
 			'renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem',
 			'showHeaderOnAiChatThreadNodes',
 			'useModalityFilterOnModelSelectorDropdown',
@@ -19,9 +20,17 @@ describe('webUiSettings — shape', () => {
 		])
 	})
 
-	it('all values are booleans', () => {
+	it('all values have expected types', () => {
+		const expectedTypes: Record<string, string> = {
+			useModalityFilterOnModelSelectorDropdown: 'boolean',
+			useShiftingGradientBackgroundOnAiChatThreadNode: 'boolean',
+			useShiftingGradientBackgroundOnAiUserInputNode: 'boolean',
+			renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: 'boolean',
+			showHeaderOnAiChatThreadNodes: 'boolean',
+			proximityConnectThreshold: 'number',
+		}
 		for (const [key, value] of Object.entries(webUiSettings)) {
-			expect(typeof value).toBe('boolean')
+			expect(typeof value).toBe(expectedTypes[key])
 		}
 	})
 
@@ -49,6 +58,10 @@ describe('webUiSettings — defaults', () => {
 
 	it('showHeaderOnAiChatThreadNodes defaults to false', () => {
 		expect(webUiSettings.showHeaderOnAiChatThreadNodes).toBe(false)
+	})
+
+	it('proximityConnectThreshold defaults to a positive number', () => {
+		expect(webUiSettings.proximityConnectThreshold).toBeGreaterThan(0)
 	})
 })
 

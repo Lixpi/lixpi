@@ -4,6 +4,7 @@ export type WebUiSettings = {
     useShiftingGradientBackgroundOnAiUserInputNode: boolean
     renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: boolean
     showHeaderOnAiChatThreadNodes: boolean
+    proximityConnectThreshold: number
 }
 
 export const webUiSettings: WebUiSettings = {
@@ -17,4 +18,7 @@ export const webUiSettings: WebUiSettings = {
     renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: false,
     // When false, the document title (h1) is hidden inside AI chat thread nodes on the workspace canvas.
     showHeaderOnAiChatThreadNodes: false,
+    // Maximum distance (in renderer-coordinate pixels) at which dragging an unconnected
+    // node near an AI chat thread node triggers the proximity-connect ghost edge.
+    proximityConnectThreshold: 500,
 }

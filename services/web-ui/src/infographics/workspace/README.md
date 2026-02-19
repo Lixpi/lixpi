@@ -215,7 +215,7 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
-- **Proximity Connect**: Dragging a node near an AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (1200px threshold)
+- **Proximity Connect**: Dragging a node near an AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`)
 - Clicking an edge selects it; when selected, endpoint handles appear for reconnection
 - Dragging an endpoint shows the edge following the cursor (original edge is hidden during reconnect)
 - Dropping an endpoint on another node reconnects the edge; dropping in empty space deletes it

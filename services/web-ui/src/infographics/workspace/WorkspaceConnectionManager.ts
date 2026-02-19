@@ -32,13 +32,12 @@ import type {
 	WorkspaceEdge,
 } from '@lixpi/constants'
 
+import { webUiSettings } from '$src/webUiSettings.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 // Switch between 'orthogonal' (3-point circuit style) and 'horizontal-bezier' (smooth curves)
 // const CONNECTION_STYLE: PathType = 'orthogonal'
 const CONNECTION_STYLE: PathType = 'horizontal-bezier'
-
-const PROXIMITY_THRESHOLD = 1200
 
 type ProximityCandidate = {
 	sourceNodeId: string
@@ -830,7 +829,7 @@ export class WorkspaceConnectionManager {
 	}
 
 	private computeRenderBounds(): RenderBounds | null {
-		if (!this.edges.length && !this.connectionInProgress) {
+		if (!this.edges.length && !this.connectionInProgress && !this.proximityCandidate) {
 			return null
 		}
 
@@ -865,6 +864,13 @@ export class WorkspaceConnectionManager {
 				: toRendererPoint({ x: this.connectionInProgress.to.x, y: this.connectionInProgress.to.y }, transform)
 
 			includeRect(to.x, to.y, 1, 1)
+		}
+
+		if (this.proximityCandidate) {
+			const proxSource = nodeById.get(this.proximityCandidate.sourceNodeId)
+			const proxTarget = nodeById.get(this.proximityCandidate.targetNodeId)
+			if (proxSource) includeRect(proxSource.position.x, proxSource.position.y, proxSource.dimensions.width, proxSource.dimensions.height)
+			if (proxTarget) includeRect(proxTarget.position.x, proxTarget.position.y, proxTarget.dimensions.width, proxTarget.dimensions.height)
 		}
 
 		if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
@@ -1296,7 +1302,7 @@ export class WorkspaceConnectionManager {
         }
 
 		let closestCandidate: ProximityCandidate | null = null
-		let minDistance = PROXIMITY_THRESHOLD
+		let minDistance = webUiSettings.proximityConnectThreshold
 
 		// Only trigger proximity connect if the dragged node has NO existing connections (either incoming or outgoing)
 		// This prevents "ghost" connections from appearing when dragging nodes that are already part of a graph (e.g. AI images).

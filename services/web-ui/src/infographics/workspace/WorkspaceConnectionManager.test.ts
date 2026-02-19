@@ -8,6 +8,7 @@ import {
 	getEdgeAnchorPositions,
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 // =============================================================================
@@ -225,6 +226,50 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 		manager.commitProximityConnection()
 
 		expect(config.onEdgesChange).not.toHaveBeenCalled()
+	})
+
+	it('uses webUiSettings.proximityConnectThreshold as the distance limit', () => {
+		const original = webUiSettings.proximityConnectThreshold
+		try {
+			// Set a very small threshold so nodes that are normally in range are rejected
+			webUiSettings.proximityConnectThreshold = 10
+
+			const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
+			const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 300, y: 50 }, dimensions: { width: 200, height: 100 } })
+
+			manager.syncNodes([imgNode, chatNode])
+			manager.syncEdges([])
+
+			// Distance between handles is 100px (right edge of img at 200, left edge of chat at 300)
+			manager.checkProximity('img-1', { x: 0, y: 50 }, { width: 200, height: 100 })
+			manager.commitProximityConnection()
+
+			expect(config.onEdgesChange).not.toHaveBeenCalled()
+		} finally {
+			webUiSettings.proximityConnectThreshold = original
+		}
+	})
+
+	it('triggers proximity when distance is within a custom threshold', () => {
+		const original = webUiSettings.proximityConnectThreshold
+		try {
+			// Set threshold large enough to include both nodes
+			webUiSettings.proximityConnectThreshold = 200
+
+			const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
+			const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 300, y: 50 }, dimensions: { width: 200, height: 100 } })
+
+			manager.syncNodes([imgNode, chatNode])
+			manager.syncEdges([])
+
+			// Distance between handles is 100px — within the 200px threshold
+			manager.checkProximity('img-1', { x: 0, y: 50 }, { width: 200, height: 100 })
+			manager.commitProximityConnection()
+
+			expect(config.onEdgesChange).toHaveBeenCalledTimes(1)
+		} finally {
+			webUiSettings.proximityConnectThreshold = original
+		}
 	})
 
 	// -------------------------------------------------------------------------
