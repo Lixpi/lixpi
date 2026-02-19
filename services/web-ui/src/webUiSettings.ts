@@ -5,6 +5,7 @@ export type WebUiSettings = {
     renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: boolean
     showHeaderOnAiChatThreadNodes: boolean
     proximityConnectThreshold: number
+    aiChatContextTraversalDepth: 'direct' | 'full'
 }
 
 export const webUiSettings: WebUiSettings = {
@@ -20,5 +21,15 @@ export const webUiSettings: WebUiSettings = {
     showHeaderOnAiChatThreadNodes: false,
     // Maximum distance (in renderer-coordinate pixels) at which dragging an unconnected
     // node near an AI chat thread node triggers the proximity-connect ghost edge.
-    proximityConnectThreshold: 500,
+    proximityConnectThreshold: 300,
+    // Controls how deeply the system traverses node connections when extracting
+    // context for AI chat threads.
+    //   'direct' — include content only from nodes with a direct incoming edge
+    //              into the AI chat thread (one hop). Best when each thread
+    //              should see only its immediate inputs.
+    //   'full'   — recursively follow all incoming edges, gathering content from
+    //              every reachable upstream node in the graph (transitive closure).
+    //              Use when chains like DocA → DocB → ChatThread should pass
+    //              DocA's content through to the chat.
+    aiChatContextTraversalDepth: 'direct',
 }

@@ -11,6 +11,7 @@ describe('webUiSettings — shape', () => {
 	it('exports a WebUiSettings type with exactly the expected keys', () => {
 		const keys = Object.keys(webUiSettings).sort()
 		expect(keys).toEqual([
+			'aiChatContextTraversalDepth',
 			'proximityConnectThreshold',
 			'renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem',
 			'showHeaderOnAiChatThreadNodes',
@@ -28,6 +29,7 @@ describe('webUiSettings — shape', () => {
 			renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: 'boolean',
 			showHeaderOnAiChatThreadNodes: 'boolean',
 			proximityConnectThreshold: 'number',
+			aiChatContextTraversalDepth: 'string',
 		}
 		for (const [key, value] of Object.entries(webUiSettings)) {
 			expect(typeof value).toBe(expectedTypes[key])
@@ -62,6 +64,10 @@ describe('webUiSettings — defaults', () => {
 
 	it('proximityConnectThreshold defaults to a positive number', () => {
 		expect(webUiSettings.proximityConnectThreshold).toBeGreaterThan(0)
+	})
+
+	it('aiChatContextTraversalDepth defaults to direct', () => {
+		expect(webUiSettings.aiChatContextTraversalDepth).toBe('direct')
 	})
 })
 

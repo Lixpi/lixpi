@@ -19,6 +19,7 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import type { Document } from '$src/stores/documentStore.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 
 // ========== CONTEXT EXTRACTION TYPES ==========
 
@@ -91,7 +92,9 @@ function findConnectedNodes(
         const sourceNode = nodes.find((n) => n.nodeId === edge.sourceNodeId)
         if (sourceNode) {
             result.push({ node: sourceNode, edge })
-            result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
+            if (webUiSettings.aiChatContextTraversalDepth === 'full') {
+                result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
+            }
         }
     }
 
