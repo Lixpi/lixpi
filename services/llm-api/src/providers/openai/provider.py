@@ -221,13 +221,13 @@ class OpenAIProvider(BaseLLMProvider):
 
         return [{
             'type': 'image_generation',
-            # 'quality': 'high',
-            'quality': 'low',
+            'quality': 'high',
+            # 'quality': 'low',
             'moderation': 'low',
             'input_fidelity': 'high',
             'partial_images': 3,
-            # 'size': image_size if image_size else 'auto'
-            'size': '1024x1024'
+            'size': image_size if image_size else 'auto'
+            # 'size': '1024x1024'
         }]
 
     async def _handle_image_generation_output(

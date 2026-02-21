@@ -534,13 +534,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    // Returns the vertical offset from a thread node's top to where the floating
+    // input should be placed. Hidden (empty) threads contribute 0 height.
+    function getThreadTopOffset(nodeId: string, threadHeight: number): number {
+        return hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : threadHeight + 16
+    }
+
     function positionElementBelowNode(el: HTMLElement, node: CanvasNode): void {
         el.style.left = `${node.position.x}px`
-        // When the thread node is hidden (no messages), position the floating
-        // input at the node's top instead of below it.
-        const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)
-        const topOffset = isHidden ? 0 : (node.dimensions?.height ?? 400) + 16
-        el.style.top = `${node.position.y + topOffset}px`
+        el.style.top = `${node.position.y + getThreadTopOffset(node.nodeId, node.dimensions?.height ?? 400)}px`
         el.style.width = `${node.dimensions?.width ?? 400}px`
     }
 
@@ -821,26 +823,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Tracks thread nodes that are hidden because they have no messages yet
     const hiddenEmptyThreadNodeIds: Set<string> = new Set()
 
+    function hideThreadNode(nodeEl: HTMLElement, nodeId: string): void {
+        nodeEl.dataset.threadEmpty = 'true'
+        hiddenEmptyThreadNodeIds.add(nodeId)
+    }
+
+    function showThreadNode(nodeEl: HTMLElement, nodeId: string): void {
+        delete nodeEl.dataset.threadEmpty
+        hiddenEmptyThreadNodeIds.delete(nodeId)
+    }
+
     function updateThreadNodeVisibility(nodeId: string, threadNodeEl: HTMLElement): void {
         const hasMessages = threadNodeEl.querySelector('.ai-user-message-wrapper, .ai-response-message-wrapper') !== null
         const wasHidden = hiddenEmptyThreadNodeIds.has(nodeId)
 
         if (hasMessages && wasHidden) {
-            // Show the thread node — messages have appeared
-            threadNodeEl.style.display = ''
-            hiddenEmptyThreadNodeIds.delete(nodeId)
+            showThreadNode(threadNodeEl, nodeId)
             repositionAllThreadFloatingInputs()
             scheduleThreadAutoGrow(nodeId)
         } else if (!hasMessages && !wasHidden) {
-            // Hide the thread node — no messages
-            threadNodeEl.style.display = 'none'
-            hiddenEmptyThreadNodeIds.add(nodeId)
+            hideThreadNode(threadNodeEl, nodeId)
             repositionAllThreadFloatingInputs()
         }
     }
 
     function autoGrowThreadNode(threadNodeId: string): void {
         if (!currentCanvasState) return
+        if (hiddenEmptyThreadNodeIds.has(threadNodeId)) return
 
         const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${threadNodeId}"]`) as HTMLElement | null
         if (!threadNodeEl) return
@@ -2087,18 +2096,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // Reposition floating input to follow dragged node
             if (floatingInputEl && floatingInputEl.style.display !== 'none' && nodeId === selectedNodeId) {
-                const inputY = currentPos.y + currentDims.height + 16
                 floatingInputEl.style.left = `${currentPos.x}px`
-                floatingInputEl.style.top = `${inputY}px`
+                floatingInputEl.style.top = `${currentPos.y + getThreadTopOffset(nodeId, currentDims.height)}px`
                 floatingInputEl.style.width = `${currentDims.width}px`
             }
 
             // Reposition per-thread floating input if dragging a thread node
             const threadEntry = threadFloatingInputs.get(nodeId)
             if (threadEntry) {
-                const inputY = currentPos.y + currentDims.height + 16
                 threadEntry.el.style.left = `${currentPos.x}px`
-                threadEntry.el.style.top = `${inputY}px`
+                threadEntry.el.style.top = `${currentPos.y + getThreadTopOffset(nodeId, currentDims.height)}px`
                 threadEntry.el.style.width = `${currentDims.width}px`
             }
 
@@ -2334,8 +2341,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     y: parseFloat(nodeEl.style.top)
                 },
                 dimensions: {
-                    width: nodeEl.offsetWidth,
-                    height: nodeEl.offsetHeight
+                    width: newWidth,
+                    height: newHeight
                 }
             })
             scheduleEdgesRender()
@@ -2345,29 +2352,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const threadEntry = threadFloatingInputs.get(nodeId)
             if (threadEntry) {
                 const pos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
-                const dims = { width: nodeEl.offsetWidth, height: nodeEl.offsetHeight }
                 threadEntry.el.style.left = `${pos.x}px`
-                threadEntry.el.style.top = `${pos.y + dims.height + 16}px`
-                threadEntry.el.style.width = `${dims.width}px`
+                threadEntry.el.style.top = `${pos.y + getThreadTopOffset(nodeId, newHeight)}px`
+                threadEntry.el.style.width = `${newWidth}px`
             }
 
             // Reposition the vertical rail during resize
             const resizeRail = threadRails.get(nodeId)
             if (resizeRail) {
                 const pos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
-                const dims = { height: nodeEl.offsetHeight }
+                const threadH = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : newHeight
                 const floatingH = threadEntry ? threadEntry.el.offsetHeight : 0
-                const totalH = dims.height + 16 + floatingH
+                const gap = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : 16
+                const totalH = threadH + gap + floatingH
                 resizeRail.style.left = `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
                 resizeRail.style.top = `${pos.y}px`
                 resizeRail.style.height = `${totalH}px`
-                resizeRail.style.setProperty('--rail-thread-height', `${dims.height}px`)
+                resizeRail.style.setProperty('--rail-thread-height', `${threadH}px`)
                 connectionManager?.setRailHeight(nodeId, totalH)
             }
 
             // Real-time anchored image repositioning during thread resize
             if (resizeAnchorsForThread.length > 0) {
-                const liveThreadDims = { width: nodeEl.offsetWidth, height: nodeEl.offsetHeight }
+                const liveThreadDims = { width: newWidth, height: newHeight }
                 const liveThreadPos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
                 const liveThread = {
                     ...(currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId) as AiChatThreadCanvasNode),
@@ -2694,10 +2701,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             editorContainer.appendChild(createLoadingPlaceholder().dom)
         }
 
-        // Hide the thread node if it has no messages yet
-        if (thread && !threadContentHasMessages(thread.content)) {
-            nodeEl.style.display = 'none'
-            hiddenEmptyThreadNodeIds.add(node.nodeId)
+        // Hide the thread node unless we positively know it has messages.
+        // This covers both "not loaded yet" (thread undefined) and "loaded but
+        // empty" cases, preventing any visible flash on page load.
+        if (!thread || !threadContentHasMessages(thread.content)) {
+            hideThreadNode(nodeEl, node.nodeId)
         }
 
         // Create the always-visible per-thread floating prompt input

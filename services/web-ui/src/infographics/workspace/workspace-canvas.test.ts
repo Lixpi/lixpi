@@ -239,8 +239,15 @@ describe('AI chat thread — empty thread visibility', () => {
 		expect(fnBody).toContain('ai-response-message-wrapper')
 	})
 
-	it('createAiChatThreadNode hides node when thread has no messages', () => {
-		expect(ts).toMatch(/threadContentHasMessages[\s\S]*?nodeEl\.style\.display\s*=\s*'none'/)
+	it('createAiChatThreadNode hides node when thread has no messages or is not yet loaded', () => {
+		expect(ts).toMatch(/!thread\s*\|\|\s*!threadContentHasMessages/)
+		expect(ts).toMatch(/threadContentHasMessages[\s\S]*?hideThreadNode/)
+	})
+
+	it('CSS hides thread nodes with data-thread-empty attribute', () => {
+		const scss = loadScss()
+		expect(scss).toContain('data-thread-empty')
+		expect(scss).toMatch(/data-thread-empty[\s\S]*?visibility:\s*hidden/)
 	})
 
 	it('onEditorChange calls updateThreadNodeVisibility', () => {
@@ -251,7 +258,7 @@ describe('AI chat thread — empty thread visibility', () => {
 		const fnMatch = ts.match(/function\s+positionElementBelowNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('hiddenEmptyThreadNodeIds')
+		expect(fnBody).toContain('getThreadTopOffset')
 	})
 
 	it('renderNodes clears hiddenEmptyThreadNodeIds', () => {
@@ -266,6 +273,58 @@ describe('AI chat thread — empty thread visibility', () => {
 		expect(destroyMatch).not.toBeNull()
 		const destroyBody = destroyMatch![0]
 		expect(destroyBody).toContain('hiddenEmptyThreadNodeIds')
+	})
+
+	it('defines hideThreadNode helper that sets data-thread-empty attribute', () => {
+		const fnMatch = ts.match(/function\s+hideThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("threadEmpty")
+		expect(fnBody).toContain("hiddenEmptyThreadNodeIds.add")
+	})
+
+	it('defines showThreadNode helper that removes data-thread-empty attribute', () => {
+		const fnMatch = ts.match(/function\s+showThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("threadEmpty")
+		expect(fnBody).toContain("hiddenEmptyThreadNodeIds.delete")
+	})
+
+	it('defines getThreadTopOffset helper', () => {
+		const fnMatch = ts.match(/function\s+getThreadTopOffset[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('hiddenEmptyThreadNodeIds')
+	})
+
+	it('updateThreadNodeVisibility uses hideThreadNode and showThreadNode', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('showThreadNode')
+		expect(fnBody).toContain('hideThreadNode')
+	})
+
+	it('autoGrowThreadNode skips hidden threads', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('hiddenEmptyThreadNodeIds.has')
+	})
+
+	it('drag mousemove uses getThreadTopOffset for floating input positioning', () => {
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('getThreadTopOffset')
+	})
+
+	it('resize mousemove uses getThreadTopOffset for floating input positioning', () => {
+		const fnMatch = ts.match(/function\s+handleResizeStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('getThreadTopOffset')
 	})
 })
 

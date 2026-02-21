@@ -143,6 +143,15 @@
     box-shadow: var(--ai-chat-thread-node-box-shadow, none);
     border: var(--ai-chat-thread-node-border, none);
 
+    // Empty thread nodes are hidden until the first message arrives.
+    // Uses visibility:hidden so the element remains measurable (offsetWidth/Height)
+    // while being invisible. The data attribute is set at DOM-creation time so
+    // the browser never paints the node visibly — no flash on page load.
+    &[data-thread-empty="true"] {
+        visibility: hidden;
+        pointer-events: none;
+    }
+
     /* Optional pattern overlay (renderer reads these CSS vars) */
     --gradient-pattern-alpha: 0.22;
     --gradient-pattern-tint: rgba(18, 62, 112, 0.85);
