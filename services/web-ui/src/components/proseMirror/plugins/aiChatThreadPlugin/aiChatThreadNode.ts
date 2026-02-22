@@ -6,9 +6,10 @@ export const aiChatThreadNodeType = 'aiChatThread'
 
 export const aiChatThreadNodeSpec = {
     group: 'block',
-    // Thread is a pure container: messages + a dedicated input node always at the end
-    // New documents start with only `aiUserInput`.
-    content: '(aiUserMessage | aiResponseMessage)* aiUserInput',
+    // Thread is a pure conversation container: messages only.
+    // The composer input is now a separate floating canvas element.
+    // Starts empty — messages are added when the user submits from the floating input.
+    content: '(aiUserMessage | aiResponseMessage)*',
     defining: false, // Changed to false to allow better cursor interaction
     draggable: false,
     isolating: false, // Changed to false to allow cursor interaction
@@ -19,7 +20,7 @@ export const aiChatThreadNodeSpec = {
         aiModel: { default: '' },
         // Image generation settings
         imageGenerationEnabled: { default: false },
-        imageGenerationSize: { default: '1024x1024' }, // 1024x1024, 1536x1024, 1024x1536, auto
+        imageGenerationSize: { default: 'auto' }, // 1024x1024, 1536x1024, 1024x1536, auto
         // Previous response ID for multi-turn image editing
         previousResponseId: { default: '' }
     },
@@ -31,7 +32,7 @@ export const aiChatThreadNodeSpec = {
                 status: dom.getAttribute('data-status') || 'active',
                 aiModel: dom.getAttribute('data-ai-model') || '',
                 imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
-                imageGenerationSize: dom.getAttribute('data-image-generation-size') || '1024x1024',
+                imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
                 previousResponseId: dom.getAttribute('data-previous-response-id') || ''
             })
         }
@@ -81,6 +82,13 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
         dom,
         contentDOM,
         ignoreMutation: (mutation) => {
+            // Ignore style attribute changes on the wrapper (e.g. height set
+            // by applyAnchoredImageSpacing in WorkspaceCanvas). Without this,
+            // ProseMirror's MutationObserver would detect the height change and
+            // trigger reconciliation that wipes the externally-grown thread height.
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                return true
+            }
             // Let ProseMirror handle content mutations
             return false
         },

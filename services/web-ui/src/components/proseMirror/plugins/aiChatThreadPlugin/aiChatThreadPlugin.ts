@@ -7,26 +7,27 @@
 // - Placeholder decorations
 
 import { Plugin, PluginKey, EditorState, Transaction } from 'prosemirror-state'
-import { Selection } from 'prosemirror-state'
-import { TextSelection } from 'prosemirror-state'
 import { Fragment, Slice } from 'prosemirror-model'
-import { EditorView, Decoration, DecorationSet, NodeView } from 'prosemirror-view'
+import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
 import { Node as ProseMirrorNode, Schema as ProseMirrorSchema } from 'prosemirror-model'
 import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.js'
 import { aiChatThreadNodeType, aiChatThreadNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY, USE_AI_CHAT_META, STOP_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
-import { aiUserInputNodeType, aiUserInputNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
+// aiUserInput has been removed — the composer is now a separate floating canvas element
+// The aiUserInputNodeType is still imported for legacy content migration
+import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 import { aiUserMessageNodeType, aiUserMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 import type { AiModelId } from '@lixpi/constants'
 
-import { setAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
+import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
-import { dispatchSendAiChatFromUserInput } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadSend.ts'
-import { findUserInputInThread } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPositionUtils.ts'
+// dispatchSendAiChatFromUserInput has been removed — messages are now injected by AiPromptInputController
+// findUserInputInThread is no longer needed — aiUserInput has been removed from the schema
 
 const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
@@ -389,9 +390,9 @@ class PositionFinder {
             // If threadId specified, only match that exact thread
             if (threadId && nodeThreadId !== threadId) return
 
-            const inputInfo = findUserInputInThread(state, pos, node)
+            // Insert at end of thread content (before closing token)
             result = {
-                insertPos: inputInfo?.inputPos ?? (pos + node.nodeSize - 1),
+                insertPos: pos + node.nodeSize - 1,
                 threadId: nodeThreadId
             }
             return false // Stop searching
@@ -535,29 +536,45 @@ class AiChatThreadPluginClass {
     private sendAiRequestHandler: SendAiRequestHandler
     private stopAiRequestHandler: StopAiRequestHandler
     private placeholderOptions: PlaceholderOptions
+    private onReceivingStateChange: ((threadId: string, receiving: boolean) => void) | null
     private unsubscribeFromSegments: (() => void) | null = null
 
     constructor({
         sendAiRequestHandler,
         stopAiRequestHandler,
-        placeholders
+        placeholders,
+        onReceivingStateChange
     }: {
         sendAiRequestHandler: SendAiRequestHandler
         stopAiRequestHandler: StopAiRequestHandler
         placeholders: PlaceholderOptions
+        onReceivingStateChange?: (threadId: string, receiving: boolean) => void
     }) {
         this.sendAiRequestHandler = sendAiRequestHandler
         this.stopAiRequestHandler = stopAiRequestHandler
         this.placeholderOptions = placeholders
+        this.onReceivingStateChange = onReceivingStateChange ?? null
     }
 
     // ========== STREAMING MANAGEMENT ==========
 
     private startStreaming(view: EditorView): void {
+        console.log('🟣 [PLUGIN] startStreaming called', {
+            docSize: view.state.doc.content.size,
+            viewDom: view.dom?.parentElement?.className,
+            stackTrace: new Error().stack?.split('\\n').slice(1, 5).join(' → ')
+        })
         this.unsubscribeFromSegments = SegmentsReceiver.subscribeToeceiveSegment((event: SegmentEvent) => {
             const { status, type, aiProvider, segment, threadId, aiChatThreadId } = event
             const effectiveThreadId = threadId || aiChatThreadId
             const { state, dispatch } = view
+
+            console.log('🔵 [PLUGIN] Segment event received', {
+                status, type, effectiveThreadId,
+                hasSegment: !!segment,
+                docSize: state.doc.content.size,
+                viewDestroyed: (view as any).destroyed ?? 'unknown'
+            })
 
             // Handle image generation events
             if (type === 'image_partial') {
@@ -588,205 +605,92 @@ class AiChatThreadPluginClass {
     }
 
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {
-        const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
-        console.log('🖼️ [PLUGIN] handleImagePartial called:', { imageUrl, fileId, partialIndex, aiChatThreadId })
-        if (!imageUrl || !aiChatThreadId) {
-            console.log('🖼️ [PLUGIN] handleImagePartial: missing imageUrl or aiChatThreadId, returning')
-            return
-        }
+        try {
+            const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
+            if (!imageUrl || !aiChatThreadId) return
 
-        const { state, dispatch } = view
-        const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
+            const { state } = view
+            const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
 
-        // Only process events for threads that exist in THIS document
-        if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
-            return
-        }
-        // Check if we already have a partial image node being updated
-        let existingImagePos: number | null = null
-        let existingImageNode: ProseMirrorNode | null = null
+            // Only process events for threads that exist in THIS document
+            if (!threadInfo) return
 
-        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-            if (node.type.name === aiGeneratedImageNodeType && node.attrs.isPartial) {
-                // Check if this image is in the correct thread
-                const $pos = state.doc.resolve(pos)
-                for (let depth = $pos.depth; depth > 0; depth--) {
-                    const parentNode = $pos.node(depth)
-                    if (parentNode.type.name === aiChatThreadNodeType) {
-                        if (parentNode.attrs.threadId === aiChatThreadId) {
-                            existingImagePos = pos
-                            existingImageNode = node
-                        }
-                        break
-                    }
-                }
-            }
-            return existingImagePos === null
-        })
-
-        let tr = state.tr
-
-        if (existingImagePos !== null && existingImageNode) {
-            console.log('🖼️ [PLUGIN] handleImagePartial: updating existing image node at pos', existingImagePos)
-            // Update existing partial image node
-            tr.setNodeMarkup(existingImagePos, null, {
-                ...existingImageNode.attrs,
-                imageData: imageUrl,
-                fileId: fileId || null,
+            // Delegate to canvas-side handler — image appears as a canvas node, not inline
+            const callbacks = getAiGeneratedImageCallbacks()
+            callbacks.onImagePartialToCanvas?.({
+                threadId: aiChatThreadId,
+                imageUrl,
+                fileId: fileId || '',
+                workspaceId: workspaceId || '',
+                partialIndex: partialIndex || 0,
+                aiProvider: aiProvider || ''
             })
-        } else {
-            console.log('🖼️ [PLUGIN] handleImagePartial: creating NEW aiGeneratedImage node')
-
-            // Try to find a target AI response message in the thread
-            const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
-            // Use aiGeneratedImage node with proper attrs
-            const imageNode = state.schema.nodes[aiGeneratedImageNodeType].create({
-                imageData: imageUrl,
-                fileId: fileId || null,
-                workspaceId: workspaceId || null,
-                isPartial: true,
-            })
-
-            if (responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
-                 console.log('🖼️ [PLUGIN] handleImagePartial: inserting into existing response node')
-                 const insertionPos = responseNodeInfo.endOfNodePos - 1
-                 tr.insert(insertionPos, imageNode)
-            } else {
-                 console.log('🖼️ [PLUGIN] handleImagePartial: creating NEW response node with image')
-                 // Create new response node wrapping the image
-                 // Set isReceivingAnimation so findResponseNode can find it for image_complete
-                 const responseNode = state.schema.nodes[aiResponseMessageNodeType].create(
-                     {
-                         aiProvider: aiProvider || 'OpenAI',
-                         isReceivingAnimation: true
-                     },
-                     [imageNode]
-                 )
-                 tr.insert(threadInfo.insertPos, responseNode)
-            }
-        }
-
-        if (tr.docChanged) {
-            console.log('🖼️ [PLUGIN] handleImagePartial: dispatching transaction')
-            dispatch(tr)
-        } else {
-            console.log('🖼️ [PLUGIN] handleImagePartial: doc NOT changed, skipping dispatch')
+        } catch (error) {
+            console.error('🟥 [PLUGIN] handleImagePartial failed', { event }, error)
         }
     }
 
     private handleImageComplete(view: EditorView, event: SegmentEvent): void {
         const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider } = event
-        console.log('🖼️ [PLUGIN] handleImageComplete called:', { imageUrl, fileId, responseId, aiChatThreadId })
         if (!imageUrl || !aiChatThreadId) return
 
         const { state, dispatch } = view
 
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
-        if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
-            return
+        if (!threadInfo) return
+
+        // Find the current receiving response message node to:
+        // 1. Insert revised prompt text into it
+        // 2. Read its `id` attr for sourceMessageId on the canvas edge
+        let responseMessageId = ''
+        const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
+
+        if (responseNodeInfo.found && responseNodeInfo.endOfNodePos !== undefined) {
+            const $endPos = state.doc.resolve(responseNodeInfo.endOfNodePos)
+            const node = $endPos.nodeBefore
+            if (node && node.type.name === aiResponseMessageNodeType) {
+                responseMessageId = node.attrs.id || ''
+            }
         }
 
-        // Find existing partial image node in this thread
-        let existingImagePos: number | null = null
-        let existingImageNode: ProseMirrorNode | null = null
+        // Re-find positions if state changed (though relative positions inside the node shouldn't change, absolutes might)
+        // But since we only modified attributes of the node we just found, we can proceed carefully.
+        // Better to re-resolve if we want to be 100% safe, but let's see.
+        // Actually, inserting text inside the node changes its size.
 
-        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-            if (node.type.name === aiGeneratedImageNodeType && node.attrs.isPartial) {
-                const $pos = state.doc.resolve(pos)
-                for (let depth = $pos.depth; depth > 0; depth--) {
-                    const parentNode = $pos.node(depth)
-                    if (parentNode.type.name === aiChatThreadNodeType) {
-                        // Only match the exact threadId
-                        if (parentNode.attrs.threadId === aiChatThreadId) {
-                            existingImagePos = pos
-                            existingImageNode = node
-                        }
-                        break
-                    }
-                }
-            }
-            return existingImagePos === null
-        })
+        // Insert revised prompt as text into the response message (keeps conversation readable)
+        if (revisedPrompt && responseMessageId) {
+             // We need to re-find the response node end position because the document might have changed (though unlikely to affect position *before* it, but safer)
+             // However, setNodeMarkup doesn't change document length so positions are stable.
+             // BUT, we MUST use the new state to create the transaction.
 
-        let tr = state.tr
+             // Let's re-locate the end position to be safe if we want to insert at end
+             const updatedResponseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
 
-        if (existingImagePos !== null && existingImageNode) {
-            // Update existing node to complete state
-            console.log('🖼️ [PLUGIN] handleImageComplete: updating existing aiGeneratedImage node at pos', existingImagePos)
-            const mappedPos = tr.mapping.map(existingImagePos)
-            tr.setNodeMarkup(mappedPos, null, {
-                imageData: imageUrl,
-                fileId: fileId || null,
-                workspaceId: workspaceId || null,
-                revisedPrompt: revisedPrompt || null,
-                responseId: responseId || null,
-                aiModel: aiProvider || null,
-                isPartial: false,
-            })
-
-            // Handle revised prompt insertion
-            if (revisedPrompt) {
-                 const $pos = state.doc.resolve(mappedPos)
-                 const parent = $pos.parent
-                 if (parent.type.name === aiResponseMessageNodeType) {
-                      const index = $pos.index()
-                      const childBefore = index > 0 ? parent.child(index - 1) : null
-
-                      if (!childBefore || (childBefore.type.name === 'paragraph' && !childBefore.textContent.trim())) {
-                           const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-                           tr.insert(mappedPos, p)
-                      }
-                 }
-            }
-        } else {
-            console.log('🖼️ [PLUGIN] handleImageComplete: no existing partial image found, checking for existing response node')
-            // Use aiGeneratedImage node with proper attrs
-            const imageNode = state.schema.nodes[aiGeneratedImageNodeType].create({
-                imageData: imageUrl,
-                fileId: fileId || null,
-                workspaceId: workspaceId || null,
-                revisedPrompt: revisedPrompt || null,
-                responseId: responseId || null,
-                aiModel: aiProvider || null,
-                isPartial: false,
-            })
-
-            let contentNodes: ProseMirrorNode[] = [imageNode]
-            if (revisedPrompt) {
+             if (updatedResponseNodeInfo.found && updatedResponseNodeInfo.endOfNodePos) {
+                const tr = state.tr
+                const insertionPos = updatedResponseNodeInfo.endOfNodePos - 1
                 const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-                contentNodes = [p, imageNode]
-            }
-
-            // Look for an existing receiving response node to add images to
-            const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
-            console.log('🖼️ [PLUGIN] handleImageComplete: responseNodeInfo:', responseNodeInfo)
-
-            if (responseNodeInfo.found && responseNodeInfo.endOfNodePos) {
-                 console.log('🖼️ [PLUGIN] handleImageComplete: inserting into EXISTING response node')
-                 const insertionPos = responseNodeInfo.endOfNodePos - 1
-                 tr.insert(insertionPos, Fragment.from(contentNodes))
-            } else {
-                 console.log('🖼️ [PLUGIN] handleImageComplete: creating NEW response node (no existing found)')
-                 const responseNode = state.schema.nodes[aiResponseMessageNodeType].create(
-                     {
-                         aiProvider: aiProvider || 'OpenAI',
-                         isReceivingAnimation: true  // Mark as receiving so subsequent images go here
-                     },
-                     Fragment.from(contentNodes)
-                 )
-                 const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
-                 if (threadInfo) {
-                    tr.insert(threadInfo.insertPos, responseNode)
-                 }
-            }
+                tr.insert(insertionPos, p)
+                if (tr.docChanged) {
+                    dispatch(tr)
+                }
+             }
         }
 
-        if (tr.docChanged) {
-            dispatch(tr)
-        }
+        // Delegate image placement to the canvas
+        const callbacks = getAiGeneratedImageCallbacks()
+        callbacks.onImageCompleteToCanvas?.({
+            threadId: aiChatThreadId,
+            imageUrl,
+            fileId: fileId || '',
+            workspaceId: workspaceId || '',
+            responseId: responseId || '',
+            revisedPrompt: revisedPrompt || '',
+            aiModel: aiProvider || '',
+            responseMessageId,
+        })
     }
 
     private handleCreateVariantRequest(view: EditorView, node: ProseMirrorNode, pos: number): void {
@@ -827,14 +731,23 @@ class AiChatThreadPluginClass {
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
 
+        console.log('🔴 [PLUGIN] handleStreamStart', {
+            threadId,
+            threadInfoFound: !!threadInfo,
+            insertPos: threadInfo?.insertPos,
+            docSize: state.doc.content.size
+        })
+
         if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
+            console.warn('🔴 [PLUGIN] handleStreamStart: thread NOT found in doc, skipping', { threadId })
             return
         }
 
         const { insertPos } = threadInfo
 
+        const responseMessageId = `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
         const aiResponseNode = state.schema.nodes[aiResponseMessageNodeType].create({
+            id: responseMessageId,
             isInitialRenderAnimation: true,
             isReceivingAnimation: true,
             aiProvider
@@ -851,9 +764,10 @@ class AiChatThreadPluginClass {
             // Set receiving state for this specific thread
             if (threadId) {
                 tr.setMeta('setReceiving', { threadId, receiving: true })
-                console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos })
+                console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos, responseMessageId })
             }
             dispatch(tr)
+            console.log('🔴 [PLUGIN] handleStreamStart dispatch done', { threadId, docSizeAfter: tr.doc.content.size })
         } catch (error) {
             console.error('Error inserting aiResponseMessage:', error)
         }
@@ -871,12 +785,21 @@ class AiChatThreadPluginClass {
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) {
-            // Thread not in this document - event is for a different editor
+            console.warn('🟠 [PLUGIN] handleStreaming: thread NOT found in doc, skipping', { threadId })
             return
         }
 
         let tr = state.tr
         let responseInfo = PositionFinder.findResponseNode(state, threadId)
+
+        console.log('🟠 [PLUGIN] handleStreaming', {
+            threadId,
+            responseFound: responseInfo.found,
+            endOfNodePos: responseInfo.endOfNodePos,
+            childCount: responseInfo.childCount,
+            segmentType: segment.type,
+            segmentContent: segment.segment?.substring(0, 50)
+        })
 
         // Create response node if missing in the correct thread
         if (!responseInfo.found) {
@@ -1034,16 +957,6 @@ class AiChatThreadPluginClass {
                     })
                 )
             }
-
-            // Input placeholder (composer)
-            if (node.type.name === aiUserInputNodeType && node.textContent.trim() === '') {
-                decorations.push(
-                    Decoration.node(pos, pos + node.nodeSize, {
-                        class: 'empty-node-placeholder',
-                        'data-placeholder': this.placeholderOptions.paragraphPlaceholder
-                    })
-                )
-            }
         })
 
         return DecorationSet.create(state.doc, decorations)
@@ -1055,14 +968,14 @@ class AiChatThreadPluginClass {
         const attrs = transaction.getMeta(INSERT_THREAD_META)
         if (!attrs) return null
 
-        // Create thread with dedicated user input node
+        // Create an empty thread node — messages will be injected by AiPromptInputController
         const nodeType = newState.schema.nodes[aiChatThreadNodeType]
-        const inputType = newState.schema.nodes[aiUserInputNodeType]
-        const paragraph = newState.schema.nodes.paragraph.createAndFill()
-        if (!inputType || !paragraph) return null
+        if (!nodeType) return null
 
-        const inputNode = inputType.create({}, paragraph)
-        const threadNode = nodeType.create(attrs, inputNode)
+        // Thread content expression is (aiUserMessage | aiResponseMessage)*
+        // Empty thread is valid — the first message will be injected when the
+        // user submits from the floating input.
+        const threadNode = nodeType.create(attrs)
 
         const { $from } = newState.selection
 
@@ -1079,19 +992,13 @@ class AiChatThreadPluginClass {
         let insertPos: number
         if (currentThreadDepth !== -1) {
             const threadPos = $from.before(currentThreadDepth)
-            const threadNode = $from.node(currentThreadDepth)
-            insertPos = threadPos + threadNode.nodeSize
+            const existingThread = $from.node(currentThreadDepth)
+            insertPos = threadPos + existingThread.nodeSize
         } else {
             insertPos = $from.after(1)
         }
 
-        let tr = newState.tr.replace(insertPos, insertPos, new Slice(Fragment.from(threadNode), 0, 0))
-
-        // doc -> title + aiChatThread
-        // aiChatThread content starts after +1
-        // aiUserInput wrapper adds another +1, and paragraph starts after that.
-        const cursorPos = insertPos + 3
-        tr = tr.setSelection(TextSelection.create(tr.doc, cursorPos))
+        const tr = newState.tr.replace(insertPos, insertPos, new Slice(Fragment.from(threadNode), 0, 0))
 
         return tr
     }
@@ -1113,7 +1020,7 @@ class AiChatThreadPluginClass {
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
             imageGenerationEnabled = false,
-            imageGenerationSize = '1024x1024'
+            imageGenerationSize = 'auto'
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 
@@ -1149,28 +1056,19 @@ class AiChatThreadPluginClass {
         return new Plugin({
             key: PLUGIN_KEY,
 
-            // Prevent transactions that would delete the aiUserInput or corrupt thread structure
+            // Prevent transactions that would corrupt thread structure
             filterTransaction: (tr: Transaction, state: EditorState) => {
-                // Allow transactions that don't change the doc
                 if (!tr.docChanged) return true
 
-                // Check if any aiChatThread would be left without aiUserInput
                 let valid = true
                 tr.doc.descendants((node: ProseMirrorNode) => {
                     if (node.type.name !== aiChatThreadNodeType) return
 
-                    // Thread must have at least one child (aiUserInput)
+                    // Thread must have at least one child (a message)
                     if (node.childCount === 0) {
                         console.warn('🚫 [PLUGIN] filterTransaction: blocking deletion that would empty thread')
                         valid = false
                         return false
-                    }
-
-                    // Last child must be aiUserInput
-                    const lastChild = node.lastChild
-                    if (!lastChild || lastChild.type.name !== aiUserInputNodeType) {
-                        // This is OK - appendTransaction will fix it
-                        return
                     }
                 })
                 return valid
@@ -1197,6 +1095,7 @@ class AiChatThreadPluginClass {
                             } else {
                                 newSet.delete(threadId)
                             }
+                            this.onReceivingStateChange?.(threadId, receiving)
                             return {
                                 ...prev,
                                 receivingThreadIds: newSet,
@@ -1219,28 +1118,21 @@ class AiChatThreadPluginClass {
             },
 
             appendTransaction: (transactions: Transaction[], _oldState: EditorState, newState: EditorState) => {
-                // Ensure every aiChatThread has valid structure with aiUserInput at the end
-                const inputType = newState.schema.nodes[aiUserInputNodeType]
+                // Strip legacy aiUserInput nodes from threads if present (data migration)
                 const paragraphType = newState.schema.nodes.paragraph
-                if (inputType && paragraphType) {
+                if (paragraphType) {
                     let tr: Transaction | null = null
                     newState.doc.descendants((node: ProseMirrorNode, pos: number) => {
                         if (node.type.name !== aiChatThreadNodeType) return
 
-                        // Check if thread has valid structure
-                        const lastChild = node.lastChild
-
-                        // If thread is completely empty, or last child is not aiUserInput
-                        if (!lastChild || lastChild.type.name !== aiUserInputNodeType) {
-                            console.log('🔧 [PLUGIN] appendTransaction: restoring aiUserInput in thread', node.attrs?.threadId)
-                            // Missing aiUserInput - insert one at the end of this thread
-                            const emptyParagraph = paragraphType.createAndFill()
-                            if (!emptyParagraph) return
-                            const inputNode = inputType.create({}, emptyParagraph)
-                            const insertPos = pos + node.nodeSize - 1 // before thread closing
-                            tr = tr || newState.tr
-                            tr.insert(insertPos, inputNode)
-                        }
+                        // Remove any aiUserInput children (legacy content)
+                        node.forEach((child: ProseMirrorNode, offset: number) => {
+                            if (child.type.name === aiUserInputNodeType) {
+                                const childPos = pos + 1 + offset
+                                tr = tr || newState.tr
+                                tr.delete(childPos, childPos + child.nodeSize)
+                            }
+                        })
                     })
                     if (tr) return tr
                 }
@@ -1344,6 +1236,9 @@ class AiChatThreadPluginClass {
 
                 return {
                     destroy: () => {
+                        console.log('🟣 [PLUGIN] destroy called — unsubscribing from segments', {
+                            hadSubscription: !!this.unsubscribeFromSegments
+                        })
                         if (this.unsubscribeFromSegments) {
                             this.unsubscribeFromSegments()
                         }
@@ -1352,139 +1247,20 @@ class AiChatThreadPluginClass {
             },
 
             props: {
-                // Handle paste events to ensure content is inserted correctly within aiUserInput
-                handlePaste: (view: EditorView, event: ClipboardEvent, slice: Slice) => {
-                    const { state } = view
-                    const { $from } = state.selection
-
-                    console.log('📋 [PLUGIN] handlePaste called at pos:', $from.pos)
-
-                    // Check if we're inside an aiUserInput or aiChatThread node
-                    let insideUserInput = false
-                    let insideThread = false
-                    let threadNode: ProseMirrorNode | null = null
-                    let threadPos = -1
+                // Paste handling: thread content is read-only (conversation log),
+                // so we block pastes inside thread nodes. Users paste into the
+                // separate floating aiPromptInput instead.
+                handlePaste: (view: EditorView, _event: ClipboardEvent, _slice: Slice) => {
+                    const { $from } = view.state.selection
 
                     for (let depth = $from.depth; depth > 0; depth--) {
-                        const node = $from.node(depth)
-                        const pos = $from.before(depth)
-                        console.log('📋 [PLUGIN] handlePaste: checking depth', depth, 'node type:', node.type.name)
-                        if (node.type.name === aiUserInputNodeType) {
-                            insideUserInput = true
-                            break
-                        }
-                        if (node.type.name === aiChatThreadNodeType) {
-                            insideThread = true
-                            threadNode = node
-                            threadPos = pos
-                            // Don't break - keep looking for aiUserInput
-                        }
-                    }
-
-                    // If we're inside aiChatThread but NOT inside aiUserInput,
-                    // we need to redirect the paste to the aiUserInput node
-                    if (insideThread && !insideUserInput && threadNode) {
-                        console.log('📋 [PLUGIN] handlePaste: inside aiChatThread but NOT inside aiUserInput, redirecting paste')
-
-                        // Find the aiUserInput node within this thread
-                        const userInputInfo = findUserInputInThread(state, threadPos, threadNode)
-                        if (userInputInfo) {
-                            console.log('📋 [PLUGIN] handlePaste: found aiUserInput at pos', userInputInfo.inputPos)
-
-                            // Get the content to paste
-                            const textContent = slice.content.textBetween(0, slice.content.size, '\n')
-                            if (!textContent) {
-                                console.log('📋 [PLUGIN] handlePaste: no text content to paste')
-                                return true // Consume the event but do nothing
-                            }
-
-                            // Create a paragraph with the pasted text
-                            const paragraph = state.schema.nodes.paragraph.create(
-                                null,
-                                state.schema.text(textContent)
-                            )
-
-                            // Insert at the end of aiUserInput content
-                            // aiUserInput position + 1 (inside the node) + content size - 1 (before closing)
-                            const insertPos = userInputInfo.inputPos + userInputInfo.inputNode.nodeSize - 1
-                            console.log('📋 [PLUGIN] handlePaste: inserting at pos', insertPos)
-
-                            const tr = state.tr.insert(insertPos, paragraph)
-                            // Move cursor to end of inserted content
-                            const newPos = insertPos + paragraph.nodeSize
-                            tr.setSelection(TextSelection.create(tr.doc, newPos - 1))
-                            view.dispatch(tr)
-                            return true
-                        } else {
-                            console.log('📋 [PLUGIN] handlePaste: could not find aiUserInput in thread')
-                            return true // Consume the event to prevent invalid paste
-                        }
-                    }
-
-                    if (!insideUserInput) {
-                        console.log('📋 [PLUGIN] handlePaste: not inside aiUserInput or aiChatThread, letting default paste handle it')
-                        return false // Let default paste handling take over
-                    }
-
-                    console.log('📋 [PLUGIN] handlePaste: inside aiUserInput, processing paste')
-
-                    // We're inside aiUserInput - ensure the pasted content is valid
-                    // aiUserInput allows (paragraph | block)+ content
-                    // The issue is that ProseMirror may try to "lift" the content up to aiChatThread level
-                    // which doesn't accept paragraph nodes directly
-
-                    // Get the content to paste
-                    const content = slice.content
-                    console.log('📋 [PLUGIN] handlePaste: slice content:', content.toString())
-
-                    // Check if the content is valid for aiUserInput
-                    // If it's just inline content (text), wrap it in a paragraph
-                    let validContent = content
-
-                    // Check if all nodes are valid for aiUserInput
-                    let allValid = true
-                    content.forEach((node: ProseMirrorNode) => {
-                        // aiUserInput accepts (paragraph | block)+
-                        // block group includes paragraph, heading, code_block, blockquote, etc.
-                        if (!node.type.isBlock) {
-                            allValid = false
-                            console.log('📋 [PLUGIN] handlePaste: found non-block node:', node.type.name)
-                        }
-                    })
-
-                    if (!allValid || content.childCount === 0) {
-                        console.log('📋 [PLUGIN] handlePaste: content needs wrapping in paragraph')
-                        // Convert the slice content to text and wrap in paragraph
-                        const textContent = slice.content.textBetween(0, slice.content.size, '\n')
-                        if (textContent) {
-                            const paragraph = state.schema.nodes.paragraph.create(
-                                null,
-                                state.schema.text(textContent)
-                            )
-                            validContent = Fragment.from(paragraph)
-                        }
-                    }
-
-                    // Create and dispatch the transaction
-                    const tr = state.tr.replaceSelection(new Slice(validContent, 0, 0))
-                    console.log('📋 [PLUGIN] handlePaste: dispatching paste transaction')
-                    view.dispatch(tr)
-                    return true // We handled the paste
-                },
-
-                // Keyboard handling for mod+enter
-                handleDOMEvents: {
-                    keydown: (_view: EditorView, event: KeyboardEvent) => {
-                        // Handle Mod+Enter for AI chat
-                        if (KeyboardHandler.isModEnter(event)) {
-                            event.preventDefault()
-                            const { $from } = _view.state.selection
-                            dispatchSendAiChatFromUserInput(_view, $from.pos)
+                        if ($from.node(depth).type.name === aiChatThreadNodeType) {
+                            // Inside a thread — consume the event to prevent invalid edits
                             return true
                         }
-
-                        return false
                     }
+
+                    return false // Outside thread, let default handling proceed
                 },
 
                 // Decorations: combine all independent decoration systems
@@ -1512,8 +1288,6 @@ class AiChatThreadPluginClass {
                         aiResponseMessageNodeView(node, view, getPos),
                     [aiUserMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiUserMessageNodeView(node, view, getPos),
-                    [aiUserInputNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
-                        aiUserInputNodeView(node, view, getPos),
                     // Note: aiGeneratedImage is handled by imageSelectionPlugin for bubble menu integration
                 },
                 view: (editorView: EditorView) => {
@@ -1544,18 +1318,20 @@ export function createAiChatThreadPlugin({
     sendAiRequestHandler,
     stopAiRequestHandler,
     placeholders,
-    imageCallbacks
+    imageCallbacks,
+    onReceivingStateChange
 }: {
     sendAiRequestHandler: SendAiRequestHandler
     stopAiRequestHandler: StopAiRequestHandler
     placeholders: PlaceholderOptions
     imageCallbacks?: AiGeneratedImageCallbacks
+    onReceivingStateChange?: (threadId: string, receiving: boolean) => void
 }): Plugin {
     // Set image generation callbacks if provided
     if (imageCallbacks) {
         setAiGeneratedImageCallbacks(imageCallbacks)
     }
 
-    const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders })
+    const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders, onReceivingStateChange })
     return pluginInstance.create()
 }

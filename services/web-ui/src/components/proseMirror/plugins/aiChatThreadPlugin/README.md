@@ -188,22 +188,22 @@ sequenceDiagram
 ### Schema Nodes
 
 **`aiChatThread`** - Container for entire conversation
-- Content: `(aiUserMessage | aiResponseMessage)* aiUserInput` (composer is always last)
+- Content: `(aiUserMessage | aiResponseMessage)+` (pure conversation log, no inline composer)
 - Attributes:
   - `threadId: string | null` - Unique identifier for the thread
   - `status: 'active'|'paused'|'completed'` - Thread lifecycle state
   - `aiModel: string` - Selected AI model (e.g., "Anthropic:claude-3-5-sonnet")
 - DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model]`
+- **Note:** User input is handled by the separate `aiPromptInputPlugin` which renders as a floating canvas element below the selected node. See `aiPromptInputPlugin/` for details.
 
 **`aiUserMessage`** - Sent user message bubble
 - Content: `(paragraph | block)+`
 - Attributes: `id, createdAt`
 - DOM: `div.ai-user-message`
 
-**`aiUserInput`** - Sticky composer (rich-text) at the end of the thread
-- Content: `(paragraph | block)+`
-- DOM: `div.ai-user-input-wrapper`
-- Behavior: NodeView renders the controls (model selector, image toggle, submit/stop) alongside `contentDOM`.
+**`aiUserInput`** - **DEPRECATED / LEGACY ONLY** — Previously the sticky composer at the end of the thread. Now replaced by the separate `aiPromptInputPlugin` which renders as a floating canvas element.
+- The node type spec is kept in the schema for legacy content migration — old thread documents that still contain `aiUserInput` will have it silently stripped in `appendTransaction`.
+- New threads no longer include `aiUserInput` in their content.
 
 **`aiResponseMessage`** - Individual AI responses
 - Content: `(paragraph | block)*` (empty allowed for streaming shell)
@@ -226,7 +226,11 @@ sequenceDiagram
   - `textWrap: 'none' | 'left' | 'right'` - Text wrap mode
 - DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
 - **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
-- **MULTI-MODAL CONTEXT:** When extracting thread content for AI requests, AI-generated images are included as `nats-obj://workspace-{workspaceId}-files/{fileId}` references, enabling the LLM to reference previously generated images in the conversation.
+- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements instead of inline in the chat. The plugin delegates image events to `WorkspaceCanvas.ts` via `onImagePartialToCanvas` / `onImageCompleteToCanvas` callbacks. Two placement modes are supported, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
+  - **Anchored mode** (default): Images overlap the AI chat thread node, positioned side-by-side to the right of the AI response message text. The image canvas node is placed at approximately the right half of the thread width, vertically aligned with the top of the `aiResponseMessage` that generated it. The `anchoredImageManager` tracks the image-to-thread relationship. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image-thread pairs.
+  - **Connector line mode**: A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it. The image appears to the right of the thread.
+  - In both modes, the revised prompt text is inserted as a paragraph in the AI response message.
+- **MULTI-MODAL CONTEXT:** Connected canvas images are included in AI requests via the workspace edge system (`ai-chat-thread-service.ts` → `extractConnectedContext()`). Legacy inline `aiGeneratedImage` nodes in older threads are still extracted via `ContentExtractor.collectContentWithImages()` for backwards compatibility.
 
 ## DOM Template System
 
@@ -248,27 +252,11 @@ const button = html`
 
 ### Composer Controls
 
-The `aiUserInput` NodeView renders the conversation controls:
+The composer controls (AI model selector, image toggle, submit/stop button) have been **extracted into generic reusable factories** in `primitives/aiControls/`. They are now used by the separate `aiPromptInputPlugin` NodeView.
 
-1. **AI Model Selector** - Choose which AI model to use (GPT-4, Claude, etc.)
-2. **Image Toggle** - Enable/disable image generation
-3. **Submit/Stop** - Send the current composer content (or stop streaming)
+The thread plugin no longer renders any composer controls — it is purely a conversation log renderer and streaming orchestrator.
 
-These controls are **UI elements outside the document schema**:
-- **Not part of the document schema** - Zero NodeSpec involvement, never serialized
-- **Rendered directly to controls container** - No transactions, no decorations needed
-- **State managed via singleton** - `infoBubbleStateManager` handles open/close coordination
-- **Created by DOM factory** - `createPureDropdown()` from `primitives/dropdown`
-- **Reusable primitive** - Same dropdown used across different plugins
-
-The NodeView simply:
-1. Calls `createPureDropdown()` with configuration (options, onSelect callback, theme)
-2. Appends the returned `dom` element to `controlsContainer`
-3. Writes selected model to `aiChatThread.attrs.aiModel` via `tr.setNodeMarkup(threadPos, ...)`
-4. Calls `destroy()` in NodeView cleanup
-5. Uses `ignoreMutation()` to prevent NodeView recreation when dropdown opens/closes
-
-**Why outside the schema?** Previously dropdowns were document nodes, causing flicker (rendered in contentDOM, then relocated), complex state management via decorations, and unnecessary involvement in document transactions. Keeping them outside the schema means they render instantly in the correct location with simple, direct state management.
+See `$src/components/proseMirror/plugins/aiPromptInputPlugin/` for the floating input implementation and `$src/components/proseMirror/plugins/primitives/aiControls/` for the reusable control factories.
 
 ## Quick setup
 
@@ -420,6 +408,7 @@ Users see:
   - Content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`
   - Uses `html` template literals for clean UI creation
   - Handles hover events and focus management
+  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set `height` (grown by `applyAnchoredImageSpacing` in `WorkspaceCanvas.ts`)
 
 - `aiUserInputNode.ts` - Sticky composer node (self-contained):
   - Exports node schema AND its NodeView implementation
@@ -427,6 +416,7 @@ Users see:
   - Content: `(paragraph | block)+` for rich-text input
   - NodeView renders controls (model selector, image toggle, submit/stop) alongside `contentDOM`
   - `createAiModelSelectorDropdown()` uses `createPureDropdown()` primitive
+  - `webUiSettings.useModalityFilterOnModelSelectorDropdown` toggles the modality filter chips in the model selector dropdown (currently disabled)
   - Dropdowns appended directly to controlsContainer (not inserted via transactions)
   - `ignoreMutation()` prevents NodeView recreation when controls are manipulated
 
@@ -436,6 +426,7 @@ Users see:
   - Attributes: `id, createdAt` for message identification
   - Rendered as a styled chat bubble (right-aligned)
   - Created when user submits content from the composer
+  - `ignoreMutation()` returns `true` for style attribute changes for consistency with other thread NodeViews
 
 - `aiResponseMessageNode.ts` - AI response node (self-contained):
   - Exports node schema AND its NodeView implementation
@@ -443,11 +434,20 @@ Users see:
   - Provider-specific avatars (Claude, GPT) with animations
   - Streaming animation states (receiving/idle)
   - Boundary strip decoration
+  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set `marginBottom` (set by `applyAnchoredImageSpacing` in `WorkspaceCanvas.ts` to push subsequent messages below overlapping anchored images)
+
+- `aiGeneratedImageNode.ts` - AI-generated image node and canvas callback system:
+  - Exports ProseMirror node spec for `aiGeneratedImage` (atom node)
+  - Manages global `AiGeneratedImageCallbacks` via `setAiGeneratedImageCallbacks()` / `getAiGeneratedImageCallbacks()`
+  - Callbacks include `onImagePartialToCanvas`, `onImageCompleteToCanvas`, `onAddToCanvas`, `onEditInNewThread`
+  - `WorkspaceCanvas.ts` registers these callbacks to receive image events from the plugin
+  - The plugin calls `getAiGeneratedImageCallbacks()` during streaming to delegate image placement to the canvas
 
 - `aiChatThreadPlugin.ts` - Main orchestration logic:
   - Plugin state and lifecycle management
   - Content extraction and message conversion
   - Streaming event handling and DOM insertion
+  - Image generation delegates to canvas via `getAiGeneratedImageCallbacks()` (partial previews and final images appear as canvas nodes, not inline)
   - Decoration system (placeholders, boundaries)
   - No UI rendering - delegates to node-specific NodeViews and primitive components
 
@@ -513,6 +513,10 @@ class ContentExtractor {
    - Text parts: `{ type: 'text', text: '...' }`
    - Image parts: `{ type: 'image_url', image_url: { url: 'nats-obj://workspace-{workspaceId}-files/{fileId}' } }`
 6. Return message array ready for any LLM provider (provider-agnostic)
+
+**Dual Image Context Paths:**
+- **Canvas edges (primary):** New AI-generated images live as `ImageCanvasNode` on the canvas, connected via `WorkspaceEdge` with `sourceMessageId`. The `ai-chat-thread-service.ts` → `extractConnectedContext()` traverses these edges and includes connected images in AI requests.
+- **Inline nodes (legacy/backwards compat):** Older threads may still contain inline `aiGeneratedImage` ProseMirror nodes. `collectContentWithImages()` extracts these as `nats-obj://` references. Both paths produce the same provider-agnostic format for the LLM API.
 
 ### PositionFinder
 Document position utilities for content insertion:

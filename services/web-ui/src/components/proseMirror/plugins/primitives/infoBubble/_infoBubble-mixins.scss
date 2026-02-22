@@ -177,7 +177,7 @@
         surfaceBg: #fff,
         surfaceFg: #333,
         bubbleRadius: 4px,
-        bubbleShadow: 0.05rem 0.05rem 7px 0px rgba(0,0,0,0.2),
+        bubbleShadow: (0 1px 3px 1px rgba(0,0,0,0.15), 0 1px 2px 0 rgba(0,0,0,0.3)),
         borderLightnessAdjustment: -10%
     );
     $s: map-merge($defaults, $config);
@@ -186,7 +186,8 @@
     $surfaceBg: map-get($s, surfaceBg);
 
     .bubble-wrapper {
-        box-shadow: map-get($s, bubbleShadow);
+        box-shadow: #{map-get($s, bubbleShadow)};
+        border-radius: map-get($s, bubbleRadius);
     }
 
     .bubble-container {
@@ -195,7 +196,7 @@
         border: .06rem solid $borderColor;
 
         .bubble-header {
-            padding: .5rem .5rem .5rem .5rem;
+            padding: 6px 8px;
             border-bottom: 1px solid $borderColor;
             border-top-left-radius: map-get($s, bubbleRadius);
             border-top-right-radius: map-get($s, bubbleRadius);

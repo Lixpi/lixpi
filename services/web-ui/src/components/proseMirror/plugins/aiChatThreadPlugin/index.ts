@@ -7,7 +7,8 @@ export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThre
 // Export all from node definitions
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
-export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
+// aiUserInput is no longer exported — the composer is now the separate aiPromptInputPlugin
+// The node type/spec remain in aiUserInputNode.ts for legacy content migration only
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 
 // Export aiGeneratedImage node for schema and NodeView registration
@@ -15,7 +16,8 @@ export {
     aiGeneratedImageNodeType,
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeView,
-    setAiGeneratedImageCallbacks
+    setAiGeneratedImageCallbacks,
+    getAiGeneratedImageCallbacks
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
 // Export all from plugin

@@ -2,25 +2,41 @@
 @import '$src/sass/components/_animations.scss';
 @import '$src/components/proseMirror/plugins/primitives/dropdown/_dropdown-mixins.scss';
 
+// M3 Menu staggered item animation
+@keyframes md3MenuItemFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes md3MenuSurfaceOpen {
+    from { opacity: 0; transform: scaleY(0.6); }
+    to { opacity: 1; transform: scaleY(1); }
+}
+
 /* Dropdown Plugin Styles */
 .dropdown-menu-tag-pill-wrapper {
-    // Wrapper needs to be positioned for absolutely positioned bubble
     position: relative;
 
-    // Trigger button
+    // Trigger button — M3 compact style
     @include dropdownTriggerStructure((
-        fontSize: .9rem,
-        fontWeight: 400,
-        iconMargin: 0 .3rem 0 .2rem,
-        triggerPadding: 0
+        fontSize: 0.8125rem,
+        fontWeight: 500,
+        iconMargin: 0 6px 0 0,
+        triggerPadding: 4px 8px,
+        triggerRadius: 8px,
+        triggerHeight: 28px
     ));
 
-    // Dropdown items
+    // Dropdown items — compact proportional to 28px trigger
     @include dropdownItemsStructure((
-        itemFontSize: .83rem
+        itemFontSize: 0.75rem,
+        itemHeight: 32px,
+        itemPadding: 0 10px,
+        itemIconSize: 14px,
+        itemIconMargin: 0 6px 0 0
     ));
 
-    // Dropdown-specific themes (items and trigger only)
+    // Theme variants
     &.theme-light {
         @include tagPillDropdownLightTheme();
     }
@@ -29,13 +45,74 @@
     }
 }
 
-/* Dropdown open state - when ProseMirror decoration adds .dropdown-open class */
+// Detached dropdown popover (mounted to body or static-position)
+.dropdown-menu-popover {
+    // Ultra compact items — proportional to trigger
+    @include dropdownItemsStructure((
+        itemFontSize: 0.7rem,
+        itemHeight: 26px,
+        itemPadding: 0 8px,
+        itemIconSize: 12px,
+        itemIconMargin: 0 6px 0 0
+    ));
+
+    // Force option icons to be compact even if SVGs have baked-in sizing
+    .bubble-body .submenu li :global(svg) {
+        width: 12px !important;
+        height: 12px !important;
+    }
+
+    // Limit height and add scrolling
+    .bubble-body .submenu {
+        max-height: 280px;
+        overflow-y: auto;
+
+        // Hide scrollbar (keep scroll)
+        scrollbar-width: none; // Firefox
+        -ms-overflow-style: none; // legacy
+
+        &::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+            display: none;
+        }
+    }
+
+    // Themes
+    &.theme-light {
+        @include tagPillDropdownLightTheme();
+    }
+    &.theme-dark {
+        @include tagPillDropdownDarkTheme();
+    }
+
+    // M3 menu open animation
+    .bubble-wrapper.visible {
+        animation: md3MenuSurfaceOpen 150ms cubic-bezier(0.2, 0, 0, 1);
+        transform-origin: top center;
+
+        // Staggered item fade-in
+        .submenu li {
+            opacity: 0;
+            animation: md3MenuItemFadeIn 150ms cubic-bezier(0.2, 0, 0, 1) forwards;
+
+            @for $i from 1 through 20 {
+                &:nth-child(#{$i}) {
+                    animation-delay: #{3 * $i}ms;
+                }
+            }
+        }
+    }
+}
+
+/* Dropdown open state — decoration-driven */
 .dropdown-open {
     .dropdown-menu-tag-pill-wrapper {
         .dots-dropdown-menu {
             .bubble-wrapper {
                 display: block;
-                animation: popOut 300ms cubic-bezier(0.19, 1, 0.22, 1);
+                animation: md3MenuSurfaceOpen 200ms cubic-bezier(0.2, 0, 0, 1);
+                transform-origin: top center;
             }
         }
     }

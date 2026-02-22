@@ -221,11 +221,7 @@
                     {
                         type: 'aiChatThread',
                         attrs: { threadId },
-                        content: [
-                            {
-                                type: 'paragraph'
-                            }
-                        ]
+                        content: []
                     }
                 ]
             }

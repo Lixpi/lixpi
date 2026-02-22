@@ -6,6 +6,18 @@ Dropdown menus for ProseMirror NodeViews. Lives outside the document schema – 
 
 A factory function that creates dropdown UI controls. Used by AI Chat Thread for model/context selection. **Built on top of the InfoBubble primitive** - dropdown provides the button and options, infoBubble handles all state management, positioning, and auto-flip logic.
 
+**Visual design inspired by Material Design 3 menus:**
+- Surface container with level-2 elevation shadow (no border on popover)
+- 44dp item height with 12dp horizontal padding
+- State layer ripple on hover/press (8%/12% opacity via `::after` pseudo-element)
+- Staggered item fade-in animation on open (30ms delay per item)
+- Menu surface open animation (`scaleY` from 0.6 → 1, 200ms EMPHASIZED easing)
+- Leading icon support (20dp) with on-surface-variant color
+- No arrow on dropdown popover (M3 menus are borderless elevated surfaces)
+- Chevron rotates 180° when open (smooth cubic-bezier transition)
+- Hover + selected states use a simple two-color CSS gradient based on the shifting gradient palette
+- Chevron color is CSS-driven (not auto-recolored on open/hover)
+
 **Key features:**
 - Not a document node (no NodeSpec)
 - Appended directly to your controls container
@@ -28,6 +40,23 @@ Dropdown uses `infoBubble` primitive, which handles:
 - Scroll and resize tracking
 
 **Dropdown's only responsibility**: Provide button (anchor) and content (options list).
+
+### SCSS Architecture (M3-Inspired)
+
+The styling is split into structure (layout) and theme (colors) mixins:
+
+| Mixin | Purpose |
+|---|---|
+| `dropdownTriggerStructure` | Trigger button layout, sizing, `::before` state layer, chevron transition |
+| `dropdownTriggerTheme` | Glyph fills, state layer color, active indicator |
+| `dropdownItemsStructure` | List item layout, `::after` state layer, icon sizing |
+| `dropdownItemsTheme` | Surface/on-surface color system, state layer color |
+| `dropdownTagFilter` | M3 pill-shaped filter chips with click feedback |
+| `tagPillDropdownLightTheme` / `tagPillDropdownDarkTheme` | Bundled theme presets |
+
+Animations in `dropdown.scss`:
+- `md3MenuSurfaceOpen`: Container scales in from 0.6 → 1 (200ms, EMPHASIZED easing)
+- `md3MenuItemFadeIn`: Items fade in with -4px → 0 translateY, staggered 30ms per item
 
 ## Why not document nodes?
 
@@ -61,7 +90,9 @@ createPureDropdown({
   renderIconForOptions?: boolean,
   renderTitleForSelectedValue?: boolean,
   enableTagFilter?: boolean,
-  availableTags?: ['tag1', 'tag2']
+  availableTags?: ['tag1', 'tag2'],
+  mountToBody?: boolean,
+  disableAutoPositioning?: boolean
 })
 // Returns: { dom: HTMLElement, update: (option) => void, destroy: () => void }
 ```
@@ -76,6 +107,8 @@ createPureDropdown({
 - `buttonIcon`: SVG icon for dropdown button (default: chevron)
 - `enableTagFilter`: Show tag filter in dropdown header (default: false)
 - `availableTags`: Tags for filtering options
+- `mountToBody`: Appends bubble to `document.body` when `true`, otherwise nests it under the trigger container
+- `disableAutoPositioning`: Disables viewport `top/left` placement and relies on CSS placement while keeping arrow-to-anchor alignment
 - Various rendering flags for icons, colors, titles
 
 **Note**: `renderPosition` is deprecated and removed. The dropdown now uses InfoBubble's smart auto-flip logic instead.

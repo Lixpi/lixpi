@@ -26,12 +26,12 @@ describe('aiGeneratedImage AI-specific attributes', () => {
             )
         })
 
-        it('defaults to empty string when not provided', () => {
+        it('defaults to builder default when not provided', () => {
             const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
             const state = createStateWithNodeSelection(doc(imageNode), 0)
             const selection = state.selection as NodeSelection
 
-            expect(selection.node.attrs.revisedPrompt).toBe('')
+            expect(selection.node.attrs.revisedPrompt).toBe('Test prompt')
         })
     })
 
@@ -47,12 +47,12 @@ describe('aiGeneratedImage AI-specific attributes', () => {
             expect(selection.node.attrs.responseId).toBe('resp_abc123xyz')
         })
 
-        it('defaults to empty string when not provided', () => {
+        it('defaults to builder default when not provided', () => {
             const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
             const state = createStateWithNodeSelection(doc(imageNode), 0)
             const selection = state.selection as NodeSelection
 
-            expect(selection.node.attrs.responseId).toBe('')
+            expect(selection.node.attrs.responseId).toBe('test-response-id')
         })
     })
 
@@ -68,12 +68,12 @@ describe('aiGeneratedImage AI-specific attributes', () => {
             expect(selection.node.attrs.aiModel).toBe('dall-e-3')
         })
 
-        it('defaults to empty string when not provided', () => {
+        it('defaults to builder default when not provided', () => {
             const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
             const state = createStateWithNodeSelection(doc(imageNode), 0)
             const selection = state.selection as NodeSelection
 
-            expect(selection.node.attrs.aiModel).toBe('')
+            expect(selection.node.attrs.aiModel).toBe('dall-e-3')
         })
     })
 
@@ -100,12 +100,12 @@ describe('aiGeneratedImage AI-specific attributes', () => {
             expect(selection.node.attrs.isPartial).toBe(false)
         })
 
-        it('defaults to true (streaming state)', () => {
+        it('defaults to false (builder default = complete)', () => {
             const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
             const state = createStateWithNodeSelection(doc(imageNode), 0)
             const selection = state.selection as NodeSelection
 
-            expect(selection.node.attrs.isPartial).toBe(true)
+            expect(selection.node.attrs.isPartial).toBe(false)
         })
     })
 
@@ -142,12 +142,12 @@ describe('aiGeneratedImage AI-specific attributes', () => {
             expect(selection.node.attrs.fileId).toBe('file_xyz789')
         })
 
-        it('defaults to empty string before save', () => {
+        it('defaults to builder default before save', () => {
             const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
             const state = createStateWithNodeSelection(doc(imageNode), 0)
             const selection = state.selection as NodeSelection
 
-            expect(selection.node.attrs.fileId).toBe('')
+            expect(selection.node.attrs.fileId).toBe('test-file-id')
         })
     })
 })

@@ -86,6 +86,7 @@ $userMessageTextColor: #fff;
         justify-content: flex-end;
         gap: 0.2rem;
         margin-top: 0.4rem;
+        padding-right: 0.5rem;
 
         .dropdown-menu-tag-pill-wrapper {
             position: relative;
@@ -374,7 +375,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         .ai-response-message-bubble {
             display: flex;
             flex-direction: column;
-            background: #fff;
+            background: var(--ai-response-bubble-color, #f7f7fd);
             border-radius: 18px 18px 18px 12px;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
             max-width: 85%;
@@ -382,11 +383,17 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             min-width: 5rem; // Ensure space for spinner
             position: relative;
             overflow: visible; // Prevent clipping spinner dots
+            transition: max-width 0.3s ease-in-out;
 
             @include speechBubbleTail((
                 position: 'left',
-                bubbleColor: #fff
+                bubbleColor: #f7f7fd
             ));
+
+            // Override tail color with CSS variable for runtime theming
+            &::after {
+                background-color: var(--ai-response-bubble-color, #f7f7fd);
+            }
 
             // Spinner inside the bubble
             .ai-response-message-spinner {
@@ -571,3 +578,4 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         transform: rotate(360deg);
     }
 }
+

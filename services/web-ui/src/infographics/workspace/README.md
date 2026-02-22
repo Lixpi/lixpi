@@ -14,11 +14,13 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
-- **Connect nodes** by dragging from a node's right handle to another node's left handle (arrow points in drag direction)
+- **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
 - **Provide AI context** by connecting documents/images to an AI chat thread—connected content is automatically sent to the AI
+- **Use the floating prompt input** to send prompts to the currently selected node; for non-thread nodes, the input appears on selection and hides on deselect
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 - **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
+- **Reposition edge anchor points** by selecting an edge and dragging the circular handles vertically along the node's side
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
 
@@ -45,6 +47,17 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Support streaming AI responses with real-time token parsing
 - Content is persisted separately from documents in the AI-Chat-Threads table
 - Automatically extract context from connected nodes (documents, images, other threads) when sending messages
+- Each AI chat thread node always has its own floating prompt input visible below it, regardless of selection state; these per-thread inputs automatically target the correct thread and follow the node during drag and resize
+- A **vertical rail** element spans the full height of the thread node, the gap, and the floating input. It is a sibling element in the viewport (not nested inside the thread node) tracked via the `threadRails` Map. The rail uses a two-layer architecture:
+    - **Outer container** (`.workspace-thread-rail`) — spans the full functional height (thread + gap + floating input). Handles drag interactions and connection proxy hit areas. Invisible by itself
+    - **Inner visual line** (`.workspace-thread-rail__line`) — a child div whose height is limited to the thread node height via the `--rail-thread-height` CSS variable. Hosts the `::before` pseudo-element that renders the visible gradient line, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `aiChatThreadRailGradient` and `aiChatThreadRailWidth` in `webUiThemeSettings.ts`
+    - **Drag handle** — clicking and dragging anywhere on the full-height outer container moves both the thread node and its floating input (reuses `handleDragStart`)
+    - **Connection proxy** — all connector line left-side anchors are shifted to the rail position via `railOffset` in `WorkspaceConnectionManager`, so edges visually connect to the rail rather than the node edge. The anchor Y range spans the full rail height (thread + gap + floating input) via `railHeights`, so connectors slide from the very top to the very bottom of the rail. The top/bottom edge margin is configurable via `aiChatThreadRailEdgeMargin` (fractional, default 0.025). When the rail height is below `aiChatThreadRailMinSlideHeight` (default 120px) all connectors snap to the vertical center instead of sliding
+    - The horizontal offset from the node edge is configurable via `aiChatThreadRailOffset` in `webUiThemeSettings.ts` (default -2px). Negative values move the rail inside the node boundary; the rail is rendered at z-index 9990 (above all nodes, below floating inputs) to ensure it stays visible regardless of node layering
+- **AI-generated images** can appear in two modes controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
+    - **Anchored mode** (default, setting = `false`): Images are separate canvas nodes that visually overlap the right side of the AI chat thread node. Width is constrained to roughly 68% of the thread width, and each image is continuously re-aligned to the target response bubble as streamed text changes message proportions. The image moves with the thread during drag, and can be detached by dragging its center outside the thread bounds. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image/thread pairs. Messages below an anchored image are pushed down via `applyAnchoredImageSpacing()` which sets `marginBottom` on the response message wrapper; this requires `ignoreMutation()` in the NodeViews (`aiResponseMessageNode`, `aiChatThreadNode`) to return `true` for style attribute mutations so ProseMirror's MutationObserver doesn't wipe the externally-set styles. **On page refresh**, the in-memory `anchoredImageManager` is re-derived from `ImageCanvasNode.generatedBy` metadata persisted in the canvas state — `renderNodes()` scans all image nodes with `generatedBy`, matches them to their source thread via `generatedBy.aiChatThreadId`, and re-registers them as anchored.
+  - **Connector line mode** (setting = `true`): Images appear as separate canvas nodes positioned to the right of the thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image.
+  - In both modes, progressive partial previews update the canvas node in real-time during generation, and the revised prompt text is inserted as text inside the AI response message.
 
 ## Architecture
 
@@ -202,6 +215,7 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
+- **Proximity Connect**: Dragging a node near an AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`)
 - Clicking an edge selects it; when selected, endpoint handles appear for reconnection
 - Dragging an endpoint shows the edge following the cursor (original edge is hidden during reconnect)
 - Dropping an endpoint on another node reconnects the edge; dropping in empty space deletes it
@@ -253,14 +267,31 @@ sequenceDiagram
     Service->>Backend: NATS request
 ```
 
+## Canvas Bubble Menu
+
+When an image node is selected on the canvas, a bubble menu appears below it — the same shared `BubbleMenu` component used in ProseMirror editors. The menu provides context-specific actions for canvas elements.
+
+### Image Node Actions
+- **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
+- **Download** — fetches the image as a blob and triggers a browser download via `downloadImage()` utility
+- **Delete** — removes the node and its associated edges from canvas state
+
+The bubble menu automatically hides during drag and resize operations, and repositions itself when the selected image moves.
+
+Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` class is from `$src/components/bubbleMenu/`.
+
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers |
+| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration |
 | `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, edge rendering, selection/deletion |
 | `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
+| `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image actions) |
+| `imagePositioning.ts` | Computes image placement positions (next-to-thread and overlapping-thread modes) |
+| `anchoredImageManager.ts` | Tracks which images are anchored to which threads; manages anchor lifecycle |
+| `nodeLayering.ts` | Z-index management for bringing nodes to front |
 
 ## CSS Classes
 
@@ -279,6 +310,10 @@ sequenceDiagram
 | `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
 | `.image-node-content` | Image container |
 | `.image-node-img` | The actual img element |
+| `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
+| `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
+| `.workspace-thread-rail__line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
+
 | `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |
@@ -288,5 +323,10 @@ sequenceDiagram
 AI chat thread nodes display an animated shifting gradient background. The gradient is rendered to a small 60×80 pixel bitmap and scaled up with bilinear interpolation for smooth, low-cost rendering. The canvas element is injected as the first child of `.workspace-ai-chat-thread-node` with class `.shifting-gradient-canvas`.
 
 The gradient uses 4 color points with inverse distance weighting and a subtle swirl distortion for an organic feel. When sending a message, the gradient animates to the next phase position.
+
+Both the thread node gradient and the floating user-input gradient are controlled by feature flags in `webUiSettings.ts`:
+
+- `useShiftingGradientBackgroundOnAiChatThreadNode` (default `false`) — gradient on the AI chat thread canvas node itself.
+- `useShiftingGradientBackgroundOnAiUserInputNode` (default `true`) — gradient on the floating AI prompt input nodes.
 
 For full technical details, color customization, and the color analysis tool, see [Shifting Gradient Background](../../../documentation/features/SHIFTING-GRADIENT.md).

@@ -9,6 +9,7 @@ import {
     claudeAnimatedFrameIcon,
 } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 // Define the unique type name for this custom node
 export const aiResponseMessageNodeType = 'aiResponseMessage'
@@ -77,9 +78,11 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
     // Get references to the nested elements for manipulation
     const aiResponseMessageContainer = parentWrapper.querySelector('.ai-response-message')
+    parentWrapper.setAttribute('data-message-id', node.attrs.id)
     const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
     const spinnerElement = parentWrapper.querySelector('.ai-response-message-spinner')
     const bubbleElement = parentWrapper.querySelector('.ai-response-message-bubble')
+    bubbleElement.style.setProperty('--ai-response-bubble-color', webUiThemeSettings.aiResponseMessageBubbleColor)
     const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
 
     // // Create an accept button
@@ -159,6 +162,16 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     return {
         dom: parentWrapper, // The outer DOM node of the node view
         contentDOM: responseMessageContent, // The DOM node that holds the node's content
+        ignoreMutation: (mutation) => {
+            // Ignore style attribute changes on the wrapper (e.g. marginBottom set
+            // by applyAnchoredImageSpacing in WorkspaceCanvas). Without this,
+            // ProseMirror's internal MutationObserver would detect the style change
+            // and trigger a DOM reconciliation that wipes the externally-set margin.
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                return true
+            }
+            return false
+        },
         update: (updatedNode) => {
             // Check if the updated node is still of the same type
             if (updatedNode.type.name !== aiResponseMessageNodeType) {
@@ -166,6 +179,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             }
 
             node = updatedNode    // Update the node reference and refresh the animation
+            parentWrapper.setAttribute('data-message-id', node.attrs.id)
             updateAnimation()    // Update the animation state
             updateSpinnerState()
 

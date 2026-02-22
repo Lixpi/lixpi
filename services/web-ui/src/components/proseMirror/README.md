@@ -50,10 +50,13 @@ Custom nodes are intentionally split by responsibility:
   - `taskRowNode`: placeholder for future Svelte-backed rendering.
 
 - AI chat nodes (only present in `documentType: 'aiChatThread'` via `plugins/aiChatThreadPlugin/`):
-  - `aiChatThreadNode` (`aiChatThread`): conversation container. Content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`.
+  - `aiChatThreadNode` (`aiChatThread`): conversation container. Content expression: `(aiUserMessage | aiResponseMessage)+`. Pure conversation log — no inline composer.
   - `aiUserMessageNode` (`aiUserMessage`): sent user message bubble. Content: `(paragraph | block)+`. Attributes: `id, createdAt`.
-  - `aiUserInputNode` (`aiUserInput`): sticky composer at the end of the thread. Content: `(paragraph | block)+`.
+  - `aiUserInputNode` (`aiUserInput`): **DEPRECATED** — kept in schema for legacy content migration only. Silently stripped from loaded documents.
   - `aiResponseMessageNode` (`aiResponseMessage`): assistant message. Content: `(paragraph | block)*` so it can start empty and be filled by streaming.
+
+- AI prompt input (separate `documentType: 'aiPromptInput'` via `plugins/aiPromptInputPlugin/`):
+  - `aiPromptInputNode` (`aiPromptInput`): floating composer used to send messages to any selected canvas node. Content: `(paragraph | block)+`. Renders as a floating element below the active node.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -62,10 +65,12 @@ flowchart TD
   A --> T[aiChatThread]
   T --> UM[aiUserMessage]
   T --> R[aiResponseMessage]
-  T --> UI[aiUserInput]
   UM --> UMC["(paragraph | block)+"]
   R --> RP["(paragraph | block)*"]
-  UI --> UIC["(paragraph | block)+"]
+
+  subgraph "Separate floating editor"
+    FI[aiPromptInput] --> FIC["(paragraph | block)+"]
+  end
 ```
 
 Notes
@@ -292,21 +297,22 @@ Note: The editor currently ships with the TaskRow Svelte renderer commented out 
 The main plugin orchestrating AI chat functionality. All AI chat logic is consolidated here.
 
 **Schema nodes managed by this plugin:**
-- `aiChatThread` - Container with content: `(aiUserMessage | aiResponseMessage)* aiUserInput`
-- `aiUserInput` - Sticky composer at the end of the thread with controls (model selector, image toggle, submit button)
+- `aiChatThread` - Container with content: `(aiUserMessage | aiResponseMessage)+` (pure conversation log)
 - `aiUserMessage` - Sent user message bubble with `id` and `createdAt` attributes
 - `aiResponseMessage` - AI response with provider avatar and streaming animations
+- `aiUserInput` - **DEPRECATED** — kept in schema for legacy migration only, silently stripped
+
+**User input is handled separately by `aiPromptInputPlugin`** — a floating canvas element that renders below the selected node, with its own `ProseMirrorEditor` instance. An `AiPromptInputController` service coordinates message injection between the floating input and thread editors.
 
 **Message submission flow:**
-1. User types in `aiUserInput` composer and presses Cmd/Ctrl+Enter or clicks submit
-2. Plugin extracts composer content, creates an `aiUserMessage` node before the composer
-3. Clears the composer content
-4. Dispatches `USE_AI_CHAT_META` with messages, threadId, and model info
-5. Plugin calls `onAiChatSubmit` callback with the message array
+1. User types in the floating `aiPromptInput` and presses Cmd/Ctrl+Enter or clicks submit
+2. `AiPromptInputController` extracts content, creates an `aiUserMessage` node in the target thread
+3. Dispatches `USE_AI_CHAT_META` on the thread editor to trigger the AI request
+4. Plugin calls `onAiChatSubmit` callback with the message array
 
 **Streaming response handling:**
 - Subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` for streaming events
-- START_STREAM: inserts empty `aiResponseMessage` before `aiUserInput` with animation flags
+- START_STREAM: inserts empty `aiResponseMessage` at end of thread with animation flags
 - STREAMING: inserts text/blocks into the response node, handles marks and block types
 - END_STREAM: clears animation flags, finalizes response
 
@@ -315,7 +321,8 @@ See `plugins/aiChatThreadPlugin/README.md` for complete documentation.
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
-  participant UI as User
+  participant FI as Floating Input
+  participant Ctrl as AiPromptInputController
   participant Plugin as aiChatThreadPlugin
   participant S as AiInteractionService
   participant SR as SegmentsReceiver
@@ -323,22 +330,23 @@ sequenceDiagram
   %% PHASE 1: SUBMIT
   %% ═══════════════════════════════════════════════════════════════
   rect rgb(220, 236, 233)
-      Note over UI, SR: PHASE 1 - SUBMIT
-      UI->>Plugin: Cmd+Enter in aiUserInput
+      Note over FI, SR: PHASE 1 - SUBMIT
+      FI->>Ctrl: Cmd+Enter in aiPromptInput
+      activate Ctrl
+      Ctrl->>Plugin: Inject aiUserMessage + USE_AI_CHAT_META
       activate Plugin
-      Plugin->>Plugin: Create aiUserMessage from composer content
-      Plugin->>Plugin: Clear composer
       Plugin->>S: onAiChatSubmit(messages, aiModel)
       activate S
+      deactivate Ctrl
   end
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 2: STREAM
   %% ═══════════════════════════════════════════════════════════════
   rect rgb(195, 222, 221)
-      Note over UI, SR: PHASE 2 - STREAM
+      Note over FI, SR: PHASE 2 - STREAM
       SR-->>Plugin: START_STREAM(provider, threadId)
       activate SR
-      Plugin->>Plugin: Insert aiResponseMessage before aiUserInput
+      Plugin->>Plugin: Insert aiResponseMessage at end of thread
       SR-->>Plugin: STREAMING(segments)
       Plugin->>Plugin: Insert text/blocks into aiResponseMessage
   end
@@ -346,7 +354,7 @@ sequenceDiagram
   %% PHASE 3: COMPLETE
   %% ═══════════════════════════════════════════════════════════════
   rect rgb(246, 199, 179)
-      Note over UI, SR: PHASE 3 - COMPLETE
+      Note over FI, SR: PHASE 3 - COMPLETE
       SR-->>Plugin: END_STREAM
       deactivate SR
       Plugin->>Plugin: Clear animations
@@ -420,7 +428,7 @@ flowchart LR
 
 - Regular document shape: The first node is always `documentTitle`, followed by one or more `block` nodes.
 - AI chat thread shape: The first node is always `documentTitle`, followed by one or more `aiChatThread` nodes.
-- Thread shape: `aiChatThread` content is `(aiUserMessage | aiResponseMessage)* aiUserInput`. The `aiUserInput` composer is always the last child.
+- Thread shape: `aiChatThread` content is `(aiUserMessage | aiResponseMessage)+`. The thread is a pure conversation log with no inline composer.
 - aiResponse streaming insertion locates the most recent `aiResponseMessage` within the target thread (identified by `threadId`) and calculates `endOfNodePos`. Only one empty paragraph is kept immediately after it, and the cursor is moved there on creation.
 - **Multiple concurrent streams ARE supported**: Each thread can have independent AI streaming via `threadId` parameter. The plugin maintains a `Set<string>` of active `receivingThreadIds` to track concurrent streams across different threads.
 - CodeMirror selection sync: Avoid infinite loops by guarding with `this.updating` and focus checks; keep `forwardUpdate` fast.
@@ -467,16 +475,24 @@ flowchart LR
 
 The document structure uses a single AI chat thread container:
 - Document starts with a title (`documentTitle`), then contains an `aiChatThread` node
-- Thread content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`
-- `aiUserInput` is a sticky composer that's always the last child of the thread
-- `aiUserMessage` nodes represent sent user messages (created when user submits from composer)
+- Thread content expression: `(aiUserMessage | aiResponseMessage)+` — pure conversation log
+- `aiUserMessage` nodes represent sent user messages (injected by `AiPromptInputController`)
 - `aiResponseMessage` nodes contain AI responses (created during streaming)
+
+**Floating AI Prompt Input**
+
+User input is handled by a separate `aiPromptInputPlugin` which renders as a floating canvas element:
+- Appears below the currently selected canvas node
+- Has its own `ProseMirrorEditor` with `documentType: 'aiPromptInput'`
+- `AiPromptInputController` coordinates message injection into thread editors
+- Controls (model selector, image toggle, submit button) are generic reusable factories in `primitives/aiControls/`
+- Can target any canvas node type — auto-creates a new AI chat thread when targeting non-thread nodes
 
 **Key design decisions**:
 - Fresh documents are created using ProseMirror's `createAndFill()` which auto-populates required nodes based on schema
 - The editor accepts a `threadId` parameter to ensure the `aiChatThread` node has the correct ID for streaming routing
 - Streaming events (START_STREAM, STREAMING, END_STREAM) are scoped by `threadId` for multi-thread support
-- Controls (model selector, image toggle, submit button) live in the `aiUserInput` NodeView, outside the document schema
+- Legacy `aiUserInput` nodes in old thread documents are silently stripped during load via `appendTransaction`
 
 ---
 This knowledge base is hand-audited against the current codebase (see paths above) and aims to be stable, specific, and actionable for future development.

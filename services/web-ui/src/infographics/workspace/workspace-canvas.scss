@@ -1,4 +1,5 @@
 @import '$src/sass/_variables.scss';
+@import '$src/components/bubbleMenu/bubbleMenu.scss';
 
 .workspace-canvas {
     width: 100%;
@@ -18,6 +19,7 @@
     padding: 0;
     align-items: center;
     gap: 12px;
+    // display: none;
 }
 
 .create-document-btn {
@@ -85,12 +87,7 @@
     display: flex;
     flex-direction: column;
     overflow: visible;
-    transition: box-shadow 0.15s ease;
     position: relative;
-
-    &:hover {
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16), 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
 
     &:hover .document-resize-handle {
         opacity: 1;
@@ -103,9 +100,29 @@
         pointer-events: auto;
     }
 
+    // On AI chat thread nodes, only show each handle on its own hover
+    &.workspace-ai-chat-thread-node {
+        &:hover .document-resize-handle {
+            opacity: 0;
+            pointer-events: auto;
+        }
+
+        .document-resize-handle:hover {
+            opacity: 1;
+        }
+
+        &.is-resizing .document-resize-handle {
+            opacity: 0;
+            pointer-events: auto;
+
+            &.is-dragging {
+                opacity: 1;
+            }
+        }
+    }
+
     &.is-selected,
     &:focus-within {
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
         outline: none;
     }
 
@@ -123,6 +140,17 @@
     position: relative;
     padding: 0;
     overflow: hidden;
+    box-shadow: var(--ai-chat-thread-node-box-shadow, none);
+    border: var(--ai-chat-thread-node-border, none);
+
+    // Empty thread nodes are hidden until the first message arrives.
+    // Uses visibility:hidden so the element remains measurable (offsetWidth/Height)
+    // while being invisible. The data attribute is set at DOM-creation time so
+    // the browser never paints the node visibly — no flash on page load.
+    &[data-thread-empty="true"] {
+        visibility: hidden;
+        pointer-events: none;
+    }
 
     /* Optional pattern overlay (renderer reads these CSS vars) */
     --gradient-pattern-alpha: 0.22;
@@ -133,6 +161,17 @@
 
     .shifting-gradient-canvas {
         border-radius: inherit;
+    }
+
+    // Position resize handles inside the node boundary (overflow: hidden clips anything outside)
+    .document-resize-top-left {
+        top: 0;
+        left: 0;
+    }
+
+    .document-resize-top-right {
+        top: 0;
+        right: 0;
     }
 }
 
@@ -148,18 +187,90 @@
     background: transparent !important;
 }
 
+/* Remove bottom padding that was reserved for the in-thread sticky composer.
+   In the workspace canvas the input is a floating element below the node. */
+.workspace-ai-chat-thread-node .ai-chat-thread-wrapper {
+    padding-bottom: 0;
+    margin-top: 0;
+}
+
+.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-chat-thread-content {
+    padding-bottom: 0;
+}
+
+/* Hide the in-editor composer — the workspace uses a floating input instead */
+.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-user-input-wrapper {
+    display: none;
+}
+
+/* Override global ProseMirror padding/min-height for the canvas thread */
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
+    min-height: 0;
+    padding-bottom: 1rem;
+}
+
+/* Hide the document title (h1) inside AI chat thread nodes on the canvas (controlled by showHeaderOnAiChatThreadNodes) */
+.workspace-ai-chat-thread-node--hide-title .document-title {
+    display: none;
+}
+
+/* Vertical rail — drag handle + connection proxy running along AI chat thread + floating input */
+/* The outer .workspace-thread-rail spans the full functional height (thread + gap + floating input) */
+/* The inner __line child spans only the thread node height for visual display */
+.workspace-thread-rail {
+    position: absolute;
+    z-index: 10;
+    pointer-events: auto;
+    cursor: move;
+
+    &__line {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: var(--rail-thread-height, 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: var(--rail-width, 3px);
+            background-image: var(--rail-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
+            border-radius: 2px;
+        }
+    }
+
+    &__boundary-circle {
+        position: absolute;
+        bottom: -6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 14px;
+        height: 14px;
+        line-height: 0;
+        pointer-events: none;
+
+        svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    }
+
+}
+
 
 .workspace-image-node {
-    // Override document-node defaults for images
     background: transparent;
     border-radius: 4px;
     overflow: visible;
-    box-shadow: none;
     padding: 0;
-
-    &:hover {
-        box-shadow: none;
-    }
 
     &.is-resizing {
         user-select: none;
@@ -167,6 +278,17 @@
 
     &.is-dragging {
         cursor: move;
+    }
+
+    // Anchored mode: image overlaps the AI chat thread node
+    &.workspace-image-node--anchored {
+        pointer-events: auto;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+
+        .image-node-img {
+            border-radius: 6px;
+        }
     }
 
     .image-node-img {
@@ -342,7 +464,7 @@
 // AI chat thread editor container - extends document-node-editor
 .ai-chat-thread-node-editor {
     flex: 1;
-    overflow: auto;
+    overflow: hidden;
     min-height: 100px;
     border-radius: 0 0 8px 8px;
     padding: 0;
@@ -411,6 +533,22 @@
     &:hover svg,
     &.is-dragging svg {
         transform: rotate(0deg) scale(1.2);
+    }
+}
+
+// Bottom resize handles on the per-thread floating AI input
+.ai-prompt-input-thread-persistent {
+    // Only show each handle on its own hover
+    .document-resize-handle {
+        pointer-events: auto;
+    }
+
+    .document-resize-handle:hover {
+        opacity: 1;
+    }
+
+    &.thread-hovered .document-resize-handle {
+        pointer-events: auto;
     }
 }
 

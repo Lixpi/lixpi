@@ -3,6 +3,8 @@ import type { Schema, Node as ProseMirrorNode } from 'prosemirror-model'
 import { toggleMark, wrapIn, setBlockType } from 'prosemirror-commands'
 import { NodeSelection } from 'prosemirror-state'
 import { createEl } from '$src/utils/domTemplates.ts'
+import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
+import AuthService from '$src/services/auth-service.ts'
 import {
     boldIcon,
     italicIcon,
@@ -21,7 +23,9 @@ import {
     alignLeftIcon,
     alignCenterIcon,
     alignRightIcon,
+    downloadIcon,
 } from '$src/svgIcons/index.ts'
+import { downloadImage } from '$src/utils/downloadImage.ts'
 
 // =============================================================================
 // SELECTION CONTEXT TYPES
@@ -136,7 +140,7 @@ type ImageWrapItem = MenuItemBase & {
 type ImageActionItem = MenuItemBase & {
     type: 'imageAction'
     key: string
-    action: 'delete' | 'blockquote' | 'createVariant'
+    action: 'delete' | 'blockquote' | 'createVariant' | 'download'
     icon: string
     title: string
     iconSize: number
@@ -198,6 +202,7 @@ const MENU_ITEMS: MenuItem[] = [
 
     // Image actions
     { type: 'imageAction', key: 'createVariant', action: 'createVariant', icon: magicIcon, title: 'Create variant', iconSize: 17, context: ['image'] },
+    { type: 'imageAction', key: 'imageDownload', action: 'download', icon: downloadIcon, title: 'Download image', iconSize: 16, context: ['image'] },
     { type: 'imageAction', key: 'imageBlockquote', action: 'blockquote', icon: blockquoteIcon, title: 'Wrap in blockquote', iconSize: 17, context: ['image'] },
     { type: 'imageAction', key: 'imageDelete', action: 'delete', icon: trashBinIcon, title: 'Delete image', iconSize: 16, context: ['image'] },
 ]
@@ -481,6 +486,17 @@ function createImageActionButton(
         const { pos, node } = imageInfo
 
         switch (item.action) {
+            case 'download': {
+                const domNode = view.nodeDOM(pos)
+                const imgEl = domNode instanceof HTMLElement
+                    ? domNode.querySelector('img') as HTMLImageElement | null
+                    : null
+                if (imgEl?.src) {
+                    downloadImage(imgEl.src, { getAuthToken: () => AuthService.getTokenSilently() })
+                }
+                bubbleMenuView.forceHide()
+                break
+            }
             case 'createVariant': {
                 // Check if image has AI-related attrs (is an AI-generated image)
                 if (node.attrs.revisedPrompt || node.attrs.responseId) {
@@ -565,10 +581,8 @@ function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView):
 // MAIN BUILDER FUNCTION
 // =============================================================================
 
-export type MenuItemElement = {
-    element: HTMLElement
+export type MenuItemElement = BubbleMenuItem & {
     context: SelectionContext[]
-    update?: () => void
 }
 
 export function buildBubbleMenuItems(

@@ -222,6 +222,13 @@ router.get(
             res.setHeader('Content-Length', data.length)
             res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
 
+            // When ?download=true is present, force the browser to save the file
+            if (req.query.download === 'true') {
+                const ext = mimeType.split('/')[1] || 'bin'
+                const downloadName = fileInfo?.name || `${fileId}.${ext}`
+                res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`)
+            }
+
             // Send the data
             res.send(Buffer.from(data))
         } catch (e: any) {

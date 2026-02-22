@@ -65,6 +65,14 @@ export const aiUserMessageNodeView = (
     return {
         dom: wrapper,
         contentDOM,
+        ignoreMutation: (mutation: MutationRecord) => {
+            // Ignore style attribute changes on the wrapper so ProseMirror
+            // does not trigger DOM reconciliation for externally-set styles.
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                return true
+            }
+            return false
+        },
         update: (updatedNode: ProseMirrorNode) => {
             if (updatedNode.type.name !== aiUserMessageNodeType) return false
             node = updatedNode

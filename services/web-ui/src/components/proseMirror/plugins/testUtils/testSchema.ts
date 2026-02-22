@@ -5,6 +5,7 @@ import { aiChatThreadNodeSpec } from '$src/components/proseMirror/plugins/aiChat
 import { aiResponseMessageNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
 import { aiUserMessageNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiUserInputNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
+import { aiPromptInputNodeSpec } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 
 // Test schema that includes all node types needed for image and bubble menu testing
 // This combines:
@@ -38,6 +39,9 @@ export const testSchema = new Schema({
         aiResponseMessage: aiResponseMessageNodeSpec,
         aiUserMessage: aiUserMessageNodeSpec,
         aiUserInput: aiUserInputNodeSpec,
+
+        // AI prompt input node (standalone floating prompt)
+        aiPromptInput: aiPromptInputNodeSpec,
     },
     marks: marks
 })

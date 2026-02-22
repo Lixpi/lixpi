@@ -1,0 +1,561 @@
+'use strict'
+
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+function loadScss(): string {
+	return readFileSync(
+		resolve(__dirname, 'workspace-canvas.scss'),
+		'utf-8'
+	)
+}
+
+function loadTs(): string {
+	return readFileSync(
+		resolve(__dirname, 'WorkspaceCanvas.ts'),
+		'utf-8'
+	)
+}
+
+function extractBlock(scss: string, selector: string): string {
+	const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	const pattern = new RegExp(`${escapedSelector}\\s*\\{`)
+	const match = pattern.exec(scss)
+	if (!match) return ''
+
+	let depth = 0
+	let start = match.index + match[0].length
+	let end = start
+
+	for (let i = start; i < scss.length; i++) {
+		if (scss[i] === '{') depth++
+		if (scss[i] === '}') {
+			if (depth === 0) {
+				end = i
+				break
+			}
+			depth--
+		}
+	}
+
+	return scss.slice(match.index, end + 1)
+}
+
+function extractBoxShadowValues(block: string): string[] {
+	const matches = [...block.matchAll(/box-shadow:\s*([^;]+);/g)]
+	return matches.map(m => m[1].trim())
+}
+
+// =============================================================================
+// workspace-image-node — consistent box-shadow
+// =============================================================================
+
+describe('workspace node CSS — box-shadow consistency', () => {
+	const scss = loadScss()
+	const docNodeBlock = extractBlock(scss, '.workspace-document-node')
+	const imageNodeBlock = extractBlock(scss, '.workspace-image-node')
+
+	it('.workspace-document-node has exactly one box-shadow (base only)', () => {
+		const allShadows = extractBoxShadowValues(docNodeBlock)
+		expect(allShadows).toHaveLength(1)
+		expect(allShadows[0]).not.toBe('none')
+	})
+
+	it('no hover box-shadow override on any node', () => {
+		const hoverDocBlock = extractBlock(docNodeBlock, '&:hover')
+		expect(extractBoxShadowValues(hoverDocBlock)).toHaveLength(0)
+
+		const hoverImgBlock = extractBlock(imageNodeBlock, '&:hover')
+		expect(extractBoxShadowValues(hoverImgBlock)).toHaveLength(0)
+	})
+
+	it('no is-selected or focus-within box-shadow override on any node', () => {
+		// No box-shadow should appear in selected/focus-within rules
+		expect(docNodeBlock).not.toMatch(/is-selected[\s\S]*?box-shadow/)
+		expect(docNodeBlock).not.toMatch(/focus-within[\s\S]*?box-shadow/)
+	})
+
+	it('no box-shadow transition on any node', () => {
+		expect(docNodeBlock).not.toContain('transition: box-shadow')
+		expect(docNodeBlock).not.toContain('transition:box-shadow')
+	})
+
+	it('.workspace-image-node base has no own box-shadow, only anchored variant does', () => {
+		// The base .workspace-image-node must not set box-shadow.
+		// Only the nested .workspace-image-node--anchored modifier may.
+		const baseScss = imageNodeBlock.replace(
+			/&\.workspace-image-node--anchored\s*\{[^}]*\}/g,
+			''
+		)
+		const baseShadows = extractBoxShadowValues(baseScss)
+		expect(baseShadows).toHaveLength(0)
+
+		// Anchored variant is allowed to have a shadow
+		const anchoredBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--anchored')
+		const anchoredShadows = extractBoxShadowValues(anchoredBlock)
+		expect(anchoredShadows).toHaveLength(1)
+	})
+})
+
+// =============================================================================
+// AI chat thread — auto-grow CSS overrides
+// =============================================================================
+
+describe('AI chat thread — workspace CSS overrides for auto-grow', () => {
+	const scss = loadScss()
+
+	it('zeroes padding-bottom on .ai-chat-thread-wrapper inside workspace thread', () => {
+		const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper')
+		expect(block).toMatch(/padding-bottom:\s*0/)
+	})
+
+	it('zeroes padding-bottom on .ai-chat-thread-content inside workspace thread', () => {
+		const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-chat-thread-content')
+		expect(block).toMatch(/padding-bottom:\s*0/)
+	})
+
+	it('hides the in-editor composer (.ai-user-input-wrapper) inside workspace thread', () => {
+		const block = extractBlock(scss, '.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-user-input-wrapper')
+		expect(block).toMatch(/display:\s*none/)
+	})
+
+	it('overrides ProseMirror min-height to 0 inside workspace thread', () => {
+		// There are two rules with this selector — search the raw SCSS for
+		// the min-height declaration scoped to the workspace thread.
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*min-height:\s*0/)
+	})
+
+	it('sets ProseMirror padding-bottom to 1rem inside workspace thread', () => {
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*padding-bottom:\s*1rem/)
+	})
+})
+
+// =============================================================================
+// AI chat thread — auto-grow TypeScript infrastructure
+// =============================================================================
+
+describe('AI chat thread — auto-grow TS infrastructure', () => {
+	const ts = loadTs()
+
+	it('defines AI_CHAT_THREAD_MIN_HEIGHT constant', () => {
+		expect(ts).toMatch(/const\s+AI_CHAT_THREAD_MIN_HEIGHT\s*=\s*\d+/)
+	})
+
+	it('defines autoGrowThreadNode function', () => {
+		expect(ts).toMatch(/function\s+autoGrowThreadNode\s*\(\s*threadNodeId:\s*string\s*\)/)
+	})
+
+	it('defines scheduleThreadAutoGrow function', () => {
+		expect(ts).toMatch(/function\s+scheduleThreadAutoGrow\s*\(\s*threadNodeId:\s*string\s*\)/)
+	})
+
+	it('autoGrowThreadNode measures natural height using height:auto technique', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("threadNodeEl.style.height = 'auto'")
+		expect(fnBody).toContain('threadNodeEl.offsetHeight')
+	})
+
+	it('autoGrowThreadNode enforces minimum height via AI_CHAT_THREAD_MIN_HEIGHT', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('AI_CHAT_THREAD_MIN_HEIGHT')
+	})
+
+	it('autoGrowThreadNode can both grow and shrink (no grow-only guard)', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		// Must use === (skip if equal) not <= (skip if smaller — grow only)
+		expect(fnBody).toMatch(/naturalHeight\s*===\s*currentHeight/)
+		expect(fnBody).not.toMatch(/naturalHeight\s*<=\s*currentHeight/)
+	})
+
+	it('autoGrowThreadNode calls commitCanvasStatePreservingEditors', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('commitCanvasStatePreservingEditors')
+	})
+
+	it('autoGrowThreadNode calls repositionAllThreadFloatingInputs', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('repositionAllThreadFloatingInputs')
+	})
+
+	it('onEditorChange calls scheduleThreadAutoGrow', () => {
+		expect(ts).toMatch(/onEditorChange[\s\S]*?scheduleThreadAutoGrow/)
+	})
+
+	it('renderNodes schedules auto-grow for all thread nodes', () => {
+		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
+		expect(renderMatch).not.toBeNull()
+		const renderBody = renderMatch![0]
+		expect(renderBody).toContain('scheduleThreadAutoGrow')
+	})
+
+	it('destroy() cleans up autoGrowRaf and pendingAutoGrowThreadNodeIds', () => {
+		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
+		expect(destroyMatch).not.toBeNull()
+		const destroyBody = destroyMatch![0]
+		expect(destroyBody).toContain('autoGrowRaf')
+		expect(destroyBody).toContain('pendingAutoGrowThreadNodeIds')
+	})
+})
+
+// =============================================================================
+// AI chat thread — empty thread hidden until messages appear
+// =============================================================================
+
+describe('AI chat thread — empty thread visibility', () => {
+	const ts = loadTs()
+
+	it('defines threadContentHasMessages helper', () => {
+		expect(ts).toMatch(/function\s+threadContentHasMessages\s*\(\s*content:\s*any\s*\):\s*boolean/)
+	})
+
+	it('defines hiddenEmptyThreadNodeIds set', () => {
+		expect(ts).toMatch(/const\s+hiddenEmptyThreadNodeIds:\s*Set<string>\s*=\s*new\s+Set/)
+	})
+
+	it('defines updateThreadNodeVisibility function', () => {
+		expect(ts).toMatch(/function\s+updateThreadNodeVisibility\s*\(/)
+	})
+
+	it('updateThreadNodeVisibility checks for message wrapper elements', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('ai-user-message-wrapper')
+		expect(fnBody).toContain('ai-response-message-wrapper')
+	})
+
+	it('createAiChatThreadNode hides node when thread has no messages or is not yet loaded', () => {
+		expect(ts).toMatch(/!thread\s*\|\|\s*!threadContentHasMessages/)
+		expect(ts).toMatch(/threadContentHasMessages[\s\S]*?hideThreadNode/)
+	})
+
+	it('CSS hides thread nodes with data-thread-empty attribute', () => {
+		const scss = loadScss()
+		expect(scss).toContain('data-thread-empty')
+		expect(scss).toMatch(/data-thread-empty[\s\S]*?visibility:\s*hidden/)
+	})
+
+	it('onEditorChange calls updateThreadNodeVisibility', () => {
+		expect(ts).toMatch(/onEditorChange[\s\S]*?updateThreadNodeVisibility/)
+	})
+
+	it('positionElementBelowNode accounts for hidden thread nodes', () => {
+		const fnMatch = ts.match(/function\s+positionElementBelowNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('getThreadTopOffset')
+	})
+
+	it('renderNodes clears hiddenEmptyThreadNodeIds', () => {
+		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
+		expect(renderMatch).not.toBeNull()
+		const renderBody = renderMatch![0]
+		expect(renderBody).toContain('hiddenEmptyThreadNodeIds.clear()')
+	})
+
+	it('destroy() clears hiddenEmptyThreadNodeIds', () => {
+		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
+		expect(destroyMatch).not.toBeNull()
+		const destroyBody = destroyMatch![0]
+		expect(destroyBody).toContain('hiddenEmptyThreadNodeIds')
+	})
+
+	it('defines hideThreadNode helper that sets data-thread-empty attribute', () => {
+		const fnMatch = ts.match(/function\s+hideThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("threadEmpty")
+		expect(fnBody).toContain("hiddenEmptyThreadNodeIds.add")
+	})
+
+	it('defines showThreadNode helper that removes data-thread-empty attribute', () => {
+		const fnMatch = ts.match(/function\s+showThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("threadEmpty")
+		expect(fnBody).toContain("hiddenEmptyThreadNodeIds.delete")
+	})
+
+	it('defines getThreadTopOffset helper', () => {
+		const fnMatch = ts.match(/function\s+getThreadTopOffset[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('hiddenEmptyThreadNodeIds')
+	})
+
+	it('updateThreadNodeVisibility uses hideThreadNode and showThreadNode', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('showThreadNode')
+		expect(fnBody).toContain('hideThreadNode')
+	})
+
+	it('autoGrowThreadNode skips hidden threads', () => {
+		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('hiddenEmptyThreadNodeIds.has')
+	})
+
+	it('drag mousemove uses getThreadTopOffset for floating input positioning', () => {
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('getThreadTopOffset')
+	})
+
+	it('resize mousemove uses getThreadTopOffset for floating input positioning', () => {
+		const fnMatch = ts.match(/function\s+handleResizeStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('getThreadTopOffset')
+	})
+})
+
+// =============================================================================
+// AI chat thread — document title hidden (controlled by setting)
+// =============================================================================
+
+describe('AI chat thread — document title hidden in workspace', () => {
+	const scss = loadScss()
+	const ts = loadTs()
+
+	it('hides .document-title via --hide-title modifier class', () => {
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node--hide-title\s+\.document-title\s*\{[^}]*display:\s*none/)
+	})
+
+	it('createAiChatThreadNode adds --hide-title class based on showHeaderOnAiChatThreadNodes setting', () => {
+		expect(ts).toContain('showHeaderOnAiChatThreadNodes')
+		expect(ts).toContain('workspace-ai-chat-thread-node--hide-title')
+	})
+})
+
+// =============================================================================
+// Vertical rail — CSS styling
+// =============================================================================
+
+describe('Vertical rail — CSS styling', () => {
+	const scss = loadScss()
+
+	it('defines .workspace-thread-rail with absolute positioning', () => {
+		const block = extractBlock(scss, '.workspace-thread-rail')
+		expect(block).toMatch(/position:\s*absolute/)
+	})
+
+	it('sets cursor: move on rail', () => {
+		const block = extractBlock(scss, '.workspace-thread-rail')
+		expect(block).toMatch(/cursor:\s*move/)
+	})
+
+	it('has __line child with ::before pseudo-element for the visible line', () => {
+		expect(scss).toMatch(/&__line/)
+		expect(scss).toMatch(/&::before/)
+		expect(scss).toMatch(/--rail-width/)
+		expect(scss).toMatch(/--rail-gradient/)
+		expect(scss).toMatch(/--rail-thread-height/)
+	})
+
+	it('has no .is-selected visual change on __line::before (rail always looks the same)', () => {
+		expect(scss).not.toMatch(/\.is-selected\s+\.workspace-thread-rail__line::before/)
+	})
+
+	it('defines __boundary-circle positioned at bottom of __line', () => {
+		expect(scss).toMatch(/&__boundary-circle/)
+		expect(scss).toMatch(/bottom:\s*-6px/)
+	})
+})
+
+// =============================================================================
+// Vertical rail — TypeScript infrastructure
+// =============================================================================
+
+describe('Vertical rail — TS infrastructure', () => {
+	const ts = loadTs()
+
+	it('defines RAIL_OFFSET from theme settings', () => {
+		expect(ts).toMatch(/const\s+RAIL_OFFSET\s*=\s*webUiThemeSettings\.aiChatThreadRailOffset/)
+	})
+
+	it('defines RAIL_GRAB_WIDTH from webUiSettings', () => {
+		expect(ts).toMatch(/const\s+RAIL_GRAB_WIDTH\s*=\s*webUiSettings\.aiChatThreadRailDragGrabWidth/)
+	})
+
+	it('defines threadRails Map', () => {
+		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
+	})
+
+	it('defines createThreadRail function', () => {
+		expect(ts).toContain('function createThreadRail(')
+	})
+
+	it('defines repositionThreadRail function', () => {
+		expect(ts).toContain('function repositionThreadRail(')
+	})
+
+	it('defines destroyAllThreadRails function', () => {
+		expect(ts).toContain('function destroyAllThreadRails(')
+	})
+
+	it('createAiChatThreadNode calls createThreadRail', () => {
+		const fnMatch = ts.match(/function\s+createAiChatThreadNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('createThreadRail(')
+	})
+
+	it('repositionAllThreadFloatingInputs also repositions rails', () => {
+		const fnMatch = ts.match(/function\s+repositionAllThreadFloatingInputs[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('repositionThreadRail(')
+	})
+
+	it('drag mousemove handler repositions the rail', () => {
+		expect(ts).toContain('dragRail')
+		expect(ts).toMatch(/dragRail\.style\.left/)
+	})
+
+	it('resize mousemove handler repositions the rail', () => {
+		expect(ts).toContain('resizeRail')
+		expect(ts).toMatch(/resizeRail\.style\.height/)
+	})
+
+	it('selectNode toggles is-selected on the rail', () => {
+		const fnMatch = ts.match(/function\s+selectNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("rail.classList.add('is-selected')")
+		expect(fnBody).toContain("prevRail.classList.remove('is-selected')")
+	})
+
+	it('renderNodes calls destroyAllThreadRails', () => {
+		const fnMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('destroyAllThreadRails()')
+	})
+
+	it('destroy() calls destroyAllThreadRails', () => {
+		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
+		expect(destroyMatch).not.toBeNull()
+		expect(destroyMatch![0]).toContain('destroyAllThreadRails()')
+	})
+
+	it('passes railOffset to WorkspaceConnectionManager', () => {
+		expect(ts).toMatch(/railOffset:\s*RAIL_OFFSET/)
+	})
+
+	it('edge endpoint handles apply rail offset for aiChatThread nodes', () => {
+		const fnMatch = ts.match(/function\s+updateEdgeEndpointHandles[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('RAIL_OFFSET')
+	})
+
+	it('createThreadRail creates __line child element', () => {
+		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('workspace-thread-rail__line')
+	})
+
+	it('createThreadRail appends boundary circle to __line', () => {
+		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('workspace-thread-rail__boundary-circle')
+		expect(fnMatch![0]).toContain('aiChatThreadRailBoundaryCircle')
+	})
+
+	it('createThreadRail applies theme colors to boundary circle SVG paths', () => {
+		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('aiChatThreadRailBoundaryCircleColors')
+		expect(fnBody).toContain("setAttribute('fill'")
+	})
+
+	it('repositionThreadRail sets --rail-thread-height CSS var', () => {
+		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('--rail-thread-height')
+	})
+
+	it('repositionThreadRail hides boundary circle when thread is hidden', () => {
+		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('workspace-thread-rail__boundary-circle')
+		expect(fnBody).toContain("isHidden ? 'none' : ''")
+	})
+
+	it('resize handler updates --rail-thread-height CSS var', () => {
+		expect(ts).toMatch(/resizeRail\.style\.setProperty\('--rail-thread-height'/)
+	})
+
+	it('repositionThreadRail calls connectionManager.setRailHeight', () => {
+		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('connectionManager?.setRailHeight(')
+	})
+
+	it('destroyAllThreadRails calls connectionManager.clearRailHeights', () => {
+		const fnMatch = ts.match(/function\s+destroyAllThreadRails[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
+	})
+
+	it('edge endpoint handles use getRailHeight for aiChatThread Y position', () => {
+		const fnMatch = ts.match(/function\s+updateEdgeEndpointHandles[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('getRailHeight')
+	})
+
+	it('selectNode hides floating input for image nodes', () => {
+		const fnMatch = ts.match(/function\s+selectNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain("node.type === 'image'")
+		expect(fnBody).toContain('hideFloatingInput')
+	})
+
+	it('bubble menu callbacks include onAskAi', () => {
+		expect(ts).toContain('onAskAi')
+	})
+
+	it('onAskAi handler creates an AI chat thread and edge', () => {
+		expect(ts).toMatch(/onAskAi.*async|async.*onAskAi/)
+		expect(ts).toContain('createAiChatThread')
+	})
+
+	it('bubble menu callbacks include onTriggerConnection', () => {
+		expect(ts).toContain('onTriggerConnection')
+	})
+
+	it('onTriggerConnection triggers connection via startConnectionFromMenu', () => {
+		expect(ts).toMatch(/onTriggerConnection.*startConnectionFromMenu|startConnectionFromMenu.*onTriggerConnection/s)
+	})
+
+	it('passes onReceivingStateChange callback to ProseMirrorEditor', () => {
+		expect(ts).toContain('onReceivingStateChange')
+		// The callback must bridge plugin state to promptInputController
+		expect(ts).toMatch(/onReceivingStateChange.*promptInputController\.setReceiving|promptInputController\.setReceiving.*onReceivingStateChange/s)
+	})
+
+	it('onReceivingStateChange calls promptInputController.setReceiving with threadId and receiving', () => {
+		// Find the onReceivingStateChange callback block and verify it passes both args
+		const callbackMatch = ts.match(/onReceivingStateChange:\s*\(threadId.*?receiving.*?\)\s*=>\s*\{[^}]*\}/s)
+		expect(callbackMatch).not.toBeNull()
+		expect(callbackMatch![0]).toContain('promptInputController.setReceiving(threadId, receiving)')
+	})
+})

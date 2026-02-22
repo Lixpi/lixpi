@@ -14,6 +14,7 @@ type InfoBubbleConfig = {
     onOpen?: () => void
     onClose?: () => void
     closeOnClickOutside?: boolean
+    disableAutoPositioning?: boolean
     offset?: { x?: number, y?: number }
     arrowCrossOffset?: number // Optional custom distance of arrow from the edge (overrides CSS default of 8px)
     className?: string
@@ -32,6 +33,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         onOpen,
         onClose,
         closeOnClickOutside = true,
+        disableAutoPositioning = false,
         offset = { x: 0, y: 20 }, // Default 20px spacing from anchor
         arrowCrossOffset, // Optional custom arrow cross offset
         className = ''
@@ -41,7 +43,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
 
     // Create the info bubble DOM structure
     const dom = html`
-        <div class="info-bubble-wrapper theme-${theme} ${className}" data-arrow-side="${arrowSide}" data-bubble-id="${id}">
+        <div class="info-bubble-wrapper theme-${theme} ${className} ${disableAutoPositioning ? 'static-position' : ''}" data-arrow-side="${arrowSide}" data-bubble-id="${id}">
             <nav class="bubble-wrapper ${isVisible ? 'visible' : ''}" contenteditable="false">
                 <div class="bubble-container">
                     ${headerContent && html`<div class="bubble-header">${headerContent}</div>`}
@@ -104,6 +106,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
     // Compute and apply viewport-relative position using the anchor rect
     const applyPosition = () => {
         if (!bubbleWrapper) return
+        if (disableAutoPositioning) return
 
         const anchorRect = posAnchorEl.getBoundingClientRect()
 

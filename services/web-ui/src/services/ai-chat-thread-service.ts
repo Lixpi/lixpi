@@ -19,6 +19,7 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import type { Document } from '$src/stores/documentStore.ts'
+import { webUiSettings } from '$src/webUiSettings.ts'
 
 // ========== CONTEXT EXTRACTION TYPES ==========
 
@@ -33,6 +34,8 @@ export type ContextItem = {
     // For images stored in NATS object store
     fileId?: string
     workspaceId?: string
+    // Links this image to a specific aiResponseMessage within the source AI chat thread
+    sourceMessageId?: string
 }
 
 export type ExtractedContext = ContextItem[]
@@ -68,23 +71,30 @@ type ExtractedContent = {
 
 // ========== HELPER FUNCTIONS ==========
 
+type ConnectedNodeWithEdge = {
+    node: CanvasNode
+    edge: WorkspaceEdge
+}
+
 function findConnectedNodes(
     targetNodeId: string,
     edges: WorkspaceEdge[],
     nodes: CanvasNode[],
     visited: Set<string>
-): CanvasNode[] {
+): ConnectedNodeWithEdge[] {
     if (visited.has(targetNodeId)) return []
     visited.add(targetNodeId)
 
     const incomingEdges = edges.filter((e) => e.targetNodeId === targetNodeId)
-    const result: CanvasNode[] = []
+    const result: ConnectedNodeWithEdge[] = []
 
     for (const edge of incomingEdges) {
         const sourceNode = nodes.find((n) => n.nodeId === edge.sourceNodeId)
         if (sourceNode) {
-            result.push(sourceNode)
-            result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
+            result.push({ node: sourceNode, edge })
+            if (webUiSettings.aiChatContextTraversalDepth === 'full') {
+                result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
+            }
         }
     }
 
@@ -265,12 +275,12 @@ class AiChatThreadService {
         const documents: Document[] = documentsStore.getData()
         const threadsMap: Map<string, AiChatThread> = aiChatThreadsStore.getData()
 
-        const connectedNodes = findConnectedNodes(aiChatNodeId, edges, nodes, new Set())
-        if (connectedNodes.length === 0) return []
+        const connectedItems = findConnectedNodes(aiChatNodeId, edges, nodes, new Set())
+        if (connectedItems.length === 0) return []
 
         const context: GatheredContext = []
 
-        for (const node of connectedNodes) {
+        for (const { node, edge } of connectedItems) {
             if (node.type === 'document') {
                 const docNode = node as DocumentCanvasNode
                 const doc = documents.find((d) => d.documentId === docNode.referenceId)
@@ -288,24 +298,23 @@ class AiChatThreadService {
                     }
 
                     for (let i = 0; i < imageSrcs.length; i++) {
-                        // Pass the image URL directly - LLM API will fetch it
                         context.push({
                             type: 'image',
                             nodeId: `${node.nodeId}-embedded-${i}`,
                             parentNodeId: node.nodeId,
-                            content: imageSrcs[i], // Original URL
+                            content: imageSrcs[i],
                         })
                     }
                 }
             } else if (node.type === 'image') {
                 const imgNode = node as ImageCanvasNode
-                // Pass fileId and workspaceId - LLM API fetches directly from NATS object store
                 context.push({
                     type: 'image',
                     nodeId: node.nodeId,
-                    content: '', // Not used for canvas images
+                    content: '',
                     fileId: imgNode.fileId,
                     workspaceId: imgNode.workspaceId,
+                    sourceMessageId: edge.sourceMessageId,
                 })
             } else if (node.type === 'aiChatThread') {
                 const threadNode = node as AiChatThreadCanvasNode
@@ -323,12 +332,11 @@ class AiChatThreadService {
                     }
 
                     for (let i = 0; i < imageSrcs.length; i++) {
-                        // Pass the image URL directly - LLM API will fetch it
                         context.push({
                             type: 'image',
                             nodeId: `${node.nodeId}-embedded-${i}`,
                             parentNodeId: node.nodeId,
-                            content: imageSrcs[i], // Original URL
+                            content: imageSrcs[i],
                         })
                     }
                 }
@@ -392,9 +400,14 @@ class AiChatThreadService {
                 imageUrl = `nats-obj://workspace-${item.workspaceId}-files/${item.fileId}`
             }
 
+            const imageMetadata: Record<string, string> = { type: 'standalone_image' }
+            if (item.sourceMessageId) {
+                imageMetadata.sourceMessageId = item.sourceMessageId
+            }
+
             contentBlocks.push({
                 type: 'input_text',
-                text: JSON.stringify({ type: 'standalone_image' }),
+                text: JSON.stringify(imageMetadata),
             })
             contentBlocks.push({
                 type: 'input_image',

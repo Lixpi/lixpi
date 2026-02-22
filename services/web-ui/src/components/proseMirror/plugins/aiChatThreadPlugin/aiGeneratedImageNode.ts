@@ -70,12 +70,34 @@ export type AiGeneratedImageCallbacks = {
         aiModel: string
     }) => void
     onEditInNewThread?: (responseId: string) => void
+    onImagePartialToCanvas?: (data: {
+        threadId: string
+        imageUrl: string
+        fileId: string
+        workspaceId: string
+        partialIndex: number
+        aiProvider: string
+    }) => void
+    onImageCompleteToCanvas?: (data: {
+        threadId: string
+        imageUrl: string
+        fileId: string
+        workspaceId: string
+        responseId: string
+        revisedPrompt: string
+        aiModel: string
+        responseMessageId: string
+    }) => void
 }
 
 let globalCallbacks: AiGeneratedImageCallbacks = {}
 
 export function setAiGeneratedImageCallbacks(callbacks: AiGeneratedImageCallbacks) {
     globalCallbacks = callbacks
+}
+
+export function getAiGeneratedImageCallbacks(): AiGeneratedImageCallbacks {
+    return globalCallbacks
 }
 
 export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => number | undefined) => {

@@ -77,6 +77,7 @@ export type ImageGeneratedByMetadata = {
     responseId: string
     aiModel: AiModelId
     revisedPrompt: string
+    responseMessageId?: string
 }
 
 export type ImageCanvasNode = {
@@ -113,6 +114,9 @@ export type WorkspaceEdge = {
     targetNodeId: string
     sourceHandle?: string
     targetHandle?: string
+    sourceT?: number  // Position along source side (0=start, 1=end, 0.5=center). Default: 0.5
+    targetT?: number  // Position along target side (0=start, 1=end, 0.5=center). Default: 0.5
+    sourceMessageId?: string  // Links edge to a specific aiResponseMessage (by its id attr) within the source AI chat thread
 }
 
 export type CanvasState = {
