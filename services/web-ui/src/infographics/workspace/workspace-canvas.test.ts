@@ -392,8 +392,8 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/const\s+RAIL_OFFSET\s*=\s*webUiThemeSettings\.aiChatThreadRailOffset/)
 	})
 
-	it('defines RAIL_GRAB_WIDTH constant', () => {
-		expect(ts).toMatch(/const\s+RAIL_GRAB_WIDTH\s*=\s*\d+/)
+	it('defines RAIL_GRAB_WIDTH from webUiSettings', () => {
+		expect(ts).toMatch(/const\s+RAIL_GRAB_WIDTH\s*=\s*webUiSettings\.aiChatThreadRailDragGrabWidth/)
 	})
 
 	it('defines threadRails Map', () => {

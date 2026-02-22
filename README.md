@@ -2,7 +2,7 @@
 
 Version:  0.0.2
 
-## Preview here: https://slides.com/lixpi/lixpi-ai-bridge-tech-preview/fullscreen
+## Preview here: https://slides.com/lixpi/lixpi-ai-bridge-tech-preview-55a682/fullscreen
 
 
 ## Quick Start

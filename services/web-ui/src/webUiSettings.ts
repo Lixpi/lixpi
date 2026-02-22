@@ -6,6 +6,7 @@ export type WebUiSettings = {
     showHeaderOnAiChatThreadNodes: boolean
     proximityConnectThreshold: number
     aiChatContextTraversalDepth: 'direct' | 'full'
+    aiChatThreadRailDragGrabWidth: number
 }
 
 export const webUiSettings: WebUiSettings = {
@@ -32,4 +33,8 @@ export const webUiSettings: WebUiSettings = {
     //              Use when chains like DocA → DocB → ChatThread should pass
     //              DocA's content through to the chat.
     aiChatContextTraversalDepth: 'direct',
+    // Width (in pixels) of the invisible drag hit area around the vertical rail line.
+    // The visible rail line width is controlled separately by aiChatThreadRailWidth in
+    // webUiThemeSettings.ts — this only affects how wide the grabbable zone is.
+    aiChatThreadRailDragGrabWidth: 90,
 }

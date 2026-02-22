@@ -12,6 +12,7 @@ describe('webUiSettings — shape', () => {
 		const keys = Object.keys(webUiSettings).sort()
 		expect(keys).toEqual([
 			'aiChatContextTraversalDepth',
+			'aiChatThreadRailDragGrabWidth',
 			'proximityConnectThreshold',
 			'renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem',
 			'showHeaderOnAiChatThreadNodes',
@@ -30,6 +31,7 @@ describe('webUiSettings — shape', () => {
 			showHeaderOnAiChatThreadNodes: 'boolean',
 			proximityConnectThreshold: 'number',
 			aiChatContextTraversalDepth: 'string',
+			aiChatThreadRailDragGrabWidth: 'number',
 		}
 		for (const [key, value] of Object.entries(webUiSettings)) {
 			expect(typeof value).toBe(expectedTypes[key])
@@ -68,6 +70,10 @@ describe('webUiSettings — defaults', () => {
 
 	it('aiChatContextTraversalDepth defaults to direct', () => {
 		expect(webUiSettings.aiChatContextTraversalDepth).toBe('direct')
+	})
+
+	it('aiChatThreadRailDragGrabWidth defaults to 40', () => {
+		expect(webUiSettings.aiChatThreadRailDragGrabWidth).toBe(40)
 	})
 })
 

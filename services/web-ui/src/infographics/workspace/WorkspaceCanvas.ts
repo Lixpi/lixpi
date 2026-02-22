@@ -337,7 +337,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Vertical rail elements — one per AI chat thread, spanning thread + floating input
     const RAIL_OFFSET = webUiThemeSettings.aiChatThreadRailOffset
-    const RAIL_GRAB_WIDTH = 8
+    const RAIL_GRAB_WIDTH = webUiSettings.aiChatThreadRailDragGrabWidth
     const threadRails: Map<string, HTMLElement> = new Map()
 
     const promptInputController = new AiPromptInputController({
