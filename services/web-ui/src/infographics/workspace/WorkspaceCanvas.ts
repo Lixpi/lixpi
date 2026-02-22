@@ -564,6 +564,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         rail.className = 'workspace-thread-rail nopan'
         rail.style.position = 'absolute'
         rail.style.width = `${RAIL_GRAB_WIDTH}px`
+        rail.style.zIndex = '9990'
         rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
         rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
         rail.dataset.threadNodeId = node.nodeId

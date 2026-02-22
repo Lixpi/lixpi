@@ -371,8 +371,8 @@ describe('Vertical rail — CSS styling', () => {
 		expect(scss).toMatch(/--rail-thread-height/)
 	})
 
-	it('has .is-selected state targeting __line::before', () => {
-		expect(scss).toMatch(/\.is-selected\s+\.workspace-thread-rail__line::before/)
+	it('has no .is-selected visual change on __line::before (rail always looks the same)', () => {
+		expect(scss).not.toMatch(/\.is-selected\s+\.workspace-thread-rail__line::before/)
 	})
 
 	it('defines __boundary-circle positioned at bottom of __line', () => {
