@@ -4,6 +4,8 @@ Version:  0.0.2
 
 ## Preview here: https://slides.com/lixpi/lixpi-ai-bridge-tech-preview-55a682/fullscreen
 
+<img width="1280" height="742" alt="image" src="https://github.com/user-attachments/assets/33ec726d-d0c3-4203-b5c9-5ce0a30568dd" />
+
 
 ## Quick Start
 
