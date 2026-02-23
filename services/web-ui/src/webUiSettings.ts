@@ -10,6 +10,7 @@ export type WebUiSettings = {
     aiChatContextTraversalDepth: 'direct' | 'full'
     aiChatThreadRailDragGrabWidth: number
     nodesConnectorLineCurve: WorkspaceEdgePathType
+    nodesConnectorLineClickAreaWidth: number
 }
 
 export const webUiSettings: WebUiSettings = {
@@ -47,4 +48,7 @@ export const webUiSettings: WebUiSettings = {
     //   'straight'          — direct straight line between points
     //   'smoothstep'        — stepped line with rounded corners (similar to orthogonal but simpler)
     nodesConnectorLineCurve: 'horizontal-bezier',
+    // Width (in pixels) of the invisible click area around connector lines.
+    // Makes it easier to select thin lines.
+    nodesConnectorLineClickAreaWidth: 24,
 }

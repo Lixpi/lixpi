@@ -70,6 +70,10 @@
     height: 100%;
     position: relative;
     cursor: default;
+
+    &.is-hovering-edge {
+        cursor: pointer;
+    }
 }
 
 .workspace-viewport {

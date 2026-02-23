@@ -1147,6 +1147,7 @@ export class WorkspaceConnectionManager {
 	}
 
 	private paneClickHandler: ((e: MouseEvent) => void) | null = null
+	private paneMouseMoveHandler: ((e: MouseEvent) => void) | null = null
 
 	private attachEdgeInteractionHandlers() {
 		if (this.paneClickHandler) return  // Already attached
@@ -1176,7 +1177,7 @@ export class WorkspaceConnectionManager {
 				if (edgeId.startsWith('__workspace-temp')) continue
 
 				const origWidth = path.style.strokeWidth
-				path.style.strokeWidth = '14'
+				path.style.strokeWidth = `${webUiSettings.nodesConnectorLineClickAreaWidth}`
 				const hit = path.isPointInStroke(point)
 				path.style.strokeWidth = origWidth
 
@@ -1189,7 +1190,62 @@ export class WorkspaceConnectionManager {
 			}
 		}
 
+		this.paneMouseMoveHandler = (e: MouseEvent) => {
+			// Don't interfere with cursor if we are currently drawing a connection
+			// or if the user is dragging something (mouse button is held down)
+			if (this.connectionInProgress || e.buttons > 0) {
+				this.config.paneEl.classList.remove('is-hovering-edge')
+				return
+			}
+
+			const target = e.target as HTMLElement
+			if (target.closest('.workspace-document-node, .workspace-image-node, .workspace-ai-chat-thread-node')) {
+				this.config.paneEl.classList.remove('is-hovering-edge')
+				return
+			}
+
+			const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg') as SVGSVGElement | null
+			if (!svg) {
+				this.config.paneEl.classList.remove('is-hovering-edge')
+				return
+			}
+
+			const ctm = svg.getScreenCTM()
+			if (!ctm) {
+				this.config.paneEl.classList.remove('is-hovering-edge')
+				return
+			}
+
+			const svgPoint = svg.createSVGPoint()
+			svgPoint.x = e.clientX
+			svgPoint.y = e.clientY
+			const point = svgPoint.matrixTransform(ctm.inverse())
+
+			const paths = svg.querySelectorAll('path.connector-edge') as NodeListOf<SVGPathElement>
+			let isHoveringEdge = false
+
+			for (const path of paths) {
+				const id = path.getAttribute('id')
+				if (!id?.startsWith('edge-')) continue
+				const edgeId = id.slice('edge-'.length)
+				if (edgeId.startsWith('__workspace-temp')) continue
+
+				const origWidth = path.style.strokeWidth
+				path.style.strokeWidth = `${webUiSettings.nodesConnectorLineClickAreaWidth}`
+				const hit = path.isPointInStroke(point)
+				path.style.strokeWidth = origWidth
+
+				if (hit) {
+					isHoveringEdge = true
+					break
+				}
+			}
+
+			this.config.paneEl.classList.toggle('is-hovering-edge', isHoveringEdge)
+		}
+
 		this.config.paneEl.addEventListener('click', this.paneClickHandler)
+		this.config.paneEl.addEventListener('mousemove', this.paneMouseMoveHandler)
 	}
 
 	public checkProximity(
