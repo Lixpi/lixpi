@@ -108,6 +108,8 @@ export type CanvasViewport = {
     zoom: number
 }
 
+export type WorkspaceEdgePathType = 'bezier' | 'straight' | 'smoothstep' | 'horizontal-bezier' | 'orthogonal'
+
 export type WorkspaceEdge = {
     edgeId: string
     sourceNodeId: string
@@ -117,6 +119,7 @@ export type WorkspaceEdge = {
     sourceT?: number  // Position along source side (0=start, 1=end, 0.5=center). Default: 0.5
     targetT?: number  // Position along target side (0=start, 1=end, 0.5=center). Default: 0.5
     sourceMessageId?: string  // Links edge to a specific aiResponseMessage (by its id attr) within the source AI chat thread
+    pathType?: WorkspaceEdgePathType
 }
 
 export type CanvasState = {

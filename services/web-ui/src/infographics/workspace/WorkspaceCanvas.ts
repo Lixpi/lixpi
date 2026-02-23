@@ -147,6 +147,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 connectionManager.selectEdge(edgeId)
                 connectionManager.deleteSelectedEdge()
             },
+            onChangeConnectorShape: (edgeId) => {
+                if (!currentCanvasState) return
+
+                const edgeIndex = currentCanvasState.edges.findIndex((e: WorkspaceEdge) => e.edgeId === edgeId)
+                if (edgeIndex === -1) return
+
+                const edge = currentCanvasState.edges[edgeIndex]
+                const currentShape = edge.pathType ?? webUiSettings.nodesConnectorLineShape
+                const newShape = currentShape === 'horizontal-bezier' ? 'orthogonal' : 'horizontal-bezier'
+
+                const updatedEdge = { ...edge, pathType: newShape }
+                const newEdges = [...currentCanvasState.edges]
+                newEdges[edgeIndex] = updatedEdge
+
+                commitCanvasState({
+                    ...currentCanvasState,
+                    edges: newEdges
+                })
+            },
             onDeleteNode: (nodeId) => {
                 if (!currentCanvasState) return
 

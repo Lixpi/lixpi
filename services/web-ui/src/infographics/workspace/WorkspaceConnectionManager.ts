@@ -35,10 +35,6 @@ import type {
 import { webUiSettings } from '$src/webUiSettings.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
-// Switch between 'orthogonal' (3-point circuit style) and 'horizontal-bezier' (smooth curves)
-// const CONNECTION_STYLE: PathType = 'orthogonal'
-const CONNECTION_STYLE: PathType = 'horizontal-bezier'
-
 type ProximityCandidate = {
 	sourceNodeId: string
 	sourceHandle: 'left' | 'right'
@@ -1031,7 +1027,7 @@ export class WorkspaceConnectionManager {
 				id: e.edgeId,
 				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
 				target: { nodeId: e.targetNodeId, position: target, t: targetT },
-				pathType: CONNECTION_STYLE,
+				pathType: e.pathType ?? webUiSettings.nodesConnectorLineShape,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
 				markerOffset: scaledMarkerOffset,
@@ -1133,7 +1129,7 @@ export class WorkspaceConnectionManager {
 					position: this.proximityCandidate.targetHandle,
 					t: computed?.targetT ?? this.proximityCandidate.targetT
 				},
-				pathType: CONNECTION_STYLE,
+				pathType: webUiSettings.nodesConnectorLineShape,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
 				markerOffset: scaledMarkerOffset,

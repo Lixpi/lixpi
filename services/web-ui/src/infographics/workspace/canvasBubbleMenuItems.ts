@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { createEl } from '$src/utils/domTemplates.ts'
-import { trashBinIcon, downloadIcon, triggerNodesConnectionIcon } from '$src/svgIcons/index.ts'
+import { trashBinIcon, downloadIcon, triggerNodesConnectionIcon, changeNodesConnectorLineShape } from '$src/svgIcons/index.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'
@@ -18,6 +18,7 @@ const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" s
 type CanvasBubbleMenuCallbacks = {
     onDeleteNode: (nodeId: string) => void
     onDeleteEdge: (edgeId: string) => void
+    onChangeConnectorShape: (edgeId: string) => void
     onAskAi: (nodeId: string) => void
     onDownloadImage: (nodeId: string) => void
     onTriggerConnection: (nodeId: string) => void
@@ -130,11 +131,24 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
 
+    const changeShapeButton = createCanvasButton({
+        icon: changeNodesConnectorLineShape,
+        title: 'Change connector shape',
+        iconSize: 16,
+        onClick: () => {
+            if (activeEdgeId) {
+                callbacks.onChangeConnectorShape(activeEdgeId)
+                callbacks.onHide()
+            }
+        },
+    })
+
     const items: BubbleMenuItem[] = [
         { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: connectButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
+        { element: changeShapeButton, context: [CANVAS_EDGE_CONTEXT] },
         { element: deleteEdgeButton, context: [CANVAS_EDGE_CONTEXT] },
     ]
 
