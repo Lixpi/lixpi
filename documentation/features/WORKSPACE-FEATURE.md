@@ -946,7 +946,7 @@ stateDiagram-v2
     Selected --> [*]: Delete/Backspace key
 ```
 
-When an edge is selected, it is visually highlighted.
+When an edge is selected, it is visually highlighted and a bubble menu appears below the edge with a Delete action.
 
 ### Edge Persistence
 
