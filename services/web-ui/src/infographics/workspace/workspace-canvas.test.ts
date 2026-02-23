@@ -470,6 +470,12 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain('workspace-thread-rail__line')
 	})
 
+	it('createThreadRail sets z-index above all nodes to prevent overlap', () => {
+		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain("rail.style.zIndex = '9990'")
+	})
+
 	it('createThreadRail appends boundary circle to __line', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()

@@ -72,8 +72,8 @@ describe('webUiSettings — defaults', () => {
 		expect(webUiSettings.aiChatContextTraversalDepth).toBe('direct')
 	})
 
-	it('aiChatThreadRailDragGrabWidth defaults to 40', () => {
-		expect(webUiSettings.aiChatThreadRailDragGrabWidth).toBe(40)
+	it('aiChatThreadRailDragGrabWidth defaults to 90', () => {
+		expect(webUiSettings.aiChatThreadRailDragGrabWidth).toBe(90)
 	})
 })
 
