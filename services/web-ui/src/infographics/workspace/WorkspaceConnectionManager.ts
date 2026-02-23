@@ -1027,7 +1027,7 @@ export class WorkspaceConnectionManager {
 				id: e.edgeId,
 				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
 				target: { nodeId: e.targetNodeId, position: target, t: targetT },
-				pathType: e.pathType ?? webUiSettings.nodesConnectorLineShape,
+				pathType: e.pathType ?? webUiSettings.nodesConnectorLineCurve,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
 				markerOffset: scaledMarkerOffset,
@@ -1129,7 +1129,7 @@ export class WorkspaceConnectionManager {
 					position: this.proximityCandidate.targetHandle,
 					t: computed?.targetT ?? this.proximityCandidate.targetT
 				},
-				pathType: webUiSettings.nodesConnectorLineShape,
+				pathType: webUiSettings.nodesConnectorLineCurve,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
 				markerOffset: scaledMarkerOffset,
