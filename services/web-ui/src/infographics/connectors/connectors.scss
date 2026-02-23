@@ -59,13 +59,6 @@
         stroke-linecap: round;
     }
 
-    // Circle marker styles
-    .connector-marker-circle {
-        fill: rgba(190, 190, 200, 0.95);
-        stroke: rgba(190, 190, 200, 0.95);
-        stroke-width: 1;
-    }
-
     // Text content styles
     .connector-text {
         fill: rgba(243, 244, 246, 0.96);
@@ -97,22 +90,4 @@
         height: 100%;
     }
 
-    // Edge anchor point handles (for repositioning edge endpoints)
-    .edge-anchor-handle {
-        fill: rgba(255, 255, 255, 0.9);
-        stroke: rgba(100, 116, 139, 0.8);
-        stroke-width: 1.5;
-        cursor: ns-resize;
-        transition: fill 0.15s ease, stroke 0.15s ease;
-
-        &:hover {
-            fill: rgba(147, 197, 253, 1);
-            stroke: rgba(59, 130, 246, 0.9);
-        }
-
-        &.is-dragging {
-            fill: rgba(59, 130, 246, 1);
-            stroke: rgba(30, 64, 175, 0.9);
-        }
-    }
 }

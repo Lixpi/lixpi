@@ -745,11 +745,10 @@ Visual connections (edges/arrows) between canvas nodes allow users to show relat
 
 ### Key Features
 
-- **Connection handles** on each node (small circles on the sides, visible on hover)
+- **Connection handles** on each node (visible on hover)
 - **Drag-to-connect** interaction using `XYHandle.onPointerDown` from `@xyflow/system`
 - **Edge rendering** using ConnectorRenderer from `src/infographics/connectors/`
 - **Edge selection and deletion** (click to select, Delete/Backspace to remove)
-- **Edge reconnection** (drag an edge endpoint to move it to a different node, or drop in empty space to delete)
 - **Persistence** of edges in `CanvasState`
 
 ### Architecture
@@ -894,7 +893,7 @@ Responsibilities:
 
 ### Handle DOM Elements
 
-Each workspace node has connection handles — small circles at the left (target) and right (source) edges:
+Each workspace node has connection handles at the left (target) and right (source) edges:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -947,7 +946,7 @@ stateDiagram-v2
     Selected --> [*]: Delete/Backspace key
 ```
 
-When an edge is selected, small draggable circles appear at the source and target endpoints for reconnection.
+When an edge is selected, it is visually highlighted.
 
 ### Edge Persistence
 

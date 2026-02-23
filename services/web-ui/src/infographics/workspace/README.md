@@ -19,8 +19,6 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Use the floating prompt input** to send prompts to the currently selected node; for non-thread nodes, the input appears on selection and hides on deselect
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
-- **Reconnect edges** by dragging the endpoint handles that appear when an edge is selected
-- **Reposition edge anchor points** by selecting an edge and dragging the circular handles vertically along the node's side
 
 All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
 
@@ -216,9 +214,7 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
 - **Proximity Connect**: Dragging a node near an AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`)
-- Clicking an edge selects it; when selected, endpoint handles appear for reconnection
-- Dragging an endpoint shows the edge following the cursor (original edge is hidden during reconnect)
-- Dropping an endpoint on another node reconnects the edge; dropping in empty space deletes it
+- Clicking an edge selects it
 - Deleting an edge updates `canvasState.edges` via the normal persistence flow
 
 ### AI Chat Context Extraction

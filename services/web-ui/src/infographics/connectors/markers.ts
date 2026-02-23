@@ -56,18 +56,6 @@ function getMarkerConfig(type: MarkerType, instanceId: string, size: number = 7)
                 path: ARROW_RIGHT_ICON_D
             }
 
-        case 'circle':
-            return {
-                id: `${instanceId}-circle`,
-                markerWidth: 8,
-                markerHeight: 8,
-                viewBox: '-5 -5 10 10',
-                refX: 0,
-                refY: 0,
-                className: 'connector-marker-circle',
-                path: 'M 0,0 m -2.5,0 a 2.5,2.5 0 1,0 5,0 a 2.5,2.5 0 1,0 -5,0'  // smaller circle
-            }
-
         case 'none':
         default:
             return null

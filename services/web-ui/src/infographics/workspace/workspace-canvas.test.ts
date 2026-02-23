@@ -458,12 +458,6 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/railOffset:\s*RAIL_OFFSET/)
 	})
 
-	it('edge endpoint handles apply rail offset for aiChatThread nodes', () => {
-		const fnMatch = ts.match(/function\s+updateEdgeEndpointHandles[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('RAIL_OFFSET')
-	})
-
 	it('createThreadRail creates __line child element', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
@@ -519,12 +513,6 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+destroyAllThreadRails[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
-	})
-
-	it('edge endpoint handles use getRailHeight for aiChatThread Y position', () => {
-		const fnMatch = ts.match(/function\s+updateEdgeEndpointHandles[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('getRailHeight')
 	})
 
 	it('selectNode hides floating input for image nodes', () => {
