@@ -8,6 +8,8 @@ export type WebUiThemeSettings = {
     aiChatThreadRailEdgeMargin: number
     aiChatThreadRailMinSlideHeight: number
     aiChatThreadRailBoundaryCircleColors: [string, string, string]
+    nodesConnectorLineDefaultColor: string
+    nodesConnectorLineFocusColor: string
 }
 
 export const webUiThemeSettings: WebUiThemeSettings = {
@@ -39,4 +41,8 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // Order: [outer fill, ring/border, inner fill].
     // Uses the shifting gradient hue family with increased contrast for small-size legibility.
     aiChatThreadRailBoundaryCircleColors: ['#F3E4F2', '#C5C0EE', 'rgb(202, 180, 201)'],
+    // Default color for connector lines between nodes.
+    nodesConnectorLineDefaultColor: '#4682B4', // steelblue
+    // Focus/selected color for connector lines between nodes.
+    nodesConnectorLineFocusColor: '#000',
 }

@@ -596,21 +596,27 @@
 
         // Default edge color
         .workspace-edge {
-            stroke: $steelBlue;
+            stroke: var(--connector-line-default-color, $steelBlue);
         }
 
         // Arrowhead markers
         .connector-arrowhead {
-            fill: $steelBlue;
-            stroke: $steelBlue;
+            fill: var(--connector-line-default-color, $steelBlue);
+            stroke: var(--connector-line-default-color, $steelBlue);
+        }
+
+        .connector-arrowhead-selected {
+            fill: var(--connector-line-focus-color, #000);
+            stroke: var(--connector-line-focus-color, #000);
         }
 
         .workspace-edge.is-selected {
-            stroke: $steelBlue;
+            stroke: var(--connector-line-focus-color, #000);
         }
 
         .workspace-edge-temp {
-            stroke: rgba($steelBlue, 0.6);
+            stroke: var(--connector-line-default-color, $steelBlue);
+            opacity: 0.6;
         }
     }
 }

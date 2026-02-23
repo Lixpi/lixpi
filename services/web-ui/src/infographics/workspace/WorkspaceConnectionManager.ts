@@ -1028,10 +1028,10 @@ export class WorkspaceConnectionManager {
 				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
 				target: { nodeId: e.targetNodeId, position: target, t: targetT },
 				pathType: e.pathType ?? webUiSettings.nodesConnectorLineCurve,
-				marker: 'arrowhead',
+				marker: isSelected ? 'arrowhead-selected' : 'arrowhead',
 				markerSize: scaledMarkerSize,
 				markerOffset: scaledMarkerOffset,
-				strokeWidth: isSelected ? scaledStrokeWidth * 1.5 : scaledStrokeWidth,
+				strokeWidth: scaledStrokeWidth,
 				className: `workspace-edge ${isSelected ? 'is-selected' : ''}`,
 				laneIndex: tValues?.laneIndex ?? 0,
 				laneCount: tValues?.laneCount ?? 1
