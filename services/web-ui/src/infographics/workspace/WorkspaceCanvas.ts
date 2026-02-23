@@ -109,7 +109,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let edgesLayerEl: HTMLDivElement | null = null
-    let edgeEndpointHandlesEl: HTMLDivElement | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
@@ -1619,7 +1618,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (nodeId) {
             selectedEdgeId = null
             connectionManager?.deselect()
-            updateEdgeEndpointHandles()
             showCanvasBubbleMenuForNode(nodeId)
 
             // aiChatThread nodes have their own always-visible per-thread inputs.
@@ -1732,7 +1730,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager.syncNodes(nodesForEdges)
             connectionManager.syncEdges(currentCanvasState.edges)
             connectionManager.render()
-            updateEdgeEndpointHandles()
         })
     }
 
@@ -1749,10 +1746,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         edgesLayerEl = document.createElement('div')
         edgesLayerEl.className = 'workspace-edges-layer'
 
-        edgeEndpointHandlesEl = document.createElement('div')
-        edgeEndpointHandlesEl.className = 'workspace-edge-endpoints-layer'
-
-        viewportEl.prepend(edgeEndpointHandlesEl)
         viewportEl.prepend(edgesLayerEl)
 
         connectionManager = new WorkspaceConnectionManager({
@@ -1779,7 +1772,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (edgeId) {
                     selectNode(null)
                 }
-                updateEdgeEndpointHandles()
             }
         })
 
@@ -1860,85 +1852,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         nodeEl.appendChild(left)
         nodeEl.appendChild(right)
-    }
-
-    function updateEdgeEndpointHandles() {
-        if (!edgeEndpointHandlesEl || !connectionManager || !currentCanvasState) return
-
-        edgeEndpointHandlesEl.replaceChildren()
-
-        if (!selectedEdgeId) return
-
-        const edge = currentCanvasState.edges.find((e: WorkspaceEdge) => e.edgeId === selectedEdgeId)
-        if (!edge) return
-
-        const sourceNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === edge.sourceNodeId)
-        const targetNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === edge.targetNodeId)
-        if (!sourceNode || !targetNode) return
-
-        const sourceOnLeft = (edge.sourceHandle ?? '').startsWith('left')
-        const targetOnRight = (edge.targetHandle ?? '').startsWith('right')
-
-        // Shift left-side anchors by -RAIL_OFFSET for aiChatThread nodes so
-        // edge endpoints sit on the rail instead of the node boundary.
-        // Use rail height (thread + gap + floating input) for Y computation.
-        const sourceRailShift = sourceOnLeft && sourceNode.type === 'aiChatThread' ? RAIL_OFFSET : 0
-        const targetRailShift = !targetOnRight && targetNode.type === 'aiChatThread' ? RAIL_OFFSET : 0
-        const sourceHeight = sourceNode.type === 'aiChatThread' && connectionManager
-            ? connectionManager.getRailHeight(sourceNode.nodeId) ?? sourceNode.dimensions.height
-            : sourceNode.dimensions.height
-        const targetHeight = targetNode.type === 'aiChatThread' && connectionManager
-            ? connectionManager.getRailHeight(targetNode.nodeId) ?? targetNode.dimensions.height
-            : targetNode.dimensions.height
-
-        const sourceAnchor = {
-            x: sourceNode.position.x + (sourceOnLeft ? 0 : sourceNode.dimensions.width) - sourceRailShift,
-            y: sourceNode.position.y + sourceHeight / 2
-        }
-        const targetAnchor = {
-            x: targetNode.position.x + (targetOnRight ? targetNode.dimensions.width : 0) - targetRailShift,
-            y: targetNode.position.y + targetHeight / 2
-        }
-
-        const createEndpoint = (params: {
-            x: number
-            y: number
-            updaterType: 'source' | 'target'
-        }) => {
-            const el = document.createElement('div')
-            el.className = [
-                'workspace-edge-endpoint',
-                'nopan',
-                'connectable',
-                'connectableend',
-                'xy-flow__handle',
-                params.updaterType,
-            ].join(' ')
-
-            el.style.left = `${params.x}px`
-            el.style.top = `${params.y}px`
-
-            el.addEventListener('mousedown', (e) => {
-                if (!connectionManager) return
-
-                // Flip isTarget for source updates so strict mode yields "new source" semantics.
-                const isTarget = params.updaterType === 'source'
-
-                connectionManager.onHandlePointerDown(e, {
-                    nodeId: params.updaterType === 'source' ? edge.sourceNodeId : edge.targetNodeId,
-                    handleId: params.updaterType === 'source' ? (edge.sourceHandle ?? 'right') : (edge.targetHandle ?? 'left'),
-                    isTarget,
-                    handleDomNode: el,
-                    edgeUpdaterType: params.updaterType,
-                    reconnectingEdgeId: edge.edgeId,
-                })
-            })
-
-            return el
-        }
-
-        edgeEndpointHandlesEl.appendChild(createEndpoint({ x: sourceAnchor.x, y: sourceAnchor.y, updaterType: 'source' }))
-        edgeEndpointHandlesEl.appendChild(createEndpoint({ x: targetAnchor.x, y: targetAnchor.y, updaterType: 'target' }))
     }
 
     // Handle sizing/positioning of resize handles so they appear constant in screen pixels
@@ -2976,7 +2889,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectNode(null)
             selectedEdgeId = null
             connectionManager?.deselect()
-            updateEdgeEndpointHandles()
         }
     })
 
@@ -2992,7 +2904,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectedEdgeId = null
             connectionManager?.deselect()
             selectNode(null)
-            updateEdgeEndpointHandles()
             return
         }
 

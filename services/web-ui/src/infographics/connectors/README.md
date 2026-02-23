@@ -1,6 +1,6 @@
 # Connector Primitive (Edges + Arrowheads Only)
 
-Minimal, reusable arrowed line renderer. It draws edges (paths) and arrowhead / circle markers. Nothing else.
+Minimal, reusable arrowed line renderer. It draws edges (paths) and arrowhead markers. Nothing else.
 
 ## What It Does (and Does NOT Do)
 
@@ -8,7 +8,6 @@ Minimal, reusable arrowed line renderer. It draws edges (paths) and arrowhead / 
 |---------------------------|--------|
 | Render lines (paths)      | ✅     |
 | Arrowhead markers         | ✅     |
-| Circle markers            | ✅     |
 | Dashed line support       | ✅     |
 | Multiple path strategies  | ✅     |
 | Node shape rendering      | ❌     |
@@ -84,8 +83,8 @@ type EdgeConfig = {
   source: EdgeAnchor
   target: EdgeAnchor
   pathType?: 'bezier' | 'straight' | 'smoothstep' | 'horizontal-bezier' | 'orthogonal'
-  marker?: 'arrowhead' | 'arrowhead-muted' | 'circle' | 'none'
-  markerStart?: 'arrowhead' | 'arrowhead-muted' | 'circle' | 'none'
+  marker?: 'arrowhead' | 'arrowhead-muted' | 'none'
+  markerStart?: 'arrowhead' | 'arrowhead-muted' | 'none'
   curvature?: number
   borderRadius?: number  // Corner rounding for 'orthogonal' paths (default: 8)
   lineStyle?: 'solid' | 'dashed'
@@ -174,7 +173,6 @@ Do not override these for geometry:
 | `.connector-edge-inline`     | Inline heavier variant (2px) |
 | `.connector-arrowhead`       | Arrowhead marker path |
 | `.connector-arrowhead-muted` | Muted arrowhead path |
-| `.connector-marker-circle`   | Circle marker |
 
 You may append semantic classes via `className` (e.g. `className: 'my-edge connector-edge-strong'`) but SHOULD NOT remove the base internal class.
 
