@@ -56,6 +56,18 @@ function getMarkerConfig(type: MarkerType, instanceId: string, size: number = 7)
                 path: ARROW_RIGHT_ICON_D
             }
 
+        case 'arrowhead-selected':
+            return {
+                id: `${instanceId}-arrowhead-selected-${size}`,
+                markerWidth: size,
+                markerHeight: size,
+                viewBox: '0 0 256 256',
+                refX: 48,                      // line terminates at arrow BASE
+                refY: 128,
+                className: 'connector-arrowhead-selected',
+                path: ARROW_RIGHT_ICON_D
+            }
+
         case 'none':
         default:
             return null

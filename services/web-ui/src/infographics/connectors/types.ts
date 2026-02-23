@@ -17,7 +17,7 @@ export type PathType =
     | 'orthogonal'          // Circuit board style: horizontal → vertical → horizontal with rounded corners
 
 // Marker (arrowhead) style
-export type MarkerType = 'arrowhead' | 'arrowhead-muted' | 'none'
+export type MarkerType = 'arrowhead' | 'arrowhead-muted' | 'arrowhead-selected' | 'none'
 
 // Base anchor point for edge connections
 export type EdgeAnchor = {
