@@ -35,7 +35,7 @@ import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRen
 import { webUiSettings } from '$src/webUiSettings.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
-import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
+import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
@@ -142,6 +142,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function initCanvasBubbleMenu() {
         canvasBubbleMenuItems = buildCanvasBubbleMenuItems({
+            onDeleteEdge: (edgeId) => {
+                if (!connectionManager) return
+                connectionManager.selectEdge(edgeId)
+                connectionManager.deleteSelectedEdge()
+            },
+            onChangeConnectorCurve: (edgeId) => {
+                if (!currentCanvasState) return
+
+                const edgeIndex = currentCanvasState.edges.findIndex((e: WorkspaceEdge) => e.edgeId === edgeId)
+                if (edgeIndex === -1) return
+
+                const edge = currentCanvasState.edges[edgeIndex]
+                const currentCurve = edge.pathType ?? webUiSettings.nodesConnectorLineCurve
+                const newCurve = currentCurve === 'horizontal-bezier' ? 'orthogonal' : 'horizontal-bezier'
+
+                const updatedEdge = { ...edge, pathType: newCurve }
+                const newEdges = [...currentCanvasState.edges]
+                newEdges[edgeIndex] = updatedEdge
+
+                commitCanvasState({
+                    ...currentCanvasState,
+                    edges: newEdges
+                })
+            },
             onDeleteNode: (nodeId) => {
                 if (!currentCanvasState) return
 
@@ -314,6 +338,95 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const targetEl = imgEl || nodeEl
         const targetRect = targetEl.getBoundingClientRect()
 
+        canvasBubbleMenu.reposition({ targetRect, placement: 'below' })
+    }
+
+    function getEdgeMidpointRect(pathEl: SVGPathElement): DOMRect {
+        const length = pathEl.getTotalLength()
+        const mid = length / 2
+        const svg = pathEl.ownerSVGElement!
+        const ctm = pathEl.getScreenCTM()
+
+        if (!ctm) {
+            const bbox = pathEl.getBoundingClientRect()
+            return new DOMRect(bbox.left + bbox.width / 2, bbox.top + bbox.height / 2, 1, 1)
+        }
+
+        const pt = svg.createSVGPoint()
+
+        pt.x = pathEl.getPointAtLength(mid).x
+        pt.y = pathEl.getPointAtLength(mid).y
+        const screenMid = pt.matrixTransform(ctm)
+
+        pt.x = pathEl.getPointAtLength(Math.max(0, mid - 1)).x
+        pt.y = pathEl.getPointAtLength(Math.max(0, mid - 1)).y
+        const screenP1 = pt.matrixTransform(ctm)
+
+        pt.x = pathEl.getPointAtLength(Math.min(length, mid + 1)).x
+        pt.y = pathEl.getPointAtLength(Math.min(length, mid + 1)).y
+        const screenP2 = pt.matrixTransform(ctm)
+
+        const dx = screenP2.x - screenP1.x
+        const dy = screenP2.y - screenP1.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+
+        let nx = -dy / dist
+        let ny = dx / dist
+
+        // Force normal to point DOWN (positive Y) so it works well with placement: 'below'
+        if (ny < 0) {
+            nx = -nx
+            ny = -ny
+        }
+
+        // We want the center of the menu to be exactly 28px away from the line
+        // (assuming ~18px menu radius + 10px desired gap)
+        const menuRadius = 18
+        const gap = 10
+        const distance = menuRadius + gap
+
+        const menuCenterX = screenMid.x + nx * distance
+        const menuCenterY = screenMid.y + ny * distance
+
+        // BubbleMenu with placement 'below' places the menu at:
+        // center X = targetRect.left + width/2
+        // top Y = targetRect.bottom + 8 (assuming scale 1)
+        // So if we pass a 1x1 rect at (targetX, targetY):
+        // menuCenterX = targetX
+        // menuTop = targetY + 1 + 8 = targetY + 9
+        // Since we want menuTop = menuCenterY - menuRadius:
+        // targetY + 9 = menuCenterY - menuRadius
+
+        const targetX = menuCenterX
+        const targetY = menuCenterY - menuRadius - 9
+
+        return new DOMRect(targetX, targetY, 1, 1)
+    }
+
+    function showEdgeBubbleMenu(edgeId: string) {
+        if (!canvasBubbleMenu || !canvasBubbleMenuItems || !edgesLayerEl) return
+
+        canvasBubbleMenuItems.setActiveEdgeId(edgeId)
+
+        const pathEl = edgesLayerEl.querySelector(`path#edge-${edgeId}`) as SVGPathElement | null
+        if (!pathEl) return
+
+        const targetRect = getEdgeMidpointRect(pathEl)
+        canvasBubbleMenu.show(CANVAS_EDGE_CONTEXT, { targetRect, placement: 'below' })
+    }
+
+    function hideEdgeBubbleMenu() {
+        canvasBubbleMenuItems?.setActiveEdgeId(null)
+        canvasBubbleMenu?.hide()
+    }
+
+    function repositionEdgeBubbleMenu() {
+        if (!canvasBubbleMenu?.isVisible || !selectedEdgeId || !edgesLayerEl) return
+
+        const pathEl = edgesLayerEl.querySelector(`path#edge-${selectedEdgeId}`) as SVGPathElement | null
+        if (!pathEl) return
+
+        const targetRect = getEdgeMidpointRect(pathEl)
         canvasBubbleMenu.reposition({ targetRect, placement: 'below' })
     }
 
@@ -1577,8 +1690,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             updateVisibleNodes()
             // Ensure edges keep up with autopan + zoom changes
             scheduleEdgesRender()
-            // Reposition bubble menu to follow image during pan/zoom
+            // Reposition bubble menu to follow image/edge during pan/zoom
             repositionCanvasBubbleMenu()
+            repositionEdgeBubbleMenu()
             onViewportChange?.(vp)
         }),
         ...options.panZoomConfig
@@ -1730,6 +1844,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager.syncNodes(nodesForEdges)
             connectionManager.syncEdges(currentCanvasState.edges)
             connectionManager.render()
+            repositionEdgeBubbleMenu()
         })
     }
 
@@ -1771,6 +1886,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 selectedEdgeId = edgeId
                 if (edgeId) {
                     selectNode(null)
+                    showEdgeBubbleMenu(edgeId)
+                } else {
+                    hideEdgeBubbleMenu()
                 }
             }
         })
@@ -2889,6 +3007,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectNode(null)
             selectedEdgeId = null
             connectionManager?.deselect()
+            hideEdgeBubbleMenu()
         }
     })
 
@@ -2904,6 +3023,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectedEdgeId = null
             connectionManager?.deselect()
             selectNode(null)
+            hideEdgeBubbleMenu()
             return
         }
 
@@ -2912,6 +3032,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if ((e.key === 'Backspace' || e.key === 'Delete') && selectedEdgeId) {
             e.preventDefault()
             connectionManager?.deleteSelectedEdge()
+            hideEdgeBubbleMenu()
         }
     }
 

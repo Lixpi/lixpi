@@ -1,3 +1,5 @@
+import type { WorkspaceEdgePathType } from '@lixpi/constants'
+
 export type WebUiSettings = {
     useModalityFilterOnModelSelectorDropdown: boolean
     useShiftingGradientBackgroundOnAiChatThreadNode: boolean
@@ -7,6 +9,8 @@ export type WebUiSettings = {
     proximityConnectThreshold: number
     aiChatContextTraversalDepth: 'direct' | 'full'
     aiChatThreadRailDragGrabWidth: number
+    nodesConnectorLineCurve: WorkspaceEdgePathType
+    nodesConnectorLineClickAreaWidth: number
 }
 
 export const webUiSettings: WebUiSettings = {
@@ -37,4 +41,14 @@ export const webUiSettings: WebUiSettings = {
     // The visible rail line width is controlled separately by aiChatThreadRailWidth in
     // webUiThemeSettings.ts — this only affects how wide the grabbable zone is.
     aiChatThreadRailDragGrabWidth: 90,
+    // Default curve for connector lines between nodes.
+    //   'horizontal-bezier' — smooth S-curve connecting left/right handles (default)
+    //   'orthogonal'        — 3-point circuit board style with rounded corners
+    //   'bezier'            — standard bezier curve (can loop back on itself)
+    //   'straight'          — direct straight line between points
+    //   'smoothstep'        — stepped line with rounded corners (similar to orthogonal but simpler)
+    nodesConnectorLineCurve: 'horizontal-bezier',
+    // Width (in pixels) of the invisible click area around connector lines.
+    // Makes it easier to select thin lines.
+    nodesConnectorLineClickAreaWidth: 24,
 }

@@ -214,7 +214,7 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
 - **Proximity Connect**: Dragging a node near an AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`)
-- Clicking an edge selects it
+- Clicking an edge selects it and shows a bubble menu below it with a Delete action
 - Deleting an edge updates `canvasState.edges` via the normal persistence flow
 
 ### AI Chat Context Extraction
@@ -265,7 +265,7 @@ sequenceDiagram
 
 ## Canvas Bubble Menu
 
-When an image node is selected on the canvas, a bubble menu appears below it — the same shared `BubbleMenu` component used in ProseMirror editors. The menu provides context-specific actions for canvas elements.
+When an image node or an edge is selected on the canvas, a bubble menu appears below it — the same shared `BubbleMenu` component used in ProseMirror editors. The menu provides context-specific actions for canvas elements.
 
 ### Image Node Actions
 - **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
@@ -284,7 +284,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, edge rendering, selection/deletion |
 | `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
-| `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image actions) |
+| `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
 | `imagePositioning.ts` | Computes image placement positions (next-to-thread and overlapping-thread modes) |
 | `anchoredImageManager.ts` | Tracks which images are anchored to which threads; manages anchor lifecycle |
 | `nodeLayering.ts` | Z-index management for bringing nodes to front |
