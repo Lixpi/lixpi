@@ -121,6 +121,18 @@ class OpenAIProvider(BaseLLMProvider):
                         if delta_text:
                             await self._publish_stream_chunk(workspace_id, ai_chat_thread_id, delta_text)
 
+                    # Handle output item added (to detect image generation start)
+                    case 'response.output_item.added':
+                        item = getattr(event, 'item', None)
+                        if item and getattr(item, 'type', None) == 'image_generation_call':
+                            logger.debug("Image generation call started")
+                            await self._publish_image_partial(
+                                workspace_id,
+                                ai_chat_thread_id,
+                                "", # Empty image to trigger UI placeholder
+                                0
+                            )
+
                     # Handle partial image events during generation
                     case 'response.image_generation_call.partial_image':
                         partial_image = getattr(event, 'partial_image_b64', None)

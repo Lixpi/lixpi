@@ -607,7 +607,7 @@ class AiChatThreadPluginClass {
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {
         try {
             const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
-            if (!imageUrl || !aiChatThreadId) return
+            if (!aiChatThreadId) return
 
             const { state } = view
             const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)

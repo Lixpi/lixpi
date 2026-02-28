@@ -4,10 +4,10 @@
     } from 'svelte'
     import { fade } from 'svelte/transition'
 
-    import { Button } from "$lib/registry/new-york/ui/button/index.ts"
-    import { Label } from "$lib/registry/new-york/ui/label/index.ts";
-    import { Input } from "$lib/registry/new-york/ui/input/index.ts"
-    import * as Table from "$lib/registry/new-york/ui/table/index.js";
+    import { Button } from "$lib/registry/ui/button/index.ts"
+    import { Label } from "$lib/registry/ui/label/index.ts";
+    import { Input } from "$lib/registry/ui/input/index.ts"
+    import * as Table from "$lib/registry/ui/table/index.js";
 
     import WalletCardsIcon from "@lucide/svelte/icons/wallet-cards"
     import CreditCardIcon from "@lucide/svelte/icons/credit-card";

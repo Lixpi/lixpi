@@ -471,6 +471,24 @@ class BaseLLMProvider(ABC):
             image_base64: Base64-encoded partial image data
             partial_index: Index of this partial (0, 1, 2, ...)
         """
+        if not image_base64:
+            # Empty image means generation just started, send placeholder
+            logger.info(f"Publishing IMAGE_PARTIAL event (start placeholder): partialIndex={partial_index}")
+            self.nats_client.publish(
+                f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
+                {
+                    'content': {
+                        'status': StreamStatus.IMAGE_PARTIAL,
+                        'imageUrl': '',
+                        'fileId': '',
+                        'partialIndex': partial_index,
+                        'aiProvider': self.get_provider_name()
+                    },
+                    'aiChatThreadId': ai_chat_thread_id
+                }
+            )
+            return
+
         # Upload image to storage first
         upload_result = await self._upload_image_to_storage(workspace_id, image_base64)
 

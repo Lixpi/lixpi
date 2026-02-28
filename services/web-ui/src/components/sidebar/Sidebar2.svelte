@@ -21,21 +21,20 @@
     import { organizationStore } from '$src/stores/organizationStore.ts'
     import { popOutTransition } from '$src/constants/svelteAnimationTransitions'
 
-    import { Button } from "$lib/registry/new-york/ui/button/index.ts";
-	import * as DropdownMenu from "$lib/registry/new-york/ui/dropdown-menu/index.ts";
-    import { DropdownMenuPrimitive } from "$lib/registry/new-york/ui/dropdown-menu/index.ts";
+    import { Button } from "$lib/registry/ui/button/index.ts";
+	import * as DropdownMenu from "$lib/registry/ui/dropdown-menu/index.ts";
     import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
     import SquarePlusIcon from "@lucide/svelte/icons/square-plus";
     import FilePlus2Icon from "@lucide/svelte/icons/file-plus-2";
     import FilePlusIcon from "@lucide/svelte/icons/file-plus";
-    // import { Separator } from "$lib/registry/new-york/ui/separator/index.js";
+    // import { Separator } from "$lib/registry/ui/separator/index.js";
 
 	// import { mailStore } from "$src/components/store.js";
 	// import type { Mail } from "$src/components/data.js";
 	// import { formatTimeAgo } from "$src/components/utils.js";
 	import { cn } from "$lib/utils.ts";
-	import { Badge } from "$lib/registry/new-york/ui/badge/index.ts";
-	import { ScrollArea } from "$lib/registry/new-york/ui/scroll-area/index.ts";
+	import { Badge } from "$lib/registry/ui/badge/index.ts";
+	import { ScrollArea } from "$lib/registry/ui/scroll-area/index.ts";
 
 	// export let items: Mail[];
 
@@ -47,7 +46,7 @@
     // You can keep the scrollAreaRef if needed for other purposes
     // let scrollAreaRef = $bindable(null);
 
-    console.log('DropdownMenuPrimitive', DropdownMenu)
+    console.log('DropdownMenu', DropdownMenu)
 
 	function get_badge_variant_from_label(label: string) {
 		if (["work"].includes(label.toLowerCase())) {
@@ -125,11 +124,11 @@
             <Button
                 variant="ghost"
                 size="icon"
-                class="[&_svg]:size-6 mr-3"
+                class="mr-3"
                 onclick={handleCreateNewWorkspaceClick}
             >
                 <!-- {@html createNewFileIcon} -->
-                <FilePlus2Icon />
+                <FilePlus2Icon class="size-6" />
             </Button>
         </div>
     </div>
@@ -198,7 +197,7 @@
                                         </Button>
                                     {/snippet}
                                 </DropdownMenu.Trigger>
-                                <DropdownMenu.DropdownMenuPrimitive.Portal to={scrollAreaRef}>
+                                <DropdownMenu.Portal to={scrollAreaRef}>
                                     <div style="position: fixed; top: 0; left: 0; background: red; padding: 5px; z-index: 9999;">
                                         Portal content should be visible
                                     </div>
@@ -230,7 +229,7 @@
                                             <DropdownMenu.Shortcut>⌘⌫</DropdownMenu.Shortcut>
                                         </DropdownMenu.Item>
                                     </DropdownMenu.Content>
-                                </DropdownMenu.DropdownMenuPrimitive.Portal>
+                                </DropdownMenu.Portal>
                             </DropdownMenu.Root>
 						</div>
 					</div>

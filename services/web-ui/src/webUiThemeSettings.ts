@@ -10,6 +10,10 @@ export type WebUiThemeSettings = {
     aiChatThreadRailBoundaryCircleColors: [string, string, string]
     nodesConnectorLineDefaultColor: string
     nodesConnectorLineFocusColor: string
+    // Four gradient colors used by the shifting gradient background and animated border
+    // overlays (image generation border, document thread shape, context selection).
+    // Hex strings. The shifting gradient renderer converts these to RGB internally.
+    shiftingGradientColors: [string, string, string, string]
 }
 
 export const webUiThemeSettings: WebUiThemeSettings = {
@@ -45,4 +49,8 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     nodesConnectorLineDefaultColor: '#4682B4', // steelblue
     // Focus/selected color for connector lines between nodes.
     nodesConnectorLineFocusColor: '#000',
+    // Four gradient colors shared between the shifting gradient background and the
+    // animated border overlays (image generation, document thread shape).
+    // Dreamy sky pastel palette — whisper pink, lavender, periwinkle, orchid.
+    shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
 }

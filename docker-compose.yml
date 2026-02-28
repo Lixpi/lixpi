@@ -271,7 +271,7 @@ services:
             - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
-            - ./packages-vendor/shadcn-svelte/sites/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
+            - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
 
             # CA certificate for browser installation
             - caddy-certs:/usr/src/service/public/certs:ro

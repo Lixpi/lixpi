@@ -1,7 +1,7 @@
 // Document context selection - animated gradient background
 
-// @ts-ignore - runtime import
 import { select } from 'd3-selection'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 type ContextSelectionConfig = {
     gradientId: string
@@ -19,7 +19,7 @@ function customEase(t: number): number {
 
 // Sets up the gradient definition in SVG defs
 export function setupContextGradient(defs: any, config: ContextSelectionConfig) {
-    const colors = config.colors || ['#a78bfa', '#60a5fa', '#a78bfa']
+    const colors = config.colors || webUiThemeSettings.shiftingGradientColors.slice(0, 3)
 
     const gradient = defs.append('linearGradient')
         .attr('id', config.gradientId)

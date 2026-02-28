@@ -47,7 +47,7 @@ COPY ./packages /usr/src/service/packages
 COPY ./services /usr/src/service/services
 
 # Copy `web-ui` specific packages
-COPY ./packages-vendor/shadcn-svelte/sites/docs/src/lib /usr/src/service/packages-vendor/shadcn-svelte/sites/docs/src/lib
+COPY ./packages-vendor/shadcn-svelte/docs/src/lib /usr/src/service/packages-vendor/shadcn-svelte/docs/src/lib
 
 COPY ./pnpm-workspace.yaml /usr/src/service/pnpm-workspace.yaml
 RUN echo "FINDME"

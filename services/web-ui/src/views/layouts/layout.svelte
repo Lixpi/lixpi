@@ -25,13 +25,13 @@
 
 
     // import { toast } from "svelte-sonner";
-    // import { Toaster } from '$lib/registry/new-york/ui/sonner/index.js'
-    import { Button } from '$lib/registry/new-york/ui/button/index.ts'
-	import * as DropdownMenu from '$lib/registry/new-york/ui/dropdown-menu/index.ts'
-    import { buttonVariants } from '$lib/registry/new-york/ui/button/index.ts'
-    import { Label } from '$lib/registry/new-york/ui/label/index.ts'
-    import * as Drawer from '$lib/registry/new-york/ui/drawer/index.ts'
-    import * as Card from '$lib/registry/new-york/ui/card/index.ts'
+    // import { Toaster } from '$lib/registry/ui/sonner/index.js'
+    import { Button } from '$lib/registry/ui/button/index.ts'
+	import * as DropdownMenu from '$lib/registry/ui/dropdown-menu/index.ts'
+    import { buttonVariants } from '$lib/registry/ui/button/index.ts'
+    import { Label } from '$lib/registry/ui/label/index.ts'
+    import * as Drawer from '$lib/registry/ui/drawer/index.ts'
+    import * as Card from '$lib/registry/ui/card/index.ts'
 
     import EllipsisIcon from '@lucide/svelte/icons/ellipsis'
     import PanelLeftOpen from '@lucide/svelte/icons/panel-left-open'
@@ -50,17 +50,17 @@
 	import Search from "@lucide/svelte/icons/search";
 
 	import { cn } from "$lib/utils.ts";
-	import { Input } from '$lib/registry/new-york/ui/input/index.ts';
-	import * as Resizable from '$lib/registry/new-york/ui/resizable/index.ts';
+	import { Input } from '$lib/registry/ui/input/index.ts';
+	import * as Resizable from '$lib/registry/ui/resizable/index.ts';
     import { type PaneAPI } from 'paneforge';
-	import { Separator } from '$lib/registry/new-york/ui/separator/index.ts';
-	import * as Tabs from '$lib/registry/new-york/ui/tabs/index.ts';
+	import { Separator } from '$lib/registry/ui/separator/index.ts';
+	import * as Tabs from '$lib/registry/ui/tabs/index.ts';
 	// import MailLight from '$lib/img/examples/mail-light.png?enhanced';
 	// import MailDark from '$lib/img/examples/mail-dark.png?enhanced';
 
     import { PaneGroup, Pane, PaneResizer, type PaneAPI } from 'paneforge';
 
-    import * as Dialog from '$lib/registry/new-york/ui/dialog/index.ts'
+    import * as Dialog from '$lib/registry/ui/dialog/index.ts'
 
     let {
         layout,
@@ -201,11 +201,11 @@
 
 
 <div class="sidebar-collapse-actions absolute left-5 top-5">
-    <Button variant="ghost" size="icon" class="[&_svg]:size-6" onclick={() => { isSidebarCollapsed ? sidebarPane.expand() : sidebarPane.collapse() }}>
+    <Button variant="ghost" size="icon" onclick={() => { isSidebarCollapsed ? sidebarPane.expand() : sidebarPane.collapse() }}>
         {#if isSidebarCollapsed}
-            <PanelLeftOpen />
+            <PanelLeftOpen class="size-6" />
         {:else}
-            <PanelRightOpen />
+            <PanelRightOpen class="size-6" />
         {/if}
     </Button>
 </div>
