@@ -323,6 +323,10 @@ type StreamStatus =
     | 'IMAGE_COMPLETE' // Final generated image
 ```
 
+**Early Image Placeholder:**
+
+When OpenAI fires `response.output_item.added` with type `image_generation_call`, the OpenAI provider immediately publishes an `IMAGE_PARTIAL` with an empty `imageUrl` (before any pixel data is available). This lets the frontend create a placeholder canvas node with an animated border and spinner. The base provider's `_publish_image_partial` detects the empty `image_base64` and publishes the event with empty `imageUrl`/`fileId`, skipping the storage upload.
+
 **Stream Chunk Payload:**
 ```json
 {

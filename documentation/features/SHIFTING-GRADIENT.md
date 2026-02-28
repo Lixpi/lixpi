@@ -91,7 +91,7 @@ The renderer is a singleton. There's only ever one instance, and it maintains a 
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | `ShiftingGradientRenderer` | `services/web-ui/src/utils/shiftingGradientRenderer.ts` | Core gradient rendering engine |
-| `GRADIENT_COLORS` | Same file, top | The 4 colors used for the gradient |
+| `GRADIENT_COLORS` | Same file, top | The 4 colors used for the gradient (derived from `webUiThemeSettings.shiftingGradientColors` via `hexToRgb()`) |
 | `PHASE_POSITIONS` | Same file | The 8 position coordinates for each phase |
 
 ### Swirl Distortion
@@ -112,7 +112,14 @@ The gradient uses 4 colors that blend together. Choosing good colors is importan
 2. Have appropriate contrast (not too similar, not too jarring)
 3. Match the overall design aesthetic
 
-The current colors are ultra-light pastels inspired by a desert sunset sky palette:
+The current colors are ultra-light pastels inspired by a desert sunset sky palette. They are defined centrally in `webUiThemeSettings.ts` as the `shiftingGradientColors` property and shared across the shifting gradient background, image generation animated border (`WorkspaceCanvas.ts`), and document shape borders (`documentThreadShape.ts`, `documentContextSelection.ts`):
+
+```typescript
+// webUiThemeSettings.ts
+shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
+```
+
+The renderer converts these hex values to RGB via the `hexToRgb()` helper at startup:
 
 ```typescript
 const GRADIENT_COLORS = {
@@ -336,18 +343,13 @@ The design is intentionally simple. No WebGL, no shaders, just plain Canvas 2D. 
 
 ### Changing Colors
 
-Edit the `GRADIENT_COLORS` constant at the top of `shiftingGradientRenderer.ts`:
+Edit the `shiftingGradientColors` array in `webUiThemeSettings.ts`:
 
 ```typescript
-const GRADIENT_COLORS = {
-    color1: { r: 0xff, g: 0xf5, b: 0xfa },
-    color2: { r: 0xf5, g: 0xef, b: 0xf9 },
-    color3: { r: 0xe6, g: 0xe9, b: 0xf6 },
-    color4: { r: 0xf3, g: 0xe4, b: 0xf2 },
-}
+shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-Colors are in RGB format with values 0-255 (or hex 0x00-0xff).
+These hex values are converted to RGB at startup by `hexToRgb()` in `shiftingGradientRenderer.ts`. The same colors are also used by the image generation animated border in `WorkspaceCanvas.ts` and the document shape borders in `documentThreadShape.ts` / `documentContextSelection.ts`.
 
 ### Changing Animation Speed
 

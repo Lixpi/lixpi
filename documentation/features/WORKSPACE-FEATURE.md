@@ -1048,9 +1048,9 @@ Multi-turn editing is supported: users can continue refining an image within the
 1. User enables "Image Generation" mode in an AI chat thread's settings
 2. User types a prompt like "Create a logo for a coffee shop"
 3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
-4. OpenAI streams back partial images (up to 3) as the generation progresses
-5. Each partial creates/updates the canvas image node in real-time (progressive preview)
-6. On completion, the canvas node is finalized with full metadata. In connector line mode, an edge (including `sourceMessageId`) connects the AI response to the image. In anchored mode, the image is positioned at the right side of the thread, aligned with the response message top.
+4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with an animated gradient border and a three-dot bounce spinner
+5. OpenAI streams back partial images (up to 3) as the generation progresses. The first real partial removes the spinner; subsequent partials update the image progressively
+6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, and finalizes the canvas node with full metadata. In connector line mode, an edge (including `sourceMessageId`) connects the AI response to the image. In anchored mode, the image is positioned at the right side of the thread, aligned with the response message top.
 7. The revised prompt text appears inside the AI response message in the chat thread
 8. In connector line mode, multiple images stack vertically to the right with 30px gaps. In anchored mode, images overlap the right half of the thread alongside their source response text.
 
@@ -1085,24 +1085,36 @@ sequenceDiagram
     end
 
     %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 2: STREAM PARTIALS → CANVAS
+    %% PHASE 2: EARLY PLACEHOLDER → CANVAS
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over User, Storage: PHASE 2 - STREAM PARTIALS TO CANVAS
+        Note over User, Storage: PHASE 2 - EARLY PLACEHOLDER — Animated border + spinner before pixels arrive
+        OpenAI->>LLM: response.output_item.added (image_generation_call)
+        LLM->>AIS: IMAGE_PARTIAL { imageUrl: "", partialIndex: 0 }
+        AIS->>Thread: Plugin routes to canvas callback
+        Thread->>Canvas: onImagePartialToCanvas({ imageUrl: "" })
+        Canvas->>Canvas: Create ImageCanvasNode (transparent 1×1 PNG) + animated D3 gradient border + 3-dot spinner
+    end
+
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 3: STREAM PARTIALS → CANVAS
+    %% ═══════════════════════════════════════════════════════════════
+    rect rgb(242, 234, 224)
+        Note over User, Storage: PHASE 3 - STREAM PARTIALS TO CANVAS
         loop Partial Images (0-3)
             OpenAI->>LLM: image_generation_call.partial_image
             LLM->>AIS: IMAGE_PARTIAL { partialIndex, imageUrl, fileId }
             AIS->>Thread: Plugin routes to canvas callback
             Thread->>Canvas: onImagePartialToCanvas(...)
-            Canvas->>Canvas: Create/update ImageCanvasNode + edge
+            Canvas->>Canvas: Remove spinner on first real partial, update image
         end
     end
 
     %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3: COMPLETE → CANVAS + REVISED PROMPT IN CHAT
+    %% PHASE 4: COMPLETE → CANVAS + REVISED PROMPT IN CHAT
     %% ═══════════════════════════════════════════════════════════════
-    rect rgb(242, 234, 224)
-        Note over User, Storage: PHASE 3 - COMPLETE
+    rect rgb(246, 199, 179)
+        Note over User, Storage: PHASE 4 - COMPLETE
         OpenAI->>LLM: image_generation_call (completed)
         deactivate LLM
         LLM->>AIS: IMAGE_COMPLETE { responseId, revisedPrompt, imageUrl, fileId }
@@ -1148,10 +1160,10 @@ Multi-turn image editing uses a **provider-agnostic approach** by leveraging can
 
 When the AI generates an image:
 
-1. `IMAGE_PARTIAL` events create an `ImageCanvasNode` on the canvas, positioned to the right of the source thread
+1. An early `IMAGE_PARTIAL` with an empty `imageUrl` creates the `ImageCanvasNode` placeholder on the canvas (transparent 1×1 PNG, animated gradient border, bounce spinner). Subsequent `IMAGE_PARTIAL` events with real image data update the existing node in place.
 2. The `partialImageTracker` Map records the pending partial SYNCHRONOUSLY before any async work to prevent race conditions with `IMAGE_COMPLETE`
-3. Progressive partial previews update the canvas node's image in real-time via direct DOM updates
-4. `IMAGE_COMPLETE` finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
+3. Progressive partial previews update the canvas node's image in real-time via direct DOM updates. The first real partial removes the bounce spinner.
+4. `IMAGE_COMPLETE` removes the animated border and spinner, then finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
 5. A `WorkspaceEdge` connects the thread to the image with `sourceMessageId` identifying the specific `aiResponseMessage` (the response node gets a unique `id` when created by `handleStreamStart`)
 6. Multiple images from the same thread stack vertically with 30px gaps
 7. Collision resolution runs after finalization to push apart any overlapping nodes

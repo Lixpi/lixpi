@@ -184,6 +184,16 @@ On image load the client verifies the image's natural aspect ratio and will auto
 
 Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoothly during diagonal drags and avoid axis-switching jumps that can cause jitter during resize. Resize handles are dynamically sized and positioned (computed from the current viewport zoom) so they remain a uniform screen-pixel size and precisely aligned to the image corners regardless of canvas zoom or image scale.
 
+### Image Generation Visual Feedback
+
+When an AI-generated image is being created, the canvas provides visual feedback before and during generation:
+
+1. **Early placeholder** — The backend emits an `IMAGE_PARTIAL` with an empty `imageUrl` as soon as OpenAI's `response.output_item.added` event fires (before any pixel data arrives). `buildImageSrc` converts the empty URL to a transparent 1×1 PNG data URI so the `<img>` element has a valid source.
+2. **Animated gradient border** — An SVG `linearGradient` border (`.image-generating-border`) is added around the image node using D3 (`d3-selection`). The gradient rotates continuously through the four colors from `webUiThemeSettings.shiftingGradientColors`, matching the `documentShape` animated border style.
+3. **Bounce spinner** — A three-dot bounce animation (`.image-generating-spinner`) appears centered over the image while waiting for the first real partial. The spinner uses inline styles and an injected `@keyframes img-dot-bounce` so it works without external SCSS.
+4. **First real partial** — When `onImagePartialToCanvas` receives a non-empty `imageUrl`, the spinner is removed and the image begins updating progressively.
+5. **Completion** — `onImageCompleteToCanvas` removes both `.image-generating-border` and `.image-generating-spinner` from the image node.
+
 ### Image Lifecycle
 
 When an image node is removed from the canvas, the `canvasImageLifecycle` tracker detects the change and triggers deletion from NATS Object Store via the `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE` NATS subject.
@@ -309,6 +319,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
 | `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
 | `.workspace-thread-rail__line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
+| `.image-generating-border` | SVG animated gradient border shown during image generation |
+| `.image-generating-spinner` | Three-dot bounce spinner shown before first partial image arrives |
 
 | `.document-resize-handle` | Corner resize controls (shared by all node types) |
 | `.nopan` | Prevents panning when interacting |
