@@ -126,6 +126,7 @@ sequenceDiagram
             ObjStore-->>Attachments: Image bytes
             deactivate ObjStore
             Attachments->>Attachments: Detect MIME via magic bytes
+            Attachments->>Attachments: Downscale if exceeds 4.5MB
             Attachments->>Attachments: Convert to base64 data URL
         end
         Attachments-->>Provider: Resolved content
@@ -247,6 +248,7 @@ flowchart LR
         Parse[Parse bucket/key]
         Fetch[Fetch from Object Store]
         Detect[Detect MIME type<br/>via magic bytes]
+        Downscale[Downscale if &gt; 4.5MB<br/>Max 2048px longest side]
         Encode[Base64 encode]
     end
 
@@ -254,8 +256,19 @@ flowchart LR
         DataURL["data:image/png;base64,iVBORw0K..."]
     end
 
-    URL --> Parse --> Fetch --> Detect --> Encode --> DataURL
+    URL --> Parse --> Fetch --> Detect --> Downscale --> Encode --> DataURL
 ```
+
+### Image Downscaling
+
+Images are automatically downscaled before being sent to LLM providers to stay within API size limits (Anthropic's 5MB limit). The downscaling is applied both to NATS Object Store images and to existing data URL images.
+
+**Strategy** (preserves maximum quality):
+1. Images under 4.5MB are passed through untouched
+2. If any dimension exceeds 2048px, resize proportionally using Lanczos resampling
+3. Re-encode with progressive quality reduction (JPEG: 92 → 85 → 78 → 70 → 60)
+4. For transparent PNGs that are still too large, convert to JPEG with white background
+5. As a last resort, resize more aggressively (75% then 50%) until under the limit
 
 ### MIME Type Detection
 

@@ -20,15 +20,22 @@ COPY packages/lixpi/nats-service/python ./packages/lixpi/nats-service/python
 # Copy dependency files
 COPY services/llm-api/pyproject.toml ./
 
+# Install build dependencies for Pillow (image processing)
+RUN apk add --no-cache --virtual .build-deps \
+    gcc musl-dev zlib-dev jpeg-dev libpng-dev libwebp-dev
+
 # Install dependencies using uv
 RUN uv pip install --system --no-cache -r pyproject.toml
+
+# Remove build deps, keep runtime libs
+RUN apk del .build-deps
 
 
 # Stage 2: Runtime
 FROM python:${PYTHON_VERSION}-alpine
 
-# Install curl for health checks
-RUN apk add --no-cache curl
+# Install curl for health checks and image processing runtime libs
+RUN apk add --no-cache curl zlib jpeg libpng libwebp
 
 # Install uv in runtime stage
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/

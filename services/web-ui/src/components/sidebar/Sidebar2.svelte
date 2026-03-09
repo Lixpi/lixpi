@@ -191,16 +191,12 @@
                             <DropdownMenu.Root>
                                 <DropdownMenu.Trigger>
                                     {#snippet child({ props })}
-                                        <Button {...props} variant="muted" class="data-[state=open]:bg-ghost flex h-8 w-8 p-0">
+                                        <Button {...props} variant="muted" class="data-[state=open]:bg-ghost flex h-8 w-8 p-0" onclick={(e) => e.stopPropagation()}>
                                             <EllipsisIcon class="h-4 w-4 "/>
                                             <span class="sr-only">Open Menu</span>
                                         </Button>
                                     {/snippet}
                                 </DropdownMenu.Trigger>
-                                <DropdownMenu.Portal to={scrollAreaRef}>
-                                    <div style="position: fixed; top: 0; left: 0; background: red; padding: 5px; z-index: 9999;">
-                                        Portal content should be visible
-                                    </div>
                                     <DropdownMenu.Content class="w-[160px]" align="end">
                                         <DropdownMenu.Item>Edit</DropdownMenu.Item>
                                         <DropdownMenu.Item>Make a copy</DropdownMenu.Item>
@@ -229,7 +225,6 @@
                                             <DropdownMenu.Shortcut>⌘⌫</DropdownMenu.Shortcut>
                                         </DropdownMenu.Item>
                                     </DropdownMenu.Content>
-                                </DropdownMenu.Portal>
                             </DropdownMenu.Root>
 						</div>
 					</div>

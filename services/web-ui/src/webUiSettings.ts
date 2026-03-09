@@ -26,7 +26,7 @@ export const webUiSettings: WebUiSettings = {
     showHeaderOnAiChatThreadNodes: false,
     // Maximum distance (in renderer-coordinate pixels) at which dragging an unconnected
     // node near an AI chat thread node triggers the proximity-connect ghost edge.
-    proximityConnectThreshold: 300,
+    proximityConnectThreshold: 700,
     // Controls how deeply the system traverses node connections when extracting
     // context for AI chat threads.
     //   'direct' — include content only from nodes with a direct incoming edge

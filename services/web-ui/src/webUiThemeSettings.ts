@@ -16,6 +16,10 @@ export type WebUiThemeSettings = {
     shiftingGradientColors: [string, string, string, string]
 }
 
+const brandColors = {
+    steelBlue: '#5d656d'
+}
+
 export const webUiThemeSettings: WebUiThemeSettings = {
     // Background color for AI response message bubbles and their pigtail (speech bubble tail).
     // Previous value: '#fff'
@@ -46,7 +50,7 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // Uses the shifting gradient hue family with increased contrast for small-size legibility.
     aiChatThreadRailBoundaryCircleColors: ['#F3E4F2', '#C5C0EE', 'rgb(202, 180, 201)'],
     // Default color for connector lines between nodes.
-    nodesConnectorLineDefaultColor: '#4682B4', // steelblue
+    nodesConnectorLineDefaultColor: brandColors.steelBlue,
     // Focus/selected color for connector lines between nodes.
     nodesConnectorLineFocusColor: '#000',
     // Four gradient colors shared between the shifting gradient background and the
