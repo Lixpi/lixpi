@@ -352,6 +352,13 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 animation-timing-function: ease-in-out;
             }
         }
+
+        &.assistant-google {
+            svg {
+                width: 19px;
+                height: 19px;
+            }
+        }
     }
 
     // ===== AI RESPONSE MESSAGE =====

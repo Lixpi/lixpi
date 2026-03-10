@@ -41,6 +41,7 @@
         "jwks-rsa": "*",
         "openai": "*",
         "@anthropic-ai/sdk": "*",
+        "@google/genai": "*",
         "tiktoken": "*",
         "type-fest": "*"
     },

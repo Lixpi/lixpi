@@ -50,6 +50,7 @@ type SubmitControls = {
 type ImageSizeControls = {
     getImageGenerationSize: () => string
     setImageGenerationSize: (size: string) => void
+    getProvider?: () => string
 }
 
 type AiPromptInputNodeViewOptions = {
@@ -105,6 +106,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const imageControls: ImageSizeControls = {
             getImageGenerationSize: () => getNodeAttr(view, getPos, 'imageGenerationSize') || 'auto',
             setImageGenerationSize: (size: string) => setNodeAttr(view, getPos, 'imageGenerationSize', size),
+            getProvider: () => (getNodeAttr(view, getPos, 'aiModel') || '').split(':')[0] || '',
         }
 
         const submitControls: SubmitControls = {

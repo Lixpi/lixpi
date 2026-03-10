@@ -26,6 +26,7 @@ class AttachmentFormat(Enum):
     """Supported LLM provider formats for attachments."""
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    GOOGLE = "google"
 
 
 def parse_nats_object_ref(ref: str) -> tuple[str, str] | None:
@@ -440,6 +441,56 @@ def convert_content_for_openai(content: Union[str, List[Dict]]) -> Union[str, Li
     return validated_content if validated_content else ''
 
 
+def convert_content_for_google(content: Union[str, List[Dict]]) -> Union[str, List[Dict]]:
+    """
+    Convert OpenAI Responses API message content to Google Gen AI format.
+
+    Input format (OpenAI Responses API):
+        {"type": "input_text", "text": "..."}
+        {"type": "input_image", "image_url": "data:...", "detail": "auto"}
+
+    Output format (Google Gen AI):
+        {"text": "..."}
+        {"inline_data": {"mime_type": "...", "data": "..."}}
+    """
+    if isinstance(content, str):
+        return content
+
+    if not isinstance(content, list):
+        return content
+
+    google_content = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+
+        block_type = block.get('type')
+
+        if block_type == 'input_text':
+            google_content.append({
+                'text': block.get('text', '')
+            })
+        elif block_type == 'input_image':
+            url = block.get('image_url', '')
+            if url.startswith('data:'):
+                try:
+                    media_type, base64_data = parse_data_url(url)
+                    google_content.append({
+                        'inline_data': {
+                            'mime_type': media_type,
+                            'data': base64_data
+                        }
+                    })
+                except ValueError as e:
+                    logger.warning(f"Failed to parse image data URL for Google: {e}")
+            else:
+                logger.warning(f"Unsupported image URL format for Google: {url[:50]}")
+        else:
+            logger.warning(f"Unknown content block type for Google: {block_type}")
+
+    return google_content if google_content else ''
+
+
 def convert_attachments_for_provider(
     content: Union[str, List[Dict]],
     target_format: AttachmentFormat
@@ -468,6 +519,8 @@ def convert_attachments_for_provider(
         return convert_content_for_anthropic(content)
     elif target_format == AttachmentFormat.OPENAI:
         return convert_content_for_openai(content)
+    elif target_format == AttachmentFormat.GOOGLE:
+        return convert_content_for_google(content)
     else:
         logger.warning(f"Unknown target format: {target_format}, returning content as-is")
         return content

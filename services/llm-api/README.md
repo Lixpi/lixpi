@@ -1,16 +1,16 @@
 # LLM API Service
 
-A Python-based microservice that handles AI model interactions via NATS messaging. This service orchestrates conversations with OpenAI and Anthropic models using a LangGraph-based state machine workflow, providing real-time token streaming back to clients.
+A Python-based microservice that handles AI model interactions via NATS messaging. This service orchestrates conversations with OpenAI, Anthropic, and Google models using a LangGraph-based state machine workflow, providing real-time token streaming back to clients.
 
 ## Core Concepts
 
-**Provider** — An abstraction over an AI vendor's API. Each provider implements a LangGraph workflow with four stages: validate → stream → calculate_usage → cleanup. Currently supports OpenAI (Responses API) and Anthropic (Messages API).
+**Provider** — An abstraction over an AI vendor's API. Each provider implements a LangGraph workflow with four stages: validate → stream → calculate_usage → cleanup. Currently supports OpenAI (Responses API), Anthropic (Messages API), and Google (Gen AI SDK).
 
 **Provider Registry** — Manages provider instance lifecycle. Creates instances keyed by `{workspaceId}:{aiChatThreadId}` and removes them after request completion. Prevents memory leaks by cleaning up after each conversation turn.
 
 **Instance Key** — A unique identifier for a conversation session: `{workspaceId}:{aiChatThreadId}`. Used to route stop requests to the correct active stream.
 
-**Provider-Agnostic Design** — No provider-specific session IDs are used. Every request includes the full conversation history, allowing users to switch between OpenAI and Anthropic mid-conversation.
+**Provider-Agnostic Design** — No provider-specific session IDs are used. Every request includes the full conversation history, allowing users to switch between OpenAI, Anthropic, and Google mid-conversation.
 
 **NATS Object Store Reference** — A URL scheme (`nats-obj://bucket/key`) for referencing images stored in NATS Object Store. The service resolves these references to base64 data URLs before sending to providers.
 
@@ -40,6 +40,7 @@ flowchart TB
             subgraph Instances["Active Instances"]
                 OpenAI[OpenAIProvider<br/>Responses API]
                 Anthropic[AnthropicProvider<br/>Messages API]
+                Google[GoogleProvider<br/>Gen AI SDK]
             end
         end
 
@@ -52,6 +53,7 @@ flowchart TB
     subgraph External["External Services"]
         OpenAIAPI[OpenAI API]
         AnthropicAPI[Anthropic API]
+        GoogleAPI[Google Gen AI API]
     end
 
     subgraph Clients["Upstream Services"]
@@ -68,13 +70,17 @@ flowchart TB
     Registry --> Anthropic
     OpenAI --> Attachments
     Anthropic --> Attachments
+    Google --> Attachments
     Attachments -->|Fetch images| ObjStore
     OpenAI --> UsageRpt
     Anthropic --> UsageRpt
+    Google --> UsageRpt
     OpenAI -->|Stream| OpenAIAPI
     Anthropic -->|Stream| AnthropicAPI
+    Google -->|Stream| GoogleAPI
     OpenAI -->|Publish chunks| Subjects
     Anthropic -->|Publish chunks| Subjects
+    Google -->|Publish chunks| Subjects
     Subjects -->|ai.interaction.chat.receiveMessage.*| WebUI
     FastAPI --> NATSSvc
     NATSSvc --> Subjects
@@ -219,7 +225,7 @@ stateDiagram-v2
 | `event_meta` | `dict` | User/org metadata for billing |
 | `workspace_id` | `str` | Workspace identifier |
 | `ai_chat_thread_id` | `str` | Thread identifier |
-| `provider` | `str` | "OpenAI" or "Anthropic" |
+| `provider` | `str` | "OpenAI", "Anthropic", or "Google" |
 | `model_version` | `str` | Specific model (e.g., "gpt-4.1") |
 | `stream_active` | `bool` | Whether streaming is in progress |
 | `usage` | `dict` | Token counts after completion |
@@ -306,6 +312,16 @@ After resolution, `convert_attachments_for_provider()` transforms content blocks
 }
 ```
 
+**Google (Gen AI SDK format):**
+```json
+{
+    "inline_data": {
+        "mime_type": "image/png",
+        "data": "iVBORw0K..."
+    }
+}
+```
+
 ## NATS Subjects
 
 ### Subscriptions
@@ -379,8 +395,10 @@ src/
 │   ├── registry.py                 # ProviderRegistry
 │   ├── openai/
 │   │   └── provider.py             # OpenAI Responses API
-│   └── anthropic/
-│       └── provider.py             # Anthropic Messages API
+│   ├── anthropic/
+│   │   └── provider.py             # Anthropic Messages API
+│   └── google/
+│       └── provider.py             # Google Gen AI SDK
 ├── services/
 │   └── usage_reporter.py           # Cost tracking
 ├── utils/
@@ -399,6 +417,7 @@ src/
 | `NATS_NKEY_SEED` | Yes | — | NKey seed for service authentication |
 | `OPENAI_API_KEY` | No | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | No | — | Anthropic API key |
+| `GOOGLE_API_KEY` | No | — | Google API key |
 | `LLM_TIMEOUT_SECONDS` | No | 1200 | Circuit breaker timeout |
 | `LOG_LEVEL` | No | INFO | Logging level |
 

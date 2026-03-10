@@ -3,7 +3,8 @@ import {
     pauseIcon,
     chevronDownIcon,
     gptAvatarIcon,
-    claudeIcon
+    claudeIcon,
+    geminiIcon
 } from '$src/svgIcons/index.ts'
 
 import { html } from '$src/utils/domTemplates.ts'
@@ -38,11 +39,13 @@ type SubmitControls = {
 type ImageSizeControls = {
     getImageGenerationSize: () => string
     setImageGenerationSize: (size: string) => void
+    getProvider?: () => string
 }
 
 const AI_AVATAR_ICONS: Record<string, string> = {
     gptAvatarIcon,
     claudeIcon,
+    geminiIcon,
 }
 
 function transformModelsToOptions(models: any[]): AiModelDropdownOption[] {
@@ -209,12 +212,34 @@ export function createGenericImageSizeDropdown(
     controls: ImageSizeControls,
     dropdownId: string
 ) {
-    const IMAGE_SIZES = [
+    const OPENAI_IMAGE_SIZES = [
         { title: '1:1', value: '1024x1024' },
         { title: '3:2', value: '1536x1024' },
         { title: '2:3', value: '1024x1536' },
         { title: 'Auto', value: 'auto' },
     ]
+
+    const GOOGLE_IMAGE_SIZES = [
+        { title: '1:1', value: '1:1' },
+        { title: '3:2', value: '3:2' },
+        { title: '2:3', value: '2:3' },
+        { title: '16:9', value: '16:9' },
+        { title: '9:16', value: '9:16' },
+        { title: '4:3', value: '4:3' },
+        { title: '3:4', value: '3:4' },
+        { title: '4:5', value: '4:5' },
+        { title: '5:4', value: '5:4' },
+        { title: '21:9', value: '21:9' },
+        { title: 'Auto', value: 'auto' },
+    ]
+
+    const getSizesForProvider = (provider: string) => {
+        if (provider === 'Google') return GOOGLE_IMAGE_SIZES
+        return OPENAI_IMAGE_SIZES
+    }
+
+    let lastProvider = controls.getProvider?.() || ''
+    let IMAGE_SIZES = getSizesForProvider(lastProvider)
 
     const currentSize = controls.getImageGenerationSize()
     const selectedValue = IMAGE_SIZES.find(s => s.value === currentSize) || IMAGE_SIZES[0]
@@ -237,10 +262,25 @@ export function createGenericImageSizeDropdown(
     })
 
     const updateSelection = () => {
-        const currentSize = controls.getImageGenerationSize()
-        const matched = IMAGE_SIZES.find(s => s.value === currentSize)
-        if (matched) {
-            dropdown.update(matched)
+        const currentProvider = controls.getProvider?.() || ''
+        if (currentProvider !== lastProvider) {
+            lastProvider = currentProvider
+            IMAGE_SIZES = getSizesForProvider(currentProvider)
+            const currentSize = controls.getImageGenerationSize()
+            const matched = IMAGE_SIZES.find(s => s.value === currentSize)
+            if (!matched) {
+                controls.setImageGenerationSize(IMAGE_SIZES[0].value)
+            }
+            dropdown.setOptions({
+                options: IMAGE_SIZES,
+                selectedValue: matched || IMAGE_SIZES[0],
+            })
+        } else {
+            const currentSize = controls.getImageGenerationSize()
+            const matched = IMAGE_SIZES.find(s => s.value === currentSize)
+            if (matched) {
+                dropdown.update(matched)
+            }
         }
     }
 
