@@ -22,7 +22,7 @@ type AiSubmitPayload = {
     aiModel: string
     threadId: string
     imageOptions?: {
-        imageGenerationEnabled: boolean
+        aiImageModel?: string
         imageGenerationSize: ImageGenerationSize
     }
 }
@@ -37,7 +37,7 @@ type PendingMessage = {
     content: any
     aiModel: string
     imageOptions?: {
-        imageGenerationEnabled: boolean
+        aiImageModel?: string
         imageGenerationSize: ImageGenerationSize
     }
 }
@@ -131,7 +131,7 @@ export class AiPromptInputController {
         contentJSON: any
         aiModel: string
         imageOptions?: {
-            imageGenerationEnabled: boolean
+            aiImageModel?: string
             imageGenerationSize: ImageGenerationSize
         }
     }): Promise<void> {
@@ -218,14 +218,19 @@ export class AiPromptInputController {
         const insertPos = threadPos + (threadNode as ProseMirrorNode).nodeSize - 1
         let tr = state.tr.insert(insertPos, messageNode)
 
-        // Update the AI model on the thread if it differs
-        if ((threadNode as ProseMirrorNode).attrs.aiModel !== pending.aiModel) {
+        // Update the AI model and image options on the thread node
+        const currentAttrs = (threadNode as ProseMirrorNode).attrs
+        const needsUpdate = currentAttrs.aiModel !== pending.aiModel
+            || (pending.imageOptions?.aiImageModel && currentAttrs.aiImageModel !== pending.imageOptions.aiImageModel)
+            || (pending.imageOptions?.imageGenerationSize && currentAttrs.imageGenerationSize !== pending.imageOptions.imageGenerationSize)
+
+        if (needsUpdate) {
             const mappedThreadPos = tr.mapping.map(threadPos)
             tr = tr.setNodeMarkup(mappedThreadPos, undefined, {
-                ...(threadNode as ProseMirrorNode).attrs,
+                ...currentAttrs,
                 aiModel: pending.aiModel,
                 ...(pending.imageOptions ? {
-                    imageGenerationEnabled: pending.imageOptions.imageGenerationEnabled,
+                    aiImageModel: pending.imageOptions.aiImageModel,
                     imageGenerationSize: pending.imageOptions.imageGenerationSize,
                 } : {})
             })
@@ -259,7 +264,12 @@ export class AiPromptInputController {
                 },
                 {
                     type: 'aiChatThread',
-                    attrs: { threadId, aiModel },
+                    attrs: {
+                        threadId,
+                        aiModel,
+                        ...(imageOptions?.aiImageModel ? { aiImageModel: imageOptions.aiImageModel } : {}),
+                        ...(imageOptions?.imageGenerationSize ? { imageGenerationSize: imageOptions.imageGenerationSize } : {}),
+                    },
                     content: [
                         {
                             type: 'aiUserMessage',

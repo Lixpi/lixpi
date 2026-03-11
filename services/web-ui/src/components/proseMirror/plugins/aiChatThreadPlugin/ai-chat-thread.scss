@@ -173,80 +173,11 @@ $userMessageTextColor: #fff;
         }
     }
 
-    // ===== IMAGE GENERATION TOGGLE =====
-    .image-generation-toggle {
+    // ===== IMAGE MODEL CONTROLS =====
+    .image-model-controls {
         display: flex;
         align-items: center;
         gap: 0.25rem;
-        opacity: 0.6;
-        transition: hoverTransition(opacity, 200ms);
-
-        &:hover {
-            opacity: 1;
-        }
-
-        &[data-enabled="true"] {
-            opacity: 1;
-
-            .image-toggle-btn {
-                background: rgba($steelBlue, 0.15);
-
-                svg {
-                    fill: $steelBlue;
-                }
-            }
-
-            .image-size-selector {
-                display: block;
-            }
-        }
-
-        .image-toggle-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            border: none;
-            border-radius: 6px;
-            background: transparent;
-            cursor: pointer;
-            transition: hoverTransition(all, 200ms);
-
-            svg {
-                width: 16px;
-                height: 16px;
-                fill: $nightBlue;
-                transition: hoverTransition(fill, 150ms);
-            }
-
-            &:hover {
-                background: rgba($nightBlue, 0.1);
-            }
-        }
-
-        .image-size-selector {
-            display: none;
-            font-size: 11px;
-            padding: 2px 6px;
-            border: 1px solid rgba($nightBlue, 0.3);
-            border-radius: 4px;
-            background: rgba(#fff, 0.9);
-            color: $nightBlue;
-            cursor: pointer;
-            outline: none;
-            transition: hoverTransition(all, 200ms);
-
-            &:hover,
-            &:focus {
-                border-color: $steelBlue;
-            }
-
-            option {
-                background: #fff;
-                color: $nightBlue;
-            }
-        }
     }
 
     // ===== INTERACTION STATES =====

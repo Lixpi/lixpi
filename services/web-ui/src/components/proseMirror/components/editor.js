@@ -262,6 +262,7 @@ export class ProseMirrorEditor {
                     onStop: () => this.onPromptStop?.(),
                     isReceiving: () => this.isPromptReceiving?.() ?? false,
                     createModelDropdown: this.promptControlFactories?.createModelDropdown,
+                    createImageModelDropdown: this.promptControlFactories?.createImageModelDropdown,
                     createImageSizeDropdown: this.promptControlFactories?.createImageSizeDropdown,
                     createSubmitButton: this.promptControlFactories?.createSubmitButton,
                     placeholderText: 'Talk to me...'

@@ -20,7 +20,7 @@ import { userStore } from '$src/stores/userStore.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
-    enableImageGeneration?: boolean
+    aiImageModel?: string
     imageSize?: ImageGenerationSize
 }
 
@@ -167,7 +167,7 @@ export default class AiInteractionService {
     async sendChatMessage({
         messages,
         aiModel,
-        enableImageGeneration,
+        aiImageModel,
         imageSize
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
@@ -182,9 +182,9 @@ export default class AiInteractionService {
             organizationId
         }
 
-        // Add image generation options if enabled
-        if (enableImageGeneration) {
-            payload.enableImageGeneration = true
+        // Add image model routing options if an image model is selected
+        if (aiImageModel) {
+            payload.aiImageModel = aiImageModel
             payload.imageSize = imageSize || 'auto'
         }
 

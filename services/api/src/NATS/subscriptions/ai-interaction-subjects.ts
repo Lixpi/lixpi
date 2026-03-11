@@ -36,6 +36,7 @@ export const aiInteractionSubjects = [
                 },
                 messages,
                 aiModel,
+                aiImageModel,
                 workspaceId,
                 aiChatThreadId,
                 organizationId,
@@ -48,6 +49,7 @@ export const aiInteractionSubjects = [
                 organizationId: string
                 enableImageGeneration?: boolean
                 imageSize?: string
+                aiImageModel?: string
             } & AiInteractionChatSendMessagePayload
 
             const [provider, model] = (aiModel as string).split(':')
@@ -67,6 +69,18 @@ export const aiInteractionSubjects = [
                     return
                 }
 
+                // Fetch image model meta info if an image model is selected
+                let imageModelMetaInfo: any = null
+                if (aiImageModel) {
+                    const [imageProvider, imageModel] = (aiImageModel as string).split(':')
+                    imageModelMetaInfo = await AiModel.getAiModel({ provider: imageProvider, model: imageModel, omitPricing: false })
+                    if (imageModelMetaInfo) {
+                        info(`Image model resolved: ${imageProvider}:${imageModel}`)
+                    } else {
+                        warn(`Image model not found: ${aiImageModel}, proceeding without image routing`)
+                    }
+                }
+
                 // One stream per thread - use workspaceId:aiChatThreadId as unique key
                 const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
@@ -83,6 +97,7 @@ export const aiInteractionSubjects = [
                 natsService.publish(AI_INTERACTION_SUBJECTS.CHAT_PROCESS, {
                     messages,
                     aiModelMetaInfo,
+                    imageModelMetaInfo,
                     workspaceId,
                     aiChatThreadId,
                     enableImageGeneration,

@@ -38,7 +38,7 @@ import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubb
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
-import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 
 import { select } from 'd3-selection'
 
@@ -508,6 +508,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlFactories = {
             createModelDropdown: createGenericAiModelDropdown,
+            createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
@@ -595,6 +596,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlFactories = {
             createModelDropdown: createGenericAiModelDropdown,
+            createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
@@ -1561,7 +1563,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             type: 'aiChatThread',
                             attrs: {
                                 threadId,
-                                imageGenerationEnabled: true,
                                 // Store the previous response ID for multi-turn editing
                                 previousResponseId: responseId
                             },
@@ -2690,9 +2691,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             aiService.sendChatMessage({
                                 messages: messagesWithContext,
                                 aiModel,
-                                enableImageGeneration: imageOptions?.imageGenerationEnabled,
-                                imageSize: imageOptions?.imageGenerationSize,
-                                previousResponseId: imageOptions?.previousResponseId
+                                aiImageModel: imageOptions?.aiImageModel,
+                                imageSize: imageOptions?.imageGenerationSize
                             })
                         } catch (error) {
                             console.error('Failed to gather context from connected nodes:', error)

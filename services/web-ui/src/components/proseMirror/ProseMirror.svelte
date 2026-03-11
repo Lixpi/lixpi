@@ -40,7 +40,7 @@
 
 
     type ImageOptions = {
-        imageGenerationEnabled: boolean
+        aiImageModel: string
         imageGenerationSize: ImageGenerationSize
     }
 
@@ -57,9 +57,8 @@
         aiInteractionInstance.sendChatMessage({
             messages,
             aiModel,
-            enableImageGeneration: imageOptions?.imageGenerationEnabled,
-            imageSize: imageOptions?.imageGenerationSize,
-            previousResponseId: imageOptions?.previousResponseId
+            aiImageModel: imageOptions?.aiImageModel,
+            imageSize: imageOptions?.imageGenerationSize
         })
     }
 

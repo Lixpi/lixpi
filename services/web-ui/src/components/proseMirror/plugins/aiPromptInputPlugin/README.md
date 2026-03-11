@@ -7,7 +7,7 @@ Provides the floating ProseMirror editor used for composing and sending messages
 This plugin powers the floating input field that appears below canvas nodes. It provides:
 - A rich-text ProseMirror editor for composing messages
 - An AI model selector dropdown
-- An image generation size dropdown
+- An image model selector dropdown (with size selector)
 - A submit/stop button
 - Placeholder text when the input is empty
 - Keyboard shortcut support (Cmd/Ctrl + Enter to submit)
@@ -38,6 +38,7 @@ graph TD
         NV --> CONT[Content Area<br/>ProseMirror contentDOM]
         NV --> CTRL[Controls Container]
         CTRL --> MD[Model Dropdown]
+        CTRL --> IMD[Image Model Dropdown]
         CTRL --> ISD[Image Size Dropdown]
         CTRL --> SB[Submit Button]
     end
@@ -139,8 +140,9 @@ sequenceDiagram
 - Isolating: `true` (prevents cursor from escaping)
 - Attributes:
   - `aiModel: string` (default `''`) — Selected AI model (e.g., `"Anthropic:claude-3-5-sonnet"`)
+  - `aiImageModel: string` (default `''`) — Selected image generation model (e.g., `"OpenAI:dall-e-3"`)
   - `imageGenerationSize: string` (default `'auto'`) — Image generation size (e.g., `"512x512"`)
-- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-image-generation-size]`
+- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-image-model][data-image-generation-size]`
 - Content hole: `0` (ProseMirror renders editable content inside)
 
 The document schema for `documentType: 'aiPromptInput'` is:
@@ -159,13 +161,14 @@ div.ai-prompt-input-wrapper [data-empty="true"|"false"]
 ├── div.ai-prompt-input-content        ← contentDOM (editable)
 └── div.ai-prompt-input-controls
     ├── [Model Dropdown]               ← injected via createModelDropdown()
+    ├── [Image Model Dropdown]         ← injected via createImageModelDropdown()
     ├── [Image Size Dropdown]          ← injected via createImageSizeDropdown()
     └── [Submit Button]                ← injected via createSubmitButton()
 ```
 
 ### Control Adapters
 
-The NodeView uses an adapter pattern to bridge ProseMirror node attributes with UI controls. Each control receives getter/setter functions that read/write `aiModel` and `imageGenerationSize` via `setNodeMarkup` transactions:
+The NodeView uses an adapter pattern to bridge ProseMirror node attributes with UI controls. Each control receives getter/setter functions that read/write `aiModel`, `aiImageModel`, and `imageGenerationSize` via `setNodeMarkup` transactions:
 
 ```typescript
 const modelControls: AiModelControls = {
@@ -194,7 +197,7 @@ This keeps the controls stateless — the ProseMirror document is the single sou
 
 **`extractContentJSON(state)`** — Walks the document to find the `aiPromptInput` node, returns its children as a JSON array. Returns `null` if the node isn't found or has no text content.
 
-**`getInputAttrs(state)`** — Reads `aiModel` and `imageGenerationSize` attributes from the `aiPromptInput` node.
+**`getInputAttrs(state)`** — Reads `aiModel`, `aiImageModel`, and `imageGenerationSize` attributes from the `aiPromptInput` node.
 
 **`clearInputContent(view)`** — Replaces all content inside the `aiPromptInput` node with a single empty paragraph and positions the cursor at the start.
 
@@ -208,6 +211,7 @@ createAiPromptInputPlugin({
     onStop: () => { /* stop streaming */ },
     isReceiving: () => boolean,
     createModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createImageModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createImageSizeDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createSubmitButton: (controls) => HTMLElement,
     placeholderText: 'Talk to me...',
@@ -242,7 +246,7 @@ Each AI chat thread canvas node gets its own dedicated floating input. On submit
 
 Both types:
 - Use `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
-- Receive the same control factories (`createGenericAiModelDropdown`, `createGenericImageSizeDropdown`, `createGenericSubmitButton`) from `primitives/aiControls/`
+- Receive the same control factories (`createGenericAiModelDropdown`, `createGenericImageModelDropdown`, `createGenericImageSizeDropdown`, `createGenericSubmitButton`) from `primitives/aiControls/`
 - Render inside a `.ai-prompt-input-floating` container with optional shifting gradient background (controlled by `webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode`)
 
 ## Styling

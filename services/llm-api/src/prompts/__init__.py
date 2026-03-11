@@ -31,10 +31,13 @@ def load_prompt(filename: str) -> str:
 # Load system prompts
 SYSTEM_PROMPT = load_prompt("system.txt")
 ANTHROPIC_CODE_BLOCK_HACK = load_prompt("anthropic_code_block_hack.txt")
+IMAGE_GENERATION_INSTRUCTIONS = load_prompt("image_generation_instructions.txt")
 
 
-def get_system_prompt() -> str:
-    """Get the base system prompt for all LLM interactions."""
+def get_system_prompt(include_image_generation: bool = False) -> str:
+    """Get the system prompt, optionally with image generation instructions."""
+    if include_image_generation:
+        return f"{SYSTEM_PROMPT}\n\n{IMAGE_GENERATION_INSTRUCTIONS}"
     return SYSTEM_PROMPT
 
 
