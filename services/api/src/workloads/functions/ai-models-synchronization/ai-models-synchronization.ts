@@ -20,6 +20,7 @@ import type { PartialDeep } from 'type-fest'
 const MODALITY_METADATA = {
     text: { title: 'Text', shortTitle: 'TXT' },
     image: { title: 'Image', shortTitle: 'IMG' },
+    image_generation: { title: 'Image Generation', shortTitle: 'IMG GEN' },
     audio: { title: 'Audio', shortTitle: 'AUDIO' },
     voice: { title: 'Voice', shortTitle: 'VOICE' },
     video: { title: 'Video', shortTitle: 'VID' }
@@ -154,7 +155,6 @@ export class AiModelsSync {
             exact: [
                 'gpt-4',
                 'gpt-4o',
-                'gpt-image-1',    // temporarily disabled, code doesn't yet support it
                 'gpt-4o-transcribe',    // temporarily disabled, code doesn't yet support it
             ],
             // Prefix matches (legacy families)
@@ -197,6 +197,7 @@ export class AiModelsSync {
                 'gemini-1.0',
                 'gemini-1.5',
                 'gemini-2.0',
+                'gemini-embedding',
                 'text-embedding',
                 'embedding',
                 'aqa',
@@ -204,6 +205,7 @@ export class AiModelsSync {
             contains: [
                 '-tts-',
                 '-live-',
+                '-native-audio-',
                 '-robotics-',
                 '-computer-use-',
                 'imagen',
@@ -245,8 +247,10 @@ export class AiModelsSync {
                 { prefix: 'o3-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '40.00' } } } } } },
                 // O4 Mini Deep Research: 200k context, 100k max output (per page)
                 { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
-                // GPT-Image-1: image generation model; specify modalities only
-                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
+                // GPT Image family: image generation models
+                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
+                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
+                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
             ],
             contains: [],
             fallback: {
@@ -354,13 +358,13 @@ export class AiModelsSync {
                 'gemini-2.5-flash-preview-image-generation': {
                     contextWindow: 1048576,
                     maxCompletionSize: 65536,
-                    modalities: ['text', 'image'],
+                    modalities: ['text', 'image', 'image_generation'],
                     pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
                 },
                 'gemini-2.5-flash-image': {
                     contextWindow: 1048576,
                     maxCompletionSize: 65536,
-                    modalities: ['text', 'image'],
+                    modalities: ['text', 'image', 'image_generation'],
                     pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
                 },
             },
@@ -370,9 +374,9 @@ export class AiModelsSync {
                 // Gemini 2.5 Flash family (text-only, image generation only in gemini-2.5-flash-image)
                 { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
                 // Gemini 3 Pro Image (Nano Banana Pro)
-                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
                 // Gemini 3.1 Flash Image (Nano Banana 2)
-                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
                 // Gemini 3.1 Pro
                 { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
                 // Gemini 3.1 Flash
@@ -527,6 +531,9 @@ export class AiModelsSync {
 
             return models.filter((model: OpenAIModel) => {
                 const modelId = model.id
+
+                // GPT Image models are always allowed through (overrides -mini/-nano contains rules)
+                if (modelId.startsWith('gpt-image-')) return true
 
                 // Check exact blacklist matches
                 if (blacklist.exact.includes(modelId)) {

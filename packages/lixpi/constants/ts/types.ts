@@ -205,7 +205,7 @@ export type AiInteractionChatSendMessagePayload = {
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
-    enableImageGeneration: boolean
+    aiImageModel: AiModelId
     imageSize?: ImageGenerationSize
     previousResponseId?: string
 }

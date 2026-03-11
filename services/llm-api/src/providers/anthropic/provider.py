@@ -12,6 +12,7 @@ from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt, format_user_message_with_hack
 from config import settings
 from utils.attachments import convert_attachments_for_provider, AttachmentFormat, resolve_image_urls
+from tools.image_generation import get_tool_for_provider, extract_tool_call, extract_reference_images
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,9 @@ class AnthropicProvider(BaseLLMProvider):
         workspace_id = state['workspace_id']
         ai_chat_thread_id = state['ai_chat_thread_id']
 
+        # Inject generate_image tool when an image model is selected
+        has_image_model = bool(state.get('image_model_version'))
+
         # Convert messages to Anthropic format (handles multimodal content)
         formatted_messages = []
         for i, msg in enumerate(messages):
@@ -75,6 +79,12 @@ class AnthropicProvider(BaseLLMProvider):
                 'content': content
             })
 
+        # Build tools array
+        tools = []
+        if has_image_model:
+            tools.append(get_tool_for_provider("Anthropic"))
+            logger.info("Injected generate_image function tool for image model routing")
+
         logger.info(f"Streaming from Anthropic model: {model_version}")
         logger.debug(f"Messages count: {len(formatted_messages)}")
 
@@ -82,13 +92,18 @@ class AnthropicProvider(BaseLLMProvider):
             # Publish stream start event
             await self._publish_stream_start(workspace_id, ai_chat_thread_id)
 
+            # Build stream kwargs
+            stream_kwargs = {
+                'model': model_version,
+                'messages': formatted_messages,
+                'max_tokens': max_tokens,
+                'system': get_system_prompt(include_image_generation=has_image_model),
+            }
+            if tools:
+                stream_kwargs['tools'] = tools
+
             # Create streaming completion
-            async with self.client.messages.stream(
-                model=model_version,
-                messages=formatted_messages,
-                max_tokens=max_tokens,
-                system=get_system_prompt(),
-            ) as stream:
+            async with self.client.messages.stream(**stream_kwargs) as stream:
 
                 # Stream tokens to client
                 async for text in stream.text_stream:
@@ -103,16 +118,24 @@ class AnthropicProvider(BaseLLMProvider):
                 # Get final message with usage data
                 final_message = await stream.get_final_message()
 
+                # Check for generate_image tool call
+                if has_image_model:
+                    tool_call = extract_tool_call("Anthropic", final_message)
+                    if tool_call:
+                        state['generated_image_prompt'] = tool_call.prompt
+                        state['reference_images'] = extract_reference_images(formatted_messages)
+                        logger.info(f"Tool call detected: generate_image, prompt: {tool_call.prompt[:100]}...")
+
                 # Extract usage information
                 if final_message.usage:
                     usage = final_message.usage
                     state['usage'] = {
                         'promptTokens': usage.input_tokens,
-                        'promptAudioTokens': 0,  # Not supported by Anthropic yet
-                        'promptCachedTokens': 0,  # Not using cache currently
+                        'promptAudioTokens': 0,
+                        'promptCachedTokens': 0,
                         'completionTokens': usage.output_tokens,
-                        'completionAudioTokens': 0,  # Not supported by Anthropic yet
-                        'completionReasoningTokens': 0,  # Not supported by Anthropic yet
+                        'completionAudioTokens': 0,
+                        'completionReasoningTokens': 0,
                         'totalTokens': usage.input_tokens + usage.output_tokens
                     }
                     state['ai_vendor_request_id'] = final_message.id
@@ -123,8 +146,7 @@ class AnthropicProvider(BaseLLMProvider):
             logger.info(f"✅ Anthropic streaming completed for {self.instance_key}")
 
         except Exception as e:
-            logger.error(f"Error streaming from Anthropic: {e}", exc_info=True)
+            logger.error(f"Anthropic streaming failed: {e}")
             state['error'] = str(e)
-            raise
 
         return state

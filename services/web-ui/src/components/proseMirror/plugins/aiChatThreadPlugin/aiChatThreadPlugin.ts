@@ -36,7 +36,7 @@ const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 import type { AiInteractionChatSendMessagePayload, AiInteractionChatStopMessagePayload, ImageGenerationSize } from '@lixpi/constants'
 
 type ImageOptions = {
-    imageGenerationEnabled: boolean
+    aiImageModel: string
     imageGenerationSize: ImageGenerationSize
 }
 
@@ -697,31 +697,31 @@ class AiChatThreadPluginClass {
         const { revisedPrompt, aiModel } = node.attrs
         if (!revisedPrompt) return
 
-        // Find the thread ID
+        // Find the thread node
         const $pos = view.state.doc.resolve(pos)
         let threadId: string | undefined
+        let aiImageModel: string | undefined
 
         for (let d = $pos.depth; d > 0; d--) {
             const n = $pos.node(d)
             if (n.type.name === aiChatThreadNodeType) {
                 threadId = n.attrs.threadId
+                aiImageModel = n.attrs.aiImageModel
                 break
             }
         }
 
-        if (!threadId) return
+        if (!threadId || !aiImageModel) return
 
         console.log('🖼️ [PLUGIN] Creating variant for thread:', threadId)
 
         // Use the handler to trigger new generation
-        // Note: we trust the handler to resolve the correct model if omitted,
-        // or we use a default appropriate for images (e.g. gpt-4o/dall-e-3)
         this.sendAiRequestHandler({
             message: `Create a variant of this image: ${revisedPrompt}`,
             threadId,
             aiChatThreadId: threadId,
             imageOptions: {
-                imageGenerationEnabled: true,
+                aiImageModel,
                 imageGenerationSize: '1024x1024'
             }
         })
@@ -1017,9 +1017,9 @@ class AiChatThreadPluginClass {
         // Extract thread attributes including image generation settings
         const {
             aiModel = '',
+            aiImageModel = '',
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
-            imageGenerationEnabled = false,
             imageGenerationSize = 'auto'
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
@@ -1035,9 +1035,9 @@ class AiChatThreadPluginClass {
         const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
 
-        // Build image generation options if enabled
-        const imageOptions = imageGenerationEnabled ? {
-            imageGenerationEnabled: true,
+        // Build image generation options if an image model is selected
+        const imageOptions = aiImageModel ? {
+            aiImageModel,
             imageGenerationSize
         } : undefined
 

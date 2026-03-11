@@ -18,6 +18,8 @@ export const aiChatThreadNodeSpec = {
         status: { default: 'active' }, // active, paused, completed
         // Leave aiModel blank initially; we'll assign first available model from store when models load
         aiModel: { default: '' },
+        // Image model for image generation routing (Provider:model format)
+        aiImageModel: { default: '' },
         // Image generation settings
         imageGenerationEnabled: { default: false },
         imageGenerationSize: { default: 'auto' }, // 1024x1024, 1536x1024, 1024x1536, auto
@@ -31,6 +33,7 @@ export const aiChatThreadNodeSpec = {
                 threadId: dom.getAttribute('data-thread-id'),
                 status: dom.getAttribute('data-status') || 'active',
                 aiModel: dom.getAttribute('data-ai-model') || '',
+                aiImageModel: dom.getAttribute('data-ai-image-model') || '',
                 imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
                 imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
                 previousResponseId: dom.getAttribute('data-previous-response-id') || ''
@@ -44,6 +47,7 @@ export const aiChatThreadNodeSpec = {
             'data-thread-id': node.attrs.threadId,
             'data-status': node.attrs.status,
             'data-ai-model': node.attrs.aiModel,
+            'data-ai-image-model': node.attrs.aiImageModel,
             'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
             'data-image-generation-size': node.attrs.imageGenerationSize,
             'data-previous-response-id': node.attrs.previousResponseId

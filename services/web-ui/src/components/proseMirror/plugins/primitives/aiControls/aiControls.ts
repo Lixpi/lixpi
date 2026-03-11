@@ -4,7 +4,8 @@ import {
     chevronDownIcon,
     gptAvatarIcon,
     claudeIcon,
-    geminiIcon
+    geminiIcon,
+    imageIcon
 } from '$src/svgIcons/index.ts'
 
 import { html } from '$src/utils/domTemplates.ts'
@@ -42,6 +43,11 @@ type ImageSizeControls = {
     getProvider?: () => string
 }
 
+type ImageModelControls = {
+    getCurrentImageModel: () => string
+    setImageModel: (aiModel: string) => void
+}
+
 const AI_AVATAR_ICONS: Record<string, string> = {
     gptAvatarIcon,
     claudeIcon,
@@ -69,9 +75,14 @@ function extractAvailableTags(models: any[]) {
 }
 
 function buildDropdownData(models: any[]) {
+    const textModels = models.filter((m: any) =>
+        !m.modalities?.some((mod: any) =>
+            (mod.modality || mod) === 'image_generation'
+        )
+    )
     return {
-        options: transformModelsToOptions(models),
-        tags: extractAvailableTags(models)
+        options: transformModelsToOptions(textModels),
+        tags: extractAvailableTags(textModels)
     }
 }
 
@@ -290,5 +301,108 @@ export function createGenericImageSizeDropdown(
             dropdown.destroy?.()
         },
         update: updateSelection,
+    }
+}
+
+export function createGenericImageModelDropdown(
+    controls: ImageModelControls,
+    dropdownId: string
+) {
+    let aiModelsData: any[] = aiModelsStore.getData()
+
+    const filterImageModels = (models: any[]) => {
+        return models.filter((m: any) =>
+            m.modalities?.some((mod: any) =>
+                (mod.modality || mod) === 'image_generation'
+            )
+        )
+    }
+
+    let imageModels = filterImageModels(aiModelsData)
+    const currentImageModel = controls.getCurrentImageModel()
+
+    let options = transformModelsToOptions(imageModels)
+
+    const placeholderValue: AiModelDropdownOption = {
+        title: 'Image Model',
+        icon: imageIcon,
+        color: '',
+        aiModel: '',
+        provider: '',
+        model: '',
+        tags: []
+    }
+
+    const selectedValue: AiModelDropdownOption =
+        options.find(m => m.aiModel === currentImageModel)
+        || options[0]
+        || placeholderValue
+
+    const dropdown = createPureDropdown({
+        id: dropdownId,
+        selectedValue,
+        options,
+        theme: 'dark',
+        buttonIcon: chevronDownIcon,
+        ignoreColorValuesForOptions: true,
+        ignoreColorValuesForSelectedValue: false,
+        renderIconForSelectedValue: false,
+        renderIconForOptions: true,
+        mountToBody: false,
+        disableAutoPositioning: true,
+        onSelect: (option: any) => {
+            const selected = option as AiModelDropdownOption
+            controls.setImageModel(selected.aiModel)
+        }
+    })
+
+    // Auto-select first image model if none set
+    if (!currentImageModel && selectedValue.aiModel) {
+        setTimeout(() => {
+            if (!controls.getCurrentImageModel()) {
+                controls.setImageModel(selectedValue.aiModel)
+            }
+        }, 0)
+    }
+
+    let lastProcessedCount = aiModelsData.length
+
+    const updateSelection = () => {
+        const current = controls.getCurrentImageModel()
+        const matched = options.find(m => m.aiModel === current)
+        if (matched) {
+            dropdown.update(matched)
+        }
+    }
+
+    const unsubscribe = aiModelsStore.subscribe((storeState: any) => {
+        const newModelsData = storeState.data
+        if (newModelsData.length === 0 || newModelsData.length === lastProcessedCount) return
+
+        lastProcessedCount = newModelsData.length
+        aiModelsData = newModelsData
+
+        imageModels = filterImageModels(aiModelsData)
+        options = transformModelsToOptions(imageModels)
+
+        dropdown.setOptions({ options })
+
+        const current = controls.getCurrentImageModel()
+        if (!current && options.length > 0) {
+            controls.setImageModel(options[0].aiModel)
+            dropdown.update(options[0])
+            return
+        }
+
+        updateSelection()
+    })
+
+    return {
+        dom: dropdown.dom,
+        destroy: () => {
+            unsubscribe()
+            dropdown.destroy?.()
+        },
+        update: updateSelection
     }
 }

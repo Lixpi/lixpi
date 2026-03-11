@@ -453,7 +453,7 @@ Users see:
 
 - `aiChatThreadControls.ts` - UI control factories:
   - `createAiModelSelectorDropdown()` - AI model picker dropdown
-  - `createImageGenerationToggle()` - Image generation on/off toggle
+  - `createImageModelSelectorDropdown()` - Image model picker dropdown (with size selector)
   - `createAiSubmitButton()` - Submit/stop button
 
 - `aiChatThreadPluginConstants.ts` - Shared `PluginKey` to avoid identity mismatch and circular imports between NodeView and plugin. Import this key in both places and call `AI_CHAT_THREAD_PLUGIN_KEY.getState(view.state)` when needed.

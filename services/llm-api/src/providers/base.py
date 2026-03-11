@@ -64,6 +64,11 @@ class ProviderState(TypedDict, total=False):
         - image_size: Size for image generation
         - previous_response_id: Previous response ID for multi-turn editing
         - image_usage: Image generation usage statistics
+        - image_model_meta_info: Metadata for the selected image model
+        - image_model_version: Image model ID
+        - image_provider_name: Image model provider name
+        - generated_image_prompt: Prompt extracted from text model's tool call
+        - reference_images: Reference images extracted from tool call
     """
     messages: list
     ai_model_meta_info: Dict[str, Any]
@@ -87,6 +92,11 @@ class ProviderState(TypedDict, total=False):
     enable_image_generation: Optional[bool]
     image_size: Optional[str]
     image_usage: Optional[Dict[str, Any]]
+    image_model_meta_info: Optional[Dict[str, Any]]
+    image_model_version: Optional[str]
+    image_provider_name: Optional[str]
+    generated_image_prompt: Optional[str]
+    reference_images: Optional[list]
 
 
 class BaseLLMProvider(ABC):
@@ -122,24 +132,52 @@ class BaseLLMProvider(ABC):
         """
         Build the LangGraph state machine workflow.
 
-        Workflow: validate_request → stream_tokens → calculate_usage → cleanup
+        Workflow:
+            validate_request → stream_tokens → [conditional]
+                → if generated_image_prompt: execute_image_generation → calculate_usage → cleanup → END
+                → else: calculate_usage → cleanup → END
         """
         workflow = StateGraph(ProviderState)
 
         # Add nodes
         workflow.add_node("validate_request", self._validate_request)
         workflow.add_node("stream_tokens", self._stream_tokens)
+        workflow.add_node("execute_image_generation", self._execute_image_generation)
         workflow.add_node("calculate_usage", self._calculate_usage)
         workflow.add_node("cleanup", self._cleanup)
 
         # Add edges
         workflow.set_entry_point("validate_request")
         workflow.add_edge("validate_request", "stream_tokens")
-        workflow.add_edge("stream_tokens", "calculate_usage")
+
+        # Conditional edge: route to image generation if text model made a tool call
+        workflow.add_conditional_edges(
+            "stream_tokens",
+            self._should_generate_image,
+            {
+                "generate_image": "execute_image_generation",
+                "skip": "calculate_usage"
+            }
+        )
+
+        workflow.add_edge("execute_image_generation", "calculate_usage")
         workflow.add_edge("calculate_usage", "cleanup")
         workflow.add_edge("cleanup", END)
 
         return workflow
+
+    @staticmethod
+    def _should_generate_image(state: ProviderState) -> str:
+        if state.get('generated_image_prompt'):
+            return "generate_image"
+        return "skip"
+
+    async def _execute_image_generation(self, state: ProviderState) -> ProviderState:
+        from tools.image_router import ImageRouter
+
+        logger.info(f"Executing image generation for {self.instance_key}")
+        router = ImageRouter()
+        return await router.execute(state, self.nats_client, self.usage_reporter)
 
     async def process(self, request_data: Dict[str, Any]) -> None:
         """
@@ -173,6 +211,11 @@ class BaseLLMProvider(ABC):
                 'enable_image_generation': request_data.get('enableImageGeneration', False),
                 'image_size': request_data.get('imageSize', 'auto'),
                 'image_usage': None,
+                'image_model_meta_info': request_data.get('imageModelMetaInfo'),
+                'image_model_version': request_data.get('imageModelMetaInfo', {}).get('modelVersion') if request_data.get('imageModelMetaInfo') else None,
+                'image_provider_name': request_data.get('imageModelMetaInfo', {}).get('provider') if request_data.get('imageModelMetaInfo') else None,
+                'generated_image_prompt': None,
+                'reference_images': None,
             }
 
             # Run workflow with timeout (circuit breaker)
@@ -260,10 +303,18 @@ class BaseLLMProvider(ABC):
             return updated_state
 
         except Exception as e:
-            logger.error(f"Error during streaming: {e}", exc_info=True)
+            logger.error(f"Streaming error ({self.get_provider_name()}): {e}")
             state['error'] = str(e)
-            await self._publish_stream_end(state['workspace_id'], state['ai_chat_thread_id'])
-            raise
+            try:
+                await self._publish_error(
+                    state['workspace_id'],
+                    state['ai_chat_thread_id'],
+                    str(e)
+                )
+                await self._publish_stream_end(state['workspace_id'], state['ai_chat_thread_id'])
+            except Exception:
+                logger.error("Failed to publish error/end events to NATS")
+            return state
         finally:
             state['stream_active'] = False
             state['ai_request_finished_at'] = int(datetime.now().timestamp() * 1000)
