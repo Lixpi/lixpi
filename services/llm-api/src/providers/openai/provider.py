@@ -217,7 +217,8 @@ class OpenAIProvider(BaseLLMProvider):
 
             if image_b64:
                 await self._publish_image_complete(
-                    workspace_id, ai_chat_thread_id, image_b64, '', revised_prompt
+                    workspace_id, ai_chat_thread_id, image_b64, '', revised_prompt,
+                    image_model_id=model_version
                 )
 
                 state['image_usage'] = {
@@ -461,7 +462,8 @@ class OpenAIProvider(BaseLLMProvider):
                         ai_chat_thread_id,
                         result,
                         response.id,
-                        revised_prompt
+                        revised_prompt,
+                        image_model_id=model_version
                     )
 
         if images_generated > 0:

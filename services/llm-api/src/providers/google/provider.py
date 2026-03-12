@@ -160,7 +160,8 @@ class GoogleProvider(BaseLLMProvider):
                             elif part.inline_data and not getattr(part, 'thought', False):
                                 image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
                                 await self._publish_image_complete(
-                                    workspace_id, ai_chat_thread_id, image_b64, '', ''
+                                    workspace_id, ai_chat_thread_id, image_b64, '', '',
+                                    image_model_id=model_version
                                 )
 
             elif inject_tool:

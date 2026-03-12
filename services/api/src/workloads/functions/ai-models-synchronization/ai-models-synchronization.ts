@@ -155,15 +155,20 @@ export class AiModelsSync {
             exact: [
                 'gpt-4',
                 'gpt-4o',
-                'gpt-4o-transcribe',    // temporarily disabled, code doesn't yet support it
+                'gpt-5',
             ],
             // Prefix matches (legacy families)
             prefix: [
                 'gpt-3.5',
                 'gpt-4-',
                 'gpt-4-turbo',
-                'chatgpt-4o-',
-                'o1',    // temporarily disabled, code doesn't yet support it
+                'gpt-4.1',
+                'gpt-4o',
+                'gpt-5-',
+                'gpt-5.1',
+                'gpt-5.2',
+                'gpt-5.3',
+                'o1',
                 'text-',
                 'code-',
                 'davinci',
@@ -175,10 +180,14 @@ export class AiModelsSync {
                 'whisper'
             ],
             // Contains (partial-name) matches
-            // Example: filter out models with '-mini' or '-nano' anywhere in the name
             contains: [
                 '-mini',
-                '-nano'
+                '-nano',
+                '-codex',
+                '-realtime',
+                '-audio',
+                '-transcribe',
+                'chatgpt',
             ]
         },
         Anthropic: {
@@ -187,7 +196,13 @@ export class AiModelsSync {
                 'claude-3-haiku',
                 'claude-3-opus',
                 'claude-3-5',
-                'claude-3-7'
+                'claude-3-7',
+                'claude-sonnet-4-5',
+                'claude-sonnet-4-20',
+                'claude-opus-4-5',
+                'claude-opus-4-1',
+                'claude-opus-4-20',
+                'claude-haiku-4-5',
             ],
             contains: []
         },
@@ -197,10 +212,19 @@ export class AiModelsSync {
                 'gemini-1.0',
                 'gemini-1.5',
                 'gemini-2.0',
+                'gemini-2.5',
+                'gemini-3-flash',
+                'gemini-3-pro',
+                'gemini-3.1-flash-lite',
+                'gemini-3.1-pro',
+                'gemini-flash-lite',
                 'gemini-embedding',
+                'gemma',
                 'text-embedding',
                 'embedding',
                 'aqa',
+                'deep-research',
+                'nano-banana',
             ],
             contains: [
                 '-tts-',
@@ -655,10 +679,14 @@ export class AiModelsSync {
             return allModels.filter(model => {
                 const modelId = model.name
 
+                // Image generation models are always allowed through (overrides blacklist rules)
+                // Use '-image' to match gemini-*-image* but NOT 'imagen' models
+                if (modelId.includes('-image')) return true
+
                 if (blacklist.exact.includes(modelId)) return false
                 if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) return false
                 if (blacklist.contains.some(substring => modelId.includes(substring))) return false
-                if (this.isMinorVersion(modelId) && !modelId.includes('image')) return false
+                if (this.isMinorVersion(modelId) && !modelId.includes('-image')) return false
 
                 // Only include gemini models
                 return modelId.startsWith('gemini')

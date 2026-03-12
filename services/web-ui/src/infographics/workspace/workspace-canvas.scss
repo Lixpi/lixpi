@@ -444,6 +444,28 @@
         border-radius: 4px;
         pointer-events: none;
     }
+
+    .image-model-badge {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        width: 24px;
+        height: 24px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 4;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+
+        svg {
+            width: 14px;
+            height: 14px;
+            fill: #555;
+        }
+    }
 }
 
 .image-drag-overlay {

@@ -86,6 +86,7 @@ export type AiGeneratedImageCallbacks = {
         responseId: string
         revisedPrompt: string
         aiModel: string
+        imageModelProvider: string
         responseMessageId: string
     }) => void
 }

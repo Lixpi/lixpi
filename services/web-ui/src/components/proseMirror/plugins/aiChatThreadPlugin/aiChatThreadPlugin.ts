@@ -49,6 +49,7 @@ type SegmentEvent = {
     status?: StreamStatus
     type?: ImageSegmentType
     aiProvider?: string
+    imageModelProvider?: string
     threadId?: string
     aiChatThreadId?: string
     segment?: {
@@ -631,7 +632,7 @@ class AiChatThreadPluginClass {
     }
 
     private handleImageComplete(view: EditorView, event: SegmentEvent): void {
-        const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider } = event
+        const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider, imageModelProvider } = event
         if (!imageUrl || !aiChatThreadId) return
 
         const { state, dispatch } = view
@@ -689,6 +690,7 @@ class AiChatThreadPluginClass {
             responseId: responseId || '',
             revisedPrompt: revisedPrompt || '',
             aiModel: aiProvider || '',
+            imageModelProvider: imageModelProvider || '',
             responseMessageId,
         })
     }

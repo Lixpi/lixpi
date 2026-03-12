@@ -19,7 +19,7 @@ import {
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
@@ -1273,7 +1273,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
 
         onImageCompleteToCanvas: async (data) => {
-            const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, responseMessageId } = data
+            const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, imageModelProvider, responseMessageId } = data
             console.log('🖼️ [CANVAS] onImageCompleteToCanvas', { threadId, fileId, responseMessageId, hasPartial: partialImageTracker.has(threadId) })
 
             // Read tracker SYNCHRONOUSLY before any await
@@ -1299,6 +1299,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             aiChatThreadId: threadId,
                             responseId,
                             aiModel: aiModel as any,
+                            imageModelProvider: imageModelProvider || '',
                             revisedPrompt,
                             responseMessageId: responseMessageId || '',
                         },
@@ -1348,6 +1349,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // Update the existing DOM image src directly
                 const imgEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] img.image-node-img`) as HTMLImageElement | null
                 if (imgEl) imgEl.src = imageSrc
+
+                // Add provider icon badge to the existing DOM node
+                const nodeEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"]`) as HTMLElement | null
+                if (nodeEl && imageModelProvider) {
+                    const providerIcons: Record<string, string> = {
+                        'OpenAI': gptAvatarIcon,
+                        'Anthropic': claudeIcon,
+                        'Google': geminiIcon,
+                    }
+                    const iconSvg = providerIcons[imageModelProvider]
+                    if (iconSvg) {
+                        const badge = document.createElement('div')
+                        badge.className = 'image-model-badge'
+                        badge.innerHTML = iconSvg
+                        badge.title = imageModelProvider
+                        nodeEl.appendChild(badge)
+                    }
+                }
 
                 if (useAnchored && responseMessageId) {
                     // Update anchored entry with the real responseMessageId and
@@ -1442,6 +1461,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         aiChatThreadId: threadId,
                         responseId,
                         aiModel: aiModel as any,
+                        imageModelProvider: imageModelProvider || '',
                         revisedPrompt,
                         responseMessageId: responseMessageId || '',
                     },
@@ -2818,6 +2838,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         nodeEl.appendChild(imgEl)
+
+        // Add image model provider icon badge
+        const imageModelProvider = node.generatedBy?.imageModelProvider
+        if (imageModelProvider) {
+            const providerIcons: Record<string, string> = {
+                'OpenAI': gptAvatarIcon,
+                'Anthropic': claudeIcon,
+                'Google': geminiIcon,
+            }
+            const iconSvg = providerIcons[imageModelProvider]
+            if (iconSvg) {
+                const badge = document.createElement('div')
+                badge.className = 'image-model-badge'
+                badge.innerHTML = iconSvg
+                badge.title = imageModelProvider
+                nodeEl.appendChild(badge)
+            }
+        }
 
         // Check if this image is currently generating
         const isGenerating = Array.from(partialImageTracker.values()).some(p => p.nodeId === node.nodeId)

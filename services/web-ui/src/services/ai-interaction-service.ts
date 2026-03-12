@@ -141,6 +141,7 @@ export default class AiInteractionService {
                     responseId: content.responseId,
                     revisedPrompt: content.revisedPrompt,
                     aiProvider: this.currentAiProvider,
+                    imageModelProvider: content.imageModelProvider || content.aiProvider || '',
                     aiChatThreadId: this.aiChatThreadId
                 })
                 return

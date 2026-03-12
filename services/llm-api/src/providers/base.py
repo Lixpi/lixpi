@@ -568,7 +568,8 @@ class BaseLLMProvider(ABC):
         ai_chat_thread_id: str,
         image_base64: str,
         response_id: str,
-        revised_prompt: str
+        revised_prompt: str,
+        image_model_id: str = ''
     ) -> None:
         """
         Upload and publish a completed generated image.
@@ -579,6 +580,7 @@ class BaseLLMProvider(ABC):
             image_base64: Base64-encoded final image data
             response_id: OpenAI response ID for multi-turn editing
             revised_prompt: The prompt as revised/interpreted by the model
+            image_model_id: The model ID used to generate the image
         """
         # Upload image to storage first
         upload_result = await self._upload_image_to_storage(workspace_id, image_base64)
@@ -597,7 +599,9 @@ class BaseLLMProvider(ABC):
                     'fileId': upload_result['fileId'],
                     'responseId': response_id,
                     'revisedPrompt': revised_prompt,
-                    'aiProvider': self.get_provider_name()
+                    'aiProvider': self.get_provider_name(),
+                    'imageModelProvider': self.get_provider_name(),
+                    'imageModelId': image_model_id
                 },
                 'aiChatThreadId': ai_chat_thread_id
             }

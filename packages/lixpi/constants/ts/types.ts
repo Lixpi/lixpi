@@ -76,6 +76,7 @@ export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
     aiModel: AiModelId
+    imageModelProvider?: string
     revisedPrompt: string
     responseMessageId?: string
 }
