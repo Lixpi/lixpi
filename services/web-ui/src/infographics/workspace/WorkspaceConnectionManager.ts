@@ -950,7 +950,9 @@ export class WorkspaceConnectionManager {
 
 		// Calculate scaled sizes for edges
 		const { strokeWidth: scaledStrokeWidth, markerSize: scaledMarkerSize, markerOffset: scaledMarkerOffset } =
-			getEdgeScaledSizes(zoom)
+			webUiSettings.useZoomCompensatedConnectorScaling
+				? getEdgeScaledSizes(zoom)
+				: { strokeWidth: 2, markerSize: 16, markerOffset: { source: 6, target: 19 } }
 
 		// Compute spread-out t values for edges sharing the same node+side
 		// This prevents multiple edges from converging to the exact same point
