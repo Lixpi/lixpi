@@ -3,19 +3,30 @@ Attachment handling utilities for LLM providers.
 Provides a unified way to convert attachments (images, files) between provider formats.
 """
 
+import io
 import re
 import base64
 import logging
 from enum import Enum
 from typing import Dict, Any, List, Union
 
+from PIL import Image
+
 logger = logging.getLogger(__name__)
+
+# Anthropic's 5MB limit applies to the base64-encoded string, not raw bytes.
+# Base64 inflates size by ~33% (4/3), so max raw bytes = 5,242,880 * 3/4 = 3,932,160.
+MAX_IMAGE_BYTES = 3_750_000  # ~3.75MB raw → ~5MB base64, with safety margin
+
+# Max dimension on the longest side
+MAX_IMAGE_DIMENSION = 2048
 
 
 class AttachmentFormat(Enum):
     """Supported LLM provider formats for attachments."""
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    GOOGLE = "google"
 
 
 def parse_nats_object_ref(ref: str) -> tuple[str, str] | None:
@@ -37,6 +48,122 @@ def parse_nats_object_ref(ref: str) -> tuple[str, str] | None:
         return None
 
     return parts[0], parts[1]
+
+
+def downscale_image_if_needed(data: bytes, mime_type: str) -> tuple[bytes, str]:
+    """
+    Downscale an image if it exceeds provider size limits.
+
+    Strategy:
+    1. If under MAX_IMAGE_BYTES, return as-is (no processing)
+    2. Resize if any dimension exceeds MAX_IMAGE_DIMENSION
+    3. Re-encode with progressive quality reduction until under limit
+
+    Returns:
+        Tuple of (image_bytes, mime_type) — mime_type may change if format conversion is needed
+    """
+    if len(data) <= MAX_IMAGE_BYTES:
+        return data, mime_type
+
+    logger.info(f"Image exceeds {MAX_IMAGE_BYTES} bytes ({len(data)} bytes), downscaling...")
+
+    try:
+        img = Image.open(io.BytesIO(data))
+    except Exception as e:
+        logger.warning(f"Failed to open image for downscaling: {e}")
+        return data, mime_type
+
+    has_alpha = img.mode in ('RGBA', 'LA', 'PA')
+
+    # Resize if dimensions exceed the maximum
+    width, height = img.size
+    longest_side = max(width, height)
+    if longest_side > MAX_IMAGE_DIMENSION:
+        scale = MAX_IMAGE_DIMENSION / longest_side
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+        img = img.resize((new_width, new_height), Image.LANCZOS)
+        logger.info(f"Resized from {width}x{height} to {new_width}x{new_height}")
+
+    # Choose output format: keep PNG for transparency, otherwise JPEG
+    if has_alpha:
+        out_format = 'PNG'
+        out_mime = 'image/png'
+    else:
+        out_format = 'JPEG'
+        out_mime = 'image/jpeg'
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+
+    # Try encoding with progressively lower quality
+    quality_steps = [92, 85, 78, 70, 60] if out_format == 'JPEG' else [None]
+
+    for quality in quality_steps:
+        buf = io.BytesIO()
+        save_kwargs = {'format': out_format}
+        if quality is not None:
+            save_kwargs['quality'] = quality
+            save_kwargs['optimize'] = True
+        else:
+            save_kwargs['optimize'] = True
+        img.save(buf, **save_kwargs)
+        result = buf.getvalue()
+
+        if len(result) <= MAX_IMAGE_BYTES:
+            logger.info(f"Downscaled to {len(result)} bytes (format={out_format}, quality={quality})")
+            return result, out_mime
+
+    # PNG was still too large — convert to JPEG as last resort
+    if has_alpha:
+        logger.info("PNG still too large after optimization, converting to JPEG")
+        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+        rgb_img.paste(img, mask=img.split()[-1])
+        for quality in [85, 78, 70, 60]:
+            buf = io.BytesIO()
+            rgb_img.save(buf, format='JPEG', quality=quality, optimize=True)
+            result = buf.getvalue()
+            if len(result) <= MAX_IMAGE_BYTES:
+                logger.info(f"Converted PNG→JPEG, downscaled to {len(result)} bytes (quality={quality})")
+                return result, 'image/jpeg'
+
+    # If still too large, do a more aggressive resize
+    width, height = img.size
+    for scale in [0.75, 0.5]:
+        new_w = int(width * scale)
+        new_h = int(height * scale)
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+        if resized.mode != 'RGB':
+            resized = resized.convert('RGB')
+        buf = io.BytesIO()
+        resized.save(buf, format='JPEG', quality=70, optimize=True)
+        result = buf.getvalue()
+        if len(result) <= MAX_IMAGE_BYTES:
+            logger.info(f"Aggressively resized to {new_w}x{new_h}, {len(result)} bytes")
+            return result, 'image/jpeg'
+
+    logger.warning(f"Could not downscale image below {MAX_IMAGE_BYTES} bytes, returning best effort")
+    return result, 'image/jpeg'
+
+
+def _downscale_data_url_block(block: Dict) -> Dict:
+    """Downscale an image in a data URL block if it exceeds size limits."""
+    url = block.get('image_url', '')
+    match = re.match(r'data:([^;]+);base64,(.+)', url, re.DOTALL)
+    if not match:
+        return block
+
+    mime_type = match.group(1)
+    raw_data = base64.b64decode(match.group(2))
+
+    if len(raw_data) <= MAX_IMAGE_BYTES:
+        return block
+
+    new_data, new_mime = downscale_image_if_needed(raw_data, mime_type)
+    new_b64 = base64.b64encode(new_data).decode('utf-8')
+    return {
+        **block,
+        'image_url': f"data:{new_mime};base64,{new_b64}"
+    }
 
 
 async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) -> Union[str, List[Dict]]:
@@ -74,9 +201,9 @@ async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) 
         if block_type == 'input_image':
             url = block.get('image_url', '')
 
-            # Already a data URL - pass through
+            # Already a data URL - downscale if needed
             if url.startswith('data:'):
-                resolved_content.append(block)
+                resolved_content.append(_downscale_data_url_block(block))
                 continue
 
             # NATS object store reference
@@ -103,6 +230,7 @@ async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) 
                                 mime_type = 'image/png'
 
                         # Convert to base64 data URL
+                        data, mime_type = downscale_image_if_needed(data, mime_type)
                         base64_data = base64.b64encode(data).decode('utf-8')
                         data_url = f"data:{mime_type};base64,{base64_data}"
 
@@ -313,6 +441,56 @@ def convert_content_for_openai(content: Union[str, List[Dict]]) -> Union[str, Li
     return validated_content if validated_content else ''
 
 
+def convert_content_for_google(content: Union[str, List[Dict]]) -> Union[str, List[Dict]]:
+    """
+    Convert OpenAI Responses API message content to Google Gen AI format.
+
+    Input format (OpenAI Responses API):
+        {"type": "input_text", "text": "..."}
+        {"type": "input_image", "image_url": "data:...", "detail": "auto"}
+
+    Output format (Google Gen AI):
+        {"text": "..."}
+        {"inline_data": {"mime_type": "...", "data": "..."}}
+    """
+    if isinstance(content, str):
+        return content
+
+    if not isinstance(content, list):
+        return content
+
+    google_content = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+
+        block_type = block.get('type')
+
+        if block_type == 'input_text':
+            google_content.append({
+                'text': block.get('text', '')
+            })
+        elif block_type == 'input_image':
+            url = block.get('image_url', '')
+            if url.startswith('data:'):
+                try:
+                    media_type, base64_data = parse_data_url(url)
+                    google_content.append({
+                        'inline_data': {
+                            'mime_type': media_type,
+                            'data': base64_data
+                        }
+                    })
+                except ValueError as e:
+                    logger.warning(f"Failed to parse image data URL for Google: {e}")
+            else:
+                logger.warning(f"Unsupported image URL format for Google: {url[:50]}")
+        else:
+            logger.warning(f"Unknown content block type for Google: {block_type}")
+
+    return google_content if google_content else ''
+
+
 def convert_attachments_for_provider(
     content: Union[str, List[Dict]],
     target_format: AttachmentFormat
@@ -341,6 +519,8 @@ def convert_attachments_for_provider(
         return convert_content_for_anthropic(content)
     elif target_format == AttachmentFormat.OPENAI:
         return convert_content_for_openai(content)
+    elif target_format == AttachmentFormat.GOOGLE:
+        return convert_content_for_google(content)
     else:
         logger.warning(f"Unknown target format: {target_format}, returning content as-is")
         return content

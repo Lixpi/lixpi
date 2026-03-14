@@ -1,7 +1,7 @@
 // Document thread shape - white rounded border with centered text
 
-// @ts-ignore - runtime import
 import { select } from 'd3-selection'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 type ThreadShapeConfig = {
     text: string
@@ -61,13 +61,14 @@ export function setupThreadGradient(defs: any, config: { gradientId: string }) {
         .attr('x1', '0').attr('y1', '256')  // Center of the shape
         .attr('x2', '512').attr('y2', '256')
 
-    // Create smooth gradient with more blue, less purple
+    // Use the shifting gradient palette from theme settings
+    const themeColors = webUiThemeSettings.shiftingGradientColors
     const extendedColors = [
-        '#60a5fa',  // blue
-        '#7c9ff9',  // blue-purple transition
-        '#a0afe8ff',  // purple
-        '#7c9ff9',  // purple-blue transition
-        '#60a5fa'   // blue
+        themeColors[0],
+        themeColors[1],
+        themeColors[2],
+        themeColors[3],
+        themeColors[0],
     ]
 
     const numRepeats = 2

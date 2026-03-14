@@ -19,7 +19,7 @@ import {
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
@@ -38,7 +38,9 @@ import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubb
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
-import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+
+import { select } from 'd3-selection'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -506,6 +508,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlFactories = {
             createModelDropdown: createGenericAiModelDropdown,
+            createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
@@ -593,6 +596,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlFactories = {
             createModelDropdown: createGenericAiModelDropdown,
+            createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
@@ -1037,6 +1041,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function buildImageSrc(imageUrl: string, apiBaseUrl: string, token: string | false): string {
+        if (!imageUrl) return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
         if (imageUrl.startsWith('data:')) return imageUrl
         if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
         if (imageUrl.startsWith('http')) return imageUrl
@@ -1137,8 +1142,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const token = await AuthService.getTokenSilently()
                 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
                 const imgEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"] img.image-node-img`) as HTMLImageElement | null
-                if (imgEl) {
+                if (imgEl && imageUrl) {
                     imgEl.src = buildImageSrc(imageUrl, API_BASE_URL, token)
+                    // Remove the spinner once real image data arrives
+                    const spinnerEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"] .image-generating-spinner`)
+                    if (spinnerEl) spinnerEl.remove()
                 }
                 partialImageTracker.set(threadId, { ...existing, fileId: fileId || existing.fileId })
                 return
@@ -1265,7 +1273,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
 
         onImageCompleteToCanvas: async (data) => {
-            const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, responseMessageId } = data
+            const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, imageModelProvider, responseMessageId } = data
             console.log('🖼️ [CANVAS] onImageCompleteToCanvas', { threadId, fileId, responseMessageId, hasPartial: partialImageTracker.has(threadId) })
 
             // Read tracker SYNCHRONOUSLY before any await
@@ -1291,6 +1299,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             aiChatThreadId: threadId,
                             responseId,
                             aiModel: aiModel as any,
+                            imageModelProvider: imageModelProvider || '',
                             revisedPrompt,
                             responseMessageId: responseMessageId || '',
                         },
@@ -1308,6 +1317,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 partialImageTracker.delete(threadId)
 
+                // Remove the animated generating border and spinner
+                const borderSvg = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-border`)
+                if (borderSvg) borderSvg.remove()
+                const spinnerEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-spinner`)
+                if (spinnerEl) spinnerEl.remove()
                 const collisionExclusions = useAnchored ? anchoredImageManager.getExclusionPairsForCollisions() : undefined
                 const nodeBoxes = nodes.map((n: CanvasNode) => ({
                     id: n.nodeId,
@@ -1335,6 +1349,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // Update the existing DOM image src directly
                 const imgEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] img.image-node-img`) as HTMLImageElement | null
                 if (imgEl) imgEl.src = imageSrc
+
+                // Add provider icon badge to the existing DOM node
+                const nodeEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"]`) as HTMLElement | null
+                if (nodeEl && imageModelProvider) {
+                    const providerIcons: Record<string, string> = {
+                        'OpenAI': gptAvatarIcon,
+                        'Anthropic': claudeIcon,
+                        'Google': geminiIcon,
+                    }
+                    const iconSvg = providerIcons[imageModelProvider]
+                    if (iconSvg) {
+                        const badge = document.createElement('div')
+                        badge.className = 'image-model-badge'
+                        badge.innerHTML = iconSvg
+                        badge.title = imageModelProvider
+                        nodeEl.appendChild(badge)
+                    }
+                }
 
                 if (useAnchored && responseMessageId) {
                     // Update anchored entry with the real responseMessageId and
@@ -1429,6 +1461,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         aiChatThreadId: threadId,
                         responseId,
                         aiModel: aiModel as any,
+                        imageModelProvider: imageModelProvider || '',
                         revisedPrompt,
                         responseMessageId: responseMessageId || '',
                     },
@@ -1550,7 +1583,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             type: 'aiChatThread',
                             attrs: {
                                 threadId,
-                                imageGenerationEnabled: true,
                                 // Store the previous response ID for multi-turn editing
                                 previousResponseId: responseId
                             },
@@ -2679,9 +2711,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             aiService.sendChatMessage({
                                 messages: messagesWithContext,
                                 aiModel,
-                                enableImageGeneration: imageOptions?.imageGenerationEnabled,
-                                imageSize: imageOptions?.imageGenerationSize,
-                                previousResponseId: imageOptions?.previousResponseId
+                                aiImageModel: imageOptions?.aiImageModel,
+                                imageSize: imageOptions?.imageGenerationSize
                             })
                         } catch (error) {
                             console.error('Failed to gather context from connected nodes:', error)
@@ -2807,6 +2838,152 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         nodeEl.appendChild(imgEl)
+
+        // Add image model provider icon badge
+        const imageModelProvider = node.generatedBy?.imageModelProvider
+        if (imageModelProvider) {
+            const providerIcons: Record<string, string> = {
+                'OpenAI': gptAvatarIcon,
+                'Anthropic': claudeIcon,
+                'Google': geminiIcon,
+            }
+            const iconSvg = providerIcons[imageModelProvider]
+            if (iconSvg) {
+                const badge = document.createElement('div')
+                badge.className = 'image-model-badge'
+                badge.innerHTML = iconSvg
+                badge.title = imageModelProvider
+                nodeEl.appendChild(badge)
+            }
+        }
+
+        // Check if this image is currently generating
+        const isGenerating = Array.from(partialImageTracker.values()).some(p => p.nodeId === node.nodeId)
+
+        if (isGenerating) {
+            // Add loading spinner — three bouncing dots matching AI response message style
+            const spinnerContainer = document.createElement('div')
+            spinnerContainer.className = 'image-generating-spinner'
+            spinnerContainer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:5;pointer-events:none;'
+
+            const dotsWrapper = document.createElement('div')
+            dotsWrapper.style.cssText = 'display:flex;gap:8px;align-items:center;'
+
+            for (let i = 0; i < 3; i++) {
+                const dot = document.createElement('div')
+                dot.style.cssText = `width:8px;height:8px;border-radius:50%;background:#b0b0b0;animation:img-dot-bounce 1s ${i * 0.15}s infinite ease-in-out;`
+                dotsWrapper.appendChild(dot)
+            }
+
+            // Inject keyframes if not already present
+            if (!document.getElementById('img-dot-bounce-keyframes')) {
+                const style = document.createElement('style')
+                style.id = 'img-dot-bounce-keyframes'
+                style.textContent = `@keyframes img-dot-bounce { 0%,80%,100%{transform:scale(1);opacity:.4} 40%{transform:scale(1.3);opacity:1} }`
+                document.head.appendChild(style)
+            }
+
+            spinnerContainer.appendChild(dotsWrapper)
+            nodeEl.appendChild(spinnerContainer)
+
+            const gradientId = `img-grad-${node.nodeId}`
+
+            // Create an SVG overlay that covers the image node
+            const svg = select(nodeEl).append('svg')
+                .attr('class', 'image-generating-border')
+                .style('position', 'absolute')
+                .style('top', '0')
+                .style('left', '0')
+                .style('width', '100%')
+                .style('height', '100%')
+                .style('pointer-events', 'none')
+                .style('border-radius', 'inherit')
+                .style('z-index', '10')
+
+            const defs = svg.append('defs')
+            const gradient = defs.append('linearGradient')
+                .attr('id', gradientId)
+                .attr('gradientUnits', 'objectBoundingBox')
+                .attr('x1', '0').attr('y1', '0.5')
+                .attr('x2', '1').attr('y2', '0.5')
+
+            // Use the shifting gradient palette from theme settings
+            const themeColors = webUiThemeSettings.shiftingGradientColors
+            const extendedColors = [
+                themeColors[0],
+                themeColors[1],
+                themeColors[2],
+                themeColors[3],
+                themeColors[0],
+            ]
+
+            const numRepeats = 2
+            for (let i = 0; i <= numRepeats * extendedColors.length; i++) {
+                const colorIndex = i % extendedColors.length
+                const offset = (i / (numRepeats * extendedColors.length)) * 100
+                gradient.append('stop')
+                    .attr('offset', `${offset}%`)
+                    .style('stop-color', extendedColors[colorIndex])
+            }
+
+            // Draw the border rectangle
+            svg.append('rect')
+                .attr('width', '100%')
+                .attr('height', '100%')
+                .attr('rx', 6) // Match image node's border radius
+                .attr('ry', 6)
+                .attr('fill', 'none')
+                .attr('stroke', `url(#${gradientId})`)
+                .attr('stroke-width', 4)
+
+            // Custom easing matching cubic-bezier(0.19, 1, 0.22, 1)
+            const customEase = (t: number): number => {
+                const t2 = t * t, t3 = t2 * t, mt = 1 - t, mt2 = mt * mt
+                return 3 * mt2 * t + 3 * mt * t2 + t3
+            }
+
+            // Animation loop
+            let running = true
+            const duration = 50
+
+            const loop = () => {
+                if (!running) return
+
+                // Get current angle and calculate new position for rotation effect
+                const centerX = 0.5
+                const centerY = 0.5
+                const radius = 0.707 // sqrt(0.5^2 + 0.5^2) to cover corners
+
+                let angle = 0
+
+                const animate = () => {
+                    if (!running) return
+
+                    // Calculate gradient endpoints based on rotating angle
+                    const x1 = centerX + radius * Math.cos(angle)
+                    const y1 = centerY + radius * Math.sin(angle)
+                    const x2 = centerX + radius * Math.cos(angle + Math.PI)
+                    const y2 = centerY + radius * Math.sin(angle + Math.PI)
+
+                    gradient
+                        .transition()
+                        .duration(duration)  // Small steps for smooth rotation
+                        .ease(customEase)
+                        .attr('x1', x1)
+                        .attr('y1', y1)
+                        .attr('x2', x2)
+                        .attr('y2', y2)
+                        .on('end', () => {
+                            angle -= 0.1  // Negative for counterclockwise
+                            if (running) animate()
+                        })
+                }
+
+                animate()
+            }
+
+            loop()
+        }
 
         return nodeEl
     }

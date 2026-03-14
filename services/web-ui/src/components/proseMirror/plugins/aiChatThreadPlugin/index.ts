@@ -20,5 +20,12 @@ export {
     getAiGeneratedImageCallbacks
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
+// Export aiCollapsibleBlock node for schema and NodeView registration
+export {
+    aiCollapsibleBlockNodeType,
+    aiCollapsibleBlockNodeSpec,
+    aiCollapsibleBlockNodeView
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
+
 // Export all from plugin
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'

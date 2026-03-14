@@ -8,14 +8,25 @@
 //
 // See documentation/features/SHIFTING-GRADIENT.md for full technical details
 
-// Dreamy sky pastel colors inspired by desert sunset palette.
-// Ultra-light versions for a soft, airy sky look.
-// Note: which corner each color dominates depends on the current phase/positions.
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+
+type Color = { r: number; g: number; b: number }
+
+function hexToRgb(hex: string): Color {
+    const h = hex.replace('#', '')
+    return {
+        r: parseInt(h.substring(0, 2), 16),
+        g: parseInt(h.substring(2, 4), 16),
+        b: parseInt(h.substring(4, 6), 16),
+    }
+}
+
+// Colors sourced from webUiThemeSettings.shiftingGradientColors
 const GRADIENT_COLORS = {
-    color1: { r: 0xff, g: 0xf5, b: 0xfa }, // #FFF5FA - whisper pink
-    color2: { r: 0xf5, g: 0xef, b: 0xf9 }, // #F5EFF9 - whisper lavender
-    color3: { r: 0xe6, g: 0xe9, b: 0xf6 }, // #E6E9F6 - whisper periwinkle
-    color4: { r: 0xf3, g: 0xe4, b: 0xf2 }, // #F3E4F2 - whisper orchid
+    color1: hexToRgb(webUiThemeSettings.shiftingGradientColors[0]),
+    color2: hexToRgb(webUiThemeSettings.shiftingGradientColors[1]),
+    color3: hexToRgb(webUiThemeSettings.shiftingGradientColors[2]),
+    color4: hexToRgb(webUiThemeSettings.shiftingGradientColors[3]),
 }
 
 // 8 phase positions for the 4 color points
@@ -38,7 +49,6 @@ const BITMAP_HEIGHT = 80
 const ANIMATION_DURATION_MS = 500
 const SWIRL_FACTOR = 0.35
 
-type Color = { r: number; g: number; b: number }
 type Position = { x: number; y: number }
 
 type PatternOptions = {

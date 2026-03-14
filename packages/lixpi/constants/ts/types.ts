@@ -76,6 +76,7 @@ export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
     aiModel: AiModelId
+    imageModelProvider?: string
     revisedPrompt: string
     responseMessageId?: string
 }
@@ -205,7 +206,7 @@ export type AiInteractionChatSendMessagePayload = {
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
-    enableImageGeneration: boolean
+    aiImageModel: AiModelId
     imageSize?: ImageGenerationSize
     previousResponseId?: string
 }

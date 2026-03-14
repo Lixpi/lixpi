@@ -16,3 +16,6 @@ When working on TypeScript code make sure to follow these rules:
     ```
 
 When question is related to SVG or D3 you must always refer to the available `D3` MCP server!
+
+NEVER use `cat` to edit files.
+NEVER run large inline python or js code in the terminal.

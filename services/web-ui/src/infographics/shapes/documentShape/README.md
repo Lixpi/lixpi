@@ -78,6 +78,7 @@ startThreadGradientAnimation(
 - With `gradientId`: applies animated rotating gradient to stroke
 - Gradient rotates counterclockwise around the border creating a flowing snake effect
 - Uses blue-dominant color palette with purple accents
+- Gradient colors sourced from `webUiThemeSettings.shiftingGradientColors`
 
 **Usage:**
 ```typescript
@@ -117,7 +118,7 @@ Handles animated gradient background for context selection.
 // Setup gradient definition in SVG defs
 setupContextGradient(defs: D3Selection, config: {
   gradientId: string
-  colors?: string[]  // default: ['#a78bfa', '#60a5fa', '#a78bfa']
+  colors?: string[]  // default: webUiThemeSettings.shiftingGradientColors (first 3)
 })
 
 // Draw gradient-filled rectangle

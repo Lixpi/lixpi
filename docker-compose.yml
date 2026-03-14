@@ -271,7 +271,7 @@ services:
             - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
-            - ./packages-vendor/shadcn-svelte/sites/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
+            - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
 
             # CA certificate for browser installation
             - caddy-certs:/usr/src/service/public/certs:ro
@@ -349,6 +349,7 @@ services:
             # AI config
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
 
         volumes:
@@ -439,6 +440,7 @@ services:
             # AI Provider API Keys
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
 
             # Circuit breaker settings
             LLM_TIMEOUT_SECONDS: 1200
@@ -541,6 +543,7 @@ services:
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
 
             # Web-UI config
             VITE_API_URL: ${VITE_API_URL}

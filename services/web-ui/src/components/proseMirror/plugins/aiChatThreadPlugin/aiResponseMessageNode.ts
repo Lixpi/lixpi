@@ -7,6 +7,7 @@ import {
     checkMarkIcon,
     claudeIcon,
     claudeAnimatedFrameIcon,
+    geminiIcon,
 } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
@@ -104,6 +105,9 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             break
         case 'OpenAI':
             userAvatarContainer.innerHTML = gptAvatarIcon
+            break
+        case 'Google':
+            userAvatarContainer.innerHTML = geminiIcon
             break
         default:
             break

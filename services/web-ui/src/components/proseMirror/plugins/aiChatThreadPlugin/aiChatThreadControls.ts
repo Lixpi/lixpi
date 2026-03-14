@@ -3,6 +3,7 @@
     pauseIcon,
     gptAvatarIcon,
     claudeIcon,
+    geminiIcon,
     chevronDownIcon,
     imageIcon
 } from '$src/svgIcons/index.ts'
@@ -44,6 +45,7 @@ export function createAiModelSelectorDropdown(view: EditorView, getPos: () => nu
     const aiAvatarIcons: Record<string, string> = {
         gptAvatarIcon,
         claudeIcon,
+        geminiIcon,
     }
 
     let aiModelsData: any[] = aiModelsStore.getData()
@@ -234,12 +236,42 @@ export function createAiSubmitButton(view: EditorView, getPos: () => number | un
 }
 
 export function createImageGenerationToggle(view: EditorView, getPos: () => number | undefined) {
-    const IMAGE_SIZES = [
+    const OPENAI_IMAGE_SIZES = [
         { value: '1024x1024', label: '1:1' },
         { value: '1536x1024', label: '3:2' },
         { value: '1024x1536', label: '2:3' },
         { value: 'auto', label: 'Auto' }
     ]
+
+    const GOOGLE_IMAGE_SIZES = [
+        { value: '1:1', label: '1:1' },
+        { value: '3:2', label: '3:2' },
+        { value: '2:3', label: '2:3' },
+        { value: '16:9', label: '16:9' },
+        { value: '9:16', label: '9:16' },
+        { value: '4:3', label: '4:3' },
+        { value: '3:4', label: '3:4' },
+        { value: '4:5', label: '4:5' },
+        { value: '5:4', label: '5:4' },
+        { value: '21:9', label: '21:9' },
+        { value: 'auto', label: 'Auto' }
+    ]
+
+    const getSizesForProvider = (provider: string) => {
+        if (provider === 'Google') return GOOGLE_IMAGE_SIZES
+        return OPENAI_IMAGE_SIZES
+    }
+
+    const getProviderFromThread = (): string => {
+        const inputPos = getPos()
+        if (typeof inputPos !== 'number') return ''
+        const threadInfo = getThreadInfo(view, inputPos)
+        if (!threadInfo) return ''
+        const aiModel = threadInfo.threadNode.attrs?.aiModel || ''
+        return aiModel.split(':')[0] || ''
+    }
+
+    let lastProvider = getProviderFromThread()
 
     const container = document.createElement('div')
     container.className = 'image-generation-toggle'
@@ -250,12 +282,19 @@ export function createImageGenerationToggle(view: EditorView, getPos: () => numb
 
     const sizeSelector = document.createElement('select')
     sizeSelector.className = 'image-size-selector'
-    IMAGE_SIZES.forEach(size => {
-        const option = document.createElement('option')
-        option.value = size.value
-        option.textContent = size.label
-        sizeSelector.appendChild(option)
-    })
+
+    const populateSizeOptions = (provider: string) => {
+        const sizes = getSizesForProvider(provider)
+        sizeSelector.innerHTML = ''
+        sizes.forEach(size => {
+            const option = document.createElement('option')
+            option.value = size.value
+            option.textContent = size.label
+            sizeSelector.appendChild(option)
+        })
+    }
+
+    populateSizeOptions(lastProvider)
 
     const syncFromThread = () => {
         const inputPos = getPos()
@@ -266,7 +305,24 @@ export function createImageGenerationToggle(view: EditorView, getPos: () => numb
 
         const { threadNode } = threadInfo
         const enabled = Boolean(threadNode.attrs.imageGenerationEnabled)
-        const size = threadNode.attrs.imageGenerationSize || '1024x1024'
+        const currentProvider = (threadNode.attrs?.aiModel || '').split(':')[0] || ''
+
+        if (currentProvider !== lastProvider) {
+            lastProvider = currentProvider
+            populateSizeOptions(currentProvider)
+            const sizes = getSizesForProvider(currentProvider)
+            const currentSize = threadNode.attrs.imageGenerationSize || sizes[0].value
+            if (!sizes.find(s => s.value === currentSize)) {
+                const { threadPos } = threadInfo
+                const tr = view.state.tr.setNodeMarkup(threadPos, undefined, {
+                    ...threadNode.attrs,
+                    imageGenerationSize: sizes[0].value,
+                })
+                view.dispatch(tr)
+            }
+        }
+
+        const size = threadNode.attrs.imageGenerationSize || getSizesForProvider(currentProvider)[0].value
 
         container.setAttribute('data-enabled', String(enabled))
         toggleButton.title = enabled ? 'Image generation enabled' : 'Enable image generation'

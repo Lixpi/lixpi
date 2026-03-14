@@ -943,7 +943,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
 // =============================================================================
 
 describe('createAiPromptInputPlugin — image options handling', () => {
-    it('always includes imageOptions with imageGenerationEnabled true', () => {
+    it('always includes imageOptions with imageGenerationSize', () => {
         const { options } = createPluginOptions()
         const plugin = createAiPromptInputPlugin(options)
 
@@ -964,7 +964,6 @@ describe('createAiPromptInputPlugin — image options handling', () => {
 
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
-            imageGenerationEnabled: true,
             imageGenerationSize: '512x512',
         })
     })
@@ -990,7 +989,6 @@ describe('createAiPromptInputPlugin — image options handling', () => {
 
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
-            imageGenerationEnabled: true,
             imageGenerationSize: 'auto',
         })
     })

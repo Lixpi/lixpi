@@ -12,6 +12,7 @@ export const aiPromptInputNodeSpec = {
     isolating: true,
     attrs: {
         aiModel: { default: '' },
+        aiImageModel: { default: '' },
         imageGenerationSize: { default: 'auto' },
     },
     parseDOM: [
@@ -19,6 +20,7 @@ export const aiPromptInputNodeSpec = {
             tag: 'div.ai-prompt-input-wrapper',
             getAttrs: (dom: HTMLElement) => ({
                 aiModel: dom.getAttribute('data-ai-model') || '',
+                aiImageModel: dom.getAttribute('data-ai-image-model') || '',
                 imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
             })
         },
@@ -29,6 +31,7 @@ export const aiPromptInputNodeSpec = {
             {
                 class: 'ai-prompt-input-wrapper',
                 'data-ai-model': node.attrs.aiModel,
+                'data-ai-image-model': node.attrs.aiImageModel,
                 'data-image-generation-size': node.attrs.imageGenerationSize,
             },
             0,
@@ -50,6 +53,12 @@ type SubmitControls = {
 type ImageSizeControls = {
     getImageGenerationSize: () => string
     setImageGenerationSize: (size: string) => void
+    getProvider?: () => string
+}
+
+type ImageModelControls = {
+    getCurrentImageModel: () => string
+    setImageModel: (aiModel: string) => void
 }
 
 type AiPromptInputNodeViewOptions = {
@@ -57,6 +66,11 @@ type AiPromptInputNodeViewOptions = {
     onStop: () => void
     isReceiving: () => boolean
     createModelDropdown: (controls: AiModelControls, dropdownId: string) => {
+        dom: HTMLElement
+        destroy?: () => void
+        update: () => void
+    }
+    createImageModelDropdown: (controls: ImageModelControls, dropdownId: string) => {
         dom: HTMLElement
         destroy?: () => void
         update: () => void
@@ -102,9 +116,15 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setAiModel: (aiModel: string) => setNodeAttr(view, getPos, 'aiModel', aiModel),
         }
 
+        const imageModelControls: ImageModelControls = {
+            getCurrentImageModel: () => getNodeAttr(view, getPos, 'aiImageModel') || '',
+            setImageModel: (aiModel: string) => setNodeAttr(view, getPos, 'aiImageModel', aiModel),
+        }
+
         const imageControls: ImageSizeControls = {
             getImageGenerationSize: () => getNodeAttr(view, getPos, 'imageGenerationSize') || 'auto',
             setImageGenerationSize: (size: string) => setNodeAttr(view, getPos, 'imageGenerationSize', size),
+            getProvider: () => (getNodeAttr(view, getPos, 'aiImageModel') || getNodeAttr(view, getPos, 'aiModel') || '').split(':')[0] || '',
         }
 
         const submitControls: SubmitControls = {
@@ -115,10 +135,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         // Mount controls using adapters
         const modelDropdown = options.createModelDropdown(modelControls, 'ai-prompt-input')
+        const imageModelDropdown = options.createImageModelDropdown(imageModelControls, 'ai-image-model')
         const imageSizeDropdown = options.createImageSizeDropdown(imageControls, 'ai-image-size')
         const submitButton = options.createSubmitButton(submitControls)
 
         controlsEl.appendChild(modelDropdown.dom)
+        controlsEl.appendChild(imageModelDropdown.dom)
         controlsEl.appendChild(imageSizeDropdown.dom)
         controlsEl.appendChild(submitButton)
 
@@ -155,12 +177,14 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 syncEmptyState(updatedNode)
                 syncReceivingState()
                 modelDropdown.update()
+                imageModelDropdown.update()
                 imageSizeDropdown.update()
                 return true
             },
             destroy: () => {
                 clearInterval(receivingPollInterval)
                 modelDropdown.destroy?.()
+                imageModelDropdown.destroy?.()
                 imageSizeDropdown.destroy?.()
             },
             stopEvent: (e: Event) => {

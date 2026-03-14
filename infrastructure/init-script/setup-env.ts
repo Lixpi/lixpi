@@ -64,6 +64,7 @@ type EnvConfig = {
     // API Keys
     openaiApiKey: string
     anthropicApiKey: string
+    googleApiKey: string
     stripePublicKey: string
 }
 
@@ -593,6 +594,15 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         return null
     }
 
+    const googleApiKey = await prompts.text({
+        message: 'Google API Key',
+        placeholder: 'AIza...',
+    })
+    if (prompts.isCancel(googleApiKey)) {
+        prompts.cancel('Setup cancelled')
+        return null
+    }
+
     // Only ask for Stripe key if not using LocalAuth0 mock (real Auth0 = real payments)
     let stripePublicKey = ''
     if (!useLocalAuth0Mock) {
@@ -642,6 +652,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         cloudwatchContainerInsightsEnabled,
         openaiApiKey: (openaiApiKey as string) || '',
         anthropicApiKey: (anthropicApiKey as string) || '',
+        googleApiKey: (googleApiKey as string) || '',
         stripePublicKey: (stripePublicKey as string) || '',
     }
 }
@@ -688,6 +699,7 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{SAVE_LLM_RESPONSES_TO_DEBUG_DIR}}': String(isLocal),
         '{{OPENAI_API_KEY}}': config.openaiApiKey,
         '{{ANTHROPIC_API_KEY}}': config.anthropicApiKey,
+        '{{GOOGLE_API_KEY}}': config.googleApiKey,
         '{{VITE_MOCK_AUTH}}': String(config.useLocalAuth0Mock),
         '{{VITE_MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',
         '{{VITE_API_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
@@ -842,6 +854,7 @@ async function main(): Promise<void> {
             cloudwatchContainerInsightsEnabled: false,
             openaiApiKey: '',
             anthropicApiKey: '',
+            googleApiKey: '',
             stripePublicKey: '',
         }
 

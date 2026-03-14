@@ -3,6 +3,7 @@
 import process from 'process'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenAI } from '@google/genai'
 import DynamoDBService, { marshall, unmarshall } from '@lixpi/dynamodb-service'
 
 //INFO: do not remove unused imports!
@@ -19,6 +20,7 @@ import type { PartialDeep } from 'type-fest'
 const MODALITY_METADATA = {
     text: { title: 'Text', shortTitle: 'TXT' },
     image: { title: 'Image', shortTitle: 'IMG' },
+    image_generation: { title: 'Image Generation', shortTitle: 'IMG GEN' },
     audio: { title: 'Audio', shortTitle: 'AUDIO' },
     voice: { title: 'Voice', shortTitle: 'VOICE' },
     video: { title: 'Video', shortTitle: 'VID' }
@@ -43,6 +45,14 @@ type AnthropicModel = {
     display_name?: string
     created_at?: string
     type?: string
+}
+
+type GoogleModel = {
+    name: string
+    displayName?: string
+    description?: string
+    inputTokenLimit?: number
+    outputTokenLimit?: number
 }
 
 // Blacklist rules per provider: exact, prefix, and contains (partial-name) patterns
@@ -76,6 +86,7 @@ export interface AiModelsSyncOptions {
     dynamoDBService?: DynamoDBService
     openaiApiKey?: string
     anthropicApiKey?: string
+    googleApiKey?: string
 }
 
 export interface AiModelsSyncResult {
@@ -91,6 +102,12 @@ export interface AiModelsSyncResult {
         updatedModels: number
         deletedModels: number
     }
+    google: {
+        processed: number
+        newModels: number
+        updatedModels: number
+        deletedModels: number
+    }
     totalProcessed: number
     totalNew: number
     totalUpdated: number
@@ -101,6 +118,7 @@ export class AiModelsSync {
     private readonly dynamoDBService: DynamoDBService
     private readonly openai: OpenAI
     private readonly anthropic: Anthropic
+    private readonly google: GoogleGenAI
     private readonly aiModelsListTableName: string
     private readonly serviceName: string
 
@@ -122,27 +140,35 @@ export class AiModelsSync {
             apiKey: options.anthropicApiKey || env.ANTHROPIC_API_KEY,
         })
 
+        this.google = new GoogleGenAI({
+            apiKey: options.googleApiKey || env.GOOGLE_API_KEY,
+        })
+
         this.aiModelsListTableName = getDynamoDbTableStageName('AI_MODELS_LIST', env.ORG_NAME!, env.STAGE!)
         this.serviceName = 'ai-models-sync-service'
     }
 
     // Blacklist rules per provider: exact, prefix, and contains (partial-name) patterns
-    private static readonly MODELS_BLACKLIST: { OpenAI: ProviderBlacklist; Anthropic: ProviderBlacklist } = {
+    private static readonly MODELS_BLACKLIST: { OpenAI: ProviderBlacklist; Anthropic: ProviderBlacklist; Google: ProviderBlacklist } = {
         OpenAI: {
             // Exact matches (use for cases like 'gpt-4' to avoid excluding 'gpt-4o')
             exact: [
                 'gpt-4',
                 'gpt-4o',
-                'gpt-image-1',    // temporarily disabled, code doesn't yet support it
-                'gpt-4o-transcribe',    // temporarily disabled, code doesn't yet support it
+                'gpt-5',
             ],
             // Prefix matches (legacy families)
             prefix: [
                 'gpt-3.5',
                 'gpt-4-',
                 'gpt-4-turbo',
-                'chatgpt-4o-',
-                'o1',    // temporarily disabled, code doesn't yet support it
+                'gpt-4.1',
+                'gpt-4o',
+                'gpt-5-',
+                'gpt-5.1',
+                'gpt-5.2',
+                'gpt-5.3',
+                'o1',
                 'text-',
                 'code-',
                 'davinci',
@@ -154,10 +180,14 @@ export class AiModelsSync {
                 'whisper'
             ],
             // Contains (partial-name) matches
-            // Example: filter out models with '-mini' or '-nano' anywhere in the name
             contains: [
                 '-mini',
-                '-nano'
+                '-nano',
+                '-codex',
+                '-realtime',
+                '-audio',
+                '-transcribe',
+                'chatgpt',
             ]
         },
         Anthropic: {
@@ -166,14 +196,51 @@ export class AiModelsSync {
                 'claude-3-haiku',
                 'claude-3-opus',
                 'claude-3-5',
-                'claude-3-7'
+                'claude-3-7',
+                'claude-sonnet-4-5',
+                'claude-sonnet-4-20',
+                'claude-opus-4-5',
+                'claude-opus-4-1',
+                'claude-opus-4-20',
+                'claude-haiku-4-5',
             ],
             contains: []
+        },
+        Google: {
+            exact: [],
+            prefix: [
+                'gemini-1.0',
+                'gemini-1.5',
+                'gemini-2.0',
+                'gemini-2.5',
+                'gemini-3-flash',
+                'gemini-3-pro',
+                'gemini-3.1-flash-lite',
+                'gemini-3.1-pro',
+                'gemini-flash-lite',
+                'gemini-embedding',
+                'gemma',
+                'text-embedding',
+                'embedding',
+                'aqa',
+                'deep-research',
+                'nano-banana',
+            ],
+            contains: [
+                '-tts-',
+                '-live-',
+                '-native-audio-',
+                '-robotics-',
+                '-computer-use-',
+                'imagen',
+                'veo',
+                'lyria',
+            ]
         }
     }
 
     // Default model capability/settings per provider.
-    private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults } = {
+    private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults; Google: ProviderModelDefaults } = {
         // OpenAI model defaults sourced from offline docs provided in temp-openai-models-info/.
         // Only differences from fallback are specified; remaining fields inherit via mergeWithFallback.
         OpenAI: {
@@ -204,8 +271,10 @@ export class AiModelsSync {
                 { prefix: 'o3-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '40.00' } } } } } },
                 // O4 Mini Deep Research: 200k context, 100k max output (per page)
                 { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
-                // GPT-Image-1: image generation model; specify modalities only
-                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
+                // GPT Image family: image generation models
+                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
+                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
+                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
             ],
             contains: [],
             fallback: {
@@ -307,6 +376,96 @@ export class AiModelsSync {
                     }
                 }
             }
+        },
+        Google: {
+            exact: {
+                'gemini-2.5-flash-preview-image-generation': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    modalities: ['text', 'image', 'image_generation'],
+                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
+                },
+                'gemini-2.5-flash-image': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    modalities: ['text', 'image', 'image_generation'],
+                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
+                },
+            },
+            prefix: [
+                // Gemini 2.5 Pro family (text-only)
+                { prefix: 'gemini-2.5-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
+                // Gemini 2.5 Flash family (text-only, image generation only in gemini-2.5-flash-image)
+                { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                // Gemini 3 Pro Image (Nano Banana Pro)
+                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                // Gemini 3.1 Flash Image (Nano Banana 2)
+                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                // Gemini 3.1 Pro
+                { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
+                // Gemini 3.1 Flash
+                { prefix: 'gemini-3.1-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                // Gemini 3 Flash
+                { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+            ],
+            contains: [],
+            fallback: {
+                contextWindow: 0,
+                maxCompletionSize: 0,
+                defaultTemperature: 0.7,
+                supportsSystemPrompt: true,
+                modalities: ['text'],
+                pricing: {
+                    currency: 'USD',
+                    resaleMargin: '1',
+                    text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: { prompt: '0.00', completion: '0.00' } }
+                    }
+                },
+                color: '#4285F4',
+                iconName: 'geminiIcon',
+                starSortingPosition: 150,
+                transforms: {
+                    title: (modelId: string) => {
+                        // Map well-known image models to Nano Banana names
+                        const nanoBananaNames: Record<string, string> = {
+                            'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
+                            'gemini-3-pro-image-preview': 'Nano Banana Pro',
+                            'gemini-3.1-flash-image-preview': 'Nano Banana 2',
+                        }
+                        if (nanoBananaNames[modelId]) return nanoBananaNames[modelId]
+
+                        return modelId
+                            .replace(/^models\//, '')
+                            .split('-')
+                            .map(part => {
+                                if (part.toLowerCase() === 'gemini') return 'Gemini'
+                                return part.charAt(0).toUpperCase() + part.slice(1)
+                            })
+                            .join(' ')
+                    },
+                    shortTitle: (modelId: string) => {
+                        const nanoBananaNames: Record<string, string> = {
+                            'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
+                            'gemini-3-pro-image-preview': 'Nano Banana Pro',
+                            'gemini-3.1-flash-image-preview': 'Nano Banana 2',
+                        }
+                        if (nanoBananaNames[modelId]) return nanoBananaNames[modelId]
+
+                        return modelId
+                            .replace(/^models\//, '')
+                            .split('-')
+                            .map(part => {
+                                if (part.toLowerCase() === 'gemini') return 'Gemini'
+                                return part.charAt(0).toUpperCase() + part.slice(1)
+                            })
+                            .join(' ')
+                            .replace(/\s+Preview$/i, '')
+                    }
+                }
+            }
         }
     }
 
@@ -396,6 +555,9 @@ export class AiModelsSync {
 
             return models.filter((model: OpenAIModel) => {
                 const modelId = model.id
+
+                // GPT Image models are always allowed through (overrides -mini/-nano contains rules)
+                if (modelId.startsWith('gpt-image-')) return true
 
                 // Check exact blacklist matches
                 if (blacklist.exact.includes(modelId)) {
@@ -490,6 +652,52 @@ export class AiModelsSync {
         }
     }
 
+    // Fetch available models from Google Gen AI API
+    private async fetchGoogleModels(): Promise<GoogleModel[]> {
+        try {
+            const pager = await this.google.models.list({ config: { pageSize: 100 } })
+            const allModels: GoogleModel[] = []
+
+            for await (const model of pager) {
+                // The API returns model names like "models/gemini-2.5-flash"
+                // Strip the "models/" prefix for consistency
+                const modelId = (model.name || '').replace(/^models\//, '')
+                if (!modelId) continue
+
+                allModels.push({
+                    name: modelId,
+                    displayName: model.displayName,
+                    description: model.description,
+                    inputTokenLimit: model.inputTokenLimit,
+                    outputTokenLimit: model.outputTokenLimit,
+                })
+            }
+
+            // Filter models based on blacklist
+            const blacklist = AiModelsSync.MODELS_BLACKLIST.Google
+
+            return allModels.filter(model => {
+                const modelId = model.name
+
+                // Image generation models are always allowed through (overrides blacklist rules)
+                // Use '-image' to match gemini-*-image* but NOT 'imagen' models
+                if (modelId.includes('-image')) return true
+
+                if (blacklist.exact.includes(modelId)) return false
+                if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) return false
+                if (blacklist.contains.some(substring => modelId.includes(substring))) return false
+                if (this.isMinorVersion(modelId) && !modelId.includes('-image')) return false
+
+                // Only include gemini models
+                return modelId.startsWith('gemini')
+            })
+
+        } catch (error) {
+            err('Failed to fetch Google models:', error)
+            throw error
+        }
+    }
+
     // Map OpenAI model to our AiModel format
     private mapOpenAIModelToAiModel(openAIModel: OpenAIModel, sortingPosition: number): AiModel {
         const modelDefaults = this.resolveModelDefaults('OpenAI', openAIModel.id)
@@ -557,6 +765,47 @@ export class AiModelsSync {
             for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
                 if (transformFn) {
                     (model as any)[key] = transformFn(anthropicModel.id, anthropicModel.display_name)
+                }
+            }
+        }
+
+        return model
+    }
+
+    // Map Google model to our AiModel format
+    private mapGoogleModelToAiModel(googleModel: GoogleModel, sortingPosition: number): AiModel {
+        const modelDefaults = this.resolveModelDefaults('Google', googleModel.name)
+
+        const now = Date.now()
+
+        // Use API-reported token limits if available and our defaults are 0
+        const contextWindow = modelDefaults.contextWindow || googleModel.inputTokenLimit || 0
+        const maxCompletionSize = modelDefaults.maxCompletionSize || googleModel.outputTokenLimit || 0
+
+        const model: AiModel = {
+            provider: 'Google',
+            model: googleModel.name,
+            title: googleModel.displayName || googleModel.name,
+            shortTitle: googleModel.displayName || googleModel.name,
+            modelVersion: googleModel.name,
+            contextWindow,
+            maxCompletionSize,
+            defaultTemperature: modelDefaults.defaultTemperature,
+            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            color: modelDefaults.color,
+            iconName: modelDefaults.iconName,
+            sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
+            modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            pricing: modelDefaults.pricing,
+            createdAt: now,
+            updatedAt: now
+        }
+
+        // Apply transforms to model properties
+        if (modelDefaults.transforms) {
+            for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
+                if (transformFn) {
+                    (model as any)[key] = transformFn(googleModel.name)
                 }
             }
         }
@@ -797,6 +1046,101 @@ export class AiModelsSync {
         }
     }
 
+    // Synchronize Google models with database
+    private async synchronizeGoogleModels() {
+        if (!this.aiModelsListTableName) {
+            throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
+        }
+
+        info('🔄 Starting Google models synchronization')
+
+        try {
+            const googleModels = await this.fetchGoogleModels()
+            info(`📡 Fetched ${googleModels.length} models from Google API`)
+
+            info('📋 Raw Google models:')
+            googleModels.forEach((model, index) => {
+                info(`  ${index + 1}. ${model.name} (display: ${model.displayName || 'N/A'}, input: ${model.inputTokenLimit}, output: ${model.outputTokenLimit})`)
+            })
+
+            const mappedModels: AiModel[] = googleModels.map((model, index) =>
+                this.mapGoogleModelToAiModel(model, index + 1)
+            )
+
+            info(`🔧 Mapped ${mappedModels.length} Google models to our format:`)
+            mappedModels.forEach((model, index) => {
+                info(`  ${index + 1}. ${model.model} - ${model.title} (context: ${model.contextWindow}, max completion: ${model.maxCompletionSize})`)
+            })
+
+            const existingModelsResult = await this.dynamoDBService.queryItems({
+                tableName: this.aiModelsListTableName,
+                keyConditions: { provider: 'Google' },
+                fetchAllItems: true,
+                origin: `Service::${this.serviceName}`
+            })
+
+            const existingModels = existingModelsResult.items
+            const existingModelIds: string[] = existingModels.map((model: any) => model.model)
+            const fetchedModelIds: string[] = mappedModels.map(model => model.model)
+
+            info(`Found ${existingModels.length} existing Google models in database`)
+
+            const modelsToDelete = existingModels.filter((existingModel: any) =>
+                fetchedModelIds.indexOf(existingModel.model) === -1
+            )
+
+            const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
+            const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
+
+            info(`Processing ${newModels.length} new Google models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+
+            if (modelsToDelete.length > 0) {
+                info(`🗑️ Deleting ${modelsToDelete.length} obsolete Google models`)
+
+                for (const modelToDelete of modelsToDelete) {
+                    try {
+                        await this.dynamoDBService.deleteItems({
+                            tableName: this.aiModelsListTableName,
+                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            origin: `Service::${this.serviceName}`
+                        })
+                        info(`Deleted obsolete Google model: ${(modelToDelete as any).model}`)
+                    } catch (error) {
+                        err(`Failed to delete Google model ${(modelToDelete as any).model}:`, error)
+                        throw error
+                    }
+                }
+                info(`✅ Successfully deleted ${modelsToDelete.length} obsolete Google models`)
+            }
+
+            if (newModels.length > 0) {
+                await this.dynamoDBService.batchWriteItems({
+                    tableName: this.aiModelsListTableName,
+                    items: newModels,
+                    origin: `Service::${this.serviceName}`
+                })
+                info(`Inserted ${newModels.length} new Google models`)
+            }
+
+            if (modelsToUpdate.length > 0) {
+                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
+            }
+
+            info('✅ Google models synchronization completed successfully')
+
+            return {
+                processed: mappedModels.length,
+                newModels: newModels.length,
+                updatedModels: modelsToUpdate.length,
+                deletedModels: modelsToDelete.length
+            }
+
+        } catch (error) {
+            err('❌ Google models synchronization failed:', error)
+            throw error
+        }
+    }
+
     // Main synchronization method
     async synchronizeModels(): Promise<AiModelsSyncResult> {
         info(`🚀 Starting AI models synchronization - Service: ${this.serviceName}`)
@@ -810,13 +1154,18 @@ export class AiModelsSync {
             const anthropicResult = await this.synchronizeAnthropicModels()
             info(`Anthropic synchronization completed: ${JSON.stringify(anthropicResult)}`)
 
+            // Synchronize Google models
+            const googleResult = await this.synchronizeGoogleModels()
+            info(`Google synchronization completed: ${JSON.stringify(googleResult)}`)
+
             const totalResult = {
                 openAI: openAIResult,
                 anthropic: anthropicResult,
-                totalProcessed: openAIResult.processed + anthropicResult.processed,
-                totalNew: openAIResult.newModels + anthropicResult.newModels,
-                totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels,
-                totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels
+                google: googleResult,
+                totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed,
+                totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels,
+                totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels,
+                totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels
             }
 
             info('✅ AI models synchronization completed successfully')

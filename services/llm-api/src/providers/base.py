@@ -34,6 +34,8 @@ class StreamStatus(str, Enum):
     ERROR = _STREAM_STATUS.get("ERROR", "ERROR")
     IMAGE_PARTIAL = _STREAM_STATUS.get("IMAGE_PARTIAL", "IMAGE_PARTIAL")
     IMAGE_COMPLETE = _STREAM_STATUS.get("IMAGE_COMPLETE", "IMAGE_COMPLETE")
+    COLLAPSIBLE_START = _STREAM_STATUS.get("COLLAPSIBLE_START", "COLLAPSIBLE_START")
+    COLLAPSIBLE_END = _STREAM_STATUS.get("COLLAPSIBLE_END", "COLLAPSIBLE_END")
 
 
 class ProviderState(TypedDict, total=False):
@@ -64,6 +66,11 @@ class ProviderState(TypedDict, total=False):
         - image_size: Size for image generation
         - previous_response_id: Previous response ID for multi-turn editing
         - image_usage: Image generation usage statistics
+        - image_model_meta_info: Metadata for the selected image model
+        - image_model_version: Image model ID
+        - image_provider_name: Image model provider name
+        - generated_image_prompt: Prompt extracted from text model's tool call
+        - reference_images: Reference images extracted from tool call
     """
     messages: list
     ai_model_meta_info: Dict[str, Any]
@@ -87,6 +94,11 @@ class ProviderState(TypedDict, total=False):
     enable_image_generation: Optional[bool]
     image_size: Optional[str]
     image_usage: Optional[Dict[str, Any]]
+    image_model_meta_info: Optional[Dict[str, Any]]
+    image_model_version: Optional[str]
+    image_provider_name: Optional[str]
+    generated_image_prompt: Optional[str]
+    reference_images: Optional[list]
 
 
 class BaseLLMProvider(ABC):
@@ -94,25 +106,27 @@ class BaseLLMProvider(ABC):
     Base class for LLM providers using LangGraph workflows.
     """
 
+    # XML tags used to delimit collapsible content in the stream
+    _COLLAPSIBLE_OPEN_TAG = '<image_prompt>'
+    _COLLAPSIBLE_CLOSE_TAG = '</image_prompt>'
+    # Buffer size large enough to hold a partial tag
+    _TAG_BUFFER_SIZE = len('</image_prompt>')
+
     def __init__(
         self,
         instance_key: str,
         nats_client,
         usage_reporter: UsageReporter
     ):
-        """
-        Initialize base provider.
-
-        Args:
-            instance_key: Unique identifier for this instance (documentId:threadId)
-            nats_client: NATS client for publishing responses
-            usage_reporter: Usage reporter for tracking costs
-        """
         self.instance_key = instance_key
         self.nats_client = nats_client
         self.usage_reporter = usage_reporter
         self.stream_task: Optional[asyncio.Task] = None
         self.should_stop = False
+
+        # Tag-aware stream processor state (reset per stream)
+        self._tag_buffer = ''
+        self._inside_collapsible = False
 
         # Build LangGraph workflow
         self.workflow = self._build_workflow()
@@ -122,24 +136,52 @@ class BaseLLMProvider(ABC):
         """
         Build the LangGraph state machine workflow.
 
-        Workflow: validate_request → stream_tokens → calculate_usage → cleanup
+        Workflow:
+            validate_request → stream_tokens → [conditional]
+                → if generated_image_prompt: execute_image_generation → calculate_usage → cleanup → END
+                → else: calculate_usage → cleanup → END
         """
         workflow = StateGraph(ProviderState)
 
         # Add nodes
         workflow.add_node("validate_request", self._validate_request)
         workflow.add_node("stream_tokens", self._stream_tokens)
+        workflow.add_node("execute_image_generation", self._execute_image_generation)
         workflow.add_node("calculate_usage", self._calculate_usage)
         workflow.add_node("cleanup", self._cleanup)
 
         # Add edges
         workflow.set_entry_point("validate_request")
         workflow.add_edge("validate_request", "stream_tokens")
-        workflow.add_edge("stream_tokens", "calculate_usage")
+
+        # Conditional edge: route to image generation if text model made a tool call
+        workflow.add_conditional_edges(
+            "stream_tokens",
+            self._should_generate_image,
+            {
+                "generate_image": "execute_image_generation",
+                "skip": "calculate_usage"
+            }
+        )
+
+        workflow.add_edge("execute_image_generation", "calculate_usage")
         workflow.add_edge("calculate_usage", "cleanup")
         workflow.add_edge("cleanup", END)
 
         return workflow
+
+    @staticmethod
+    def _should_generate_image(state: ProviderState) -> str:
+        if state.get('generated_image_prompt'):
+            return "generate_image"
+        return "skip"
+
+    async def _execute_image_generation(self, state: ProviderState) -> ProviderState:
+        from tools.image_router import ImageRouter
+
+        logger.info(f"Executing image generation for {self.instance_key}")
+        router = ImageRouter()
+        return await router.execute(state, self.nats_client, self.usage_reporter)
 
     async def process(self, request_data: Dict[str, Any]) -> None:
         """
@@ -173,6 +215,11 @@ class BaseLLMProvider(ABC):
                 'enable_image_generation': request_data.get('enableImageGeneration', False),
                 'image_size': request_data.get('imageSize', 'auto'),
                 'image_usage': None,
+                'image_model_meta_info': request_data.get('imageModelMetaInfo'),
+                'image_model_version': request_data.get('imageModelMetaInfo', {}).get('modelVersion') if request_data.get('imageModelMetaInfo') else None,
+                'image_provider_name': request_data.get('imageModelMetaInfo', {}).get('provider') if request_data.get('imageModelMetaInfo') else None,
+                'generated_image_prompt': None,
+                'reference_images': None,
             }
 
             # Run workflow with timeout (circuit breaker)
@@ -260,10 +307,18 @@ class BaseLLMProvider(ABC):
             return updated_state
 
         except Exception as e:
-            logger.error(f"Error during streaming: {e}", exc_info=True)
+            logger.error(f"Streaming error ({self.get_provider_name()}): {e}")
             state['error'] = str(e)
-            await self._publish_stream_end(state['workspace_id'], state['ai_chat_thread_id'])
-            raise
+            try:
+                await self._publish_error(
+                    state['workspace_id'],
+                    state['ai_chat_thread_id'],
+                    str(e)
+                )
+                await self._publish_stream_end(state['workspace_id'], state['ai_chat_thread_id'])
+            except Exception:
+                logger.error("Failed to publish error/end events to NATS")
+            return state
         finally:
             state['stream_active'] = False
             state['ai_request_finished_at'] = int(datetime.now().timestamp() * 1000)
@@ -338,13 +393,7 @@ class BaseLLMProvider(ABC):
         workspace_id: str,
         ai_chat_thread_id: str
     ) -> None:
-        """
-        Publish stream start marker to the client.
-
-        Args:
-            workspace_id: Workspace identifier
-            ai_chat_thread_id: AI chat thread identifier
-        """
+        self._reset_tag_processor()
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
@@ -362,14 +411,14 @@ class BaseLLMProvider(ABC):
         ai_chat_thread_id: str,
         text: str
     ) -> None:
-        """
-        Publish a streaming chunk to the client.
+        await self._publish_stream_chunk_tag_aware(workspace_id, ai_chat_thread_id, text)
 
-        Args:
-            workspace_id: Workspace identifier
-            ai_chat_thread_id: AI chat thread identifier
-            text: Text content to stream
-        """
+    async def _publish_stream_chunk_raw(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str,
+        text: str
+    ) -> None:
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
@@ -382,18 +431,120 @@ class BaseLLMProvider(ABC):
             }
         )
 
+    def _reset_tag_processor(self) -> None:
+        self._tag_buffer = ''
+        self._inside_collapsible = False
+
+    async def _publish_stream_chunk_tag_aware(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str,
+        text: str
+    ) -> None:
+        subject = f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}"
+        provider = self.get_provider_name()
+
+        # Append incoming text to buffer
+        self._tag_buffer += text
+
+        while self._tag_buffer:
+            if not self._inside_collapsible:
+                # Look for opening tag
+                idx = self._tag_buffer.find(self._COLLAPSIBLE_OPEN_TAG)
+                if idx == -1:
+                    # No tag found — check if the tail might be a partial tag
+                    safe_len = len(self._tag_buffer) - self._TAG_BUFFER_SIZE
+                    if safe_len > 0:
+                        # Flush safe portion as normal text
+                        flush = self._tag_buffer[:safe_len]
+                        self._tag_buffer = self._tag_buffer[safe_len:]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': flush, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    # Keep remainder in buffer for next chunk
+                    break
+                else:
+                    # Flush text before the tag
+                    if idx > 0:
+                        before = self._tag_buffer[:idx]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': before, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    # Strip the tag and publish COLLAPSIBLE_START
+                    self._tag_buffer = self._tag_buffer[idx + len(self._COLLAPSIBLE_OPEN_TAG):]
+                    self._inside_collapsible = True
+                    self.nats_client.publish(subject, {
+                        'content': {
+                            'status': StreamStatus.COLLAPSIBLE_START,
+                            'collapsibleTitle': 'Image generation prompt',
+                            'aiProvider': provider
+                        },
+                        'aiChatThreadId': ai_chat_thread_id
+                    })
+            else:
+                # Inside collapsible — look for closing tag
+                idx = self._tag_buffer.find(self._COLLAPSIBLE_CLOSE_TAG)
+                if idx == -1:
+                    # No closing tag yet — flush safe portion as streaming content
+                    safe_len = len(self._tag_buffer) - self._TAG_BUFFER_SIZE
+                    if safe_len > 0:
+                        flush = self._tag_buffer[:safe_len]
+                        self._tag_buffer = self._tag_buffer[safe_len:]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': flush, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    break
+                else:
+                    # Flush text before closing tag
+                    if idx > 0:
+                        before = self._tag_buffer[:idx]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': before, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    # Strip tag and publish COLLAPSIBLE_END
+                    self._tag_buffer = self._tag_buffer[idx + len(self._COLLAPSIBLE_CLOSE_TAG):]
+                    self._inside_collapsible = False
+                    self.nats_client.publish(subject, {
+                        'content': {
+                            'status': StreamStatus.COLLAPSIBLE_END,
+                            'aiProvider': provider
+                        },
+                        'aiChatThreadId': ai_chat_thread_id
+                    })
+
+    async def _flush_tag_buffer(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str
+    ) -> None:
+        if self._tag_buffer:
+            subject = f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}"
+            provider = self.get_provider_name()
+            self.nats_client.publish(subject, {
+                'content': { 'text': self._tag_buffer, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                'aiChatThreadId': ai_chat_thread_id
+            })
+            self._tag_buffer = ''
+        # If we were inside a collapsible when stream ended, close it gracefully
+        if self._inside_collapsible:
+            subject = f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}"
+            provider = self.get_provider_name()
+            self.nats_client.publish(subject, {
+                'content': { 'status': StreamStatus.COLLAPSIBLE_END, 'aiProvider': provider },
+                'aiChatThreadId': ai_chat_thread_id
+            })
+            self._inside_collapsible = False
+
     async def _publish_stream_end(
         self,
         workspace_id: str,
         ai_chat_thread_id: str
     ) -> None:
-        """
-        Publish stream end marker to the client.
-
-        Args:
-            workspace_id: Workspace identifier
-            ai_chat_thread_id: AI chat thread identifier
-        """
+        await self._flush_tag_buffer(workspace_id, ai_chat_thread_id)
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
@@ -471,6 +622,24 @@ class BaseLLMProvider(ABC):
             image_base64: Base64-encoded partial image data
             partial_index: Index of this partial (0, 1, 2, ...)
         """
+        if not image_base64:
+            # Empty image means generation just started, send placeholder
+            logger.info(f"Publishing IMAGE_PARTIAL event (start placeholder): partialIndex={partial_index}")
+            self.nats_client.publish(
+                f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
+                {
+                    'content': {
+                        'status': StreamStatus.IMAGE_PARTIAL,
+                        'imageUrl': '',
+                        'fileId': '',
+                        'partialIndex': partial_index,
+                        'aiProvider': self.get_provider_name()
+                    },
+                    'aiChatThreadId': ai_chat_thread_id
+                }
+            )
+            return
+
         # Upload image to storage first
         upload_result = await self._upload_image_to_storage(workspace_id, image_base64)
 
@@ -499,7 +668,8 @@ class BaseLLMProvider(ABC):
         ai_chat_thread_id: str,
         image_base64: str,
         response_id: str,
-        revised_prompt: str
+        revised_prompt: str,
+        image_model_id: str = ''
     ) -> None:
         """
         Upload and publish a completed generated image.
@@ -510,6 +680,7 @@ class BaseLLMProvider(ABC):
             image_base64: Base64-encoded final image data
             response_id: OpenAI response ID for multi-turn editing
             revised_prompt: The prompt as revised/interpreted by the model
+            image_model_id: The model ID used to generate the image
         """
         # Upload image to storage first
         upload_result = await self._upload_image_to_storage(workspace_id, image_base64)
@@ -528,7 +699,9 @@ class BaseLLMProvider(ABC):
                     'fileId': upload_result['fileId'],
                     'responseId': response_id,
                     'revisedPrompt': revised_prompt,
-                    'aiProvider': self.get_provider_name()
+                    'aiProvider': self.get_provider_name(),
+                    'imageModelProvider': self.get_provider_name(),
+                    'imageModelId': image_model_id
                 },
                 'aiChatThreadId': ai_chat_thread_id
             }

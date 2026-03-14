@@ -173,80 +173,11 @@ $userMessageTextColor: #fff;
         }
     }
 
-    // ===== IMAGE GENERATION TOGGLE =====
-    .image-generation-toggle {
+    // ===== IMAGE MODEL CONTROLS =====
+    .image-model-controls {
         display: flex;
         align-items: center;
         gap: 0.25rem;
-        opacity: 0.6;
-        transition: hoverTransition(opacity, 200ms);
-
-        &:hover {
-            opacity: 1;
-        }
-
-        &[data-enabled="true"] {
-            opacity: 1;
-
-            .image-toggle-btn {
-                background: rgba($steelBlue, 0.15);
-
-                svg {
-                    fill: $steelBlue;
-                }
-            }
-
-            .image-size-selector {
-                display: block;
-            }
-        }
-
-        .image-toggle-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            border: none;
-            border-radius: 6px;
-            background: transparent;
-            cursor: pointer;
-            transition: hoverTransition(all, 200ms);
-
-            svg {
-                width: 16px;
-                height: 16px;
-                fill: $nightBlue;
-                transition: hoverTransition(fill, 150ms);
-            }
-
-            &:hover {
-                background: rgba($nightBlue, 0.1);
-            }
-        }
-
-        .image-size-selector {
-            display: none;
-            font-size: 11px;
-            padding: 2px 6px;
-            border: 1px solid rgba($nightBlue, 0.3);
-            border-radius: 4px;
-            background: rgba(#fff, 0.9);
-            color: $nightBlue;
-            cursor: pointer;
-            outline: none;
-            transition: hoverTransition(all, 200ms);
-
-            &:hover,
-            &:focus {
-                border-color: $steelBlue;
-            }
-
-            option {
-                background: #fff;
-                color: $nightBlue;
-            }
-        }
     }
 
     // ===== INTERACTION STATES =====
@@ -350,6 +281,13 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             &.node-receiving-animation svg {
                 animation: heartbeatAnimation 1.5s infinite;
                 animation-timing-function: ease-in-out;
+            }
+        }
+
+        &.assistant-google {
+            svg {
+                width: 19px;
+                height: 19px;
             }
         }
     }
@@ -576,6 +514,84 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 @keyframes spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+// ========== AI COLLAPSIBLE BLOCK ==========
+.ai-collapsible-block {
+    margin: 0.5rem 0;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.875rem;
+
+    > summary {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        user-select: none;
+        color: rgba(0, 0, 0, 0.55);
+        font-weight: 500;
+        font-size: 0.8rem;
+        background: rgba(0, 0, 0, 0.02);
+        list-style: none;
+        transition: background 0.15s ease;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &::before {
+            content: '';
+            display: inline-block;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 4px 0 4px 6px;
+            border-color: transparent transparent transparent rgba(0, 0, 0, 0.35);
+            transition: transform 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        &:hover {
+            background: rgba(0, 0, 0, 0.04);
+        }
+    }
+
+    &[open] > summary::before {
+        transform: rotate(90deg);
+    }
+
+    .ai-collapsible-block-content {
+        padding: 0.5rem 0.75rem;
+        color: rgba(0, 0, 0, 0.5);
+        font-size: 0.78rem;
+        font-style: italic;
+        line-height: 1.5;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+
+        > *:first-child { margin-top: 0; }
+        > *:last-child { margin-bottom: 0; }
+
+        p, h1, h2, h3, h4, h5, h6, span, div {
+            font-size: 0.78rem !important;
+            font-style: italic;
+        }
+    }
+
+    &.is-streaming > summary::after {
+        content: '';
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(0, 0, 0, 0.1);
+        border-top-color: rgba(0, 0, 0, 0.4);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-left: auto;
+        flex-shrink: 0;
     }
 }
 

@@ -1,16 +1,16 @@
 # LLM API Service
 
-A Python-based microservice that handles AI model interactions via NATS messaging. This service orchestrates conversations with OpenAI and Anthropic models using a LangGraph-based state machine workflow, providing real-time token streaming back to clients.
+A Python-based microservice that handles AI model interactions via NATS messaging. This service orchestrates conversations with OpenAI, Anthropic, and Google models using a LangGraph-based state machine workflow, providing real-time token streaming back to clients.
 
 ## Core Concepts
 
-**Provider** — An abstraction over an AI vendor's API. Each provider implements a LangGraph workflow with four stages: validate → stream → calculate_usage → cleanup. Currently supports OpenAI (Responses API) and Anthropic (Messages API).
+**Provider** — An abstraction over an AI vendor's API. Each provider implements a LangGraph workflow with four stages: validate → stream → calculate_usage → cleanup. Currently supports OpenAI (Responses API), Anthropic (Messages API), and Google (Gen AI SDK).
 
 **Provider Registry** — Manages provider instance lifecycle. Creates instances keyed by `{workspaceId}:{aiChatThreadId}` and removes them after request completion. Prevents memory leaks by cleaning up after each conversation turn.
 
 **Instance Key** — A unique identifier for a conversation session: `{workspaceId}:{aiChatThreadId}`. Used to route stop requests to the correct active stream.
 
-**Provider-Agnostic Design** — No provider-specific session IDs are used. Every request includes the full conversation history, allowing users to switch between OpenAI and Anthropic mid-conversation.
+**Provider-Agnostic Design** — No provider-specific session IDs are used. Every request includes the full conversation history, allowing users to switch between OpenAI, Anthropic, and Google mid-conversation.
 
 **NATS Object Store Reference** — A URL scheme (`nats-obj://bucket/key`) for referencing images stored in NATS Object Store. The service resolves these references to base64 data URLs before sending to providers.
 
@@ -40,6 +40,7 @@ flowchart TB
             subgraph Instances["Active Instances"]
                 OpenAI[OpenAIProvider<br/>Responses API]
                 Anthropic[AnthropicProvider<br/>Messages API]
+                Google[GoogleProvider<br/>Gen AI SDK]
             end
         end
 
@@ -52,6 +53,7 @@ flowchart TB
     subgraph External["External Services"]
         OpenAIAPI[OpenAI API]
         AnthropicAPI[Anthropic API]
+        GoogleAPI[Google Gen AI API]
     end
 
     subgraph Clients["Upstream Services"]
@@ -68,13 +70,17 @@ flowchart TB
     Registry --> Anthropic
     OpenAI --> Attachments
     Anthropic --> Attachments
+    Google --> Attachments
     Attachments -->|Fetch images| ObjStore
     OpenAI --> UsageRpt
     Anthropic --> UsageRpt
+    Google --> UsageRpt
     OpenAI -->|Stream| OpenAIAPI
     Anthropic -->|Stream| AnthropicAPI
+    Google -->|Stream| GoogleAPI
     OpenAI -->|Publish chunks| Subjects
     Anthropic -->|Publish chunks| Subjects
+    Google -->|Publish chunks| Subjects
     Subjects -->|ai.interaction.chat.receiveMessage.*| WebUI
     FastAPI --> NATSSvc
     NATSSvc --> Subjects
@@ -126,6 +132,7 @@ sequenceDiagram
             ObjStore-->>Attachments: Image bytes
             deactivate ObjStore
             Attachments->>Attachments: Detect MIME via magic bytes
+            Attachments->>Attachments: Downscale if exceeds 4.5MB
             Attachments->>Attachments: Convert to base64 data URL
         end
         Attachments-->>Provider: Resolved content
@@ -168,14 +175,16 @@ sequenceDiagram
 
 ## LangGraph Workflow
 
-Each provider uses a LangGraph state machine with four nodes:
+Each provider uses a LangGraph state machine with conditional routing for image generation:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 stateDiagram-v2
     [*] --> validate_request
     validate_request --> stream_tokens
-    stream_tokens --> calculate_usage
+    stream_tokens --> execute_image_generation : Tool call detected
+    stream_tokens --> calculate_usage : No tool call
+    execute_image_generation --> calculate_usage
     calculate_usage --> cleanup
     cleanup --> [*]
 
@@ -218,11 +227,33 @@ stateDiagram-v2
 | `event_meta` | `dict` | User/org metadata for billing |
 | `workspace_id` | `str` | Workspace identifier |
 | `ai_chat_thread_id` | `str` | Thread identifier |
-| `provider` | `str` | "OpenAI" or "Anthropic" |
+| `provider` | `str` | "OpenAI", "Anthropic", or "Google" |
 | `model_version` | `str` | Specific model (e.g., "gpt-4.1") |
 | `stream_active` | `bool` | Whether streaming is in progress |
 | `usage` | `dict` | Token counts after completion |
 | `error` | `str` | Error message if failed |
+| `image_model_meta_info` | `dict\|None` | Image model config (when dual-model routing) |
+| `image_model_version` | `str\|None` | Image model version |
+| `image_provider_name` | `str\|None` | Image model provider name |
+| `generated_image_prompt` | `str\|None` | Prompt extracted from text model's tool call |
+| `reference_images` | `list` | Reference images from conversation for image editing |
+
+## Dual-Model Image Generation
+
+When an image model is selected alongside the text model, the workflow uses tool-calling to route image generation:
+
+1. **Text model** receives a `generate_image` function tool (provider-specific format)
+2. Text model analyzes the conversation and decides whether to call the tool
+3. If the tool is called, it provides an optimized prompt for image generation
+4. **LangGraph conditional edge** detects the tool call and routes to `execute_image_generation`
+5. **ImageRouter** creates a temporary provider instance for the image model
+6. The image model generates the image using only the optimized prompt (no conversation history)
+
+Key files:
+- `tools/image_generation.py` — Canonical tool definition, per-provider format converters, tool call extractors
+- `tools/image_router.py` — Provider-agnostic image generation executor
+
+This architecture is fully provider-agnostic: any text model can route to any image model.
 
 ## Image Handling
 
@@ -247,6 +278,7 @@ flowchart LR
         Parse[Parse bucket/key]
         Fetch[Fetch from Object Store]
         Detect[Detect MIME type<br/>via magic bytes]
+        Downscale[Downscale if &gt; 4.5MB<br/>Max 2048px longest side]
         Encode[Base64 encode]
     end
 
@@ -254,8 +286,19 @@ flowchart LR
         DataURL["data:image/png;base64,iVBORw0K..."]
     end
 
-    URL --> Parse --> Fetch --> Detect --> Encode --> DataURL
+    URL --> Parse --> Fetch --> Detect --> Downscale --> Encode --> DataURL
 ```
+
+### Image Downscaling
+
+Images are automatically downscaled before being sent to LLM providers to stay within API size limits (Anthropic's 5MB limit). The downscaling is applied both to NATS Object Store images and to existing data URL images.
+
+**Strategy** (preserves maximum quality):
+1. Images under 4.5MB are passed through untouched
+2. If any dimension exceeds 2048px, resize proportionally using Lanczos resampling
+3. Re-encode with progressive quality reduction (JPEG: 92 → 85 → 78 → 70 → 60)
+4. For transparent PNGs that are still too large, convert to JPEG with white background
+5. As a last resort, resize more aggressively (75% then 50%) until under the limit
 
 ### MIME Type Detection
 
@@ -293,6 +336,16 @@ After resolution, `convert_attachments_for_provider()` transforms content blocks
 }
 ```
 
+**Google (Gen AI SDK format):**
+```json
+{
+    "inline_data": {
+        "mime_type": "image/png",
+        "data": "iVBORw0K..."
+    }
+}
+```
+
 ## NATS Subjects
 
 ### Subscriptions
@@ -322,6 +375,10 @@ type StreamStatus =
     | 'IMAGE_PARTIAL'  // Partial image during generation
     | 'IMAGE_COMPLETE' // Final generated image
 ```
+
+**Early Image Placeholder:**
+
+When OpenAI fires `response.output_item.added` with type `image_generation_call`, the OpenAI provider immediately publishes an `IMAGE_PARTIAL` with an empty `imageUrl` (before any pixel data is available). This lets the frontend create a placeholder canvas node with an animated border and spinner. The base provider's `_publish_image_partial` detects the empty `image_base64` and publishes the event with empty `imageUrl`/`fileId`, skipping the storage upload.
 
 **Stream Chunk Payload:**
 ```json
@@ -362,8 +419,10 @@ src/
 │   ├── registry.py                 # ProviderRegistry
 │   ├── openai/
 │   │   └── provider.py             # OpenAI Responses API
-│   └── anthropic/
-│       └── provider.py             # Anthropic Messages API
+│   ├── anthropic/
+│   │   └── provider.py             # Anthropic Messages API
+│   └── google/
+│       └── provider.py             # Google Gen AI SDK
 ├── services/
 │   └── usage_reporter.py           # Cost tracking
 ├── utils/
@@ -382,6 +441,7 @@ src/
 | `NATS_NKEY_SEED` | Yes | — | NKey seed for service authentication |
 | `OPENAI_API_KEY` | No | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | No | — | Anthropic API key |
+| `GOOGLE_API_KEY` | No | — | Google API key |
 | `LLM_TIMEOUT_SECONDS` | No | 1200 | Circuit breaker timeout |
 | `LOG_LEVEL` | No | INFO | Logging level |
 

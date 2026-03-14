@@ -9,6 +9,7 @@ from lixpi_debug_tools import log, info, warn, err
 from lixpi_nats_service import NatsService
 from providers.openai.provider import OpenAIProvider
 from providers.anthropic.provider import AnthropicProvider
+from providers.google.provider import GoogleProvider
 from services.usage_reporter import UsageReporter
 
 
@@ -76,6 +77,12 @@ class ProviderRegistry:
             )
         elif provider_name == 'Anthropic':
             provider = AnthropicProvider(
+                instance_key,
+                self.nats_client,
+                self.usage_reporter
+            )
+        elif provider_name == 'Google':
+            provider = GoogleProvider(
                 instance_key,
                 self.nats_client,
                 self.usage_reporter

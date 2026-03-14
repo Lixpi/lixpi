@@ -4,7 +4,7 @@
     } from 'svelte'
     import { fade } from 'svelte/transition'
 
-    import { Button } from "$lib/registry/new-york/ui/button/index.ts"
+    import { Button } from "$lib/registry/ui/button/index.ts"
     import SubscriptionService from '$src/services/subscription-service.ts'
 
     import WalletCardsIcon from "@lucide/svelte/icons/wallet-cards"

@@ -212,6 +212,13 @@ sequenceDiagram
 - Empty shells render a horizontal spinner placeholder so the layout keeps height while the first tokens stream in.
 
 **`aiGeneratedImage`** - AI-generated images (from DALL-E, etc.)
+
+**`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
+- Content: `(paragraph | block)*`
+- Attributes: `title, isOpen, isStreaming`
+- DOM: `details.ai-collapsible-block > summary + div.ai-collapsible-block-content`
+- Shows "Preparing image generation prompt" while streaming, "Image generation prompt" when done
+- Collapsed by default; spinner indicator while streaming
 - Content: Empty (atom node)
 - Attributes:
   - `imageData: string` - Image URL or base64 data
@@ -226,7 +233,7 @@ sequenceDiagram
   - `textWrap: 'none' | 'left' | 'right'` - Text wrap mode
 - DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
 - **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
-- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements instead of inline in the chat. The plugin delegates image events to `WorkspaceCanvas.ts` via `onImagePartialToCanvas` / `onImageCompleteToCanvas` callbacks. Two placement modes are supported, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
+- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements instead of inline in the chat. The plugin delegates image events to `WorkspaceCanvas.ts` via `onImagePartialToCanvas` / `onImageCompleteToCanvas` callbacks. `handleImagePartial` only guards on `!aiChatThreadId` (not `!imageUrl`), allowing early empty-URL `IMAGE_PARTIAL` events through so the canvas can create a placeholder node with an animated border and spinner before any pixel data arrives. Two placement modes are supported, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
   - **Anchored mode** (default): Images overlap the AI chat thread node, positioned side-by-side to the right of the AI response message text. The image canvas node is placed at approximately the right half of the thread width, vertically aligned with the top of the `aiResponseMessage` that generated it. The `anchoredImageManager` tracks the image-to-thread relationship. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image-thread pairs.
   - **Connector line mode**: A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it. The image appears to the right of the thread.
   - In both modes, the revised prompt text is inserted as a paragraph in the AI response message.
@@ -443,6 +450,14 @@ Users see:
   - `WorkspaceCanvas.ts` registers these callbacks to receive image events from the plugin
   - The plugin calls `getAiGeneratedImageCallbacks()` during streaming to delegate image placement to the canvas
 
+- `aiCollapsibleBlockNode.ts` - Collapsible disclosure block for image generation prompts:
+  - Renders as `<details><summary>` with custom NodeView
+  - Attributes: `title` (label text), `isOpen` (expanded state), `isStreaming` (shows spinner while prompt streams in)
+  - Title transitions from "Preparing image generation prompt" (streaming) to "Image generation prompt" (done)
+  - Collapsed by default — user can expand to see the full prompt
+  - Streamed content inserts inside the collapsible block via `PositionFinder.findCollapsibleNode()`
+  - Backend detects `<image_prompt>` XML tags in the LLM stream and publishes `COLLAPSIBLE_START` / `COLLAPSIBLE_END` events
+
 - `aiChatThreadPlugin.ts` - Main orchestration logic:
   - Plugin state and lifecycle management
   - Content extraction and message conversion
@@ -453,7 +468,7 @@ Users see:
 
 - `aiChatThreadControls.ts` - UI control factories:
   - `createAiModelSelectorDropdown()` - AI model picker dropdown
-  - `createImageGenerationToggle()` - Image generation on/off toggle
+  - `createImageModelSelectorDropdown()` - Image model picker dropdown (with size selector)
   - `createAiSubmitButton()` - Submit/stop button
 
 - `aiChatThreadPluginConstants.ts` - Shared `PluginKey` to avoid identity mismatch and circular imports between NodeView and plugin. Import this key in both places and call `AI_CHAT_THREAD_PLUGIN_KEY.getState(view.state)` when needed.

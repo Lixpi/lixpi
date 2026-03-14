@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # AI Provider API Keys
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
+    GOOGLE_API_KEY: Optional[str] = None
 
     # Circuit breaker settings
     LLM_TIMEOUT_SECONDS: int = 1200  # 20 minutes
