@@ -219,6 +219,7 @@ sequenceDiagram
 - DOM: `details.ai-collapsible-block > summary + div.ai-collapsible-block-content`
 - Shows "Preparing image generation prompt" while streaming, "Image generation prompt" when done
 - Collapsed by default; spinner indicator while streaming
+- The NodeView handles summary `mousedown` and `click` directly so the thread-level focus handler does not swallow the toggle interaction
 - Content: Empty (atom node)
 - Attributes:
   - `imageData: string` - Image URL or base64 data

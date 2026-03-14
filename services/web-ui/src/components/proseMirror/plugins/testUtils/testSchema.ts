@@ -2,6 +2,7 @@ import { Schema } from 'prosemirror-model'
 import { nodes, marks } from '$src/components/proseMirror/components/schema.ts'
 import { aiGeneratedImageNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 import { aiChatThreadNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
+import { aiCollapsibleBlockNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import { aiResponseMessageNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
 import { aiUserMessageNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiUserInputNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
@@ -33,6 +34,7 @@ export const testSchema = new Schema({
 
         // AI-generated image node (used inside aiResponseMessage)
         aiGeneratedImage: aiGeneratedImageNodeSpec,
+        aiCollapsibleBlock: aiCollapsibleBlockNodeSpec,
 
         // AI chat thread nodes
         aiChatThread: aiChatThreadNodeSpec,
