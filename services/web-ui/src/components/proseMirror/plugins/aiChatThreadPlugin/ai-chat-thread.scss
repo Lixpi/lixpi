@@ -517,3 +517,81 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     }
 }
 
+// ========== AI COLLAPSIBLE BLOCK ==========
+.ai-collapsible-block {
+    margin: 0.5rem 0;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.875rem;
+
+    > summary {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        user-select: none;
+        color: rgba(0, 0, 0, 0.55);
+        font-weight: 500;
+        font-size: 0.8rem;
+        background: rgba(0, 0, 0, 0.02);
+        list-style: none;
+        transition: background 0.15s ease;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &::before {
+            content: '';
+            display: inline-block;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 4px 0 4px 6px;
+            border-color: transparent transparent transparent rgba(0, 0, 0, 0.35);
+            transition: transform 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        &:hover {
+            background: rgba(0, 0, 0, 0.04);
+        }
+    }
+
+    &[open] > summary::before {
+        transform: rotate(90deg);
+    }
+
+    .ai-collapsible-block-content {
+        padding: 0.5rem 0.75rem;
+        color: rgba(0, 0, 0, 0.5);
+        font-size: 0.78rem;
+        font-style: italic;
+        line-height: 1.5;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+
+        > *:first-child { margin-top: 0; }
+        > *:last-child { margin-bottom: 0; }
+
+        p, h1, h2, h3, h4, h5, h6, span, div {
+            font-size: 0.78rem !important;
+            font-style: italic;
+        }
+    }
+
+    &.is-streaming > summary::after {
+        content: '';
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(0, 0, 0, 0.1);
+        border-top-color: rgba(0, 0, 0, 0.4);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+}
+

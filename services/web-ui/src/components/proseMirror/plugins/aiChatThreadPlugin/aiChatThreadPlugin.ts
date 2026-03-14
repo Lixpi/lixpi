@@ -18,6 +18,7 @@ import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/compo
 // The aiUserInputNodeType is still imported for legacy content migration
 import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 import { aiUserMessageNodeType, aiUserMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
+import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
@@ -45,13 +46,15 @@ type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM'
 type ImageSegmentType = 'image_partial' | 'image_complete'
+type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type SegmentEvent = {
     status?: StreamStatus
-    type?: ImageSegmentType
+    type?: ImageSegmentType | CollapsibleSegmentType
     aiProvider?: string
     imageModelProvider?: string
     threadId?: string
     aiChatThreadId?: string
+    collapsibleTitle?: string
     segment?: {
         segment: string
         styles: string[]
@@ -81,6 +84,7 @@ type AiChatThreadPluginState = {
     insideCodeBlock: boolean
     codeBuffer: string
     decorations: DecorationSet
+    collapsibleThreadIds: Set<string>
     // Note: dropdownStates removed - now handled by dropdown primitive plugin
 }
 
@@ -440,6 +444,49 @@ class PositionFinder {
             ? { found: true, endOfNodePos: bestEndPos, childCount: bestChildCount }
             : { found: false }
     }
+
+    // Find the last aiCollapsibleBlock node inside the current response message for a thread
+    static findCollapsibleNode(state: EditorState, threadId?: string): {
+        found: boolean
+        endOfNodePos?: number
+        childCount?: number
+        nodePos?: number
+    } {
+        let result: { found: boolean; endOfNodePos?: number; childCount?: number; nodePos?: number } = { found: false }
+
+        if (!threadId) return result
+
+        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+            if (node.type.name !== aiChatThreadNodeType || node.attrs?.threadId !== threadId) return
+
+            // Search within this thread for the last collapsible block in the last response
+            let lastCollapsiblePos: number | undefined
+            let lastCollapsibleEnd: number | undefined
+            let lastCollapsibleChildCount: number | undefined
+
+            node.descendants((child: ProseMirrorNode, relPos: number) => {
+                if (child.type.name === aiCollapsibleBlockNodeType) {
+                    const absPos = pos + relPos + 1
+                    lastCollapsiblePos = absPos
+                    lastCollapsibleEnd = absPos + child.nodeSize
+                    lastCollapsibleChildCount = child.childCount
+                }
+            })
+
+            if (lastCollapsiblePos !== undefined) {
+                result = {
+                    found: true,
+                    endOfNodePos: lastCollapsibleEnd,
+                    childCount: lastCollapsibleChildCount,
+                    nodePos: lastCollapsiblePos
+                }
+            }
+
+            return false
+        })
+
+        return result
+    }
 }
 
 // Content insertion during AI streaming
@@ -585,6 +632,17 @@ class AiChatThreadPluginClass {
 
             if (type === 'image_complete') {
                 this.handleImageComplete(view, event)
+                return
+            }
+
+            // Handle collapsible block events
+            if (type === 'collapsible_start') {
+                this.handleCollapsibleStart(view, event)
+                return
+            }
+
+            if (type === 'collapsible_end') {
+                this.handleCollapsibleEnd(view, event)
                 return
             }
 
@@ -792,19 +850,26 @@ class AiChatThreadPluginClass {
         }
 
         let tr = state.tr
-        let responseInfo = PositionFinder.findResponseNode(state, threadId)
 
-        console.log('🟠 [PLUGIN] handleStreaming', {
-            threadId,
-            responseFound: responseInfo.found,
-            endOfNodePos: responseInfo.endOfNodePos,
-            childCount: responseInfo.childCount,
-            segmentType: segment.type,
-            segmentContent: segment.segment?.substring(0, 50)
-        })
+        // Check if we're inside a collapsible block for this thread
+        const pluginState = PLUGIN_KEY.getState(state)
+        const isInsideCollapsible = threadId && pluginState?.collapsibleThreadIds.has(threadId)
+
+        let targetInfo: { found: boolean; endOfNodePos?: number; childCount?: number }
+
+        if (isInsideCollapsible) {
+            // Insert into the collapsible node
+            targetInfo = PositionFinder.findCollapsibleNode(state, threadId)
+            if (!targetInfo.found) {
+                // Fallback to response node if collapsible not found
+                targetInfo = PositionFinder.findResponseNode(state, threadId)
+            }
+        } else {
+            targetInfo = PositionFinder.findResponseNode(state, threadId)
+        }
 
         // Create response node if missing in the correct thread
-        if (!responseInfo.found) {
+        if (!targetInfo.found) {
             console.warn('⚠️ [PLUGIN] No response node found, creating one', { threadId })
 
             const { insertPos } = threadInfo
@@ -814,19 +879,16 @@ class AiChatThreadPluginClass {
                 aiProvider: aiProvider || 'Anthropic'
             })
 
-            // Insert the response node first
             tr.insert(insertPos, responseNode)
 
-            // After inserting, the response node is at insertPos
-            // Its content starts at insertPos + 1, ends at insertPos + responseNode.nodeSize - 1
-            responseInfo = {
+            targetInfo = {
                 found: true,
                 endOfNodePos: insertPos + responseNode.nodeSize,
                 childCount: 0
             }
         }
 
-        const { endOfNodePos, childCount } = responseInfo
+        const { endOfNodePos, childCount } = targetInfo
         const { segment: content, styles, type, level, isBlockDefining } = segment
 
         // Create text marks from styles
@@ -889,6 +951,65 @@ class AiChatThreadPluginClass {
                 return false // Stop after first match
             }
         })
+    }
+
+    private handleCollapsibleStart(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId: threadId, collapsibleTitle } = event
+        if (!threadId) return
+
+        const { state, dispatch } = view
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
+        if (!threadInfo) return
+
+        const responseInfo = PositionFinder.findResponseNode(state, threadId)
+        if (!responseInfo.found || !responseInfo.endOfNodePos) return
+
+        const tr = state.tr
+        const collapsibleNode = state.schema.nodes[aiCollapsibleBlockNodeType].create({
+            title: collapsibleTitle || 'Image generation prompt',
+            isOpen: false,
+            isStreaming: true,
+        })
+
+        // Insert collapsible block at end of response message content
+        const insertPos = responseInfo.endOfNodePos - 1
+        tr.insert(insertPos, collapsibleNode)
+
+        // Track that this thread is now inside a collapsible block
+        tr.setMeta('setCollapsible', { threadId, active: true })
+
+        if (tr.docChanged) {
+            dispatch(tr)
+        }
+    }
+
+    private handleCollapsibleEnd(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId: threadId } = event
+        if (!threadId) return
+
+        const { state, dispatch } = view
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
+        if (!threadInfo) return
+
+        // Mark collapsible as no longer streaming
+        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId)
+        if (!collapsibleInfo.found || collapsibleInfo.nodePos === undefined) return
+
+        const tr = state.tr
+        const collapsibleNode = state.doc.nodeAt(collapsibleInfo.nodePos)
+        if (collapsibleNode && collapsibleNode.type.name === aiCollapsibleBlockNodeType) {
+            tr.setNodeMarkup(collapsibleInfo.nodePos, undefined, {
+                ...collapsibleNode.attrs,
+                isStreaming: false,
+            })
+        }
+
+        // Clear collapsible tracking for this thread
+        tr.setMeta('setCollapsible', { threadId, active: false })
+
+        if (tr.docChanged) {
+            dispatch(tr)
+        }
     }
 
     private createResponseFallback(state: EditorState, dispatch: (tr: Transaction) => void, threadId?: string, aiProvider?: string): void {
@@ -1083,7 +1204,8 @@ class AiChatThreadPluginClass {
                     backtickBuffer: '',
                     insideCodeBlock: false,
                     codeBuffer: '',
-                    decorations: DecorationSet.empty
+                    decorations: DecorationSet.empty,
+                    collapsibleThreadIds: new Set<string>()
                 }),
                 apply: (tr: Transaction, prev: AiChatThreadPluginState): AiChatThreadPluginState => {
                     // Handle receiving state toggle per thread
@@ -1101,6 +1223,25 @@ class AiChatThreadPluginClass {
                             return {
                                 ...prev,
                                 receivingThreadIds: newSet,
+                                decorations: prev.decorations.map(tr.mapping, tr.doc)
+                            }
+                        }
+                    }
+
+                    // Handle collapsible state toggle per thread
+                    const collapsibleMeta = tr.getMeta('setCollapsible')
+                    if (collapsibleMeta !== undefined) {
+                        const { threadId, active } = collapsibleMeta
+                        if (threadId) {
+                            const newSet = new Set(prev.collapsibleThreadIds)
+                            if (active) {
+                                newSet.add(threadId)
+                            } else {
+                                newSet.delete(threadId)
+                            }
+                            return {
+                                ...prev,
+                                collapsibleThreadIds: newSet,
                                 decorations: prev.decorations.map(tr.mapping, tr.doc)
                             }
                         }
@@ -1290,6 +1431,8 @@ class AiChatThreadPluginClass {
                         aiResponseMessageNodeView(node, view, getPos),
                     [aiUserMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiUserMessageNodeView(node, view, getPos),
+                    [aiCollapsibleBlockNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
+                        aiCollapsibleBlockNodeView(node, view, getPos),
                     // Note: aiGeneratedImage is handled by imageSelectionPlugin for bubble menu integration
                 },
                 view: (editorView: EditorView) => {
