@@ -111,13 +111,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
     let lastTransform: Transform = [0, 0, 1]
-    let lastZoom: number = 1
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let edgesLayerEl: HTMLDivElement | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
+    let transformSideEffectsRaf: number | null = null
+    let pendingHandleZoom: number | null = null
     let anchoredRealignRaf: number | null = null
     let autoGrowRaf: number | null = null
     let selectedNodeId: string | null = null
@@ -1714,25 +1715,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     const panZoomConfig = {
         ...defaultPanZoomConfig((transform) => {
+            const zoomChanged = transform[2] !== lastTransform[2]
             lastTransform = transform
             const vp: Viewport = { x: transform[0], y: transform[1], zoom: transform[2] }
-            const zoomChanged = vp.zoom !== lastZoom
-            lastZoom = vp.zoom
+            // ONLY write the CSS transform here — nothing else.
+            // Any other DOM mutation (custom properties, style writes, querySelectorAll)
+            // invalidates the compositor layer cache and forces a full re-rasterization
+            // of every image/text in the viewport, causing visible flickering.
             if (viewportEl) {
                 viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
-                // Set CSS custom property for zoom (used for any CSS fallbacks)
-                viewportEl.style.setProperty('--zoom-scale', String(vp.zoom))
-                // Only update handle sizes when zoom changes (not on every pan frame)
-                if (zoomChanged) updateResizeHandles(vp.zoom)
             }
-            // Update visibility tracking for lazy loading
-            updateVisibleNodes()
-            // Only re-render edges when zoom changes (edge sizes scale with zoom)
-            // During pure pan, the edges SVG moves with the viewport via CSS transform
-            if (zoomChanged) scheduleEdgesRender()
-            // Reposition bubble menu to follow image/edge during pan/zoom
-            repositionCanvasBubbleMenu()
-            repositionEdgeBubbleMenu()
+            if (zoomChanged) {
+                if (webUiSettings.useZoomCompensatedResizeHandleScaling) {
+                    pendingHandleZoom = vp.zoom
+                }
+                if (webUiSettings.useZoomCompensatedConnectorScaling) {
+                    scheduleEdgesRender()
+                }
+            }
+            // Defer all layout-forcing DOM work to a separate frame
+            scheduleTransformSideEffects()
             onViewportChange?.(vp)
         }),
         ...options.panZoomConfig
@@ -1859,6 +1861,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncEdges(nextState.edges)
         connectionManager?.syncNodes(nextState.nodes)
         scheduleEdgesRender()
+    }
+
+    function scheduleTransformSideEffects() {
+        if (transformSideEffectsRaf !== null) return
+        transformSideEffectsRaf = requestAnimationFrame(() => {
+            transformSideEffectsRaf = null
+            if (pendingHandleZoom !== null) {
+                updateResizeHandles(pendingHandleZoom)
+                pendingHandleZoom = null
+            }
+            repositionCanvasBubbleMenu()
+            repositionEdgeBubbleMenu()
+        })
     }
 
     function scheduleEdgesRender() {
@@ -3178,13 +3193,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (currentCanvasState?.viewport) {
             const vp = currentCanvasState.viewport
             viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
-            viewportEl.style.setProperty('--zoom-scale', String(vp.zoom))
             // Ensure handles match initial zoom
             updateResizeHandles(vp.zoom)
             panZoom.syncViewport(vp)
         } else {
-            // Set default zoom scale
-            viewportEl.style.setProperty('--zoom-scale', '1')
             updateResizeHandles(1)
         }
     }
@@ -3273,6 +3285,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (edgesRaf !== null) {
                 cancelAnimationFrame(edgesRaf)
                 edgesRaf = null
+            }
+            if (transformSideEffectsRaf !== null) {
+                cancelAnimationFrame(transformSideEffectsRaf)
+                transformSideEffectsRaf = null
             }
             if (anchoredRealignRaf !== null) {
                 cancelAnimationFrame(anchoredRealignRaf)

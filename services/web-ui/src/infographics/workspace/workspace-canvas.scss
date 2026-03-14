@@ -728,6 +728,9 @@
     // Container passes events through to nodes below
     pointer-events: none;
     contain: layout style;
+    // Promote to own compositor layer so SVG repaints during zoom
+    // don't force re-rasterization of images/text in the parent layer
+    transform: translateZ(0);
 
     .connector-svg {
         // SVG itself doesn't block events
@@ -790,8 +793,8 @@
     position: absolute;
     top: 50%;
     transform: translate(-50%, -50%);
-    width: calc(10px / var(--zoom-scale, 1));
-    height: calc(10px / var(--zoom-scale, 1));
+    width: 10px;
+    height: 10px;
     border-radius: 999px;
     background: $nightBlue;
     opacity: 0;

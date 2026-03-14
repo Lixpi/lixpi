@@ -14,7 +14,7 @@ import type {
     MarkerType,
     EdgeAnchor
 } from '$src/infographics/connectors/types.ts'
-import { createMarkers, getMarkerUrl, collectMarkerTypes } from '$src/infographics/connectors/markers.ts'
+import { createMarkers, getMarkerUrl } from '$src/infographics/connectors/markers.ts'
 import { computePath, applyOffset } from '$src/infographics/connectors/paths.ts'
 
 // Compute anchor points for a node based on its shape and dimensions
@@ -509,25 +509,16 @@ export function createConnectorRenderer(config: ConnectorConfig): ConnectorRende
                 .data(edgesData, (d: EdgeRenderDatum) => d.id)
                 .join(
                     enter => enter.append('path')
-                        .attr('id', d => `edge-${d.id}`)
-                        .attr('class', d => d.className)
-                        .attr('d', d => d.path)
-                        .style('stroke-width', d => `${d.strokeWidth}px`)
                         .attr('stroke-linecap', 'round')
                         .attr('stroke-linejoin', 'round')
-                        .attr('marker-end', d => d.markerEnd ?? null)
-                        .attr('marker-start', d => d.markerStart ?? null)
-                        .attr('stroke-dasharray', d => d.strokeDasharray),
-                    update => update
-                        .attr('id', d => `edge-${d.id}`)
-                        .attr('class', d => d.className)
-                        .attr('d', d => d.path)
-                        .style('stroke-width', d => `${d.strokeWidth}px`)
-                        .attr('marker-end', d => d.markerEnd ?? null)
-                        .attr('marker-start', d => d.markerStart ?? null)
-                        .attr('stroke-dasharray', d => d.strokeDasharray),
-                    exit => exit.remove()
                 )
+                .attr('id', (d: EdgeRenderDatum) => `edge-${d.id}`)
+                .attr('class', (d: EdgeRenderDatum) => d.className)
+                .attr('d', (d: EdgeRenderDatum) => d.path)
+                .style('stroke-width', (d: EdgeRenderDatum) => `${d.strokeWidth}px`)
+                .attr('marker-end', (d: EdgeRenderDatum) => d.markerEnd ?? null)
+                .attr('marker-start', (d: EdgeRenderDatum) => d.markerStart ?? null)
+                .attr('stroke-dasharray', (d: EdgeRenderDatum) => d.strokeDasharray)
         },
 
         destroy() {
