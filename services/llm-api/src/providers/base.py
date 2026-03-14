@@ -34,6 +34,8 @@ class StreamStatus(str, Enum):
     ERROR = _STREAM_STATUS.get("ERROR", "ERROR")
     IMAGE_PARTIAL = _STREAM_STATUS.get("IMAGE_PARTIAL", "IMAGE_PARTIAL")
     IMAGE_COMPLETE = _STREAM_STATUS.get("IMAGE_COMPLETE", "IMAGE_COMPLETE")
+    COLLAPSIBLE_START = _STREAM_STATUS.get("COLLAPSIBLE_START", "COLLAPSIBLE_START")
+    COLLAPSIBLE_END = _STREAM_STATUS.get("COLLAPSIBLE_END", "COLLAPSIBLE_END")
 
 
 class ProviderState(TypedDict, total=False):
@@ -104,25 +106,27 @@ class BaseLLMProvider(ABC):
     Base class for LLM providers using LangGraph workflows.
     """
 
+    # XML tags used to delimit collapsible content in the stream
+    _COLLAPSIBLE_OPEN_TAG = '<image_prompt>'
+    _COLLAPSIBLE_CLOSE_TAG = '</image_prompt>'
+    # Buffer size large enough to hold a partial tag
+    _TAG_BUFFER_SIZE = len('</image_prompt>')
+
     def __init__(
         self,
         instance_key: str,
         nats_client,
         usage_reporter: UsageReporter
     ):
-        """
-        Initialize base provider.
-
-        Args:
-            instance_key: Unique identifier for this instance (documentId:threadId)
-            nats_client: NATS client for publishing responses
-            usage_reporter: Usage reporter for tracking costs
-        """
         self.instance_key = instance_key
         self.nats_client = nats_client
         self.usage_reporter = usage_reporter
         self.stream_task: Optional[asyncio.Task] = None
         self.should_stop = False
+
+        # Tag-aware stream processor state (reset per stream)
+        self._tag_buffer = ''
+        self._inside_collapsible = False
 
         # Build LangGraph workflow
         self.workflow = self._build_workflow()
@@ -389,13 +393,7 @@ class BaseLLMProvider(ABC):
         workspace_id: str,
         ai_chat_thread_id: str
     ) -> None:
-        """
-        Publish stream start marker to the client.
-
-        Args:
-            workspace_id: Workspace identifier
-            ai_chat_thread_id: AI chat thread identifier
-        """
+        self._reset_tag_processor()
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
@@ -413,14 +411,14 @@ class BaseLLMProvider(ABC):
         ai_chat_thread_id: str,
         text: str
     ) -> None:
-        """
-        Publish a streaming chunk to the client.
+        await self._publish_stream_chunk_tag_aware(workspace_id, ai_chat_thread_id, text)
 
-        Args:
-            workspace_id: Workspace identifier
-            ai_chat_thread_id: AI chat thread identifier
-            text: Text content to stream
-        """
+    async def _publish_stream_chunk_raw(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str,
+        text: str
+    ) -> None:
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
@@ -433,18 +431,120 @@ class BaseLLMProvider(ABC):
             }
         )
 
+    def _reset_tag_processor(self) -> None:
+        self._tag_buffer = ''
+        self._inside_collapsible = False
+
+    async def _publish_stream_chunk_tag_aware(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str,
+        text: str
+    ) -> None:
+        subject = f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}"
+        provider = self.get_provider_name()
+
+        # Append incoming text to buffer
+        self._tag_buffer += text
+
+        while self._tag_buffer:
+            if not self._inside_collapsible:
+                # Look for opening tag
+                idx = self._tag_buffer.find(self._COLLAPSIBLE_OPEN_TAG)
+                if idx == -1:
+                    # No tag found — check if the tail might be a partial tag
+                    safe_len = len(self._tag_buffer) - self._TAG_BUFFER_SIZE
+                    if safe_len > 0:
+                        # Flush safe portion as normal text
+                        flush = self._tag_buffer[:safe_len]
+                        self._tag_buffer = self._tag_buffer[safe_len:]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': flush, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    # Keep remainder in buffer for next chunk
+                    break
+                else:
+                    # Flush text before the tag
+                    if idx > 0:
+                        before = self._tag_buffer[:idx]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': before, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    # Strip the tag and publish COLLAPSIBLE_START
+                    self._tag_buffer = self._tag_buffer[idx + len(self._COLLAPSIBLE_OPEN_TAG):]
+                    self._inside_collapsible = True
+                    self.nats_client.publish(subject, {
+                        'content': {
+                            'status': StreamStatus.COLLAPSIBLE_START,
+                            'collapsibleTitle': 'Image generation prompt',
+                            'aiProvider': provider
+                        },
+                        'aiChatThreadId': ai_chat_thread_id
+                    })
+            else:
+                # Inside collapsible — look for closing tag
+                idx = self._tag_buffer.find(self._COLLAPSIBLE_CLOSE_TAG)
+                if idx == -1:
+                    # No closing tag yet — flush safe portion as streaming content
+                    safe_len = len(self._tag_buffer) - self._TAG_BUFFER_SIZE
+                    if safe_len > 0:
+                        flush = self._tag_buffer[:safe_len]
+                        self._tag_buffer = self._tag_buffer[safe_len:]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': flush, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    break
+                else:
+                    # Flush text before closing tag
+                    if idx > 0:
+                        before = self._tag_buffer[:idx]
+                        self.nats_client.publish(subject, {
+                            'content': { 'text': before, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                            'aiChatThreadId': ai_chat_thread_id
+                        })
+                    # Strip tag and publish COLLAPSIBLE_END
+                    self._tag_buffer = self._tag_buffer[idx + len(self._COLLAPSIBLE_CLOSE_TAG):]
+                    self._inside_collapsible = False
+                    self.nats_client.publish(subject, {
+                        'content': {
+                            'status': StreamStatus.COLLAPSIBLE_END,
+                            'aiProvider': provider
+                        },
+                        'aiChatThreadId': ai_chat_thread_id
+                    })
+
+    async def _flush_tag_buffer(
+        self,
+        workspace_id: str,
+        ai_chat_thread_id: str
+    ) -> None:
+        if self._tag_buffer:
+            subject = f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}"
+            provider = self.get_provider_name()
+            self.nats_client.publish(subject, {
+                'content': { 'text': self._tag_buffer, 'status': StreamStatus.STREAMING, 'aiProvider': provider },
+                'aiChatThreadId': ai_chat_thread_id
+            })
+            self._tag_buffer = ''
+        # If we were inside a collapsible when stream ended, close it gracefully
+        if self._inside_collapsible:
+            subject = f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}"
+            provider = self.get_provider_name()
+            self.nats_client.publish(subject, {
+                'content': { 'status': StreamStatus.COLLAPSIBLE_END, 'aiProvider': provider },
+                'aiChatThreadId': ai_chat_thread_id
+            })
+            self._inside_collapsible = False
+
     async def _publish_stream_end(
         self,
         workspace_id: str,
         ai_chat_thread_id: str
     ) -> None:
-        """
-        Publish stream end marker to the client.
-
-        Args:
-            workspace_id: Workspace identifier
-            ai_chat_thread_id: AI chat thread identifier
-        """
+        await self._flush_tag_buffer(workspace_id, ai_chat_thread_id)
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {

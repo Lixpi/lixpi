@@ -27,7 +27,10 @@ import {
     aiUserMessageNodeSpec,
     aiGeneratedImageNodeType,
     aiGeneratedImageNodeSpec,
-    aiGeneratedImageNodeView
+    aiGeneratedImageNodeView,
+    aiCollapsibleBlockNodeType,
+    aiCollapsibleBlockNodeSpec,
+    aiCollapsibleBlockNodeView
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
 // aiUserInput is kept in the schema for legacy content migration but no longer imported here
 import { aiUserInputNodeType, aiUserInputNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
@@ -201,7 +204,8 @@ export class ProseMirrorEditor {
                 // aiUserInput kept in schema for legacy content migration
                 [aiUserInputNodeType]: aiUserInputNodeSpec,
                 [aiUserMessageNodeType]: aiUserMessageNodeSpec,
-                [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec
+                [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec,
+                [aiCollapsibleBlockNodeType]: aiCollapsibleBlockNodeSpec
             }
         } else if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
             allNodes = {

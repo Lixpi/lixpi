@@ -212,6 +212,13 @@ sequenceDiagram
 - Empty shells render a horizontal spinner placeholder so the layout keeps height while the first tokens stream in.
 
 **`aiGeneratedImage`** - AI-generated images (from DALL-E, etc.)
+
+**`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
+- Content: `(paragraph | block)*`
+- Attributes: `title, isOpen, isStreaming`
+- DOM: `details.ai-collapsible-block > summary + div.ai-collapsible-block-content`
+- Shows "Preparing image generation prompt" while streaming, "Image generation prompt" when done
+- Collapsed by default; spinner indicator while streaming
 - Content: Empty (atom node)
 - Attributes:
   - `imageData: string` - Image URL or base64 data
@@ -442,6 +449,14 @@ Users see:
   - Callbacks include `onImagePartialToCanvas`, `onImageCompleteToCanvas`, `onAddToCanvas`, `onEditInNewThread`
   - `WorkspaceCanvas.ts` registers these callbacks to receive image events from the plugin
   - The plugin calls `getAiGeneratedImageCallbacks()` during streaming to delegate image placement to the canvas
+
+- `aiCollapsibleBlockNode.ts` - Collapsible disclosure block for image generation prompts:
+  - Renders as `<details><summary>` with custom NodeView
+  - Attributes: `title` (label text), `isOpen` (expanded state), `isStreaming` (shows spinner while prompt streams in)
+  - Title transitions from "Preparing image generation prompt" (streaming) to "Image generation prompt" (done)
+  - Collapsed by default — user can expand to see the full prompt
+  - Streamed content inserts inside the collapsible block via `PositionFinder.findCollapsibleNode()`
+  - Backend detects `<image_prompt>` XML tags in the LLM stream and publishes `COLLAPSIBLE_START` / `COLLAPSIBLE_END` events
 
 - `aiChatThreadPlugin.ts` - Main orchestration logic:
   - Plugin state and lifecycle management

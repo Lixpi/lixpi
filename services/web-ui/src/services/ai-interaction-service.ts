@@ -147,6 +147,25 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.COLLAPSIBLE_START) {
+                this.segmentsReceiver.receiveSegment({
+                    type: 'collapsible_start',
+                    collapsibleTitle: content.collapsibleTitle || 'Image generation prompt',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.COLLAPSIBLE_END) {
+                this.segmentsReceiver.receiveSegment({
+                    type: 'collapsible_end',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
             // Route raw tokens through markdown parser (exact replication of backend pattern)
             if (content.status === STREAM_STATUS.START_STREAM) {
                 // Initialize fresh parser instance for this stream
