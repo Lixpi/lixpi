@@ -182,7 +182,7 @@ Image resize always preserves aspect ratio using the `aspectRatio` value stored 
 
 On image load the client verifies the image's natural aspect ratio and will auto-correct the node's dimensions if a mismatch is detected (this helps self-heal nodes created by older clients). When a correction is necessary the client persists the corrected `dimensions` and updated `aspectRatio` via the normal canvas state persistence flow (`onCanvasStateChange` / `commitCanvasState`).
 
-Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoothly during diagonal drags and avoid axis-switching jumps that can cause jitter during resize. Resize handles are dynamically sized and positioned (computed from the current viewport zoom) so they remain a uniform screen-pixel size and precisely aligned to the image corners regardless of canvas zoom or image scale.
+Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoothly during diagonal drags and avoid axis-switching jumps that can cause jitter during resize. Resize handles are dynamically sized and positioned (computed from the current viewport zoom) so they remain a uniform screen-pixel size and precisely aligned to the image corners regardless of canvas zoom or image scale. This zoom-compensated sizing is controlled by `useZoomCompensatedResizeHandleScaling` in `webUiSettings.ts` (default `true`).
 
 ### Image Generation Visual Feedback
 
@@ -224,6 +224,7 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
 - **Proximity Connect**: Dragging a node near an AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`)
+- **Zoom-compensated scaling**: Connector stroke width and arrowhead marker sizes can be inversely scaled based on zoom level so they appear at constant visual size. Controlled by `useZoomCompensatedConnectorScaling` in `webUiSettings.ts` (default `false` — connectors use fixed base sizes and scale naturally with the canvas zoom)
 - Clicking an edge selects it and shows a bubble menu below it with a Delete action
 - Deleting an edge updates `canvasState.edges` via the normal persistence flow
 

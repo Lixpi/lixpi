@@ -11,6 +11,8 @@ export type WebUiSettings = {
     aiChatThreadRailDragGrabWidth: number
     nodesConnectorLineCurve: WorkspaceEdgePathType
     nodesConnectorLineClickAreaWidth: number
+    useZoomCompensatedConnectorScaling: boolean
+    useZoomCompensatedResizeHandleScaling: boolean
 }
 
 export const webUiSettings: WebUiSettings = {
@@ -51,4 +53,11 @@ export const webUiSettings: WebUiSettings = {
     // Width (in pixels) of the invisible click area around connector lines.
     // Makes it easier to select thin lines.
     nodesConnectorLineClickAreaWidth: 24,
+    // When true, connector line stroke width and marker sizes are inversely scaled
+    // based on zoom level so they appear at constant visual size. When false, connectors
+    // use fixed base sizes and will shrink/grow naturally with the canvas zoom.
+    useZoomCompensatedConnectorScaling: false,
+    // When true, resize corner handles are inversely scaled based on zoom level so
+    // they appear at constant visual size. When false, handles use fixed base sizes.
+    useZoomCompensatedResizeHandleScaling: true,
 }

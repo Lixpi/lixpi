@@ -2009,7 +2009,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Handle sizing/positioning of resize handles so they appear constant in screen pixels
     function applyHandleSizing(handle: HTMLElement, corner: ResizeCorner, zoom: number) {
-        const { size: sizePx, offset: offsetPx } = getResizeHandleScaledSizes(zoom)
+        const { size: sizePx, offset: offsetPx } = webUiSettings.useZoomCompensatedResizeHandleScaling
+            ? getResizeHandleScaledSizes(zoom)
+            : { size: 24, offset: 6 }
 
         handle.style.width = `${sizePx}px`
         handle.style.height = `${sizePx}px`
