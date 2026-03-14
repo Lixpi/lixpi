@@ -111,6 +111,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
     let lastTransform: Transform = [0, 0, 1]
+    let lastZoom: number = 1
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let edgesLayerEl: HTMLDivElement | null = null
@@ -1689,7 +1690,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!currentCanvasState) return
 
         const viewport = panZoom?.getViewport() || { x: 0, y: 0, zoom: 1 }
-        paneRect = paneEl.getBoundingClientRect()
+        // Use cached paneRect (updated by ResizeObserver) to avoid forced layout reflow
+        if (!paneRect) paneRect = paneEl.getBoundingClientRect()
 
         for (const node of currentCanvasState.nodes) {
             const wasVisible = visibleNodeIds.has(node.nodeId)
@@ -1714,17 +1716,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ...defaultPanZoomConfig((transform) => {
             lastTransform = transform
             const vp: Viewport = { x: transform[0], y: transform[1], zoom: transform[2] }
+            const zoomChanged = vp.zoom !== lastZoom
+            lastZoom = vp.zoom
             if (viewportEl) {
                 viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
                 // Set CSS custom property for zoom (used for any CSS fallbacks)
                 viewportEl.style.setProperty('--zoom-scale', String(vp.zoom))
-                // Update handle sizes/positions to remain constant in screen space
-                updateResizeHandles(vp.zoom)
+                // Only update handle sizes when zoom changes (not on every pan frame)
+                if (zoomChanged) updateResizeHandles(vp.zoom)
             }
             // Update visibility tracking for lazy loading
             updateVisibleNodes()
-            // Ensure edges keep up with autopan + zoom changes
-            scheduleEdgesRender()
+            // Only re-render edges when zoom changes (edge sizes scale with zoom)
+            // During pure pan, the edges SVG moves with the viewport via CSS transform
+            if (zoomChanged) scheduleEdgesRender()
             // Reposition bubble menu to follow image/edge during pan/zoom
             repositionCanvasBubbleMenu()
             repositionEdgeBubbleMenu()

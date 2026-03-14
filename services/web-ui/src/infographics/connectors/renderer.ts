@@ -238,14 +238,24 @@ function renderNode(
     }
 }
 
-// Render a single edge using D3
-function renderEdge(
-    gEdges: ConnectorState['gEdges'],
+// Pre-compute edge path and styling data for D3 data join rendering
+// Returns computed render data without creating DOM elements
+type EdgeRenderDatum = {
+    id: string
+    path: string
+    className: string
+    strokeWidth: number
+    markerEnd: string | undefined
+    markerStart: string | undefined
+    strokeDasharray: string | null
+}
+
+function computeEdgeRenderData(
     edge: EdgeConfig,
     nodes: Map<string, NodeConfig>,
     anchors: Map<string, NodeAnchors>,
     instanceId: string
-): void {
+): EdgeRenderDatum | null {
     const {
         id,
         source,
@@ -266,29 +276,23 @@ function renderEdge(
         laneCount = 1
     } = edge
 
-    // Extract marker offsets with defaults
     const sourceMarkerOffset = markerOffset.source ?? 5
     const targetMarkerOffset = markerOffset.target ?? 5
 
-    // Get source and target nodes
     const sourceNodeConfig = nodes.get(source.nodeId)
     const targetNodeConfig = nodes.get(target.nodeId)
 
     if (!sourceNodeConfig || !targetNodeConfig) {
         console.warn(`[Connector] Missing node for edge ${id}: source=${source.nodeId}, target=${target.nodeId}`)
-        return
+        return null
     }
 
-    // Compute anchor coordinates with flexible 't' positioning
     const sourceAnchor = computeAnchorCoordinate(source, sourceNodeConfig)
     const targetAnchor = computeAnchorCoordinate(target, targetNodeConfig)
 
-    // Apply offsets if specified
     let sourceCoords = applyOffset(sourceAnchor.x, sourceAnchor.y, source.offset)
     let targetCoords = applyOffset(targetAnchor.x, targetAnchor.y, target.offset)
 
-    // Apply marker offsets to create gap between edge and nodes
-    // Offset in the direction away from the node
     if (sourceMarkerOffset > 0) {
         switch (source.position) {
             case 'right':
@@ -323,7 +327,6 @@ function renderEdge(
         }
     }
 
-    // Compute path with node avoidance for orthogonal paths
     const { path } = computePath(
         pathType,
         sourceCoords.x,
@@ -335,42 +338,31 @@ function renderEdge(
         curvature,
         borderRadius,
         bendPoints,
-        nodes,           // Pass all nodes for obstacle avoidance
-        source.nodeId,   // Source node ID to exclude from obstacles
-        target.nodeId,   // Target node ID to exclude from obstacles
-        laneIndex,       // Lane index for vertical segment ordering
-        laneCount        // Total lanes sharing same target
+        nodes,
+        source.nodeId,
+        target.nodeId,
+        laneIndex,
+        laneCount
     )
 
-    // Create path element with styling
-    const pathElement = gEdges.append('path')
-        .attr('id', `edge-${id}`)
-        .attr('d', path)
-        .attr('class', `connector-edge ${className || ''}`)
-        .style('stroke-width', `${strokeWidth}px`)
-        .attr('stroke-linecap', 'round')
-        .attr('stroke-linejoin', 'round')
+    const markerEndUrl = getMarkerUrl(marker, instanceId, markerSize)
+    const markerStartUrl = markerStart ? getMarkerUrl(markerStart, instanceId, markerSize) : undefined
 
-    // Apply marker at end if specified
-    const markerUrl = getMarkerUrl(marker, instanceId, markerSize)
-    if (markerUrl) {
-        pathElement.attr('marker-end', markerUrl)
-    }
-
-    // Apply marker at start if specified (for bidirectional arrows)
-    if (markerStart) {
-        const markerStartUrl = getMarkerUrl(markerStart, instanceId, markerSize)
-        if (markerStartUrl) {
-            pathElement.attr('marker-start', markerStartUrl)
-        }
-    }
-
-    // Apply stroke pattern - custom dasharray takes precedence over lineStyle
+    let computedDasharray: string | null = null
     if (strokeDasharray) {
-        pathElement.attr('stroke-dasharray', strokeDasharray)
+        computedDasharray = strokeDasharray
     } else if (lineStyle === 'dashed') {
-        // Dashing: 6px dash, 8px gap
-        pathElement.attr('stroke-dasharray', '6 8')
+        computedDasharray = '6 8'
+    }
+
+    return {
+        id,
+        path,
+        className: `connector-edge ${className || ''}`,
+        strokeWidth,
+        markerEnd: markerEndUrl,
+        markerStart: markerStartUrl,
+        strokeDasharray: computedDasharray
     }
 }
 
@@ -461,17 +453,13 @@ export function createConnectorRenderer(config: ConnectorConfig): ConnectorRende
             state.nodes.clear()
             state.edges.clear()
             state.anchors.clear()
-            init()  // Reinitialize SVG structure
+            // SVG structure preserved — data join in render() handles DOM cleanup
         },
 
         render() {
-            // Clear existing elements
-            state.gEdges.selectAll('*').remove()
-            state.gNodes.selectAll('*').remove()
+            // Update markers in defs (few elements, simple rebuild is fine)
             state.defs.selectAll('*').remove()
 
-            // Create markers based on edge requirements
-            // Collect unique combinations of marker type and size
             const markerConfigs = new Map<string, { type: MarkerType; size: number }>()
             for (const edge of state.edges.values()) {
                 const size = edge.markerSize || 7
@@ -483,20 +471,63 @@ export function createConnectorRenderer(config: ConnectorConfig): ConnectorRende
                 }
             }
 
-            // Create all unique markers
             for (const { type, size } of markerConfigs.values()) {
                 createMarkers(state.defs, state.instanceId, [type], size)
             }
 
-            // Render nodes
-            for (const node of state.nodes.values()) {
-                renderNode(state.gNodes, node)
+            // Render nodes using D3 data join — reuse DOM elements across frames
+            const nodesArray = Array.from(state.nodes.values())
+            state.gNodes.selectAll<SVGGElement, NodeConfig>('g.connector-node-group')
+                .data(nodesArray, (d: NodeConfig) => d.id)
+                .join(
+                    enter => {
+                        const g = enter.append('g').attr('class', 'connector-node-group')
+                        g.each(function (this: SVGGElement, d: NodeConfig) {
+                            renderNode(select(this) as any, d)
+                        })
+                        return g
+                    },
+                    update => {
+                        update.each(function (this: SVGGElement, d: NodeConfig) {
+                            const g = select(this)
+                            g.selectAll('*').remove()
+                            renderNode(g as any, d)
+                        })
+                        return update
+                    },
+                    exit => exit.remove()
+                )
+
+            // Render edges using D3 data join — path elements persist across frames
+            const edgesData: EdgeRenderDatum[] = []
+            for (const edge of state.edges.values()) {
+                const result = computeEdgeRenderData(edge, state.nodes, state.anchors, state.instanceId)
+                if (result) edgesData.push(result)
             }
 
-            // Render edges
-            for (const edge of state.edges.values()) {
-                renderEdge(state.gEdges, edge, state.nodes, state.anchors, state.instanceId)
-            }
+            state.gEdges.selectAll<SVGPathElement, EdgeRenderDatum>('path.connector-edge')
+                .data(edgesData, (d: EdgeRenderDatum) => d.id)
+                .join(
+                    enter => enter.append('path')
+                        .attr('id', d => `edge-${d.id}`)
+                        .attr('class', d => d.className)
+                        .attr('d', d => d.path)
+                        .style('stroke-width', d => `${d.strokeWidth}px`)
+                        .attr('stroke-linecap', 'round')
+                        .attr('stroke-linejoin', 'round')
+                        .attr('marker-end', d => d.markerEnd ?? null)
+                        .attr('marker-start', d => d.markerStart ?? null)
+                        .attr('stroke-dasharray', d => d.strokeDasharray),
+                    update => update
+                        .attr('id', d => `edge-${d.id}`)
+                        .attr('class', d => d.className)
+                        .attr('d', d => d.path)
+                        .style('stroke-width', d => `${d.strokeWidth}px`)
+                        .attr('marker-end', d => d.markerEnd ?? null)
+                        .attr('marker-start', d => d.markerStart ?? null)
+                        .attr('stroke-dasharray', d => d.strokeDasharray),
+                    exit => exit.remove()
+                )
         },
 
         destroy() {

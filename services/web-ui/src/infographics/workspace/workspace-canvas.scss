@@ -727,6 +727,7 @@
     z-index: 5;
     // Container passes events through to nodes below
     pointer-events: none;
+    contain: layout style;
 
     .connector-svg {
         // SVG itself doesn't block events
