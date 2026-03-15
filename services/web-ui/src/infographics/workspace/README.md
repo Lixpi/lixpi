@@ -220,12 +220,59 @@ After mouse-up, we re-enable panning and commit the new position/dimensions via 
 
 Node selection is runtime-only UI state and is not persisted into `canvasState`.
 
-- **Plain click on node** — replaces the current node selection with that node
-- **Plain click on empty space** — clears the current node selection
-- **Mod-click on node** — toggles that node in or out of the current selection
-- **Empty-space drag** — draws a marquee rectangle and selects any node that overlaps it
-- **Group drag** — dragging any selected draggable node moves the entire selected set together
-- **Anchored AI images** — images visually attached to an AI chat thread resolve to the parent thread for selection and drag, so marquee selection or direct interaction on the anchored image selects the thread rather than the image node itself
+#### Click Interactions
+
+| Action | Result |
+|---|---|
+| Plain click on node (non-editor area) | Selects that node; no overlay appears |
+| Plain click on empty space | Clears the selection |
+| Mod-click on node | Toggles that node in/out of the selection |
+| Click on ProseMirror editor content | Passes through to the editor — no selection change, no resize handles |
+| Click on anchored AI image | Selects the **image** (not the parent thread), showing the image bubble menu |
+
+**Editor content bypass:** The `nodeEl` click handler checks `isContentEditable`, `.ProseMirror`, and `.ai-chat-thread-wrapper` and bails out before reaching `selectNode`. This prevents clicks inside AI chat thread content from triggering node selection UI (resize handles, outline), which would block text editing. Mod-click still fires through the bypass to allow toggling selection.
+
+**Anchored image click resolution:** The click handler calls `selectNode(node.nodeId)` with the original node ID — it does **not** use `getSelectionTargetNodeId()`. This ensures that clicking an anchored image selects the image itself rather than resolving to the parent thread.
+
+#### Marquee Selection
+
+Empty-space drag draws a marquee rectangle and selects all overlapping nodes. During marquee hit-testing, anchored AI images resolve to their parent thread via `getSelectionTargetNodeId()`.
+
+**Empty AI chat threads** (no messages yet) are included in marquee selection. Although the thread node itself is hidden, its floating input is visible and the selection bounds for hidden threads use only the floating input's dimensions — not the invisible thread area. This prevents phantom selection over areas the user cannot see.
+
+#### Selection Overlay Rules
+
+The selection group overlay (z-index 10000) appears based on two conditions:
+
+| Condition | Overlay visible? |
+|---|---|
+| 2+ nodes selected (any source) | Yes |
+| 1 node selected via marquee | Yes |
+| 1 node selected via plain click | **No** |
+| 0 nodes selected | No |
+
+This is controlled by the `selectionIsFromMarquee` flag. `setSelectedNodes(ids, fromMarquee)` stores the flag; `shouldShowSelectionGroupOverlay()` checks `size > 1 || selectionIsFromMarquee`. The function does not inspect node types — no special-casing for AI chat threads or any other node type.
+
+#### Deferred Selection in Drag
+
+`handleDragStart` does **not** select nodes immediately on mousedown. Instead it records `wasAlreadySelected` and defers selection:
+
+- **On drag movement** — selects `resolvedNodeId` (parent thread for anchored images) for group drag.
+- **On mouseup without movement (click)** — selects the original `nodeId` (the image itself).
+
+This prevents the selection overlay from appearing between mousedown and mouseup, which would intercept the mouseup event and break the image click flow.
+
+The drag overlay passes `node.nodeId` (not pre-resolved) to `handleDragStart` so both code paths have access to the original ID.
+
+#### Group Drag
+
+Dragging any selected draggable node moves the entire selection together. During group drag:
+
+- AI chat thread companion UI (vertical rail, floating input, anchored images) stays attached to its thread
+- Collision resolution is skipped for multi-node moves to preserve rigid spacing
+- The follow-up click event is suppressed so multi-selection is not collapsed to a single node after drag
+
+#### Single-Target UI
 
 Single-target canvas UI stays single-target:
 
@@ -233,13 +280,7 @@ Single-target canvas UI stays single-target:
 - The single floating prompt input appears only when exactly one document node is selected
 - Per-thread floating inputs remain attached to AI chat thread nodes regardless of selection state
 
-When two or more nodes are selected, the canvas renders a persistent background overlay behind the selected range. A single selected AI chat thread also gets this overlay because the thread, its persistent floating input, and any anchored AI images are treated as one composite selection unit. Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `webUiThemeSettings` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
-
-During group drag, AI chat thread companion UI stays attached to the thread node:
-
-- The vertical rail moves with the thread
-- The per-thread floating input moves with the thread
-- Anchored images continue to follow their owning thread
+Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `webUiThemeSettings` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
 
 Note: viewport transforms are only re-applied when the saved viewport actually changes. This prevents temporary zoom/pan flashes when unrelated canvas updates (for example, image onload corrections) occur.
 
