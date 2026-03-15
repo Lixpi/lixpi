@@ -85,20 +85,20 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expect(docNodeBlock).not.toContain('transition:box-shadow')
 	})
 
-	it('.workspace-image-node base has no own box-shadow, only anchored variant does', () => {
-		// The base .workspace-image-node must not set box-shadow.
-		// Only the nested .workspace-image-node--anchored modifier may.
-		const baseScss = imageNodeBlock.replace(
-			/&\.workspace-image-node--anchored\s*\{[^}]*\}/g,
-			''
-		)
-		const baseShadows = extractBoxShadowValues(baseScss)
-		expect(baseShadows).toHaveLength(0)
+	it('.workspace-image-node base has no top-level box-shadow, while anchored mode does', () => {
+		// The base .workspace-image-node container itself must not set a root box-shadow.
+		// Nested children such as provider badges may still have their own shadows.
+		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--anchored')[0]
+		expect(topLevelSection).not.toMatch(/^\s*box-shadow:/m)
 
-		// Anchored variant is allowed to have a shadow
+		// Anchored variant is allowed to have a shadow.
 		const anchoredBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--anchored')
 		const anchoredShadows = extractBoxShadowValues(anchoredBlock)
 		expect(anchoredShadows).toHaveLength(1)
+
+		// Nested provider badge shadow remains allowed.
+		const badgeBlock = extractBlock(imageNodeBlock, '.image-model-badge')
+		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(1)
 	})
 })
 
@@ -434,12 +434,12 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/resizeRail\.style\.height/)
 	})
 
-	it('selectNode toggles is-selected on the rail', () => {
-		const fnMatch = ts.match(/function\s+selectNode[\s\S]*?^    \}/m)
+	it('updateNodeSelectionClasses toggles is-selected on the rail', () => {
+		const fnMatch = ts.match(/function\s+updateNodeSelectionClasses[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("rail.classList.add('is-selected')")
-		expect(fnBody).toContain("prevRail.classList.remove('is-selected')")
+		expect(fnBody).toContain("threadRails.get(nodeId)?.classList.add('is-selected')")
+		expect(fnBody).toContain("threadRails.get(nodeId)?.classList.remove('is-selected')")
 	})
 
 	it('renderNodes calls destroyAllThreadRails', () => {
@@ -515,11 +515,11 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
 	})
 
-	it('selectNode hides floating input for image nodes', () => {
-		const fnMatch = ts.match(/function\s+selectNode[\s\S]*?^    \}/m)
+	it('updateSelectionDrivenUi hides floating input for image and AI chat thread selections', () => {
+		const fnMatch = ts.match(/function\s+updateSelectionDrivenUi[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("node.type === 'image'")
+		expect(fnBody).toContain("node.type === 'aiChatThread' || node.type === 'image'")
 		expect(fnBody).toContain('hideFloatingInput')
 	})
 
@@ -551,5 +551,132 @@ describe('Vertical rail — TS infrastructure', () => {
 		const callbackMatch = ts.match(/onReceivingStateChange:\s*\(threadId.*?receiving.*?\)\s*=>\s*\{[^}]*\}/s)
 		expect(callbackMatch).not.toBeNull()
 		expect(callbackMatch![0]).toContain('promptInputController.setReceiving(threadId, receiving)')
+	})
+})
+
+// =============================================================================
+// Multi-selection and group drag
+// =============================================================================
+
+describe('Workspace canvas — multi-selection and group drag', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+
+	it('stores selected nodes in a Set instead of a single selectedNodeId', () => {
+		expect(ts).toContain('let selectedNodeIds: Set<string> = new Set()')
+		expect(ts).toContain('function setSelectedNodes(')
+		expect(ts).toContain('function toggleNodeSelection(')
+	})
+
+	it('supports Mod-click selection toggling on node click and drag overlay mousedown', () => {
+		expect(ts).toContain('function isModSelectionEvent(event: MouseEvent): boolean')
+		expect(ts).toContain('if (isModSelectionEvent(e))')
+		expect(ts).toContain('if (isModSelectionEvent(event))')
+		expect(ts).toContain('toggleNodeSelection(selectionTargetNodeId)')
+		expect(ts).toContain('toggleNodeSelection(resolvedNodeId)')
+	})
+
+	it('defines marquee selection helpers and pane mousedown listener', () => {
+		expect(ts).toContain('type MarqueeSelectionState = {')
+		expect(ts).toContain('function handlePaneMouseDown(event: MouseEvent): void')
+		expect(ts).toContain("paneEl.addEventListener('mousedown', handlePaneMouseDown, true)")
+		expect(ts).toContain('function ensureSelectionRectElement(): HTMLDivElement | null')
+		expect(ts).toContain('function getSelectableNodeIdsInRect(rect: Rect): string[]')
+	})
+
+	it('syncs viewport interaction state before the first pan so selection works immediately on load', () => {
+		expect(ts).toContain('function syncViewportInteractionState(viewport: Viewport): void')
+		expect(ts).toContain('lastTransform = [viewport.x, viewport.y, viewport.zoom]')
+		expect(ts).toContain('paneRect = paneEl.getBoundingClientRect()')
+		expect(ts).toContain('syncViewportInteractionState(initialViewport)')
+		expect(ts).toContain('syncViewportInteractionState(vp)')
+	})
+
+	it('treats transparent canvas children as background so marquee and outside-click clear still work', () => {
+		expect(ts).toContain('function isCanvasBackgroundTarget(target: EventTarget | null): boolean')
+		expect(ts).toContain('if (!isCanvasBackgroundTarget(event.target)) return')
+		expect(ts).toContain('if (isCanvasBackgroundTarget(e.target)) {')
+		expect(ts).toContain('selectionGroupOverlayEl?.contains(target)')
+	})
+
+	it('maps anchored AI-chat images to the parent thread for selection and drag targeting', () => {
+		expect(ts).toContain('function getSelectionTargetNodeId(nodeId: string): string')
+		expect(ts).toContain('const anchor = anchoredImageManager.getAnchor(nodeId)')
+		expect(ts).toContain('selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))')
+		expect(ts).toContain('dragOverlay.addEventListener(\'mousedown\', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId)))')
+	})
+
+	it('treats AI chat thread floating input as part of the same selected composite', () => {
+		expect(ts).toContain('function getSelectionBoundsForNode(node: CanvasNode): Rect')
+		expect(ts).toContain('const threadFloatingInput = threadFloatingInputs.get(node.nodeId)')
+		expect(ts).toContain('const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)')
+		expect(ts).toContain('const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width')
+		expect(ts).toContain('const inputHeight = threadFloatingInput.el.offsetHeight')
+		expect(ts).toContain('right = Math.max(right, position.x + inputWidth)')
+		expect(ts).toContain('bottom = Math.max(bottom, inputTop + inputHeight)')
+		expect(ts).toContain('rectsOverlap(rect, getSelectionBoundsForNode(node))')
+		expect(ts).toContain("threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')")
+		expect(ts).toContain("threadFloatingInputs.get(nodeId)?.el.classList.remove('is-selected')")
+		expect(scss).toMatch(/\.ai-prompt-input-thread-persistent\s*\{[\s\S]*?&\.is-selected/)
+	})
+
+	it('includes anchored AI images when computing the selection overlay bounds', () => {
+		expect(ts).toContain('for (const anchor of anchoredImageManager.getAnchorsForThread(nodeId)) {')
+		expect(ts).toContain('overlayNodeIds.add(anchor.imageNodeId)')
+		expect(ts).toContain('const rect = getSelectionBoundsForNode(node)')
+	})
+
+	it('renders and styles the marquee selection rectangle', () => {
+		expect(ts).toContain("selectionRectEl.className = 'workspace-selection-rect'")
+		expect(scss).toContain('.workspace-selection-rect')
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*pointer-events:\s*none/s)
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*z-index:\s*10001/s)
+	})
+
+	it('defines and styles a persistent selection overlay for multi-selection and single AI chat thread selection', () => {
+		expect(ts).toContain("selectionGroupOverlayEl.className = 'workspace-selection-group-overlay'")
+		expect(ts).toContain('function shouldShowSelectionGroupOverlay(): boolean')
+		expect(ts).toContain('if (selectedNodeIds.size > 1) return true')
+		expect(ts).toContain('function getSelectionOverlayBounds(): Rect | null')
+		expect(ts).toContain('function updateSelectionGroupOverlayElement(): void')
+		expect(ts).toContain("return selectedNode?.type === 'aiChatThread'")
+		expect(ts).toContain('if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
+		expect(ts).toContain('updateSelectionGroupOverlayElement()')
+		expect(scss).toContain('.workspace-selection-group-overlay')
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
+	})
+
+	it('uses the selection overlay as a drag surface for the whole selected group or single AI chat thread composite', () => {
+		expect(ts).toContain("selectionGroupOverlayEl.addEventListener('mousedown'"
+		)
+		expect(ts).toContain('if (!shouldShowSelectionGroupOverlay()) return')
+		expect(ts).toContain('const primaryNodeId = Array.from(selectedNodeIds)[0]')
+		expect(ts).toContain('handleDragStart(event, primaryNodeId)')
+	})
+
+	it('group drag uses selected nodes as drag participants', () => {
+		expect(ts).toContain('function getDraggableNodeIds(primaryNodeId: string): string[]')
+		expect(ts).toContain('const draggedNodeIds = getDraggableNodeIds(resolvedNodeId)')
+		expect(ts).toContain('const draggedNodeEntries = new Map<string, {')
+		expect(ts).toContain('for (const [draggedNodeId, entry] of draggedNodeEntries)')
+	})
+
+	it('preserves multi-selection after drag by suppressing the follow-up click collapse', () => {
+		expect(ts).toContain('let suppressNextNodeClick = false')
+		expect(ts).toContain('if (suppressNextNodeClick) {')
+		expect(ts).toContain('if (dragDidMove) {')
+		expect(ts).toContain('suppressNextNodeClick = true')
+	})
+
+	it('group drag skips collision resolution for multi-node moves to preserve rigid spacing', () => {
+		expect(ts).toContain('if (draggedNodeEntries.size === 1) {')
+		expect(ts).toContain('resolveCollisions(nodeBoxes')
+	})
+
+	it('single-target UI is derived from getSingleSelectedNodeId', () => {
+		expect(ts).toContain('function getSingleSelectedNodeId(): string | null')
+		expect(ts).toContain('const singleSelectedNodeId = getSingleSelectedNodeId()')
+		expect(ts).toContain('hideCanvasBubbleMenu()')
+		expect(ts).toContain('hideFloatingInput()')
 	})
 })
