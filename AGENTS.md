@@ -1,30 +1,32 @@
-Each folder may contain a separate README.md file. When working on the code you must look for such README.md files and understand the documentation. If you update the component you must also update the README.md file in that directory or in parent directory if changes in a child directory affects code in the parend directory.
+# Project Guidelines
 
-Do not create README.md if it doesn't exist.
+## Architecture
 
-Never use any JSDoc comments!
+Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm monorepo with TypeScript services, a Python LLM API, and NATS messaging. See [documentation/PRODUCT-OVERVIEW.md](documentation/PRODUCT-OVERVIEW.md) for full architecture details.
 
-When working on TypeScript code make sure to follow these rules:
- - use `type` instead of `interface` for type definitions.
- - Always use `.ts` extension when importing files, all our code is in TypeScript, never use `.js` imports.
- - When importing types and methods from a package, make sure to do it in a single block, like this:
-    ```TypeScript
-    import {
-        createJwtVerifier,
-        type JwtVerificationResult
-    } from '@lixpi/auth-service'
-    ```
+| Service | Language | Path | Purpose |
+|---------|----------|------|---------|
+| **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas, ProseMirror editors, AI chat UI |
+| **api** | Node.js / TypeScript | `services/api/` | Gateway — JWT auth, CRUD, DynamoDB, NATS bridge |
+| **llm-api** | Python (LangGraph) | `services/llm-api/` | AI orchestration — validate → stream → usage → cleanup |
+| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, JetStream Object Store |
+| **localauth0** | Node.js | `services/localauth0/` | Mock Auth0 for local dev |
 
-When question is related to SVG or D3 you must always refer to the available `D3` MCP server!
+Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in `infrastructure/pulumi/`.
 
-NEVER use `cat` to edit files.
-NEVER run large inline python or js code in the terminal.
+## Code Style
 
-## Working with branches and GitHub tools
+Language-specific coding conventions are in `documentation/coding-style-guides/`. Find the guide for the language you're working in and follow it.
 
-When working on feature and user asks you to open a pull request, you must make sure that working branch named in the following way: `LIX-<issue-id>>/<description>` e.g. ``LIX-60/support-google-models`.
-You must fetch `<issue-id>` from GitHub via available tools.
+## Documentation
 
-When opening pull request title must be in the following format: `LIX-<issue-id> # <description>`. Make sure to assign the issue to the current user.
-After PR is opened you must update the associated issue and provide a link to the opened PR at the end of description body.
-When creating a commit you must add commit title in the same `LIX-<issue-id> # <description>` format.
+Each folder may contain a separate `README.md`. When working on code, look for and read nearby README files. If you update a component, also update the README in that directory (or the parent if changes affect parent code). Do not create README files that don't already exist.
+
+Documentation style guides are in `documentation/documentation-style-guides/`. Find the relevant guide before writing or updating documentation.
+
+## Conventions
+
+- When a question is related to SVG or D3, always refer to the available `D3` MCP server.
+- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`). Run tests with `docker exec lixpi-web-ui pnpm test:run`.
+- Never use `cat` to edit files.
+- Never run large inline Python or JS code in the terminal.
