@@ -48,6 +48,29 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
     const summary = wrapper.querySelector('summary')!
     const contentDom = wrapper.querySelector('.ai-collapsible-block-content')!
 
+    const handleSummaryMouseDown = (event: MouseEvent) => {
+        // Prevent the parent thread's mousedown focus handler from stealing the interaction.
+        event.preventDefault()
+        event.stopPropagation()
+    }
+
+    const handleSummaryClick = (event: MouseEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+
+        const pos = getPos()
+        if (pos === undefined) return
+
+        const newOpen = !wrapper.open
+        wrapper.open = newOpen
+
+        const tr = view.state.tr.setNodeMarkup(pos, undefined, {
+            ...view.state.doc.nodeAt(pos)?.attrs,
+            isOpen: newOpen,
+        })
+        view.dispatch(tr)
+    }
+
     summary.textContent = node.attrs.isStreaming
         ? 'Preparing image generation prompt'
         : node.attrs.title
@@ -56,29 +79,19 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
         wrapper.open = true
     }
 
-    // Toggle open state on click — native <details> toggle is blocked by ProseMirror
-    summary.addEventListener('click', (e: MouseEvent) => {
-        e.preventDefault()
-        const pos = getPos()
-        if (pos === undefined) return
-
-        const newOpen = !wrapper.open
-        wrapper.open = newOpen
-
-        // Sync the isOpen attr back to the ProseMirror node
-        const tr = view.state.tr.setNodeMarkup(pos, undefined, {
-            ...view.state.doc.nodeAt(pos)?.attrs,
-            isOpen: newOpen,
-        })
-        view.dispatch(tr)
-    })
+    summary.addEventListener('mousedown', handleSummaryMouseDown)
+    summary.addEventListener('click', handleSummaryClick)
 
     return {
         dom: wrapper,
         contentDOM: contentDom,
         stopEvent(event: Event) {
-            // Let clicks on summary through so the toggle handler works
             return event.target === summary || summary.contains(event.target as Node)
+        },
+        ignoreMutation(mutation: MutationRecord) {
+            return mutation.type === 'attributes'
+                && mutation.attributeName === 'open'
+                && mutation.target === wrapper
         },
         update(updatedNode: any) {
             if (updatedNode.type.name !== aiCollapsibleBlockNodeType) return false
@@ -96,6 +109,10 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
             wrapper.open = !!updatedNode.attrs.isOpen
 
             return true
+        },
+        destroy() {
+            summary.removeEventListener('mousedown', handleSummaryMouseDown)
+            summary.removeEventListener('click', handleSummaryClick)
         },
     }
 }
