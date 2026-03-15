@@ -140,6 +140,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectionRectEl: HTMLDivElement | null = null
     let selectionGroupOverlayEl: HTMLDivElement | null = null
     let marqueeSelection: MarqueeSelectionState | null = null
+    let selectionIsFromMarquee = false
     let suppressNextPaneClick = false
     let suppressNextNodeClick = false
     const pendingAnchoredRealignThreadNodeIds: Set<string> = new Set()
@@ -383,14 +384,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         let bottom = position.y + dimensions.height
 
         if (node.type === 'aiChatThread') {
+            const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)
             const threadFloatingInput = threadFloatingInputs.get(node.nodeId)
             if (threadFloatingInput) {
                 const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)
                 const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width
                 const inputHeight = threadFloatingInput.el.offsetHeight
 
-                right = Math.max(right, position.x + inputWidth)
-                bottom = Math.max(bottom, inputTop + inputHeight)
+                if (isHidden) {
+                    // Hidden empty threads: use only the floating input bounds
+                    right = position.x + inputWidth
+                    bottom = inputTop + inputHeight
+                } else {
+                    right = Math.max(right, position.x + inputWidth)
+                    bottom = Math.max(bottom, inputTop + inputHeight)
+                }
             }
         }
 
@@ -408,7 +416,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const selectedNodeIdsInRect = new Set<string>()
 
         currentCanvasState.nodes
-            .filter((node: CanvasNode) => !hiddenEmptyThreadNodeIds.has(node.nodeId))
             .filter((node: CanvasNode) => rectsOverlap(rect, getSelectionBoundsForNode(node)))
             .forEach((node: CanvasNode) => {
                 selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))
@@ -451,12 +458,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function shouldShowSelectionGroupOverlay(): boolean {
         if (!currentCanvasState || selectedNodeIds.size === 0) return false
         if (selectedNodeIds.size > 1) return true
-
-        const selectedNodeId = Array.from(selectedNodeIds)[0]
-        if (!selectedNodeId) return false
-
-        const selectedNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === selectedNodeId)
-        return selectedNode?.type === 'aiChatThread'
+        return selectionIsFromMarquee
     }
 
     function updateSelectionRectElement(): void {
@@ -596,9 +598,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         showFloatingInput(singleSelectedNodeId)
     }
 
-    function setSelectedNodes(nextSelectedNodeIds: Set<string>): void {
+    function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void {
         const prevSelectedNodeIds = selectedNodeIds
         selectedNodeIds = nextSelectedNodeIds
+        selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0
         updateNodeSelectionClasses(prevSelectedNodeIds, selectedNodeIds)
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
@@ -2129,13 +2132,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
-            const selectionTargetNodeId = getSelectionTargetNodeId(node.nodeId)
+            // Don't trigger node selection when clicking inside editor content
+            // (ProseMirror, contenteditable areas) — let the editor handle the click
+            const clickTarget = e.target as HTMLElement | null
+            if (clickTarget && (
+                clickTarget.isContentEditable ||
+                clickTarget.closest('.ProseMirror') ||
+                clickTarget.closest('.ai-chat-thread-wrapper')
+            )) {
+                return
+            }
+
             if (isModSelectionEvent(e)) {
+                const selectionTargetNodeId = getSelectionTargetNodeId(node.nodeId)
                 toggleNodeSelection(selectionTargetNodeId)
                 return
             }
 
-            selectNode(selectionTargetNodeId)
+            selectNode(node.nodeId)
         })
 
         const isAiChatThread = node.type === 'aiChatThread'
@@ -2147,7 +2161,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const dragOverlay = document.createElement('div')
         dragOverlay.className = 'node-drag-overlay nopan'
-        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId)))
+        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -2387,9 +2401,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = viewportEl?.querySelector(`[data-node-id="${resolvedNodeId}"]`) as HTMLElement
         if (!nodeEl || !currentCanvasState) return
 
-        if (!isNodeSelected(resolvedNodeId)) {
-            selectNode(resolvedNodeId)
-        }
+        // Defer selection: don't select on mousedown. Selecting here can cause
+        // the selection overlay to appear (e.g. for AI chat threads) which sits
+        // above the clicked element at a higher z-index, stealing the subsequent
+        // mouseup/click. Instead, selection happens:
+        //   - on first meaningful mouse movement (selects resolvedNodeId for drag)
+        //   - on mouseup without movement (selects original nodeId for click)
+        const wasAlreadySelected = isNodeSelected(resolvedNodeId)
 
         const draggedNodeIds = getDraggableNodeIds(resolvedNodeId)
         const draggedNodeEntries = new Map<string, {
@@ -2461,7 +2479,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const deltaY = (moveEvent.clientY - startY) / currentZoom
             if (!dragDidMove && (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1)) {
                 dragDidMove = true
+                if (!wasAlreadySelected) {
+                    selectNode(resolvedNodeId)
+                }
             }
+
+            if (!dragDidMove) return
 
             for (const [draggedNodeId, entry] of draggedNodeEntries) {
                 const currentPos = {
@@ -2550,6 +2573,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 window.setTimeout(() => {
                     suppressNextNodeClick = false
                 }, 0)
+            } else {
+                // No drag occurred — this was a click. Select the original node
+                // (not the resolved parent thread) so that clicking an anchored
+                // image selects the image and shows its bubble menu.
+                selectNode(nodeId)
             }
 
             for (const draggedNodeId of draggedNodeEntries.keys()) {
@@ -3364,7 +3392,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!marqueeSelection.moved) return
 
             const selectedIds = getSelectableNodeIdsInRect(getCanvasRectFromSelection(marqueeSelection))
-            setSelectedNodes(new Set(selectedIds))
+            setSelectedNodes(new Set(selectedIds), true)
             suppressNextPaneClick = true
         }
 
