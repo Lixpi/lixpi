@@ -229,8 +229,8 @@
     position: absolute;
     z-index: 10001;
     pointer-events: none;
-    border: 1px solid rgba(54, 92, 135, 0.85);
-    background: rgba(130, 178, 192, 0.18);
+    border: 1px solid var(--selection-marquee-border-color);
+    background: var(--selection-marquee-background-color);
     border-radius: 8px;
     box-sizing: border-box;
 }
@@ -239,8 +239,8 @@
     position: absolute;
     z-index: 10000;
     cursor: move;
-    border: 1px solid rgba(54, 92, 135, 0.52);
-    background: rgba(130, 178, 192, 0.22);
+    border: 1px solid var(--selection-overlay-border-color);
+    background: var(--selection-overlay-background-color);
     border-radius: 18px;
     box-sizing: border-box;
     backdrop-filter: blur(1px);
@@ -727,7 +727,7 @@
 // Bottom resize handles on the per-thread floating AI input
 .ai-prompt-input-thread-persistent {
     &.is-selected {
-        outline: 1px solid rgba(54, 92, 135, 0.58);
+        outline: 1px solid var(--selection-outline-color);
         outline-offset: 2px;
     }
 
