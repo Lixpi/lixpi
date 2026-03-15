@@ -8,7 +8,10 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 
 - **Pan** the canvas by clicking and dragging empty space (or two-finger scroll on trackpad)
 - **Zoom** with pinch gestures or Ctrl+scroll
+- **Multi-select nodes** by dragging a marquee rectangle from empty canvas space
+- **Toggle selection membership** with Mod-click (`Cmd` on macOS, `Ctrl` on other platforms)
 - **Drag** nodes by grabbing the overlay (top bar for documents/threads, anywhere for images)
+- **Drag selected groups** as a rigid set while preserving relative spacing
 - **Resize** nodes from any corner (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
@@ -212,6 +215,31 @@ panZoom.update({
 ```
 
 After mouse-up, we re-enable panning and commit the new position/dimensions via `onCanvasStateChange`.
+
+### Multi-Selection
+
+Node selection is runtime-only UI state and is not persisted into `canvasState`.
+
+- **Plain click on node** — replaces the current node selection with that node
+- **Plain click on empty space** — clears the current node selection
+- **Mod-click on node** — toggles that node in or out of the current selection
+- **Empty-space drag** — draws a marquee rectangle and selects any node that overlaps it
+- **Group drag** — dragging any selected draggable node moves the entire selected set together
+- **Anchored AI images** — images visually attached to an AI chat thread resolve to the parent thread for selection and drag, so marquee selection or direct interaction on the anchored image selects the thread rather than the image node itself
+
+Single-target canvas UI stays single-target:
+
+- The image bubble menu appears only when exactly one image node is selected
+- The single floating prompt input appears only when exactly one document node is selected
+- Per-thread floating inputs remain attached to AI chat thread nodes regardless of selection state
+
+When two or more nodes are selected, the canvas renders a persistent background overlay behind the selected range. A single selected AI chat thread also gets this overlay because the thread, its persistent floating input, and any anchored AI images are treated as one composite selection unit. This overlay makes the active selection obvious and also serves as an extra drag surface for moving the selected composite. Clicking outside the selected range clears the selection.
+
+During group drag, AI chat thread companion UI stays attached to the thread node:
+
+- The vertical rail moves with the thread
+- The per-thread floating input moves with the thread
+- Anchored images continue to follow their owning thread
 
 Note: viewport transforms are only re-applied when the saved viewport actually changes. This prevents temporary zoom/pan flashes when unrelated canvas updates (for example, image onload corrections) occur.
 

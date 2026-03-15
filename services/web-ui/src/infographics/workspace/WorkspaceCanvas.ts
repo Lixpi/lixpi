@@ -5,6 +5,7 @@ import {
     type PanZoomInstance,
     type Viewport,
     type Transform,
+    type Rect,
 } from '@xyflow/system'
 import { v4 as uuidv4 } from 'uuid'
 import {
@@ -58,6 +59,12 @@ type AiChatThreadEditorEntry = {
     containerEl: HTMLElement
     gradientCleanup?: () => void
     triggerGradientAnimation?: () => void
+}
+
+type MarqueeSelectionState = {
+    start: { x: number; y: number }
+    current: { x: number; y: number }
+    moved: boolean
 }
 
 type WorkspaceCanvasCallbacks = {
@@ -121,10 +128,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let pendingHandleZoom: number | null = null
     let anchoredRealignRaf: number | null = null
     let autoGrowRaf: number | null = null
-    let selectedNodeId: string | null = null
+    let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
+    let selectionRectEl: HTMLDivElement | null = null
+    let selectionGroupOverlayEl: HTMLDivElement | null = null
+    let marqueeSelection: MarqueeSelectionState | null = null
+    let suppressNextPaneClick = false
+    let suppressNextNodeClick = false
     const pendingAnchoredRealignThreadNodeIds: Set<string> = new Set()
     const pendingAutoGrowThreadNodeIds: Set<string> = new Set()
     const nodeLayerManager = createNodeLayerManager()
@@ -308,6 +320,332 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    function isModSelectionEvent(event: MouseEvent): boolean {
+        return event.metaKey || event.ctrlKey
+    }
+
+    function getSingleSelectedNodeId(): string | null {
+        if (selectedNodeIds.size !== 1) return null
+        return selectedNodeIds.values().next().value ?? null
+    }
+
+    function isNodeSelected(nodeId: string): boolean {
+        return selectedNodeIds.has(nodeId)
+    }
+
+    function getSelectionTargetNodeId(nodeId: string): string {
+        const anchor = anchoredImageManager.getAnchor(nodeId)
+        return anchor?.threadNodeId ?? nodeId
+    }
+
+    function getCanvasRectFromSelection(state: MarqueeSelectionState): Rect {
+        const left = Math.min(state.start.x, state.current.x)
+        const top = Math.min(state.start.y, state.current.y)
+        const width = Math.abs(state.current.x - state.start.x)
+        const height = Math.abs(state.current.y - state.start.y)
+
+        return { x: left, y: top, width, height }
+    }
+
+    function rectsOverlap(a: Rect, b: Rect): boolean {
+        return a.x < b.x + b.width &&
+            a.x + a.width > b.x &&
+            a.y < b.y + b.height &&
+            a.y + a.height > b.y
+    }
+
+    function getCanvasPointFromClient(clientX: number, clientY: number): { x: number; y: number } {
+        const paneBounds = paneRect ?? paneEl.getBoundingClientRect()
+        return {
+            x: (clientX - paneBounds.left - lastTransform[0]) / lastTransform[2],
+            y: (clientY - paneBounds.top - lastTransform[1]) / lastTransform[2],
+        }
+    }
+
+    function syncViewportInteractionState(viewport: Viewport): void {
+        lastTransform = [viewport.x, viewport.y, viewport.zoom]
+        paneRect = paneEl.getBoundingClientRect()
+    }
+
+    function getSelectionBoundsForNode(node: CanvasNode): Rect {
+        const override = liveNodeOverrides.get(node.nodeId)
+        const position = override?.position ?? node.position
+        const dimensions = override?.dimensions ?? node.dimensions
+
+        let left = position.x
+        let top = position.y
+        let right = position.x + dimensions.width
+        let bottom = position.y + dimensions.height
+
+        if (node.type === 'aiChatThread') {
+            const threadFloatingInput = threadFloatingInputs.get(node.nodeId)
+            if (threadFloatingInput) {
+                const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)
+                const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width
+                const inputHeight = threadFloatingInput.el.offsetHeight
+
+                right = Math.max(right, position.x + inputWidth)
+                bottom = Math.max(bottom, inputTop + inputHeight)
+            }
+        }
+
+        return {
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top,
+        }
+    }
+
+    function getSelectableNodeIdsInRect(rect: Rect): string[] {
+        if (!currentCanvasState) return []
+
+        const selectedNodeIdsInRect = new Set<string>()
+
+        currentCanvasState.nodes
+            .filter((node: CanvasNode) => !hiddenEmptyThreadNodeIds.has(node.nodeId))
+            .filter((node: CanvasNode) => rectsOverlap(rect, getSelectionBoundsForNode(node)))
+            .forEach((node: CanvasNode) => {
+                selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))
+            })
+
+        return Array.from(selectedNodeIdsInRect)
+    }
+
+    function ensureSelectionRectElement(): HTMLDivElement | null {
+        if (!viewportEl) return null
+        if (selectionRectEl && viewportEl.contains(selectionRectEl)) return selectionRectEl
+
+        selectionRectEl = document.createElement('div')
+        selectionRectEl.className = 'workspace-selection-rect'
+        selectionRectEl.style.display = 'none'
+        viewportEl.appendChild(selectionRectEl)
+        return selectionRectEl
+    }
+
+    function ensureSelectionGroupOverlayElement(): HTMLDivElement | null {
+        if (!viewportEl) return null
+        if (selectionGroupOverlayEl && viewportEl.contains(selectionGroupOverlayEl)) return selectionGroupOverlayEl
+
+        selectionGroupOverlayEl = document.createElement('div')
+        selectionGroupOverlayEl.className = 'workspace-selection-group-overlay'
+        selectionGroupOverlayEl.style.display = 'none'
+        selectionGroupOverlayEl.addEventListener('mousedown', (event) => {
+            if (!shouldShowSelectionGroupOverlay()) return
+            if (event.button !== 0) return
+
+            const primaryNodeId = Array.from(selectedNodeIds)[0]
+            if (!primaryNodeId) return
+
+            handleDragStart(event, primaryNodeId)
+        })
+        viewportEl.appendChild(selectionGroupOverlayEl)
+        return selectionGroupOverlayEl
+    }
+
+    function shouldShowSelectionGroupOverlay(): boolean {
+        if (!currentCanvasState || selectedNodeIds.size === 0) return false
+        if (selectedNodeIds.size > 1) return true
+
+        const selectedNodeId = Array.from(selectedNodeIds)[0]
+        if (!selectedNodeId) return false
+
+        const selectedNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === selectedNodeId)
+        return selectedNode?.type === 'aiChatThread'
+    }
+
+    function updateSelectionRectElement(): void {
+        if (!marqueeSelection) return
+
+        const rectEl = ensureSelectionRectElement()
+        if (!rectEl) return
+
+        const rect = getCanvasRectFromSelection(marqueeSelection)
+        rectEl.style.display = marqueeSelection.moved ? 'block' : 'none'
+        rectEl.style.left = `${rect.x}px`
+        rectEl.style.top = `${rect.y}px`
+        rectEl.style.width = `${rect.width}px`
+        rectEl.style.height = `${rect.height}px`
+    }
+
+    function hideSelectionRectElement(): void {
+        if (selectionRectEl) {
+            selectionRectEl.style.display = 'none'
+        }
+    }
+
+    function getSelectionOverlayBounds(): Rect | null {
+        if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null
+
+        const overlayNodeIds = new Set<string>()
+        for (const nodeId of selectedNodeIds) {
+            overlayNodeIds.add(nodeId)
+            for (const anchor of anchoredImageManager.getAnchorsForThread(nodeId)) {
+                overlayNodeIds.add(anchor.imageNodeId)
+            }
+        }
+
+        const overlayNodes = currentCanvasState.nodes.filter((node: CanvasNode) => overlayNodeIds.has(node.nodeId))
+        if (overlayNodes.length === 0) return null
+
+        const bounds = overlayNodes.map((node: CanvasNode) => {
+            const rect = getSelectionBoundsForNode(node)
+            return {
+                left: rect.x,
+                top: rect.y,
+                right: rect.x + rect.width,
+                bottom: rect.y + rect.height,
+            }
+        })
+
+        const padding = 16
+        const left = Math.min(...bounds.map((bound: { left: number }) => bound.left)) - padding
+        const top = Math.min(...bounds.map((bound: { top: number }) => bound.top)) - padding
+        const right = Math.max(...bounds.map((bound: { right: number }) => bound.right)) + padding
+        const bottom = Math.max(...bounds.map((bound: { bottom: number }) => bound.bottom)) + padding
+
+        return {
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top,
+        }
+    }
+
+    function updateSelectionGroupOverlayElement(): void {
+        const overlayEl = ensureSelectionGroupOverlayElement()
+        if (!overlayEl) return
+
+        const bounds = getSelectionOverlayBounds()
+        if (!bounds) {
+            overlayEl.style.display = 'none'
+            return
+        }
+
+        overlayEl.style.display = 'block'
+        overlayEl.style.left = `${bounds.x}px`
+        overlayEl.style.top = `${bounds.y}px`
+        overlayEl.style.width = `${bounds.width}px`
+        overlayEl.style.height = `${bounds.height}px`
+    }
+
+    function updateNodeSelectionClasses(prevSelectedNodeIds: Set<string>, nextSelectedNodeIds: Set<string>): void {
+        for (const nodeId of prevSelectedNodeIds) {
+            if (nextSelectedNodeIds.has(nodeId)) continue
+            const prevNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
+            prevNode?.classList.remove('is-selected')
+            threadFloatingInputs.get(nodeId)?.el.classList.remove('is-selected')
+            threadRails.get(nodeId)?.classList.remove('is-selected')
+        }
+
+        for (const nodeId of nextSelectedNodeIds) {
+            if (prevSelectedNodeIds.has(nodeId)) continue
+            const nextNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
+            nextNode?.classList.add('is-selected')
+            threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')
+
+            if (nextNode) {
+                nodeLayerManager.bringToFront(nextNode)
+
+                const threadAnchors = anchoredImageManager.getAnchorsForThread(nodeId)
+                for (const anchor of threadAnchors) {
+                    const anchoredEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
+                    if (anchoredEl) nodeLayerManager.bringToFront(anchoredEl)
+                }
+            }
+
+            threadRails.get(nodeId)?.classList.add('is-selected')
+        }
+    }
+
+    function updateSelectionDrivenUi(): void {
+        const singleSelectedNodeId = getSingleSelectedNodeId()
+
+        if (!singleSelectedNodeId) {
+            hideCanvasBubbleMenu()
+            hideFloatingInput()
+            return
+        }
+
+        selectedEdgeId = null
+        connectionManager?.deselect()
+        hideEdgeBubbleMenu()
+        showCanvasBubbleMenuForNode(singleSelectedNodeId)
+
+        const node = currentCanvasState?.nodes.find((item: CanvasNode) => item.nodeId === singleSelectedNodeId)
+        if (!node) {
+            hideCanvasBubbleMenu()
+            hideFloatingInput()
+            return
+        }
+
+        if (node.type === 'aiChatThread' || node.type === 'image') {
+            if (node.type === 'aiChatThread') {
+                const refId = (node as AiChatThreadCanvasNode).referenceId || singleSelectedNodeId
+                promptInputController.setTarget({ nodeId: singleSelectedNodeId, type: 'aiChatThread', referenceId: refId })
+            }
+            hideFloatingInput()
+            return
+        }
+
+        showFloatingInput(singleSelectedNodeId)
+    }
+
+    function setSelectedNodes(nextSelectedNodeIds: Set<string>): void {
+        const prevSelectedNodeIds = selectedNodeIds
+        selectedNodeIds = nextSelectedNodeIds
+        updateNodeSelectionClasses(prevSelectedNodeIds, selectedNodeIds)
+        updateSelectionGroupOverlayElement()
+        updateSelectionDrivenUi()
+    }
+
+    function toggleNodeSelection(nodeId: string): void {
+        const nextSelectedNodeIds = new Set(selectedNodeIds)
+        if (nextSelectedNodeIds.has(nodeId)) {
+            nextSelectedNodeIds.delete(nodeId)
+        } else {
+            nextSelectedNodeIds.add(nodeId)
+        }
+        setSelectedNodes(nextSelectedNodeIds)
+    }
+
+    function clearNodeSelection(): void {
+        if (selectedNodeIds.size === 0) {
+            hideCanvasBubbleMenu()
+            hideFloatingInput()
+            updateSelectionGroupOverlayElement()
+            return
+        }
+        setSelectedNodes(new Set())
+    }
+
+    function getDraggableNodeIds(primaryNodeId: string): string[] {
+        const effectivePrimaryNodeId = getSelectionTargetNodeId(primaryNodeId)
+        if (!isNodeSelected(effectivePrimaryNodeId)) return [effectivePrimaryNodeId]
+
+        const draggableNodeIds = Array.from(selectedNodeIds).filter((nodeId) => !anchoredImageManager.isAnchored(nodeId))
+        if (draggableNodeIds.length > 0) return draggableNodeIds
+
+        return [effectivePrimaryNodeId]
+    }
+
+    function isCanvasBackgroundTarget(target: EventTarget | null): boolean {
+        if (!(target instanceof Element)) return false
+        if (!paneEl.contains(target)) return false
+        if (selectionGroupOverlayEl?.contains(target)) return false
+
+        return !target.closest([
+            '[data-node-id]',
+            '.workspace-thread-rail',
+            '.ai-prompt-input-floating',
+            '.workspace-edge-node',
+            '.workspace-handle',
+            '.document-resize-handle',
+            '.node-drag-overlay',
+            '.bubble-menu',
+        ].join(', '))
+    }
+
     function showCanvasBubbleMenuForNode(nodeId: string) {
         if (!canvasBubbleMenu || !canvasBubbleMenuItems || !currentCanvasState) return
 
@@ -336,6 +674,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function repositionCanvasBubbleMenu() {
+        const selectedNodeId = getSingleSelectedNodeId()
         if (!canvasBubbleMenu?.isVisible || !selectedNodeId) return
 
         const nodeEl = viewportEl?.querySelector(`[data-node-id="${selectedNodeId}"]`) as HTMLElement
@@ -1741,62 +2080,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function selectNode(nodeId: string | null) {
-        if (selectedNodeId) {
-            const prevNode = viewportEl?.querySelector(`[data-node-id="${selectedNodeId}"]`)
-            prevNode?.classList.remove('is-selected')
-
-            // Deselect the previous rail
-            const prevRail = threadRails.get(selectedNodeId)
-            if (prevRail) prevRail.classList.remove('is-selected')
-        }
-
-        selectedNodeId = nodeId
-
-        if (nodeId) {
-            const newNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
-            newNode?.classList.add('is-selected')
-            if (newNode) {
-                nodeLayerManager.bringToFront(newNode)
-
-                // Bring anchored images to front along with the selected thread
-                const threadAnchors = anchoredImageManager.getAnchorsForThread(nodeId)
-                for (const anchor of threadAnchors) {
-                    const anchoredEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement
-                    if (anchoredEl) nodeLayerManager.bringToFront(anchoredEl)
-                }
-            }
-
-            // Select the rail for this thread (if any)
-            const rail = threadRails.get(nodeId)
-            if (rail) rail.classList.add('is-selected')
-        }
-
-        if (nodeId) {
-            selectedEdgeId = null
-            connectionManager?.deselect()
-            showCanvasBubbleMenuForNode(nodeId)
-
-            // aiChatThread nodes have their own always-visible per-thread inputs.
-            // Image nodes use the bubble menu "Ask AI" button instead of the floating input.
-            // Only show the single floating input for document node types.
-            const node = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-            if (node && (node.type === 'aiChatThread' || node.type === 'image')) {
-                if (node.type === 'aiChatThread') {
-                    // Set controller target to this thread (for keyboard shortcuts etc.)
-                    const refId = (node as AiChatThreadCanvasNode).referenceId || nodeId
-                    promptInputController.setTarget({ nodeId, type: 'aiChatThread', referenceId: refId })
-                }
-                // Hide the single floating input
-                if (floatingInputEl) {
-                    floatingInputEl.style.display = 'none'
-                }
-            } else {
-                showFloatingInput(nodeId)
-            }
-        } else {
-            hideCanvasBubbleMenu()
-            hideFloatingInput()
-        }
+        setSelectedNodes(nodeId ? new Set([nodeId]) : new Set())
     }
 
     function createResizeHandle(nodeId: string, corner: ResizeCorner): HTMLElement {
@@ -1831,10 +2115,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         nodeEl.style.top = `${node.position.y}px`
         nodeEl.style.width = `${node.dimensions.width}px`
         nodeEl.style.height = `${node.dimensions.height}px`
+        nodeEl.style.zIndex = String(nodeLayerManager.currentTopIndex())
 
         nodeEl.addEventListener('click', (e) => {
             e.stopPropagation()
-            selectNode(node.nodeId)
+            if (suppressNextNodeClick) {
+                suppressNextNodeClick = false
+                return
+            }
+
+            const selectionTargetNodeId = getSelectionTargetNodeId(node.nodeId)
+            if (isModSelectionEvent(e)) {
+                toggleNodeSelection(selectionTargetNodeId)
+                return
+            }
+
+            selectNode(selectionTargetNodeId)
         })
 
         const isAiChatThread = node.type === 'aiChatThread'
@@ -1846,7 +2142,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const dragOverlay = document.createElement('div')
         dragOverlay.className = 'node-drag-overlay nopan'
-        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
+        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId)))
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -2076,23 +2372,54 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         event.preventDefault()
         event.stopPropagation()
 
-        const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement
-        if (!nodeEl || !currentCanvasState) return
+        const resolvedNodeId = getSelectionTargetNodeId(nodeId)
 
-        selectNode(nodeId)
-
-        // Prevent dragging anchored images
-        if (anchoredImageManager.isAnchored(nodeId)) {
+        if (isModSelectionEvent(event)) {
+            toggleNodeSelection(resolvedNodeId)
             return
         }
 
-        draggingNodeId = nodeId
-        nodeEl.classList.add('is-dragging')
+        const nodeEl = viewportEl?.querySelector(`[data-node-id="${resolvedNodeId}"]`) as HTMLElement
+        if (!nodeEl || !currentCanvasState) return
+
+        if (!isNodeSelected(resolvedNodeId)) {
+            selectNode(resolvedNodeId)
+        }
+
+        const draggedNodeIds = getDraggableNodeIds(resolvedNodeId)
+        const draggedNodeEntries = new Map<string, {
+            el: HTMLElement
+            startLeft: number
+            startTop: number
+            startWidth: number
+            startHeight: number
+        }>()
+
+        for (const draggedNodeId of draggedNodeIds) {
+            const draggedNodeEl = viewportEl?.querySelector(`[data-node-id="${draggedNodeId}"]`) as HTMLElement | null
+            if (!draggedNodeEl) continue
+
+            draggedNodeEntries.set(draggedNodeId, {
+                el: draggedNodeEl,
+                startLeft: parseFloat(draggedNodeEl.style.left),
+                startTop: parseFloat(draggedNodeEl.style.top),
+                startWidth: draggedNodeEl.offsetWidth,
+                startHeight: draggedNodeEl.offsetHeight,
+            })
+        }
+
+        if (draggedNodeEntries.size === 0) return
+
+        draggingNodeId = resolvedNodeId
+        for (const [draggedNodeId, entry] of draggedNodeEntries) {
+            entry.el.classList.add('is-dragging')
+            if (draggedNodeId !== resolvedNodeId) {
+                nodeLayerManager.bringToFront(entry.el)
+            }
+        }
 
         const startX = event.clientX
         const startY = event.clientY
-        const startLeft = parseFloat(nodeEl.style.left)
-        const startTop = parseFloat(nodeEl.style.top)
         const currentZoom = (panZoom?.getViewport().zoom ?? 1) || 1
 
         if (panZoom) {
@@ -2100,51 +2427,91 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ...panZoomConfig,
                 panOnDrag: false,
                 userSelectionActive: true,
-                connectionInProgress: true
+                connectionInProgress: true,
+                selectionOnDrag: false
             })
         }
 
-        // Anchored image co-movement: when dragging a thread, move its anchored images too
-        const anchoredImagesForThread = anchoredImageManager.getAnchorsForThread(nodeId)
         const anchoredImageStartPositions = new Map<string, { x: number; y: number }>()
-        for (const anchor of anchoredImagesForThread) {
-            const anchoredEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
-            if (anchoredEl) {
-                anchoredImageStartPositions.set(anchor.imageNodeId, {
-                    x: parseFloat(anchoredEl.style.left),
-                    y: parseFloat(anchoredEl.style.top),
-                })
+        for (const draggedNodeId of draggedNodeEntries.keys()) {
+            const anchoredImagesForThread = anchoredImageManager.getAnchorsForThread(draggedNodeId)
+            for (const anchor of anchoredImagesForThread) {
+                if (draggedNodeEntries.has(anchor.imageNodeId)) continue
+
+                const anchoredEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
+                if (anchoredEl) {
+                    anchoredImageStartPositions.set(anchor.imageNodeId, {
+                        x: parseFloat(anchoredEl.style.left),
+                        y: parseFloat(anchoredEl.style.top),
+                    })
+                }
             }
         }
 
-        // If dragging an anchored image, track whether it gets detached from the thread
-        let draggedAnchor = anchoredImageManager.getAnchor(nodeId)
-        let detachedDuringDrag = false
+        const singleSelectedNodeId = getSingleSelectedNodeId()
+        let dragDidMove = false
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = (moveEvent.clientX - startX) / currentZoom
             const deltaY = (moveEvent.clientY - startY) / currentZoom
+            if (!dragDidMove && (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1)) {
+                dragDidMove = true
+            }
 
-            nodeEl.style.left = `${startLeft + deltaX}px`
-            nodeEl.style.top = `${startTop + deltaY}px`
+            for (const [draggedNodeId, entry] of draggedNodeEntries) {
+                const currentPos = {
+                    x: entry.startLeft + deltaX,
+                    y: entry.startTop + deltaY,
+                }
+                const currentDims = {
+                    width: entry.startWidth,
+                    height: entry.startHeight,
+                }
+
+                entry.el.style.left = `${currentPos.x}px`
+                entry.el.style.top = `${currentPos.y}px`
+
+                liveNodeOverrides.set(draggedNodeId, {
+                    position: currentPos,
+                    dimensions: currentDims,
+                })
+
+                if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
+                    floatingInputEl.style.left = `${currentPos.x}px`
+                    floatingInputEl.style.top = `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`
+                    floatingInputEl.style.width = `${currentDims.width}px`
+                }
+
+                const threadEntry = threadFloatingInputs.get(draggedNodeId)
+                if (threadEntry) {
+                    threadEntry.el.style.left = `${currentPos.x}px`
+                    threadEntry.el.style.top = `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`
+                    threadEntry.el.style.width = `${currentDims.width}px`
+                }
+
+                const dragRail = threadRails.get(draggedNodeId)
+                if (dragRail) {
+                    dragRail.style.left = `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
+                    dragRail.style.top = `${currentPos.y}px`
+                    const totalH = parseFloat(dragRail.style.height || '0')
+                    if (totalH > 0) connectionManager?.setRailHeight(draggedNodeId, totalH)
+                }
+            }
+
+            const primaryNodeEntry = draggedNodeEntries.get(resolvedNodeId)
+            if (!primaryNodeEntry) return
 
             const currentPos = {
-                x: parseFloat(nodeEl.style.left),
-                y: parseFloat(nodeEl.style.top)
+                x: parseFloat(primaryNodeEntry.el.style.left),
+                y: parseFloat(primaryNodeEntry.el.style.top),
             }
             const currentDims = {
-                width: nodeEl.offsetWidth,
-                height: nodeEl.offsetHeight
+                width: primaryNodeEntry.el.offsetWidth,
+                height: primaryNodeEntry.el.offsetHeight,
             }
 
-            liveNodeOverrides.set(nodeId, {
-                position: currentPos,
-                dimensions: currentDims
-            })
+            connectionManager?.checkProximity(resolvedNodeId, currentPos, currentDims)
 
-            connectionManager?.checkProximity(nodeId, currentPos, currentDims)
-
-            // Co-move anchored images when dragging a thread
             for (const [imgId, startPos] of anchoredImageStartPositions) {
                 const anchoredEl = viewportEl?.querySelector(`[data-node-id="${imgId}"]`) as HTMLElement | null
                 if (anchoredEl) {
@@ -2159,67 +2526,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
 
-            // Check if dragged anchored image should detach (center leaves thread bounds)
-            if (draggedAnchor && !detachedDuringDrag) {
-                const imgCenterX = currentPos.x + currentDims.width / 2
-                const imgCenterY = currentPos.y + currentDims.height / 2
-                const threadNode = currentCanvasState?.nodes.find(
-                    (n: CanvasNode) => n.nodeId === draggedAnchor!.threadNodeId
-                )
-                if (threadNode) {
-                    const threadOverride = liveNodeOverrides.get(threadNode.nodeId)
-                    const tx = threadOverride?.position?.x ?? threadNode.position.x
-                    const ty = threadOverride?.position?.y ?? threadNode.position.y
-                    const tw = threadOverride?.dimensions?.width ?? threadNode.dimensions.width
-                    const th = threadOverride?.dimensions?.height ?? threadNode.dimensions.height
-
-                    if (imgCenterX < tx || imgCenterX > tx + tw || imgCenterY < ty || imgCenterY > ty + th) {
-                        detachedDuringDrag = true
-                        nodeEl.classList.remove('workspace-image-node--anchored')
-                    }
-                }
-            }
-
             scheduleEdgesRender()
             repositionCanvasBubbleMenu()
-
-            // Reposition floating input to follow dragged node
-            if (floatingInputEl && floatingInputEl.style.display !== 'none' && nodeId === selectedNodeId) {
-                floatingInputEl.style.left = `${currentPos.x}px`
-                floatingInputEl.style.top = `${currentPos.y + getThreadTopOffset(nodeId, currentDims.height)}px`
-                floatingInputEl.style.width = `${currentDims.width}px`
-            }
-
-            // Reposition per-thread floating input if dragging a thread node
-            const threadEntry = threadFloatingInputs.get(nodeId)
-            if (threadEntry) {
-                threadEntry.el.style.left = `${currentPos.x}px`
-                threadEntry.el.style.top = `${currentPos.y + getThreadTopOffset(nodeId, currentDims.height)}px`
-                threadEntry.el.style.width = `${currentDims.width}px`
-            }
-
-            // Reposition the vertical rail alongside the dragged thread
-            const dragRail = threadRails.get(nodeId)
-            if (dragRail) {
-                dragRail.style.left = `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-                dragRail.style.top = `${currentPos.y}px`
-                // Update connection manager rail height during drag
-                const totalH = parseFloat(dragRail.style.height || '0')
-                if (totalH > 0) connectionManager?.setRailHeight(nodeId, totalH)
-            }
+            updateSelectionGroupOverlayElement()
         }
 
         const handleMouseUp = () => {
-            nodeEl.classList.remove('is-dragging')
+            for (const [, entry] of draggedNodeEntries) {
+                entry.el.classList.remove('is-dragging')
+            }
 
             // Try to convert any proximity candidate into a real connection
             connectionManager?.commitProximityConnection()
 
             draggingNodeId = null
+            if (dragDidMove) {
+                suppressNextNodeClick = true
+                window.setTimeout(() => {
+                    suppressNextNodeClick = false
+                }, 0)
+            }
 
-            liveNodeOverrides.delete(nodeId)
-
-            // Clean up liveNodeOverrides for co-moved anchored images
+            for (const draggedNodeId of draggedNodeEntries.keys()) {
+                liveNodeOverrides.delete(draggedNodeId)
+            }
             for (const [imgId] of anchoredImageStartPositions) {
                 liveNodeOverrides.delete(imgId)
             }
@@ -2231,14 +2561,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 panZoom.update(panZoomConfig)
             }
 
-            const newPosition = {
-                x: parseFloat(nodeEl.style.left),
-                y: parseFloat(nodeEl.style.top)
+            const finalDraggedPositions = new Map<string, { x: number; y: number }>()
+            for (const [draggedNodeId, entry] of draggedNodeEntries) {
+                finalDraggedPositions.set(draggedNodeId, {
+                    x: parseFloat(entry.el.style.left),
+                    y: parseFloat(entry.el.style.top),
+                })
             }
 
-            // Update dragged node position AND co-moved anchored image positions
             let updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
-                if (n.nodeId === nodeId) return { ...n, position: newPosition }
+                const draggedPosition = finalDraggedPositions.get(n.nodeId)
+                if (draggedPosition) return { ...n, position: draggedPosition }
+
                 const startPos = anchoredImageStartPositions.get(n.nodeId)
                 if (startPos) {
                     const anchoredEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement | null
@@ -2249,62 +2583,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return n
             })
 
-            // Handle detachment of anchored image that was dragged away from its thread
-            if (detachedDuringDrag && draggedAnchor) {
-                const removed = anchoredImageManager.removeAnchor(nodeId)
-                if (removed) {
-                    // Recalculate thread height based on remaining anchored images
+            if (draggedNodeEntries.size === 1) {
+                const collisionExclusions = anchoredImageManager.getExclusionPairsForCollisions()
+                const nodeBoxes = updatedNodes.map((n: CanvasNode) => ({
+                    id: n.nodeId,
+                    x: n.position.x,
+                    y: n.position.y,
+                    width: n.dimensions.width,
+                    height: n.dimensions.height
+                }))
+
+                const { nodes: movedNodes, hasChanges } = resolveCollisions(nodeBoxes, {
+                    iterations: 50,
+                    overlapThreshold: 0.5,
+                    margin: 20,
+                    excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
+                })
+
+                if (hasChanges) {
                     updatedNodes = updatedNodes.map((n: CanvasNode) => {
-                        if (n.nodeId !== removed.threadNodeId) return n
-                        const remainingAnchors = anchoredImageManager.getAnchorsForThread(n.nodeId)
-                        let requiredHeight = 200
-                        for (const a of remainingAnchors) {
-                            const imgN = updatedNodes.find((nn: CanvasNode) => nn.nodeId === a.imageNodeId)
-                            if (imgN) {
-                                const imgBottom = (imgN.position.y + imgN.dimensions.height + OVERLAP_GAP_Y) - n.position.y
-                                requiredHeight = Math.max(requiredHeight, imgBottom)
+                        const newPos = movedNodes.get(n.nodeId)
+                        if (newPos) {
+                            const movedNodeEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
+                            if (movedNodeEl) {
+                                movedNodeEl.style.left = `${newPos.x}px`
+                                movedNodeEl.style.top = `${newPos.y}px`
                             }
+                            return { ...n, position: newPos }
                         }
-                        const newHeight = Math.max(requiredHeight, 200)
-                        const threadEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
-                        if (threadEl) threadEl.style.height = `${newHeight}px`
-                        return { ...n, dimensions: { ...n.dimensions, height: newHeight } }
+                        return n
                     })
                 }
-            }
-
-            // Apply collision detection to resolve any overlapping nodes
-            const collisionExclusions = anchoredImageManager.getExclusionPairsForCollisions()
-            const nodeBoxes = updatedNodes.map((n: CanvasNode) => ({
-                id: n.nodeId,
-                x: n.position.x,
-                y: n.position.y,
-                width: n.dimensions.width,
-                height: n.dimensions.height
-            }))
-
-            const { nodes: movedNodes, hasChanges } = resolveCollisions(nodeBoxes, {
-                iterations: 50,
-                overlapThreshold: 0.5,
-                margin: 20,
-                excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
-            })
-
-            // Apply collision-resolved positions
-            if (hasChanges) {
-                updatedNodes = updatedNodes.map((n: CanvasNode) => {
-                    const newPos = movedNodes.get(n.nodeId)
-                    if (newPos) {
-                        // Update DOM element position immediately
-                        const movedNodeEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
-                        if (movedNodeEl) {
-                            movedNodeEl.style.left = `${newPos.x}px`
-                            movedNodeEl.style.top = `${newPos.y}px`
-                        }
-                        return { ...n, position: newPos }
-                    }
-                    return n
-                })
             }
 
             commitCanvasState({
@@ -2315,6 +2624,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Final reposition after collision resolution may have moved the node
             repositionCanvasBubbleMenu()
             repositionAllThreadFloatingInputs()
+            updateSelectionGroupOverlayElement()
         }
 
         document.addEventListener('mousemove', handleMouseMove)
@@ -3010,6 +3320,65 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    function handlePaneMouseDown(event: MouseEvent): void {
+        if (event.button !== 0) return
+        if (!isCanvasBackgroundTarget(event.target)) return
+        if (isModSelectionEvent(event)) return
+        if (!currentCanvasState) return
+
+        event.preventDefault()
+        event.stopPropagation()
+
+        const start = getCanvasPointFromClient(event.clientX, event.clientY)
+        marqueeSelection = {
+            start,
+            current: start,
+            moved: false,
+        }
+        updateSelectionRectElement()
+
+        if (panZoom) {
+            panZoom.update({
+                ...panZoomConfig,
+                panOnDrag: false,
+                userSelectionActive: true,
+                connectionInProgress: true,
+                selectionOnDrag: true,
+            })
+        }
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            if (!marqueeSelection) return
+
+            marqueeSelection.current = getCanvasPointFromClient(moveEvent.clientX, moveEvent.clientY)
+            const movedX = Math.abs(moveEvent.clientX - event.clientX)
+            const movedY = Math.abs(moveEvent.clientY - event.clientY)
+            marqueeSelection.moved = marqueeSelection.moved || movedX > 3 || movedY > 3
+            updateSelectionRectElement()
+
+            if (!marqueeSelection.moved) return
+
+            const selectedIds = getSelectableNodeIdsInRect(getCanvasRectFromSelection(marqueeSelection))
+            setSelectedNodes(new Set(selectedIds))
+            suppressNextPaneClick = true
+        }
+
+        const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+
+            marqueeSelection = null
+            hideSelectionRectElement()
+
+            if (panZoom) {
+                panZoom.update(panZoomConfig)
+            }
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+    }
+
     function getNodeStructureKey(canvasState: CanvasState | null): string {
         if (!canvasState) return ''
         // Create a key based on node IDs and types - position/dimension changes don't affect this
@@ -3024,6 +3393,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewportEl.innerHTML = ''
 
         ensureEdgesLayer()
+        ensureSelectionGroupOverlayElement()
+        ensureSelectionRectElement()
 
         for (const [, { editor, aiService }] of documentEditors) {
             if (editor?.destroy) editor.destroy()
@@ -3077,6 +3448,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Register after insertion so bounds are measurable
             connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
         }
+
+        const existingNodeIds = new Set(currentCanvasState.nodes.map((node: CanvasNode) => node.nodeId))
+        const prunedSelectedNodeIds = new Set(Array.from(selectedNodeIds).filter((nodeId) => existingNodeIds.has(nodeId)))
+        if (prunedSelectedNodeIds.size !== selectedNodeIds.size) {
+            selectedNodeIds = prunedSelectedNodeIds
+        }
+
+        updateNodeSelectionClasses(new Set(), selectedNodeIds)
+        updateSelectionGroupOverlayElement()
+        updateSelectionDrivenUi()
 
         // Ensure edges render after a full rerender
         connectionManager?.syncNodes(currentCanvasState.nodes)
@@ -3176,9 +3557,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function initializePanZoom() {
+        const initialViewport = currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 }
+        syncViewportInteractionState(initialViewport)
+
         panZoom = XYPanZoom({
             domNode: paneEl,
-            viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+            viewport: initialViewport,
             minZoom: 0.1,
             maxZoom: 2,
             translateExtent: infiniteExtent,
@@ -3192,6 +3576,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (currentCanvasState?.viewport) {
             const vp = currentCanvasState.viewport
+            syncViewportInteractionState(vp)
             viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
             // Ensure handles match initial zoom
             updateResizeHandles(vp.zoom)
@@ -3201,9 +3586,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    paneEl.addEventListener('mousedown', handlePaneMouseDown, true)
+
     paneEl.addEventListener('click', (e) => {
-        if (e.target === paneEl || e.target === viewportEl) {
-            selectNode(null)
+        if (suppressNextPaneClick) {
+            suppressNextPaneClick = false
+            return
+        }
+
+        if (isCanvasBackgroundTarget(e.target)) {
+            clearNodeSelection()
             selectedEdgeId = null
             connectionManager?.deselect()
             hideEdgeBubbleMenu()
@@ -3275,6 +3667,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Don't reset viewport just because node dimensions were corrected
             if (viewportChanged && newCanvasState?.viewport) {
                 const vp = newCanvasState.viewport
+                syncViewportInteractionState(vp)
                 viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
                 panZoom?.syncViewport(vp)
             }
@@ -3282,6 +3675,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         destroy() {
             resizeObserver.disconnect()
             window.removeEventListener('keydown', onKeyDown)
+            paneEl.removeEventListener('mousedown', handlePaneMouseDown, true)
             if (edgesRaf !== null) {
                 cancelAnimationFrame(edgesRaf)
                 edgesRaf = null
@@ -3329,6 +3723,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             floatingInputEl = null
             floatingInputEditor = null
             floatingInputGradient = null
+            selectionRectEl?.remove()
+            selectionRectEl = null
+            selectionGroupOverlayEl?.remove()
+            selectionGroupOverlayEl = null
+            marqueeSelection = null
 
             // Clean up per-thread floating inputs
             destroyAllThreadFloatingInputs()
