@@ -562,19 +562,183 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	const ts = loadTs()
 	const scss = loadScss()
 
+	// -------------------------------------------------------------------------
+	// Selection state model
+	// -------------------------------------------------------------------------
+
 	it('stores selected nodes in a Set instead of a single selectedNodeId', () => {
 		expect(ts).toContain('let selectedNodeIds: Set<string> = new Set()')
 		expect(ts).toContain('function setSelectedNodes(')
 		expect(ts).toContain('function toggleNodeSelection(')
 	})
 
-	it('supports Mod-click selection toggling on node click and drag overlay mousedown', () => {
+	it('single-target UI is derived from getSingleSelectedNodeId', () => {
+		expect(ts).toContain('function getSingleSelectedNodeId(): string | null')
+		expect(ts).toContain('const singleSelectedNodeId = getSingleSelectedNodeId()')
+		expect(ts).toContain('hideCanvasBubbleMenu()')
+		expect(ts).toContain('hideFloatingInput()')
+	})
+
+	// -------------------------------------------------------------------------
+	// Click interaction rules
+	// -------------------------------------------------------------------------
+
+	it('plain click on node selects the node directly without resolving anchored images to parent thread', () => {
+		// The click handler must call selectNode(node.nodeId) — the original
+		// node, NOT getSelectionTargetNodeId(). This ensures that clicking an
+		// anchored image selects the image (showing its bubble menu), not the
+		// parent thread.
+		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
+		expect(clickMatch).not.toBeNull()
+		const clickHandler = clickMatch![0]
+
+		expect(clickHandler).toContain('selectNode(node.nodeId)')
+		expect(clickHandler).not.toContain('selectNode(selectionTargetNodeId)')
+		expect(clickHandler).not.toContain('selectNode(getSelectionTargetNodeId')
+	})
+
+	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
+		// CRITICAL: clicks inside AI chat thread content must reach ProseMirror
+		// editors without triggering selectNode, which would cause the selection
+		// overlay and resize handles to appear, blocking text editing.
+		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
+		expect(clickMatch).not.toBeNull()
+		const clickHandler = clickMatch![0]
+
+		// Must check all three selectors to cover:
+		// - contenteditable: any contenteditable element (ProseMirror root)
+		// - .ProseMirror: the ProseMirror editor container class
+		// - .ai-chat-thread-wrapper: the AI chat thread content container
+		expect(clickHandler).toContain('clickTarget.isContentEditable')
+		expect(clickHandler).toContain(".closest('.ProseMirror')")
+		expect(clickHandler).toContain(".closest('.ai-chat-thread-wrapper')")
+
+		// The handler must bail out (return) before reaching selectNode
+		// when the click target matches any of these selectors
+		const editorCheckIndex = clickHandler.indexOf('isContentEditable')
+		const selectNodeIndex = clickHandler.indexOf('selectNode(node.nodeId)')
+		expect(editorCheckIndex).toBeLessThan(selectNodeIndex)
+	})
+
+	it('Mod-click still triggers selection toggling even inside editor content', () => {
+		// Mod-click must always toggle selection, so the isModSelectionEvent
+		// check is in the click handler alongside the editor bypass
+		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
+		expect(clickMatch).not.toBeNull()
+		const clickHandler = clickMatch![0]
+
+		expect(clickHandler).toContain('if (isModSelectionEvent(e))')
+		expect(clickHandler).toContain('toggleNodeSelection(selectionTargetNodeId)')
+	})
+
+	it('supports Mod-click selection toggling on both node click and drag overlay mousedown', () => {
 		expect(ts).toContain('function isModSelectionEvent(event: MouseEvent): boolean')
-		expect(ts).toContain('if (isModSelectionEvent(e))')
-		expect(ts).toContain('if (isModSelectionEvent(event))')
+		expect(ts).toContain('return event.metaKey || event.ctrlKey')
 		expect(ts).toContain('toggleNodeSelection(selectionTargetNodeId)')
 		expect(ts).toContain('toggleNodeSelection(resolvedNodeId)')
 	})
+
+	// -------------------------------------------------------------------------
+	// Selection overlay rules
+	// -------------------------------------------------------------------------
+
+	it('tracks selection source (marquee vs click) to control overlay visibility', () => {
+		// selectionIsFromMarquee flag controls whether a single-node selection
+		// shows the overlay. Plain click = no overlay. Marquee = overlay.
+		expect(ts).toContain('let selectionIsFromMarquee = false')
+		expect(ts).toContain('return selectionIsFromMarquee')
+
+		// setSelectedNodes accepts a fromMarquee parameter
+		expect(ts).toContain('function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void')
+		expect(ts).toContain('selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0')
+	})
+
+	it('shouldShowSelectionGroupOverlay returns true for multi-select or marquee, false for plain click', () => {
+		const fnMatch = ts.match(/function\s+shouldShowSelectionGroupOverlay[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		// Empty selection = no overlay
+		expect(fnBody).toContain('selectedNodeIds.size === 0) return false')
+
+		// 2+ nodes = always overlay (regardless of source)
+		expect(fnBody).toContain('if (selectedNodeIds.size > 1) return true')
+
+		// Single node = overlay only if selected via marquee
+		expect(fnBody).toContain('return selectionIsFromMarquee')
+
+		// Must NOT contain any node-type special casing (e.g. aiChatThread)
+		expect(fnBody).not.toContain("'aiChatThread'")
+		expect(fnBody).not.toContain('node.type')
+	})
+
+	it('marquee handler passes fromMarquee=true so even a single marquee node gets the overlay', () => {
+		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
+		expect(paneMouseDownMatch).not.toBeNull()
+		const fnBody = paneMouseDownMatch![0]
+
+		expect(fnBody).toContain('setSelectedNodes(new Set(selectedIds), true)')
+	})
+
+	it('selectNode (plain click) does NOT pass fromMarquee so single-click never shows overlay', () => {
+		const fnMatch = ts.match(/function\s+selectNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		// selectNode calls setSelectedNodes with default fromMarquee=false
+		expect(fnBody).toContain('setSelectedNodes(nodeId ? new Set([nodeId]) : new Set())')
+		expect(fnBody).not.toContain('true)')
+	})
+
+	it('toggleNodeSelection does NOT pass fromMarquee', () => {
+		const fnMatch = ts.match(/function\s+toggleNodeSelection[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('setSelectedNodes(nextSelectedNodeIds)')
+		expect(fnBody).not.toContain(', true)')
+	})
+
+	it('clearNodeSelection resets selection and hides overlay', () => {
+		const fnMatch = ts.match(/function\s+clearNodeSelection[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('setSelectedNodes(new Set())')
+		expect(fnBody).toContain('updateSelectionGroupOverlayElement()')
+	})
+
+	it('defines and styles the persistent selection overlay', () => {
+		expect(ts).toContain("selectionGroupOverlayEl.className = 'workspace-selection-group-overlay'")
+		expect(ts).toContain('function getSelectionOverlayBounds(): Rect | null')
+		expect(ts).toContain('function updateSelectionGroupOverlayElement(): void')
+		expect(ts).toContain('if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
+		expect(ts).toContain('updateSelectionGroupOverlayElement()')
+		expect(scss).toContain('.workspace-selection-group-overlay')
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-border-color/s)
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-background-color/s)
+	})
+
+	it('uses the selection overlay as a drag surface for the whole selected group', () => {
+		expect(ts).toContain("selectionGroupOverlayEl.addEventListener('mousedown'")
+		expect(ts).toContain('if (!shouldShowSelectionGroupOverlay()) return')
+		expect(ts).toContain('const primaryNodeId = Array.from(selectedNodeIds)[0]')
+		expect(ts).toContain('handleDragStart(event, primaryNodeId)')
+	})
+
+	it('wires selection colors from webUiThemeSettings to CSS custom properties', () => {
+		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)")
+		expect(scss).toMatch(/var\(--selection-outline-color/)
+	})
+
+	// -------------------------------------------------------------------------
+	// Marquee selection
+	// -------------------------------------------------------------------------
 
 	it('defines marquee selection helpers and pane mousedown listener', () => {
 		expect(ts).toContain('type MarqueeSelectionState = {')
@@ -584,7 +748,16 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('function getSelectableNodeIdsInRect(rect: Rect): string[]')
 	})
 
-	it('syncs viewport interaction state before the first pan so selection works immediately on load', () => {
+	it('renders and styles the marquee selection rectangle', () => {
+		expect(ts).toContain("selectionRectEl.className = 'workspace-selection-rect'")
+		expect(scss).toContain('.workspace-selection-rect')
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*pointer-events:\s*none/s)
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*z-index:\s*10001/s)
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*var\(--selection-marquee-border-color/s)
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*var\(--selection-marquee-background-color/s)
+	})
+
+	it('syncs viewport interaction state before first pan so selection works immediately on load', () => {
 		expect(ts).toContain('function syncViewportInteractionState(viewport: Viewport): void')
 		expect(ts).toContain('lastTransform = [viewport.x, viewport.y, viewport.zoom]')
 		expect(ts).toContain('paneRect = paneEl.getBoundingClientRect()')
@@ -599,11 +772,24 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('selectionGroupOverlayEl?.contains(target)')
 	})
 
-	it('maps anchored AI-chat images to the parent thread for selection and drag targeting', () => {
+	// -------------------------------------------------------------------------
+	// Anchored AI image resolution
+	// -------------------------------------------------------------------------
+
+	it('maps anchored AI-chat images to parent thread for marquee and resolves inside handleDragStart', () => {
+		// getSelectionTargetNodeId is used in marquee hit-testing and inside
+		// handleDragStart, but NOT in the nodeEl click handler
 		expect(ts).toContain('function getSelectionTargetNodeId(nodeId: string): string')
 		expect(ts).toContain('const anchor = anchoredImageManager.getAnchor(nodeId)')
 		expect(ts).toContain('selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))')
-		expect(ts).toContain('dragOverlay.addEventListener(\'mousedown\', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId)))')
+		expect(ts).toContain('const resolvedNodeId = getSelectionTargetNodeId(nodeId)')
+	})
+
+	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
+		// The drag overlay must pass the original nodeId so handleDragStart can
+		// resolve it internally and also preserve the original for the click path
+		expect(ts).toContain('dragOverlay.addEventListener(\'mousedown\', (e) => handleDragStart(e, node.nodeId))')
+		expect(ts).not.toContain('dragOverlay.addEventListener(\'mousedown\', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))')
 	})
 
 	it('treats AI chat thread floating input as part of the same selected composite', () => {
@@ -612,12 +798,39 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)')
 		expect(ts).toContain('const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width')
 		expect(ts).toContain('const inputHeight = threadFloatingInput.el.offsetHeight')
-		expect(ts).toContain('right = Math.max(right, position.x + inputWidth)')
-		expect(ts).toContain('bottom = Math.max(bottom, inputTop + inputHeight)')
 		expect(ts).toContain('rectsOverlap(rect, getSelectionBoundsForNode(node))')
 		expect(ts).toContain("threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')")
 		expect(ts).toContain("threadFloatingInputs.get(nodeId)?.el.classList.remove('is-selected')")
 		expect(scss).toMatch(/\.ai-prompt-input-thread-persistent\s*\{[\s\S]*?&\.is-selected/)
+	})
+
+	it('uses only floating input bounds for hidden empty threads in selection hit-testing', () => {
+		const fnMatch = ts.match(/function\s+getSelectionBoundsForNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		// Hidden empty threads must use only the floating input bounds,
+		// not the invisible thread node dimensions, to prevent phantom
+		// selection over areas the user cannot see
+		expect(fnBody).toContain('const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)')
+		expect(fnBody).toContain('if (isHidden) {')
+		expect(fnBody).toContain('right = position.x + inputWidth')
+		expect(fnBody).toContain('bottom = inputTop + inputHeight')
+
+		// Visible threads still use Math.max to combine both bounds
+		expect(fnBody).toContain('right = Math.max(right, position.x + inputWidth)')
+		expect(fnBody).toContain('bottom = Math.max(bottom, inputTop + inputHeight)')
+	})
+
+	it('marquee selection includes hidden empty threads (they are selectable via their floating input)', () => {
+		const fnMatch = ts.match(/function\s+getSelectableNodeIdsInRect[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		// Must NOT filter out hidden empty threads — they are still visible
+		// via their floating input and must be selectable
+		expect(fnBody).not.toContain('hiddenEmptyThreadNodeIds')
+		expect(fnBody).toContain('rectsOverlap(rect, getSelectionBoundsForNode(node))')
 	})
 
 	it('includes anchored AI images when computing the selection overlay bounds', () => {
@@ -626,46 +839,46 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('const rect = getSelectionBoundsForNode(node)')
 	})
 
-	it('renders and styles the marquee selection rectangle', () => {
-		expect(ts).toContain("selectionRectEl.className = 'workspace-selection-rect'")
-		expect(scss).toContain('.workspace-selection-rect')
-		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*pointer-events:\s*none/s)
-		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*z-index:\s*10001/s)
-		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*var\(--selection-marquee-border-color/s)
-		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*var\(--selection-marquee-background-color/s)
+	// -------------------------------------------------------------------------
+	// Deferred selection in handleDragStart (regression: overlay stealing clicks)
+	// -------------------------------------------------------------------------
+
+	it('defers selection in handleDragStart so the overlay does not steal mouseup from anchored images', () => {
+		// REGRESSION GUARD: the selection overlay (z-index 10000) must not
+		// appear between mousedown and mouseup when clicking an anchored image.
+		// If selectNode(resolvedNodeId) ran on mousedown, the overlay would
+		// appear instantly and intercept mouseup, preventing the image from
+		// being selected and its bubble menu from appearing.
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		// Selection must NOT happen unconditionally on mousedown — it is deferred
+		// behind wasAlreadySelected and dragDidMove guards
+		expect(fnBody).toContain('const wasAlreadySelected = isNodeSelected(resolvedNodeId)')
+		expect(fnBody).not.toMatch(/if \(!isNodeSelected\(resolvedNodeId\)\) \{\s*\n\s*selectNode\(resolvedNodeId\)/)
+
+		// On first meaningful mouse movement → select the resolved (thread) node for drag
+		expect(fnBody).toContain('if (!wasAlreadySelected) {')
+		expect(fnBody).toContain('selectNode(resolvedNodeId)')
+
+		// On mouseup without movement (click) → select the original nodeId
+		// so clicking an anchored image selects the image, not the thread
+		expect(fnBody).toContain('selectNode(nodeId)')
 	})
 
-	it('wires selection colors from webUiThemeSettings to CSS custom properties', () => {
-		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)")
-		expect(scss).toMatch(/var\(--selection-outline-color/)
+	it('does not move nodes in handleMouseMove until the drag threshold is exceeded', () => {
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		// handleMouseMove must bail out before moving nodes when drag hasn't started
+		expect(fnBody).toContain('if (!dragDidMove) return')
 	})
 
-	it('defines and styles a persistent selection overlay for multi-selection and single AI chat thread selection', () => {
-		expect(ts).toContain("selectionGroupOverlayEl.className = 'workspace-selection-group-overlay'")
-		expect(ts).toContain('function shouldShowSelectionGroupOverlay(): boolean')
-		expect(ts).toContain('if (selectedNodeIds.size > 1) return true')
-		expect(ts).toContain('function getSelectionOverlayBounds(): Rect | null')
-		expect(ts).toContain('function updateSelectionGroupOverlayElement(): void')
-		expect(ts).toContain("return selectedNode?.type === 'aiChatThread'")
-		expect(ts).toContain('if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
-		expect(ts).toContain('updateSelectionGroupOverlayElement()')
-		expect(scss).toContain('.workspace-selection-group-overlay')
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-border-color/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-background-color/s)
-	})
-
-	it('uses the selection overlay as a drag surface for the whole selected group or single AI chat thread composite', () => {
-		expect(ts).toContain("selectionGroupOverlayEl.addEventListener('mousedown'"
-		)
-		expect(ts).toContain('if (!shouldShowSelectionGroupOverlay()) return')
-		expect(ts).toContain('const primaryNodeId = Array.from(selectedNodeIds)[0]')
-		expect(ts).toContain('handleDragStart(event, primaryNodeId)')
-	})
+	// -------------------------------------------------------------------------
+	// Group drag
+	// -------------------------------------------------------------------------
 
 	it('group drag uses selected nodes as drag participants', () => {
 		expect(ts).toContain('function getDraggableNodeIds(primaryNodeId: string): string[]')
@@ -685,11 +898,134 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('if (draggedNodeEntries.size === 1) {')
 		expect(ts).toContain('resolveCollisions(nodeBoxes')
 	})
+})
 
-	it('single-target UI is derived from getSingleSelectedNodeId', () => {
-		expect(ts).toContain('function getSingleSelectedNodeId(): string | null')
-		expect(ts).toContain('const singleSelectedNodeId = getSingleSelectedNodeId()')
-		expect(ts).toContain('hideCanvasBubbleMenu()')
-		expect(ts).toContain('hideFloatingInput()')
+// =============================================================================
+// Selection interaction regression guards
+// =============================================================================
+
+describe('Workspace canvas — selection interaction regression guards', () => {
+	const ts = loadTs()
+
+	// These tests guard against specific regressions that were introduced and
+	// caught during the multi-selection feature development. Each test
+	// documents the root cause and the invariant that must hold.
+
+	it('REGRESSION: clicking AI chat thread must NOT show selection overlay (must allow text editing)', () => {
+		// Root cause: shouldShowSelectionGroupOverlay had a special case that
+		// returned true for any single aiChatThread selection. This caused the
+		// overlay to appear on every click, blocking ProseMirror editor
+		// interaction because:
+		//   1. Click on thread → selectNode(threadId) → overlay appears at z-index 10000
+		//   2. Overlay covers the thread content → resize handles activate
+		//   3. User cannot click into ProseMirror to edit text
+		//
+		// Invariant: shouldShowSelectionGroupOverlay must NOT check node.type
+		const fnMatch = ts.match(/function\s+shouldShowSelectionGroupOverlay[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).not.toContain("'aiChatThread'")
+		expect(fnBody).not.toContain('node.type')
+		// Must not look up individual node objects to check their type
+		expect(fnBody).not.toContain('getNode(')
+		expect(fnBody).not.toContain('.nodes.find')
+	})
+
+	it('REGRESSION: clicking AI chat thread content must NOT trigger selectNode', () => {
+		// Root cause: nodeEl click handler called selectNode for all clicks
+		// inside the node, including clicks on ProseMirror editor content.
+		// This activated the node selection UI (resize handles, outline)
+		// which blocked text editing in AI chat threads.
+		//
+		// Invariant: clicks on contenteditable, .ProseMirror, or
+		// .ai-chat-thread-wrapper elements must bail out before selectNode
+		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
+		expect(clickMatch).not.toBeNull()
+		const clickHandler = clickMatch![0]
+
+		// All three checks must be present — they cover overlapping DOM trees
+		expect(clickHandler).toContain('clickTarget.isContentEditable')
+		expect(clickHandler).toContain(".closest('.ProseMirror')")
+		expect(clickHandler).toContain(".closest('.ai-chat-thread-wrapper')")
+
+		// The bail-out must happen BEFORE selectNode
+		const bailOutIndex = clickHandler.indexOf('return')
+		const selectNodeIndex = clickHandler.lastIndexOf('selectNode(node.nodeId)')
+		expect(bailOutIndex).toBeLessThan(selectNodeIndex)
+	})
+
+	it('REGRESSION: clicking anchored image must select the IMAGE (not parent thread)', () => {
+		// Root cause: nodeEl click handler called
+		// selectNode(getSelectionTargetNodeId(node.nodeId)) which resolved
+		// anchored images to their parent thread. This meant clicking an
+		// anchored image selected the thread instead, and the image bubble
+		// menu never appeared.
+		//
+		// Invariant: click handler must call selectNode(node.nodeId) with
+		// the original nodeId, never pre-resolving through
+		// getSelectionTargetNodeId
+		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
+		expect(clickMatch).not.toBeNull()
+		const clickHandler = clickMatch![0]
+
+		expect(clickHandler).toContain('selectNode(node.nodeId)')
+		expect(clickHandler).not.toContain('selectNode(selectionTargetNodeId)')
+		expect(clickHandler).not.toContain('selectNode(getSelectionTargetNodeId')
+	})
+
+	it('REGRESSION: drag overlay must NOT pre-resolve nodeId to parent thread', () => {
+		// Root cause: dragOverlay mousedown passed
+		// getSelectionTargetNodeId(node.nodeId) to handleDragStart, which
+		// meant handleDragStart never had access to the original nodeId. On
+		// mouseup-without-drag (click), it would select the thread instead
+		// of the image.
+		//
+		// Invariant: dragOverlay must pass node.nodeId directly
+		expect(ts).toContain("dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))")
+		expect(ts).not.toContain("dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))")
+	})
+
+	it('REGRESSION: handleDragStart must NOT select on mousedown (deferred selection)', () => {
+		// Root cause: handleDragStart immediately called selectNode(resolvedNodeId)
+		// on mousedown. For anchored images, resolvedNodeId = parent thread.
+		// Selecting the thread caused shouldShowSelectionGroupOverlay to return
+		// true (AI chat thread special case), showing the overlay at z-index 10000.
+		// The overlay intercepted mouseup, so the image click handler never fired,
+		// preventing bubble menu from appearing.
+		//
+		// Invariant: selection must be deferred:
+		//   - On drag movement → selectNode(resolvedNodeId) for group drag
+		//   - On click (no movement) → selectNode(nodeId) for original node
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		// The deferred selection pattern
+		expect(fnBody).toContain('const wasAlreadySelected = isNodeSelected(resolvedNodeId)')
+
+		// Both selection paths must exist
+		expect(fnBody).toContain('selectNode(resolvedNodeId)')
+		expect(fnBody).toContain('selectNode(nodeId)')
+
+		// selectNode(resolvedNodeId) must be inside a dragDidMove guard
+		const dragMoveSection = fnBody.match(/if \(!dragDidMove[\s\S]*?dragDidMove = true[\s\S]*?\}/)?.[0]
+		expect(dragMoveSection).toBeDefined()
+		expect(dragMoveSection).toContain('selectNode(resolvedNodeId)')
+	})
+
+	it('REGRESSION: marquee selecting a single node must show the overlay', () => {
+		// Root cause: shouldShowSelectionGroupOverlay required size > 1 for
+		// non-special-cased nodes. Marquee-selecting a single image resulted
+		// in no overlay, which was inconsistent — marquee selection should
+		// always produce a visible overlay regardless of count.
+		//
+		// Invariant: selectionIsFromMarquee must make the overlay visible
+		expect(ts).toContain('return selectionIsFromMarquee')
+
+		// The marquee handler must pass fromMarquee=true
+		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
+		expect(paneMouseDownMatch).not.toBeNull()
+		expect(paneMouseDownMatch![0]).toContain(', true)')
 	})
 })
