@@ -1,6 +1,6 @@
 <script lang="ts">
 
-    import { setContext, getContext } from 'svelte'
+    import { setContext, getContext, untrack, tick } from 'svelte'
     import { fade } from 'svelte/transition'
 
     import { PaymentProcessingStatus } from '@lixpi/constants'
@@ -77,12 +77,21 @@
 
 
     let sidebarPane: Resizable.Pane = $state(null!);
-    let isSidebarCollapsed = $state(false);
+    let isSidebarCollapsed = $state(true);
 
     let isUserInfoSidePanelOpen = $state(false);
+    let didInitialCollapse = false;
 
     $effect(() => {
-        // console.log('userStore', $userStore.data.balance);
+        if (sidebarPane && !didInitialCollapse) {
+            didInitialCollapse = true;
+            if (!layout) {
+                (async () => {
+                    await tick();
+                    untrack(() => sidebarPane.collapse());
+                })();
+            }
+        }
     })
 
     const triggerUserInfoSidePanel = () => {
