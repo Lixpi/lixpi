@@ -1,6 +1,6 @@
-# Lixpi AI Bridge
+# Lixpi
 
-Version:  0.0.2
+Bridges the gap between the best models
 
 ## Preview here: https://slides.com/lixpi/lixpi-ai-bridge-tech-preview-55a682/fullscreen
 
