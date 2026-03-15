@@ -19,3 +19,12 @@ When question is related to SVG or D3 you must always refer to the available `D3
 
 NEVER use `cat` to edit files.
 NEVER run large inline python or js code in the terminal.
+
+## Working with branches and GitHub tools
+
+When working on feature and user asks you to open a pull request, you must make sure that working branch named in the following way: `LIX-<issue-id>>/<description>` e.g. ``LIX-60/support-google-models`.
+You must fetch `<issue-id>` from GitHub via available tools.
+
+When opening pull request title must be in the following format: `LIX-<issue-id> # <description>`. Make sure to assign the issue to the current user.
+After PR is opened you must update the associated issue and provide a link to the opened PR at the end of description body.
+When creating a commit you must add commit title in the same `LIX-<issue-id> # <description>` format.
