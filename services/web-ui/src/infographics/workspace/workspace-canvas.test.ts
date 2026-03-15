@@ -631,6 +631,17 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(scss).toContain('.workspace-selection-rect')
 		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*pointer-events:\s*none/s)
 		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*z-index:\s*10001/s)
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*var\(--selection-marquee-border-color/s)
+		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*var\(--selection-marquee-background-color/s)
+	})
+
+	it('wires selection colors from webUiThemeSettings to CSS custom properties', () => {
+		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)")
+		expect(ts).toContain("paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)")
+		expect(scss).toMatch(/var\(--selection-outline-color/)
 	})
 
 	it('defines and styles a persistent selection overlay for multi-selection and single AI chat thread selection', () => {
@@ -644,6 +655,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('updateSelectionGroupOverlayElement()')
 		expect(scss).toContain('.workspace-selection-group-overlay')
 		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-border-color/s)
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-background-color/s)
 	})
 
 	it('uses the selection overlay as a drag surface for the whole selected group or single AI chat thread composite', () => {

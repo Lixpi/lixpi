@@ -112,6 +112,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     paneEl.style.setProperty('--connector-line-default-color', webUiThemeSettings.nodesConnectorLineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', webUiThemeSettings.nodesConnectorLineFocusColor)
+    paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)
+    paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)
+    paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)
+    paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)
+    paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents

@@ -10,6 +10,11 @@ export type WebUiThemeSettings = {
     aiChatThreadRailBoundaryCircleColors: [string, string, string]
     nodesConnectorLineDefaultColor: string
     nodesConnectorLineFocusColor: string
+    selectionMarqueeBorderColor: string
+    selectionMarqueeBackgroundColor: string
+    selectionOverlayBorderColor: string
+    selectionOverlayBackgroundColor: string
+    selectionOutlineColor: string
     // Four gradient colors used by the shifting gradient background and animated border
     // overlays (image generation border, document thread shape, context selection).
     // Hex strings. The shifting gradient renderer converts these to RGB internally.
@@ -53,6 +58,14 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     nodesConnectorLineDefaultColor: brandColors.steelBlue,
     // Focus/selected color for connector lines between nodes.
     nodesConnectorLineFocusColor: '#000',
+    // Marquee selection rectangle (drag-to-select).
+    selectionMarqueeBorderColor: 'rgba(176, 173, 224, 0.88)',
+    selectionMarqueeBackgroundColor: 'rgba(230, 233, 246, 0.38)',
+    // Persistent selection group overlay (multi-select / single AI chat thread).
+    selectionOverlayBorderColor: 'rgba(197, 192, 238, 0.62)',
+    selectionOverlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
+    // Outline on the per-thread floating input when selected.
+    selectionOutlineColor: 'rgba(197, 192, 238, 0.75)',
     // Four gradient colors shared between the shifting gradient background and the
     // animated border overlays (image generation, document thread shape).
     // Dreamy sky pastel palette — whisper pink, lavender, periwinkle, orchid.

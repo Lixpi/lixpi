@@ -233,7 +233,7 @@ Single-target canvas UI stays single-target:
 - The single floating prompt input appears only when exactly one document node is selected
 - Per-thread floating inputs remain attached to AI chat thread nodes regardless of selection state
 
-When two or more nodes are selected, the canvas renders a persistent background overlay behind the selected range. A single selected AI chat thread also gets this overlay because the thread, its persistent floating input, and any anchored AI images are treated as one composite selection unit. This overlay makes the active selection obvious and also serves as an extra drag surface for moving the selected composite. Clicking outside the selected range clears the selection.
+When two or more nodes are selected, the canvas renders a persistent background overlay behind the selected range. A single selected AI chat thread also gets this overlay because the thread, its persistent floating input, and any anchored AI images are treated as one composite selection unit. Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `webUiThemeSettings` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
 
 During group drag, AI chat thread companion UI stays attached to the thread node:
 
