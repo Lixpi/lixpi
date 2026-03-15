@@ -58,6 +58,15 @@ Include:
 4. **Open the PR** — Use `mcp_github_create_pull_request` with the correct title format. Assign to current user.
 5. **Update the issue** — Add the PR link to the issue description body.
 
+## After PR is Merged
+
+Since files are pushed via the GitHub API (not local Git), the local working tree still has uncommitted changes after the PR is created. After the PR is merged into `main`:
+
+1. Switch to main: `git checkout main`
+2. Pull the merged changes: `git pull`
+
+This overwrites the local modifications with the merged versions. Do **not** commit locally — the API push is the single source of truth.
+
 ## Tools
 
 Use the GitHub MCP server tools for **all** GitHub and Git operations. Never use local Git CLI commands (`git checkout`, `git add`, `git commit`, `git push`, `git stash`, etc.).
