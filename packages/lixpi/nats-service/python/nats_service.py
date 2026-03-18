@@ -684,7 +684,7 @@ class NatsService:
             return await js.object_store(bucket_name)
         except Exception:
             warn(f"Object Store bucket missing, recreating: {bucket_name}")
-            return await js.create_object_store(bucket_name)
+            return await js.create_object_store(bucket_name, config=ObjectStoreConfig(replicas=1))
 
     async def delete_object_store(self, bucket_name: str) -> bool:
         """Delete an Object Store bucket."""
