@@ -2,7 +2,7 @@
 
 Bridges the gap between the best models
 
-## Preview here: https://slides.com/lixpi/lixpi-ai-bridge-tech-preview-55a682/fullscreen
+## Preview here: https://www.dropbox.com/scl/fi/a94opjhks8xa3arxzmyvd/lixpi-demo-moz.mp4?rlkey=q9yl8shub0w9xqfqrvqzc2sem&st=13vh5202&dl=0
 
 <img width="1280" height="742" alt="image" src="https://github.com/user-attachments/assets/33ec726d-d0c3-4203-b5c9-5ce0a30568dd" />
 
@@ -147,15 +147,8 @@ Lixpi AI Bridge is a real-time AI-powered document collaboration platform built 
 
 ## High-Level System Overview
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-flowchart LR
-    WebUI["🌐 Web UI"] <-->|WebSocket| NATS["⚡ NATS"]
-    NATS <--> API["⚙️ Main API"]
-    NATS <--> LLM["🤖 LLM API"]
-    API --> DB[(DynamoDB)]
-    LLM --> AI(("AI Providers"))
-```
+![generated-image (4)](https://github.com/user-attachments/assets/ac8f7018-0b6a-41cd-80ee-d125970f28aa)
+
 
 **The core idea is simple:**
 - **Everything talks through NATS** — browser clients, API service, and LLM service all communicate via the same message bus
@@ -195,166 +188,14 @@ Examples:
   ai.interaction.chat.process        # Internal: API → LLM API
 ```
 
-## Authentication Flow
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
-sequenceDiagram
-    participant WebUI as Web UI
-    participant Auth0 as Auth0
-    participant NATS as NATS
-    participant AuthCallout as Auth Callout
-    participant AuthSvc as @lixpi/auth-service
-    participant API as API
-    participant LLM as LLM API
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 1: GET TOKEN
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(220, 236, 233)
-        Note over WebUI, LLM: PHASE 1 - GET TOKEN
-        WebUI->>Auth0: OAuth2 login
-        activate Auth0
-        Auth0-->>WebUI: JWT token
-        deactivate Auth0
-    end
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 2: CONNECT TO NATS
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(195, 222, 221)
-        Note over WebUI, LLM: PHASE 2 - CONNECT TO NATS
-        WebUI->>NATS: Connect with JWT
-        activate NATS
-        NATS->>AuthCallout: Validate token
-        activate AuthCallout
-        AuthCallout->>AuthSvc: Verify JWT
-        activate AuthSvc
-        AuthSvc->>Auth0: Fetch JWKS
-        Auth0-->>AuthSvc: Public keys
-        AuthSvc-->>AuthCallout: ✓ Valid
-        deactivate AuthSvc
-        AuthCallout-->>NATS: Signed response JWT
-        deactivate AuthCallout
-        NATS-->>WebUI: Connected
-        deactivate NATS
-    end
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3: MAKE REQUESTS
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(242, 234, 224)
-        Note over WebUI, LLM: PHASE 3 - MAKE REQUESTS
-        WebUI->>NATS: Request
-        activate NATS
-        NATS->>API: Route to API
-        activate API
-        deactivate API
-        NATS->>LLM: Route to LLM API
-        activate LLM
-        deactivate LLM
-        deactivate NATS
-    end
-```
-
-Only API can access the database directly. LLM API must publish messages through NATS if it needs to persist data — a tradeoff for simpler access control.
-
-### Authentication Architecture
-
-All token verification is handled by `@lixpi/auth-service`, a shared package used by:
-- **NATS Auth Callout** — validates tokens during NATS connection
-- **API HTTP endpoints** — validates Bearer tokens on REST calls
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-flowchart TB
-    subgraph Clients
-        WebUI["Web UI"]
-        LLM["LLM API"]
-    end
-
-    subgraph auth-service["@lixpi/auth-service"]
-        JV["createJwtVerifier()"]
-        NKV["verifyNKeySignedJWT()"]
-    end
-
-    subgraph Consumers
-        AC["NATS Auth Callout"]
-        API["API Endpoints"]
-    end
-
-    WebUI -->|Auth0 JWT| JV
-    LLM -->|NKey JWT| NKV
-    JV --> AC & API
-    NKV --> AC
-```
-
-### Two Authentication Modes
-
-1. **User Authentication (Auth0/LocalAuth0)**
-   - OAuth2 flow with RS256 JWTs
-   - JWKS endpoint validation via `@lixpi/auth-service`
-   - Permissions derived from subscription configurations
-
-2. **Service Authentication (NKey-signed JWTs)**
-   - For internal service-to-service communication (e.g., LLM API)
-   - Ed25519 cryptographic signatures
-   - Verified by `@lixpi/auth-service`
-   - No external Auth0 dependency
 
 ## AI Chat Flow
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
-sequenceDiagram
-    participant WebUI as Web UI
-    participant NATS as NATS
-    participant API as API
-    participant LLM as LLM API
-    participant AI as AI Provider
+![generated-image (5)](https://github.com/user-attachments/assets/69641005-d191-4e56-b312-94f3ea57cfc5)
 
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 1: REQUEST
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(220, 236, 233)
-        Note over WebUI, AI: PHASE 1 - REQUEST — Web UI sends message to API
-        WebUI->>NATS: sendMessage { messages, aiModel }
-        activate NATS
-        NATS->>API: Route to handler
-        activate API
-        API->>API: Validate token & enrich data
-        deactivate NATS
-    end
 
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 2: FORWARD TO LLM
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(195, 222, 221)
-        Note over WebUI, AI: PHASE 2 - FORWARD — API routes to LLM API
-        API->>NATS: process { messages, modelConfig }
-        activate NATS
-        NATS->>LLM: Route to LLM worker
-        activate LLM
-        LLM->>AI: Stream request
-        activate AI
-        deactivate API
-        deactivate NATS
-    end
+![generated-image](https://github.com/user-attachments/assets/4b6a2214-8bbf-4ae0-9ecb-e9e23a1cd793)
 
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3: STREAM RESPONSE
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(246, 199, 179)
-        Note over WebUI, AI: PHASE 3 - STREAM — Tokens flow directly to client
-        loop Token Streaming
-            AI-->>LLM: Token chunk
-            LLM->>NATS: receiveMessage.{threadId} { chunk }
-            NATS-->>WebUI: Deliver token
-        end
-        deactivate AI
-        deactivate LLM
-    end
-```
 
 **Key insight:** Response tokens stream directly from LLM API → NATS → Web UI, bypassing the API service for minimal latency.
 
@@ -372,35 +213,6 @@ sequenceDiagram
 
 The system is designed to scale horizontally with zero configuration changes. Both `main-api` and `llm-api` services are stateless and can be replicated to handle increased load.
 
-### NATS Queue Groups
-
-Instead of using traditional external load balancers (like Nginx or AWS ALB), we leverage NATS **Queue Groups**.
-
-When multiple instances of a service subscribe to the same subject with the same queue group name, NATS automatically distributes messages among them.
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-flowchart LR
-    Client["Web UI / Client"] -->|Request| NATS["⚡ NATS Cluster"]
-
-    subgraph API_Group["Queue Group: 'aiInteraction'"]
-        API1["API Instance 1"]
-        API2["API Instance 2"]
-        API3["API Instance 3"]
-    end
-
-    subgraph LLM_Group["Queue Group: 'llm-workers'"]
-        LLM1["LLM Instance 1"]
-        LLM2["LLM Instance 2"]
-    end
-
-    NATS -.->|Randomly Distributed| API1
-    NATS -.->|Randomly Distributed| API2
-    NATS -.->|Randomly Distributed| API3
-
-    NATS -.->|Randomly Distributed| LLM1
-    NATS -.->|Randomly Distributed| LLM2
-```
 
 ### How It Works
 
