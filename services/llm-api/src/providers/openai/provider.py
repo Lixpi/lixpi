@@ -118,7 +118,7 @@ class OpenAIProvider(BaseLLMProvider):
             logger.info(f"✅ OpenAI streaming completed for {self.instance_key}")
 
         except Exception as e:
-            logger.error(f"OpenAI streaming failed: {e}")
+            logger.error(f"OpenAI streaming failed: [{type(e).__name__}] {e}", exc_info=True)
             if not state.get('error'):
                 state['error'] = str(e)
 

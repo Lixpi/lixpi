@@ -242,14 +242,24 @@ async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) 
                         continue
                     else:
                         logger.warning(f"NATS object not found: {bucket_name}/{object_key}")
+                        logger.warning(f"Dropping unresolvable image block: {url[:80]}")
+                        continue
 
                 except Exception as e:
-                    logger.error(f"Failed to fetch from NATS object store: {e}")
-            else:
-                logger.warning(f"Unknown image URL format, skipping: {url[:100]}")
+                    logger.error(f"Failed to fetch from NATS object store: {type(e).__name__}: {e}", exc_info=True)
+                    # NATS fetch failed — drop this image block rather than
+                    # sending an invalid URL to the provider (would crash).
+                    logger.warning(f"Dropping unresolvable image block: {url[:80]}")
+                    continue
 
-            # Fallback - pass through unchanged (will likely fail at provider level)
-            resolved_content.append(block)
+            if url.startswith('https://'):
+                # Valid HTTPS URL — pass through for the provider to fetch
+                resolved_content.append(block)
+                continue
+
+            # Non-data, non-nats, non-https URL (e.g. http://, relative path) — skip
+            logger.warning(f"Dropping unsupported image URL: {url[:80]}")
+            continue
         else:
             resolved_content.append(block)
 
