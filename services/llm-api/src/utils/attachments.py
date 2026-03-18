@@ -12,6 +12,8 @@ from typing import Dict, Any, List, Union
 
 from PIL import Image
 
+from utils.converters import normalize_attachment_data
+
 logger = logging.getLogger(__name__)
 
 # Anthropic's 5MB limit applies to the base64-encoded string, not raw bytes.
@@ -158,8 +160,8 @@ def downscale_image_if_needed(data: bytes, mime_type: str) -> tuple[bytes, str]:
     return result, 'image/jpeg'
 
 
-def _downscale_data_url_block(block: Dict) -> Dict:
-    """Downscale an image in a data URL block if it exceeds size limits."""
+def _normalize_data_url_block(block: Dict) -> Dict:
+    """Normalize format (e.g. WebP → PNG) and downscale a data-URL image block."""
     url = block.get('image_url', '')
     match = re.match(r'data:([^;]+);base64,(.+)', url, re.DOTALL)
     if not match:
@@ -168,14 +170,20 @@ def _downscale_data_url_block(block: Dict) -> Dict:
     mime_type = match.group(1)
     raw_data = base64.b64decode(match.group(2))
 
-    if len(raw_data) <= MAX_IMAGE_BYTES:
-        return block
+    # Normalize unsupported formats (e.g. WebP → PNG/JPEG)
+    normalized_data, normalized_mime = normalize_attachment_data(raw_data, mime_type)
+    format_changed = normalized_mime != mime_type
 
-    new_data, new_mime = downscale_image_if_needed(raw_data, mime_type)
-    new_b64 = base64.b64encode(new_data).decode('utf-8')
+    # Downscale if over the provider size limit
+    if len(normalized_data) > MAX_IMAGE_BYTES:
+        normalized_data, normalized_mime = downscale_image_if_needed(normalized_data, normalized_mime)
+    elif not format_changed:
+        return block  # Nothing to do
+
+    new_b64 = base64.b64encode(normalized_data).decode('utf-8')
     return {
         **block,
-        'image_url': f"data:{new_mime};base64,{new_b64}"
+        'image_url': f"data:{normalized_mime};base64,{new_b64}"
     }
 
 
@@ -214,9 +222,9 @@ async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) 
         if block_type == 'input_image':
             url = block.get('image_url', '')
 
-            # Already a data URL - downscale if needed
+            # Already a data URL — normalize format and downscale if needed
             if url.startswith('data:'):
-                resolved_content.append(_downscale_data_url_block(block))
+                resolved_content.append(_normalize_data_url_block(block))
                 continue
 
             # NATS object store reference
@@ -233,8 +241,9 @@ async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) 
                     logger.warning(f"Dropping unresolvable image block: {url[:80]}")
                     continue
 
-                # Detect mime type from magic bytes
+                # Detect mime type, normalize format, downscale
                 mime_type = _detect_image_mime(data)
+                data, mime_type = normalize_attachment_data(data, mime_type)
                 data, mime_type = downscale_image_if_needed(data, mime_type)
                 base64_data = base64.b64encode(data).decode('utf-8')
 
