@@ -146,7 +146,7 @@ class AnthropicProvider(BaseLLMProvider):
             logger.info(f"✅ Anthropic streaming completed for {self.instance_key}")
 
         except Exception as e:
-            logger.error(f"Anthropic streaming failed: {e}")
+            logger.error(f"Anthropic streaming failed: [{type(e).__name__}] {e}", exc_info=True)
             state['error'] = str(e)
 
         return state

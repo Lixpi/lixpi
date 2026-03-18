@@ -529,6 +529,18 @@ export default class NatsService {
         return objm.open(bucketName)
     }
 
+    // Open a bucket, auto-creating it if it was wiped or never existed.
+    // All internal methods use this so operations survive a NATS storage reset.
+    async ensureObjectStore(bucketName: string): Promise<ObjectStore> {
+        const objm = this.getObjectStoreManager()
+        try {
+            return await objm.open(bucketName)
+        } catch {
+            warn(`Object Store bucket missing, recreating: ${bucketName}`)
+            return await objm.create(bucketName, { replicas: 1 })
+        }
+    }
+
     async deleteObjectStore(bucketName: string): Promise<boolean> {
         const objm = this.getObjectStoreManager()
         const result = await objm.destroy(bucketName)
@@ -547,7 +559,7 @@ export default class NatsService {
     }
 
     async putObject(bucketName: string, name: string, data: Uint8Array, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
-        const os = await this.getObjectStore(bucketName)
+        const os = await this.ensureObjectStore(bucketName)
         const stream = this.readableStreamFrom(data)
         const result = await os.put({ name, ...meta }, stream)
         info(`Object stored: ${bucketName}/${name} (${data.length} bytes)`)
@@ -555,14 +567,14 @@ export default class NatsService {
     }
 
     async putObjectFromReadable(bucketName: string, name: string, readable: ReadableStream<Uint8Array>, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
-        const os = await this.getObjectStore(bucketName)
+        const os = await this.ensureObjectStore(bucketName)
         const result = await os.put({ name, ...meta }, readable)
         info(`Object stored from stream: ${bucketName}/${name}`)
         return result
     }
 
     async getObject(bucketName: string, name: string): Promise<Uint8Array | null> {
-        const os = await this.getObjectStore(bucketName)
+        const os = await this.ensureObjectStore(bucketName)
         const result = await os.get(name)
         if (!result) {
             return null
@@ -587,7 +599,7 @@ export default class NatsService {
     }
 
     async getObjectStream(bucketName: string, name: string): Promise<ReadableStream<Uint8Array> | null> {
-        const os = await this.getObjectStore(bucketName)
+        const os = await this.ensureObjectStore(bucketName)
         const result = await os.get(name)
         if (!result) {
             return null
@@ -596,18 +608,18 @@ export default class NatsService {
     }
 
     async getObjectInfo(bucketName: string, name: string): Promise<ObjectInfo | null> {
-        const os = await this.getObjectStore(bucketName)
+        const os = await this.ensureObjectStore(bucketName)
         return os.info(name)
     }
 
     async deleteObject(bucketName: string, name: string): Promise<void> {
-        const os = await this.getObjectStore(bucketName)
+        const os = await this.ensureObjectStore(bucketName)
         await os.delete(name)
         info(`Object deleted: ${bucketName}/${name}`)
     }
 
     async listObjects(bucketName: string): Promise<ObjectInfo[]> {
-        const os = await this.getObjectStore(bucketName)
+        const os = await this.ensureObjectStore(bucketName)
         const objects: ObjectInfo[] = []
         const list = await os.list()
         for await (const obj of list) {

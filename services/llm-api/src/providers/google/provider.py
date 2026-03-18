@@ -265,7 +265,7 @@ class GoogleProvider(BaseLLMProvider):
             logger.info(f"✅ Google streaming completed for {self.instance_key}")
 
         except Exception as e:
-            logger.error(f"Google streaming failed: {e}")
+            logger.error(f"Google streaming failed: [{type(e).__name__}] {e}", exc_info=True)
             state['error'] = str(e)
 
         return state
