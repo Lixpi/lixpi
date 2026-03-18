@@ -12,9 +12,10 @@ Usage:
     # → returns PNG or JPEG bytes with updated mime_type
 
 Extending with new converters:
-    1. Create a new module in this package (e.g., `heic.py`, `tiff.py`, `docx.py`)
-    2. Implement a function: (data: bytes, mime_type: str) -> tuple[bytes, str]
-    3. Register it in `_register_builtin_converters()` below
+    - Images: add the MIME type to `_register_builtin_converters()` using
+      the shared `ImageConverter` (handles any Pillow-decodable format).
+    - Other media: create a new module, implement `(bytes, str) -> (bytes, str)`,
+      and register it in `_register_builtin_converters()` below.
 """
 
 import logging
@@ -61,9 +62,9 @@ def normalize_attachment_data(data: bytes, mime_type: str) -> tuple[bytes, str]:
 
 def _register_builtin_converters() -> None:
     """Register all built-in converters. Called once at import time."""
-    from .webp import convert_webp
+    from .image import image_converter
 
-    register_converter('image/webp', convert_webp)
+    register_converter('image/webp', image_converter.convert)
 
 
 _register_builtin_converters()
