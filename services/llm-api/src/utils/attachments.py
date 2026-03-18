@@ -12,6 +12,8 @@ from typing import Dict, Any, List, Union
 
 from PIL import Image
 
+from utils.converters import normalize_attachment_data
+
 logger = logging.getLogger(__name__)
 
 # Anthropic's 5MB limit applies to the base64-encoded string, not raw bytes.
@@ -27,6 +29,19 @@ class AttachmentFormat(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
+
+
+def _detect_image_mime(data: bytes) -> str:
+    """Detect image MIME type from magic bytes."""
+    if len(data) > 8 and data[:8] == b'\x89PNG\r\n\x1a\n':
+        return 'image/png'
+    if len(data) > 2 and data[:2] == b'\xff\xd8':
+        return 'image/jpeg'
+    if len(data) > 4 and data[:4] == b'GIF8':
+        return 'image/gif'
+    if len(data) > 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return 'image/webp'
+    return 'image/png'
 
 
 def parse_nats_object_ref(ref: str) -> tuple[str, str] | None:
@@ -145,8 +160,8 @@ def downscale_image_if_needed(data: bytes, mime_type: str) -> tuple[bytes, str]:
     return result, 'image/jpeg'
 
 
-def _downscale_data_url_block(block: Dict) -> Dict:
-    """Downscale an image in a data URL block if it exceeds size limits."""
+def _normalize_data_url_block(block: Dict) -> Dict:
+    """Normalize format (e.g. WebP → PNG) and downscale a data-URL image block."""
     url = block.get('image_url', '')
     match = re.match(r'data:([^;]+);base64,(.+)', url, re.DOTALL)
     if not match:
@@ -155,14 +170,20 @@ def _downscale_data_url_block(block: Dict) -> Dict:
     mime_type = match.group(1)
     raw_data = base64.b64decode(match.group(2))
 
-    if len(raw_data) <= MAX_IMAGE_BYTES:
-        return block
+    # Normalize unsupported formats (e.g. WebP → PNG/JPEG)
+    normalized_data, normalized_mime = normalize_attachment_data(raw_data, mime_type)
+    format_changed = normalized_mime != mime_type
 
-    new_data, new_mime = downscale_image_if_needed(raw_data, mime_type)
-    new_b64 = base64.b64encode(new_data).decode('utf-8')
+    # Downscale if over the provider size limit
+    if len(normalized_data) > MAX_IMAGE_BYTES:
+        normalized_data, normalized_mime = downscale_image_if_needed(normalized_data, normalized_mime)
+    elif not format_changed:
+        return block  # Nothing to do
+
+    new_b64 = base64.b64encode(normalized_data).decode('utf-8')
     return {
         **block,
-        'image_url': f"data:{new_mime};base64,{new_b64}"
+        'image_url': f"data:{normalized_mime};base64,{new_b64}"
     }
 
 
@@ -201,9 +222,9 @@ async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) 
         if block_type == 'input_image':
             url = block.get('image_url', '')
 
-            # Already a data URL - downscale if needed
+            # Already a data URL — normalize format and downscale if needed
             if url.startswith('data:'):
-                resolved_content.append(_downscale_data_url_block(block))
+                resolved_content.append(_normalize_data_url_block(block))
                 continue
 
             # NATS object store reference
@@ -211,45 +232,34 @@ async def resolve_image_urls(content: Union[str, List[Dict]], nats_client=None) 
             if parsed and nats_client:
                 bucket_name, object_key = parsed
                 try:
-                    logger.info(f"Fetching image from NATS object store: {bucket_name}/{object_key}")
-
-                    # Fetch the object data
                     data = await nats_client.get_object(bucket_name, object_key)
-
-                    if data:
-                        # Detect mime type from magic bytes
-                        mime_type = 'image/png'
-                        if len(data) > 4:
-                            if data[:2] == b'\xff\xd8':
-                                mime_type = 'image/jpeg'
-                            elif data[:4] == b'GIF8':
-                                mime_type = 'image/gif'
-                            elif data[:4] == b'RIFF' and len(data) > 12 and data[8:12] == b'WEBP':
-                                mime_type = 'image/webp'
-                            elif data[:8] == b'\x89PNG\r\n\x1a\n':
-                                mime_type = 'image/png'
-
-                        # Convert to base64 data URL
-                        data, mime_type = downscale_image_if_needed(data, mime_type)
-                        base64_data = base64.b64encode(data).decode('utf-8')
-                        data_url = f"data:{mime_type};base64,{base64_data}"
-
-                        resolved_content.append({
-                            **block,
-                            'image_url': data_url
-                        })
-                        logger.info(f"Successfully resolved NATS object reference: {len(data)} bytes, mime: {mime_type}")
-                        continue
-                    else:
-                        logger.warning(f"NATS object not found: {bucket_name}/{object_key}")
-
                 except Exception as e:
-                    logger.error(f"Failed to fetch from NATS object store: {e}")
-            else:
-                logger.warning(f"Unknown image URL format, skipping: {url[:100]}")
+                    logger.error(f"Failed to fetch from NATS object store: {type(e).__name__}: {e}", exc_info=True)
+                    data = None
 
-            # Fallback - pass through unchanged (will likely fail at provider level)
-            resolved_content.append(block)
+                if not data:
+                    logger.warning(f"Dropping unresolvable image block: {url[:80]}")
+                    continue
+
+                # Detect mime type, normalize format, downscale
+                mime_type = _detect_image_mime(data)
+                data, mime_type = normalize_attachment_data(data, mime_type)
+                data, mime_type = downscale_image_if_needed(data, mime_type)
+                base64_data = base64.b64encode(data).decode('utf-8')
+
+                resolved_content.append({
+                    **block,
+                    'image_url': f"data:{mime_type};base64,{base64_data}"
+                })
+                continue
+
+            if url.startswith('https://'):
+                resolved_content.append(block)
+                continue
+
+            # Unsupported scheme (http://, relative path, etc.) — drop
+            logger.warning(f"Dropping unsupported image URL: {url[:80]}")
+            continue
         else:
             resolved_content.append(block)
 
