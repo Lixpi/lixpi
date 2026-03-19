@@ -551,6 +551,7 @@ AI chat threads belonging to the current workspace.
 |----------|--------|---------|
 | `/api/images/:workspaceId` | POST | Upload image (multipart/form-data) |
 | `/api/images/:workspaceId/:fileId` | GET | Serve image with auth token |
+| `/api/workspaces/:workspaceId/export` | GET | Download workspace as ZIP archive (see [WORKSPACE-EXPORT.md](WORKSPACE-EXPORT.md)) |
 
 ## Rendering Pipeline
 
