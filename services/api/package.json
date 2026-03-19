@@ -16,6 +16,7 @@
         "aws-login": "aws sso login --use-device-code --sso-session=lixpi"
     },
     "dependencies": {
+        "archiver": "*",
         "@lixpi/auth-service": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",
@@ -47,6 +48,7 @@
     },
     "devDependencies": {
         "nodemon": "latest",
+        "@types/archiver": "*",
         "@types/node": "*",
         "@types/express": "*"
     },
