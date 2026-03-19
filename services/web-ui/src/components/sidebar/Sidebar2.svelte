@@ -13,6 +13,7 @@
 
     import routerService from '$src/services/router-service'
     import WorkspaceService from '$src/services/workspace-service.ts'
+    import AuthService from '$src/services/auth-service.ts'
     import { routerStore } from '$src/stores/routerStore'
     import { workspacesStore } from '$src/stores/workspacesStore.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
@@ -68,6 +69,16 @@
         const workspaceService = new WorkspaceService()
         const deleteWorkspaceRes = await workspaceService.deleteWorkspace({ workspaceId })
 
+    }
+
+    const onWorkspaceExportHandler = async (e, workspaceId) => {
+        e.stopPropagation()
+
+        const token = await AuthService.getTokenSilently()
+        if (!token) return
+
+        const apiUrl = import.meta.env.VITE_API_URL
+        window.open(`${apiUrl}/api/workspaces/${workspaceId}/export?token=${token}`, '_blank')
     }
 
 
@@ -201,6 +212,13 @@
                                         <DropdownMenu.Item>Edit</DropdownMenu.Item>
                                         <DropdownMenu.Item>Make a copy</DropdownMenu.Item>
                                         <DropdownMenu.Item>Favorite</DropdownMenu.Item>
+                                        <DropdownMenu.Item
+                                            onclick={(e) => {
+                                                onWorkspaceExportHandler(e, workspace.workspaceId)
+                                            }}
+                                        >
+                                            Export
+                                        </DropdownMenu.Item>
                                         <DropdownMenu.Separator />
                                         <DropdownMenu.Sub>
                                             <DropdownMenu.SubTrigger>Labels</DropdownMenu.SubTrigger>
