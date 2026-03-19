@@ -28,6 +28,7 @@ import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjec
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
 import imageRoutes from './routes/image-routes.ts'
+import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 
 import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
 
@@ -178,6 +179,9 @@ app.use(cookieParser())
 // Image upload/download routes
 app.use('/api/images', imageRoutes)
 
+// Workspace export routes
+app.use('/api/workspaces', workspaceExportRoutes)
+
 
 
 // Health check endpoint
@@ -213,4 +217,3 @@ process.on('SIGTERM', () => {
     log('Nuke request received, shutting down immediately...')
     process.exit(0)
 })
-
