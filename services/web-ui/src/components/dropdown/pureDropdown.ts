@@ -36,6 +36,7 @@ type PureDropdownConfig = {
     availableTags?: string[]
     mountToBody?: boolean
     disableAutoPositioning?: boolean
+    disableTriggerHover?: boolean
     onSelect: (option: DropdownOption) => void
 }
 
@@ -54,6 +55,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
         enableTagFilter = false,
         mountToBody = false,
         disableAutoPositioning = false,
+        disableTriggerHover = false,
         onSelect
     } = config
 
@@ -217,7 +219,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     // Build dropdown wrapper with button first
     const dom = html`
-        <div class="dropdown-menu-tag-pill-wrapper theme-${theme}" data-dropdown-id="${id}" data-arrow-side="top" contenteditable="false">
+        <div class="dropdown-menu-tag-pill-wrapper theme-${theme}${disableTriggerHover ? ' no-trigger-hover' : ''}" data-dropdown-id="${id}" data-arrow-side="top" contenteditable="false">
             <span class="dots-dropdown-menu">
                 <button
                     class="flex justify-between items-center"
