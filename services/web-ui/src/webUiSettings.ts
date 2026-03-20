@@ -7,6 +7,7 @@ export type WebUiSettings = {
     renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: boolean
     showHeaderOnAiChatThreadNodes: boolean
     proximityConnectThreshold: number
+    menuConnectionSnapRadius: number
     aiChatContextTraversalDepth: 'direct' | 'full'
     aiChatThreadRailDragGrabWidth: number
     nodesConnectorLineCurve: WorkspaceEdgePathType
@@ -29,6 +30,9 @@ export const webUiSettings: WebUiSettings = {
     // Maximum distance (in renderer-coordinate pixels) at which dragging an unconnected
     // node near an AI chat thread node triggers the proximity-connect ghost edge.
     proximityConnectThreshold: 700,
+    // Maximum distance (in renderer-coordinate pixels) at which the menu-driven
+    // "Connect to node" interaction snaps to a target handle/rail.
+    menuConnectionSnapRadius: 110,
     // Controls how deeply the system traverses node connections when extracting
     // context for AI chat threads.
     //   'direct' — include content only from nodes with a direct incoming edge
