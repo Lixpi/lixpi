@@ -133,6 +133,13 @@
             }
         }
     }
+
+    // Optional: disable trigger hover background
+    &.no-trigger-hover .dots-dropdown-menu button {
+        &:before {
+            display: none;
+        }
+    }
 }
 
 // 2) Dropdown items structure — M3 list item layout
