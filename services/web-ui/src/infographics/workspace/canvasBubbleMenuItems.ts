@@ -21,6 +21,7 @@ type CanvasBubbleMenuCallbacks = {
     onChangeConnectorCurve: (edgeId: string) => void
     onAskAi: (nodeId: string) => void
     onDownloadImage: (nodeId: string) => void
+    onReplaceImage: (nodeId: string) => void
     onTriggerConnection: (nodeId: string) => void
     onHide: () => void
 }
@@ -87,6 +88,20 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
 
+    const replaceButton = createCanvasButton({
+        icon: downloadIcon,
+        title: 'Replace image',
+        iconSize: 16,
+        onClick: () => {
+            if (activeNodeId) {
+                callbacks.onReplaceImage(activeNodeId)
+                callbacks.onHide()
+            }
+        },
+    })
+    const replaceSvg = replaceButton.querySelector('svg')
+    if (replaceSvg) replaceSvg.style.transform = 'rotate(180deg)'
+
     const connectButton = createEl('button', {
         className: 'bubble-menu-button',
         type: 'button',
@@ -145,6 +160,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
 
     const items: BubbleMenuItem[] = [
         { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
+        { element: replaceButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: connectButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },

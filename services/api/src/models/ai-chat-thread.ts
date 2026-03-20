@@ -119,5 +119,34 @@ export default {
         } catch (error) {
             throw error
         }
+    },
+
+    deleteWorkspaceAiChatThreads: async ({
+        workspaceId
+    }: { workspaceId: string }): Promise<number> => {
+        const threads = await dynamoDBService.queryItems({
+            tableName: getDynamoDbTableStageName('AI_CHAT_THREADS', ORG_NAME, STAGE),
+            keyConditions: { workspaceId },
+            fetchAllItems: true,
+            origin: 'deleteWorkspaceAiChatThreads:query'
+        })
+
+        const allThreads = threads?.items || []
+        let deletedCount = 0
+
+        for (const thread of allThreads) {
+            try {
+                await dynamoDBService.deleteItems({
+                    tableName: getDynamoDbTableStageName('AI_CHAT_THREADS', ORG_NAME, STAGE),
+                    key: { workspaceId, threadId: thread.threadId },
+                    origin: 'deleteWorkspaceAiChatThreads:thread'
+                })
+                deletedCount++
+            } catch (error) {
+                console.error(`Failed to delete AI chat thread ${thread.threadId}:`, error)
+            }
+        }
+
+        return deletedCount
     }
 }

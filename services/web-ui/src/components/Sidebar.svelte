@@ -6,6 +6,7 @@
     import { routerStore } from '$src/stores/routerStore'
     import { workspacesStore } from '$src/stores/workspacesStore.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
+    import { servicesStore } from '$src/stores/servicesStore.ts'
     import { authStore } from '$src/stores/authStore'
     import { popOutTransition } from '$src/constants/svelteAnimationTransitions'
     import { Button } from '$lib/registry/ui/button/index.ts'
@@ -18,6 +19,9 @@
 
     let currentWorkspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId)
 
+    let importFileInput: HTMLInputElement
+    let importTargetWorkspaceId: string | null = null
+
     const onWorkspaceDeleteHandler = async (workspaceId: string) => {
         const workspaceService = new WorkspaceService()
         await workspaceService.deleteWorkspace({ workspaceId })
@@ -29,6 +33,54 @@
 
         const apiUrl = import.meta.env.VITE_API_URL
         window.open(`${apiUrl}/api/workspaces/${workspaceId}/export?token=${token}`, '_blank')
+    }
+
+    const onWorkspaceImportHandler = (workspaceId: string) => {
+        importTargetWorkspaceId = workspaceId
+        importFileInput.value = ''
+        importFileInput.click()
+    }
+
+    const onImportFileSelected = async (event: Event) => {
+        const input = event.target as HTMLInputElement
+        const file = input.files?.[0]
+        if (!file || !importTargetWorkspaceId) return
+
+        const workspaceId = importTargetWorkspaceId
+        importTargetWorkspaceId = null
+
+        const token = await AuthService.getTokenSilently()
+        if (!token) return
+
+        const apiUrl = import.meta.env.VITE_API_URL
+        const formData = new FormData()
+        formData.append('file', file)
+
+        try {
+            const response = await fetch(`${apiUrl}/api/workspaces/${workspaceId}/import`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData
+            })
+
+            if (!response.ok) {
+                const error = await response.json()
+                console.error('Workspace import failed:', error)
+                return
+            }
+
+            // Reload workspace data if the imported workspace is currently open
+            if (currentWorkspaceId === workspaceId) {
+                const workspaceService = new WorkspaceService()
+                await workspaceService.getWorkspace({ workspaceId })
+                await Promise.all([
+                    servicesStore.getData('documentService').getWorkspaceDocuments({ workspaceId }),
+                    servicesStore.getData('aiChatThreadService').getWorkspaceAiChatThreads({ workspaceId })
+                ])
+            }
+        } catch (error) {
+            console.error('Workspace import failed:', error)
+        }
     }
 
     const handleWorkspaceClick = (workspaceId: string) => {
@@ -54,6 +106,7 @@
             id: `workspace-menu-${workspaceId}`,
             selectedValue: { title: '' },
             options: [
+                { title: 'Import' },
                 { title: 'Export' },
                 { title: 'Delete' },
             ],
@@ -65,7 +118,9 @@
             renderIconForOptions: false,
             mountToBody: true,
             onSelect: (option) => {
-                if (option.title === 'Export') {
+                if (option.title === 'Import') {
+                    onWorkspaceImportHandler(workspaceId)
+                } else if (option.title === 'Export') {
                     onWorkspaceExportHandler(workspaceId)
                 } else if (option.title === 'Delete') {
                     onWorkspaceDeleteHandler(workspaceId)
@@ -86,6 +141,14 @@
     }
 </script>
 
+
+<input
+    type="file"
+    accept=".zip"
+    class="hidden"
+    bind:this={importFileInput}
+    onchange={onImportFileSelected}
+/>
 
 <aside class="bg-sidebar">
 

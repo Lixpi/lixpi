@@ -16,6 +16,7 @@
         "aws-login": "aws sso login --use-device-code --sso-session=lixpi"
     },
     "dependencies": {
+        "adm-zip": "*",
         "archiver": "*",
         "@lixpi/auth-service": "workspace:*",
         "@lixpi/constants": "workspace:*",
@@ -48,6 +49,7 @@
     },
     "devDependencies": {
         "nodemon": "latest",
+        "@types/adm-zip": "*",
         "@types/archiver": "*",
         "@types/node": "*",
         "@types/express": "*"

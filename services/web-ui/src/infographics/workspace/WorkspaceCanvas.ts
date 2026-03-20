@@ -245,6 +245,50 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     downloadImage(imgEl.src, { getAuthToken: () => AuthService.getTokenSilently() })
                 }
             },
+            onReplaceImage: (nodeId) => {
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = 'image/*'
+                input.style.display = 'none'
+                input.addEventListener('change', async () => {
+                    const file = input.files?.[0]
+                    input.remove()
+                    if (!file || !file.type.startsWith('image/')) return
+
+                    const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+                    const token = await AuthService.getTokenSilently()
+                    if (!token) return
+
+                    const formData = new FormData()
+                    formData.append('file', file)
+
+                    const response = await fetch(`${API_BASE_URL}/api/images/${workspaceId}`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: formData
+                    })
+
+                    if (!response.ok) return
+
+                    const data = await response.json()
+                    const newSrc = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+
+                    // Update DOM immediately
+                    const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
+                    const imgEl = nodeEl?.querySelector('img') as HTMLImageElement | null
+                    if (imgEl) imgEl.src = newSrc
+
+                    // Update canvas state
+                    if (!currentCanvasState) return
+                    const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
+                        if (n.nodeId !== nodeId || n.type !== 'image') return n
+                        return { ...n, fileId: data.fileId, src: newSrc } as ImageCanvasNode
+                    })
+                    commitCanvasState({ ...currentCanvasState, nodes: updatedNodes })
+                })
+                document.body.appendChild(input)
+                input.click()
+            },
             onAskAi: async (nodeId) => {
                 const imageNode = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
                 if (!imageNode || imageNode.type !== 'image') return
@@ -1393,6 +1437,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!imageUrl) return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
         if (imageUrl.startsWith('data:')) return imageUrl
         if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
+        if (imageUrl.startsWith('http') && imageUrl.includes('/api/images/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
         if (imageUrl.startsWith('http')) return imageUrl
         return `data:image/png;base64,${imageUrl}`
     }
@@ -3169,9 +3214,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Create the img element - fills the container
         const imgEl = document.createElement('img')
         imgEl.className = 'image-node-img'
-        imgEl.src = node.src
         imgEl.alt = ''
         imgEl.draggable = false
+
+        // Strip any stale token from src, then re-apply a fresh one via buildImageSrc
+        const rawSrc = node.src.replace(/[?&]token=[^&]+/, '')
+        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+        AuthService.getTokenSilently().then(token => {
+            imgEl.src = buildImageSrc(rawSrc, API_BASE_URL, token)
+        })
 
         // Once image loads, fix container dimensions to match actual aspect ratio
         imgEl.onload = () => {
