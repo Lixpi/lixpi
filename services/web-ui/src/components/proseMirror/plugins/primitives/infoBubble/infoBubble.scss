@@ -44,11 +44,11 @@
     &.dropdown-menu-popover {
         .bubble-wrapper {
             border-radius: 10px !important;
+            box-shadow: var(--dropdown-popover-box-shadow) !important;
         }
 
         .bubble-container {
-            // Keep a subtle border on light surfaces (matches your screenshot)
-            border: 1px solid rgba($dropdownDarkThemeSubmenuTextColor, 0.18) !important;
+            border: none !important;
             border-radius: 10px !important;
 
             // Override arrow pseudo-elements regardless of data-arrow-side attribute
