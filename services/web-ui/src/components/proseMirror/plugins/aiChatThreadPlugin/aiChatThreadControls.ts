@@ -10,7 +10,7 @@
 
 import { html } from '$src/utils/domTemplates.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { createPureDropdown } from '$src/components/proseMirror/plugins/primitives/dropdown/index.ts'
+import { createPureDropdown } from '$src/components/dropdown/index.ts'
 import { webUiSettings } from '$src/webUiSettings.ts'
 
 import type { EditorView } from 'prosemirror-view'

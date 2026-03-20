@@ -1,6 +1,6 @@
 /* Import animations and base dropdown styles */
 @import '$src/sass/components/_animations.scss';
-@import '$src/components/proseMirror/plugins/primitives/dropdown/_dropdown-mixins.scss';
+@import '$src/components/dropdown/_dropdown-mixins.scss';
 
 // M3 Menu staggered item animation
 @keyframes md3MenuItemFadeIn {
