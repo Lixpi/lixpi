@@ -69,6 +69,20 @@ function createManager(config = createMockConfig()) {
 	return { manager: new WorkspaceConnectionManager(config), config }
 }
 
+function mockPaneBounds(paneEl: HTMLDivElement) {
+	vi.spyOn(paneEl, 'getBoundingClientRect').mockReturnValue({
+		top: 0,
+		left: 0,
+		right: 1600,
+		bottom: 1200,
+		width: 1600,
+		height: 1200,
+		x: 0,
+		y: 0,
+		toJSON: () => ({})
+	})
+}
+
 // =============================================================================
 // PROXIMITY CONNECT — checkProximity
 // =============================================================================
@@ -397,6 +411,89 @@ describe('WorkspaceConnectionManager — commitProximityConnection', () => {
 		manager.commitProximityConnection() // second call
 
 		expect(config.onEdgesChange).toHaveBeenCalledTimes(1)
+	})
+})
+
+// =============================================================================
+// MENU CONNECTIONS
+// =============================================================================
+
+describe('WorkspaceConnectionManager — menu connections', () => {
+	it('commits menu connections on mouseup, not mousedown', () => {
+		const config = { ...createMockConfig(), railOffset: 5 }
+		mockPaneBounds(config.paneEl)
+		const manager = new WorkspaceConnectionManager(config)
+
+		const imageNode = makeNode({
+			nodeId: 'img-1',
+			type: 'image',
+			position: { x: 100, y: 100 },
+			dimensions: { width: 200, height: 120 }
+		})
+		const chatNode = makeNode({
+			nodeId: 'chat-1',
+			type: 'aiChatThread',
+			position: { x: 500, y: 100 },
+			dimensions: { width: 260, height: 120 }
+		})
+
+		manager.syncNodes([imageNode, chatNode])
+		manager.syncEdges([])
+		manager.setRailHeight('chat-1', 420)
+
+		manager.startConnectionFromMenu('img-1')
+
+		document.dispatchEvent(new MouseEvent('mousemove', {
+			clientX: 495,
+			clientY: 410,
+			bubbles: true,
+		}))
+
+		document.dispatchEvent(new MouseEvent('mousedown', {
+			clientX: 495,
+			clientY: 410,
+			bubbles: true,
+		}))
+
+		expect(config.onEdgesChange).not.toHaveBeenCalled()
+
+		document.dispatchEvent(new MouseEvent('mouseup', {
+			clientX: 495,
+			clientY: 410,
+			bubbles: true,
+		}))
+
+		expect(config.onEdgesChange).toHaveBeenCalledTimes(1)
+	})
+
+	it('snaps to the ai chat thread rail near the floating input area', () => {
+		const config = { ...createMockConfig(), railOffset: 5 }
+		const manager = new WorkspaceConnectionManager(config)
+
+		const imageNode = makeNode({
+			nodeId: 'img-1',
+			type: 'image',
+			position: { x: 100, y: 100 },
+			dimensions: { width: 200, height: 120 }
+		})
+		const chatNode = makeNode({
+			nodeId: 'chat-1',
+			type: 'aiChatThread',
+			position: { x: 500, y: 100 },
+			dimensions: { width: 260, height: 120 }
+		})
+
+		manager.syncNodes([imageNode, chatNode])
+		manager.syncEdges([])
+		manager.setRailHeight('chat-1', 420)
+
+		const sourceHandle = (manager as any).nodeLookup.get('img-1').internals.handleBounds.source[0]
+		const closest = (manager as any).findClosestHandle({ x: 500, y: 430 }, sourceHandle, 220)
+
+		expect(closest).not.toBeNull()
+		expect(closest.nodeId).toBe('chat-1')
+		expect(closest.x).toBe(495)
+		expect(closest.y).toBe(430)
 	})
 })
 

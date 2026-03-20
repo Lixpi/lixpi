@@ -13,12 +13,17 @@ describe('webUiSettings — shape', () => {
 		expect(keys).toEqual([
 			'aiChatContextTraversalDepth',
 			'aiChatThreadRailDragGrabWidth',
+			'menuConnectionSnapRadius',
+			'nodesConnectorLineClickAreaWidth',
+			'nodesConnectorLineCurve',
 			'proximityConnectThreshold',
 			'renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem',
 			'showHeaderOnAiChatThreadNodes',
 			'useModalityFilterOnModelSelectorDropdown',
 			'useShiftingGradientBackgroundOnAiChatThreadNode',
 			'useShiftingGradientBackgroundOnAiUserInputNode',
+				'useZoomCompensatedConnectorScaling',
+				'useZoomCompensatedResizeHandleScaling',
 		])
 	})
 
@@ -30,8 +35,13 @@ describe('webUiSettings — shape', () => {
 			renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem: 'boolean',
 			showHeaderOnAiChatThreadNodes: 'boolean',
 			proximityConnectThreshold: 'number',
+			menuConnectionSnapRadius: 'number',
 			aiChatContextTraversalDepth: 'string',
 			aiChatThreadRailDragGrabWidth: 'number',
+			nodesConnectorLineCurve: 'string',
+			nodesConnectorLineClickAreaWidth: 'number',
+			useZoomCompensatedConnectorScaling: 'boolean',
+			useZoomCompensatedResizeHandleScaling: 'boolean',
 		}
 		for (const [key, value] of Object.entries(webUiSettings)) {
 			expect(typeof value).toBe(expectedTypes[key])
@@ -66,6 +76,10 @@ describe('webUiSettings — defaults', () => {
 
 	it('proximityConnectThreshold defaults to a positive number', () => {
 		expect(webUiSettings.proximityConnectThreshold).toBeGreaterThan(0)
+	})
+
+	it('menuConnectionSnapRadius defaults to 110', () => {
+		expect(webUiSettings.menuConnectionSnapRadius).toBe(110)
 	})
 
 	it('aiChatContextTraversalDepth defaults to direct', () => {
