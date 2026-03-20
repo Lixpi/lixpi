@@ -321,5 +321,89 @@ export default {
 		} catch (e) {
 			throw e
 		}
+	},
+
+	importDocument: async ({
+		documentId,
+		workspaceId,
+		title,
+		content,
+		createdAt,
+		updatedAt
+	}: Pick<Document, 'documentId' | 'workspaceId' | 'title' | 'content' | 'createdAt' | 'updatedAt'>): Promise<Document | undefined> => {
+		const documentData: Document = {
+			documentId,
+			workspaceId,
+			revision: 1,
+			title,
+			content,
+			prevRevision: 1,
+			createdAt,
+			updatedAt
+		}
+
+		try {
+			await dynamoDBService.putItem({
+				tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+				item: documentData,
+				origin: 'importDocument'
+			})
+
+			await dynamoDBService.putItem({
+				tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
+				item: {
+					documentId,
+					workspaceId,
+					title,
+					tags: [],
+					createdAt,
+					updatedAt
+				},
+				origin: 'importDocument'
+			})
+
+			return documentData
+		} catch (error) {
+			console.error('Failed to import document:', error)
+		}
+	},
+
+	deleteWorkspaceDocuments: async ({
+		workspaceId
+	}: { workspaceId: string }): Promise<number> => {
+		const documents = await dynamoDBService.queryItems({
+			tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+			indexName: 'workspaceId',
+			keyConditions: { workspaceId },
+			fetchAllItems: true,
+			origin: 'deleteWorkspaceDocuments:query'
+		})
+
+		const allDocuments = documents?.items || []
+		let deletedCount = 0
+
+		for (const doc of allDocuments) {
+			try {
+				await dynamoDBService.deleteItems({
+					tableName: getDynamoDbTableStageName('DOCUMENTS', ORG_NAME, STAGE),
+					key: { documentId: doc.documentId, revision: doc.revision },
+					origin: 'deleteWorkspaceDocuments:document'
+				})
+
+				if (doc.revision === 1) {
+					await dynamoDBService.deleteItems({
+						tableName: getDynamoDbTableStageName('DOCUMENTS_META', ORG_NAME, STAGE),
+						key: { documentId: doc.documentId },
+						origin: 'deleteWorkspaceDocuments:meta'
+					})
+				}
+
+				deletedCount++
+			} catch (error) {
+				console.error(`Failed to delete document ${doc.documentId}:`, error)
+			}
+		}
+
+		return deletedCount
 	}
 }

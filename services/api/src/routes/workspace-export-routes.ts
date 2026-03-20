@@ -2,6 +2,8 @@
 
 import { Router } from 'express'
 import archiver from 'archiver'
+import AdmZip from 'adm-zip'
+import multer from 'multer'
 
 import NATS_Service from '@lixpi/nats-service'
 import { type DocumentFile } from '@lixpi/constants'
@@ -15,6 +17,21 @@ import AiChatThread from '../models/ai-chat-thread.ts'
 const router = Router()
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
+
+// Maximum import file size: 1GB
+const MAX_IMPORT_SIZE = 1024 * 1024 * 1024
+
+const importUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_IMPORT_SIZE },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/zip' || file.mimetype === 'application/x-zip-compressed' || file.originalname.endsWith('.zip')) {
+            cb(null, true)
+        } else {
+            cb(new Error('Invalid file type. Only ZIP files are accepted.'))
+        }
+    }
+})
 
 const getFileExtension = (mimeType?: string, filename?: string): string => {
     if (filename) {
@@ -170,6 +187,153 @@ router.get(
             if (!res.headersSent) {
                 res.status(500).json({ error: 'Export failed' })
             }
+        }
+    }
+)
+
+// POST /api/workspaces/:workspaceId/import
+// Imports a previously exported ZIP archive, replacing all workspace content
+router.post(
+    '/:workspaceId/import',
+    authenticateRequest,
+    validateWorkspaceAccess,
+    importUpload.single('file'),
+    async (req: any, res: any) => {
+        const { workspaceId } = req.params
+        const file = req.file
+
+        if (!file) {
+            return res.status(400).json({ error: 'No file provided' })
+        }
+
+        // ── Parse ZIP ──────────────────────────────────────────────
+        let zip: AdmZip
+        let manifest: any
+
+        try {
+            zip = new AdmZip(file.buffer)
+        } catch (e: any) {
+            return res.status(400).json({ error: 'Invalid ZIP file' })
+        }
+
+        const manifestEntry = zip.getEntry('manifest.json')
+        if (!manifestEntry) {
+            return res.status(400).json({ error: 'ZIP archive is missing manifest.json' })
+        }
+
+        try {
+            manifest = JSON.parse(manifestEntry.getData().toString('utf8'))
+        } catch (e: any) {
+            return res.status(400).json({ error: 'manifest.json contains invalid JSON' })
+        }
+
+        // ── Validate manifest ──────────────────────────────────────
+        if (manifest.exportVersion !== 1) {
+            return res.status(400).json({ error: `Unsupported export version: ${manifest.exportVersion}` })
+        }
+
+        if (!manifest.workspace?.canvasState) {
+            return res.status(400).json({ error: 'manifest.json is missing workspace.canvasState' })
+        }
+
+        if (!Array.isArray(manifest.documents)) {
+            return res.status(400).json({ error: 'manifest.json is missing documents array' })
+        }
+
+        if (!Array.isArray(manifest.aiChatThreads)) {
+            return res.status(400).json({ error: 'manifest.json is missing aiChatThreads array' })
+        }
+
+        // Collect image entries from ZIP before wiping anything
+        const imageEntries: { fileId: string; ext: string; data: Buffer }[] = []
+
+        for (const entry of zip.getEntries()) {
+            if (entry.entryName.startsWith('images/') && !entry.isDirectory) {
+                const filename = entry.entryName.slice('images/'.length)
+                const dotIndex = filename.lastIndexOf('.')
+                const fileId = dotIndex !== -1 ? filename.substring(0, dotIndex) : filename
+                const ext = dotIndex !== -1 ? filename.substring(dotIndex) : ''
+                imageEntries.push({ fileId, ext, data: entry.getData() })
+            }
+        }
+
+        // ── Wipe existing content ──────────────────────────────────
+        try {
+            const natsService = NATS_Service.getInstance()
+            const bucketName = getWorkspaceBucketName(workspaceId)
+
+            await Promise.all([
+                // Delete all images (wipe entire NATS object store bucket)
+                (async () => {
+                    if (natsService) {
+                        try {
+                            await natsService.deleteObjectStore(bucketName)
+                        } catch (e: any) {
+                            // Bucket may not exist — that's fine
+                        }
+                    }
+                })(),
+                // Delete all documents from DynamoDB
+                Document.deleteWorkspaceDocuments({ workspaceId }),
+                // Delete all AI chat threads from DynamoDB
+                AiChatThread.deleteWorkspaceAiChatThreads({ workspaceId })
+            ])
+
+            // ── Restore images ─────────────────────────────────────
+            if (imageEntries.length > 0 && natsService) {
+                await natsService.ensureObjectStore(bucketName)
+                for (const image of imageEntries) {
+                    await natsService.putObject(bucketName, image.fileId, image.data, {
+                        name: image.fileId,
+                        description: `${image.fileId}${image.ext}`
+                    })
+                }
+            }
+
+            // ── Restore documents ──────────────────────────────────
+            for (const doc of manifest.documents) {
+                await Document.importDocument({
+                    documentId: doc.documentId,
+                    workspaceId,
+                    title: doc.title,
+                    content: doc.content,
+                    createdAt: doc.createdAt,
+                    updatedAt: doc.updatedAt
+                })
+            }
+
+            // ── Restore AI chat threads ────────────────────────────
+            for (const thread of manifest.aiChatThreads) {
+                await AiChatThread.createAiChatThread({
+                    workspaceId,
+                    threadId: thread.threadId,
+                    content: thread.content,
+                    aiModel: thread.aiModel
+                })
+            }
+
+            // ── Update workspace canvas state and files ────────────
+            const files: DocumentFile[] = manifest.workspace.files || []
+            await Workspace.replaceWorkspaceContent({
+                workspaceId,
+                canvasState: manifest.workspace.canvasState,
+                files
+            })
+
+            info(`Workspace ${workspaceId} imported successfully (${manifest.documents.length} documents, ${manifest.aiChatThreads.length} threads, ${imageEntries.length} images)`)
+
+            res.json({
+                success: true,
+                workspaceId,
+                imported: {
+                    documents: manifest.documents.length,
+                    aiChatThreads: manifest.aiChatThreads.length,
+                    images: imageEntries.length
+                }
+            })
+        } catch (e: any) {
+            err('Workspace import failed:', e)
+            res.status(500).json({ error: 'Import failed' })
         }
     }
 )

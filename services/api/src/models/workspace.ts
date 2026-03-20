@@ -332,5 +332,38 @@ export default {
         return workspace as Workspace
     },
 
+    replaceWorkspaceContent: async ({
+        workspaceId,
+        canvasState,
+        files
+    }: { workspaceId: string; canvasState: CanvasState; files: DocumentFile[] }): Promise<void> => {
+        const currentDate = new Date().getTime()
+
+        try {
+            await dynamoDBService.updateItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                updates: {
+                    canvasState,
+                    files,
+                    updatedAt: currentDate
+                },
+                origin: 'replaceWorkspaceContent'
+            })
+
+            await dynamoDBService.updateItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                key: { workspaceId },
+                updates: {
+                    updatedAt: currentDate
+                },
+                origin: 'replaceWorkspaceContent:meta'
+            })
+        } catch (error) {
+            console.error('Failed to replace workspace content:', error)
+            throw error
+        }
+    },
+
     getBucketName: getWorkspaceBucketName
 }
