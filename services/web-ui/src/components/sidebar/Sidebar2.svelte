@@ -23,57 +23,21 @@
     import { popOutTransition } from '$src/constants/svelteAnimationTransitions'
 
     import { Button } from "$lib/registry/ui/button/index.ts";
-	import * as DropdownMenu from "$lib/registry/ui/dropdown-menu/index.ts";
-    import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
-    import SquarePlusIcon from "@lucide/svelte/icons/square-plus";
     import FilePlus2Icon from "@lucide/svelte/icons/file-plus-2";
-    import FilePlusIcon from "@lucide/svelte/icons/file-plus";
-    // import { Separator } from "$lib/registry/ui/separator/index.js";
-
-	// import { mailStore } from "$src/components/store.js";
-	// import type { Mail } from "$src/components/data.js";
-	// import { formatTimeAgo } from "$src/components/utils.js";
+    import { createPureDropdown } from '$src/components/dropdown/index.ts'
 	import { cn } from "$lib/utils.ts";
-	import { Badge } from "$lib/registry/ui/badge/index.ts";
 	import { ScrollArea } from "$lib/registry/ui/scroll-area/index.ts";
 
-	// export let items: Mail[];
-
-    let scrollAreaRef: HTMLElement | null = null;
-
-    // Create a ref for our portal target
-    let portalTargetRef: HTMLElement;
-
-    // You can keep the scrollAreaRef if needed for other purposes
-    // let scrollAreaRef = $bindable(null);
-
-    console.log('DropdownMenu', DropdownMenu)
-
-	function get_badge_variant_from_label(label: string) {
-		if (["work"].includes(label.toLowerCase())) {
-			return "default";
-		}
-
-		if (["personal"].includes(label.toLowerCase())) {
-			return "outline";
-		}
-
-		return "secondary";
-	}
+    const ellipsisIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>`
 
     let currentWorkspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId)
 
-    const onWorkspaceDeleteHandler = async (e, workspaceId) => {
-        e.stopPropagation()
-
+    const onWorkspaceDeleteHandler = async (workspaceId: string) => {
         const workspaceService = new WorkspaceService()
-        const deleteWorkspaceRes = await workspaceService.deleteWorkspace({ workspaceId })
-
+        await workspaceService.deleteWorkspace({ workspaceId })
     }
 
-    const onWorkspaceExportHandler = async (e, workspaceId) => {
-        e.stopPropagation()
-
+    const onWorkspaceExportHandler = async (workspaceId: string) => {
         const token = await AuthService.getTokenSilently()
         if (!token) return
 
@@ -81,32 +45,11 @@
         window.open(`${apiUrl}/api/workspaces/${workspaceId}/export?token=${token}`, '_blank')
     }
 
-
-    const labels = [
-        {
-            value: "bug",
-            label: "Bug",
-        },
-        {
-            value: "feature",
-            label: "Feature",
-        },
-        {
-            value: "documentation",
-            label: "Documentation",
-        },
-    ];
-
-
-
-
     // TODO: this is just a temp solution. I'm not sure how I want to approach setting default AI model, especially when there will be a multi-thread support in the documents.
     // I definitely don't want to bother to set it here
     let defaultAiModel = $derived($aiModelsStore.data.find(model => model.sortingPosition === 103))
 
-
-    const handleWorkspaceClick = workspaceId => {
-        console.log('workspaceId', workspaceId)
+    const handleWorkspaceClick = (workspaceId: string) => {
         workspaceStore.setMetaValues({
             loadingStatus: LoadingStatus.idle,
         })
@@ -118,12 +61,46 @@
 	}
 
     const handleCreateNewWorkspaceClick = async () => {
-
         const workspaceService = new WorkspaceService()
-
         await workspaceService.createWorkspace({
             name: 'New Workspace',
         })
+    }
+
+    function mountWorkspaceDropdown(node: HTMLElement, workspaceId: string) {
+        const dropdown = createPureDropdown({
+            id: `workspace-menu-${workspaceId}`,
+            selectedValue: { title: '' },
+            options: [
+                { title: 'Export' },
+                { title: 'Delete' },
+            ],
+            theme: 'dark',
+            buttonIcon: ellipsisIcon,
+            disableTriggerHover: true,
+            renderTitleForSelectedValue: false,
+            renderIconForSelectedValue: false,
+            renderIconForOptions: false,
+            mountToBody: true,
+            onSelect: (option) => {
+                if (option.title === 'Export') {
+                    onWorkspaceExportHandler(workspaceId)
+                } else if (option.title === 'Delete') {
+                    onWorkspaceDeleteHandler(workspaceId)
+                }
+            },
+        })
+
+        node.appendChild(dropdown.dom)
+
+        // Stop click propagation so workspace row doesn't navigate
+        dropdown.dom.addEventListener('click', (e) => e.stopPropagation())
+
+        return {
+            destroy() {
+                dropdown.destroy()
+            }
+        }
     }
 </script>
 
@@ -199,51 +176,7 @@
 							)}
 						>
 
-                            <DropdownMenu.Root>
-                                <DropdownMenu.Trigger>
-                                    {#snippet child({ props })}
-                                        <Button {...props} variant="muted" class="data-[state=open]:bg-ghost flex h-8 w-8 p-0" onclick={(e) => e.stopPropagation()}>
-                                            <EllipsisIcon class="h-4 w-4 "/>
-                                            <span class="sr-only">Open Menu</span>
-                                        </Button>
-                                    {/snippet}
-                                </DropdownMenu.Trigger>
-                                    <DropdownMenu.Content class="w-[160px]" align="end">
-                                        <DropdownMenu.Item>Edit</DropdownMenu.Item>
-                                        <DropdownMenu.Item>Make a copy</DropdownMenu.Item>
-                                        <DropdownMenu.Item>Favorite</DropdownMenu.Item>
-                                        <DropdownMenu.Item
-                                            onclick={(e) => {
-                                                onWorkspaceExportHandler(e, workspace.workspaceId)
-                                            }}
-                                        >
-                                            Export
-                                        </DropdownMenu.Item>
-                                        <DropdownMenu.Separator />
-                                        <DropdownMenu.Sub>
-                                            <DropdownMenu.SubTrigger>Labels</DropdownMenu.SubTrigger>
-                                            <DropdownMenu.SubContent>
-                                                <DropdownMenu.RadioGroup value={workspace.name}>
-                                                    {#each labels as label (label.value)}
-                                                        <DropdownMenu.RadioItem value={label.value}>
-                                                            {label.label}
-                                                        </DropdownMenu.RadioItem>
-                                                    {/each}
-                                                </DropdownMenu.RadioGroup>
-                                            </DropdownMenu.SubContent>
-                                        </DropdownMenu.Sub>
-                                        <DropdownMenu.Separator />
-                                        <DropdownMenu.Item
-                                            onclick={(e) => {
-                                                console.log('delete', workspace.workspaceId)
-                                                onWorkspaceDeleteHandler(e, workspace.workspaceId)
-                                            }}
-                                        >
-                                            Delete
-                                            <DropdownMenu.Shortcut>⌘⌫</DropdownMenu.Shortcut>
-                                        </DropdownMenu.Item>
-                                    </DropdownMenu.Content>
-                            </DropdownMenu.Root>
+                            <div use:mountWorkspaceDropdown={workspace.workspaceId}></div>
 						</div>
 					</div>
 					{#if workspace.tags?.length}
