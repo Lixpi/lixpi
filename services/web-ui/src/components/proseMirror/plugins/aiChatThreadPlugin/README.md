@@ -474,7 +474,7 @@ Users see:
 
 - `aiChatThreadPluginConstants.ts` - Shared `PluginKey` to avoid identity mismatch and circular imports between NodeView and plugin. Import this key in both places and call `AI_CHAT_THREAD_PLUGIN_KEY.getState(view.state)` when needed.
 
-- `$src/components/proseMirror/plugins/primitives/dropdown/` - Dropdown primitive (outside document schema):
+- `$src/components/dropdown/` - Dropdown primitive (outside document schema):
   - `pureDropdown.ts` - Factory function creating dropdowns with {dom, update, destroy} API
   - Uses `infoBubble` primitive for state management
   - `index.ts` - Clean exports
@@ -700,7 +700,7 @@ if (node.type.name === 'aiChatThread' &&
 ```
 
 ### 3. Dropdown Open Decorations
-**Note:** Dropdown decorations are now handled by the dropdown primitive plugin (`services/web-ui/src/components/proseMirror/plugins/primitives/dropdown/dropdownPlugin.ts`), not by aiChatThreadPlugin.
+**Note:** Dropdown decorations are now handled by the dropdown primitive plugin (`services/web-ui/src/components/dropdown/dropdownPlugin.ts`), not by aiChatThreadPlugin.
 
 ## Styling hooks (short version)
 
@@ -789,7 +789,7 @@ The styling system uses SCSS variables like `$steelBlue` and `$redPink`. Check `
 
 ## Operational notes for future contributors
 
-- **Dropdown rendering**: All dropdown UI, state, and events are handled by the dropdown primitive component in `services/web-ui/src/components/proseMirror/plugins/primitives/dropdown/`. Do NOT put dropdown layout/rendering logic in aiChatThreadNode.
+- **Dropdown rendering**: All dropdown UI, state, and events are handled by the dropdown primitive component in `services/web-ui/src/components/dropdown/`. Do NOT put dropdown layout/rendering logic in aiChatThreadNode.
 - The dropdown primitive follows the plugin state + decorations pattern. Never store UI state in NodeViews.
 - Never import the plugin module inside NodeViews; import only the shared `PluginKey` from `aiChatThreadPluginConstants.ts` and read state via `getState(view.state)`.
 - When subscribing to external stores (Svelte), keep references to DOM nodes and update textContent/innerHTML. Unsubscribe in `destroy()` and remove global listeners like `document.click`.

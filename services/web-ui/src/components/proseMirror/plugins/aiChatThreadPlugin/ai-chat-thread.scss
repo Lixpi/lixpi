@@ -1,7 +1,7 @@
 // AI Chat Thread Styles
 @import '$src/components/proseMirror/ProseMirrorMixings.scss';
 @import '$src/sass/components/animations';
-@import '$src/components/proseMirror/plugins/primitives/dropdown/dropdown.scss';
+@import '$src/components/dropdown/dropdown.scss';
 @import '$src/components/proseMirror/plugins/primitives/infoBubble/infoBubble.scss';
 
 $aiChatThreadMinHeight: 50px;
