@@ -15,6 +15,8 @@ export type WebUiThemeSettings = {
     selectionOverlayBorderColor: string
     selectionOverlayBackgroundColor: string
     selectionOutlineColor: string
+    // Box shadow for the dropdown popover menus (model selectors etc.).
+    dropdownPopoverBoxShadow: string
     // Four gradient colors used by the shifting gradient background and animated border
     // overlays (image generation border, document thread shape, context selection).
     // Hex strings. The shifting gradient renderer converts these to RGB internally.
@@ -66,6 +68,8 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     selectionOverlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
     // Outline on the per-thread floating input when selected.
     selectionOutlineColor: 'rgba(197, 192, 238, 0.75)',
+    // Box shadow for dropdown popover menus (model selectors etc.).
+    dropdownPopoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
     // Four gradient colors shared between the shifting gradient background and the
     // animated border overlays (image generation, document thread shape).
     // Dreamy sky pastel palette — whisper pink, lavender, periwinkle, orchid.

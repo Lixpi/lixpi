@@ -3,6 +3,7 @@ import { html } from '$src/utils/domTemplates.ts'
 import { chevronDownIcon } from '$src/svgIcons/index.ts'
 import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/pureInfoBubble.ts'
 import { webUiSettings } from '$src/webUiSettings.ts'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 // Inject fill color utility (same as original dropdown)
 function injectFillColor(svg: string, color: string): string {
@@ -188,14 +189,31 @@ export function createPureDropdown(config: PureDropdownConfig) {
         </div>
     ` : null
 
-    // Stop scroll propagation to prevent canvas pan/zoom
-    const stopScrollPropagation = (e: Event) => {
-        e.stopPropagation()
-        // Do not prevent default, otherwise scrolling itself breaks
+    // Only absorb wheel events when the dropdown can actually scroll in that direction.
+    // At scroll boundaries or when content doesn't overflow, let the event propagate
+    // so the canvas can pan normally. Always block browser zoom (pinch / ctrlKey).
+    const handleWheel = (e: WheelEvent) => {
+        if (e.ctrlKey) {
+            e.preventDefault()
+            return
+        }
+
+        const el = e.currentTarget as HTMLElement
+        const hasOverflow = el.scrollHeight > el.clientHeight
+        if (!hasOverflow) return
+
+        const atTop = el.scrollTop <= 0
+        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight
+        const scrollingDown = e.deltaY > 0
+        const scrollingUp = e.deltaY < 0
+
+        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
+            e.stopPropagation()
+        }
     }
 
     // Build body content (dropdown items)
-    const bodyContent = html`<ul class="submenu" onwheel=${stopScrollPropagation}></ul>`
+    const bodyContent = html`<ul class="submenu" onwheel=${handleWheel}></ul>`
 
     // Build dropdown wrapper with button first
     const dom = html`
@@ -240,6 +258,9 @@ export function createPureDropdown(config: PureDropdownConfig) {
             dotsMenu?.classList.remove('is-active')
         }
     })
+
+    // Apply theme shadow
+    infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', webUiThemeSettings.dropdownPopoverBoxShadow)
 
     // Append info bubble to dropdown or body
     if (mountToBody) {
