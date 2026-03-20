@@ -5,6 +5,8 @@ description: 'Manage GitHub branches, commits, issues, and pull requests for Lix
 
 # GitHub Workflow
 
+**Repository**: `Lixpi/lixpi` (https://github.com/Lixpi/lixpi.git)
+
 Lixpi uses a strict naming convention for branches, commits, and pull requests tied to GitHub issues.
 
 ## Branch Naming
