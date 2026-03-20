@@ -74,22 +74,6 @@ $sidebarLogoFiler: none;
 $sidebarProjectsScrollContainerBackgroundColor: transparent;
 // $sidebarProjectsScrollContainerBackgroundColor: red;
 
-// ProjectRow component
-$projectRowBackgroundColor: transparent;
-// $projectRowBoxShadow: 0px 0px 0px 1px rgba(234, 234, 234, 1);
-$projectRowSeparatorLineFallbackColor: rgb(234,234,234);
-$projectRowSeparatorLineGradientColor: linear-gradient(90deg, rgba(234,234,234,1) 0%, rgba(234,234,234,1) 55%, rgba(255,255,255,1) 100%);
-$projectRowActiveBackgroundColor: $activeElementAccentColor;
-$projectRowHoverBackgroundColor: color.adjust($projectRowActiveBackgroundColor, $lightness: 4%);
-$projectTitleColor: $minimalistChicNightBlue;
-$projectTitleActiveColor: color.adjust($minimalistChicNightBlue, $lightness: -10%);
-$projectRowWrapperBoxShadow: 0 0 7px 0 rgba(0,0,0,.02);
-$projectRowBorderRadius: 0px;
-
-$projectRowDropdownSubmenuColor: $minimalistChicOffWhite;
-$projectRowDropdownColor: $minimalistChicNightBlue;
-
-
 // ProseMirror ############################################################################################
 $aiResponseMessageIndicatorColor: #d7d7d7;
 $aiResponseMessageIndicatorAccentPointerColor: #d7d7d7;

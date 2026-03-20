@@ -23,7 +23,7 @@ A workspace is the primary container where users organize and edit their documen
 flowchart TB
     subgraph Client["Browser"]
         subgraph Svelte["Svelte Components"]
-            Sidebar[Sidebar2.svelte]
+            Sidebar[Sidebar.svelte]
             WCS[WorkspaceCanvas.svelte]
         end
 
