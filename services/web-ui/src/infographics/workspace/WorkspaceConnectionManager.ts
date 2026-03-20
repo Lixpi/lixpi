@@ -61,7 +61,7 @@ type ConnectionManagerConfig = {
 	panBy: ({ x, y }: { x: number; y: number }) => Promise<boolean>
 	onEdgesChange: (edges: WorkspaceEdge[]) => void
 	onSelectedEdgeChange?: (edgeId: string | null) => void
-	rainOffset?: number
+	railOffset?: number
 }
 
 type RenderBounds = {
@@ -431,7 +431,7 @@ export class WorkspaceConnectionManager {
 			}
 
 			// Find closest target handle
-			const closestHandle = this.findClosestHandle(rendererPos, fromHandle, 30)
+			const closestHandle = this.findClosestHandle(rendererPos, fromHandle, webUiSettings.menuConnectionSnapRadius)
 
 			const isValid = closestHandle ? this.isMenuConnectionValid(nodeId, closestHandle) : null
 
@@ -449,8 +449,8 @@ export class WorkspaceConnectionManager {
 			this.render()
 		}
 
-		const onMouseDown = (e: MouseEvent) => {
-			console.log('[CONNECT] onMouseDown in menu connection mode', {
+		const onMouseUp = (e: MouseEvent) => {
+			console.log('[CONNECT] onMouseUp in menu connection mode', {
 				toHandle: this.connectionInProgress?.toHandle,
 				isValid: this.connectionInProgress?.isValid,
 				target: e.target,
@@ -500,6 +500,14 @@ export class WorkspaceConnectionManager {
 			}
 		}
 
+		const onMouseDownCapture = (e: MouseEvent) => {
+			// While menu-connection mode is active, suppress target-node mousedown
+			// handlers so clicking to finish a connection cannot also start a drag,
+			// focus an editor, or otherwise attach the target UI to mouse movement.
+			e.preventDefault()
+			e.stopPropagation()
+		}
+
 		const onKeyDown = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') {
 				cleanup()
@@ -508,7 +516,8 @@ export class WorkspaceConnectionManager {
 
 		const cleanup = () => {
 			document.removeEventListener('mousemove', onMouseMove)
-			document.removeEventListener('mousedown', onMouseDown, true)
+			document.removeEventListener('mousedown', onMouseDownCapture, true)
+			document.removeEventListener('mouseup', onMouseUp, true)
 			document.removeEventListener('keydown', onKeyDown)
 			this.connectionInProgress = null
 			this.config.paneEl.style.cursor = ''
@@ -518,10 +527,56 @@ export class WorkspaceConnectionManager {
 
 		this.menuConnectionCleanup = cleanup
 
-		// Use capture for mousedown so we intercept before other handlers
+		// Use capture for mouseup so we intercept before other handlers
 		document.addEventListener('mousemove', onMouseMove)
-		document.addEventListener('mousedown', onMouseDown, true)
+		document.addEventListener('mousedown', onMouseDownCapture, true)
+		document.addEventListener('mouseup', onMouseUp, true)
 		document.addEventListener('keydown', onKeyDown)
+	}
+
+	private getMenuSnapPoint(nodeId: string, handle: Handle, pointer: { x: number; y: number }) {
+		const node = this.nodeLookup.get(nodeId)
+		const canvasNode = this.nodes.find((candidate) => candidate.nodeId === nodeId)
+
+		if (!node || !canvasNode) {
+			return {
+				x: (handle.x ?? 0),
+				y: (handle.y ?? 0),
+			}
+		}
+
+		const isLeftHandle = (handle.id === 'left') || handle.position === Position.Left
+		const railOffset = this.config.railOffset ?? 0
+		const railHeight = canvasNode.type === 'aiChatThread'
+			? (this.railHeights.get(nodeId) ?? canvasNode.dimensions.height)
+			: canvasNode.dimensions.height
+
+		const x = isLeftHandle
+			? node.internals.positionAbsolute.x - (canvasNode.type === 'aiChatThread' ? railOffset : 0)
+			: node.internals.positionAbsolute.x + canvasNode.dimensions.width
+
+		if (canvasNode.type === 'aiChatThread' && isLeftHandle) {
+			if (railHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+				return {
+					x,
+					y: node.internals.positionAbsolute.y + railHeight / 2,
+				}
+			}
+
+			const margin = railHeight * webUiThemeSettings.aiChatThreadRailEdgeMargin
+			const minY = node.internals.positionAbsolute.y + margin
+			const maxY = node.internals.positionAbsolute.y + railHeight - margin
+
+			return {
+				x,
+				y: Math.max(minY, Math.min(maxY, pointer.y)),
+			}
+		}
+
+		return {
+			x,
+			y: node.internals.positionAbsolute.y + canvasNode.dimensions.height / 2,
+		}
 	}
 
 	private findClosestHandle(
@@ -544,8 +599,7 @@ export class WorkspaceConnectionManager {
 					continue
 				}
 
-				const hx = (handle.x ?? 0) + node.internals.positionAbsolute.x + (handle.width ?? 0) / 2
-				const hy = (handle.y ?? 0) + node.internals.positionAbsolute.y + (handle.height ?? 0) / 2
+				const { x: hx, y: hy } = this.getMenuSnapPoint(nodeId, handle, position)
 
 				const dist = Math.sqrt((hx - position.x) ** 2 + (hy - position.y) ** 2)
 
@@ -852,12 +906,23 @@ export class WorkspaceConnectionManager {
 		}
 
 		if (this.connectionInProgress) {
+			const fromNode = this.nodes.find((node) => node.nodeId === this.connectionInProgress?.fromHandle?.nodeId)
+			if (fromNode) {
+				includeRect(fromNode.position.x, fromNode.position.y, fromNode.dimensions.width, fromNode.dimensions.height)
+			}
+
 			includeRect(this.connectionInProgress.from.x, this.connectionInProgress.from.y, 1, 1)
 
 			const transform = this.config.getTransform()
 			const to = this.connectionInProgress.toHandle
 				? { x: this.connectionInProgress.toHandle.x, y: this.connectionInProgress.toHandle.y }
 				: toRendererPoint({ x: this.connectionInProgress.to.x, y: this.connectionInProgress.to.y }, transform)
+
+			const toNodeId = this.connectionInProgress.toHandle?.nodeId ?? this.connectionInProgress.toNode?.id
+			const toNode = toNodeId ? this.nodes.find((node) => node.nodeId === toNodeId) : null
+			if (toNode) {
+				includeRect(toNode.position.x, toNode.position.y, toNode.dimensions.width, toNode.dimensions.height)
+			}
 
 			includeRect(to.x, to.y, 1, 1)
 		}
@@ -1050,23 +1115,31 @@ export class WorkspaceConnectionManager {
 				: toRendererPoint({ x: this.connectionInProgress.to.x, y: this.connectionInProgress.to.y }, transform)
 
 			const tempNodeId = '__workspace-temp-target'
-			const tempNode: NodeConfig = {
-				id: tempNodeId,
-				shape: 'rect',
-				x: to.x - offsetX,
-				y: to.y - offsetY,
-				width: 1,
-				height: 1,
-				className: 'workspace-edge-temp-node',
-				anchorOverrides: {
-					left: { x: to.x - offsetX, y: to.y - offsetY },
-					right: { x: to.x - offsetX, y: to.y - offsetY },
-					top: { x: to.x - offsetX, y: to.y - offsetY },
-					bottom: { x: to.x - offsetX, y: to.y - offsetY },
-					center: { x: to.x - offsetX, y: to.y - offsetY }
+			const snappedTargetNodeId = this.connectionInProgress.toHandle?.nodeId ?? this.connectionInProgress.toNode?.id ?? null
+			const snappedTargetNode = snappedTargetNodeId
+				? this.nodes.find((node) => node.nodeId === snappedTargetNodeId) ?? null
+				: null
+			const snappedTargetPosition = this.connectionInProgress.toHandle?.position as 'left' | 'right' | 'top' | 'bottom' | undefined
+
+			if (!snappedTargetNode || !snappedTargetPosition || !this.connectionInProgress.toHandle) {
+				const tempNode: NodeConfig = {
+					id: tempNodeId,
+					shape: 'rect',
+					x: to.x - offsetX,
+					y: to.y - offsetY,
+					width: 1,
+					height: 1,
+					className: 'workspace-edge-temp-node',
+					anchorOverrides: {
+						left: { x: to.x - offsetX, y: to.y - offsetY },
+						right: { x: to.x - offsetX, y: to.y - offsetY },
+						top: { x: to.x - offsetX, y: to.y - offsetY },
+						bottom: { x: to.x - offsetX, y: to.y - offsetY },
+						center: { x: to.x - offsetX, y: to.y - offsetY }
+					}
 				}
+				this.connector.addNode(tempNode)
 			}
-			this.connector.addNode(tempNode)
 
 			// When reconnecting, show the edge from the anchored end to the cursor
 			// When creating new connection, show dashed line from source to cursor
@@ -1095,18 +1168,26 @@ export class WorkspaceConnectionManager {
 				sourcePosition = this.connectionInProgress.fromHandle.position as 'left' | 'right'
 			}
 
-			// Use horizontal-bezier for in-progress edges:
-			// - No obstacle avoidance means no wrapping around intermediate/target nodes
-			// - Smooth S-curve from source center to cursor position
-			// - Committed edges use 'orthogonal' with proper routing after drop
 			const tempEdge: EdgeConfig = {
 				id: '__workspace-temp-edge',
 				source: { nodeId: sourceNodeId, position: sourcePosition },
-				target: { nodeId: tempNodeId, position: 'center' },
-				pathType: 'horizontal-bezier',
-				marker: isReconnecting ? 'arrowhead' : 'none',
-				markerSize: isReconnecting ? scaledMarkerSize : undefined,
-				markerOffset: { source: 0, target: 0 },
+				target: snappedTargetNode && snappedTargetPosition && this.connectionInProgress.toHandle
+					? {
+						nodeId: snappedTargetNode.nodeId,
+						position: snappedTargetPosition,
+						t: computeTFromPointerPosition(
+							this.connectionInProgress.toHandle.y,
+							snappedTargetNode.position.y,
+							snappedTargetNode.type === 'aiChatThread'
+								? (this.railHeights.get(snappedTargetNode.nodeId) ?? snappedTargetNode.dimensions.height)
+								: snappedTargetNode.dimensions.height,
+						),
+					}
+					: { nodeId: tempNodeId, position: 'center' },
+				pathType: webUiSettings.nodesConnectorLineCurve,
+				marker: 'arrowhead',
+				markerSize: scaledMarkerSize,
+				markerOffset: scaledMarkerOffset,
 				strokeWidth: scaledStrokeWidth,
 				lineStyle: isReconnecting ? 'solid' : 'dashed',
 				className: `workspace-edge ${isReconnecting ? '' : 'workspace-edge-temp'}`
