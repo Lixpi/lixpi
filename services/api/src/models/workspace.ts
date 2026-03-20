@@ -94,7 +94,7 @@ export default {
                 workspacesMetaItems.find((meta: WorkspaceMeta) => meta.workspaceId === workspace.workspaceId)
             )
             .filter((workspace: WorkspaceMeta | undefined): workspace is WorkspaceMeta => Boolean(workspace))
-            .sort((a: WorkspaceMeta, b: WorkspaceMeta) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+            .sort((a: WorkspaceMeta, b: WorkspaceMeta) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
     },
 
     createWorkspace: async ({
