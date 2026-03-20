@@ -61,22 +61,6 @@ $sidebarTextColor: #fff;
 $sidebarLogoFiler: invert(100%);
 $sidebarProjectsScrollContainerBackgroundColor: color.adjust($solarizedNightBlue, $lightness: 1%);
 
-// ProjectRow component
-$projectRowBackgroundColor: #444c52;
-// $projectRowBoxShadow: 0px 0px 10px 0 rgba(0, 0, 0, .05);
-$projectRowSeparatorLineFallbackColor: rgba(0, 0, 0, .05);
-$projectRowSeparatorLineGradientColor: linear-gradient(90deg, rgba(234,234,234,1) 0%, rgba(234,234,234,1) 55%, rgba(255,255,255,1) 100%);
-$projectRowActiveBackgroundColor: #222931;
-$projectRowHoverBackgroundColor: color.adjust($solarizedNightBlue, $lightness: 6%);
-$projectTitleColor: #f3f3f3;
-$projectRowWrapperBoxShadow: 0 0 7px 0 rgba(0,0,0,.02);
-$projectRowBorderRadius: 8px;
-
-$projectRowDropdownSubmenuColor: $solarizedOffWhite;
-$projectRowDropdownColor: $solarizedNightBlue;
-
-
-
 // CodeMirror ############################################################################################
 $aiResponseMessageIndicatorColor: color.adjust($solarizedSteelBlue, $lightness: 35%);
 $aiResponseMessageIndicatorAccentPointerColor: color.adjust($solarizedSteelBlue, $lightness: 30%);

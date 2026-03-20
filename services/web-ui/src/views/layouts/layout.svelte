@@ -5,8 +5,7 @@
 
     import { PaymentProcessingStatus } from '@lixpi/constants'
 
-    // import Sidebar from '$src/components/sidebar/Sidebar.svelte'
-    import Sidebar2 from '$src/components/sidebar/Sidebar2.svelte'
+    import Sidebar from '$src/components/Sidebar.svelte'
     import IntroPage from '$src/components/intro-page.svelte'
     import WorkspaceCanvas from '$src/components/WorkspaceCanvas.svelte'
     import ProjectDetails from '$src/components/project-details/project-details.svelte'
@@ -258,10 +257,7 @@
 			</div> -->
 			<!-- <Separator /> -->
 			<!-- <Nav {isSidebarCollapsed} routes={primaryRoutes} /> -->
-            <!-- <Sidebar /> -->
-
-
-            <Sidebar2 />
+            <Sidebar />
 			<!-- <Separator /> -->
 			<!-- <Nav {isSidebarCollapsed} routes={secondaryRoutes} /> -->
 		</Resizable.Pane>

@@ -135,9 +135,20 @@
     }
 
     // Optional: disable trigger hover background
-    &.no-trigger-hover .dots-dropdown-menu button {
-        &:before {
-            display: none;
+    &.no-trigger-hover .dots-dropdown-menu {
+        button {
+            &:before {
+                display: none;
+            }
+            &:hover, &:active {
+                background: none !important;
+            }
+        }
+        &.is-active button {
+            background: none !important;
+            &:before {
+                display: none;
+            }
         }
     }
 }
