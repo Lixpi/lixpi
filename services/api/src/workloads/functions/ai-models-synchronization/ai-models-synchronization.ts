@@ -11,6 +11,7 @@ import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import type {
     AiModel,
+    ImageSizeOption,
 } from '@lixpi/constants'
 
 import { getDynamoDbTableStageName } from '@lixpi/constants'
@@ -67,6 +68,8 @@ type ModelDefaults = Pick<
     AiModel,
     'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'supportsSystemPrompt' | 'modalities' | 'pricing' | 'color' | 'iconName'
 > & {
+    imagePromptMaxChars?: number
+    imageSizes?: ImageSizeOption[]
     // Not part of AiModel, used only for provider-grouped sorting
     starSortingPosition: number
     // Transform functions for model properties
@@ -87,6 +90,7 @@ export interface AiModelsSyncOptions {
     openaiApiKey?: string
     anthropicApiKey?: string
     googleApiKey?: string
+    stabilityApiKey?: string
 }
 
 export interface AiModelsSyncResult {
@@ -103,6 +107,12 @@ export interface AiModelsSyncResult {
         deletedModels: number
     }
     google: {
+        processed: number
+        newModels: number
+        updatedModels: number
+        deletedModels: number
+    }
+    stability: {
         processed: number
         newModels: number
         updatedModels: number
@@ -149,7 +159,7 @@ export class AiModelsSync {
     }
 
     // Blacklist rules per provider: exact, prefix, and contains (partial-name) patterns
-    private static readonly MODELS_BLACKLIST: { OpenAI: ProviderBlacklist; Anthropic: ProviderBlacklist; Google: ProviderBlacklist } = {
+    private static readonly MODELS_BLACKLIST: { OpenAI: ProviderBlacklist; Anthropic: ProviderBlacklist; Google: ProviderBlacklist; Stability: ProviderBlacklist } = {
         OpenAI: {
             // Exact matches (use for cases like 'gpt-4' to avoid excluding 'gpt-4o')
             exact: [
@@ -236,11 +246,16 @@ export class AiModelsSync {
                 'veo',
                 'lyria',
             ]
+        },
+        Stability: {
+            exact: [],
+            prefix: [],
+            contains: []
         }
     }
 
     // Default model capability/settings per provider.
-    private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults; Google: ProviderModelDefaults } = {
+    private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults; Google: ProviderModelDefaults; Stability: ProviderModelDefaults } = {
         // OpenAI model defaults sourced from offline docs provided in temp-openai-models-info/.
         // Only differences from fallback are specified; remaining fields inherit via mergeWithFallback.
         OpenAI: {
@@ -295,6 +310,12 @@ export class AiModelsSync {
                 // Provider UI defaults
                 color: '#56967c',
                 iconName: 'gptAvatarIcon',
+                imageSizes: [
+                    { value: '1024x1024', label: '1:1' },
+                    { value: '1536x1024', label: '3:2' },
+                    { value: '1024x1536', label: '2:3' },
+                    { value: 'auto', label: 'Auto' },
+                ],
                 // Base offset for sorting; used to group providers
                 starSortingPosition: 200,
                 transforms: {
@@ -426,6 +447,19 @@ export class AiModelsSync {
                 },
                 color: '#4285F4',
                 iconName: 'geminiIcon',
+                imageSizes: [
+                    { value: '1:1', label: '1:1' },
+                    { value: '3:2', label: '3:2' },
+                    { value: '2:3', label: '2:3' },
+                    { value: '16:9', label: '16:9' },
+                    { value: '9:16', label: '9:16' },
+                    { value: '4:3', label: '4:3' },
+                    { value: '3:4', label: '3:4' },
+                    { value: '4:5', label: '4:5' },
+                    { value: '5:4', label: '5:4' },
+                    { value: '21:9', label: '21:9' },
+                    { value: 'auto', label: 'Auto' },
+                ],
                 starSortingPosition: 150,
                 transforms: {
                     title: (modelId: string) => {
@@ -466,6 +500,68 @@ export class AiModelsSync {
                     }
                 }
             }
+        },
+        Stability: {
+            exact: {
+                'stability-ultra': {
+                    modalities: ['image_generation'],
+                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '8.00' } }
+                },
+                'sd3.5-large': {
+                    modalities: ['image_generation'],
+                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '6.50' } }
+                },
+            },
+            prefix: [],
+            contains: [],
+            fallback: {
+                imagePromptMaxChars: 10000,
+                contextWindow: 0,
+                maxCompletionSize: 0,
+                defaultTemperature: 0,
+                supportsSystemPrompt: false,
+                modalities: ['image_generation'],
+                pricing: {
+                    currency: 'USD',
+                    resaleMargin: '1',
+                    image: {
+                        measuringUnit: 'credits',
+                        pricePer: '1',
+                        prompt: '0.00',
+                        completion: '0.00'
+                    }
+                },
+                color: '#A855F7',
+                iconName: 'stabilityIcon',
+                imageSizes: [
+                    { value: '1:1', label: '1:1' },
+                    { value: '21:9', label: '21:9' },
+                    { value: '16:9', label: '16:9' },
+                    { value: '3:2', label: '3:2' },
+                    { value: '5:4', label: '5:4' },
+                    { value: '4:5', label: '4:5' },
+                    { value: '2:3', label: '2:3' },
+                    { value: '9:16', label: '9:16' },
+                    { value: '9:21', label: '9:21' },
+                ],
+                starSortingPosition: 300,
+                transforms: {
+                    title: (modelId: string) => {
+                        const names: Record<string, string> = {
+                            'stability-ultra': 'Stable Image Ultra',
+                            'sd3.5-large': 'SD 3.5 Large',
+                        }
+                        return names[modelId] || modelId
+                    },
+                    shortTitle: (modelId: string) => {
+                        const names: Record<string, string> = {
+                            'stability-ultra': 'Ultra',
+                            'sd3.5-large': 'SD 3.5 Large',
+                        }
+                        return names[modelId] || modelId
+                    }
+                }
+            }
         }
     }
 
@@ -486,11 +582,13 @@ export class AiModelsSync {
     private mergeWithFallback(partial: PartialDeep<ModelDefaults> | undefined, fallback: ModelDefaults): ModelDefaults {
         const p = partial || {}
         return {
+            imagePromptMaxChars: typeof p.imagePromptMaxChars === 'number' ? p.imagePromptMaxChars : fallback.imagePromptMaxChars,
             contextWindow: typeof p.contextWindow === 'number' ? p.contextWindow : fallback.contextWindow,
             maxCompletionSize: typeof p.maxCompletionSize === 'number' ? p.maxCompletionSize : fallback.maxCompletionSize,
             defaultTemperature: typeof p.defaultTemperature === 'number' ? p.defaultTemperature : fallback.defaultTemperature,
             supportsSystemPrompt: typeof p.supportsSystemPrompt === 'boolean' ? p.supportsSystemPrompt : fallback.supportsSystemPrompt,
             modalities: Array.isArray(p.modalities) ? p.modalities : fallback.modalities,
+            imageSizes: Array.isArray(p.imageSizes) ? p.imageSizes : fallback.imageSizes,
             pricing: this.mergePricingWithFallback(p.pricing as any, fallback.pricing),
             color: typeof (p as any).color === 'string' ? (p as any).color : fallback.color,
             iconName: typeof (p as any).iconName === 'string' ? (p as any).iconName : fallback.iconName,
@@ -710,6 +808,7 @@ export class AiModelsSync {
             title: openAIModel.id,
             shortTitle: openAIModel.id,
             modelVersion: openAIModel.id,
+            imagePromptMaxChars: modelDefaults.imagePromptMaxChars,
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
@@ -718,6 +817,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizes: modelDefaults.imageSizes,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -747,6 +847,7 @@ export class AiModelsSync {
             title: anthropicModel.display_name || anthropicModel.id,
             shortTitle: anthropicModel.display_name || anthropicModel.id,
             modelVersion: anthropicModel.id,
+            imagePromptMaxChars: modelDefaults.imagePromptMaxChars,
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
@@ -755,6 +856,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizes: modelDefaults.imageSizes,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -788,6 +890,7 @@ export class AiModelsSync {
             title: googleModel.displayName || googleModel.name,
             shortTitle: googleModel.displayName || googleModel.name,
             modelVersion: googleModel.name,
+            imagePromptMaxChars: modelDefaults.imagePromptMaxChars,
             contextWindow,
             maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
@@ -796,6 +899,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizes: modelDefaults.imageSizes,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1141,6 +1245,143 @@ export class AiModelsSync {
         }
     }
 
+    // Stability AI models (hardcoded — no list-models API available)
+    private getStabilityModels(): Array<{ id: string; displayName: string }> {
+        return [
+            { id: 'stability-ultra', displayName: 'Stable Image Ultra' },
+            { id: 'sd3.5-large', displayName: 'SD 3.5 Large' },
+        ]
+    }
+
+    // Map Stability model to our AiModel format
+    private mapStabilityModelToAiModel(model: { id: string; displayName: string }, sortingPosition: number): AiModel {
+        const modelDefaults = this.resolveModelDefaults('Stability', model.id)
+
+        const now = Date.now()
+
+        const aiModel: AiModel = {
+            provider: 'Stability',
+            model: model.id,
+            title: model.displayName,
+            shortTitle: model.displayName,
+            modelVersion: model.id,
+            imagePromptMaxChars: modelDefaults.imagePromptMaxChars,
+            contextWindow: modelDefaults.contextWindow,
+            maxCompletionSize: modelDefaults.maxCompletionSize,
+            defaultTemperature: modelDefaults.defaultTemperature,
+            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            color: modelDefaults.color,
+            iconName: modelDefaults.iconName,
+            sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
+            modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizes: modelDefaults.imageSizes,
+            pricing: modelDefaults.pricing,
+            createdAt: now,
+            updatedAt: now
+        }
+
+        // Apply transforms to model properties
+        if (modelDefaults.transforms) {
+            for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
+                if (transformFn) {
+                    (aiModel as any)[key] = transformFn(model.id)
+                }
+            }
+        }
+
+        return aiModel
+    }
+
+    // Synchronize Stability AI models with database
+    private async synchronizeStabilityModels() {
+        if (!this.aiModelsListTableName) {
+            throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
+        }
+
+        info('🔄 Starting Stability AI models synchronization')
+
+        try {
+            const stabilityModels = this.getStabilityModels()
+            info(`📡 Using ${stabilityModels.length} hardcoded Stability AI models`)
+
+            const mappedModels: AiModel[] = stabilityModels.map((model, index) =>
+                this.mapStabilityModelToAiModel(model, index + 1)
+            )
+
+            info(`🔧 Mapped ${mappedModels.length} Stability AI models to our format:`)
+            mappedModels.forEach((model, index) => {
+                info(`  ${index + 1}. ${model.model} - ${model.title}`)
+            })
+
+            const existingModelsResult = await this.dynamoDBService.queryItems({
+                tableName: this.aiModelsListTableName,
+                keyConditions: { provider: 'Stability' },
+                fetchAllItems: true,
+                origin: `Service::${this.serviceName}`
+            })
+
+            const existingModels = existingModelsResult.items
+            const existingModelIds: string[] = existingModels.map((model: any) => model.model)
+            const fetchedModelIds: string[] = mappedModels.map(model => model.model)
+
+            info(`Found ${existingModels.length} existing Stability AI models in database`)
+
+            const modelsToDelete = existingModels.filter((existingModel: any) =>
+                fetchedModelIds.indexOf(existingModel.model) === -1
+            )
+
+            const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
+            const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
+
+            info(`Processing ${newModels.length} new Stability AI models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+
+            if (modelsToDelete.length > 0) {
+                info(`🗑️ Deleting ${modelsToDelete.length} obsolete Stability AI models`)
+
+                for (const modelToDelete of modelsToDelete) {
+                    try {
+                        await this.dynamoDBService.deleteItems({
+                            tableName: this.aiModelsListTableName,
+                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            origin: `Service::${this.serviceName}`
+                        })
+                        info(`Deleted obsolete Stability AI model: ${(modelToDelete as any).model}`)
+                    } catch (error) {
+                        err(`Failed to delete Stability AI model ${(modelToDelete as any).model}:`, error)
+                        throw error
+                    }
+                }
+                info(`✅ Successfully deleted ${modelsToDelete.length} obsolete Stability AI models`)
+            }
+
+            if (newModels.length > 0) {
+                await this.dynamoDBService.batchWriteItems({
+                    tableName: this.aiModelsListTableName,
+                    items: newModels,
+                    origin: `Service::${this.serviceName}`
+                })
+                info(`Inserted ${newModels.length} new Stability AI models`)
+            }
+
+            if (modelsToUpdate.length > 0) {
+                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
+            }
+
+            info('✅ Stability AI models synchronization completed successfully')
+
+            return {
+                processed: mappedModels.length,
+                newModels: newModels.length,
+                updatedModels: modelsToUpdate.length,
+                deletedModels: modelsToDelete.length
+            }
+
+        } catch (error) {
+            err('❌ Stability AI models synchronization failed:', error)
+            throw error
+        }
+    }
+
     // Main synchronization method
     async synchronizeModels(): Promise<AiModelsSyncResult> {
         info(`🚀 Starting AI models synchronization - Service: ${this.serviceName}`)
@@ -1158,14 +1399,19 @@ export class AiModelsSync {
             const googleResult = await this.synchronizeGoogleModels()
             info(`Google synchronization completed: ${JSON.stringify(googleResult)}`)
 
+            // Synchronize Stability AI models
+            const stabilityResult = await this.synchronizeStabilityModels()
+            info(`Stability AI synchronization completed: ${JSON.stringify(stabilityResult)}`)
+
             const totalResult = {
                 openAI: openAIResult,
                 anthropic: anthropicResult,
                 google: googleResult,
-                totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed,
-                totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels,
-                totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels,
-                totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels
+                stability: stabilityResult,
+                totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed + stabilityResult.processed,
+                totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels + stabilityResult.newModels,
+                totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels + stabilityResult.updatedModels,
+                totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels + stabilityResult.deletedModels
             }
 
             info('✅ AI models synchronization completed successfully')

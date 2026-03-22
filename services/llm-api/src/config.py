@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
+    STABLE_DIFFUSION_API_KEY: Optional[str] = None
 
     # Circuit breaker settings
     LLM_TIMEOUT_SECONDS: int = 1200  # 20 minutes

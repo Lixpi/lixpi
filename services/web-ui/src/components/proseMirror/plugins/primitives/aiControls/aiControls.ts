@@ -5,6 +5,7 @@ import {
     gptAvatarIcon,
     claudeIcon,
     geminiIcon,
+    stabilityIcon,
     imageIcon
 } from '$src/svgIcons/index.ts'
 
@@ -52,6 +53,7 @@ const AI_AVATAR_ICONS: Record<string, string> = {
     gptAvatarIcon,
     claudeIcon,
     geminiIcon,
+    stabilityIcon,
 }
 
 function transformModelsToOptions(models: any[]): AiModelDropdownOption[] {
@@ -223,30 +225,11 @@ export function createGenericImageSizeDropdown(
     controls: ImageSizeControls,
     dropdownId: string
 ) {
-    const OPENAI_IMAGE_SIZES = [
-        { title: '1:1', value: '1024x1024' },
-        { title: '3:2', value: '1536x1024' },
-        { title: '2:3', value: '1024x1536' },
-        { title: 'Auto', value: 'auto' },
-    ]
-
-    const GOOGLE_IMAGE_SIZES = [
-        { title: '1:1', value: '1:1' },
-        { title: '3:2', value: '3:2' },
-        { title: '2:3', value: '2:3' },
-        { title: '16:9', value: '16:9' },
-        { title: '9:16', value: '9:16' },
-        { title: '4:3', value: '4:3' },
-        { title: '3:4', value: '3:4' },
-        { title: '4:5', value: '4:5' },
-        { title: '5:4', value: '5:4' },
-        { title: '21:9', value: '21:9' },
-        { title: 'Auto', value: 'auto' },
-    ]
-
     const getSizesForProvider = (provider: string) => {
-        if (provider === 'Google') return GOOGLE_IMAGE_SIZES
-        return OPENAI_IMAGE_SIZES
+        const models: any[] = aiModelsStore.getData()
+        const model = models.find((m: any) => m.provider === provider && m.imageSizes?.length)
+        const sizes = model?.imageSizes ?? [{ value: 'auto', label: 'Auto' }]
+        return sizes.map((s: any) => ({ title: s.label, value: s.value }))
     }
 
     let lastProvider = controls.getProvider?.() || ''

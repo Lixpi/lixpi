@@ -13,7 +13,7 @@ This script runs inside a Docker container and:
    - **NATS**: Auto-generates all required keys and passwords
    - **AWS SSO Configuration**: Optional SSO profile setup
    - **AWS Deployment Configuration**: Optional Route53, CloudWatch log retention, Container Insights
-   - **API Keys**: OpenAI, Anthropic, Stripe
+   - **API Keys**: OpenAI, Anthropic, Google, Stability AI, Stripe
 
 2. **Generates NATS keys** using `@nats-io/nkeys`:
    - `createAccount()` → `NATS_AUTH_NKEY_*` (seeds start with `SA`)

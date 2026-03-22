@@ -120,7 +120,7 @@ class UsageReporter:
 
             # TODO: Implement NATS-based reporting
             # For now, just log the usage report
-            logger.info(f"📊 Token Usage Report: {usage_report}")
+            logger.debug(f"Token Usage Report: {usage_report}")
 
             # Future implementation:
             # await self.nats_client.publish('usage.tokens.ai', usage_report)
@@ -186,7 +186,7 @@ class UsageReporter:
 
             # TODO: Implement NATS-based reporting
             # For now, just log the usage report
-            logger.info(f"🖼️ Image Usage Report: {usage_report}")
+            logger.debug(f"Image Usage Report: {usage_report}")
 
             # Future implementation:
             # await self.nats_client.publish('usage.images.ai', usage_report)

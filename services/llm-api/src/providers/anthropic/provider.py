@@ -12,7 +12,13 @@ from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt, format_user_message_with_hack
 from config import settings
 from utils.attachments import convert_attachments_for_provider, AttachmentFormat, resolve_image_urls
-from tools.image_generation import get_tool_for_provider, extract_tool_call, extract_reference_images
+from tools.image_generation import (
+    apply_image_prompt_limit_to_system_prompt,
+    build_image_prompt_rewrite_instruction,
+    extract_reference_images,
+    extract_tool_call,
+    get_tool_for_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +58,13 @@ class AnthropicProvider(BaseLLMProvider):
         """
         messages = state['messages']
         model_version = state['model_version']
-        max_tokens = state.get('max_completion_size', 4096)
         temperature = state.get('temperature', 0.7)
         workspace_id = state['workspace_id']
         ai_chat_thread_id = state['ai_chat_thread_id']
 
         # Inject generate_image tool when an image model is selected
         has_image_model = bool(state.get('image_model_version'))
+        max_tokens = state.get('max_completion_size', 4096)
 
         # Convert messages to Anthropic format (handles multimodal content)
         formatted_messages = []
@@ -74,6 +80,13 @@ class AnthropicProvider(BaseLLMProvider):
             if i == len(messages) - 1 and msg.get('role') == 'user' and isinstance(content, str):
                 content = format_user_message_with_hack(content, 'Anthropic')
 
+            if isinstance(content, list):
+                block_types = [b.get('type', '?') if isinstance(b, dict) else type(b).__name__ for b in content]
+                logger.debug(
+                    "[Anthropic:%s] msg[%d] role=%s multimodal blockTypes=%s",
+                    self.instance_key, i, msg.get('role'), block_types,
+                )
+
             formatted_messages.append({
                 'role': msg.get('role', 'user'),
                 'content': content
@@ -82,22 +95,35 @@ class AnthropicProvider(BaseLLMProvider):
         # Build tools array
         tools = []
         if has_image_model:
-            tools.append(get_tool_for_provider("Anthropic"))
-            logger.info("Injected generate_image function tool for image model routing")
+            tools.append(get_tool_for_provider(
+                "Anthropic",
+                state.get('image_model_meta_info'),
+                state.get('image_provider_name')
+            ))
+            logger.debug("Injected generate_image function tool for image model routing")
 
-        logger.info(f"Streaming from Anthropic model: {model_version}")
+        logger.debug(f"Streaming from Anthropic model: {model_version}")
         logger.debug(f"Messages count: {len(formatted_messages)}")
 
         try:
             # Publish stream start event
             await self._publish_stream_start(workspace_id, ai_chat_thread_id)
 
+            # Build system prompt, appending image prompt char limit when applicable
+            system_prompt = get_system_prompt(include_image_generation=has_image_model)
+            if has_image_model:
+                system_prompt = apply_image_prompt_limit_to_system_prompt(
+                    system_prompt,
+                    state.get('image_model_meta_info'),
+                    state.get('image_provider_name')
+                )
+
             # Build stream kwargs
             stream_kwargs = {
                 'model': model_version,
                 'messages': formatted_messages,
                 'max_tokens': max_tokens,
-                'system': get_system_prompt(include_image_generation=has_image_model),
+                'system': system_prompt,
             }
             if tools:
                 stream_kwargs['tools'] = tools
@@ -124,7 +150,12 @@ class AnthropicProvider(BaseLLMProvider):
                     if tool_call:
                         state['generated_image_prompt'] = tool_call.prompt
                         state['reference_images'] = extract_reference_images(formatted_messages)
-                        logger.info(f"Tool call detected: generate_image, prompt: {tool_call.prompt[:100]}...")
+                        logger.info(
+                            "[Anthropic:%s] Tool call detected: generate_image promptLen=%d refImages=%d prompt=%s",
+                            self.instance_key, len(tool_call.prompt),
+                            len(state['reference_images']),
+                            tool_call.prompt[:120],
+                        )
 
                 # Extract usage information
                 if final_message.usage:
@@ -139,14 +170,51 @@ class AnthropicProvider(BaseLLMProvider):
                         'totalTokens': usage.input_tokens + usage.output_tokens
                     }
                     state['ai_vendor_request_id'] = final_message.id
-                    logger.info(f"Received usage data: {state['usage']}")
+                    logger.debug(f"Received usage data: {state['usage']}")
+
+                if has_image_model and not state.get('generated_image_prompt'):
+                    block_types = [getattr(block, 'type', None) for block in (final_message.content or [])]
+                    logger.warning(
+                        "Anthropic did not emit generate_image tool call for %s. Final content block types: %s",
+                        self.instance_key,
+                        block_types,
+                    )
 
             # Publish stream end
             await self._publish_stream_end(workspace_id, ai_chat_thread_id)
-            logger.info(f"✅ Anthropic streaming completed for {self.instance_key}")
+            logger.debug(f"Anthropic streaming completed for {self.instance_key}")
 
         except Exception as e:
             logger.error(f"Anthropic streaming failed: [{type(e).__name__}] {e}", exc_info=True)
             state['error'] = str(e)
 
         return state
+
+    async def _rewrite_image_prompt_to_fit_limit(
+        self,
+        state: ProviderState,
+        prompt: str,
+        max_chars: int
+    ) -> str | None:
+        response = await self.client.messages.create(
+            model=state['model_version'],
+            messages=[{
+                'role': 'user',
+                'content': f"Original image prompt:\n{prompt}"
+            }],
+            max_tokens=max(256, ((max_chars + 3) // 4) + 128),
+            temperature=0.2,
+            system=build_image_prompt_rewrite_instruction(max_chars),
+        )
+
+        text_parts = []
+        for block in response.content or []:
+            if getattr(block, 'type', None) != 'text':
+                continue
+
+            text_value = getattr(block, 'text', None)
+            if isinstance(text_value, str) and text_value.strip():
+                text_parts.append(text_value.strip())
+
+        rewritten_prompt = '\n'.join(text_parts).strip()
+        return rewritten_prompt or None

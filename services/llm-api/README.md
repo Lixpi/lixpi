@@ -1,16 +1,16 @@
 # LLM API Service
 
-A Python-based microservice that handles AI model interactions via NATS messaging. This service orchestrates conversations with OpenAI, Anthropic, and Google models using a LangGraph-based state machine workflow, providing real-time token streaming back to clients.
+A Python-based microservice that handles AI model interactions via NATS messaging. This service orchestrates conversations with OpenAI, Anthropic, Google, and Stability AI models using a LangGraph-based state machine workflow, providing real-time token streaming back to clients.
 
 ## Core Concepts
 
-**Provider** — An abstraction over an AI vendor's API. Each provider implements a LangGraph workflow with four stages: validate → stream → calculate_usage → cleanup. Currently supports OpenAI (Responses API), Anthropic (Messages API), and Google (Gen AI SDK).
+**Provider** — An abstraction over an AI vendor's API. Each provider implements a LangGraph workflow with four stages: validate → stream → calculate_usage → cleanup. Currently supports OpenAI (Responses API), Anthropic (Messages API), Google (Gen AI SDK), and Stability AI (v2beta REST API).
 
 **Provider Registry** — Manages provider instance lifecycle. Creates instances keyed by `{workspaceId}:{aiChatThreadId}` and removes them after request completion. Prevents memory leaks by cleaning up after each conversation turn.
 
 **Instance Key** — A unique identifier for a conversation session: `{workspaceId}:{aiChatThreadId}`. Used to route stop requests to the correct active stream.
 
-**Provider-Agnostic Design** — No provider-specific session IDs are used. Every request includes the full conversation history, allowing users to switch between OpenAI, Anthropic, and Google mid-conversation.
+**Provider-Agnostic Design** — No provider-specific session IDs are used. Every request includes the full conversation history, allowing users to switch between OpenAI, Anthropic, and Google mid-conversation. Stability AI operates as an image-only provider — it receives an optimized prompt from a text model's tool call rather than full conversation history.
 
 **NATS Object Store Reference** — A URL scheme (`nats-obj://bucket/key`) for referencing images stored in NATS Object Store. The service resolves these references to base64 data URLs before sending to providers.
 
@@ -41,6 +41,7 @@ flowchart TB
                 OpenAI[OpenAIProvider<br/>Responses API]
                 Anthropic[AnthropicProvider<br/>Messages API]
                 Google[GoogleProvider<br/>Gen AI SDK]
+                Stability[StabilityProvider<br/>v2beta REST API]
             end
         end
 
@@ -54,6 +55,7 @@ flowchart TB
         OpenAIAPI[OpenAI API]
         AnthropicAPI[Anthropic API]
         GoogleAPI[Google Gen AI API]
+        StabilityAPI[Stability AI API]
     end
 
     subgraph Clients["Upstream Services"]
@@ -68,6 +70,7 @@ flowchart TB
     ChatStop --> Registry
     Registry --> OpenAI
     Registry --> Anthropic
+    Registry --> Stability
     OpenAI --> Attachments
     Anthropic --> Attachments
     Google --> Attachments
@@ -78,9 +81,11 @@ flowchart TB
     OpenAI -->|Stream| OpenAIAPI
     Anthropic -->|Stream| AnthropicAPI
     Google -->|Stream| GoogleAPI
+    Stability -->|REST| StabilityAPI
     OpenAI -->|Publish chunks| Subjects
     Anthropic -->|Publish chunks| Subjects
     Google -->|Publish chunks| Subjects
+    Stability -->|Publish image| Subjects
     Subjects -->|ai.interaction.chat.receiveMessage.*| WebUI
     FastAPI --> NATSSvc
     NATSSvc --> Subjects
@@ -227,7 +232,7 @@ stateDiagram-v2
 | `event_meta` | `dict` | User/org metadata for billing |
 | `workspace_id` | `str` | Workspace identifier |
 | `ai_chat_thread_id` | `str` | Thread identifier |
-| `provider` | `str` | "OpenAI", "Anthropic", or "Google" |
+| `provider` | `str` | "OpenAI", "Anthropic", "Google", or "Stability" |
 | `model_version` | `str` | Specific model (e.g., "gpt-4.1") |
 | `stream_active` | `bool` | Whether streaming is in progress |
 | `usage` | `dict` | Token counts after completion |
@@ -254,6 +259,16 @@ Key files:
 - `tools/image_router.py` — Provider-agnostic image generation executor
 
 This architecture is fully provider-agnostic: any text model can route to any image model.
+
+### Stability AI Reference Images
+
+When Stability AI is used as the image model and the conversation contains reference images, the provider handles them with style-based endpoints:
+
+- **Single reference image** → `control/style` endpoint with `fidelity=0.7`
+- **Two reference images** → `control/style-transfer` endpoint — the larger image becomes `init_image`, the smaller becomes `style_image`
+- **No reference images** → Standard `generate/ultra` or `generate/sd3` text-to-image endpoints
+
+Reference images are extracted from all messages in the conversation history, sorted by size to assign roles.
 
 ## Image Handling
 
@@ -421,8 +436,10 @@ src/
 │   │   └── provider.py             # OpenAI Responses API
 │   ├── anthropic/
 │   │   └── provider.py             # Anthropic Messages API
-│   └── google/
-│       └── provider.py             # Google Gen AI SDK
+│   ├── google/
+│   │   └── provider.py             # Google Gen AI SDK
+│   └── stability/
+│       └── provider.py             # Stability AI v2beta REST API
 ├── services/
 │   └── usage_reporter.py           # Cost tracking
 ├── utils/
@@ -442,6 +459,7 @@ src/
 | `OPENAI_API_KEY` | No | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | No | — | Anthropic API key |
 | `GOOGLE_API_KEY` | No | — | Google API key |
+| `STABLE_DIFFUSION_API_KEY` | No | — | Stability AI API key |
 | `LLM_TIMEOUT_SECONDS` | No | 1200 | Circuit breaker timeout |
 | `LOG_LEVEL` | No | INFO | Logging level |
 
