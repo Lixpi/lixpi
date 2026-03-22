@@ -14,7 +14,13 @@ from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt
 from config import settings
 from utils.attachments import convert_attachments_for_provider, AttachmentFormat, resolve_image_urls
-from tools.image_generation import get_tool_for_provider, extract_tool_call, extract_reference_images
+from tools.image_generation import (
+    apply_image_prompt_limit_to_system_prompt,
+    build_image_prompt_rewrite_instruction,
+    extract_reference_images,
+    extract_tool_call,
+    get_tool_for_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +61,6 @@ class OpenAIProvider(BaseLLMProvider):
         """
         messages = state['messages']
         model_version = state['model_version']
-        max_tokens = state.get('max_completion_size')
         temperature = state.get('temperature', 0.7)
         workspace_id = state['workspace_id']
         ai_chat_thread_id = state['ai_chat_thread_id']
@@ -66,38 +71,59 @@ class OpenAIProvider(BaseLLMProvider):
 
         # Check if an image model is selected for dual-model routing
         has_image_model = bool(state.get('image_model_version'))
+        inject_tool = has_image_model and not enable_image_generation
+        max_tokens = state.get('max_completion_size')
 
         # Prepare input array from messages with attachment conversion
         input_messages = []
-        for msg in messages:
+        for msg_idx, msg in enumerate(messages):
             content = msg.get('content', '')
             # First resolve any NATS object store references to base64
             content = await resolve_image_urls(content, self.nats_client)
             # Then convert attachments to OpenAI format (validates and normalizes)
             content = convert_attachments_for_provider(content, AttachmentFormat.OPENAI)
+
+            if isinstance(content, list):
+                block_types = [b.get('type', '?') if isinstance(b, dict) else type(b).__name__ for b in content]
+                logger.debug(
+                    "[OpenAI:%s] msg[%d] role=%s multimodal blockTypes=%s",
+                    self.instance_key, msg_idx, msg.get('role'), block_types,
+                )
+
             input_messages.append({
                 'role': msg.get('role', 'user'),
                 'content': content
             })
 
-        # Extract system prompt as instructions (if supported)
+        # Extract system prompt as instructions (if supported),
+        # appending image prompt char limit when applicable
         instructions = get_system_prompt(include_image_generation=has_image_model) if supports_system_prompt else None
+        if has_image_model and instructions:
+            instructions = apply_image_prompt_limit_to_system_prompt(
+                instructions,
+                state.get('image_model_meta_info'),
+                state.get('image_provider_name')
+            )
 
         # Build tools array for image generation
         tools = self._build_image_generation_tools(enable_image_generation, image_size)
 
         # Inject generate_image function tool when an image model is selected
         # (this is the text model path — the tool call will be routed to the image model)
-        if has_image_model and not enable_image_generation:
-            generate_image_tool = get_tool_for_provider("OpenAI")
+        if inject_tool:
+            generate_image_tool = get_tool_for_provider(
+                "OpenAI",
+                state.get('image_model_meta_info'),
+                state.get('image_provider_name')
+            )
             tools = tools or []
             tools.append(generate_image_tool)
-            logger.info(f"Injected generate_image function tool for image model routing")
+            logger.debug(f"Injected generate_image function tool for image model routing")
 
-        logger.info(f"Streaming from OpenAI Responses API with model: {model_version}")
+        logger.debug(f"Streaming from OpenAI Responses API with model: {model_version}")
         logger.debug(f"Input messages count: {len(input_messages)}")
         if enable_image_generation:
-            logger.info(f"Image generation enabled with size: {image_size}")
+            logger.debug(f"Image generation enabled with size: {image_size}")
 
         try:
             # Skip START_STREAM when called as image model (via ImageRouter)
@@ -115,7 +141,7 @@ class OpenAIProvider(BaseLLMProvider):
             # Publish stream end
             if not enable_image_generation:
                 await self._publish_stream_end(workspace_id, ai_chat_thread_id)
-            logger.info(f"✅ OpenAI streaming completed for {self.instance_key}")
+            logger.debug(f"OpenAI streaming completed for {self.instance_key}")
 
         except Exception as e:
             logger.error(f"OpenAI streaming failed: [{type(e).__name__}] {e}", exc_info=True)
@@ -259,6 +285,48 @@ class OpenAIProvider(BaseLLMProvider):
             logger.warning(f"Failed to convert data URL to file: {e}")
             return None
 
+    @staticmethod
+    def _extract_response_text(response: Any) -> str:
+        output_text = getattr(response, 'output_text', None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
+
+        text_parts: List[str] = []
+        for item in getattr(response, 'output', []) or []:
+            if getattr(item, 'type', None) != 'message':
+                continue
+
+            for content_item in getattr(item, 'content', []) or []:
+                content_type = getattr(content_item, 'type', None)
+                if content_type not in ('output_text', 'text'):
+                    continue
+
+                text_value = getattr(content_item, 'text', None)
+                if isinstance(text_value, str) and text_value.strip():
+                    text_parts.append(text_value.strip())
+
+        return '\n'.join(text_parts).strip()
+
+    async def _rewrite_image_prompt_to_fit_limit(
+        self,
+        state: ProviderState,
+        prompt: str,
+        max_chars: int
+    ) -> Optional[str]:
+        response = await self.client.responses.create(
+            model=state['model_version'],
+            input=[{
+                'role': 'user',
+                'content': f"Original image prompt:\n{prompt}"
+            }],
+            instructions=build_image_prompt_rewrite_instruction(max_chars),
+            temperature=0.2,
+            max_output_tokens=max(256, ((max_chars + 3) // 4) + 128),
+            store=False,
+        )
+        rewritten_prompt = self._extract_response_text(response)
+        return rewritten_prompt or None
+
     async def _generate_via_responses_api(
         self,
         state: ProviderState,
@@ -346,7 +414,19 @@ class OpenAIProvider(BaseLLMProvider):
                         if tool_call:
                             state['generated_image_prompt'] = tool_call.prompt
                             state['reference_images'] = extract_reference_images(input_messages)
-                            logger.info(f"Tool call detected: generate_image, prompt: {tool_call.prompt[:100]}...")
+                            logger.info(
+                                "[OpenAI:%s] Tool call detected: generate_image promptLen=%d refImages=%d prompt=%s",
+                                self.instance_key, len(tool_call.prompt),
+                                len(state['reference_images']),
+                                tool_call.prompt[:120],
+                            )
+                        else:
+                            output_types = [getattr(item, 'type', None) for item in (response.output or [])]
+                            logger.warning(
+                                "OpenAI did not emit generate_image tool call for %s. Response output types: %s",
+                                self.instance_key,
+                                output_types,
+                            )
 
                     # Check for completed image generation in output (native DALL-E path)
                     await self._handle_image_generation_output(
@@ -368,7 +448,7 @@ class OpenAIProvider(BaseLLMProvider):
                             'completionReasoningTokens': getattr(usage, 'output_tokens_reasoning', 0) if hasattr(usage, 'output_tokens_reasoning') else 0,
                             'totalTokens': usage.input_tokens + usage.output_tokens
                         }
-                        logger.info(f"Received usage data: {state['usage']}")
+                        logger.debug(f"Received usage data: {state['usage']}")
 
                 # Handle failure event (structured errors)
                 case 'response.failed':
@@ -463,7 +543,7 @@ class OpenAIProvider(BaseLLMProvider):
                         result,
                         response.id,
                         revised_prompt,
-                        image_model_id=model_version
+                        image_model_id=state['model_version']
                     )
 
         if images_generated > 0:

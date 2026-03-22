@@ -1,11 +1,12 @@
 """
 Base provider abstraction using LangGraph for LLM interactions.
-Defines the common workflow: validate → stream → calculate_usage → cleanup
+Defines the common workflow: validate → stream → validate_image_prompt → image/calculate_usage → cleanup
 """
 
 import asyncio
 import base64
 import logging
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, Any, Optional, AsyncIterator, TypedDict
@@ -71,6 +72,7 @@ class ProviderState(TypedDict, total=False):
         - image_provider_name: Image model provider name
         - generated_image_prompt: Prompt extracted from text model's tool call
         - reference_images: Reference images extracted from tool call
+        - image_prompt_retry_count: Number of prompt rewrite retries attempted
     """
     messages: list
     ai_model_meta_info: Dict[str, Any]
@@ -99,6 +101,7 @@ class ProviderState(TypedDict, total=False):
     image_provider_name: Optional[str]
     generated_image_prompt: Optional[str]
     reference_images: Optional[list]
+    image_prompt_retry_count: Optional[int]
 
 
 class BaseLLMProvider(ABC):
@@ -111,6 +114,21 @@ class BaseLLMProvider(ABC):
     _COLLAPSIBLE_CLOSE_TAG = '</image_prompt>'
     # Buffer size large enough to hold a partial tag
     _TAG_BUFFER_SIZE = len('</image_prompt>')
+    _GRAPH_STATE_KEYS = (
+        'provider',
+        'model_version',
+        'image_provider_name',
+        'image_model_version',
+        'enable_image_generation',
+        'image_size',
+        'stream_active',
+        'error',
+        'error_code',
+        'error_type',
+        'response_id',
+        'ai_vendor_request_id',
+        'image_prompt_retry_count',
+    )
 
     def __init__(
         self,
@@ -138,17 +156,18 @@ class BaseLLMProvider(ABC):
 
         Workflow:
             validate_request → stream_tokens → [conditional]
-                → if generated_image_prompt: execute_image_generation → calculate_usage → cleanup → END
+                → if generated_image_prompt: validate_image_prompt → execute_image_generation → calculate_usage → cleanup → END
                 → else: calculate_usage → cleanup → END
         """
         workflow = StateGraph(ProviderState)
 
         # Add nodes
-        workflow.add_node("validate_request", self._validate_request)
-        workflow.add_node("stream_tokens", self._stream_tokens)
-        workflow.add_node("execute_image_generation", self._execute_image_generation)
-        workflow.add_node("calculate_usage", self._calculate_usage)
-        workflow.add_node("cleanup", self._cleanup)
+        workflow.add_node("validate_request", self._wrap_graph_node("validate_request", self._validate_request))
+        workflow.add_node("stream_tokens", self._wrap_graph_node("stream_tokens", self._stream_tokens))
+        workflow.add_node("validate_image_prompt", self._wrap_graph_node("validate_image_prompt", self._validate_image_prompt))
+        workflow.add_node("execute_image_generation", self._wrap_graph_node("execute_image_generation", self._execute_image_generation))
+        workflow.add_node("calculate_usage", self._wrap_graph_node("calculate_usage", self._calculate_usage))
+        workflow.add_node("cleanup", self._wrap_graph_node("cleanup", self._cleanup))
 
         # Add edges
         workflow.set_entry_point("validate_request")
@@ -157,6 +176,15 @@ class BaseLLMProvider(ABC):
         # Conditional edge: route to image generation if text model made a tool call
         workflow.add_conditional_edges(
             "stream_tokens",
+            self._should_generate_image,
+            {
+                "generate_image": "validate_image_prompt",
+                "skip": "calculate_usage"
+            }
+        )
+
+        workflow.add_conditional_edges(
+            "validate_image_prompt",
             self._should_generate_image,
             {
                 "generate_image": "execute_image_generation",
@@ -170,18 +198,153 @@ class BaseLLMProvider(ABC):
 
         return workflow
 
+    def _summarize_graph_state(self, state: Optional[ProviderState]) -> Dict[str, Any]:
+        if not state:
+            return {}
+
+        summary: Dict[str, Any] = {key: state.get(key) for key in self._GRAPH_STATE_KEYS}
+        messages = state.get('messages') or []
+        generated_image_prompt = state.get('generated_image_prompt') or ''
+        reference_images = state.get('reference_images') or []
+        usage = state.get('usage') or {}
+        image_usage = state.get('image_usage') or {}
+
+        summary.update({
+            'messages_count': len(messages),
+            'last_message_role': messages[-1].get('role') if messages and isinstance(messages[-1], dict) else None,
+            'has_generated_image_prompt': bool(generated_image_prompt),
+            'generated_image_prompt_length': len(generated_image_prompt),
+            'reference_images_count': len(reference_images),
+            'usage_total_tokens': usage.get('totalTokens'),
+            'usage_completion_tokens': usage.get('completionTokens'),
+            'image_usage_generated_count': image_usage.get('generatedCount'),
+            'image_usage_size': image_usage.get('size'),
+        })
+        return summary
+
     @staticmethod
-    def _should_generate_image(state: ProviderState) -> str:
-        if state.get('generated_image_prompt'):
-            return "generate_image"
-        return "skip"
+    def _diff_graph_state(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        diff: Dict[str, Dict[str, Any]] = {}
+        for key in sorted(set(before) | set(after)):
+            before_value = before.get(key)
+            after_value = after.get(key)
+            if before_value != after_value:
+                diff[key] = {
+                    'before': before_value,
+                    'after': after_value,
+                }
+        return diff
+
+    def _wrap_graph_node(self, node_name: str, handler):
+        async def wrapped(state: ProviderState) -> ProviderState:
+            before_summary = self._summarize_graph_state(state)
+            started_at = time.perf_counter()
+            logger.debug(
+                "[LangGraph:%s] Enter node=%s state=%s",
+                self.instance_key, node_name, before_summary,
+            )
+
+            try:
+                result = await handler(state)
+            except Exception:
+                elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+                logger.exception(
+                    "[LangGraph:%s] Node failed node=%s durationMs=%s",
+                    self.instance_key, node_name, elapsed_ms,
+                )
+                raise
+
+            after_summary = self._summarize_graph_state(result)
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            diff = self._diff_graph_state(before_summary, after_summary)
+            if diff:
+                logger.info(
+                    "[LangGraph:%s] node=%s durationMs=%s diff=%s",
+                    self.instance_key, node_name, elapsed_ms, diff,
+                )
+            else:
+                logger.debug(
+                    "[LangGraph:%s] node=%s durationMs=%s (no state changes)",
+                    self.instance_key, node_name, elapsed_ms,
+                )
+            return result
+
+        return wrapped
+
+    def _should_generate_image(self, state: ProviderState) -> str:
+        generated_image_prompt = state.get('generated_image_prompt') or ''
+        route = "generate_image" if generated_image_prompt else "skip"
+        logger.debug(
+            "[LangGraph:%s] Route route=%s promptLen=%d imageProvider=%s error=%s",
+            self.instance_key, route, len(generated_image_prompt),
+            state.get('image_provider_name'), state.get('error'),
+        )
+        return route
 
     async def _execute_image_generation(self, state: ProviderState) -> ProviderState:
         from tools.image_router import ImageRouter
 
-        logger.info(f"Executing image generation for {self.instance_key}")
         router = ImageRouter()
         return await router.execute(state, self.nats_client, self.usage_reporter)
+
+    async def _validate_image_prompt(self, state: ProviderState) -> ProviderState:
+        from tools.image_generation import get_image_prompt_max_chars, validate_image_prompt
+
+        prompt = state.get('generated_image_prompt')
+        if not prompt:
+            return state
+
+        image_model_meta_info = state.get('image_model_meta_info')
+        image_provider_name = state.get('image_provider_name')
+        max_chars = get_image_prompt_max_chars(image_model_meta_info, image_provider_name)
+        if not max_chars:
+            return state
+
+        validation_error = validate_image_prompt(prompt, image_model_meta_info, image_provider_name)
+        if not validation_error:
+            return state
+
+        retry_count = state.get('image_prompt_retry_count', 0) or 0
+        logger.warning(
+            "Image prompt exceeded selected image model limit for %s: %s",
+            self.instance_key,
+            validation_error
+        )
+
+        if retry_count < 1:
+            try:
+                rewritten_prompt = await self._rewrite_image_prompt_to_fit_limit(state, prompt, max_chars)
+            except Exception as e:
+                logger.error(f"Image prompt rewrite failed for {self.instance_key}: {e}", exc_info=True)
+                rewritten_prompt = None
+
+            state['image_prompt_retry_count'] = retry_count + 1
+
+            if rewritten_prompt:
+                rewritten_prompt = rewritten_prompt.strip()
+                state['generated_image_prompt'] = rewritten_prompt
+
+                validation_error = validate_image_prompt(
+                    rewritten_prompt,
+                    image_model_meta_info,
+                    image_provider_name
+                )
+                if not validation_error:
+                    logger.info(
+                        "Image prompt rewritten under limit for %s after %s retry",
+                        self.instance_key,
+                        state['image_prompt_retry_count']
+                    )
+                    return state
+
+        state['generated_image_prompt'] = None
+        state['error'] = validation_error
+        await self._publish_error(
+            state['workspace_id'],
+            state['ai_chat_thread_id'],
+            validation_error
+        )
+        return state
 
     async def process(self, request_data: Dict[str, Any]) -> None:
         """
@@ -220,12 +383,25 @@ class BaseLLMProvider(ABC):
                 'image_provider_name': request_data.get('imageModelMetaInfo', {}).get('provider') if request_data.get('imageModelMetaInfo') else None,
                 'generated_image_prompt': None,
                 'reference_images': None,
+                'image_prompt_retry_count': 0,
             }
 
+            logger.debug(
+                "[LangGraph:%s] Starting workflow state=%s",
+                self.instance_key,
+                self._summarize_graph_state(state),
+            )
+
             # Run workflow with timeout (circuit breaker)
-            await asyncio.wait_for(
+            final_state = await asyncio.wait_for(
                 self.app.ainvoke(state),
                 timeout=settings.LLM_TIMEOUT_SECONDS
+            )
+
+            logger.debug(
+                "[LangGraph:%s] Workflow completed finalState=%s",
+                self.instance_key,
+                self._summarize_graph_state(final_state),
             )
 
         except asyncio.TimeoutError:
@@ -249,7 +425,7 @@ class BaseLLMProvider(ABC):
 
     async def stop(self) -> None:
         """Stop the current streaming operation."""
-        logger.info(f"Stopping stream for instance: {self.instance_key}")
+        logger.debug(f"Stopping stream for instance: {self.instance_key}")
         self.should_stop = True
 
         if self.stream_task and not self.stream_task.done():
@@ -257,7 +433,7 @@ class BaseLLMProvider(ABC):
             try:
                 await self.stream_task
             except asyncio.CancelledError:
-                logger.info(f"Stream task cancelled for {self.instance_key}")
+                logger.debug(f"Stream task cancelled for {self.instance_key}")
 
     # Workflow nodes
 
@@ -271,7 +447,7 @@ class BaseLLMProvider(ABC):
         Returns:
             Updated state
         """
-        logger.info(f"Validating request for {self.instance_key}")
+        logger.debug(f"Validating request for {self.instance_key}")
 
         # Validate required fields
         if not state.get('model_version'):
@@ -286,7 +462,7 @@ class BaseLLMProvider(ABC):
         if not state.get('ai_chat_thread_id'):
             raise ValueError("ai_chat_thread_id is required")
 
-        logger.info(f"✅ Request validation passed for {self.instance_key}")
+        logger.debug(f"Request validation passed for {self.instance_key}")
         return state
 
     async def _stream_tokens(self, state: ProviderState) -> ProviderState:
@@ -334,7 +510,7 @@ class BaseLLMProvider(ABC):
             Updated state
         """
         if state.get('error'):
-            logger.info("Skipping usage calculation due to error")
+            logger.debug("Skipping usage calculation due to error")
             return state
 
         usage = state.get('usage', {})
@@ -382,7 +558,7 @@ class BaseLLMProvider(ABC):
         Returns:
             Updated state
         """
-        logger.info(f"Cleaning up instance: {self.instance_key}")
+        logger.debug(f"Cleaning up instance: {self.instance_key}")
         self.should_stop = False
         return state
 
@@ -596,7 +772,7 @@ class BaseLLMProvider(ABC):
 
                 if response.status_code == 200:
                     result = response.json()
-                    logger.info(f"Image uploaded: {result.get('fileId')} (duplicate: {result.get('isDuplicate', False)})")
+                    logger.debug(f"Image uploaded: {result.get('fileId')} (duplicate: {result.get('isDuplicate', False)})")
                     return result
                 else:
                     logger.error(f"Image upload failed: {response.status_code} - {response.text}")
@@ -624,7 +800,7 @@ class BaseLLMProvider(ABC):
         """
         if not image_base64:
             # Empty image means generation just started, send placeholder
-            logger.info(f"Publishing IMAGE_PARTIAL event (start placeholder): partialIndex={partial_index}")
+            logger.debug(f"Publishing IMAGE_PARTIAL event (start placeholder): partialIndex={partial_index}")
             self.nats_client.publish(
                 f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
                 {
@@ -647,7 +823,7 @@ class BaseLLMProvider(ABC):
             logger.warning(f"Failed to upload partial image {partial_index}, skipping")
             return
 
-        logger.info(f"Publishing IMAGE_PARTIAL event: partialIndex={partial_index}, url={upload_result['url']}")
+        logger.debug(f"Publishing IMAGE_PARTIAL event: partialIndex={partial_index}, url={upload_result['url']}")
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
@@ -689,7 +865,7 @@ class BaseLLMProvider(ABC):
             logger.error("Failed to upload completed image")
             return
 
-        logger.info(f"Publishing IMAGE_COMPLETE event: url={upload_result['url']}, responseId={response_id}")
+        logger.debug(f"Publishing IMAGE_COMPLETE event: url={upload_result['url']}, responseId={response_id}")
         self.nats_client.publish(
             f"ai.interaction.chat.receiveMessage.{workspace_id}.{ai_chat_thread_id}",
             {
@@ -758,6 +934,16 @@ class BaseLLMProvider(ABC):
             Updated state
         """
         pass
+
+    async def _rewrite_image_prompt_to_fit_limit(
+        self,
+        state: ProviderState,
+        prompt: str,
+        max_chars: int
+    ) -> Optional[str]:
+        raise NotImplementedError(
+            f"{self.get_provider_name()} provider does not implement image prompt rewriting"
+        )
 
     @abstractmethod
     def get_provider_name(self) -> str:

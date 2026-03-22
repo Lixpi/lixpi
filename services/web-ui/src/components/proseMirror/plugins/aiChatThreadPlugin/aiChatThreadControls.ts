@@ -236,30 +236,10 @@ export function createAiSubmitButton(view: EditorView, getPos: () => number | un
 }
 
 export function createImageGenerationToggle(view: EditorView, getPos: () => number | undefined) {
-    const OPENAI_IMAGE_SIZES = [
-        { value: '1024x1024', label: '1:1' },
-        { value: '1536x1024', label: '3:2' },
-        { value: '1024x1536', label: '2:3' },
-        { value: 'auto', label: 'Auto' }
-    ]
-
-    const GOOGLE_IMAGE_SIZES = [
-        { value: '1:1', label: '1:1' },
-        { value: '3:2', label: '3:2' },
-        { value: '2:3', label: '2:3' },
-        { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' },
-        { value: '4:3', label: '4:3' },
-        { value: '3:4', label: '3:4' },
-        { value: '4:5', label: '4:5' },
-        { value: '5:4', label: '5:4' },
-        { value: '21:9', label: '21:9' },
-        { value: 'auto', label: 'Auto' }
-    ]
-
     const getSizesForProvider = (provider: string) => {
-        if (provider === 'Google') return GOOGLE_IMAGE_SIZES
-        return OPENAI_IMAGE_SIZES
+        const models: any[] = aiModelsStore.getData()
+        const model = models.find((m: any) => m.provider === provider && m.imageSizes?.length)
+        return model?.imageSizes ?? [{ value: 'auto', label: 'Auto' }]
     }
 
     const getProviderFromThread = (): string => {

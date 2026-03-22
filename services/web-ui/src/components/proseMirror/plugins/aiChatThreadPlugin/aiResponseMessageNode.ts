@@ -8,6 +8,7 @@ import {
     claudeIcon,
     claudeAnimatedFrameIcon,
     geminiIcon,
+    stabilityIcon,
 } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
@@ -108,6 +109,9 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             break
         case 'Google':
             userAvatarContainer.innerHTML = geminiIcon
+            break
+        case 'Stability':
+            userAvatarContainer.innerHTML = stabilityIcon
             break
         default:
             break
