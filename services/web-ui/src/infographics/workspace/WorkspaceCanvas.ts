@@ -20,7 +20,7 @@ import {
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon, stabilityIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
@@ -1751,6 +1751,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         'OpenAI': gptAvatarIcon,
                         'Anthropic': claudeIcon,
                         'Google': geminiIcon,
+                        'Stability': stabilityIcon,
                     }
                     const iconSvg = providerIcons[imageModelProvider]
                     if (iconSvg) {

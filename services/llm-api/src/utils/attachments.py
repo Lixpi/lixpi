@@ -98,7 +98,7 @@ def downscale_image_if_needed(data: bytes, mime_type: str) -> tuple[bytes, str]:
         new_width = int(width * scale)
         new_height = int(height * scale)
         img = img.resize((new_width, new_height), Image.LANCZOS)
-        logger.info(f"Resized from {width}x{height} to {new_width}x{new_height}")
+        logger.debug(f"Resized from {width}x{height} to {new_width}x{new_height}")
 
     # Choose output format: keep PNG for transparency, otherwise JPEG
     if has_alpha:
@@ -125,12 +125,12 @@ def downscale_image_if_needed(data: bytes, mime_type: str) -> tuple[bytes, str]:
         result = buf.getvalue()
 
         if len(result) <= MAX_IMAGE_BYTES:
-            logger.info(f"Downscaled to {len(result)} bytes (format={out_format}, quality={quality})")
+            logger.debug(f"Downscaled to {len(result)} bytes (format={out_format}, quality={quality})")
             return result, out_mime
 
     # PNG was still too large — convert to JPEG as last resort
     if has_alpha:
-        logger.info("PNG still too large after optimization, converting to JPEG")
+        logger.debug("PNG still too large after optimization, converting to JPEG")
         rgb_img = Image.new('RGB', img.size, (255, 255, 255))
         rgb_img.paste(img, mask=img.split()[-1])
         for quality in [85, 78, 70, 60]:
@@ -138,7 +138,7 @@ def downscale_image_if_needed(data: bytes, mime_type: str) -> tuple[bytes, str]:
             rgb_img.save(buf, format='JPEG', quality=quality, optimize=True)
             result = buf.getvalue()
             if len(result) <= MAX_IMAGE_BYTES:
-                logger.info(f"Converted PNG→JPEG, downscaled to {len(result)} bytes (quality={quality})")
+                logger.debug(f"Converted PNG→JPEG, downscaled to {len(result)} bytes (quality={quality})")
                 return result, 'image/jpeg'
 
     # If still too large, do a more aggressive resize
@@ -153,7 +153,7 @@ def downscale_image_if_needed(data: bytes, mime_type: str) -> tuple[bytes, str]:
         resized.save(buf, format='JPEG', quality=70, optimize=True)
         result = buf.getvalue()
         if len(result) <= MAX_IMAGE_BYTES:
-            logger.info(f"Aggressively resized to {new_w}x{new_h}, {len(result)} bytes")
+            logger.debug(f"Aggressively resized to {new_w}x{new_h}, {len(result)} bytes")
             return result, 'image/jpeg'
 
     logger.warning(f"Could not downscale image below {MAX_IMAGE_BYTES} bytes, returning best effort")

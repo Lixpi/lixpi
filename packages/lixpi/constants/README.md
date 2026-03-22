@@ -9,8 +9,9 @@ All NATS subjects are defined once in `nats-subjects.json` and accessed through 
 ```
 packages/lixpi/constants/
 ├── nats-subjects.json        # Single source of truth
+├── ai-interaction-constants.json
 ├── python/                   # Python package
-└── js/                       # TypeScript/JavaScript package
+└── ts/                       # TypeScript/JavaScript package
 ```
 
 ## Usage
@@ -19,7 +20,7 @@ packages/lixpi/constants/
 
 ```typescript
 import { NATS_SUBJECTS } from '@lixpi/constants'
-import type { AiInteractionChatSendMessagePayload, User } from '@lixpi/constants'
+import type { AiInteractionChatSendMessagePayload, User, AiModel, ImageSizeOption } from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS, WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
@@ -35,6 +36,10 @@ const deleteImageSubject = IMAGE_SUBJECTS.DELETE_IMAGE
 
 // Use types
 const payload: AiInteractionChatSendMessagePayload = { messages, aiModel, threadId }
+
+// AiModel includes imageSizes for image generation providers
+// ImageSizeOption: { value: string; label: string }
+const sizes: ImageSizeOption[] = model.imageSizes ?? []
 ```
 
 ### Python
