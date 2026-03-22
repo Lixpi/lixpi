@@ -350,6 +350,7 @@ services:
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
 
         volumes:
@@ -441,6 +442,7 @@ services:
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
 
             # Circuit breaker settings
             LLM_TIMEOUT_SECONDS: 1200
@@ -544,6 +546,7 @@ services:
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
 
             # Web-UI config
             VITE_API_URL: ${VITE_API_URL}

@@ -72,6 +72,11 @@ export type DocumentCanvasNode = {
 
 export type ImageGenerationSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto'
 
+export type ImageSizeOption = {
+    value: string
+    label: string
+}
+
 export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
@@ -221,6 +226,7 @@ export type AiModel = {
     title: string
     shortTitle?: string
     modelVersion: string
+    imagePromptMaxChars?: number
     contextWindow: number
     maxCompletionSize: number
     defaultTemperature: number
@@ -229,6 +235,7 @@ export type AiModel = {
     iconName: string
     sortingPosition: number
     modalities: Array<{ modality: string; title: string; shortTitle: string }>
+    imageSizes?: ImageSizeOption[]
     pricing: {
         currency: string
         resaleMargin: string

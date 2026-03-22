@@ -9,7 +9,14 @@ from providers.base import BaseLLMProvider, ProviderState
 from prompts import get_system_prompt
 from config import settings
 from utils.attachments import convert_attachments_for_provider, AttachmentFormat, resolve_image_urls
-from tools.image_generation import get_tool_for_provider, extract_tool_call, extract_reference_images, TOOL_NAME, TOOL_DESCRIPTION, TOOL_PARAMETERS
+from tools.image_generation import (
+    TOOL_NAME,
+    apply_image_prompt_limit_to_system_prompt,
+    build_image_prompt_rewrite_instruction,
+    extract_reference_images,
+    extract_tool_call,
+    get_tool_for_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +63,16 @@ class GoogleProvider(BaseLLMProvider):
         # Convert messages to Google Content format
         resolved_messages = []
         contents = []
-        for msg in messages:
+        for msg_idx, msg in enumerate(messages):
             content = msg.get('content', '')
             content = await resolve_image_urls(content, self.nats_client)
+
+            if isinstance(content, list):
+                block_types = [b.get('type', '?') if isinstance(b, dict) else type(b).__name__ for b in content]
+                logger.debug(
+                    "[Google:%s] msg[%d] role=%s multimodal blockTypes=%s",
+                    self.instance_key, msg_idx, msg.get('role'), block_types,
+                )
 
             resolved_messages.append({
                 'role': msg.get('role', 'user'),
@@ -92,19 +106,30 @@ class GoogleProvider(BaseLLMProvider):
 
         # Inject generate_image function tool for text→image routing
         if inject_tool:
+            image_tool_def = get_tool_for_provider(
+                "Google",
+                state.get('image_model_meta_info'),
+                state.get('image_provider_name')
+            )
             gen_config_kwargs['tools'] = [types.Tool(
                 function_declarations=[
                     types.FunctionDeclaration(
                         name=TOOL_NAME,
-                        description=TOOL_DESCRIPTION,
-                        parameters=TOOL_PARAMETERS,
+                        description=image_tool_def["description"],
+                        parameters=image_tool_def["parameters"],
                     )
                 ]
             )]
-            logger.info("Injected generate_image function tool for image model routing")
+            logger.debug("Injected generate_image function tool for image model routing")
 
-        # System instruction
+        # System instruction, appending image prompt char limit when applicable
         system_instruction = get_system_prompt(include_image_generation=inject_tool) if supports_system_prompt else None
+        if inject_tool and system_instruction:
+            system_instruction = apply_image_prompt_limit_to_system_prompt(
+                system_instruction,
+                state.get('image_model_meta_info'),
+                state.get('image_provider_name')
+            )
         if system_instruction:
             gen_config_kwargs['system_instruction'] = system_instruction
 
@@ -112,11 +137,11 @@ class GoogleProvider(BaseLLMProvider):
         if effective_image_gen and not model_version.startswith('gemini-2.5'):
             gen_config_kwargs['thinking_config'] = types.ThinkingConfig(include_thoughts=True)
 
-        logger.info(f"Streaming from Google model: {model_version}")
+        logger.debug(f"Streaming from Google model: {model_version}")
         if effective_image_gen:
-            logger.info(f"Image generation enabled with aspect ratio: {image_size}")
+            logger.debug(f"Image generation enabled with aspect ratio: {image_size}")
         elif inject_tool:
-            logger.info(f"Text model with image model routing enabled")
+            logger.debug(f"Text model with image model routing enabled")
 
         try:
             # Skip START_STREAM when called as image model (via ImageRouter)
@@ -203,7 +228,17 @@ class GoogleProvider(BaseLLMProvider):
                 if detected_tool_call:
                     state['generated_image_prompt'] = detected_tool_call
                     state['reference_images'] = extract_reference_images(resolved_messages)
-                    logger.info(f"Tool call detected: generate_image, prompt: {detected_tool_call[:100]}...")
+                    logger.info(
+                        "[Google:%s] Tool call detected: generate_image promptLen=%d refImages=%d prompt=%s",
+                        self.instance_key, len(detected_tool_call),
+                        len(state['reference_images']),
+                        detected_tool_call[:120],
+                    )
+                else:
+                    logger.warning(
+                        "Google did not emit generate_image tool call for %s during inject_tool path",
+                        self.instance_key,
+                    )
 
             else:
                 # Pure text streaming path
@@ -250,7 +285,7 @@ class GoogleProvider(BaseLLMProvider):
                     'totalTokens': getattr(usage_metadata, 'total_token_count', 0) or (prompt_tokens + completion_tokens)
                 }
                 state['ai_vendor_request_id'] = f"google-{workspace_id}-{ai_chat_thread_id}"
-                logger.info(f"Received usage data: {state['usage']}")
+                logger.debug(f"Received usage data: {state['usage']}")
 
             # Track image usage
             if effective_image_gen:
@@ -262,13 +297,50 @@ class GoogleProvider(BaseLLMProvider):
 
             if not effective_image_gen:
                 await self._publish_stream_end(workspace_id, ai_chat_thread_id)
-            logger.info(f"✅ Google streaming completed for {self.instance_key}")
+            logger.debug(f"Google streaming completed for {self.instance_key}")
 
         except Exception as e:
             logger.error(f"Google streaming failed: [{type(e).__name__}] {e}", exc_info=True)
             state['error'] = str(e)
 
         return state
+
+    async def _rewrite_image_prompt_to_fit_limit(
+        self,
+        state: ProviderState,
+        prompt: str,
+        max_chars: int
+    ) -> str | None:
+        response = await self.client.aio.models.generate_content(
+            model=state['model_version'],
+            contents=[
+                types.Content(
+                    role='user',
+                    parts=[types.Part.from_text(text=f"Original image prompt:\n{prompt}")]
+                )
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=max(256, ((max_chars + 3) // 4) + 128),
+                system_instruction=build_image_prompt_rewrite_instruction(max_chars),
+            ),
+        )
+
+        rewritten_prompt = (getattr(response, 'text', None) or '').strip()
+        if rewritten_prompt:
+            return rewritten_prompt
+
+        text_parts = []
+        for candidate in getattr(response, 'candidates', []) or []:
+            if not candidate.content or not candidate.content.parts:
+                continue
+
+            for part in candidate.content.parts:
+                if part.text:
+                    text_parts.append(part.text.strip())
+
+        rewritten_prompt = '\n'.join(part for part in text_parts if part).strip()
+        return rewritten_prompt or None
 
     def _build_parts(self, content) -> List[types.Part]:
         if isinstance(content, str):

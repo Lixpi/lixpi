@@ -4,7 +4,9 @@ Python-based microservice for handling AI model interactions via NATS.
 """
 
 import asyncio
+import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from colorama import Fore, Style
 import uvicorn
@@ -13,6 +15,13 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from lixpi_debug_tools import log, info, err, info_str
+
+# Configure Python logging so all logger.getLogger(__name__) calls reach stdout
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(levelname)s  %(name)s  %(message)s",
+    stream=sys.stdout,
+)
 from lixpi_nats_service import NatsService, NatsServiceConfig
 from providers.registry import ProviderRegistry
 from NATS.subscriptions.ai_interaction_subjects import get_ai_interaction_subjects
