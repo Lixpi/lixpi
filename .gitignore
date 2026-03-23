@@ -37,3 +37,6 @@ temp-ai-responses/
 
 # AWS config
 .aws/config
+
+# Agents temp files
+documentation/memory/*
