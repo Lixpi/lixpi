@@ -108,5 +108,5 @@ start.bat
 
 ## Built With
 
-[ProseMirror](https://prosemirror.net) · [CodeMirror](https://codemirror.net) · [NATS](https://nats.io) · [D3](https://d3js.org) · [Svelte](https://svelte.dev) · [LangGraph](https://www.langchain.com/langgraph) · [shadcn-svelte](https://www.shadcn-svelte.com) · [@xyflow/system](https://github.com/xyflow/xyflow) (low-level pan/zoom/coordinate math only — not React Flow or Svelte Flow)
+[ProseMirror](https://prosemirror.net) · [CodeMirror](https://codemirror.net) · [NATS](https://nats.io) · [D3](https://d3js.org) · [Svelte](https://svelte.dev) · [LangGraph](https://www.langchain.com/langgraph) · [shadcn-svelte](https://www.shadcn-svelte.com) · [@xyflow/system](https://github.com/xyflow/xyflow) (low-level pan/zoom/coordinate math only — not React Flow or Svelte Flow) · [CSS Loaders](https://cssloaders.github.io/)
 
