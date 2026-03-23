@@ -29,6 +29,17 @@ For the full architecture and service descriptions, read `documentation/PRODUCT-
 | Coding style conventions | `documentation/coding-style-guides/` (organized by language) |
 | Documentation style conventions | `documentation/documentation-style-guides/` |
 
+## Agent Persistence Storage
+
+All memory files, plan files, and any agent/plan-mode persistence artifacts **must** be stored in `documentation/memory/`. This directory is gitignored.
+
+This includes:
+- Session memory and working notes
+- Task plans and progress tracking
+- Any file an agent creates for its own context or continuity
+
+Never store agent persistence files anywhere else in the repo.
+
 ## Tips
 
 - Each folder may contain a `README.md` — always check for one when working in unfamiliar code.
