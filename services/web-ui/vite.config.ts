@@ -13,6 +13,9 @@ export default defineConfig({
         globals: true,
         include: ['src/**/*.test.ts'],
         alias: {
+            // TEMP: stub out shadcn docs' icon-placeholder — may consider dropping shadcn-svelte entirely, too cumbersome to maintain
+            '$lib/components/icon-placeholder/icon-placeholder.svelte': path.resolve("./src/shadcn-icon-stub.svelte"),
+            '$lib/components/icon-placeholder/icon-placeholder': path.resolve("./src/shadcn-icon-stub.svelte"),
             $src: path.resolve("./src"),
             $lib: path.resolve("./packages/shadcn-svelte/lib"),
         },
@@ -28,6 +31,9 @@ export default defineConfig({
     // mode:'development',
     resolve: {
         alias: {
+            // TEMP: stub out shadcn docs' icon-placeholder — may consider dropping shadcn-svelte entirely, too cumbersome to maintain
+            '$lib/components/icon-placeholder/icon-placeholder.svelte': path.resolve("./src/shadcn-icon-stub.svelte"),
+            '$lib/components/icon-placeholder/icon-placeholder': path.resolve("./src/shadcn-icon-stub.svelte"),
             $src: path.resolve("./src"),
             $lib: path.resolve("./packages/shadcn-svelte/lib"),
         },
