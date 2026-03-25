@@ -14,10 +14,10 @@ For the workspace feature itself — node types, stores, services, data flow, ar
 
 ### @xyflow/system reference
 
-The vendored `@xyflow/system` package has its own documentation set stored in `documentation/third-party-documentation/xyflow/` (persistent, not inside the vendored submodule). Start from the top-level guide and follow its links to per-module docs:
+The vendored `@xyflow/system` package has its own documentation set stored in `documentation/vendor-documentation/xyflow/` (persistent, not inside the vendored submodule). Start from the top-level guide and follow its links to per-module docs:
 
 ```
-documentation/third-party-documentation/xyflow/
+documentation/vendor-documentation/xyflow/
   overview.md                    ← start here (system vs wrappers, limitations, Lixpi integration)
   src/
     ├── pan-zoom.md              — Viewport pan & zoom (XYPanZoom)
