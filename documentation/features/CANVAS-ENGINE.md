@@ -14,20 +14,21 @@ For the workspace feature itself — node types, stores, services, data flow, ar
 
 ### @xyflow/system reference
 
-The vendored `@xyflow/system` package has its own documentation set. Start from the top-level guide and follow its links to per-module docs:
+The vendored `@xyflow/system` package has its own documentation set stored in `documentation/third-party-documentation/xyflow/` (persistent, not inside the vendored submodule). Start from the top-level guide and follow its links to per-module docs:
 
 ```
-packages-vendor/xyflow/packages/system/xyflow-DOCUMENTATION.md    ← start here
-  └── src/xypanzoom/DOCUMENTATION.md       — Pan & zoom
-  └── src/xydrag/DOCUMENTATION.md          — Node dragging
-  └── src/xyhandle/DOCUMENTATION.md        — Connection handles
-  └── src/xyresizer/DOCUMENTATION.md       — Node resizing
-  └── src/xyminimap/DOCUMENTATION.md       — Minimap
-  └── src/utils/DOCUMENTATION.md           — General utilities
-  └── src/utils/edges/DOCUMENTATION.md     — Edge path utilities
-  └── src/types/DOCUMENTATION.md           — Types
-  └── src/constants.DOCUMENTATION.md       — Constants
-  └── src/styles/DOCUMENTATION.md          — Styles & DOM contract
+documentation/third-party-documentation/xyflow/
+  overview.md                    ← start here (system vs wrappers, limitations, Lixpi integration)
+  src/
+    ├── pan-zoom.md              — Viewport pan & zoom (XYPanZoom)
+    ├── drag.md                  — Node dragging (XYDrag)
+    ├── connections.md           — Connection handles (XYHandle)
+    ├── resize.md                — Node resizing (XYResizer)
+    ├── minimap.md               — Minimap (XYMinimap)
+    ├── edge-routing.md          — Edge path calculation (bezier, smoothstep, straight)
+    ├── dom-contract.md          — CSS classes, DOM structure, z-index layers, theming
+    ├── types-and-constants.md   — Type hierarchies, coordinate spaces, error IDs
+    └── utilities.md             — Coordinate conversion, spatial math, node adoption
 ```
 
 ### Canvas implementation code
