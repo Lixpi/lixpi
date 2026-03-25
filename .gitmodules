@@ -1,0 +1,8 @@
+[submodule "packages-vendor/shadcn-svelte"]
+	path = packages-vendor/shadcn-svelte
+	url = https://github.com/huntabyte/shadcn-svelte.git
+	branch = main
+[submodule "packages-vendor/xyflow"]
+	path = packages-vendor/xyflow
+	url = https://github.com/xyflow/xyflow.git
+	branch = main
