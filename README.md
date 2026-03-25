@@ -58,6 +58,22 @@ For the full architecture deep-dive, see [Architecture](documentation/ARCHITECTU
 
 ---
 
+## Clone this repository
+
+Third-party sources under `packages-vendor/` are **Git submodules** ([shadcn-svelte](https://github.com/huntabyte/shadcn-svelte), [xyflow](https://github.com/xyflow/xyflow)). Clone with submodules so those checkouts exist:
+
+```bash
+git clone --recurse-submodules <repository-url>
+```
+
+If you already cloned without submodules, initialize them once from the repo root:
+
+```bash
+git submodule update --init --recursive
+```
+
+---
+
 ## Quick Start
 
 ### 1. Environment Setup
