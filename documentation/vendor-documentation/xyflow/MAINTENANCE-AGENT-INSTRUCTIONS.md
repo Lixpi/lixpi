@@ -112,4 +112,4 @@ If xyflow adds a new top-level module:
 These files link to the xyflow docs and need updating if file names or structure change:
 
 - `documentation/features/CANVAS-ENGINE.md` — Directory tree listing all xyflow doc files
-- `documentation/third-party-documentation/xyflow/overview.md` — Documentation Index table with relative links to `src/` files
+- `documentation/vendor-documentation/xyflow/overview.md` — Documentation Index table with relative links to `src/` files
