@@ -53,7 +53,7 @@ Each image model learns a different visual distribution — a unique internal re
 
 The text model compounds all of this. Claude, GPT-5, and Gemini write image prompts differently — different compositional emphasis, different descriptive vocabulary, different structural choices. How a scene is described determines which parts of the image model's learned distribution get activated.
 
-The result: pairing Claude with gpt-image-1 produces a genuinely different aesthetic than pairing GPT-5 with Nano Banana. Every component — the text model's prompt style, the text encoder's vector representation, the model architecture, the training data distribution — compounds into a distinct visual signature. This makes model pairing a creative decision, not just a technical one.
+The result: pairing Claude with gpt-image-1 produces a genuinely different aesthetic than pairing GPT-5 with Nano Banana. Every component — the text model's prompt style, the text encoder's vector representation, the model architecture, the training data distribution — compounds into a distinct visual signature. This makes model pairing a creative decision, not just a technical one. [More info... →](documentation/knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md)
 
 ---
 
