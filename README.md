@@ -6,7 +6,7 @@ Lixpi sits at the intersection of an infinite spatial canvas (like Miro) and a v
 
 [Watch the demo →](https://www.dropbox.com/scl/fi/x4xo0j8q6s05muhq9yl42/lix-demo-03.mov?rlkey=m5q87awvieo4apmssue5qel5h&st=rkm1etu1&dl=0)
 
-![Lixpi workspace — AI chat threads, documents, and images connected on an infinite canvas](https://github.com/user-attachments/assets/33ec726d-d0c3-4203-b5c9-5ce0a30568dd)
+![Lixpi workspace — AI chat threads, documents, and images connected on an infinite canvas](./documentation/assets/ui-screenshot.jpeg)
 
 ## What Problem Does It Solve?
 
