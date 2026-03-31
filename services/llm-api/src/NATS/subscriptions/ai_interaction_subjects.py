@@ -3,8 +3,13 @@ AI Interaction NATS subscriptions for LLM API service.
 Handles chat processing and stop requests.
 """
 
+import asyncio
+import logging
+
 from lixpi_debug_tools import info, warn, err
 from lixpi_constants import NATS_SUBJECTS
+
+logger = logging.getLogger(__name__)
 
 # Extract AI interaction subjects
 AI_INTERACTION_SUBJECTS = NATS_SUBJECTS["AI_INTERACTION_SUBJECTS"]
@@ -24,48 +29,19 @@ def get_ai_interaction_subjects(registry):
         List of subscription configurations
     """
 
-    # Handler: Process chat requests from api service
-    async def _handler_chat_process(data, msg):
+    # Active processing tasks keyed by instance_key, enabling concurrent request handling
+    active_tasks: dict[str, asyncio.Task] = {}
+
+    async def _process_request(instance_key, provider_name, data):
+        """Process a single chat request. Runs as an independent asyncio task."""
         try:
-            # Extract request data
-            workspace_id = data.get('workspaceId')
-            ai_chat_thread_id = data.get('aiChatThreadId')
-            ai_model_meta_info = data.get('aiModelMetaInfo', {})
-            provider_name = ai_model_meta_info.get('provider')
-
-            if not workspace_id:
-                err("Missing workspaceId in request")
-                return
-
-            if not ai_chat_thread_id:
-                err("Missing aiChatThreadId in request")
-                return
-
-            if not provider_name:
-                err("Missing provider in aiModelMetaInfo")
-                return
-
-            # Create instance key using workspaceId:aiChatThreadId
-            instance_key = f"{workspace_id}:{ai_chat_thread_id}"
-
-            info(f"Processing chat request for {instance_key} using {provider_name}")
-
-            # Get or create provider instance
             provider = registry._get_or_create_instance(instance_key, provider_name)
-
-            # Process the request through LangGraph workflow
             await provider.process(data)
-
-            # Remove instance after completion
-            registry._remove_instance(instance_key)
-
         except Exception as e:
-            err(f"Error handling chat process: {e}")
+            err(f"Error processing chat request for {instance_key}: {e}")
 
-            # Publish error back to services/api
             workspace_id = data.get('workspaceId', 'unknown')
             ai_chat_thread_id = data.get('aiChatThreadId', 'unknown')
-            instance_key = f"{workspace_id}:{ai_chat_thread_id}"
             registry.nats_client.publish(
                 f"{CHAT_ERROR}.{instance_key}",
                 {
@@ -73,6 +49,47 @@ def get_ai_interaction_subjects(registry):
                     'instanceKey': instance_key
                 }
             )
+        finally:
+            registry._remove_instance(instance_key)
+            active_tasks.pop(instance_key, None)
+            info(f"Chat request completed for {instance_key}")
+
+    # Handler: Process chat requests from api service
+    async def _handler_chat_process(data, msg):
+        # Extract request data
+        workspace_id = data.get('workspaceId')
+        ai_chat_thread_id = data.get('aiChatThreadId')
+        ai_model_meta_info = data.get('aiModelMetaInfo', {})
+        provider_name = ai_model_meta_info.get('provider')
+
+        if not workspace_id:
+            err("Missing workspaceId in request")
+            return
+
+        if not ai_chat_thread_id:
+            err("Missing aiChatThreadId in request")
+            return
+
+        if not provider_name:
+            err("Missing provider in aiModelMetaInfo")
+            return
+
+        instance_key = f"{workspace_id}:{ai_chat_thread_id}"
+
+        # If a request is already running for this thread, skip the duplicate
+        if instance_key in active_tasks and not active_tasks[instance_key].done():
+            warn(f"Request already in progress for {instance_key}, skipping duplicate")
+            return
+
+        info(f"Spawning chat request task for {instance_key} using {provider_name}")
+
+        # Spawn as independent task so the NATS handler returns immediately.
+        # This allows concurrent processing of requests from different threads.
+        task = asyncio.create_task(
+            _process_request(instance_key, provider_name, data),
+            name=f"chat-process:{instance_key}"
+        )
+        active_tasks[instance_key] = task
 
     # Handler: Stop streaming request
     async def _handler_chat_stop(data, msg):

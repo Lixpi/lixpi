@@ -607,22 +607,20 @@ class AiChatThreadPluginClass {
     // ========== STREAMING MANAGEMENT ==========
 
     private startStreaming(view: EditorView): void {
-        console.log('🟣 [PLUGIN] startStreaming called', {
-            docSize: view.state.doc.content.size,
-            viewDom: view.dom?.parentElement?.className,
-            stackTrace: new Error().stack?.split('\\n').slice(1, 5).join(' → ')
-        })
-        this.unsubscribeFromSegments = SegmentsReceiver.subscribeToeceiveSegment((event: SegmentEvent) => {
+        // Read this editor's threadId from the document — each editor owns exactly one thread
+        const threadInfo = PositionFinder.findThreadInsertionPoint(view.state)
+        const ownerThreadId = threadInfo?.threadId
+
+        if (!ownerThreadId) {
+            console.warn('[aiChatThreadPlugin] startStreaming: no thread found in document')
+            return
+        }
+
+        // Subscribe to segments for THIS thread only — events for other threads never reach this callback
+        this.unsubscribeFromSegments = SegmentsReceiver.subscribeForThread(ownerThreadId, (event: SegmentEvent) => {
             const { status, type, aiProvider, segment, threadId, aiChatThreadId } = event
             const effectiveThreadId = threadId || aiChatThreadId
             const { state, dispatch } = view
-
-            console.log('🔵 [PLUGIN] Segment event received', {
-                status, type, effectiveThreadId,
-                hasSegment: !!segment,
-                docSize: state.doc.content.size,
-                viewDestroyed: (view as any).destroyed ?? 'unknown'
-            })
 
             // Handle image generation events
             if (type === 'image_partial') {
@@ -1135,7 +1133,10 @@ class AiChatThreadPluginClass {
             ? ContentExtractor.findThreadByPosition(newState, nodePos)
             : ContentExtractor.findThreadBySelection(newState)
 
-        if (!threadNode) return
+        if (!threadNode) {
+            console.warn('[aiChatThreadPlugin] handleChatRequest: thread node not found')
+            return
+        }
 
         // Extract thread attributes including image generation settings
         const {
@@ -1379,9 +1380,6 @@ class AiChatThreadPluginClass {
 
                 return {
                     destroy: () => {
-                        console.log('🟣 [PLUGIN] destroy called — unsubscribing from segments', {
-                            hadSubscription: !!this.unsubscribeFromSegments
-                        })
                         if (this.unsubscribeFromSegments) {
                             this.unsubscribeFromSegments()
                         }
