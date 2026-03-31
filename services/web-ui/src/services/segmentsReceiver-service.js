@@ -15,31 +15,45 @@ class SegmentsReceiver {
             return SegmentsReceiver.instance
         }
 
-        this.eceiveSegmentListeners = []
+        // Thread-scoped listeners: Map<threadId, Set<listener>>
+        this.threadListeners = new Map()
 
         // Ensure the instance is available statically
         SegmentsReceiver.instance = this
     }
 
-    // Allow components to subscribe to token completion
-    subscribeToeceiveSegment(listener) {
-        this.eceiveSegmentListeners.push(listener)
-        return () => this.unsubscribeToTokenParse(listener)
+    /**
+     * Subscribe to segments for a specific thread only.
+     * Segments are dispatched exclusively to listeners registered for the matching threadId.
+     */
+    subscribeForThread(threadId, listener) {
+        if (!this.threadListeners.has(threadId)) {
+            this.threadListeners.set(threadId, new Set())
+        }
+        this.threadListeners.get(threadId).add(listener)
+        return () => {
+            const listeners = this.threadListeners.get(threadId)
+            if (listeners) {
+                listeners.delete(listener)
+                if (listeners.size === 0) {
+                    this.threadListeners.delete(threadId)
+                }
+            }
+        }
     }
 
-    // Allow components to unsubscribe from token completion
-    unsubscribeToTokenParse(listener) {
-        this.eceiveSegmentListeners = this.eceiveSegmentListeners.filter(l => l !== listener)
-    }
-
-    // Internal method to notify all token complete listeners
-    notifyReceiveSegment(token) {
-        this.eceiveSegmentListeners.forEach(listener => listener(token))
-    }
-
-    // Parse individual chunk token
+    // Dispatch segment to the thread-specific listeners only
     receiveSegment(chunk) {
-        this.notifyReceiveSegment(chunk) // Relay the parsed segment event
+        const threadId = chunk.aiChatThreadId || chunk.threadId
+        if (!threadId) {
+            console.warn('[SegmentsReceiver] Segment has no threadId, dropping:', chunk.status || chunk.type)
+            return
+        }
+
+        const listeners = this.threadListeners.get(threadId)
+        if (listeners) {
+            listeners.forEach(listener => listener(chunk))
+        }
     }
 }
 
