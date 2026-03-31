@@ -969,7 +969,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
 
-    function createThreadFloatingInput(node: AiChatThreadCanvasNode): void {
+    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiImageModel?: string; imageGenerationSize?: string }): void {
         if (threadFloatingInputs.has(node.nodeId)) return
 
         const el = document.createElement('div')
@@ -1044,6 +1044,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             editor,
             gradient,
         })
+
+        // Restore saved dropdown attrs from the thread content
+        if (savedAttrs) {
+            const view = editor.editorView
+            let inputPos: number | undefined
+            view.state.doc.descendants((n: any, pos: number) => {
+                if (n.type.name === 'aiPromptInput' && inputPos === undefined) inputPos = pos
+            })
+            if (inputPos !== undefined) {
+                const node = view.state.doc.nodeAt(inputPos)
+                if (node) {
+                    const tr = view.state.tr.setNodeMarkup(inputPos, undefined, {
+                        ...node.attrs,
+                        ...savedAttrs,
+                    })
+                    tr.setMeta('skipDispatch', true)
+                    view.dispatch(tr)
+                }
+            }
+        }
     }
 
     // Returns the vertical offset from a thread node's top to where the floating
@@ -3190,8 +3210,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hideThreadNode(nodeEl, node.nodeId)
         }
 
-        // Create the always-visible per-thread floating prompt input
-        createThreadFloatingInput(node)
+        // Create the always-visible per-thread floating prompt input.
+        // Extract saved dropdown attrs from thread content so the floating
+        // input restores the previously-selected model / image options.
+        const threadContentNode = thread?.content?.content?.find(
+            (n: any) => n.type === 'aiChatThread'
+        )
+        const savedDropdownAttrs = threadContentNode?.attrs
+            ? {
+                aiModel: threadContentNode.attrs.aiModel,
+                aiImageModel: threadContentNode.attrs.aiImageModel,
+                imageGenerationSize: threadContentNode.attrs.imageGenerationSize,
+            }
+            : undefined
+        createThreadFloatingInput(node, savedDropdownAttrs)
 
         // Create the vertical rail element (drag handle + connection proxy)
         createThreadRail(node)
