@@ -73,12 +73,15 @@ export default class AiInteractionService {
 
     async initNatsSubscriptions() {
         try {
-            // Unsubscribe from all previous subscriptions to avoid duplicate receives
-            servicesStore.getData('nats')!.getSubscriptions(['ai.interaction.chat.receiveMessage.*.*']).forEach(sub => sub.unsubscribe())
-
             if (!this.workspaceId || !this.aiChatThreadId)
                 throw new Error('AiInteractionService requires workspaceId and aiChatThreadId')
 
+            const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+
+            // Only unsubscribe previous subscriptions for THIS specific thread, not all threads
+            servicesStore.getData('nats')!.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
+
+            console.log(`[AI_INTERACTION] Subscribing to NATS response channel: ${subject}`)
             this.subscribeToChatMessages()
         } catch (error) {
             console.error('Failed to initialize NATS service:', error)
@@ -86,9 +89,10 @@ export default class AiInteractionService {
     }
 
     async subscribeToChatMessages() {
+        const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
         // Subscribe to responses for this specific workspace and thread
         servicesStore.getData('nats')!.subscribe(
-            `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`,
+            subject,
             (data, msg) => {
                 this.onChatMessageResponse(data)
             }
@@ -207,6 +211,14 @@ export default class AiInteractionService {
             payload.aiImageModel = aiImageModel
             payload.imageSize = imageSize || 'auto'
         }
+
+        console.log(`[AI_INTERACTION] Publishing message to ${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE}`, {
+            workspaceId: this.workspaceId,
+            aiChatThreadId: this.aiChatThreadId,
+            aiModel,
+            messageCount: messages.length,
+            hasImageModel: !!aiImageModel
+        })
 
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)
     }

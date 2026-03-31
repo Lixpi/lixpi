@@ -1346,8 +1346,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         hiddenEmptyThreadNodeIds.delete(nodeId)
     }
 
-    function updateThreadNodeVisibility(nodeId: string, threadNodeEl: HTMLElement): void {
-        const hasMessages = threadNodeEl.querySelector('.ai-user-message-wrapper, .ai-response-message-wrapper') !== null
+    function updateThreadNodeVisibility(nodeId: string, threadNodeEl: HTMLElement, contentJSON?: any): void {
+        // Check ProseMirror state (contentJSON) when available — the DOM isn't updated yet
+        // during statePlugin.apply, so querying NodeViews would return stale results.
+        const hasMessages = contentJSON
+            ? threadContentHasMessages(contentJSON)
+            : threadNodeEl.querySelector('.ai-user-message-wrapper, .ai-response-message-wrapper') !== null
         const wasHidden = hiddenEmptyThreadNodeIds.has(nodeId)
 
         if (hasMessages && wasHidden) {
@@ -3042,15 +3046,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createAiChatThreadNode(node: AiChatThreadCanvasNode, thread: AiChatThread | undefined): HTMLElement {
-        console.log('📋 [WORKSPACE] createAiChatThreadNode called:', {
-            nodeId: node.nodeId,
-            referenceId: node.referenceId,
-            hasThread: !!thread,
-            hasContent: thread ? thread.content !== undefined : false,
-            contentType: thread?.content ? typeof thread.content : 'undefined',
-            contentPreview: thread?.content ? JSON.stringify(thread.content).substring(0, 300) : 'no content'
-        })
-
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
             'workspace-ai-chat-thread-node',
@@ -3076,8 +3071,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         editorContainer.className = 'ai-chat-thread-node-editor nopan'
         nodeEl.appendChild(editorContainer)
 
-        if (thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0) {
-            console.log('📋 [WORKSPACE] Creating ProseMirrorEditor with thread content')
+        // Determine the editor content: use thread.content if loaded,
+        // otherwise use a default empty structure so the editor is always
+        // available for message injection (the floating input is always present).
+        const hasContent = thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0
+        const editorContent = hasContent
+            ? thread.content
+            : {
+                type: 'doc',
+                content: [
+                    { type: 'documentTitle', content: [{ type: 'text', text: 'AI Chat' }] },
+                    { type: 'aiChatThread', attrs: { threadId: node.referenceId }, content: [] },
+                ],
+            }
+
+        {
             try {
                 // Create AiInteractionService for this thread
                 const aiService = new AiInteractionService({
@@ -3088,7 +3096,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const editor = new ProseMirrorEditor({
                     editorMountElement: editorContainer,
                     content: document.createElement('div'),
-                    initialVal: thread.content,
+                    initialVal: editorContent,
                     isDisabled: false,
                     documentType: 'aiChatThread',
                     threadId: node.referenceId,
@@ -3098,7 +3106,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             threadId: node.referenceId,
                             content: value
                         })
-                        updateThreadNodeVisibility(node.nodeId, nodeEl)
+                        updateThreadNodeVisibility(node.nodeId, nodeEl, value)
                         scheduleThreadAutoGrow(node.nodeId)
                         scheduleAnchoredImagesRealign(node.nodeId)
                     },
@@ -3173,9 +3181,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
                 editorContainer.appendChild(errorPlaceholder.dom)
             }
-        } else {
-            // Show loading placeholder until content is loaded
-            editorContainer.appendChild(createLoadingPlaceholder().dom)
         }
 
         // Hide the thread node unless we positively know it has messages.

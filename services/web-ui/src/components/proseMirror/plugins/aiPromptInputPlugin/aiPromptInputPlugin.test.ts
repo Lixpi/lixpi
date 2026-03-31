@@ -34,6 +34,9 @@ function createMockControlFactories() {
     const modelDropdownDom = document.createElement('div')
     modelDropdownDom.className = 'mock-model-dropdown'
 
+    const imageModelDropdownDom = document.createElement('div')
+    imageModelDropdownDom.className = 'mock-image-model-dropdown'
+
     const imageSizeDropdownDom = document.createElement('div')
     imageSizeDropdownDom.className = 'mock-image-size-dropdown'
 
@@ -46,6 +49,11 @@ function createMockControlFactories() {
             update: vi.fn(),
             destroy: vi.fn(),
         })),
+        createImageModelDropdown: vi.fn(() => ({
+            dom: imageModelDropdownDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
         createImageSizeDropdown: vi.fn(() => ({
             dom: imageSizeDropdownDom,
             update: vi.fn(),
@@ -53,6 +61,7 @@ function createMockControlFactories() {
         })),
         createSubmitButton: vi.fn(() => submitButtonDom),
         modelDropdownDom,
+        imageModelDropdownDom,
         imageSizeDropdownDom,
         submitButtonDom,
     }
@@ -66,6 +75,7 @@ function createPluginOptions(overrides: Partial<Parameters<typeof createAiPrompt
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
             placeholderText: 'Ask anything…',
@@ -204,6 +214,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(node, mockView, getPos)
@@ -247,6 +258,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(controlsEl.contains(factories.modelDropdownDom)).toBe(true)
         })
 
+        it('renders image model dropdown inside controls', () => {
+            const { nv, factories } = createNodeView()
+            const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
+            expect(controlsEl.contains(factories.imageModelDropdownDom)).toBe(true)
+        })
+
         it('renders image size dropdown inside controls', () => {
             const { nv, factories } = createNodeView()
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
@@ -259,14 +276,15 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(controlsEl.contains(factories.submitButtonDom)).toBe(true)
         })
 
-        it('controls are ordered: dropdown, image size dropdown, submit', () => {
+        it('controls are ordered: model dropdown, image model dropdown, image size dropdown, submit', () => {
             const { nv, factories } = createNodeView()
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
             const children = Array.from(controlsEl.children)
 
             expect(children[0]).toBe(factories.modelDropdownDom)
-            expect(children[1]).toBe(factories.imageSizeDropdownDom)
-            expect(children[2]).toBe(factories.submitButtonDom)
+            expect(children[1]).toBe(factories.imageModelDropdownDom)
+            expect(children[2]).toBe(factories.imageSizeDropdownDom)
+            expect(children[3]).toBe(factories.submitButtonDom)
         })
     })
 })
@@ -294,6 +312,7 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
@@ -349,6 +368,7 @@ describe('createAiPromptInputNodeView — stopEvent', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
@@ -405,6 +425,7 @@ describe('createAiPromptInputNodeView — ignoreMutation', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
@@ -456,6 +477,7 @@ describe('createAiPromptInputNodeView — update', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
@@ -510,6 +532,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -529,6 +552,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -554,6 +578,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -575,6 +600,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -598,6 +624,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             onStop,
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -625,6 +652,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -670,6 +698,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -701,17 +730,18 @@ describe('Visual proportions — SCSS sizing expectations', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
     }
 
-    it('controls has exactly 3 child elements for balanced layout', () => {
+    it('controls has exactly 4 child elements for balanced layout', () => {
         const nv = renderNodeView()
         const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        // SCSS expects: model dropdown, image toggle, submit button
+        // SCSS expects: model dropdown, image model dropdown, image size dropdown, submit button
         // The controls use justify-content: flex-end so they sit right
-        expect(controls.children.length).toBe(3)
+        expect(controls.children.length).toBe(4)
     })
 
     it('content area is the first child — gets flex: 1 for vertical fill', () => {
@@ -964,6 +994,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
 
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
+            aiImageModel: '',
             imageGenerationSize: '512x512',
         })
     })
@@ -989,6 +1020,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
 
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
+            aiImageModel: '',
             imageGenerationSize: 'auto',
         })
     })
@@ -1203,6 +1235,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -1233,6 +1266,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -1259,6 +1293,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -1285,6 +1320,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
@@ -1314,6 +1350,7 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             onStop: vi.fn(),
             isReceiving,
             createModelDropdown: factories.createModelDropdown,
+            createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
