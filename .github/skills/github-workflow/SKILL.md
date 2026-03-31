@@ -55,28 +55,37 @@ Include:
 ## Step-by-Step: Full Feature Workflow
 
 1. **Identify the issue** — Use GitHub MCP tools to read the issue and get its ID.
-2. **Create the branch from `main`** — Use `mcp_github_create_branch` with `from_branch: "main"`. Never use local `git checkout -b`.
-3. **Push changed files** — Use `mcp_github_push_files` to commit files directly to the branch via the API. Never use local `git add`, `git commit`, or `git push`.
+2. **Create the branch from `main`** — Use `mcp_github_create_branch` with `from_branch: "main"`, then `git fetch origin && git checkout <branch-name>` locally.
+3. **Stage, commit, and push** — Use local Git CLI:
+   - Stage only the relevant files: `git add <file1> <file2> ...` — **never** use `git add -A` or `git add .`.
+   - Verify staged files: `git diff --cached --name-only`.
+   - Commit: `git commit -m "LIX-<id> # <description>"`.
+   - Push: `git push origin <branch-name>`.
 4. **Open the PR** — Use `mcp_github_create_pull_request` with the correct title format. Assign to current user.
 5. **Update the issue** — Add the PR link to the issue description body.
 
 ## After PR is Merged
 
-Since files are pushed via the GitHub API (not local Git), the local working tree still has uncommitted changes after the PR is created. After the PR is merged into `main`:
-
 1. Switch to main: `git checkout main`
 2. Pull the merged changes: `git pull`
 
-This overwrites the local modifications with the merged versions. Do **not** commit locally — the API push is the single source of truth.
-
 ## Tools
 
-Use the GitHub MCP server tools for **all** GitHub and Git operations. Never use local Git CLI commands (`git checkout`, `git add`, `git commit`, `git push`, `git stash`, etc.).
+Use **local Git CLI** for all file operations (staging, committing, pushing). Use **GitHub MCP tools** for GitHub API operations (branches, PRs, issues).
 
-Available MCP tools:
+### Local Git CLI — for committing and pushing code
+
+- `git fetch origin` — Fetch remote branches
+- `git checkout <branch>` — Switch to a branch
+- `git add <file1> <file2> ...` — Stage specific files (**never** `git add -A` or `git add .`)
+- `git diff --cached --name-only` — Verify staged files before committing
+- `git commit -m "LIX-<id> # <description>"` — Commit with the correct message format
+- `git push origin <branch>` — Push to remote
+
+### GitHub MCP tools — for GitHub API operations
+
 - `mcp_github_get_me` — Get current user for assignment
 - `mcp_github_create_branch` — Create branches (always from `main`)
-- `mcp_github_push_files` — Push file contents to a branch (commit message format: `LIX-<id> # <description>`)
 - `mcp_github_create_pull_request` — Open PRs
 - `mcp_github_issue_write` — Create and update issues
 - `mcp_github_issue_read` — Read issue details
