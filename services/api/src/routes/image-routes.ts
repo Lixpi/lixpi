@@ -211,7 +211,18 @@ router.get(
             const fileInfo = workspace.files?.find((f: DocumentFile) => f.id === fileId)
 
             // Get file from Object Store
-            const data = await natsService.getObject(bucketName, fileId)
+            let data: Uint8Array | null = null
+            try {
+                data = await natsService.getObject(bucketName, fileId)
+            } catch (objErr: any) {
+                const msg = objErr?.message || String(objErr)
+                if (msg.includes('no stream') || msg.includes('not found') || msg.includes('bucket')) {
+                    err(`Object Store bucket missing for ${workspaceId}: ${msg}`)
+                    return res.status(404).json({ error: 'Image storage not found — data may have been lost' })
+                }
+                throw objErr
+            }
+
             if (!data) {
                 return res.status(404).json({ error: 'Image not found' })
             }

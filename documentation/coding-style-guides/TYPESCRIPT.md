@@ -32,7 +32,18 @@ interface UserProfile {
 
 ## Comments
 
-- Never use JSDoc comments. No `/** */` blocks anywhere in the codebase.
+- Always use `//` single-line comments. For multi-line explanations, use multiple `//` lines.
+- Never use `/** */` or `/* */` block comments anywhere in the codebase.
+
+```typescript
+// Correct — single-line
+// This function handles token refresh by redirecting
+// through the browser-based login flow.
+
+// Wrong — never use block comments
+/** This function handles token refresh. */
+/* This function handles token refresh. */
+```
 
 ## Docker
 
@@ -53,6 +64,27 @@ const data = await fetchData()
 // Wrong — never use .then()
 fetchData().then((data) => { ... })
 ```
+
+### DOM Templating (web-ui)
+
+In all non-Svelte `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components like dropdowns and bubble menus, canvas code, and any utility that builds UI — always use the `html` tagged template from `domTemplates.ts`:
+
+```typescript
+import { html } from '$src/utils/domTemplates.ts'
+
+const el = html`
+    <div className="my-component" onclick=${handleClick}>
+        <span innerHTML=${someIcon}></span>
+        <span>Label</span>
+    </div>
+`
+```
+
+Never use `document.createElement` / `Object.assign(el.style, ...)` / manual `el.className = ...` / `el.setAttribute(...)` in these files. The `html` helper produces real DOM nodes (no VDOM) and handles `className`, `innerHTML`, inline `style` objects, `data` attributes, and `on*` event handlers.
+
+For SVG icons, import them from `$src/svgIcons/index.ts` and inject via `innerHTML` or string interpolation — never inline SVG markup in component code.
+
+The only exception is test files (`*.test.ts`) where minimal DOM setup for mocking is acceptable.
 
 ### Prefer Modern APIs Over Legacy Alternatives
 
