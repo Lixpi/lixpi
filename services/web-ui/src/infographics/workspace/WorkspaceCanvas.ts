@@ -20,12 +20,13 @@ import {
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon, stabilityIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon, stabilityIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { html } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeImagePositionNextToThread, computeImagePositionOverlappingThread, countExistingImagesForThread, OVERLAP_PADDING_X, OVERLAP_GAP_Y, OVERLAP_WIDTH_RATIO } from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
@@ -1464,6 +1465,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (imageUrl.startsWith('http') && imageUrl.includes('/api/images/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
         if (imageUrl.startsWith('http')) return imageUrl
         return `data:image/png;base64,${imageUrl}`
+    }
+
+    function showImageErrorPlaceholder(imgEl: HTMLImageElement, nodeEl: HTMLElement): void {
+        imgEl.style.display = 'none'
+        if (nodeEl.querySelector('.image-error-placeholder')) return
+
+        nodeEl.appendChild(html`
+            <div className="image-error-placeholder">
+                ${brokenImageIcon}
+                <span>Image unavailable</span>
+            </div>
+        `)
     }
 
     // Append an image node to the DOM directly without a full renderNodes() cycle.
@@ -3258,9 +3271,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Strip any stale token from src, then re-apply a fresh one via buildImageSrc
         const rawSrc = node.src.replace(/[?&]token=[^&]+/, '')
         const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+
+        let retried = false
         AuthService.getTokenSilently().then(token => {
             imgEl.src = buildImageSrc(rawSrc, API_BASE_URL, token)
+        }).catch(() => {
+            showImageErrorPlaceholder(imgEl, nodeEl)
         })
+
+        imgEl.onerror = () => {
+            if (!retried) {
+                retried = true
+                AuthService.getTokenSilently().then(token => {
+                    if (token) {
+                        const freshSrc = buildImageSrc(rawSrc, API_BASE_URL, token)
+                        if (imgEl.src !== freshSrc) {
+                            imgEl.src = freshSrc
+                            return
+                        }
+                    }
+                    showImageErrorPlaceholder(imgEl, nodeEl)
+                }).catch(() => showImageErrorPlaceholder(imgEl, nodeEl))
+            } else {
+                showImageErrorPlaceholder(imgEl, nodeEl)
+            }
+        }
 
         // Once image loads, fix container dimensions to match actual aspect ratio
         imgEl.onload = () => {

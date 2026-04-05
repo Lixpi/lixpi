@@ -116,10 +116,9 @@ class MyNodeView implements NodeView {
   dropdown: { dom: HTMLElement; update: (v: string) => void; destroy: () => void }
 
   constructor(node: Node, view: EditorView, getPos: () => number) {
-    // Create container structure
-    this.dom = document.createElement('div')
-    this.controlsContainer = document.createElement('div')
-    this.dom.appendChild(this.controlsContainer)
+    // Build container structure with html template
+    this.controlsContainer = html`<div className="controls"></div>`
+    this.dom = html`<div className="node-wrapper">${this.controlsContainer}</div>`
 
     // Create dropdown outside document schema
     this.dropdown = createPureDropdown({
@@ -127,7 +126,6 @@ class MyNodeView implements NodeView {
       selectedValue: node.attrs.value,
       options: [...],
       onSelect: (value) => {
-        // Update node attrs via transaction
         const pos = getPos()
         view.dispatch(
           view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, value })
@@ -298,7 +296,7 @@ return {
 
 ## Templating & NodeViews
 
-Import once and use everywhere:
+**All DOM creation in non-Svelte `.ts` files must use the `html` tagged template** from `$src/utils/domTemplates.ts`. This applies to ProseMirror NodeViews, plugins, shared components (dropdowns, bubble menus, loading placeholders, info bubbles), and canvas code. Never use `document.createElement` or manual attribute/style assignment for building UI.
 
 ```ts
 import { html } from '$src/utils/domTemplates.ts'
@@ -310,10 +308,12 @@ const el = html`
 `
 ```
 
-Rules of thumb:
-- Use `className` and `innerHTML` in templates.
+Rules:
+- Use `className` and `innerHTML` in templates (not `class`).
 - Event handlers: `onclick`, `onmouseenter`, etc. Keep handlers stable, avoid recreating closures in tight loops.
 - Styles: pass an object to `style=${{ ... }}` if needed. Keep it minimal; most styling belongs in SCSS.
+- SVG icons: always import from `$src/svgIcons/index.ts` and inject via `innerHTML` or string interpolation — never inline SVG markup in component files.
+- The only exception is test files (`*.test.ts`) where minimal DOM setup for mocking is acceptable.
 
 ## Decorations – the visual contract
 

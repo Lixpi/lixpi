@@ -141,3 +141,5 @@ export const aiChatBubbleIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox
 // https://www.flaticon.com/free-icon/connection_9248763
 // By icon wind
 export const changeNodesConnectorLineCurve = '<svg id="Layer_1" enable-background="new 0 0 24 24" height="512" viewBox="0 0 24 24" width="512" xmlns="http://www.w3.org/2000/svg"><path d="m22.9 19.1c-.1-.1-.1-.2-.2-.3l-2.5-2.5c-.4-.4-1-.4-1.4 0s-.4 1 0 1.4l.8.8h-5.6c-.6 0-1-.4-1-1v-11.5c0-1.7-1.3-3-3-3h-3.2c-.4-1.2-1.5-2-2.8-2-1.7 0-3 1.3-3 3s1.3 3 3 3c1.3 0 2.4-.8 2.8-2h3.2c.6 0 1 .4 1 1v11.5c0 1.7 1.3 3 3 3h5.6l-.8.8c-.4.4-.4 1 0 1.4.2.2.5.3.7.3s.5-.1.7-.3l2.5-2.5c.1-.1.2-.2.2-.3.1-.3.1-.5 0-.8zm-18.9-14.1c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1z"/></svg>'
+
+export const brokenImageIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>'

@@ -44,10 +44,10 @@ class Auth0MockService {
                 }
             }
 
-            // Check if we have a token
+            // Check if we have a non-expired token
             const token = localStorage.getItem('localauth0_token')
 
-            if (token) {
+            if (token && !this.isTokenExpired(token)) {
                 // Mock user object matching Auth0 format
                 const user = {
                     userId: 'local|test-user-001',
@@ -105,54 +105,93 @@ class Auth0MockService {
         }
     }
 
-    private async refreshMockToken(): Promise<string> {
-        // Get a fresh token from LocalAuth0
-        const authUrl = `http://${AUTH0_DOMAIN}/authorize?` + new URLSearchParams({
-            client_id: AUTH0_CLIENT_ID,
-            audience: AUTH0_AUDIENCE,
-            redirect_uri: AUTH0_REDIRECT_URI,
-            scope: 'openid profile email',
-            response_type: 'token',
-            bypass: 'true'
-        }).toString()
+    // Silent token refresh via hidden iframe. LocalAuth0's /authorize?bypass=true
+    // auto-approves and redirects back with #access_token=... which we read out.
+    // The iframe fires `load` once for the WASM SPA page, then again when it
+    // redirects to our callback. We resolve/reject based on load events alone.
+    private refreshTokenViaIframe(): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const iframe = document.createElement('iframe')
+            iframe.style.display = 'none'
 
-        // Fetch the token directly without redirect
-        const response = await fetch(authUrl, { redirect: 'manual' })
-        const redirectUrl = response.headers.get('Location')
+            const callbackPath = new URL(AUTH0_REDIRECT_URI).pathname
+            let loadCount = 0
 
-        if (redirectUrl) {
-            const hash = redirectUrl.split('#')[1]
-            if (hash) {
-                const params = new URLSearchParams(hash)
-                const accessToken = params.get('access_token')
-                if (accessToken) {
-                    localStorage.setItem('localauth0_token', accessToken)
-                    return accessToken
+            const cleanup = () => iframe.remove()
+
+            iframe.addEventListener('load', () => {
+                loadCount++
+
+                try {
+                    const iframeUrl = iframe.contentWindow?.location.href ?? ''
+
+                    if (!iframeUrl.includes(callbackPath)) {
+                        if (loadCount > 1) {
+                            cleanup()
+                            reject(new Error('Iframe navigated without reaching callback'))
+                        }
+                        return
+                    }
+
+                    const hash = iframe.contentWindow?.location.hash?.substring(1)
+                    if (!hash) {
+                        cleanup()
+                        reject(new Error('No hash fragment in iframe redirect'))
+                        return
+                    }
+
+                    const params = new URLSearchParams(hash)
+                    const accessToken = params.get('access_token')
+                    cleanup()
+
+                    if (accessToken) {
+                        localStorage.setItem('localauth0_token', accessToken)
+                        resolve(accessToken)
+                    } else {
+                        reject(new Error('No access_token in iframe response'))
+                    }
+                } catch {
+                    // Cross-origin read error — expected on the initial WASM page load
+                    // before LocalAuth0 redirects back to our origin.
+                    if (loadCount > 1) {
+                        cleanup()
+                        reject(new Error('Cannot read iframe after multiple loads'))
+                    }
                 }
-            }
-        }
+            })
 
-        throw new Error('Failed to refresh mock token')
+            iframe.addEventListener('error', () => {
+                cleanup()
+                reject(new Error('Iframe failed to load'))
+            })
+
+            const authUrl = `http://${AUTH0_DOMAIN}/authorize?` + new URLSearchParams({
+                client_id: AUTH0_CLIENT_ID,
+                audience: AUTH0_AUDIENCE,
+                redirect_uri: AUTH0_REDIRECT_URI,
+                scope: 'openid profile email',
+                response_type: 'token',
+                bypass: 'true',
+                prompt: 'none',
+            }).toString()
+
+            document.body.appendChild(iframe)
+            iframe.src = authUrl
+        })
     }
 
     public async getTokenSilently(): Promise<string | false> {
-        try {
-            let token = localStorage.getItem('localauth0_token')
-
-            // Check if token is expired or missing
-            if (!token || this.isTokenExpired(token)) {
-                console.log('Mock token expired or missing, refreshing...')
-                try {
-                    token = await this.refreshMockToken()
-                } catch (error) {
-                    console.error('Failed to refresh mock token:', error)
-                    await this.login()
-                    return false
-                }
-            }
-
+        const token = localStorage.getItem('localauth0_token')
+        if (token && !this.isTokenExpired(token)) {
             return token
-        } catch (error) {
+        }
+
+        // Try silent refresh via hidden iframe first (no page reload)
+        try {
+            return await this.refreshTokenViaIframe()
+        } catch {
+            // Iframe approach failed — fall back to full-page redirect
+            console.warn('Silent token refresh failed, redirecting to LocalAuth0...')
             await this.login()
             return false
         }
