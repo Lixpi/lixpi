@@ -1,4 +1,4 @@
-import { gptAvatarIcon } from '$src/svgIcons/index.ts'
+import { gptAvatarIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
@@ -153,14 +153,19 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         if (imageData.startsWith('data:')) {
             imageSrc = imageData
         } else if (imageData.startsWith('/api/')) {
-            // URL path - needs auth token appended as query param
             const token = await AuthService.getTokenSilently()
             const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-            imageSrc = `${API_BASE_URL}${imageData}?token=${token}`
+            imageSrc = `${API_BASE_URL}${imageData}${token ? `?token=${token}` : ''}`
             console.log('🖼️ [IMAGE_NODE] built image URL:', imageSrc)
         } else if (imageData.startsWith('http')) {
-            // Full URL (already has token)
-            imageSrc = imageData
+            // Full URL — strip any stale token and re-apply a fresh one
+            const stripped = imageData.replace(/[?&]token=[^&]+/, '')
+            if (stripped.includes('/api/images/')) {
+                const token = await AuthService.getTokenSilently()
+                imageSrc = `${stripped}${token ? `?token=${token}` : ''}`
+            } else {
+                imageSrc = imageData
+            }
         } else {
             // Legacy base64 data
             imageSrc = `data:image/png;base64,${imageData}`
@@ -178,7 +183,16 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         }
     }
 
-    updateDisplay()
+    imageElement.onerror = () => {
+        imageElement.style.display = 'none'
+        if (!container.querySelector('.image-error-placeholder')) {
+            container.appendChild(html`
+                <div className="image-error-placeholder">${brokenImageIcon}<span>Image unavailable</span></div>
+            `)
+        }
+    }
+
+    updateDisplay().catch(() => {})
 
     return {
         dom: wrapper,

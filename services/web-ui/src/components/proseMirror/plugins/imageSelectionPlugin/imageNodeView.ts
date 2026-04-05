@@ -1,8 +1,9 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView, NodeView } from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
-import { imageResizeCornerIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
 import AuthService from '$src/services/auth-service.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 type ImageAlignment = 'left' | 'center' | 'right'
 type TextWrap = 'none' | 'left' | 'right'
@@ -28,16 +29,18 @@ async function buildImageSrc(src: string): Promise<string> {
         return src
     }
 
-    // Full URLs that already have tokens
-    if (src.startsWith('http') && src.includes('token=')) {
-        return src
-    }
-
     // API paths need auth token
     if (src.startsWith('/api/')) {
         const token = await AuthService.getTokenSilently()
         const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-        return `${API_BASE_URL}${src}?token=${encodeURIComponent(token)}`
+        return `${API_BASE_URL}${src}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+    }
+
+    // Full URLs pointing to /api/images/ — strip stale token and re-apply fresh one
+    if (src.startsWith('http') && src.includes('/api/images/')) {
+        const stripped = src.replace(/[?&]token=[^&]+/, '')
+        const token = await AuthService.getTokenSilently()
+        return `${stripped}${token ? `?token=${encodeURIComponent(token)}` : ''}`
     }
 
     // External URLs or already full URLs
@@ -108,6 +111,15 @@ export class ImageNodeView implements NodeView {
         // Store aspect ratio when image loads
         this.img.addEventListener('load', this.handleImageLoad)
 
+        this.img.addEventListener('error', () => {
+            this.img.style.display = 'none'
+            if (!this.figure.querySelector('.image-error-placeholder')) {
+                this.figure.appendChild(html`
+                    <div className="image-error-placeholder">${brokenImageIcon}<span>Image unavailable</span></div>
+                `)
+            }
+        })
+
         // Handle selection on click
         this.figure.addEventListener('click', this.handleClick)
 
@@ -116,12 +128,16 @@ export class ImageNodeView implements NodeView {
 
     private async updateImageSrc(src: string): Promise<void> {
         if (src === this.currentSrcAttr && this.img.src) {
-            return // No change needed
+            return
         }
         this.currentSrcAttr = src
-        const resolvedSrc = await buildImageSrc(src)
-        if (this.img.src !== resolvedSrc) {
-            this.img.src = resolvedSrc
+        try {
+            const resolvedSrc = await buildImageSrc(src)
+            if (this.img.src !== resolvedSrc) {
+                this.img.src = resolvedSrc
+            }
+        } catch (error) {
+            console.error('[ImageNodeView] Failed to resolve image src:', error)
         }
     }
 

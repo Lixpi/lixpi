@@ -113,6 +113,7 @@ services:
             DOMAIN_NAME: ${DOMAIN_NAME}
         volumes:
             - caddy-certs:/opt/nats/certs:ro  # Read-only certificates from Caddy
+            - nats-1-data:/data                # Persistent JetStream storage
         command: [
             "--config", "/opt/nats/nats-server.conf",
             "--routes", "nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-1:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-2:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-3:6222"
@@ -158,6 +159,7 @@ services:
             DOMAIN_NAME: ${DOMAIN_NAME}
         volumes:
             - caddy-certs:/opt/nats/certs:ro  # Read-only certificates from Caddy
+            - nats-2-data:/data                # Persistent JetStream storage
         command: [
             "--config", "/opt/nats/nats-server.conf",
             "--routes", "nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-1:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-2:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-3:6222"
@@ -203,6 +205,7 @@ services:
             DOMAIN_NAME: ${DOMAIN_NAME}
         volumes:
             - caddy-certs:/opt/nats/certs:ro  # Read-only certificates from Caddy
+            - nats-3-data:/data                # Persistent JetStream storage
         command: [
             "--config", "/opt/nats/nats-server.conf",
             "--routes", "nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-1:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-2:6222,nats://sys:${NATS_SYS_USER_PASSWORD}@lixpi-nats-3:6222"
@@ -598,6 +601,9 @@ volumes:
     caddy-certs:   # Shared volume for certificate storage
     dynamodb-data: # Persistent storage for DynamoDB Local
     localauth0-data: # Persistent storage for LocalAuth0 mock service
+    nats-1-data:   # Persistent JetStream storage for NATS node 1
+    nats-2-data:   # Persistent JetStream storage for NATS node 2
+    nats-3-data:   # Persistent JetStream storage for NATS node 3
 
 networks:
     nats:
