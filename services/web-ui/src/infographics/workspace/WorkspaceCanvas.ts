@@ -3269,14 +3269,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         imgEl.alt = ''
         imgEl.draggable = false
 
-        // Build image URL from fileId + current workspaceId (kept in sync
-        // by render() on workspace switch).
+        // For data: URLs (streaming partials) and external URLs, use node.src
+        // directly. For NATS-stored images, build a canonical path from the
+        // current workspaceId (kept in sync by render()) to avoid stale refs.
         const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-        const canonicalPath = `/api/images/${workspaceId}/${node.fileId}`
+        const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
+        const isStoredImage = strippedSrc.startsWith('/api/') || (strippedSrc.startsWith('http') && strippedSrc.includes('/api/images/'))
+        const resolvedSrc = isStoredImage
+            ? `/api/images/${workspaceId}/${node.fileId}`
+            : strippedSrc
 
         let retried = false
         AuthService.getTokenSilently().then(token => {
-            imgEl.src = buildImageSrc(canonicalPath, API_BASE_URL, token)
+            imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
         }).catch(() => {
             showImageErrorPlaceholder(imgEl, nodeEl)
         })
@@ -3286,7 +3291,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 retried = true
                 AuthService.getTokenSilently().then(token => {
                     if (token) {
-                        const freshSrc = buildImageSrc(canonicalPath, API_BASE_URL, token)
+                        const freshSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token)
                         if (imgEl.src !== freshSrc) {
                             imgEl.src = freshSrc
                             return
