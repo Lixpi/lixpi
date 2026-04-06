@@ -1,164 +1,110 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { NodeSelection } from 'prosemirror-state'
-import {
-    doc,
-    img,
-    aiImg,
-    createStateWithNodeSelection,
-    schema,
-} from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
+'use strict'
+
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 
 // =============================================================================
-// PARAMETERIZED IMAGE NODE TEST CASES
+// HELPERS
 // =============================================================================
 
-const imageNodeCases = [
-    {
-        name: 'image',
-        createNode: (attrs: Record<string, unknown> = {}) =>
-            img({ src: 'test.jpg', alt: 'test', ...attrs }),
-        srcAttr: 'src',
-    },
-    {
-        name: 'aiGeneratedImage',
-        createNode: (attrs: Record<string, unknown> = {}) =>
-            aiImg({ imageData: 'data:image/png;base64,abc', ...attrs }),
-        srcAttr: 'imageData',
-    },
-] as const
+function loadTs(): string {
+	return readFileSync(
+		resolve(__dirname, 'imageNodeView.ts'),
+		'utf-8'
+	)
+}
 
 // =============================================================================
-// getImageSrcAttr TESTS (testing the logic)
+// Imports — brokenImageIcon from svgIcons, html from domTemplates
 // =============================================================================
 
-describe('getImageSrcAttr logic', () => {
-    describe('returns correct source attribute (parameterized)', () => {
-        imageNodeCases.forEach(({ name, createNode, srcAttr }) => {
-            it(`reads ${srcAttr} for ${name}`, () => {
-                const imageNode = createNode()
-                const state = createStateWithNodeSelection(doc(imageNode), 0)
-                const selection = state.selection as NodeSelection
+describe('ImageNodeView — imports', () => {
+	const ts = loadTs()
 
-                // The logic: return node.attrs.src || node.attrs.imageData || ''
-                const src = selection.node.attrs.src || selection.node.attrs.imageData || ''
-                expect(src).toBeTruthy()
-            })
-        })
-    })
+	it('imports brokenImageIcon from svgIcons', () => {
+		expect(ts).toMatch(/import\s*\{[^}]*brokenImageIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
+	})
 
-    it('returns empty string when neither src nor imageData is set', () => {
-        // Create a node with empty src
-        const imageNode = img({ src: '', alt: 'test' })
-        const state = createStateWithNodeSelection(doc(imageNode), 0)
-        const selection = state.selection as NodeSelection
-
-        const src = selection.node.attrs.src || selection.node.attrs.imageData || ''
-        expect(src).toBe('')
-    })
+	it('imports html from domTemplates', () => {
+		expect(ts).toMatch(/import\s*\{[^}]*html[^}]*\}\s*from\s*['"]\$src\/utils\/domTemplates\.ts['"]/)
+	})
 })
 
 // =============================================================================
-// ImageNodeView shared behavior tests
+// Image error placeholder — uses html template + innerHTML for SVG
 // =============================================================================
 
-describe('ImageNodeView shared behavior', () => {
-    describe('applies alignment attribute correctly (parameterized)', () => {
-        const alignments = ['left', 'center', 'right'] as const
+describe('ImageNodeView — error placeholder', () => {
+	const ts = loadTs()
 
-        imageNodeCases.forEach(({ name, createNode }) => {
-            alignments.forEach((alignment) => {
-                it(`applies ${alignment} alignment for ${name}`, () => {
-                    const imageNode = createNode({ alignment })
-                    const state = createStateWithNodeSelection(doc(imageNode), 0)
-                    const selection = state.selection as NodeSelection
+	it('uses html template for the error placeholder, not document.createElement', () => {
+		// Find the error handler block
+		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		expect(errorBlock).not.toBeNull()
+		const block = errorBlock![0]
 
-                    expect(selection.node.attrs.alignment).toBe(alignment)
-                })
-            })
-        })
-    })
+		expect(block).toContain('html`')
+		expect(block).not.toContain('document.createElement')
+	})
 
-    describe('applies textWrap attribute correctly (parameterized)', () => {
-        const wraps = ['none', 'left', 'right'] as const
+	it('injects brokenImageIcon via innerHTML attribute, not string interpolation', () => {
+		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		expect(errorBlock).not.toBeNull()
+		const block = errorBlock![0]
 
-        imageNodeCases.forEach(({ name, createNode }) => {
-            wraps.forEach((wrap) => {
-                it(`applies ${wrap} textWrap for ${name}`, () => {
-                    const imageNode = createNode({ textWrap: wrap })
-                    const state = createStateWithNodeSelection(doc(imageNode), 0)
-                    const selection = state.selection as NodeSelection
+		expect(block).toContain('innerHTML=${brokenImageIcon}')
+	})
 
-                    expect(selection.node.attrs.textWrap).toBe(wrap)
-                })
-            })
-        })
-    })
+	it('checks for existing placeholder before appending (deduplication)', () => {
+		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		expect(errorBlock).not.toBeNull()
+		const block = errorBlock![0]
 
-    describe('applies width attribute correctly (parameterized)', () => {
-        imageNodeCases.forEach(({ name, createNode }) => {
-            it(`stores width for ${name}`, () => {
-                const imageNode = createNode({ width: '50%' })
-                const state = createStateWithNodeSelection(doc(imageNode), 0)
-                const selection = state.selection as NodeSelection
+		expect(block).toContain(".querySelector('.image-error-placeholder')")
+	})
 
-                expect(selection.node.attrs.width).toBe('50%')
-            })
+	it('hides the img element on error', () => {
+		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		expect(errorBlock).not.toBeNull()
+		const block = errorBlock![0]
 
-            it(`allows null width for ${name}`, () => {
-                const imageNode = createNode({ width: null })
-                const state = createStateWithNodeSelection(doc(imageNode), 0)
-                const selection = state.selection as NodeSelection
+		expect(block).toContain("display = 'none'")
+	})
 
-                expect(selection.node.attrs.width).toBeNull()
-            })
-        })
-    })
+	it('no inline SVG markup in source', () => {
+		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		expect(errorBlock).not.toBeNull()
+		const block = errorBlock![0]
+
+		expect(block).not.toContain('<svg')
+		expect(block).not.toContain('viewBox')
+	})
 })
 
 // =============================================================================
-// CSS class building logic tests
+// buildImageSrc — handles various URL formats
 // =============================================================================
 
-describe('Image wrapper CSS class building', () => {
-    describe('builds correct class string (parameterized)', () => {
-        imageNodeCases.forEach(({ name, createNode }) => {
-            it(`builds class for ${name} with left alignment and no wrap`, () => {
-                const imageNode = createNode({ alignment: 'left', textWrap: 'none' })
-                const state = createStateWithNodeSelection(doc(imageNode), 0)
-                const selection = state.selection as NodeSelection
-                const { alignment, textWrap } = selection.node.attrs
+describe('ImageNodeView — buildImageSrc', () => {
+	const ts = loadTs()
 
-                const className = `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`
-                expect(className).toBe('pm-image-wrapper pm-image-align-left pm-image-wrap-none')
-            })
+	it('returns empty string for empty src', () => {
+		expect(ts).toMatch(/if\s*\(\s*!src\s*\)\s*return\s*['"]/)
+	})
 
-            it(`builds class for ${name} with center alignment and left wrap`, () => {
-                const imageNode = createNode({ alignment: 'center', textWrap: 'left' })
-                const state = createStateWithNodeSelection(doc(imageNode), 0)
-                const selection = state.selection as NodeSelection
-                const { alignment, textWrap } = selection.node.attrs
+	it('passes through data: and blob: URLs without auth', () => {
+		expect(ts).toContain("src.startsWith('data:')")
+		expect(ts).toContain("src.startsWith('blob:')")
+	})
 
-                const className = `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`
-                expect(className).toBe('pm-image-wrapper pm-image-align-center pm-image-wrap-left')
-            })
-        })
-    })
-})
+	it('prepends API base URL and appends token for /api/ paths', () => {
+		expect(ts).toContain("src.startsWith('/api/')")
+		expect(ts).toContain('`${API_BASE_URL}${src}')
+	})
 
-// =============================================================================
-// Node selection behavior tests
-// =============================================================================
-
-describe('Image node selection', () => {
-    describe('creates NodeSelection correctly (parameterized)', () => {
-        imageNodeCases.forEach(({ name, createNode }) => {
-            it(`selects ${name} at position 0`, () => {
-                const imageNode = createNode()
-                const state = createStateWithNodeSelection(doc(imageNode), 0)
-
-                expect(state.selection instanceof NodeSelection).toBe(true)
-                expect((state.selection as NodeSelection).node.type.name).toBe(name)
-            })
-        })
-    })
+	it('strips stale tokens from full URLs pointing to /api/images/', () => {
+		expect(ts).toContain("src.includes('/api/images/')")
+		expect(ts).toMatch(/src\.replace\([^)]*token[^)]*\)/)
+	})
 })

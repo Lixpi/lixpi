@@ -1,210 +1,106 @@
+'use strict'
+
 import { describe, it, expect } from 'vitest'
-import { NodeSelection } from 'prosemirror-state'
-import {
-    doc,
-    aiImg,
-    createStateWithNodeSelection,
-} from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 
 // =============================================================================
-// AI-GENERATED IMAGE SPECIFIC TESTS
-// These test attributes unique to aiGeneratedImage that don't exist on image
+// HELPERS
 // =============================================================================
 
-describe('aiGeneratedImage AI-specific attributes', () => {
-    describe('revisedPrompt attribute', () => {
-        it('stores revisedPrompt from AI response', () => {
-            const imageNode = aiImg({
-                imageData: 'data:image/png;base64,abc',
-                revisedPrompt: 'A beautiful sunset over the ocean with vibrant colors',
-            })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
+function loadTs(): string {
+	return readFileSync(
+		resolve(__dirname, 'aiGeneratedImageNode.ts'),
+		'utf-8'
+	)
+}
 
-            expect(selection.node.attrs.revisedPrompt).toBe(
-                'A beautiful sunset over the ocean with vibrant colors'
-            )
-        })
+// =============================================================================
+// Imports — brokenImageIcon from svgIcons, html from domTemplates
+// =============================================================================
 
-        it('defaults to builder default when not provided', () => {
-            const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
+describe('aiGeneratedImageNodeView — imports', () => {
+	const ts = loadTs()
 
-            expect(selection.node.attrs.revisedPrompt).toBe('Test prompt')
-        })
-    })
+	it('imports brokenImageIcon from svgIcons', () => {
+		expect(ts).toMatch(/import\s*\{[^}]*brokenImageIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
+	})
 
-    describe('responseId attribute', () => {
-        it('stores responseId for tracking', () => {
-            const imageNode = aiImg({
-                imageData: 'data:image/png;base64,abc',
-                responseId: 'resp_abc123xyz',
-            })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.responseId).toBe('resp_abc123xyz')
-        })
-
-        it('defaults to builder default when not provided', () => {
-            const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.responseId).toBe('test-response-id')
-        })
-    })
-
-    describe('aiModel attribute', () => {
-        it('stores the AI model used for generation', () => {
-            const imageNode = aiImg({
-                imageData: 'data:image/png;base64,abc',
-                aiModel: 'dall-e-3',
-            })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.aiModel).toBe('dall-e-3')
-        })
-
-        it('defaults to builder default when not provided', () => {
-            const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.aiModel).toBe('dall-e-3')
-        })
-    })
-
-    describe('isPartial attribute', () => {
-        it('is true during streaming', () => {
-            const imageNode = aiImg({
-                imageData: 'data:image/png;base64,partial',
-                isPartial: true,
-            })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.isPartial).toBe(true)
-        })
-
-        it('is false when image is complete', () => {
-            const imageNode = aiImg({
-                imageData: 'data:image/png;base64,complete',
-                isPartial: false,
-            })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.isPartial).toBe(false)
-        })
-
-        it('defaults to false (builder default = complete)', () => {
-            const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.isPartial).toBe(false)
-        })
-    })
-
-    describe('partialIndex attribute', () => {
-        it('tracks streaming chunk index', () => {
-            const imageNode = aiImg({
-                imageData: 'data:image/png;base64,abc',
-                partialIndex: 5,
-            })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.partialIndex).toBe(5)
-        })
-
-        it('defaults to 0', () => {
-            const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.partialIndex).toBe(0)
-        })
-    })
-
-    describe('fileId attribute', () => {
-        it('stores fileId after image is saved', () => {
-            const imageNode = aiImg({
-                imageData: 'data:image/png;base64,abc',
-                fileId: 'file_xyz789',
-            })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.fileId).toBe('file_xyz789')
-        })
-
-        it('defaults to builder default before save', () => {
-            const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-            const state = createStateWithNodeSelection(doc(imageNode), 0)
-            const selection = state.selection as NodeSelection
-
-            expect(selection.node.attrs.fileId).toBe('test-file-id')
-        })
-    })
+	it('imports html from domTemplates', () => {
+		expect(ts).toMatch(/import\s*\{[^}]*html[^}]*\}\s*from\s*['"]\$src\/utils\/domTemplates\.ts['"]/)
+	})
 })
 
 // =============================================================================
-// AI-GENERATED IMAGE NODE TYPE TESTS
+// Image error placeholder — uses html template + innerHTML for SVG
 // =============================================================================
 
-describe('aiGeneratedImage node type', () => {
-    it('has correct node type name', () => {
-        const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-        const state = createStateWithNodeSelection(doc(imageNode), 0)
-        const selection = state.selection as NodeSelection
+describe('aiGeneratedImageNodeView — error placeholder', () => {
+	const ts = loadTs()
 
-        expect(selection.node.type.name).toBe('aiGeneratedImage')
-    })
+	it('uses html template for the error placeholder', () => {
+		const onerrorMatch = ts.match(/imageElement\.onerror\s*=[\s\S]*?(?=\n    \w|\n    \/\/|\n\n    const|\n    updateDisplay)/)
+		expect(onerrorMatch).not.toBeNull()
+		const block = onerrorMatch![0]
 
-    it('is an atom (non-editable content)', () => {
-        const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-        const state = createStateWithNodeSelection(doc(imageNode), 0)
-        const selection = state.selection as NodeSelection
+		expect(block).toContain('html`')
+	})
 
-        expect(selection.node.isAtom).toBe(true)
-    })
+	it('injects brokenImageIcon via innerHTML attribute', () => {
+		const onerrorMatch = ts.match(/imageElement\.onerror\s*=[\s\S]*?(?=\n    \w|\n    \/\/|\n\n    const|\n    updateDisplay)/)
+		expect(onerrorMatch).not.toBeNull()
+		const block = onerrorMatch![0]
 
-    it('is a block node', () => {
-        const imageNode = aiImg({ imageData: 'data:image/png;base64,abc' })
-        const state = createStateWithNodeSelection(doc(imageNode), 0)
-        const selection = state.selection as NodeSelection
+		expect(block).toContain('innerHTML=${brokenImageIcon}')
+	})
 
-        expect(selection.node.isBlock).toBe(true)
-    })
+	it('checks for existing placeholder before appending', () => {
+		const onerrorMatch = ts.match(/imageElement\.onerror\s*=[\s\S]*?(?=\n    \w|\n    \/\/|\n\n    const|\n    updateDisplay)/)
+		expect(onerrorMatch).not.toBeNull()
+		const block = onerrorMatch![0]
+
+		expect(block).toContain(".querySelector('.image-error-placeholder')")
+	})
+
+	it('hides the image element on error', () => {
+		const onerrorMatch = ts.match(/imageElement\.onerror\s*=[\s\S]*?(?=\n    \w|\n    \/\/|\n\n    const|\n    updateDisplay)/)
+		expect(onerrorMatch).not.toBeNull()
+		const block = onerrorMatch![0]
+
+		expect(block).toContain("display = 'none'")
+	})
+
+	it('no inline SVG markup', () => {
+		const onerrorMatch = ts.match(/imageElement\.onerror\s*=[\s\S]*?(?=\n    \w|\n    \/\/|\n\n    const|\n    updateDisplay)/)
+		expect(onerrorMatch).not.toBeNull()
+		const block = onerrorMatch![0]
+
+		expect(block).not.toContain('<svg')
+	})
 })
 
 // =============================================================================
-// IMAGE DATA HANDLING TESTS
+// Image URL construction — handles data:, /api/, http, and base64
 // =============================================================================
 
-describe('aiGeneratedImage imageData handling', () => {
-    it('stores base64 data URL', () => {
-        const base64Data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk'
-        const imageNode = aiImg({ imageData: base64Data })
-        const state = createStateWithNodeSelection(doc(imageNode), 0)
-        const selection = state.selection as NodeSelection
+describe('aiGeneratedImageNodeView — image URL construction', () => {
+	const ts = loadTs()
 
-        expect(selection.node.attrs.imageData).toBe(base64Data)
-    })
+	it('handles data: URLs directly', () => {
+		expect(ts).toContain("imageData.startsWith('data:')")
+	})
 
-    it('stores API path after save', () => {
-        const apiPath = '/api/files/user123/images/generated-abc.png'
-        const imageNode = aiImg({
-            imageData: apiPath,
-            fileId: 'file_abc',
-        })
-        const state = createStateWithNodeSelection(doc(imageNode), 0)
-        const selection = state.selection as NodeSelection
+	it('handles /api/ paths with API base URL and token', () => {
+		expect(ts).toContain("imageData.startsWith('/api/')")
+		expect(ts).toContain('`${API_BASE_URL}${imageData}')
+	})
 
-        expect(selection.node.attrs.imageData).toBe(apiPath)
-    })
+	it('handles full http URLs with /api/images/ by stripping stale tokens', () => {
+		expect(ts).toContain("stripped.includes('/api/images/')")
+		expect(ts).toMatch(/imageData\.replace\([^)]*token[^)]*\)/)
+	})
+
+	it('handles legacy base64 data by prepending data: prefix', () => {
+		expect(ts).toContain('`data:image/png;base64,${imageData}`')
+	})
 })

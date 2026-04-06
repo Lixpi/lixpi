@@ -13,6 +13,7 @@ import { jwtVerifier } from '../helpers/auth.ts'
 import Workspace from '../models/workspace.ts'
 import Document from '../models/document.ts'
 import AiChatThread from '../models/ai-chat-thread.ts'
+import { collectCanvasImageFileIds, reconcileFilesWithImages, rewriteCanvasImageNodes } from './workspace-import-helpers.ts'
 
 const router = Router()
 
@@ -161,21 +162,44 @@ router.get(
 
             archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' })
 
+            // Collect all image fileIds that need exporting.
+            // The files array is the primary source, but canvas nodes may
+            // reference fileIds not in the files array (data desync).
+            // Export both to ensure imported workspaces have all referenced images.
             const files: DocumentFile[] = workspace.files || []
-            if (files.length > 0) {
-                const natsService = NATS_Service.getInstance()
-                if (natsService) {
-                    const bucketName = getWorkspaceBucketName(workspaceId)
-                    for (const file of files) {
-                        try {
-                            const data = await natsService.getObject(bucketName, file.id)
-                            if (data) {
-                                const ext = getFileExtension(file.mimeType, file.name)
-                                archive.append(Buffer.from(data), { name: `images/${file.id}${ext}` })
-                            }
-                        } catch (e: any) {
-                            err(`Export: failed to retrieve file ${file.id}:`, e)
+            const exportedFileIds = new Set<string>()
+            const natsService = NATS_Service.getInstance()
+            const bucketName = getWorkspaceBucketName(workspaceId)
+
+            if (natsService) {
+                // Export images from the files array
+                for (const file of files) {
+                    try {
+                        const data = await natsService.getObject(bucketName, file.id)
+                        if (data) {
+                            const ext = getFileExtension(file.mimeType, file.name)
+                            archive.append(Buffer.from(data), { name: `images/${file.id}${ext}` })
+                            exportedFileIds.add(file.id)
                         }
+                    } catch (e: any) {
+                        err(`Export: failed to retrieve file ${file.id}:`, e)
+                    }
+                }
+
+                // Also export images referenced by canvas nodes but missing from the files array
+                const extraFileIds = collectCanvasImageFileIds(
+                    workspace.canvasState?.nodes || [],
+                    exportedFileIds
+                )
+                for (const fileId of extraFileIds) {
+                    try {
+                        const data = await natsService.getObject(bucketName, fileId)
+                        if (data) {
+                            archive.append(Buffer.from(data), { name: `images/${fileId}.png` })
+                            exportedFileIds.add(fileId)
+                        }
+                    } catch (e: any) {
+                        err(`Export: failed to retrieve canvas-referenced file ${fileId}:`, e)
                     }
                 }
             }
@@ -312,11 +336,19 @@ router.post(
                 })
             }
 
-            // ── Update workspace canvas state and files ────────────
+            // ── Reconcile files array with actually-imported images ──
             const files: DocumentFile[] = manifest.workspace.files || []
+            reconcileFilesWithImages(files, imageEntries)
+
+            // ── Rewrite canvas image node src to target workspaceId ────
+            const canvasState = manifest.workspace.canvasState
+            if (canvasState?.nodes) {
+                rewriteCanvasImageNodes(canvasState.nodes, workspaceId)
+            }
+
             await Workspace.replaceWorkspaceContent({
                 workspaceId,
-                canvasState: manifest.workspace.canvasState,
+                canvasState,
                 files
             })
 

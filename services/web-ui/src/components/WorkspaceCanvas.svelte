@@ -366,7 +366,7 @@
 
     $effect(() => {
         if (renderer) {
-            renderer.render(canvasState, documents, aiChatThreads)
+            renderer.render(canvasState, documents, aiChatThreads, workspaceId)
         }
     })
 
