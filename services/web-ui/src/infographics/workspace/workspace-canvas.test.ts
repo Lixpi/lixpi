@@ -1029,3 +1029,107 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		expect(paneMouseDownMatch![0]).toContain(', true)')
 	})
 })
+
+// =============================================================================
+// Image loading — canonical URL from workspaceId + fileId
+// =============================================================================
+
+describe('Image loading — canonical URL construction', () => {
+	const ts = loadTs()
+
+	it('createImageNode builds canonicalPath from workspaceId and node.fileId, not from node.src', () => {
+		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('`/api/images/${workspaceId}/${node.fileId}`')
+		expect(fnBody).not.toContain('node.src.replace')
+	})
+
+	it('createImageNode uses canonicalPath (not rawSrc) in both initial load and retry', () => {
+		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		const canonicalRefs = (fnBody.match(/canonicalPath/g) || []).length
+		expect(canonicalRefs).toBeGreaterThanOrEqual(2)
+		expect(fnBody).not.toContain('rawSrc')
+	})
+
+	it('workspaceId is declared as let (mutable) so render() can update it', () => {
+		expect(ts).toMatch(/let\s+workspaceId\s*=\s*options\.workspaceId/)
+	})
+
+	it('render() accepts optional newWorkspaceId parameter and updates workspaceId', () => {
+		expect(ts).toMatch(/render\(.*newWorkspaceId\?: string/)
+		expect(ts).toContain('if (newWorkspaceId) workspaceId = newWorkspaceId')
+	})
+})
+
+// =============================================================================
+// Image error placeholder — uses brokenImageIcon from svgIcons
+// =============================================================================
+
+describe('Image error placeholder — SVG icon from svgIcons', () => {
+	const ts = loadTs()
+
+	it('imports brokenImageIcon from svgIcons', () => {
+		expect(ts).toContain('brokenImageIcon')
+		expect(ts).toMatch(/import\s*\{[^}]*brokenImageIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
+	})
+
+	it('showImageErrorPlaceholder uses innerHTML to inject brokenImageIcon (not raw interpolation)', () => {
+		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('innerHTML=${brokenImageIcon}')
+		// brokenImageIcon should only appear inside an innerHTML= binding
+		const allOccurrences = fnBody.match(/brokenImageIcon/g) || []
+		const inlineHtmlOccurrences = fnBody.match(/innerHTML=\$\{brokenImageIcon\}/g) || []
+		expect(allOccurrences.length).toBe(inlineHtmlOccurrences.length)
+	})
+
+	it('showImageErrorPlaceholder deduplicates (checks for existing placeholder before appending)', () => {
+		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain("nodeEl.querySelector('.image-error-placeholder')")
+		expect(fnBody).toContain('return')
+	})
+
+	it('no inline SVG markup in showImageErrorPlaceholder', () => {
+		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).not.toContain('<svg')
+		expect(fnBody).not.toContain('viewBox')
+	})
+})
+
+// =============================================================================
+// buildImageSrc — URL construction logic
+// =============================================================================
+
+describe('buildImageSrc — URL construction logic', () => {
+	const ts = loadTs()
+
+	it('returns transparent pixel for empty imageUrl', () => {
+		expect(ts).toMatch(/if\s*\(\s*!imageUrl\s*\)\s*return\s*['"]data:image\/png;base64,/)
+	})
+
+	it('returns data: URLs unchanged', () => {
+		expect(ts).toMatch(/if\s*\(\s*imageUrl\.startsWith\(\s*['"]data:['"]\s*\)\s*\)\s*return\s+imageUrl/)
+	})
+
+	it('prepends apiBaseUrl for /api/ paths', () => {
+		expect(ts).toMatch(/if\s*\(\s*imageUrl\.startsWith\(\s*['"]\/api\/['"]\s*\)/)
+		expect(ts).toContain('`${apiBaseUrl}${imageUrl}')
+	})
+
+	it('appends token as query param for API URLs', () => {
+		expect(ts).toContain('`?token=${token}`')
+	})
+})

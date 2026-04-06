@@ -109,7 +109,8 @@ function defaultPanZoomConfig(onTransformChange: (transform: Transform) => void)
 }
 
 export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
-    const { paneEl, viewportEl, workspaceId, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange, onAiChatThreadContentChange } = options
+    const { paneEl, viewportEl, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange, onAiChatThreadContentChange } = options
+    let workspaceId = options.workspaceId
 
     paneEl.style.setProperty('--connector-line-default-color', webUiThemeSettings.nodesConnectorLineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', webUiThemeSettings.nodesConnectorLineFocusColor)
@@ -1473,7 +1474,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         nodeEl.appendChild(html`
             <div className="image-error-placeholder">
-                ${brokenImageIcon}
+                <span innerHTML=${brokenImageIcon}></span>
                 <span>Image unavailable</span>
             </div>
         `)
@@ -3268,13 +3269,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         imgEl.alt = ''
         imgEl.draggable = false
 
-        // Strip any stale token from src, then re-apply a fresh one via buildImageSrc
-        const rawSrc = node.src.replace(/[?&]token=[^&]+/, '')
+        // Build image URL from fileId + current workspaceId (kept in sync
+        // by render() on workspace switch).
         const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+        const canonicalPath = `/api/images/${workspaceId}/${node.fileId}`
 
         let retried = false
         AuthService.getTokenSilently().then(token => {
-            imgEl.src = buildImageSrc(rawSrc, API_BASE_URL, token)
+            imgEl.src = buildImageSrc(canonicalPath, API_BASE_URL, token)
         }).catch(() => {
             showImageErrorPlaceholder(imgEl, nodeEl)
         })
@@ -3284,7 +3286,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 retried = true
                 AuthService.getTokenSilently().then(token => {
                     if (token) {
-                        const freshSrc = buildImageSrc(rawSrc, API_BASE_URL, token)
+                        const freshSrc = buildImageSrc(canonicalPath, API_BASE_URL, token)
                         if (imgEl.src !== freshSrc) {
                             imgEl.src = freshSrc
                             return
@@ -3791,7 +3793,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     renderNodes()
 
     return {
-        render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = []) {
+        render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
+            if (newWorkspaceId) workspaceId = newWorkspaceId
             // Only do a full re-render if node structure or documents/threads changed
             // Position/dimension updates are handled directly in DOM during drag/resize
             const needsRerender = shouldRerender(newCanvasState, newDocuments, newAiChatThreads)
