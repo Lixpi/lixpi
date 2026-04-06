@@ -13,6 +13,8 @@
     "scripts": {
         "start": "node ./src/server.ts",
         "dev": "nodemon -L",
+        "test:run": "vitest run",
+        "test": "vitest",
         "aws-login": "aws sso login --use-device-code --sso-session=lixpi"
     },
     "dependencies": {
@@ -48,6 +50,7 @@
         "type-fest": "*"
     },
     "devDependencies": {
+        "vitest": "latest",
         "nodemon": "latest",
         "@types/adm-zip": "*",
         "@types/archiver": "*",

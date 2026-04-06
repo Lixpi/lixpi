@@ -187,7 +187,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         imageElement.style.display = 'none'
         if (!container.querySelector('.image-error-placeholder')) {
             container.appendChild(html`
-                <div className="image-error-placeholder">${brokenImageIcon}<span>Image unavailable</span></div>
+                <div className="image-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Image unavailable</span></div>
             `)
         }
     }
