@@ -115,7 +115,7 @@ export class ImageNodeView implements NodeView {
             this.img.style.display = 'none'
             if (!this.figure.querySelector('.image-error-placeholder')) {
                 this.figure.appendChild(html`
-                    <div className="image-error-placeholder">${brokenImageIcon}<span>Image unavailable</span></div>
+                    <div className="image-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Image unavailable</span></div>
                 `)
             }
         })
