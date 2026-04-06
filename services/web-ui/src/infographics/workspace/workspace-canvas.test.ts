@@ -1034,26 +1034,43 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 // Image loading — canonical URL from workspaceId + fileId
 // =============================================================================
 
-describe('Image loading — canonical URL construction', () => {
+describe('Image loading — URL resolution strategy', () => {
 	const ts = loadTs()
 
-	it('createImageNode builds canonicalPath from workspaceId and node.fileId, not from node.src', () => {
+	it('createImageNode uses canonical workspaceId path for stored API images', () => {
 		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
 		expect(fnBody).toContain('`/api/images/${workspaceId}/${node.fileId}`')
-		expect(fnBody).not.toContain('node.src.replace')
 	})
 
-	it('createImageNode uses canonicalPath (not rawSrc) in both initial load and retry', () => {
+	it('createImageNode detects stored images via isStoredImage check', () => {
 		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		const canonicalRefs = (fnBody.match(/canonicalPath/g) || []).length
-		expect(canonicalRefs).toBeGreaterThanOrEqual(2)
-		expect(fnBody).not.toContain('rawSrc')
+		expect(fnBody).toContain('isStoredImage')
+		expect(fnBody).toContain("strippedSrc.startsWith('/api/')")
+		expect(fnBody).toContain("strippedSrc.includes('/api/images/')")
+	})
+
+	it('createImageNode strips stale tokens from node.src before classifying', () => {
+		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toMatch(/node\.src\.replace\([^)]*token[^)]*\)/)
+	})
+
+	it('createImageNode passes through data: and external URLs via resolvedSrc', () => {
+		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('resolvedSrc')
+		const resolvedRefs = (fnBody.match(/resolvedSrc/g) || []).length
+		expect(resolvedRefs).toBeGreaterThanOrEqual(3)
 	})
 
 	it('workspaceId is declared as let (mutable) so render() can update it', () => {
