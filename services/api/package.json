@@ -31,7 +31,6 @@
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/nats-auth-callout-service": "workspace:*",
         "@lixpi/markdown-stream-parser": "^0.0.3-34",
-        "axios": "*",
         "cookie-parser": "*",
         "cors": "*",
         "chalk": "*",
