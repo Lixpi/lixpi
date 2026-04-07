@@ -1,7 +1,6 @@
 'use strict'
 
 import chalk from 'chalk'
-import axios from 'axios'
 import { log, err, infoStr } from '@lixpi/debug-tools'
 
 import User from '../models/user.ts'
@@ -89,12 +88,15 @@ class RegistrationService {
 
     async getAuth0UserInfo({ queryUserDetailsUrl, accessToken }) {
         try {
-            const response = await axios.get(queryUserDetailsUrl, {
+            const response = await fetch(queryUserDetailsUrl, {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
                 }
             })
-            return response.data
+            if (!response.ok) {
+                throw new Error(`Auth0 userinfo request failed: ${response.status}`)
+            }
+            return await response.json()
         } catch (error) {
             err('Error during getAuth0UserInfo:', error)
             return { error }
