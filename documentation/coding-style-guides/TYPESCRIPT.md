@@ -99,3 +99,4 @@ The only exception is test files (`*.test.ts`) where minimal DOM setup for mocki
 | Optional chaining `?.` | Manual null checks |
 | Nullish coalescing `??` | `\|\|` for default values |
 | `using` / `await using` | Manual resource cleanup (when supported) |
+| Native `fetch` API | `axios` or any HTTP client library |
