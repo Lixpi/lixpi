@@ -4,7 +4,7 @@
 
 Lixpi sits at the intersection of an infinite spatial canvas (like Miro) and a visual logic execution pipeline (like n8n). Instead of writing workflow DSLs or using linear chat prompts, you map out ideas spatially — the arrangement of documents, images, and AI chat threads on the canvas directly dictates context, dependencies, and execution.
 
-[Watch the demo →](https://www.dropbox.com/scl/fi/x4xo0j8q6s05muhq9yl42/lix-demo-03.mov?rlkey=m5q87awvieo4apmssue5qel5h&st=rkm1etu1&dl=0)
+[Watch the demo →](https://youtu.be/Eee2Ku-Tl_8)
 
 ![UI screenshot](./documentation/assets/ui-screenshot.jpeg)
 
