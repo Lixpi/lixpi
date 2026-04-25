@@ -287,6 +287,7 @@ export class AiModelsSync {
                 // O4 Mini Deep Research: 200k context, 100k max output (per page)
                 { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
                 // GPT Image family: image generation models
+                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
                 { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
                 { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
                 { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
@@ -654,8 +655,11 @@ export class AiModelsSync {
             return models.filter((model: OpenAIModel) => {
                 const modelId = model.id
 
-                // GPT Image models are always allowed through (overrides -mini/-nano contains rules)
-                if (modelId.startsWith('gpt-image-')) return true
+                // GPT Image models are always allowed through (overrides -mini/-nano contains rules),
+                // but still drop dated snapshot versions (e.g. gpt-image-2-2026-04-21).
+                if (modelId.startsWith('gpt-image-')) {
+                    return !this.isMinorVersion(modelId)
+                }
 
                 // Check exact blacklist matches
                 if (blacklist.exact.includes(modelId)) {
