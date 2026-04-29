@@ -156,6 +156,11 @@ class GoogleProvider(BaseLLMProvider):
                 # Send placeholder so the frontend shows the animated border immediately
                 await self._publish_image_partial(workspace_id, ai_chat_thread_id, "", 0)
 
+                logger.info(
+                    "[Google:%s] Calling generate_content model=%s aspectRatio=%s configKeys=%s",
+                    self.instance_key, model_version, image_size, list(gen_config_kwargs.keys()),
+                )
+
                 response = await self.client.aio.models.generate_content(
                     model=model_version,
                     contents=contents,
@@ -164,30 +169,98 @@ class GoogleProvider(BaseLLMProvider):
 
                 usage_metadata = response.usage_metadata
 
+                logger.info(
+                    "[Google:%s] generate_content returned candidates=%s promptFeedback=%s",
+                    self.instance_key,
+                    len(response.candidates) if response.candidates else 0,
+                    getattr(response, 'prompt_feedback', None),
+                )
+
+                # Collect ALL parts then decide which is final image. Gemini 3 image
+                # models may return the image inside parts marked `thought=True` and
+                # never emit a separate non-thought image part, so we don't rely on
+                # the `thought` flag to identify the final image.
+                image_parts: list = []  # list of (part_idx, candidate_idx, base64, is_thought)
+                text_chunks: list[str] = []
+
                 if response.candidates:
-                    for candidate in response.candidates:
+                    for c_idx, candidate in enumerate(response.candidates):
+                        finish_reason = getattr(candidate, 'finish_reason', None)
+                        safety_ratings = getattr(candidate, 'safety_ratings', None)
+                        logger.info(
+                            "[Google:%s] candidate[%d] finishReason=%s safetyRatings=%s hasContent=%s parts=%s",
+                            self.instance_key, c_idx, finish_reason, safety_ratings,
+                            candidate.content is not None,
+                            len(candidate.content.parts) if (candidate.content and candidate.content.parts) else 0,
+                        )
+
                         if not candidate.content or not candidate.content.parts:
                             continue
 
-                        for part in candidate.content.parts:
+                        for p_idx, part in enumerate(candidate.content.parts):
                             if self.should_stop:
                                 break
 
-                            if getattr(part, 'thought', False) and part.inline_data:
-                                image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                                await self._publish_image_partial(
-                                    workspace_id, ai_chat_thread_id, image_b64, 0
-                                )
-                            elif part.text and not getattr(part, 'thought', False):
-                                await self._publish_stream_chunk(
-                                    workspace_id, ai_chat_thread_id, part.text
-                                )
-                            elif part.inline_data and not getattr(part, 'thought', False):
-                                image_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-                                await self._publish_image_complete(
-                                    workspace_id, ai_chat_thread_id, image_b64, '', '',
-                                    image_model_id=model_version
-                                )
+                            is_thought = bool(getattr(part, 'thought', False))
+                            inline = getattr(part, 'inline_data', None)
+                            text = getattr(part, 'text', None)
+                            mime = getattr(inline, 'mime_type', None) if inline else None
+                            data_len = len(inline.data) if (inline and inline.data) else 0
+
+                            logger.info(
+                                "[Google:%s] part[%d.%d] thought=%s hasText=%s textLen=%d hasInlineData=%s mime=%s dataLen=%d",
+                                self.instance_key, c_idx, p_idx, is_thought,
+                                bool(text), len(text) if text else 0,
+                                inline is not None, mime, data_len,
+                            )
+
+                            if inline and inline.data:
+                                image_b64 = base64.b64encode(inline.data).decode('utf-8')
+                                image_parts.append((c_idx, p_idx, image_b64, is_thought))
+                            elif text:
+                                # Text content (could be thought summary or regular text)
+                                text_chunks.append(text)
+
+                logger.info(
+                    "[Google:%s] Image generation parsed: imageParts=%d textChunks=%d",
+                    self.instance_key, len(image_parts), len(text_chunks),
+                )
+
+                # Stream any non-thought text back to the frontend
+                if text_chunks:
+                    await self._publish_stream_chunk(
+                        workspace_id, ai_chat_thread_id, ''.join(text_chunks)
+                    )
+
+                if not image_parts:
+                    err_msg = (
+                        f"Google image model {model_version} returned no inline image data. "
+                        f"finishReason={getattr(response.candidates[0], 'finish_reason', None) if response.candidates else None} "
+                        f"promptFeedback={getattr(response, 'prompt_feedback', None)}"
+                    )
+                    logger.error("[Google:%s] %s", self.instance_key, err_msg)
+                    state['error'] = err_msg
+                    # Still publish an empty IMAGE_COMPLETE so the UI unblocks the placeholder
+                    await self._publish_image_complete(
+                        workspace_id, ai_chat_thread_id, '', '', '',
+                        image_model_id=model_version
+                    )
+                else:
+                    # Emit all but the last as IMAGE_PARTIAL, the last as IMAGE_COMPLETE
+                    for idx, (_, _, image_b64, _) in enumerate(image_parts[:-1]):
+                        await self._publish_image_partial(
+                            workspace_id, ai_chat_thread_id, image_b64, idx + 1
+                        )
+
+                    final_b64 = image_parts[-1][2]
+                    logger.info(
+                        "[Google:%s] Publishing IMAGE_COMPLETE finalImageB64Len=%d (from %d total image parts)",
+                        self.instance_key, len(final_b64), len(image_parts),
+                    )
+                    await self._publish_image_complete(
+                        workspace_id, ai_chat_thread_id, final_b64, '', '',
+                        image_model_id=model_version
+                    )
 
             elif inject_tool:
                 # Text model with function tool — stream text AND detect tool calls
