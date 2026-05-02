@@ -41,9 +41,30 @@ class Auth0Service {
                 },
             })
             console.log('Auth0 client initialized successfully', this.auth0)
+
+            // Tauri delivers the OAuth callback URL via a deep-link event instead of a navigation,
+            // so window.location.search will not contain the auth code. Subscribe to the deep-link
+            // plugin when running inside Tauri (no-op in the browser build).
+            if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+                const { onOpenUrl, getCurrent } = await import('@tauri-apps/plugin-deep-link')
+                const initial = await getCurrent()
+                if (initial?.length) {
+                    await this.handleCallbackUrl(initial[0])
+                }
+                await onOpenUrl(async (urls) => {
+                    if (urls[0]) await this.handleCallbackUrl(urls[0])
+                })
+            }
         } catch (error) {
             console.error('Error initializing Auth0 client:', error)
         } finally {
+            await this.updateAuthData()
+        }
+    }
+
+    private async handleCallbackUrl(url: string): Promise<void> {
+        if (url.includes('code=') && url.includes('state=')) {
+            await this.auth0!.handleRedirectCallback(url)
             await this.updateAuthData()
         }
     }

@@ -1,0 +1,9 @@
+# Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Tauri-generated mobile project trees
+src-tauri/gen/
+
+# Node
+node_modules/

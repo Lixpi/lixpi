@@ -3,3 +3,4 @@ packages:
   - "packages/lixpi/*"
   - "lambda-functions/**/*"
   - "infrastructure/pulumi"
+  - "gui/*"

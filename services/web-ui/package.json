@@ -56,6 +56,9 @@
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
+        "@tauri-apps/api": "*",
+        "@tauri-apps/plugin-deep-link": "*",
+        "@tauri-apps/plugin-store": "*",
         "elkjs": "*",
         "@auth0/auth0-spa-js": "*",
         "@codemirror/autocomplete": "*",

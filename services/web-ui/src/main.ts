@@ -22,6 +22,23 @@ import { authStore } from '$src/stores/authStore.ts'
 
 const VITE_NATS_SERVER = import.meta.env.VITE_NATS_SERVER
 
+// In Tauri builds, the user can override the NATS endpoint via the Settings panel.
+// The override is persisted in plugin-store under settings.json. The web build skips
+// this branch entirely (the dynamic import is tree-shaken by Vite when not in Tauri).
+async function resolveNatsServerUrl(): Promise<string> {
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+        try {
+            const { Store } = await import('@tauri-apps/plugin-store')
+            const store = await Store.load('settings.json')
+            const override = await store.get<string>('nats_server_url')
+            if (override) return override
+        } catch (error) {
+            console.warn('Failed to read NATS URL override from Tauri store; falling back to build-time default', error)
+        }
+    }
+    return VITE_NATS_SERVER
+}
+
 // Init services and then start the app
 async function initializeServicesSequentially() {
     try {
@@ -32,13 +49,15 @@ async function initializeServicesSequentially() {
             throw new Error('No auth token');
         }
 
-        console.log('import.meta.env.VITE_NATS_SERVER:', {
-            natsServer: VITE_NATS_SERVER,
-            fullEnv: import.meta.env
+        const natsServerUrl = await resolveNatsServerUrl();
+
+        console.log('NATS server URL resolved:', {
+            natsServer: natsServerUrl,
+            buildDefault: VITE_NATS_SERVER,
         });
 
         const natsInstance = await NatsService.init({
-            servers: [VITE_NATS_SERVER],
+            servers: [natsServerUrl],
             webSocket: true,
             name: 'web-client',
             token: authToken,
