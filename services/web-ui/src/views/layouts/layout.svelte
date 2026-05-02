@@ -292,21 +292,24 @@
     //     flex-direction: row;
     // }
 
+    // Floating chrome respects iOS safe areas (notch / Dynamic Island / home indicator).
+    // env(safe-area-inset-*) returns 0 in browsers and on platforms without a notch.
     .sidebar-collapse-actions {
-        // z-index: 999999;
         z-index: 10;
+        top: max(1.25rem, calc(env(safe-area-inset-top) + 0.5rem));
+        left: max(1.25rem, calc(env(safe-area-inset-left) + 0.5rem));
     }
 
     .sidebar-right-menu-wrapper {
         position: absolute;
         z-index: 60;
-        top: .5rem;
-        right: .5rem;
+        top: max(.5rem, calc(env(safe-area-inset-top) + .5rem));
+        right: max(.5rem, calc(env(safe-area-inset-right) + .5rem));
     }
     .user-menu {
         position: absolute;
-        top: .7rem;
-        right: 1rem;
+        top: max(.7rem, calc(env(safe-area-inset-top) + .5rem));
+        right: max(1rem, calc(env(safe-area-inset-right) + .5rem));
         z-index: 60;
     }
 

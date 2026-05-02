@@ -5,6 +5,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+    // Keep Tauri's terminal output visible alongside Vite's during `tauri dev`.
+    clearScreen: false,
     plugins: [
         svelte(),
     ],
