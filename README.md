@@ -61,10 +61,9 @@ The result: pairing Claude with gpt-image-1 produces a genuinely different aesth
 
 ![High-Level System Overview](./documentation/assets/services-architecture-diagram.jpeg)
 
-- **Everything talks through NATS** — browser clients, API service, and LLM service all communicate via the same message bus
+- **Everything talks through NATS** — browser clients and the API service communicate via the same message bus
 - **Web UI connects directly to NATS** via WebSocket, enabling real-time streaming without HTTP polling
-- **API Service** handles authentication, business logic, and database operations
-- **LLM API Service** streams AI responses directly to clients, bypassing API for lower latency
+- **API Service** handles authentication, CRUD, database operations, AND the in-process LangGraph LLM workflow that streams AI responses directly to clients
 
 ### AI Chat Data Flow
 
@@ -74,17 +73,16 @@ The result: pairing Claude with gpt-image-1 produces a genuinely different aesth
 
 1. **Context extraction** (browser): When you hit Send, the web-ui traverses canvas edges — pulling text from connected Document nodes, `nats-obj://` image references from Image nodes, and conversation history from upstream AI Thread nodes — then assembles everything into a multimodal payload.
 2. **Publish to NATS**: The browser publishes the payload via WebSocket.
-3. **API service** (`lixpi-api`): Validates the request and fetches AI model metadata, then forwards the enriched payload to the LLM API.
-4. **LLM processing**: The LLM API resolves `nats-obj://` references from JetStream Object Store into base64, streams the response from the AI provider, and — if image generation is needed — generates an image with progressive partial previews.
-5. **Render**: Tokens stream directly to the browser via NATS and render in ProseMirror.
+3. **API service** (`lixpi-api`): The NATS handler fetches AI model metadata from DynamoDB, then invokes the LLM module (`services/api/src/llm/`) in-process. The module runs a LangGraph workflow that resolves `nats-obj://` references, streams from the AI provider, and — if image generation is needed — routes to the appropriate image model.
+4. **Render**: Tokens stream directly to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) and render in ProseMirror.
 
 #### Streaming Response — From AI to Canvas
 
 ![AI Chat Flow — Streaming Response](./documentation/assets/ai-streaming-response-diagram.jpeg)
 
-1. **Text streaming**: The LLM API streams the text response from the AI provider. If the model invokes the `generate_image` tool, image generation is triggered; otherwise, tokens stream directly to the browser.
-2. **Image generation path**: The ImageRouter routes to the appropriate image model provider, streams partial previews (blurry → clear), and uploads the final image to JetStream Object Store.
-3. **Delivery**: Text-only responses arrive via `END_STREAM` and render in ProseMirror. Generated images arrive via `IMAGE_COMPLETE` and appear as image nodes on the canvas. The API service is **not** in this streaming path — tokens flow directly from llm-api → NATS → browser.
+1. **Text streaming**: The LangGraph workflow streams the text response from the AI provider. If the model invokes the `generate_image` tool, image generation is triggered; otherwise, tokens stream directly to the browser.
+2. **Image generation path**: The ImageRouter creates a transient image-model provider (OpenAI gpt-image-*, Google Gemini, Stability), streams partial previews (blurry → clear), and uploads the final image to JetStream Object Store via the in-process `storeWorkspaceImage` helper.
+3. **Delivery**: Text-only responses arrive via `END_STREAM` and render in ProseMirror. Generated images arrive via `IMAGE_COMPLETE` and appear as image nodes on the canvas.
 
 For the full architecture deep-dive, see [Architecture](documentation/ARCHITECTURE.md).
 
