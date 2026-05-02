@@ -72,7 +72,6 @@ export type MainApiServiceArgs = {
         NATS_AUTH_NKEY_ISSUER_PUBLIC: string
         NATS_AUTH_XKEY_ISSUER_SEED: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
-        NATS_LLM_SERVICE_NKEY_PUBLIC: string
 
         ORIGIN_HOST_URL: string
         API_HOST_URL: string
@@ -83,6 +82,9 @@ export type MainApiServiceArgs = {
 
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
+        GOOGLE_API_KEY: string
+        STABLE_DIFFUSION_API_KEY: string
+        LLM_TIMEOUT_SECONDS: string
     }
 
     // Docker build context
@@ -98,8 +100,8 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         privateSubnets,
         serviceName = 'api',
         containerPort = 3000,
-        cpu = 512,        // 0.5 vCPU
-        memory = 512,    // 512 MiB
+        cpu = 512,         // 0.5 vCPU — bumped baseline for in-process LLM streaming
+        memory = 1024,     // 1024 MiB — bumped baseline for in-process LLM streaming
         desiredCount = 1,
         resourceBindings,
         environment,

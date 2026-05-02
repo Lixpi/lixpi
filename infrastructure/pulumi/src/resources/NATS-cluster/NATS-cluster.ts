@@ -57,7 +57,6 @@ export interface NatsClusterServiceArgs {
         NATS_SERVER_NAME_BASE: string
         NATS_AUTH_NKEY_ISSUER_PUBLIC: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
-        NATS_LLM_SERVICE_NKEY_PUBLIC: string
         NATS_SAME_ORIGIN: string
         NATS_ALLOWED_ORIGINS: string
         NATS_DEBUG_MODE: string
