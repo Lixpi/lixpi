@@ -1,0 +1,25 @@
+{
+    "name": "lixpi-tauri",
+    "private": true,
+    "version": "0.0.1",
+    "type": "module",
+    "scripts": {
+        "dev": "tauri dev",
+        "build": "tauri build",
+        "ios:init": "tauri ios init",
+        "ios:dev": "tauri ios dev --host",
+        "ios:build": "tauri ios build",
+        "icon": "tauri icon ../../services/web-ui/public/logo-512.png"
+    },
+    "devDependencies": {
+        "@tauri-apps/cli": "^2"
+    },
+    "dependencies": {
+        "@tauri-apps/api": "^2",
+        "@tauri-apps/plugin-deep-link": "^2",
+        "@tauri-apps/plugin-store": "^2",
+        "@tauri-apps/plugin-shell": "^2",
+        "@tauri-apps/plugin-os": "^2",
+        "@tauri-apps/plugin-log": "^2"
+    }
+}
