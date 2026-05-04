@@ -22,6 +22,27 @@ function loadTs(): string {
 	)
 }
 
+function loadWorkspaceCanvasSvelte(): string {
+	return readFileSync(
+		resolve(__dirname, '../../components/WorkspaceCanvas.svelte'),
+		'utf-8'
+	)
+}
+
+function loadLayout(): string {
+	return readFileSync(
+		resolve(__dirname, '../../views/layouts/layout.svelte'),
+		'utf-8'
+	)
+}
+
+function loadSidebar(): string {
+	return readFileSync(
+		resolve(__dirname, '../../components/Sidebar.svelte'),
+		'utf-8'
+	)
+}
+
 function loadThemeSettings(): string {
 	return readFileSync(
 		resolve(__dirname, '../../webUiThemeSettings.ts'),
@@ -767,6 +788,29 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnBody).toContain("'--dropdown-popover-box-shadow'")
 		expect(fnBody).toContain('webUiThemeSettings.dropdownPopoverBoxShadow')
 		expect(ts).not.toContain(`AiChat${'Panel.svelte'}`)
+	})
+
+	it('uses a full-height right-edge chat panel with zoom and avatar offsets', () => {
+		const scss = loadScss()
+		const svelte = loadWorkspaceCanvasSvelte()
+		const layout = loadLayout()
+		const sidebar = loadSidebar()
+
+		expect(scss).toContain('--workspace-ai-chat-sidebar-width')
+		expect(scss).toContain('--workspace-ai-chat-sidebar-edge-gap: 15px')
+		expect(svelte).toContain('class:workspace-canvas--chat-panel-open')
+		expect(scss).toContain('right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap))')
+		expect(scss).toContain('right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline))')
+		expect(scss).toContain('bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
+		expect(layout).toContain('workspace-sidebar-shell')
+		expect(layout).toContain('workspace-sidebar-body')
+		expect(layout).toContain('workspace-sidebar-footer')
+		expect(layout).toContain('<Separator />')
+		expect(layout).toContain('sidebar-user-menu')
+		expect(layout).not.toContain('user-menu--workspace-chat-panel')
+		expect(sidebar).toContain('height: auto !important')
+		expect(sidebar).toContain('flex: 1 1 auto')
+		expect(sidebar).toContain('max-height: none !important')
 	})
 })
 

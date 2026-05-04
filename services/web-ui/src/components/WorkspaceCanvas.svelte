@@ -377,7 +377,10 @@
     })
 </script>
 
-<div class="workspace-canvas">
+<div
+    class="workspace-canvas"
+    class:workspace-canvas--chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
+>
     <div class="workspace-floating-toolbar">
         <button class="workspace-floating-toolbar__button" onclick={handleCreateDocument}>
             {@html createNewFileIcon}

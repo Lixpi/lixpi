@@ -1,13 +1,23 @@
 @import '$src/sass/_variables.scss';
 @import '$src/components/bubbleMenu/bubbleMenu.scss';
 
+:root {
+    --workspace-ai-chat-sidebar-width: min(520px, calc(100vw - 64px));
+    --workspace-ai-chat-sidebar-edge-gap: 15px;
+    --workspace-ai-chat-sidebar-padding: 15px;
+    --workspace-ai-chat-sidebar-zoom-gap: 15px;
+    --workspace-canvas-padding-top: 32px;
+    --workspace-canvas-padding-inline: 16px;
+    --workspace-canvas-padding-bottom: 16px;
+}
+
 .workspace-canvas {
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
     position: relative;
-    padding: 32px 16px 16px 16px;
+    padding: var(--workspace-canvas-padding-top) var(--workspace-canvas-padding-inline) var(--workspace-canvas-padding-bottom);
     overflow: hidden;
 }
 
@@ -203,6 +213,10 @@
     color: #555;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     pointer-events: none;
+}
+
+.workspace-canvas--chat-panel-open .workspace-zoom-indicator {
+    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap));
 }
 
 .workspace-pane {
@@ -461,11 +475,12 @@
 
 .workspace-ai-chat-floating-panel {
     position: absolute;
-    top: 72px;
-    right: 32px;
-    width: min(520px, calc(100% - 64px));
-    height: min(720px, calc(100% - 120px));
-    min-height: 360px;
+    top: calc(-1 * var(--workspace-canvas-padding-top));
+    right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline));
+    bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
+    width: var(--workspace-ai-chat-sidebar-width);
+    height: auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     z-index: 10030;
