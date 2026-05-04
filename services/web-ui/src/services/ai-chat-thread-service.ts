@@ -98,10 +98,9 @@ function findConnectedNodes(
         }
     }
 
-    // Region children: any node whose `parentId` is the target node is also part
-    // of its context (the region acts as a container). Synthesize a virtual edge
-    // so downstream code that expects an edge keeps working. See
-    // documentation/memory/AI-CHAT-SIDE-PANEL-MIGRATION.md (Phase 5 step 4).
+    // Context-region children: any node whose `parentId` is the target node is
+    // part of the prompt context. Synthesize a virtual edge so downstream code
+    // that expects an edge keeps working.
     const childNodes = nodes.filter((n) => n.parentId === targetNodeId)
     for (const childNode of childNodes) {
         if (visited.has(childNode.nodeId)) continue

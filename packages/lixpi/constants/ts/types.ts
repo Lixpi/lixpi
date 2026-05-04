@@ -50,7 +50,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'contextRegion'
 
 type CanvasNodePosition = {
     x: number
@@ -117,7 +117,15 @@ export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     dimensions: CanvasNodeDimensions
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode
+export type ContextRegionCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'contextRegion'
+    referenceId: string
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | ContextRegionCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -144,7 +152,7 @@ export type CanvasState = {
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
     // Workspace-scoped UI state: which AI chat thread is currently active in
-    // the side panel. Restored on workspace load. See AI-CHAT-SIDE-PANEL-MIGRATION.md
+    // the canvas-owned floating chat panel.
     lastActiveAiChatThreadId?: string
 }
 
