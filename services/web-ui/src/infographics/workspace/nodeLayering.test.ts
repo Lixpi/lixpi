@@ -68,4 +68,17 @@ describe('nodeLayering — createNodeLayerManager', () => {
 		expect(manager.currentTopIndex()).toBe(12)
 		expect(manager2.currentTopIndex()).toBe(11)
 	})
+
+	it('keeps background elements below the normal node layer', () => {
+		const backgroundEl = document.createElement('div')
+		const normalEl = document.createElement('div')
+
+		manager.sendToBackground(backgroundEl)
+		expect(backgroundEl.style.zIndex).toBe('1')
+		expect(manager.backgroundIndex()).toBe(1)
+		expect(manager.currentTopIndex()).toBe(10)
+
+		manager.bringToFront(normalEl)
+		expect(Number(backgroundEl.style.zIndex)).toBeLessThan(Number(normalEl.style.zIndex))
+	})
 })

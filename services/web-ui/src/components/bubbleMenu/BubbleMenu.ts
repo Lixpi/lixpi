@@ -16,6 +16,8 @@ import type {
     BubbleMenuPositionRequest,
 } from '$src/components/bubbleMenu/types.ts'
 
+const noEntranceMotionClass = 'bubble-menu--no-entrance-motion'
+
 const isTouchDevice = (): boolean => 'ontouchstart' in window || navigator.maxTouchPoints > 0
 
 export class BubbleMenu {
@@ -29,6 +31,7 @@ export class BubbleMenu {
     private scrollContainer: HTMLElement | Window = window
     private onShow?: (context: string) => void
     private onHide?: () => void
+    private getVisualScale?: () => number
 
     // Prevent-hide pattern: when user clicks a menu button, the editor blur
     // shouldn't hide the menu. The consumer sets this before dispatching.
@@ -40,6 +43,7 @@ export class BubbleMenu {
         this.panels = options.panels ?? []
         this.onShow = options.onShow
         this.onHide = options.onHide
+        this.getVisualScale = options.getVisualScale
 
         this.menu = createEl('div', {
             className: 'bubble-menu',
@@ -94,7 +98,8 @@ export class BubbleMenu {
 
     show(context: string, position: BubbleMenuPositionRequest): void {
         this.updateVisibleItems(context)
-        this.menu.style.visibility = 'visible'
+        this.menu.classList.toggle(noEntranceMotionClass, position.animateOnShow === false)
+        this.menu.style.visibility = 'hidden'
         this.menu.classList.add('is-visible')
         this.onShow?.(context)
         this.lastPosition = position
@@ -132,6 +137,7 @@ export class BubbleMenu {
         if (context !== this.currentContext) {
             this.updateVisibleItems(context)
         }
+        this.menu.classList.toggle(noEntranceMotionClass, position.animateOnShow === false)
         this.lastPosition = position
         this.refreshState()
         this.reposition(position)
@@ -162,7 +168,9 @@ export class BubbleMenu {
 
     private updatePosition(position: BubbleMenuPositionRequest, retryCount = 0): void {
         const scale = this.getScale()
+        const visualScale = this.getMenuVisualScale()
         const { targetRect, placement } = position
+        const shouldClampToParent = position.clampToParent ?? true
 
         if (!targetRect.width && !targetRect.height) {
             if (retryCount < 3) {
@@ -174,31 +182,36 @@ export class BubbleMenu {
         // Measure menu
         this.menu.style.visibility = 'hidden'
         this.menu.style.display = 'flex'
+        this.menu.style.setProperty('--bubble-menu-visual-scale', String(visualScale))
+        const menuLayoutWidth = this.menu.offsetWidth
+        const menuLayoutHeight = this.menu.offsetHeight
         const menuRect = this.menu.getBoundingClientRect()
-        const menuWidthLocal = menuRect.width / scale
+        const fallbackScale = Math.max(scale * visualScale, 0.01)
+        const menuWidthLocal = (menuLayoutWidth || menuRect.width / fallbackScale) * visualScale
+        const menuHeightScreen = (menuLayoutHeight || menuRect.height / fallbackScale) * scale * visualScale
 
         if (placement === 'below') {
             // Center horizontally below target
             const targetCenterX = targetRect.left + targetRect.width / 2
-            const menuScreenLeft = targetCenterX - menuRect.width / 2
+            const menuScreenLeft = targetCenterX - menuWidthLocal * scale / 2
             const menuScreenTop = targetRect.bottom + 8 * scale
 
             const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
-            const clampedLeft = this.clampHorizontal(local.x, menuWidthLocal, scale)
+            const finalLeft = shouldClampToParent ? this.clampHorizontal(local.x, menuWidthLocal, scale) : local.x
 
             Object.assign(this.menu.style, {
-                left: `${clampedLeft}px`,
+                left: `${finalLeft}px`,
                 top: `${local.y}px`,
                 visibility: 'visible',
             })
         } else {
             // Center horizontally above target
             const targetCenterX = targetRect.left + targetRect.width / 2
-            const menuScreenLeft = targetCenterX - menuRect.width / 2
-            const menuScreenTop = targetRect.top - menuRect.height - 8 * scale
+            const menuScreenLeft = targetCenterX - menuWidthLocal * scale / 2
+            const menuScreenTop = targetRect.top - menuHeightScreen - 8 * scale
 
             const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
-            const clampedLeft = this.clampHorizontal(local.x, menuWidthLocal, scale)
+            const finalLeft = shouldClampToParent ? this.clampHorizontal(local.x, menuWidthLocal, scale) : local.x
 
             // Flip below if above is out of bounds
             let finalY = local.y
@@ -208,7 +221,7 @@ export class BubbleMenu {
             }
 
             Object.assign(this.menu.style, {
-                left: `${clampedLeft}px`,
+                left: `${finalLeft}px`,
                 top: `${finalY}px`,
                 visibility: 'visible',
             })
@@ -256,6 +269,11 @@ export class BubbleMenu {
     getScale(): number {
         const transformInfo = this.findTransformedAncestor()
         return transformInfo?.scale ?? 1
+    }
+
+    private getMenuVisualScale(): number {
+        const visualScale = this.getVisualScale?.() ?? 1
+        return Number.isFinite(visualScale) ? Math.max(visualScale, 0.01) : 1
     }
 
     // =========================================================================
