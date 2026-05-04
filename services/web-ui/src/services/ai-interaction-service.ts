@@ -233,6 +233,16 @@ export default class AiInteractionService {
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE, payload)
     }
 
-    disconnect() {}
+    disconnect() {
+        const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+        this.markdownStreamParserUnsubscribe?.()
+        MarkdownStreamParser.removeInstance(this.aiChatThreadId)
+        servicesStore.getData('nats')?.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
+        this.currentAiProvider = null
+    }
+
+    destroy() {
+        this.disconnect()
+    }
 }
 

@@ -62,7 +62,18 @@ type CanvasNodeDimensions = {
     height: number
 }
 
-export type DocumentCanvasNode = {
+// xyflow-native parent-child fields. When `parentId` is set, `position` is
+// relative to the parent's top-left corner (xyflow's contract). `expandParent`
+// causes the parent to auto-grow when this child moves or is resized past the
+// parent's current bounds. `extent: 'parent'` clamps the child inside the
+// parent rect (intentionally not used during region adoption — see plan D11).
+export type CanvasNodeParentingFields = {
+    parentId?: string
+    extent?: 'parent' | [[number, number], [number, number]]
+    expandParent?: boolean
+}
+
+export type DocumentCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'document'
     referenceId: string
@@ -86,7 +97,7 @@ export type ImageGeneratedByMetadata = {
     responseMessageId?: string
 }
 
-export type ImageCanvasNode = {
+export type ImageCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'image'
     fileId: string
@@ -98,7 +109,7 @@ export type ImageCanvasNode = {
     generatedBy?: ImageGeneratedByMetadata
 }
 
-export type AiChatThreadCanvasNode = {
+export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'aiChatThread'
     referenceId: string
@@ -132,6 +143,9 @@ export type CanvasState = {
     viewport: CanvasViewport
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
+    // Workspace-scoped UI state: which AI chat thread is currently active in
+    // the side panel. Restored on workspace load. See AI-CHAT-SIDE-PANEL-MIGRATION.md
+    lastActiveAiChatThreadId?: string
 }
 
 export type Workspace = {

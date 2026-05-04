@@ -11,6 +11,11 @@
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 type Color = { r: number; g: number; b: number }
+export type ShiftingGradientColorSet = [string, string, string, string]
+
+type ShiftingGradientBackgroundOptions = {
+    colors?: ShiftingGradientColorSet
+}
 
 function hexToRgb(hex: string): Color {
     const h = hex.replace('#', '')
@@ -21,12 +26,12 @@ function hexToRgb(hex: string): Color {
     }
 }
 
-// Colors sourced from webUiThemeSettings.shiftingGradientColors
-const GRADIENT_COLORS = {
-    color1: hexToRgb(webUiThemeSettings.shiftingGradientColors[0]),
-    color2: hexToRgb(webUiThemeSettings.shiftingGradientColors[1]),
-    color3: hexToRgb(webUiThemeSettings.shiftingGradientColors[2]),
-    color4: hexToRgb(webUiThemeSettings.shiftingGradientColors[3]),
+function getColorSetKey(colors: ShiftingGradientColorSet): string {
+    return colors.join('|')
+}
+
+function parseGradientColors(colors: ShiftingGradientColorSet): Color[] {
+    return colors.map(hexToRgb)
 }
 
 // 8 phase positions for the 4 color points
@@ -48,6 +53,7 @@ const BITMAP_HEIGHT = 80
 // Animation parameters
 const ANIMATION_DURATION_MS = 500
 const SWIRL_FACTOR = 0.35
+const INITIAL_PHASE = 4
 
 type Position = { x: number; y: number }
 
@@ -66,15 +72,16 @@ type SubscribedCanvas = {
 }
 
 class ShiftingGradientRenderer {
-    private static instance: ShiftingGradientRenderer | null = null
+    private static instances: Map<string, ShiftingGradientRenderer> = new Map()
 
+    private instanceKey: string
     private offscreenCanvas: OffscreenCanvas | HTMLCanvasElement
     private offscreenCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
     private imageData: ImageData
     private subscribedCanvases: Map<HTMLCanvasElement, SubscribedCanvas> = new Map()
 
     private colors: Color[]
-    private currentPhase: number = 0
+    private currentPhase: number = INITIAL_PHASE
     private animationProgress: number = 1 // 0 = animating, 1 = idle
     private animationStartTime: number = 0
     private animationFrameId: number | null = null
@@ -83,16 +90,12 @@ class ShiftingGradientRenderer {
     private pattern: { image: HTMLImageElement; options: Required<PatternOptions> } | null = null
 
     // Start/end phases for interpolation
-    private phaseFrom: number = 0
-    private phaseTo: number = 0
+    private phaseFrom: number = INITIAL_PHASE
+    private phaseTo: number = INITIAL_PHASE
 
-    private constructor() {
-        this.colors = [
-            GRADIENT_COLORS.color1,
-            GRADIENT_COLORS.color2,
-            GRADIENT_COLORS.color3,
-            GRADIENT_COLORS.color4,
-        ]
+    private constructor(colors: ShiftingGradientColorSet, instanceKey: string) {
+        this.instanceKey = instanceKey
+        this.colors = parseGradientColors(colors)
 
         // Initialize phase interpolation state
         this.phaseTo = this.currentPhase
@@ -116,11 +119,16 @@ class ShiftingGradientRenderer {
         this.renderGradient()
     }
 
-    static getInstance(): ShiftingGradientRenderer {
-        if (!ShiftingGradientRenderer.instance) {
-            ShiftingGradientRenderer.instance = new ShiftingGradientRenderer()
+    static getInstance(colors: ShiftingGradientColorSet = webUiThemeSettings.shiftingGradientColors): ShiftingGradientRenderer {
+        const instanceKey = getColorSetKey(colors)
+        let renderer = ShiftingGradientRenderer.instances.get(instanceKey)
+
+        if (!renderer) {
+            renderer = new ShiftingGradientRenderer(colors, instanceKey)
+            ShiftingGradientRenderer.instances.set(instanceKey, renderer)
         }
-        return ShiftingGradientRenderer.instance
+
+        return renderer
     }
 
     // Subscribe a canvas element to receive gradient updates
@@ -170,6 +178,18 @@ class ShiftingGradientRenderer {
         if (entry) {
             entry.visible = visible
         }
+    }
+
+    // Redraw immediately after a backing-store resize. Setting canvas.width or
+    // canvas.height clears the bitmap, so waiting for the next animation frame
+    // can flash a blank gradient while a region is being resized.
+    redrawCanvas(canvas: HTMLCanvasElement): void {
+        const entry = this.subscribedCanvases.get(canvas)
+        if (!entry || !entry.visible) return
+
+        entry.ctx.imageSmoothingEnabled = true
+        entry.ctx.imageSmoothingQuality = 'high'
+        this.drawToCanvas(canvas, entry.ctx)
     }
 
     // Trigger transition to next phase (called on message send)
@@ -433,12 +453,12 @@ class ShiftingGradientRenderer {
         }
         this.isAnimating = false
         this.subscribedCanvases.clear()
-        ShiftingGradientRenderer.instance = null
+        ShiftingGradientRenderer.instances.delete(this.instanceKey)
     }
 }
 
 // Creates and attaches a shifting gradient background canvas to a container element
-export function createShiftingGradientBackground(container: HTMLElement): {
+    export function createShiftingGradientBackground(container: HTMLElement, options: ShiftingGradientBackgroundOptions = {}): {
     canvas: HTMLCanvasElement
     destroy: () => void
     triggerAnimation: () => void
@@ -461,14 +481,20 @@ export function createShiftingGradientBackground(container: HTMLElement): {
         const rect = container.getBoundingClientRect()
         // Use device pixel ratio for crisp rendering, but cap at 2x for performance
         const dpr = Math.min(window.devicePixelRatio || 1, 2)
-        canvas.width = Math.max(1, Math.floor(rect.width * dpr))
-        canvas.height = Math.max(1, Math.floor(rect.height * dpr))
+        const nextWidth = Math.max(1, Math.floor(rect.width * dpr))
+        const nextHeight = Math.max(1, Math.floor(rect.height * dpr))
+
+        if (canvas.width === nextWidth && canvas.height === nextHeight) return false
+
+        canvas.width = nextWidth
+        canvas.height = nextHeight
+        return true
     }
 
     updateCanvasSize()
     container.insertBefore(canvas, container.firstChild)
 
-    const renderer = ShiftingGradientRenderer.getInstance()
+    const renderer = ShiftingGradientRenderer.getInstance(options.colors)
     renderer.subscribe(canvas)
 
     // Optional: pattern overlay configured via CSS variables on the container.
@@ -515,7 +541,9 @@ export function createShiftingGradientBackground(container: HTMLElement): {
 
     // Set up ResizeObserver for canvas size updates
     const resizeObserver = new ResizeObserver(() => {
-        updateCanvasSize()
+        if (updateCanvasSize()) {
+            renderer.redrawCanvas(canvas)
+        }
     })
     resizeObserver.observe(container)
 
@@ -533,7 +561,7 @@ export function createShiftingGradientBackground(container: HTMLElement): {
     }
 }
 
-// Get the singleton renderer instance for manual control
-export function getShiftingGradientRenderer(): ShiftingGradientRenderer {
-    return ShiftingGradientRenderer.getInstance()
+// Get a renderer instance for manual control.
+export function getShiftingGradientRenderer(colors?: ShiftingGradientColorSet): ShiftingGradientRenderer {
+    return ShiftingGradientRenderer.getInstance(colors)
 }
