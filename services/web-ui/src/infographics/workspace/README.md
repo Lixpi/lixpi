@@ -199,7 +199,7 @@ Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoot
 
 Empty context regions preserve their manually resized dimensions. Region auto-expansion may still grow a region to fit children dropped inside it, but it must not reset an empty region back to the default `300x200` size after a resize commit. When a child image or document is dropped into a manually enlarged region, the region keeps its existing size unless the child bounds plus padding exceed it.
 
-AI chat is rendered by a singleton canvas-owned floating panel. Context regions remain separate canvas nodes that hold prompt context; clicking a region opens the linked AI chat thread in the floating panel without replacing the region surface.
+AI chat is rendered by a singleton canvas-owned floating panel. Context regions remain separate canvas nodes that hold prompt context; clicking a region opens the linked AI chat thread in the floating panel without replacing the region surface. The panel is right-flush and full-height within the workspace shell. When it is open, the zoom indicator remains logically bottom-right but offsets left by the chat panel width, and the global user avatar moves to the panel's bottom-left corner.
 
 ### Image Generation Visual Feedback
 
