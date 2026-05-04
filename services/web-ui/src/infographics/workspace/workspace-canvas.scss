@@ -310,12 +310,12 @@
 }
 
 /*
- * Region card variant — used when the chat editor lives in the side panel
- * (see AI-CHAT-SIDE-PANEL-MIGRATION). The node becomes a labeled bounding
- * box on the canvas. Pointer events on the body pass through so children
- * inside the region remain interactive; only the title bar captures clicks
- * for "open this thread in the panel".
+ * Context region card variant. The node is a labeled bounding box on the
+ * canvas. Pointer events on the body pass through so children inside the
+ * region remain interactive; the title bar opens the canvas-owned chat panel
+ * for the thread linked to this region.
  */
+.workspace-context-region-node,
 .workspace-ai-chat-thread-node--region {
     // The region card. The moving backdrop is rendered by the singleton
     // `ShiftingGradientRenderer` via a <canvas class="shifting-gradient-canvas">
@@ -457,6 +457,53 @@
 .workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
     min-height: 0;
     padding-bottom: 1rem;
+}
+
+.workspace-ai-chat-floating-panel {
+    position: absolute;
+    top: 72px;
+    right: 32px;
+    width: min(520px, calc(100% - 64px));
+    height: min(720px, calc(100% - 120px));
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
+    z-index: 10030;
+    pointer-events: auto;
+    border-radius: 10px;
+    background: transparent;
+    overflow: visible;
+
+    &[data-thread-empty="true"] {
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+    .ai-chat-thread-node-editor {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+}
+
+.workspace-ai-chat-floating-panel__prompt {
+    position: relative !important;
+    display: block !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    flex: 0 0 auto;
+    margin-top: 12px;
+    z-index: 4;
+    box-shadow: var(--dropdown-popover-box-shadow) !important;
+
+    .ai-prompt-input-wrapper {
+        box-shadow: none;
+    }
+}
+
+.workspace-ai-chat-floating-panel__rail {
+    cursor: default;
 }
 
 /* Hide the document title (h1) inside AI chat thread nodes on the canvas (controlled by showHeaderOnAiChatThreadNodes) */

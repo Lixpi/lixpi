@@ -197,7 +197,9 @@ On image load the client verifies the image's natural aspect ratio and will auto
 
 Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoothly during diagonal drags and avoid axis-switching jumps that can cause jitter during resize. Resize handles are dynamically sized and positioned (computed from the current viewport zoom) so they remain a uniform screen-pixel size and precisely aligned to node corners regardless of canvas zoom or node scale. The handles are invisible hitboxes until their own corner is hovered; selecting or hovering the body of a node does not reveal every handle. This zoom-compensated sizing is controlled by `useZoomCompensatedResizeHandleScaling` in `webUiSettings.ts` (default `true`).
 
-Empty AI chat context regions preserve their manually resized dimensions. Region auto-expansion may still grow a region to fit children dropped inside it, but it must not reset an empty region back to the default `300x200` size after a resize commit. When a child image or document is dropped into a manually enlarged region, the region keeps its existing size unless the child bounds plus padding exceed it.
+Empty context regions preserve their manually resized dimensions. Region auto-expansion may still grow a region to fit children dropped inside it, but it must not reset an empty region back to the default `300x200` size after a resize commit. When a child image or document is dropped into a manually enlarged region, the region keeps its existing size unless the child bounds plus padding exceed it.
+
+AI chat is rendered by a singleton canvas-owned floating panel. Context regions remain separate canvas nodes that hold prompt context; clicking a region opens the linked AI chat thread in the floating panel without replacing the region surface.
 
 ### Image Generation Visual Feedback
 
@@ -247,9 +249,9 @@ Node selection is runtime-only UI state and is not persisted into `canvasState`.
 
 **Anchored image click resolution:** The click handler calls `selectNode(node.nodeId)` with the original node ID — it does **not** use `getSelectionTargetNodeId()`. This ensures that clicking an anchored image selects the image itself rather than resolving to the parent thread.
 
-**Context region layering:** AI chat context regions are background containers, not foreground nodes. Region elements use the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while still allowing clicks on empty region surface.
+**Context region layering:** Context regions are background containers, not foreground nodes. Region elements use the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while still allowing clicks on empty region surface.
 
-**Context region image frame:** Image nodes whose `parentId` points to an AI chat context region receive `.workspace-image-node--context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.contextRegionImageFrameColor` and defaults to the slightly off-white `#FCFCFA`. Images outside a context region keep the base transparent image styling.
+**Context region image frame:** Image nodes whose `parentId` points to a context region receive `.workspace-image-node--context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.contextRegionImageFrameColor` and defaults to the slightly off-white `#FCFCFA`. Images outside a context region keep the base transparent image styling.
 
 #### Marquee Selection
 
@@ -309,7 +311,7 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
-- **Proximity Connect**: Dragging a node near a connectable AI Chat Thread shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`). Context region cards are excluded from proximity connect because they are containment backgrounds, not graph endpoints.
+- **Proximity Connect**: Dragging a node near a connectable graph node shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`). Context region cards are excluded from proximity connect because they are containment backgrounds, not graph endpoints.
 - **Zoom-compensated scaling**: Connector stroke width and arrowhead marker sizes can be inversely scaled based on zoom level so they appear at constant visual size. Controlled by `useZoomCompensatedConnectorScaling` in `webUiSettings.ts` (default `false` — connectors use fixed base sizes and scale naturally with the canvas zoom)
 - **Pan-optimized rendering**: During pure panning (no drag, zoom, or edge changes), edge re-rendering is skipped entirely since the edges SVG moves with the viewport via CSS transform. During zoom, edge re-rendering is also skipped unless `useZoomCompensatedConnectorScaling` is enabled; with the default setting (`false`) connectors simply scale with the viewport like the nodes. Explicit data mutations (node drag, resize, edge add/remove) still trigger a render. Resize handle updates remain zoom-gated. The connector renderer uses D3's `selectAll().data().join()` pattern for efficient incremental DOM updates when re-renders do occur — existing elements are matched by ID and only their attributes are updated instead of clear-and-rebuild.
 - **Layout containment**: The edges layer and connector SVG use `contain: layout style` to isolate their layout from the rest of the document, avoiding cascading reflows during viewport transforms.
@@ -318,20 +320,20 @@ Edges are stored in `canvasState.edges` and rendered using the existing infograp
 
 ### AI Chat Context Extraction
 
-When a user sends a message in an AI chat thread, the system extracts content from all nodes connected via incoming edges. This provides context to the AI model without requiring copy/paste.
+When a user sends a message in the canvas AI chat panel, the system extracts content from the linked context region and all nodes connected via incoming edges. This provides context to the AI model without requiring copy/paste.
 
 ```mermaid
 flowchart LR
-    DOC[Document Node] -->|edge| AI[AI Chat Thread]
-    IMG[Image Node] -->|edge| AI
-    OTHER[Other AI Thread] -->|edge| AI
-    AI -->|extractConnectedContext| CTX[ExtractedContext]
+    DOC[Document Node] -->|edge| REGION[Context Region]
+    IMG[Image Node] -->|parentId child| REGION
+    REGION -->|opens| CHAT[Canvas AI Chat Panel]
+    REGION -->|extractConnectedContext| CTX[ExtractedContext]
     CTX -->|buildContextMessage| MSG[Multimodal Message]
 ```
 
 The extraction flow:
 
-1. **Edge traversal** — `AiChatThreadService.extractConnectedContext(nodeId)` finds all nodes connected via incoming edges, recursively following the graph
+1. **Edge traversal** — `AiChatThreadService.extractConnectedContext(nodeId)` finds all nodes connected to the context region via incoming edges, recursively following the graph
 2. **Content extraction** — Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64
 3. **Message building** — `buildContextMessage()` formats context as multimodal content blocks (`input_text` for text, `input_image` for images)
 4. **Submission** — The context message is prepended to the user's messages before sending to the AI
@@ -399,7 +401,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-viewport` | Transformed container for nodes |
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
-| `.workspace-ai-chat-thread-node` | Individual AI chat thread card |
+| `.workspace-context-region-node` | Context region card linked to an AI chat thread |
+| `.workspace-ai-chat-thread-node` | Canvas-owned floating AI chat panel styling |
 | `.document-drag-overlay` | Top bar for dragging documents |
 | `.ai-chat-thread-drag-overlay` | Top bar for dragging AI chat threads |
 | `.image-drag-overlay` | Full-area overlay for dragging images |
@@ -408,7 +411,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.image-node-content` | Image container |
 | `.image-node-img` | The actual img element |
 | `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
-| `.workspace-image-node--context-region-child` | Image node contained by an AI chat context region, with the region-only off-white frame |
+| `.workspace-image-node--context-region-child` | Image node contained by a context region, with the region-only off-white frame |
 | `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
 | `.workspace-thread-rail__line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
 | `.image-generating-border` | SVG animated gradient border shown during image generation |
