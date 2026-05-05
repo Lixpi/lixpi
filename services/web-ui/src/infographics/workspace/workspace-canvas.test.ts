@@ -624,6 +624,12 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
 	})
 
+	it('defines active AI chat panel resize width state', () => {
+		expect(ts).toContain('const AI_CHAT_PANEL_MIN_WIDTH = 320')
+		expect(ts).toContain('let activeAiChatPanelWidth: number | null = null')
+		expect(ts).toContain("style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)")
+	})
+
 	it('defines createThreadRail function', () => {
 		expect(ts).toContain('function createThreadRail(')
 	})
@@ -784,10 +790,20 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnBody).toContain('workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
 		expect(fnBody).toContain('new ProseMirrorEditor')
 		expect(fnBody).toContain('workspace-thread-rail workspace-ai-chat-floating-panel__rail')
+		expect(fnBody).toContain('handleActiveAiChatPanelResizeStart')
 		expect(fnBody).toContain('aiChatThreadRailBoundaryCircle')
 		expect(fnBody).toContain("'--dropdown-popover-box-shadow'")
 		expect(fnBody).toContain('webUiThemeSettings.dropdownPopoverBoxShadow')
 		expect(ts).not.toContain(`AiChat${'Panel.svelte'}`)
+	})
+
+	it('uses the floating panel rail as the horizontal resize handle', () => {
+		const scss = loadScss()
+
+		expect(ts).toContain('function handleActiveAiChatPanelResizeStart(')
+		expect(ts).toContain("document.body.style.cursor = 'ew-resize'")
+		expect(scss).toContain('.workspace-thread-rail.workspace-ai-chat-floating-panel__rail')
+		expect(scss).toContain('cursor: ew-resize')
 	})
 
 	it('uses a full-height right-edge chat panel with zoom and avatar offsets', () => {
@@ -855,6 +871,16 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(clickHandler).toContain('selectNode(node.nodeId)')
 		expect(clickHandler).not.toContain('selectNode(selectionTargetNodeId)')
 		expect(clickHandler).not.toContain('selectNode(getSelectionTargetNodeId')
+	})
+
+	it('generated output images stay independently selectable even if anchor metadata exists', () => {
+		const fnMatch = ts.match(/function\s+getSelectionTargetNodeId[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(ts).toContain('function isGeneratedOutputImageNode(')
+		expect(fnBody).toContain('if (isGeneratedOutputImageNode(node)) return nodeId')
+		expect(fnBody.indexOf('if (isGeneratedOutputImageNode(node)) return nodeId')).toBeLessThan(fnBody.indexOf('anchoredImageManager.getAnchor'))
 	})
 
 	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
@@ -1030,6 +1056,12 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('if (!isCanvasBackgroundTarget(event.target)) return')
 		expect(ts).toContain('if (isCanvasBackgroundTarget(e.target)) {')
 		expect(ts).toContain('selectionGroupOverlayEl?.contains(target)')
+	})
+
+	it('does not treat the floating AI chat panel as canvas background', () => {
+		const fnMatch = ts.match(/function\s+isCanvasBackgroundTarget[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain("'.workspace-ai-chat-floating-panel'")
 	})
 
 	// -------------------------------------------------------------------------
@@ -1287,6 +1319,23 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
 		expect(paneMouseDownMatch).not.toBeNull()
 		expect(paneMouseDownMatch![0]).toContain(', true)')
+	})
+
+	it('REGRESSION: generated output images are not adopted into context regions on drag release', () => {
+		expect(ts).toContain('function canAdoptNodeIntoContextRegion(node: CanvasNode): boolean')
+		expect(ts).toContain('return !isGeneratedOutputImageNode(node)')
+
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('if (canAdoptNodeIntoContextRegion(node))')
+		expect(fnMatch![0]).toContain("classList.remove('workspace-image-node--anchored')")
+	})
+
+	it('REGRESSION: generated images with connector edges are not rehydrated as anchored images', () => {
+		expect(ts).toContain('function hasConnectorEdgeFromThreadToImage(')
+		expect(ts).toContain('anchoredImageManager.clear()')
+		expect(ts).toContain('const hasConnectorEdge = hasConnectorEdgeFromThreadToImage(threadCanvasNode.nodeId, imgNode.nodeId)')
+		expect(ts).toContain('if (hasConnectorEdge) continue')
 	})
 })
 

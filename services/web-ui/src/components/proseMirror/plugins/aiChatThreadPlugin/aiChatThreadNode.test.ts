@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { EditorState } from 'prosemirror-state'
+import { EditorView } from 'prosemirror-view'
 import {
     doc,
     p,
@@ -16,6 +17,7 @@ import {
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
 
 // =============================================================================
 // Helper: instantiate aiChatThreadNodeView with minimal mocks
@@ -371,5 +373,230 @@ describe('aiChatThreadPlugin — onReceivingStateChange callback', () => {
 
         const pluginState = AI_CHAT_THREAD_PLUGIN_KEY.getState(newState)
         expect(pluginState.receivingThreadIds.has('thread-1')).toBe(true)
+    })
+})
+
+// =============================================================================
+// aiChatThreadPlugin — generated image completion
+// =============================================================================
+
+describe('aiChatThreadPlugin — generated image completion', () => {
+    function createView(onImageCompleteToCanvas = vi.fn(), onImagePartialToCanvas = vi.fn()) {
+        const plugin = createAiChatThreadPlugin({
+            sendAiRequestHandler: vi.fn(),
+            stopAiRequestHandler: vi.fn(),
+            placeholders: { titlePlaceholder: 'Title', paragraphPlaceholder: 'Type here…' },
+            imageCallbacks: { onImageCompleteToCanvas, onImagePartialToCanvas },
+        })
+
+        const mount = document.createElement('div')
+        document.body.appendChild(mount)
+
+        const view = new EditorView(mount, {
+            state: EditorState.create({
+                doc: doc(
+                    thread(
+                        { threadId: 'thread-1' },
+                        response(
+                            { id: 'resp-1', isReceivingAnimation: true, aiProvider: 'OpenAI' },
+                            p('Generating image')
+                        )
+                    )
+                ),
+                schema,
+                plugins: [plugin],
+            }),
+        })
+
+        return { view, mount, onImageCompleteToCanvas, onImagePartialToCanvas }
+    }
+
+    function getGeneratedImageNodes(view: EditorView): any[] {
+        const imageNodes: any[] = []
+        view.state.doc.descendants((node) => {
+            if (node.type.name === 'aiGeneratedImage') {
+                imageNodes.push(node)
+            }
+        })
+        return imageNodes
+    }
+
+    it('inserts a placeholder image reference into the active AI response on partial events', () => {
+        const onImagePartialToCanvas = vi.fn()
+        const { view, mount } = createView(vi.fn(), onImagePartialToCanvas)
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_partial',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '',
+            fileId: '',
+            workspaceId: 'workspace-1',
+            partialIndex: 0,
+            aiProvider: 'OpenAI',
+        })
+
+        const imageNodes = getGeneratedImageNodes(view)
+
+        expect(imageNodes).toHaveLength(1)
+        expect(imageNodes[0].attrs).toMatchObject({
+            imageData: '',
+            fileId: '',
+            workspaceId: 'workspace-1',
+            aiModel: 'OpenAI',
+            isPartial: true,
+            partialIndex: 0,
+            width: '112px',
+            alignment: 'right',
+            textWrap: 'none',
+        })
+        expect(onImagePartialToCanvas).toHaveBeenCalledWith(expect.objectContaining({
+            threadId: 'thread-1',
+            imageUrl: '',
+            partialIndex: 0,
+        }))
+
+        view.destroy()
+        mount.remove()
+    })
+
+    it('updates the existing chat placeholder when image partial pixels arrive', () => {
+        const { view, mount } = createView()
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_partial',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '',
+            fileId: '',
+            workspaceId: 'workspace-1',
+            partialIndex: 0,
+            aiProvider: 'OpenAI',
+        })
+        SegmentsReceiver.receiveSegment({
+            type: 'image_partial',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-partial',
+            fileId: 'file-partial',
+            workspaceId: 'workspace-1',
+            partialIndex: 0,
+            aiProvider: 'OpenAI',
+        })
+
+        const imageNodes = getGeneratedImageNodes(view)
+
+        expect(imageNodes).toHaveLength(1)
+        expect(imageNodes[0].attrs).toMatchObject({
+            imageData: '/api/images/workspace-1/file-partial',
+            fileId: 'file-partial',
+            isPartial: true,
+            partialIndex: 0,
+            alignment: 'right',
+        })
+
+        view.destroy()
+        mount.remove()
+    })
+
+    it('inserts a thumbnail image reference into the active AI response', () => {
+        const { view, mount } = createView()
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_complete',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            workspaceId: 'workspace-1',
+            responseId: 'response-1',
+            revisedPrompt: 'A revised prompt',
+            aiProvider: 'OpenAI',
+            imageModelProvider: 'OpenAI',
+        })
+
+        const imageNodes = getGeneratedImageNodes(view)
+
+        expect(imageNodes).toHaveLength(1)
+        expect(imageNodes[0].attrs).toMatchObject({
+            imageData: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            workspaceId: 'workspace-1',
+            responseId: 'response-1',
+            revisedPrompt: 'A revised prompt',
+            isPartial: false,
+            width: '112px',
+            alignment: 'right',
+            textWrap: 'none',
+        })
+
+        view.destroy()
+        mount.remove()
+    })
+
+    it('converts the existing partial placeholder into the final thumbnail on completion', () => {
+        const { view, mount } = createView()
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_partial',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '',
+            fileId: '',
+            workspaceId: 'workspace-1',
+            partialIndex: 0,
+            aiProvider: 'OpenAI',
+        })
+        SegmentsReceiver.receiveSegment({
+            type: 'image_complete',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            workspaceId: 'workspace-1',
+            responseId: 'response-1',
+            revisedPrompt: 'A revised prompt',
+            aiProvider: 'OpenAI',
+            imageModelProvider: 'OpenAI',
+        })
+
+        const imageNodes = getGeneratedImageNodes(view)
+
+        expect(imageNodes).toHaveLength(1)
+        expect(imageNodes[0].attrs).toMatchObject({
+            imageData: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            workspaceId: 'workspace-1',
+            responseId: 'response-1',
+            revisedPrompt: 'A revised prompt',
+            isPartial: false,
+            partialIndex: 0,
+            alignment: 'right',
+        })
+        expect(view.state.doc.textContent).toContain('A revised prompt')
+
+        view.destroy()
+        mount.remove()
+    })
+
+    it('passes the same response id to the canvas image callback', () => {
+        const onImageCompleteToCanvas = vi.fn()
+        const { view, mount } = createView(onImageCompleteToCanvas)
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_complete',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            workspaceId: 'workspace-1',
+            responseId: 'response-1',
+            revisedPrompt: 'A revised prompt',
+            aiProvider: 'OpenAI',
+            imageModelProvider: 'OpenAI',
+        })
+
+        expect(onImageCompleteToCanvas).toHaveBeenCalledWith(expect.objectContaining({
+            imageUrl: '/api/images/workspace-1/file-1',
+            fileId: 'file-1',
+            workspaceId: 'workspace-1',
+            responseMessageId: 'resp-1',
+        }))
+
+        view.destroy()
+        mount.remove()
     })
 })

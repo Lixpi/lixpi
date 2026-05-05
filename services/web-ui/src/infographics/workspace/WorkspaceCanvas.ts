@@ -407,7 +407,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return selectedNodeIds.has(nodeId)
     }
 
+    function isGeneratedOutputImageNode(node: CanvasNode | undefined): node is ImageCanvasNode {
+        return node?.type === 'image' && Boolean((node as ImageCanvasNode).generatedBy?.aiChatThreadId)
+    }
+
+    function canAdoptNodeIntoContextRegion(node: CanvasNode): boolean {
+        return !isGeneratedOutputImageNode(node)
+    }
+
+    function hasConnectorEdgeFromThreadToImage(threadNodeId: string, imageNodeId: string): boolean {
+        return currentCanvasState?.edges.some((edge: WorkspaceEdge) =>
+            edge.sourceNodeId === threadNodeId && edge.targetNodeId === imageNodeId
+        ) ?? false
+    }
+
     function getSelectionTargetNodeId(nodeId: string): string {
+        const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+        if (isGeneratedOutputImageNode(node)) return nodeId
+
         const anchor = anchoredImageManager.getAnchor(nodeId)
         return anchor?.threadNodeId ?? nodeId
     }
@@ -530,7 +547,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodes.map((node: CanvasNode) => {
             if (!isContextRegionCanvasNode(node)) return node
             const children = childrenByParentId.get(node.nodeId)
-            
+
             // Empty regions keep their persisted size so manual resize is stable.
             // Only repair invalid legacy dimensions that cannot render usefully.
             if (!children?.length) {
@@ -915,6 +932,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return !target.closest([
             '[data-node-id]',
             '.workspace-thread-rail',
+            '.workspace-ai-chat-floating-panel',
             '.ai-prompt-input-floating',
             '.workspace-edge-node',
             '.workspace-handle',
@@ -1086,7 +1104,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Vertical rail elements — one per AI chat thread, spanning thread + floating input
     const RAIL_OFFSET = webUiThemeSettings.aiChatThreadRailOffset
     const RAIL_GRAB_WIDTH = webUiSettings.aiChatThreadRailDragGrabWidth
+    const AI_CHAT_PANEL_MIN_WIDTH = 320
+    const AI_CHAT_PANEL_MAX_PANE_MARGIN = 64
     const threadRails: Map<string, HTMLElement> = new Map()
+    let activeAiChatPanelWidth: number | null = null
 
     const promptInputController = new AiPromptInputController({
         workspaceId,
@@ -1128,6 +1149,72 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             createImageSizeDropdown: createGenericImageSizeDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
+    }
+
+    function getWorkspaceCanvasElement(): HTMLElement | null {
+        return paneEl.closest('.workspace-canvas') as HTMLElement | null
+    }
+
+    function getActiveAiChatPanelMaxWidth(): number {
+        const paneWidth = paneEl.getBoundingClientRect().width
+        return Math.max(AI_CHAT_PANEL_MIN_WIDTH, paneWidth - AI_CHAT_PANEL_MAX_PANE_MARGIN)
+    }
+
+    function applyActiveAiChatPanelWidth(width: number): number {
+        const nextWidth = clampInsideRange(width, AI_CHAT_PANEL_MIN_WIDTH, getActiveAiChatPanelMaxWidth())
+        const widthValue = `${nextWidth}px`
+
+        activeAiChatPanelWidth = nextWidth
+        getWorkspaceCanvasElement()?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
+        activeAiChatPanelEl?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
+
+        return nextWidth
+    }
+
+    function handleActiveAiChatPanelResizeStart(event: MouseEvent, panelEl: HTMLDivElement): void {
+        if (event.button !== 0) return
+
+        event.preventDefault()
+        event.stopPropagation()
+
+        const startX = event.clientX
+        const startWidth = activeAiChatPanelWidth ?? panelEl.getBoundingClientRect().width
+        const previousBodyCursor = document.body.style.cursor
+        const previousBodyUserSelect = document.body.style.userSelect
+
+        panelEl.classList.add('is-resizing')
+        document.body.style.cursor = 'ew-resize'
+        document.body.style.userSelect = 'none'
+
+        if (panZoom) {
+            panZoom.update({
+                ...panZoomConfig,
+                panOnDrag: false,
+                userSelectionActive: true,
+                connectionInProgress: true,
+                selectionOnDrag: false
+            })
+        }
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            applyActiveAiChatPanelWidth(startWidth + startX - moveEvent.clientX)
+        }
+
+        const handleMouseUp = () => {
+            panelEl.classList.remove('is-resizing')
+            document.body.style.cursor = previousBodyCursor
+            document.body.style.userSelect = previousBodyUserSelect
+
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+
+            if (panZoom) {
+                panZoom.update(panZoomConfig)
+            }
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
     }
 
     function destroyActiveAiChatPanel(clearActive = false): void {
@@ -1191,7 +1278,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         destroyActiveAiChatPanel(false)
 
         const panelEl = document.createElement('div')
-        panelEl.className = 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan'
+        panelEl.className = 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel'
         panelEl.dataset.threadId = activeAiChatThreadId
         panelEl.dataset.regionNodeId = regionNode.nodeId
         panelEl.addEventListener('mousedown', (event) => event.stopPropagation())
@@ -1355,8 +1442,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
         rail.dataset.threadNodeId = regionNode.nodeId
         rail.addEventListener('mousedown', (event) => {
-            event.preventDefault()
-            event.stopPropagation()
+            handleActiveAiChatPanelResizeStart(event, panelEl)
         })
 
         const line = document.createElement('div')
@@ -1376,6 +1462,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatPanelEl = panelEl
         paneEl.appendChild(panelEl)
+
+        if (activeAiChatPanelWidth !== null) {
+            applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
+        }
 
         requestAnimationFrame(() => {
             const threadHeight = editorContainer.offsetHeight || Math.max(0, promptEl.offsetTop - 16)
@@ -2525,6 +2615,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Track pane bounds on resize for visibility detection
     const resizeObserver = new ResizeObserver(() => {
         paneRect = paneEl.getBoundingClientRect()
+        if (activeAiChatPanelWidth !== null) {
+            applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
+        }
         updateVisibleNodes()
     })
     resizeObserver.observe(paneEl)
@@ -3140,21 +3233,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const grace = 80
                 let containingRegion: ContextRegionNode | null = null
                 let bestRegionScore = 0
-                for (const region of regionNodes) {
-                    if (region.nodeId === node.nodeId) continue
-                    const regionRect = getNodeWorldRect(region, originalNodesById)
-                    const expandedRect: Rect = {
-                        x: regionRect.x - grace,
-                        y: regionRect.y - grace,
-                        width: regionRect.width + grace * 2,
-                        height: regionRect.height + grace * 2,
-                    }
-                    const overlapArea = rectIntersectionArea(draggedRect, expandedRect)
-                    const pointInside = pointInRect(dropPoint, expandedRect)
-                    const score = overlapArea + (pointInside ? draggedRect.width * draggedRect.height : 0)
-                    if (score > bestRegionScore) {
-                        bestRegionScore = score
-                        containingRegion = region
+                if (canAdoptNodeIntoContextRegion(node)) {
+                    for (const region of regionNodes) {
+                        if (region.nodeId === node.nodeId) continue
+                        const regionRect = getNodeWorldRect(region, originalNodesById)
+                        const expandedRect: Rect = {
+                            x: regionRect.x - grace,
+                            y: regionRect.y - grace,
+                            width: regionRect.width + grace * 2,
+                            height: regionRect.height + grace * 2,
+                        }
+                        const overlapArea = rectIntersectionArea(draggedRect, expandedRect)
+                        const pointInside = pointInRect(dropPoint, expandedRect)
+                        const score = overlapArea + (pointInside ? draggedRect.width * draggedRect.height : 0)
+                        if (score > bestRegionScore) {
+                            bestRegionScore = score
+                            containingRegion = region
+                        }
                     }
                 }
 
@@ -3194,6 +3289,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 delete releasedNode.expandParent
                 delete releasedNode.extent
                 const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+                if (isGeneratedOutputImageNode(node)) {
+                    anchoredImageManager.removeAnchor(node.nodeId)
+                    nodeEl?.classList.remove('workspace-image-node--anchored')
+                }
                 if (nodeEl) syncContextRegionImageFrame(nodeEl, releasedNode, currentCanvasState.nodes)
                 return releasedNode
             })
@@ -4014,6 +4113,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Clear loaded node tracking on full re-render
         loadedNodeIds.clear()
         hiddenEmptyThreadNodeIds.clear()
+        anchoredImageManager.clear()
 
         // Clean up per-region gradients (will be recreated for each region node)
         for (const [, g] of regionGradients) g.destroy()
@@ -4066,10 +4166,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
 
-        // Re-derive anchored image state from `generatedBy` metadata.
+        // Re-derive legacy anchored image state from `generatedBy` metadata.
         // The anchoredImageManager is in-memory only, so on page refresh
-        // it starts empty. We must scan ImageCanvasNodes that carry
-        // generatedBy metadata and re-register them as anchored.
+        // it starts empty. Generated images with persisted connector edges
+        // remain independent canvas nodes and are not re-registered as anchored.
         if (!webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) {
             // Build a lookup: threadReferenceId → context region node
             const threadNodesByRef = new Map<string, ContextRegionNode>()
@@ -4086,6 +4186,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const threadCanvasNode = threadNodesByRef.get(imgNode.generatedBy.aiChatThreadId)
                 if (!threadCanvasNode) continue
+
+                const hasConnectorEdge = hasConnectorEdgeFromThreadToImage(threadCanvasNode.nodeId, imgNode.nodeId)
+                if (hasConnectorEdge) continue
 
                 // Already tracked (e.g. re-render during live session) — skip re-registration
                 if (anchoredImageManager.isAnchored(imgNode.nodeId)) continue
