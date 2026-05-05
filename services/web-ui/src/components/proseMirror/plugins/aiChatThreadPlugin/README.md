@@ -234,10 +234,10 @@ sequenceDiagram
   - `textWrap: 'none' | 'left' | 'right'` - Text wrap mode
 - DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
 - **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
-- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements instead of inline in the chat. The plugin delegates image events to `WorkspaceCanvas.ts` via `onImagePartialToCanvas` / `onImageCompleteToCanvas` callbacks. `handleImagePartial` only guards on `!aiChatThreadId` (not `!imageUrl`), allowing early empty-URL `IMAGE_PARTIAL` events through so the canvas can create a placeholder node with an animated border and spinner before any pixel data arrives. Two placement modes are supported, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
+- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements and mirrored in chat history as compact `aiGeneratedImage` references. The plugin delegates image events to `WorkspaceCanvas.ts` via `onImagePartialToCanvas` / `onImageCompleteToCanvas` callbacks. `handleImagePartial` only guards on `!aiChatThreadId` (not `!imageUrl`), allowing early empty-URL `IMAGE_PARTIAL` events through so the canvas and chat history can create placeholder nodes before any pixel data arrives. Repeated partial events update the same chat placeholder, and completion converts it into the final thumbnail. Two placement modes are supported, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
   - **Anchored mode** (default): Images overlap the AI chat thread node, positioned side-by-side to the right of the AI response message text. The image canvas node is placed at approximately the right half of the thread width, vertically aligned with the top of the `aiResponseMessage` that generated it. The `anchoredImageManager` tracks the image-to-thread relationship. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image-thread pairs.
   - **Connector line mode**: A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it. The image appears to the right of the thread.
-  - In both modes, the revised prompt text is inserted as a paragraph in the AI response message.
+  - In both modes, the revised prompt text and a right-aligned thumbnail reference are inserted in the AI response message. The thumbnail uses the `aiGeneratedImage.alignment` attribute handled by `imageSelectionPlugin`, so the bubble menu can change it through the same alignment controls as other editor images.
 - **MULTI-MODAL CONTEXT:** Connected canvas images are included in AI requests via the workspace edge system (`ai-chat-thread-service.ts` → `extractConnectedContext()`). Legacy inline `aiGeneratedImage` nodes in older threads are still extracted via `ContentExtractor.collectContentWithImages()` for backwards compatibility.
 
 ## DOM Template System
@@ -249,13 +249,16 @@ More generic patterns and folder layout guidance: `$src/components/proseMirror/p
 Quick taste, this is how buttons are built now:
 
 ```ts
-import { html } from '$src/utils/domTemplates.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 
 const button = html`
   <div className="ai-submit-button" onclick=${handleClick}>
     <span className="send-icon" innerHTML=${sendIcon}></span>
   </div>
 `
+
+// To update styles on an existing element, use applyStyle:
+applyStyle(button, { left: `${x}px`, top: `${y}px` })
 ```
 
 ### Composer Controls
@@ -645,8 +648,12 @@ Renders AI responses using structured templates:
 const parentWrapper = html`
   <div className="ai-response-message-wrapper">
     <div className="ai-response-message">
+      <div className="ai-response-message-bubble">
+        <div className="ai-response-message-content"></div>
+      </div>
+    </div>
+    <div className="ai-response-message-meta">
       <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
-      <div className="ai-response-message-content"></div>
     </div>
   </div>
 `
@@ -655,7 +662,7 @@ const parentWrapper = html`
 const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
 const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
 
-// Response message content is styled as a white chat bubble with a left-side tail
+// The bubble spans the message width; the smaller provider avatar sits below it.
 ```
 
 **Anthropic Animation System:**

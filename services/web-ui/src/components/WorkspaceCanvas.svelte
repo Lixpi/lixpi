@@ -7,7 +7,7 @@
     import {
         type CanvasState,
         type ImageCanvasNode,
-        type AiChatThreadCanvasNode
+        type ContextRegionCanvasNode
     } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
@@ -283,9 +283,9 @@
                 const newX = 50 + (existingNodes.length % 3) * 450
                 const newY = 50 + Math.floor(existingNodes.length / 3) * 400
 
-                const threadNode: AiChatThreadCanvasNode = {
+                const contextRegionNode: ContextRegionCanvasNode = {
                     nodeId: `node-${thread.threadId}`,
-                    type: 'aiChatThread',
+                    type: 'contextRegion',
                     referenceId: thread.threadId,
                     position: { x: newX, y: newY },
                     dimensions: { width: 400, height: 500 }
@@ -294,7 +294,8 @@
                 const newCanvasState: CanvasState = {
                     viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
                     edges: canvasState?.edges ?? [],
-                    nodes: [...existingNodes, threadNode]
+                    nodes: [...existingNodes, contextRegionNode],
+                    lastActiveAiChatThreadId: thread.threadId
                 }
 
                 persistCanvasState(newCanvasState)
@@ -376,7 +377,10 @@
     })
 </script>
 
-<div class="workspace-canvas">
+<div
+    class="workspace-canvas"
+    class:workspace-canvas--chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
+>
     <div class="workspace-floating-toolbar">
         <button class="workspace-floating-toolbar__button" onclick={handleCreateDocument}>
             {@html createNewFileIcon}

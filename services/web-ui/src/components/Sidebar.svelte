@@ -150,7 +150,7 @@
     onchange={onImportFileSelected}
 />
 
-<aside class="bg-sidebar">
+<aside class="workspace-list-sidebar bg-sidebar">
 
     <div class="top-nav w-full flex justify-end items-center">
         <div class="create-new-wrapper pt-5">
@@ -217,7 +217,7 @@
 					</div>
 					{#if workspace.tags?.length}
 						<div class="flex items-center gap-2 mb-2 ">
-							{#each workspace.tags as tag}
+                            {#each workspace.tags as tag (tag)}
 								<span class="bg-orange-500 text-white text-xs font-normal me-1 px-1.5 py-0.3 rounded-[9px]">
 									{tag}
 								</span>
@@ -236,8 +236,17 @@
     @import "$src/sass/_helpers";
 
     aside {
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+
         :global(.projects) {
-            max-height: calc(100vh - 60px) !important;
+            height: auto !important;
+            min-height: 0;
+            flex: 1 1 auto;
+            max-height: none !important;
         }
     }
 </style>

@@ -17,10 +17,16 @@ export type WebUiThemeSettings = {
     selectionOutlineColor: string
     // Box shadow for the dropdown popover menus (model selectors etc.).
     dropdownPopoverBoxShadow: string
-    // Four gradient colors used by the shifting gradient background and animated border
-    // overlays (image generation border, document thread shape, context selection).
+    // Four gradient colors used by the shared shifting gradient background and
+    // animated border overlays (image generation border, document thread shape,
+    // context selection).
     // Hex strings. The shifting gradient renderer converts these to RGB internally.
     shiftingGradientColors: [string, string, string, string]
+    // Four gradient colors used only by the workspace context region area cards.
+    // Kept separate so region visual tuning does not change shared animated borders.
+    contextRegionAreaShiftingGradientColors: [string, string, string, string]
+    // Frame color for image nodes contained by workspace context region cards.
+    contextRegionImageFrameColor: string
 }
 
 const brandColors = {
@@ -70,8 +76,15 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     selectionOutlineColor: 'rgba(197, 192, 238, 0.75)',
     // Box shadow for dropdown popover menus (model selectors etc.).
     dropdownPopoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
-    // Four gradient colors shared between the shifting gradient background and the
-    // animated border overlays (image generation, document thread shape).
+    // Four gradient colors shared between the default shifting gradient background
+    // and the animated border overlays (image generation, document thread shape).
     // Dreamy sky pastel palette — whisper pink, lavender, periwinkle, orchid.
     shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
+    // Four gradient colors used only by workspace context region area cards.
+    // Pale sage/glass palette fit to the region backdrop in gradient-sample.png.
+    // The center needs visible depth without collapsing into a gray block.
+    contextRegionAreaShiftingGradientColors: ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'],
+    // Region-contained image frame. Kept just off white so it remains soft against
+    // the pale region gradient while still reading as a clear frame.
+    contextRegionImageFrameColor: '#FCFCFA',
 }

@@ -5,7 +5,7 @@ import { Fragment } from 'prosemirror-model'
 import type {
     CanvasState,
     CanvasNode,
-    AiChatThreadCanvasNode,
+    ContextRegionCanvasNode,
     WorkspaceEdge,
     ImageGenerationSize,
 } from '@lixpi/constants'
@@ -46,6 +46,7 @@ type AiPromptInputControllerOptions = {
     workspaceId: string
     getCanvasState: () => CanvasState | null
     persistCanvasState: (state: CanvasState) => void
+    onAiChatThreadCreated?: (params: { threadId: string; nodeId: string }) => void
     createAiChatThread: (params: {
         workspaceId: string
         threadId: string
@@ -68,6 +69,7 @@ export class AiPromptInputController {
     private createAiChatThread: AiPromptInputControllerOptions['createAiChatThread']
     private onAiSubmit: AiPromptInputControllerOptions['onAiSubmit']
     private onAiStop: AiPromptInputControllerOptions['onAiStop']
+    private onAiChatThreadCreated?: AiPromptInputControllerOptions['onAiChatThreadCreated']
 
     constructor(options: AiPromptInputControllerOptions) {
         this.workspaceId = options.workspaceId
@@ -76,6 +78,7 @@ export class AiPromptInputController {
         this.createAiChatThread = options.createAiChatThread
         this.onAiSubmit = options.onAiSubmit
         this.onAiStop = options.onAiStop
+        this.onAiChatThreadCreated = options.onAiChatThreadCreated
     }
 
     setTarget(target: TargetNode | null): void {
@@ -120,7 +123,7 @@ export class AiPromptInputController {
 
     getTargetThreadId(): string | null {
         if (!this.target) return null
-        if (this.target.type === 'aiChatThread') {
+        if (this.target.type === 'aiChatThread' || this.target.type === 'contextRegion') {
             return this.target.referenceId
         }
         // For non-thread targets, there's no existing thread until one is auto-created
@@ -147,7 +150,7 @@ export class AiPromptInputController {
             return
         }
 
-        if (this.target.type === 'aiChatThread') {
+        if (this.target.type === 'aiChatThread' || this.target.type === 'contextRegion') {
             // Target is an existing AI chat thread — inject message directly
             const threadId = this.target.referenceId
             this.injectMessageAndSubmit(threadId, { content: contentJSON, aiModel, imageOptions })
@@ -308,9 +311,9 @@ export class AiPromptInputController {
                 y: targetCanvasNode.position.y
             }
 
-            const threadCanvasNode: AiChatThreadCanvasNode = {
+            const threadCanvasNode: ContextRegionCanvasNode = {
                 nodeId: `node-${threadId}`,
-                type: 'aiChatThread',
+                type: 'contextRegion',
                 referenceId: threadId,
                 position: threadPosition,
                 dimensions: { width: 400, height: 500 }
@@ -337,9 +340,10 @@ export class AiPromptInputController {
             // Update target to point to the new thread
             this.target = {
                 nodeId: threadCanvasNode.nodeId,
-                type: 'aiChatThread',
+                type: 'contextRegion',
                 referenceId: threadId
             }
+            this.onAiChatThreadCreated?.({ threadId, nodeId: threadCanvasNode.nodeId })
         } catch (error) {
             console.error('[AiPromptInputController] Failed to create thread:', error)
         }

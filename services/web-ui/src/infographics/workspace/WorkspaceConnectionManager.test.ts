@@ -188,6 +188,42 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 		expect(edges[0].targetNodeId).toBe('chat-1')
 	})
 
+	it('does NOT trigger proximity when the target is a context region', () => {
+		const contextConfig = {
+			...createMockConfig(),
+			isContextRegionNode: (node: CanvasNode) => node.nodeId === 'region-1',
+		}
+		const regionManager = new WorkspaceConnectionManager(contextConfig)
+		const imageNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
+		const regionNode = makeNode({ nodeId: 'region-1', type: 'contextRegion', position: { x: 300, y: 50 }, dimensions: { width: 260, height: 180 } })
+
+		regionManager.syncNodes([imageNode, regionNode])
+		regionManager.syncEdges([])
+
+		regionManager.checkProximity('img-1', { x: 150, y: 50 }, { width: 200, height: 100 })
+		regionManager.commitProximityConnection()
+
+		expect(contextConfig.onEdgesChange).not.toHaveBeenCalled()
+	})
+
+	it('does NOT trigger proximity when the dragged node is a context region', () => {
+		const contextConfig = {
+			...createMockConfig(),
+			isContextRegionNode: (node: CanvasNode) => node.nodeId === 'region-1',
+		}
+		const regionManager = new WorkspaceConnectionManager(contextConfig)
+		const imageNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
+		const regionNode = makeNode({ nodeId: 'region-1', type: 'contextRegion', position: { x: 300, y: 50 }, dimensions: { width: 260, height: 180 } })
+
+		regionManager.syncNodes([imageNode, regionNode])
+		regionManager.syncEdges([])
+
+		regionManager.checkProximity('region-1', { x: 250, y: 50 }, { width: 260, height: 180 })
+		regionManager.commitProximityConnection()
+
+		expect(contextConfig.onEdgesChange).not.toHaveBeenCalled()
+	})
+
 	// -------------------------------------------------------------------------
 	// Duplicate prevention
 	// -------------------------------------------------------------------------

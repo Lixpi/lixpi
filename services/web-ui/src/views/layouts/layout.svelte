@@ -51,13 +51,10 @@
 	import { cn } from "$lib/utils.ts";
 	import { Input } from '$lib/registry/ui/input/index.ts';
 	import * as Resizable from '$lib/registry/ui/resizable/index.ts';
-    import { type PaneAPI } from 'paneforge';
 	import { Separator } from '$lib/registry/ui/separator/index.ts';
 	import * as Tabs from '$lib/registry/ui/tabs/index.ts';
 	// import MailLight from '$lib/img/examples/mail-light.png?enhanced';
 	// import MailDark from '$lib/img/examples/mail-dark.png?enhanced';
-
-    import { PaneGroup, Pane, PaneResizer, type PaneAPI } from 'paneforge';
 
     import * as Dialog from '$lib/registry/ui/dialog/index.ts'
 
@@ -138,17 +135,6 @@
         <PaymentDetails />
     </Dialog.Content>
 </Dialog.Root>
-
-<div class="user-menu">
-    <UserAvatar
-        avatar={$authStore.data.user?.picture}
-        name={$authStore.data.user?.given_name || 'User'}
-        isLightTheme={true}
-        size="25px"
-        onclick={triggerUserInfoSidePanel}
-    />
-</div>
-
 
 <div class="sidebar-right-menu-wrapper">
     <Drawer.Root
@@ -247,19 +233,23 @@
                 document.cookie = `PaneForge:collapsed=${false}`;
             }}
 		>
-			<!-- <div
-				class={cn(
-					"flex h-[52px] items-center justify-center",
-					isSidebarCollapsed ? "h-[52px]" : "px-2"
-				)}
-			>
-				<AccountSwitcher {isSidebarCollapsed} {accounts} />
-			</div> -->
-			<!-- <Separator /> -->
-			<!-- <Nav {isSidebarCollapsed} routes={primaryRoutes} /> -->
-            <Sidebar />
-			<!-- <Separator /> -->
-			<!-- <Nav {isSidebarCollapsed} routes={secondaryRoutes} /> -->
+            <div class="workspace-sidebar-shell">
+                <div class="workspace-sidebar-body">
+                    <Sidebar />
+                </div>
+                <div class="workspace-sidebar-footer">
+                    <Separator />
+                    <div class="sidebar-user-menu">
+                        <UserAvatar
+                            avatar={$authStore.data.user?.picture}
+                            name={$authStore.data.user?.given_name || 'User'}
+                            isLightTheme={true}
+                            size="25px"
+                            onclick={triggerUserInfoSidePanel}
+                        />
+                    </div>
+                </div>
+            </div>
 		</Resizable.Pane>
 		<Resizable.Handle withHandle={false} />
 		<Resizable.Pane
@@ -282,18 +272,9 @@
 </div>
 
 <style global lang="scss">
-    //NOTE Shared SASS variables available globally
-
     @import '$src/sass/styles.scss';
 
-    // .content-wrapper {
-    //     height: 100vh;
-    //     display: flex;
-    //     flex-direction: row;
-    // }
-
     .sidebar-collapse-actions {
-        // z-index: 999999;
         z-index: 10;
     }
 
@@ -303,14 +284,33 @@
         top: .5rem;
         right: .5rem;
     }
-    .user-menu {
-        position: absolute;
-        top: .7rem;
-        right: 1rem;
-        z-index: 60;
+
+    .workspace-sidebar-shell {
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
     }
 
-    [data-vaul-drawer] {
+    .workspace-sidebar-body {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+
+    .workspace-sidebar-footer {
+        flex: 0 0 auto;
+        background: hsl(var(--sidebar-background));
+    }
+
+    .sidebar-user-menu {
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+    }
+
+    :global([data-vaul-drawer]) {
         height: 100%;
         width: 300px;
         left: auto;

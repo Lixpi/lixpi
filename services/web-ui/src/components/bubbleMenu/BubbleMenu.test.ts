@@ -28,6 +28,7 @@ function createMockPosition(overrides: Partial<DOMRect> = {}): BubbleMenuPositio
 function createBubbleMenu(overrides: {
     items?: BubbleMenuItem[]
     panels?: HTMLElement[]
+    getVisualScale?: () => number
     onShow?: (ctx: string) => void
     onHide?: () => void
 } = {}) {
@@ -44,6 +45,7 @@ function createBubbleMenu(overrides: {
         parentEl,
         items,
         panels: overrides.panels,
+        getVisualScale: overrides.getVisualScale,
         onShow: overrides.onShow,
         onHide: overrides.onHide,
     })
@@ -319,6 +321,68 @@ describe('BubbleMenu — reposition', () => {
         menu.reposition()
         expect(menu.isVisible).toBe(false)
     })
+
+    it('centers from the final visual width when the menu is visually scaled', () => {
+        menu.destroy()
+        parentEl.remove()
+        const scaledResult = createBubbleMenu({ getVisualScale: () => 0.5 })
+        menu = scaledResult.menu
+        parentEl = scaledResult.parentEl
+        parentEl.getBoundingClientRect = vi.fn(() => ({
+            left: 0,
+            top: 0,
+            right: 1000,
+            bottom: 800,
+            width: 1000,
+            height: 800,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+        } as DOMRect))
+        Object.defineProperty(menu.element, 'offsetWidth', { configurable: true, value: 200 })
+        Object.defineProperty(menu.element, 'offsetHeight', { configurable: true, value: 40 })
+
+        menu.show('image', createMockPosition({ left: 100, right: 300, width: 200 }))
+
+        expect(menu.element.style.left).toBe('150px')
+        expect(menu.element.style.top).toBe('108px')
+    })
+
+    it('can follow a target beyond the parent edge without clamping', () => {
+        parentEl.getBoundingClientRect = vi.fn(() => ({
+            left: 0,
+            top: 0,
+            right: 400,
+            bottom: 300,
+            width: 400,
+            height: 300,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+        } as DOMRect))
+        Object.defineProperty(menu.element, 'offsetWidth', { configurable: true, value: 100 })
+        Object.defineProperty(menu.element, 'offsetHeight', { configurable: true, value: 40 })
+
+        menu.show('image', {
+            ...createMockPosition({ left: -80, right: 20, width: 100 }),
+            clampToParent: false,
+        })
+
+        expect(menu.element.style.left).toBe('-80px')
+    })
+
+    it('can disable entrance motion for anchored menus', () => {
+        menu.show('image', {
+            ...createMockPosition(),
+            animateOnShow: false,
+        })
+
+        expect(menu.element.classList.contains('bubble-menu--no-entrance-motion')).toBe(true)
+
+        menu.show('image', createMockPosition())
+
+        expect(menu.element.classList.contains('bubble-menu--no-entrance-motion')).toBe(false)
+    })
 })
 
 // =============================================================================
@@ -406,6 +470,27 @@ describe('BubbleMenu — transform awareness', () => {
         parentEl = pe
 
         expect(menu.findTransformedAncestor()).toBeNull()
+        menu.destroy()
+    })
+
+    it('applies optional visual scale without changing transform-aware coordinate scale', () => {
+        const { menu, parentEl: pe } = createBubbleMenu({ getVisualScale: () => 0.5 })
+        parentEl = pe
+
+        menu.show('image', createMockPosition())
+
+        expect(menu.element.style.getPropertyValue('--bubble-menu-visual-scale')).toBe('0.5')
+        expect(menu.getScale()).toBe(1)
+        menu.destroy()
+    })
+
+    it('clamps invalid visual scale values', () => {
+        const { menu, parentEl: pe } = createBubbleMenu({ getVisualScale: () => 0 })
+        parentEl = pe
+
+        menu.show('image', createMockPosition())
+
+        expect(menu.element.style.getPropertyValue('--bubble-menu-visual-scale')).toBe('0.01')
         menu.destroy()
     })
 })

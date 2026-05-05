@@ -98,6 +98,23 @@ function findConnectedNodes(
         }
     }
 
+    // Context-region children: any node whose `parentId` is the target node is
+    // part of the prompt context. Synthesize a virtual edge so downstream code
+    // that expects an edge keeps working.
+    const childNodes = nodes.filter((n) => n.parentId === targetNodeId)
+    for (const childNode of childNodes) {
+        if (visited.has(childNode.nodeId)) continue
+        visited.add(childNode.nodeId)
+        const virtualEdge: WorkspaceEdge = {
+            edgeId: `virtual-parent-${targetNodeId}-${childNode.nodeId}`,
+            sourceNodeId: childNode.nodeId,
+            targetNodeId,
+            sourceHandle: 'right',
+            targetHandle: 'left',
+        }
+        result.push({ node: childNode, edge: virtualEdge })
+    }
+
     return result
 }
 
