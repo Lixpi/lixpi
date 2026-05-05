@@ -311,7 +311,13 @@ const el = html`
 Rules:
 - Use `className` and `innerHTML` in templates (not `class`).
 - Event handlers: `onclick`, `onmouseenter`, etc. Keep handlers stable, avoid recreating closures in tight loops.
-- Styles: pass an object to `style=${{ ... }}` if needed. Keep it minimal; most styling belongs in SCSS.
+- Styles: pass a **named variable** to `style=${styleObj}` — never inline the object literal. Keep it minimal; most styling belongs in SCSS.
+- To apply multiple style properties to an **existing** element, import `applyStyle` and call it instead of setting properties one by one:
+  ```ts
+  import { applyStyle } from '$src/utils/domTemplates.ts'
+
+  applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px` })
+  ```
 - SVG icons: always import from `$src/svgIcons/index.ts` and inject via `innerHTML` or string interpolation — never inline SVG markup in component files.
 - The only exception is test files (`*.test.ts`) where minimal DOM setup for mocking is acceptable.
 

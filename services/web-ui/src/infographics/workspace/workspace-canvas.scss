@@ -1,13 +1,23 @@
 @import '$src/sass/_variables.scss';
 @import '$src/components/bubbleMenu/bubbleMenu.scss';
 
+:root {
+    --workspace-ai-chat-sidebar-width: min(380px, calc(100vw - 64px));
+    --workspace-ai-chat-sidebar-edge-gap: 15px;
+    --workspace-ai-chat-sidebar-padding: 15px;
+    --workspace-ai-chat-sidebar-zoom-gap: 15px;
+    --workspace-canvas-padding-top: 32px;
+    --workspace-canvas-padding-inline: 16px;
+    --workspace-canvas-padding-bottom: 16px;
+}
+
 .workspace-canvas {
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
     position: relative;
-    padding: 32px 16px 16px 16px;
+    padding: var(--workspace-canvas-padding-top) var(--workspace-canvas-padding-inline) var(--workspace-canvas-padding-bottom);
     overflow: hidden;
 }
 
@@ -205,6 +215,10 @@
     pointer-events: none;
 }
 
+.workspace-canvas--chat-panel-open .workspace-zoom-indicator {
+    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap));
+}
+
 .workspace-pane {
     flex: 1;
     width: 100%;
@@ -254,38 +268,6 @@
     flex-direction: column;
     overflow: visible;
     position: relative;
-
-    &:hover .document-resize-handle {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    &.is-selected .document-resize-handle,
-    &.is-resizing .document-resize-handle {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    // On AI chat thread nodes, only show each handle on its own hover
-    &.workspace-ai-chat-thread-node {
-        &:hover .document-resize-handle {
-            opacity: 0;
-            pointer-events: auto;
-        }
-
-        .document-resize-handle:hover {
-            opacity: 1;
-        }
-
-        &.is-resizing .document-resize-handle {
-            opacity: 0;
-            pointer-events: auto;
-
-            &.is-dragging {
-                opacity: 1;
-            }
-        }
-    }
 
     &.is-selected,
     &:focus-within {
@@ -341,6 +323,122 @@
     }
 }
 
+/*
+ * Context region card variant. The node is a labeled bounding box on the
+ * canvas. Pointer events on the body pass through so children inside the
+ * region remain interactive; the title bar opens the canvas-owned chat panel
+ * for the thread linked to this region.
+ */
+.workspace-context-region-node,
+.workspace-ai-chat-thread-node--region {
+    // The region card. The moving backdrop is rendered by the singleton
+    // `ShiftingGradientRenderer` via a <canvas class="shifting-gradient-canvas">
+    // injected as the first child. A pale base color keeps the empty region
+    // airy like the mockup while the canvas supplies the shifting depth.
+    background: #E5F2EE;
+    border: none;
+    border-radius: 18px;
+    box-shadow: 0 8px 20px rgba(94, 119, 111, 0.07);
+    isolation: isolate;
+    // overflow visible so the floating title pill renders outside the box.
+    // The gradient canvas inside has `border-radius: inherit`, so it stays
+    // visually clipped to the rounded corners on its own.
+    overflow: visible;
+    pointer-events: auto;
+
+    // Region is always visible even when empty.
+    &[data-thread-empty="true"] {
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+    // The gradient canvas is injected by createShiftingGradientBackground at
+    // index 0 (first child). Keep it behind everything else.
+    > canvas.shifting-gradient-canvas {
+        z-index: 0;
+        opacity: 0.80;
+    }
+
+    &::before,
+    &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+    }
+
+    // Center-depth pass. Keep it airy: the region needs organic depth without
+    // dropping a dark spot into the middle of the gradient.
+    &::before {
+        z-index: 1;
+        background:
+            radial-gradient(ellipse 90% 70% at 50% 55%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 58%, rgba(255, 255, 255, 0) 100%),
+            radial-gradient(ellipse 74% 62% at 50% 58%, rgba(86, 118, 109, 0.08) 0%, rgba(128, 158, 149, 0.045) 42%, rgba(232, 246, 242, 0.01) 72%, rgba(255, 255, 255, 0) 100%),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 34%, rgba(255, 255, 255, 0) 74%, rgba(255, 255, 255, 0.10) 100%);
+        mix-blend-mode: normal;
+    }
+
+    // Glass edge pass: soft rim-light, faint inner bevel, and edge haze similar
+    // to the sample's frosted border glow.
+    &::after {
+        z-index: 2;
+        background:
+            radial-gradient(ellipse 102% 42% at 50% -8%, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.10) 42%, rgba(255, 255, 255, 0) 72%),
+            radial-gradient(ellipse 94% 44% at 50% 106%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.09) 42%, rgba(255, 255, 255, 0) 76%),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.03) 15%, rgba(255, 255, 255, 0) 84%, rgba(255, 255, 255, 0.22) 100%);
+        box-shadow:
+            inset 0 1px 2px rgba(255, 255, 255, 0.64),
+            inset 1px 0 2px rgba(255, 255, 255, 0.34),
+            inset -1px 0 2px rgba(255, 255, 255, 0.32),
+            inset 0 -1px 2px rgba(255, 255, 255, 0.30),
+            inset 0 14px 34px rgba(255, 255, 255, 0.09),
+            inset 0 -14px 38px rgba(255, 255, 255, 0.08);
+    }
+
+    .workspace-ai-chat-thread-region__title-bar {
+        position: absolute;
+        top: -18px;
+        left: 20px;
+        height: 32px;
+        padding: 0 16px 0 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        background: #ffffff;
+        color: #1f2937;
+        border: 1px solid rgba(0, 0, 0, 0.04);
+        border-radius: 999px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        user-select: none;
+        transform-origin: top left;
+        z-index: 4;
+
+        &::before {
+            content: '';
+            display: block;
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: #A1C3BA; // soft mint-sage — sampled from the title-pill dot in gradient-sample.png
+            flex-shrink: 0;
+        }
+
+        &:hover {
+            background: #fafafa;
+        }
+    }
+
+    .workspace-ai-chat-thread-region__title {
+        white-space: nowrap;
+        letter-spacing: 0.005em;
+    }
+}
+
 .workspace-ai-chat-thread-node .ai-chat-thread-node-editor {
     position: relative;
     z-index: 1;
@@ -372,7 +470,61 @@
 /* Override global ProseMirror padding/min-height for the canvas thread */
 .workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
     min-height: 0;
-    padding-bottom: 1rem;
+    padding: 0 0 1rem;
+}
+
+/* Override global ProseMirror padding for the floating chat panel */
+.workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror {
+    padding: 0 var(--workspace-ai-chat-sidebar-padding) 1rem;
+}
+
+.workspace-ai-chat-floating-panel {
+    position: absolute;
+    // top: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-top));
+    top: calc(-1 * var(--workspace-canvas-padding-top));
+    right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline));
+    bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
+    width: var(--workspace-ai-chat-sidebar-width);
+    height: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 10030;
+    pointer-events: auto;
+    border-radius: 10px;
+    background: transparent;
+    overflow: visible;
+
+    &[data-thread-empty="true"] {
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+    .ai-chat-thread-node-editor {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow-y: auto;
+    }
+}
+
+.workspace-ai-chat-floating-panel__prompt {
+    position: relative !important;
+    display: block !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    flex: 0 0 auto;
+    margin-top: 12px;
+    z-index: 4;
+    box-shadow: var(--dropdown-popover-box-shadow) !important;
+
+    .ai-prompt-input-wrapper {
+        box-shadow: none;
+    }
+}
+
+.workspace-ai-chat-floating-panel__rail {
+    cursor: default;
 }
 
 /* Hide the document title (h1) inside AI chat thread nodes on the canvas (controlled by showHeaderOnAiChatThreadNodes) */
@@ -431,6 +583,15 @@
 
 }
 
+.workspace-thread-rail.workspace-ai-chat-floating-panel__rail {
+    cursor: ew-resize;
+    touch-action: none;
+}
+
+.workspace-ai-chat-floating-panel.is-resizing {
+    user-select: none;
+}
+
 
 .workspace-image-node {
     background: transparent;
@@ -451,6 +612,16 @@
         pointer-events: auto;
         border-radius: 6px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+
+        .image-node-img {
+            border-radius: 6px;
+        }
+    }
+
+    &.workspace-image-node--context-region-child {
+        background: var(--context-region-image-frame-color);
+        border-radius: 8px;
+        box-shadow: 0 0 0 8px var(--context-region-image-frame-color), 0 10px 24px rgba(31, 49, 42, 0.16), 0 1px 2px rgba(31, 49, 42, 0.08);
 
         .image-node-img {
             border-radius: 6px;
@@ -613,7 +784,7 @@
     position: absolute;
     /* size is set dynamically via JS based on zoom */
     opacity: 0;
-    pointer-events: none;
+    pointer-events: auto;
     transition: opacity 0.2s ease;
     z-index: 20;
     display: flex;
@@ -630,6 +801,11 @@
         fill: $nightBlue !important;
         transition: transform 0.15s ease;
         display: block;
+    }
+
+    &:hover,
+    &.is-dragging {
+        opacity: 1;
     }
 
     &:hover svg,
@@ -731,22 +907,7 @@
         outline-offset: 2px;
     }
 
-    // Only show each handle on its own hover
-    .document-resize-handle {
-        pointer-events: auto;
-    }
-
-    .document-resize-handle:hover {
-        opacity: 1;
-    }
-
-    &.thread-hovered .document-resize-handle {
-        pointer-events: auto;
-    }
-
-    &.is-selected .document-resize-handle {
-        opacity: 1;
-    }
+    // Resize handles stay hidden until their own corner is hovered.
 }
 
 // Workspace edges

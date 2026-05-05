@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Region Gradient Preview</title>
+<style>
+    body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #ffffff;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .stage {
+        width: min(1420px, calc(100vw - 48px));
+        display: grid;
+        grid-template-columns: minmax(480px, 1fr) minmax(300px, 420px);
+        gap: 56px;
+        align-items: center;
+    }
+
+    .workspace-ai-chat-thread-node--region {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 3 / 2;
+        background: #E5F2EE;
+        border: none;
+        border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(94, 119, 111, 0.07);
+        isolation: isolate;
+        overflow: visible;
+        pointer-events: auto;
+    }
+
+    .workspace-ai-chat-thread-node--region > canvas.shifting-gradient-canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        pointer-events: none;
+        border-radius: inherit;
+        opacity: 0.80;
+    }
+
+    .workspace-ai-chat-thread-node--region::before,
+    .workspace-ai-chat-thread-node--region::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+    }
+
+    .workspace-ai-chat-thread-node--region::before {
+        z-index: 1;
+        background:
+            radial-gradient(ellipse 90% 70% at 50% 55%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 58%, rgba(255, 255, 255, 0) 100%),
+            radial-gradient(ellipse 74% 62% at 50% 58%, rgba(86, 118, 109, 0.08) 0%, rgba(128, 158, 149, 0.045) 42%, rgba(232, 246, 242, 0.01) 72%, rgba(255, 255, 255, 0) 100%),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 34%, rgba(255, 255, 255, 0) 74%, rgba(255, 255, 255, 0.10) 100%);
+        mix-blend-mode: normal;
+    }
+
+    .workspace-ai-chat-thread-node--region::after {
+        z-index: 2;
+        background:
+            radial-gradient(ellipse 102% 42% at 50% -8%, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.10) 42%, rgba(255, 255, 255, 0) 72%),
+            radial-gradient(ellipse 94% 44% at 50% 106%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.09) 42%, rgba(255, 255, 255, 0) 76%),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.03) 15%, rgba(255, 255, 255, 0) 84%, rgba(255, 255, 255, 0.22) 100%);
+        box-shadow:
+            inset 0 1px 2px rgba(255, 255, 255, 0.64),
+            inset 1px 0 2px rgba(255, 255, 255, 0.34),
+            inset -1px 0 2px rgba(255, 255, 255, 0.32),
+            inset 0 -1px 2px rgba(255, 255, 255, 0.30),
+            inset 0 14px 34px rgba(255, 255, 255, 0.09),
+            inset 0 -14px 38px rgba(255, 255, 255, 0.08);
+    }
+
+    .workspace-ai-chat-thread-region__title-bar {
+        position: absolute;
+        top: -18px;
+        left: 50px;
+        height: 32px;
+        padding: 0 16px 0 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        background: #ffffff;
+        color: #1f2937;
+        border: 1px solid rgba(0, 0, 0, 0.04);
+        border-radius: 999px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1;
+        z-index: 4;
+    }
+
+    .workspace-ai-chat-thread-region__title-bar::before {
+        content: '';
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #A1C3BA;
+    }
+
+    img {
+        width: 100%;
+        height: auto;
+        border: 1px solid #eeeeee;
+    }
+</style>
+</head>
+<body>
+    <div class="stage">
+        <div class="workspace-ai-chat-thread-node--region">
+            <canvas class="shifting-gradient-canvas"></canvas>
+            <div class="workspace-ai-chat-thread-region__title-bar">New AI Chat</div>
+        </div>
+        <img src="gradient-sample.png" alt="Sample">
+    </div>
+<script>
+const contextRegionAreaShiftingGradientColors = ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1']
+const colors = contextRegionAreaShiftingGradientColors.map((hex) => {
+    const value = hex.replace('#', '')
+    return {
+        r: parseInt(value.slice(0, 2), 16),
+        g: parseInt(value.slice(2, 4), 16),
+        b: parseInt(value.slice(4, 6), 16),
+    }
+})
+
+const phasePositions = [
+    { x: 0.8, y: 0.1 },
+    { x: 0.6, y: 0.2 },
+    { x: 0.35, y: 0.25 },
+    { x: 0.25, y: 0.6 },
+    { x: 0.2, y: 0.9 },
+    { x: 0.4, y: 0.8 },
+    { x: 0.65, y: 0.75 },
+    { x: 0.75, y: 0.4 },
+]
+
+const positions = []
+for (let i = 0; i < 4; i++) positions.push(phasePositions[(4 + i * 2) % 8])
+
+const bitmapWidth = 60
+const bitmapHeight = 80
+const offscreen = document.createElement('canvas')
+offscreen.width = bitmapWidth
+offscreen.height = bitmapHeight
+const offscreenCtx = offscreen.getContext('2d')
+const imageData = offscreenCtx.createImageData(bitmapWidth, bitmapHeight)
+const data = imageData.data
+
+for (let y = 0; y < bitmapHeight; y++) {
+    for (let x = 0; x < bitmapWidth; x++) {
+        const directPixelX = x / bitmapWidth
+        const directPixelY = y / bitmapHeight
+        const centerDistanceX = directPixelX - 0.5
+        const centerDistanceY = directPixelY - 0.5
+        const centerDistance = Math.sqrt(centerDistanceX * centerDistanceX + centerDistanceY * centerDistanceY)
+        const swirlFactor = 0.35 * centerDistance
+        const theta = swirlFactor * swirlFactor * 0.8 * 8.0
+        const sinTheta = Math.sin(theta)
+        const cosTheta = Math.cos(theta)
+        const pixelX = Math.max(0, Math.min(1, 0.5 + centerDistanceX * cosTheta - centerDistanceY * sinTheta))
+        const pixelY = Math.max(0, Math.min(1, 0.5 + centerDistanceX * sinTheta + centerDistanceY * cosTheta))
+
+        let r = 0
+        let g = 0
+        let b = 0
+        let distanceSum = 0
+
+        for (let i = 0; i < 4; i++) {
+            const dx = pixelX - positions[i].x
+            const dy = pixelY - positions[i].y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            let weight = Math.max(0, 0.9 - dist)
+            weight = weight * weight * weight * weight
+            distanceSum += weight
+            r += weight * colors[i].r
+            g += weight * colors[i].g
+            b += weight * colors[i].b
+        }
+
+        if (distanceSum > 0) {
+            r /= distanceSum
+            g /= distanceSum
+            b /= distanceSum
+        }
+
+        const index = (y * bitmapWidth + x) * 4
+        data[index] = Math.round(r)
+        data[index + 1] = Math.round(g)
+        data[index + 2] = Math.round(b)
+        data[index + 3] = 255
+    }
+}
+
+offscreenCtx.putImageData(imageData, 0, 0)
+
+const canvas = document.querySelector('canvas')
+const container = canvas.parentElement
+const dpr = Math.min(window.devicePixelRatio || 1, 2)
+const rect = container.getBoundingClientRect()
+canvas.width = Math.max(1, Math.floor(rect.width * dpr))
+canvas.height = Math.max(1, Math.floor(rect.height * dpr))
+const ctx = canvas.getContext('2d')
+ctx.imageSmoothingEnabled = true
+ctx.imageSmoothingQuality = 'high'
+ctx.drawImage(offscreen, 0, 0, bitmapWidth, bitmapHeight, 0, 0, canvas.width, canvas.height)
+</script>
+</body>
+</html>

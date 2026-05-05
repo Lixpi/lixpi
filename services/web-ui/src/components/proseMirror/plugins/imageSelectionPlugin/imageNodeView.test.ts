@@ -83,6 +83,31 @@ describe('ImageNodeView — error placeholder', () => {
 })
 
 // =============================================================================
+// Partial generated image placeholder
+// =============================================================================
+
+describe('ImageNodeView — partial generated image placeholder', () => {
+	const ts = loadTs()
+
+	it('renders a generating placeholder for partial image nodes without image data', () => {
+		expect(ts).toContain('syncPartialPlaceholder')
+		expect(ts).toContain('pm-image-generating-placeholder')
+		expect(ts).toContain('pm-image-generating-dot')
+		expect(ts).toContain('Boolean(this.node.attrs.isPartial) && !getImageSrcAttr(this.node)')
+	})
+
+	it('does not assign an empty string as an img src', () => {
+		const updateBlock = ts.match(/private async updateImageSrc[\s\S]*?\n    \}/)
+		expect(updateBlock).not.toBeNull()
+		const block = updateBlock![0]
+
+		expect(block).toContain("if (!src)")
+		expect(block).toContain("this.img.removeAttribute('src')")
+		expect(block).toContain("this.img.style.display = 'none'")
+	})
+})
+
+// =============================================================================
 // buildImageSrc — handles various URL formats
 // =============================================================================
 

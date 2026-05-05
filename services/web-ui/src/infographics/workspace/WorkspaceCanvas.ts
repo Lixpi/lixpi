@@ -14,10 +14,11 @@ import {
     type DocumentCanvasNode,
     type ImageCanvasNode,
     type AiChatThreadCanvasNode,
+    type ContextRegionCanvasNode,
     type AiChatThread,
     type WorkspaceEdge,
 } from '@lixpi/constants'
-import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
+import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon, stabilityIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
@@ -25,8 +26,8 @@ import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { getAdaptiveZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeImagePositionNextToThread, computeImagePositionOverlappingThread, countExistingImagesForThread, OVERLAP_PADDING_X, OVERLAP_GAP_Y, OVERLAP_WIDTH_RATIO } from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
@@ -47,6 +48,7 @@ import { select } from 'd3-selection'
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'
 
 type DocumentEditorEntry = {
     editor: any
@@ -61,6 +63,8 @@ type AiChatThreadEditorEntry = {
     gradientCleanup?: () => void
     triggerGradientAnimation?: () => void
 }
+
+type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
 
 type MarqueeSelectionState = {
     start: { x: number; y: number }
@@ -119,6 +123,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)
     paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)
     paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)
+    paneEl.style.setProperty('--context-region-image-frame-color', webUiThemeSettings.contextRegionImageFrameColor)
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
@@ -133,6 +138,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let edgesRaf: number | null = null
     let transformSideEffectsRaf: number | null = null
     let pendingHandleZoom: number | null = null
+    let pendingRegionTitleZoom: number | null = null
     let anchoredRealignRaf: number | null = null
     let autoGrowRaf: number | null = null
     let selectedNodeIds: Set<string> = new Set()
@@ -150,10 +156,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
     const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
+    let activeAiChatRegionNodeId: string | null = null
+    let activeAiChatThreadId: string | null = null
+    let activeAiChatPanelEl: HTMLDivElement | null = null
+    let activeAiChatPromptEditor: any = null
+    let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
 
     // Visibility tracking for lazy loading
     const visibleNodeIds: Set<string> = new Set()
     const loadedNodeIds: Set<string> = new Set()
+    // Per-region shifting gradient backgrounds. Cleaned up on full re-render.
+    const regionGradients: Map<string, { destroy: () => void }> = new Map()
     let paneRect: DOMRect | null = null
 
     // Image lifecycle tracker - handles deletion of orphaned images
@@ -244,14 +257,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
                 const imgEl = nodeEl?.querySelector('img') as HTMLImageElement | null
                 if (imgEl?.src) {
-                    downloadImage(imgEl.src, { getAuthToken: () => AuthService.getTokenSilently() })
+                    downloadImage(imgEl.src, {
+                        getAuthToken: async () => {
+                            const token = await AuthService.getTokenSilently()
+                            return token || ''
+                        }
+                    })
                 }
             },
             onReplaceImage: (nodeId) => {
-                const input = document.createElement('input')
-                input.type = 'file'
-                input.accept = 'image/*'
-                input.style.display = 'none'
+                const input = html`<input type="file" accept="image/*" style=${{ display: 'none' }}></input>` as HTMLInputElement
                 input.addEventListener('change', async () => {
                     const file = input.files?.[0]
                     input.remove()
@@ -327,9 +342,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         const newX = imageNode.position.x + imageNode.dimensions.width + 50
                         const newY = imageNode.position.y
 
-                        const threadNode: AiChatThreadCanvasNode = {
+                        const threadNode: ContextRegionCanvasNode = {
                             nodeId: `node-${thread.threadId}`,
-                            type: 'aiChatThread',
+                            type: 'contextRegion',
                             referenceId: thread.threadId,
                             position: { x: newX, y: newY },
                             dimensions: { width: 400, height: 500 }
@@ -351,6 +366,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
 
                         onCanvasStateChange?.(newCanvasState)
+                        activeAiChatThreadId = thread.threadId
+                        activeAiChatRegionNodeId = threadNode.nodeId
+                        requestAnimationFrame(() => renderActiveAiChatPanel(threadNode, thread))
                     }
                 } catch (error) {
                     console.error('Failed to create AI chat thread from image:', error)
@@ -369,6 +387,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         canvasBubbleMenu = new BubbleMenu({
             parentEl: paneEl,
             items: canvasBubbleMenuItems.items,
+            getVisualScale: () => getAdaptiveZoomMultiplier(getCurrentViewportZoom()),
         })
     }
 
@@ -385,9 +404,45 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return selectedNodeIds.has(nodeId)
     }
 
+    function isGeneratedOutputImageNode(node: CanvasNode | undefined): node is ImageCanvasNode {
+        return node?.type === 'image' && Boolean((node as ImageCanvasNode).generatedBy?.aiChatThreadId)
+    }
+
+    function canAdoptNodeIntoContextRegion(node: CanvasNode): boolean {
+        return !isGeneratedOutputImageNode(node)
+    }
+
+    function hasConnectorEdgeFromThreadToImage(threadNodeId: string, imageNodeId: string): boolean {
+        return currentCanvasState?.edges.some((edge: WorkspaceEdge) =>
+            edge.sourceNodeId === threadNodeId && edge.targetNodeId === imageNodeId
+        ) ?? false
+    }
+
     function getSelectionTargetNodeId(nodeId: string): string {
+        const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+        if (isGeneratedOutputImageNode(node)) return nodeId
+
         const anchor = anchoredImageManager.getAnchor(nodeId)
         return anchor?.threadNodeId ?? nodeId
+    }
+
+    function isContextRegionNodeElement(nodeEl: HTMLElement): boolean {
+        return nodeEl.classList.contains('workspace-context-region-node')
+            || nodeEl.classList.contains('workspace-ai-chat-thread-node--region')
+    }
+
+    function isContextRegionCanvasNode(node: CanvasNode): node is ContextRegionNode {
+        return node.type === 'contextRegion' || node.type === 'aiChatThread'
+    }
+
+    function isImageInsideContextRegion(node: ImageCanvasNode, nodes: CanvasNode[] = currentCanvasState?.nodes ?? []): boolean {
+        if (!node.parentId) return false
+        return nodes.some((candidate: CanvasNode) => candidate.nodeId === node.parentId && isContextRegionCanvasNode(candidate))
+    }
+
+    function syncContextRegionImageFrame(nodeEl: HTMLElement, node: CanvasNode, nodes: CanvasNode[] = currentCanvasState?.nodes ?? []): void {
+        const hasContextRegionFrame = node.type === 'image' && isImageInsideContextRegion(node as ImageCanvasNode, nodes)
+        nodeEl.classList.toggle(CONTEXT_REGION_IMAGE_CLASS, hasContextRegionFrame)
     }
 
     function getCanvasRectFromSelection(state: MarqueeSelectionState): Rect {
@@ -406,6 +461,181 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             a.y + a.height > b.y
     }
 
+    function rectIntersectionArea(a: Rect, b: Rect): number {
+        const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x))
+        const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y))
+        return width * height
+    }
+
+    function pointInRect(point: { x: number; y: number }, rect: Rect): boolean {
+        return point.x >= rect.x && point.x <= rect.x + rect.width &&
+            point.y >= rect.y && point.y <= rect.y + rect.height
+    }
+
+    function clampInsideRange(value: number, min: number, max: number): number {
+        if (min > max) return min
+        return Math.min(max, Math.max(min, value))
+    }
+
+    function getCanvasNodesById(nodes: CanvasNode[] = currentCanvasState?.nodes ?? []): Map<string, CanvasNode> {
+        return new Map(nodes.map((node: CanvasNode) => [node.nodeId, node]))
+    }
+
+    function getNodeWorldPosition(
+        node: CanvasNode,
+        nodesById: Map<string, CanvasNode> = getCanvasNodesById(),
+        visiting: Set<string> = new Set()
+    ): { x: number; y: number } {
+        const override = liveNodeOverrides.get(node.nodeId)?.position
+        if (override) return override
+
+        if (!node.parentId || visiting.has(node.nodeId)) return node.position
+
+        const parentNode = nodesById.get(node.parentId)
+        if (!parentNode) return node.position
+
+        visiting.add(node.nodeId)
+        const parentPosition = getNodeWorldPosition(parentNode, nodesById, visiting)
+        visiting.delete(node.nodeId)
+
+        return {
+            x: parentPosition.x + node.position.x,
+            y: parentPosition.y + node.position.y,
+        }
+    }
+
+    function getNodeWorldRect(node: CanvasNode, nodesById: Map<string, CanvasNode> = getCanvasNodesById()): Rect {
+        const position = getNodeWorldPosition(node, nodesById)
+        const dimensions = liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
+        return {
+            x: position.x,
+            y: position.y,
+            width: dimensions.width,
+            height: dimensions.height,
+        }
+    }
+
+    function toParentRelativePosition(
+        worldPosition: { x: number; y: number },
+        parentId: string,
+        nodesById: Map<string, CanvasNode>
+    ): { x: number; y: number } {
+        const parentNode = nodesById.get(parentId)
+        if (!parentNode) return worldPosition
+        const parentPosition = getNodeWorldPosition(parentNode, nodesById)
+        return {
+            x: worldPosition.x - parentPosition.x,
+            y: worldPosition.y - parentPosition.y,
+        }
+    }
+
+    function expandRegionsToFitChildren(nodes: CanvasNode[]): CanvasNode[] {
+        const inset = 48
+        const childrenByParentId = new Map<string, CanvasNode[]>()
+        for (const node of nodes) {
+            if (!node.parentId) continue
+            // Only consider image or document child nodes for bounding box.
+            // Ignore anything like bubble menus or floating inputs if they ever crept in.
+            const children = childrenByParentId.get(node.parentId) ?? []
+            children.push(node)
+            childrenByParentId.set(node.parentId, children)
+        }
+
+        return nodes.map((node: CanvasNode) => {
+            if (!isContextRegionCanvasNode(node)) return node
+            const children = childrenByParentId.get(node.nodeId)
+
+            // Empty regions keep their persisted size so manual resize is stable.
+            // Only repair invalid legacy dimensions that cannot render usefully.
+            if (!children?.length) {
+                if (node.dimensions.width <= 0 || node.dimensions.height <= 0) {
+                    const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+                    if (nodeEl) {
+                        applyStyle(nodeEl, { width: '300px', height: '200px' })
+                    }
+                    return { ...node, dimensions: { ...node.dimensions, width: 300, height: 200 } }
+                }
+                return node
+            }
+
+            // Regions grow to fit children, but never shrink below the user's
+            // current size. Dropping a small image into a manually enlarged
+            // empty region must preserve the larger region dimensions.
+            let width = Math.max(200, node.dimensions.width)
+            let height = Math.max(120, node.dimensions.height)
+            for (const child of children) {
+                width = Math.max(width, child.position.x + child.dimensions.width + inset)
+                height = Math.max(height, child.position.y + child.dimensions.height + inset)
+            }
+
+            if (width === node.dimensions.width && height === node.dimensions.height) return node
+
+            const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+            if (nodeEl) {
+                applyStyle(nodeEl, { width: `${width}px`, height: `${height}px` })
+            }
+
+            return {
+                ...node,
+                dimensions: { ...node.dimensions, width, height },
+            }
+        })
+    }
+
+    function getRegionGeneratedImageSize(region: CanvasNode): number {
+        const availableWidth = Math.max(120, region.dimensions.width - 48)
+        return Math.min(220, availableWidth)
+    }
+
+    function getNextRegionChildPosition(region: CanvasNode, childWidth: number, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
+        const inset = 48
+        const labelClearance = 48
+        const gap = 16
+        const existingChildren = nodes.filter((node: CanvasNode) => node.parentId === region.nodeId)
+        const availableWidth = Math.max(childWidth, region.dimensions.width - inset * 2)
+        const columns = Math.max(1, Math.floor((availableWidth + gap) / (childWidth + gap)))
+        const index = existingChildren.length
+        return {
+            x: inset + (index % columns) * (childWidth + gap),
+            y: labelClearance + Math.floor(index / columns) * (childHeight + gap),
+        }
+    }
+
+    function getNextRegionOutputPosition(region: ContextRegionNode, childWidth: number, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
+        const nodesById = getCanvasNodesById(nodes)
+        const regionPosition = getNodeWorldPosition(region, nodesById)
+        const gap = 72
+        const existingOutputs = nodes.filter((node: CanvasNode) => {
+            if (node.type !== 'image' || node.parentId) return false
+            return (node as ImageCanvasNode).generatedBy?.aiChatThreadId === region.referenceId
+        })
+        const index = existingOutputs.length
+
+        return {
+            x: regionPosition.x + region.dimensions.width + gap,
+            y: regionPosition.y + index * (childHeight + gap),
+        }
+    }
+
+    function getNodesForConnectionManager(nodes: CanvasNode[]): CanvasNode[] {
+        const nodesById = getCanvasNodesById(nodes)
+        return nodes.map((node: CanvasNode) => {
+            const override = liveNodeOverrides.get(node.nodeId)
+            if (!override) return node
+
+            let position = override.position ?? node.position
+            if (override.position && node.parentId) {
+                position = toParentRelativePosition(override.position, node.parentId, nodesById)
+            }
+
+            return {
+                ...node,
+                position,
+                dimensions: override.dimensions ?? node.dimensions,
+            }
+        })
+    }
+
     function getCanvasPointFromClient(clientX: number, clientY: number): { x: number; y: number } {
         const paneBounds = paneRect ?? paneEl.getBoundingClientRect()
         return {
@@ -421,7 +651,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getSelectionBoundsForNode(node: CanvasNode): Rect {
         const override = liveNodeOverrides.get(node.nodeId)
-        const position = override?.position ?? node.position
+        const position = override?.position ?? getNodeWorldPosition(node)
         const dimensions = override?.dimensions ?? node.dimensions
 
         let left = position.x
@@ -474,9 +704,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!viewportEl) return null
         if (selectionRectEl && viewportEl.contains(selectionRectEl)) return selectionRectEl
 
-        selectionRectEl = document.createElement('div')
-        selectionRectEl.className = 'workspace-selection-rect'
-        selectionRectEl.style.display = 'none'
+        selectionRectEl = html`<div className="workspace-selection-rect" style=${{ display: 'none' }}></div>` as HTMLDivElement
         viewportEl.appendChild(selectionRectEl)
         return selectionRectEl
     }
@@ -485,9 +713,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!viewportEl) return null
         if (selectionGroupOverlayEl && viewportEl.contains(selectionGroupOverlayEl)) return selectionGroupOverlayEl
 
-        selectionGroupOverlayEl = document.createElement('div')
-        selectionGroupOverlayEl.className = 'workspace-selection-group-overlay'
-        selectionGroupOverlayEl.style.display = 'none'
+        selectionGroupOverlayEl = html`<div className="workspace-selection-group-overlay" style=${{ display: 'none' }}></div>` as HTMLDivElement
         selectionGroupOverlayEl.addEventListener('mousedown', (event) => {
             if (!shouldShowSelectionGroupOverlay()) return
             if (event.button !== 0) return
@@ -514,11 +740,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!rectEl) return
 
         const rect = getCanvasRectFromSelection(marqueeSelection)
-        rectEl.style.display = marqueeSelection.moved ? 'block' : 'none'
-        rectEl.style.left = `${rect.x}px`
-        rectEl.style.top = `${rect.y}px`
-        rectEl.style.width = `${rect.width}px`
-        rectEl.style.height = `${rect.height}px`
+        applyStyle(rectEl, {
+            display: marqueeSelection.moved ? 'block' : 'none',
+            left: `${rect.x}px`,
+            top: `${rect.y}px`,
+            width: `${rect.width}px`,
+            height: `${rect.height}px`,
+        })
     }
 
     function hideSelectionRectElement(): void {
@@ -575,11 +803,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return
         }
 
-        overlayEl.style.display = 'block'
-        overlayEl.style.left = `${bounds.x}px`
-        overlayEl.style.top = `${bounds.y}px`
-        overlayEl.style.width = `${bounds.width}px`
-        overlayEl.style.height = `${bounds.height}px`
+        applyStyle(overlayEl, {
+            display: 'block',
+            left: `${bounds.x}px`,
+            top: `${bounds.y}px`,
+            width: `${bounds.width}px`,
+            height: `${bounds.height}px`,
+        })
     }
 
     function updateNodeSelectionClasses(prevSelectedNodeIds: Set<string>, nextSelectedNodeIds: Set<string>): void {
@@ -598,12 +828,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')
 
             if (nextNode) {
-                nodeLayerManager.bringToFront(nextNode)
+                if (isContextRegionNodeElement(nextNode)) {
+                    nodeLayerManager.sendToBackground(nextNode)
+                } else {
+                    nodeLayerManager.bringToFront(nextNode)
 
-                const threadAnchors = anchoredImageManager.getAnchorsForThread(nodeId)
-                for (const anchor of threadAnchors) {
-                    const anchoredEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
-                    if (anchoredEl) nodeLayerManager.bringToFront(anchoredEl)
+                    const threadAnchors = anchoredImageManager.getAnchorsForThread(nodeId)
+                    for (const anchor of threadAnchors) {
+                        const anchoredEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
+                        if (anchoredEl) nodeLayerManager.bringToFront(anchoredEl)
+                    }
                 }
             }
 
@@ -632,10 +866,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return
         }
 
-        if (node.type === 'aiChatThread' || node.type === 'image') {
-            if (node.type === 'aiChatThread') {
-                const refId = (node as AiChatThreadCanvasNode).referenceId || singleSelectedNodeId
-                promptInputController.setTarget({ nodeId: singleSelectedNodeId, type: 'aiChatThread', referenceId: refId })
+        const selectedNodeIsContextRegion = isContextRegionCanvasNode(node)
+        const selectedNodeType = (node as CanvasNode).type
+        if (selectedNodeIsContextRegion || selectedNodeType === 'image') {
+            if (selectedNodeIsContextRegion) {
+                const refId = node.referenceId || singleSelectedNodeId
+                promptInputController.setTarget({ nodeId: singleSelectedNodeId, type: node.type, referenceId: refId })
             }
             hideFloatingInput()
             return
@@ -691,6 +927,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return !target.closest([
             '[data-node-id]',
             '.workspace-thread-rail',
+            '.workspace-ai-chat-floating-panel',
             '.ai-prompt-input-floating',
             '.workspace-edge-node',
             '.workspace-handle',
@@ -714,12 +951,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement
         if (!nodeEl) return
 
-        const imgEl = nodeEl.querySelector('img') as HTMLImageElement
-        const targetEl = imgEl || nodeEl
-        const targetRect = targetEl.getBoundingClientRect()
+        const targetRect = getCanvasImageBubbleMenuTargetRect(nodeEl)
 
-        const position: BubbleMenuPositionRequest = { targetRect, placement: 'below' }
+        const position: BubbleMenuPositionRequest = {
+            targetRect,
+            placement: 'below',
+            clampToParent: false,
+            animateOnShow: false,
+        }
         canvasBubbleMenu.show(CANVAS_IMAGE_CONTEXT, position)
+    }
+
+    function getCanvasImageBubbleMenuTargetRect(nodeEl: HTMLElement): DOMRect {
+        // Anchor to the canvas node box. The inner image can briefly report a
+        // transient rect while the node is being dragged into or out of a region.
+        return nodeEl.getBoundingClientRect()
     }
 
     function hideCanvasBubbleMenu() {
@@ -734,11 +980,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = viewportEl?.querySelector(`[data-node-id="${selectedNodeId}"]`) as HTMLElement
         if (!nodeEl) return
 
-        const imgEl = nodeEl.querySelector('img') as HTMLImageElement
-        const targetEl = imgEl || nodeEl
-        const targetRect = targetEl.getBoundingClientRect()
+        const targetRect = getCanvasImageBubbleMenuTargetRect(nodeEl)
 
-        canvasBubbleMenu.reposition({ targetRect, placement: 'below' })
+        canvasBubbleMenu.reposition({
+            targetRect,
+            placement: 'below',
+            clampToParent: false,
+            animateOnShow: false,
+        })
     }
 
     function getEdgeMidpointRect(pathEl: SVGPathElement): DOMRect {
@@ -850,13 +1099,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Vertical rail elements — one per AI chat thread, spanning thread + floating input
     const RAIL_OFFSET = webUiThemeSettings.aiChatThreadRailOffset
     const RAIL_GRAB_WIDTH = webUiSettings.aiChatThreadRailDragGrabWidth
+    const AI_CHAT_PANEL_MIN_WIDTH = 320
+    const AI_CHAT_PANEL_MAX_PANE_MARGIN = 64
     const threadRails: Map<string, HTMLElement> = new Map()
+    let activeAiChatPanelWidth: number | null = null
 
     const promptInputController = new AiPromptInputController({
         workspaceId,
         getCanvasState: () => currentCanvasState,
         persistCanvasState: (state: CanvasState) => {
             commitCanvasState(state)
+        },
+        onAiChatThreadCreated: ({ threadId, nodeId }) => {
+            activeAiChatThreadId = threadId
+            activeAiChatRegionNodeId = nodeId
+            requestAnimationFrame(() => renderActiveAiChatPanel())
         },
         createAiChatThread: async (params) => {
             const aiChatThreadService = servicesStore.getData('aiChatThreadService')
@@ -880,25 +1137,348 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
     })
 
+    function getPromptControlFactories() {
+        return {
+            createModelDropdown: createGenericAiModelDropdown,
+            createImageModelDropdown: createGenericImageModelDropdown,
+            createImageSizeDropdown: createGenericImageSizeDropdown,
+            createSubmitButton: createGenericSubmitButton,
+        }
+    }
+
+    function getWorkspaceCanvasElement(): HTMLElement | null {
+        return paneEl.closest('.workspace-canvas') as HTMLElement | null
+    }
+
+    function getActiveAiChatPanelMaxWidth(): number {
+        const paneWidth = paneEl.getBoundingClientRect().width
+        return Math.max(AI_CHAT_PANEL_MIN_WIDTH, paneWidth - AI_CHAT_PANEL_MAX_PANE_MARGIN)
+    }
+
+    function applyActiveAiChatPanelWidth(width: number): number {
+        const nextWidth = clampInsideRange(width, AI_CHAT_PANEL_MIN_WIDTH, getActiveAiChatPanelMaxWidth())
+        const widthValue = `${nextWidth}px`
+
+        activeAiChatPanelWidth = nextWidth
+        getWorkspaceCanvasElement()?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
+        activeAiChatPanelEl?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
+
+        return nextWidth
+    }
+
+    function handleActiveAiChatPanelResizeStart(event: MouseEvent, panelEl: HTMLDivElement): void {
+        if (event.button !== 0) return
+
+        event.preventDefault()
+        event.stopPropagation()
+
+        const startX = event.clientX
+        const startWidth = activeAiChatPanelWidth ?? panelEl.getBoundingClientRect().width
+        const previousBodyCursor = document.body.style.cursor
+        const previousBodyUserSelect = document.body.style.userSelect
+
+        panelEl.classList.add('is-resizing')
+        document.body.style.cursor = 'ew-resize'
+        document.body.style.userSelect = 'none'
+
+        if (panZoom) {
+            panZoom.update({
+                ...panZoomConfig,
+                panOnDrag: false,
+                userSelectionActive: true,
+                connectionInProgress: true,
+                selectionOnDrag: false
+            })
+        }
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            applyActiveAiChatPanelWidth(startWidth + startX - moveEvent.clientX)
+        }
+
+        const handleMouseUp = () => {
+            panelEl.classList.remove('is-resizing')
+            applyStyle(document.body, { cursor: previousBodyCursor, userSelect: previousBodyUserSelect })
+
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+
+            if (panZoom) {
+                panZoom.update(panZoomConfig)
+            }
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+    }
+
+    function destroyActiveAiChatPanel(clearActive = false): void {
+        if (activeAiChatThreadId) {
+            const entry = threadEditors.get(activeAiChatThreadId)
+            if (entry) {
+                entry.editor?.destroy?.()
+                entry.aiService?.disconnect?.()
+                entry.gradientCleanup?.()
+                promptInputController.unregisterThreadEditor(activeAiChatThreadId)
+                threadEditors.delete(activeAiChatThreadId)
+            }
+        }
+
+        activeAiChatPromptEditor?.destroy?.()
+        activeAiChatPromptGradient?.destroy()
+        activeAiChatPanelEl?.remove()
+        activeAiChatPanelEl = null
+        activeAiChatPromptEditor = null
+        activeAiChatPromptGradient = null
+
+        if (clearActive) {
+            activeAiChatThreadId = null
+            activeAiChatRegionNodeId = null
+            promptInputController.setTarget(null)
+        }
+    }
+
+    function activateAiChatPanel(regionNode: ContextRegionNode, thread: AiChatThread | undefined): void {
+        activeAiChatRegionNodeId = regionNode.nodeId
+        activeAiChatThreadId = regionNode.referenceId
+        renderActiveAiChatPanel(regionNode, thread)
+    }
+
+    function syncActiveAiChatPanelFromState(): void {
+        if (!currentCanvasState?.lastActiveAiChatThreadId) return
+        if (activeAiChatThreadId === currentCanvasState.lastActiveAiChatThreadId) return
+
+        const activeRegion = currentCanvasState.nodes.find(
+            (node: CanvasNode): node is ContextRegionNode => isContextRegionCanvasNode(node)
+                && node.referenceId === currentCanvasState!.lastActiveAiChatThreadId
+        )
+        if (!activeRegion) return
+
+        activeAiChatThreadId = activeRegion.referenceId
+        activeAiChatRegionNodeId = activeRegion.nodeId
+    }
+
+    function renderActiveAiChatPanel(regionNodeOverride?: ContextRegionNode, threadOverride?: AiChatThread): void {
+        if (!activeAiChatRegionNodeId || !activeAiChatThreadId) return
+
+        const regionNode = regionNodeOverride ?? currentCanvasState?.nodes.find(
+            (node: CanvasNode): node is ContextRegionNode => isContextRegionCanvasNode(node) && node.nodeId === activeAiChatRegionNodeId
+        )
+        if (!regionNode) {
+            destroyActiveAiChatPanel(true)
+            return
+        }
+
+        const thread = threadOverride ?? currentAiChatThreads.find((candidate) => candidate.threadId === activeAiChatThreadId)
+        destroyActiveAiChatPanel(false)
+
+        const panelEl = html`<div
+            className="workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel"
+            data=${{ threadId: activeAiChatThreadId!, regionNodeId: regionNode.nodeId }}
+            onmousedown=${(event: Event) => event.stopPropagation()}
+            onclick=${(event: Event) => event.stopPropagation()}
+        ></div>` as HTMLDivElement
+
+        panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
+        panelEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
+
+        if (!webUiSettings.showHeaderOnAiChatThreadNodes) {
+            panelEl.classList.add('workspace-ai-chat-thread-node--hide-title')
+        }
+
+        const gradient = webUiSettings.useShiftingGradientBackgroundOnAiChatThreadNode
+            ? createShiftingGradientBackground(panelEl)
+            : null
+
+        const editorContainer = html`<div className="ai-chat-thread-node-editor nopan"></div>` as HTMLDivElement
+        panelEl.appendChild(editorContainer)
+
+        const hasContent = thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0
+        const editorContent = hasContent
+            ? thread.content
+            : {
+                type: 'doc',
+                content: [
+                    { type: 'documentTitle', content: [{ type: 'text', text: 'AI Chat' }] },
+                    { type: 'aiChatThread', attrs: { threadId: activeAiChatThreadId }, content: [] },
+                ],
+            }
+
+        const aiService = new AiInteractionService({
+            workspaceId,
+            aiChatThreadId: activeAiChatThreadId
+        })
+        const promptControlFactories = getPromptControlFactories()
+
+        const editor = new ProseMirrorEditor({
+            editorMountElement: editorContainer,
+            content: html`<div></div>` as HTMLDivElement,
+            initialVal: editorContent,
+            isDisabled: false,
+            documentType: 'aiChatThread',
+            threadId: activeAiChatThreadId,
+            onEditorChange: (value: any) => {
+                onAiChatThreadContentChange?.({
+                    workspaceId,
+                    threadId: activeAiChatThreadId!,
+                    content: value
+                })
+            },
+            onProjectTitleChange: () => {},
+            onAiChatSubmit: async ({ messages, aiModel, imageOptions }: any) => {
+                gradient?.triggerAnimation()
+                activeAiChatPromptGradient?.triggerAnimation()
+
+                try {
+                    const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+                    const context = await aiChatThreadService.extractConnectedContext(regionNode.nodeId)
+                    const contextMessage = aiChatThreadService.buildContextMessage(context)
+                    const messagesWithContext = contextMessage ? [contextMessage, ...messages] : messages
+
+                    aiService.sendChatMessage({
+                        messages: messagesWithContext,
+                        aiModel,
+                        aiImageModel: imageOptions?.aiImageModel,
+                        imageSize: imageOptions?.imageGenerationSize
+                    })
+                } catch (error) {
+                    console.error('Failed to gather context from context region:', error)
+                    throw error
+                }
+            },
+            onAiChatStop: () => {
+                aiService.stopChatMessage()
+            },
+            onPromptSubmit: () => {},
+            onPromptStop: () => {},
+            isPromptReceiving: () => promptInputController.isReceiving(activeAiChatThreadId ?? undefined),
+            promptControlFactories,
+            onReceivingStateChange: (threadId: string, receiving: boolean) => {
+                promptInputController.setReceiving(threadId, receiving)
+            }
+        })
+
+        threadEditors.set(activeAiChatThreadId, {
+            editor,
+            aiService,
+            containerEl: panelEl,
+            gradientCleanup: gradient?.destroy,
+            triggerGradientAnimation: () => {
+                gradient?.triggerAnimation()
+                activeAiChatPromptGradient?.triggerAnimation()
+            },
+        })
+
+        promptInputController.registerThreadEditor(activeAiChatThreadId, {
+            editorView: editor.editorView,
+            triggerGradientAnimation: () => {
+                gradient?.triggerAnimation()
+                activeAiChatPromptGradient?.triggerAnimation()
+            },
+        })
+
+        const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel__prompt nopan"></div>` as HTMLDivElement
+        promptEl.style.setProperty('--dropdown-popover-box-shadow', webUiThemeSettings.dropdownPopoverBoxShadow)
+        if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
+            activeAiChatPromptGradient = createShiftingGradientBackground(promptEl)
+        }
+
+        const promptEditorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
+        promptEl.appendChild(promptEditorContainer)
+        panelEl.appendChild(promptEl)
+
+        activeAiChatPromptEditor = new ProseMirrorEditor({
+            editorMountElement: promptEditorContainer,
+            content: html`<div></div>` as HTMLDivElement,
+            initialVal: {},
+            isDisabled: false,
+            documentType: 'aiPromptInput',
+            threadId: activeAiChatThreadId,
+            onEditorChange: () => {},
+            onProjectTitleChange: () => {},
+            onAiChatSubmit: () => {},
+            onAiChatStop: () => {},
+            onPromptSubmit: (data: any) => {
+                promptInputController.setTarget({
+                    nodeId: regionNode.nodeId,
+                    type: regionNode.type,
+                    referenceId: activeAiChatThreadId!,
+                })
+                promptInputController.submitMessage({
+                    contentJSON: data.contentJSON,
+                    aiModel: data.aiModel,
+                    imageOptions: data.imageOptions,
+                })
+            },
+            onPromptStop: () => {
+                promptInputController.setTarget({
+                    nodeId: regionNode.nodeId,
+                    type: regionNode.type,
+                    referenceId: activeAiChatThreadId!,
+                })
+                promptInputController.stopStreaming()
+            },
+            isPromptReceiving: () => promptInputController.isReceiving(activeAiChatThreadId ?? undefined),
+            promptControlFactories,
+            onReceivingStateChange: () => {},
+        })
+
+        const railStyle = {
+            position: 'absolute' as const,
+            width: `${RAIL_GRAB_WIDTH}px`,
+            left: `${-RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`,
+            top: '0',
+            zIndex: '9990',
+        }
+        const rail = html`<div
+            className="workspace-thread-rail workspace-ai-chat-floating-panel__rail nopan"
+            style=${railStyle}
+            data=${{ threadNodeId: regionNode.nodeId }}
+        ></div>` as HTMLDivElement
+        rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
+        rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
+        rail.addEventListener('mousedown', (event) => {
+            handleActiveAiChatPanelResizeStart(event, panelEl)
+        })
+
+        const line = html`<div className="workspace-thread-rail__line"></div>` as HTMLDivElement
+        const bottomCircle = html`<div className="workspace-thread-rail__boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
+        const circlePaths = bottomCircle.querySelectorAll('path')
+        const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
+        if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
+        if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
+        if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
+        line.appendChild(bottomCircle)
+        rail.appendChild(line)
+        panelEl.appendChild(rail)
+
+        activeAiChatPanelEl = panelEl
+        paneEl.appendChild(panelEl)
+
+        if (activeAiChatPanelWidth !== null) {
+            applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
+        }
+
+        requestAnimationFrame(() => {
+            const threadHeight = editorContainer.offsetHeight || Math.max(0, promptEl.offsetTop - 16)
+            rail.style.height = `${panelEl.offsetHeight}px`
+            rail.style.setProperty('--rail-thread-height', `${threadHeight}px`)
+        })
+    }
+
     // ---- Single floating input (for non-thread nodes) ----
 
     function createFloatingInput(): void {
         if (floatingInputEl) return
 
-        floatingInputEl = document.createElement('div')
-        floatingInputEl.className = 'ai-prompt-input-floating nopan'
-        floatingInputEl.style.position = 'absolute'
-        floatingInputEl.style.display = 'none'
-        floatingInputEl.style.zIndex = '9999'
-        floatingInputEl.style.width = '400px'
+        const floatingInputStyle = { position: 'absolute' as const, display: 'none', zIndex: '9999', width: '400px' }
+        floatingInputEl = html`<div className="ai-prompt-input-floating nopan" style=${floatingInputStyle}></div>` as HTMLDivElement
 
         // Add gradient background (controlled by settings flag)
         if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
             floatingInputGradient = createShiftingGradientBackground(floatingInputEl)
         }
 
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'floating-input-editor nopan'
+        const editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
         floatingInputEl.appendChild(editorContainer)
 
         const controlFactories = {
@@ -910,12 +1490,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         floatingInputEditor = new ProseMirrorEditor({
             editorMountElement: editorContainer,
-            content: document.createElement('div'),
+            content: html`<div></div>` as HTMLDivElement,
             initialVal: {},
             isDisabled: false,
             documentType: 'aiPromptInput',
+            threadId: null,
             onEditorChange: () => {},
             onProjectTitleChange: () => {},
+            onAiChatSubmit: () => {},
+            onAiChatStop: () => {},
             onPromptSubmit: (data: any) => {
                 promptInputController.submitMessage({
                     contentJSON: data.contentJSON,
@@ -928,6 +1511,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
             isPromptReceiving: () => promptInputController.isReceiving(),
             promptControlFactories: controlFactories,
+            onReceivingStateChange: () => {},
         })
 
         viewportEl.appendChild(floatingInputEl)
@@ -964,9 +1548,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const inputX = targetNode.position.x
         const inputY = targetNode.position.y + (targetNode.dimensions?.height ?? 400) + 16
 
-        floatingInputEl.style.left = `${inputX}px`
-        floatingInputEl.style.top = `${inputY}px`
-        floatingInputEl.style.width = `${targetNode.dimensions?.width ?? 400}px`
+        applyStyle(floatingInputEl, {
+            left: `${inputX}px`,
+            top: `${inputY}px`,
+            width: `${targetNode.dimensions?.width ?? 400}px`,
+        })
     }
 
     // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
@@ -974,19 +1560,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiImageModel?: string; imageGenerationSize?: string }): void {
         if (threadFloatingInputs.has(node.nodeId)) return
 
-        const el = document.createElement('div')
-        el.className = 'ai-prompt-input-floating ai-prompt-input-thread-persistent nopan'
-        el.style.position = 'absolute'
-        el.style.display = 'block'
-        el.style.zIndex = '9999'
-        el.dataset.threadNodeId = node.nodeId
+        const threadInputStyle = { position: 'absolute' as const, display: 'block', zIndex: '9999' }
+        const el = html`<div
+            className="ai-prompt-input-floating ai-prompt-input-thread-persistent nopan"
+            style=${threadInputStyle}
+            data=${{ threadNodeId: node.nodeId }}
+        ></div>` as HTMLDivElement
 
         const gradient = webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode
             ? createShiftingGradientBackground(el)
             : null
 
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'floating-input-editor nopan'
+        const editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
         el.appendChild(editorContainer)
 
         const controlFactories = {
@@ -1001,12 +1586,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const editor = new ProseMirrorEditor({
             editorMountElement: editorContainer,
-            content: document.createElement('div'),
+            content: html`<div></div>` as HTMLDivElement,
             initialVal: {},
             isDisabled: false,
             documentType: 'aiPromptInput',
+            threadId,
             onEditorChange: () => {},
             onProjectTitleChange: () => {},
+            onAiChatSubmit: () => {},
+            onAiChatStop: () => {},
             onPromptSubmit: (data: any) => {
                 promptInputController.setTarget({
                     nodeId,
@@ -1029,6 +1617,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
             isPromptReceiving: () => promptInputController.isReceiving(threadId),
             promptControlFactories: controlFactories,
+            onReceivingStateChange: () => {},
         })
 
         positionElementBelowNode(el, node)
@@ -1075,9 +1664,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function positionElementBelowNode(el: HTMLElement, node: CanvasNode): void {
-        el.style.left = `${node.position.x}px`
-        el.style.top = `${node.position.y + getThreadTopOffset(node.nodeId, node.dimensions?.height ?? 400)}px`
-        el.style.width = `${node.dimensions?.width ?? 400}px`
+        applyStyle(el, {
+            left: `${node.position.x}px`,
+            top: `${node.position.y + getThreadTopOffset(node.nodeId, node.dimensions?.height ?? 400)}px`,
+            width: `${node.dimensions?.width ?? 400}px`,
+        })
     }
 
     function repositionAllThreadFloatingInputs(): void {
@@ -1094,21 +1685,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createThreadRail(node: AiChatThreadCanvasNode): void {
         if (threadRails.has(node.nodeId)) return
 
-        const rail = document.createElement('div')
-        rail.className = 'workspace-thread-rail nopan'
-        rail.style.position = 'absolute'
-        rail.style.width = `${RAIL_GRAB_WIDTH}px`
-        rail.style.zIndex = '9990'
+        const railStyle = {
+            position: 'absolute' as const,
+            width: `${RAIL_GRAB_WIDTH}px`,
+            zIndex: '9990',
+        }
+        const rail = html`<div
+            className="workspace-thread-rail nopan"
+            style=${railStyle}
+            data=${{ threadNodeId: node.nodeId }}
+        ></div>` as HTMLDivElement
         rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
         rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
-        rail.dataset.threadNodeId = node.nodeId
 
-        const line = document.createElement('div')
-        line.className = 'workspace-thread-rail__line'
-
-        const bottomCircle = document.createElement('div')
-        bottomCircle.className = 'workspace-thread-rail__boundary-circle'
-        bottomCircle.innerHTML = aiChatThreadRailBoundaryCircle
+        const line = html`<div className="workspace-thread-rail__line"></div>` as HTMLDivElement
+        const bottomCircle = html`<div className="workspace-thread-rail__boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
         const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
@@ -1141,9 +1732,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const floatingHeight = floatingEntry ? floatingEntry.el.offsetHeight : 0
         const totalHeight = threadHeight + gap + floatingHeight
 
-        rail.style.left = `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-        rail.style.top = `${node.position.y}px`
-        rail.style.height = `${totalHeight}px`
+        applyStyle(rail, {
+            left: `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`,
+            top: `${node.position.y}px`,
+            height: `${totalHeight}px`,
+        })
         rail.style.setProperty('--rail-thread-height', `${threadHeight}px`)
 
         const boundaryCircle = rail.querySelector('.workspace-thread-rail__boundary-circle') as HTMLElement | null
@@ -1211,10 +1804,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hasChanges = true
 
             if (imgNodeEl) {
-                imgNodeEl.style.left = `${x}px`
-                imgNodeEl.style.top = `${y}px`
-                imgNodeEl.style.width = `${constrainedWidth}px`
-                imgNodeEl.style.height = `${newHeight}px`
+                applyStyle(imgNodeEl, { left: `${x}px`, top: `${y}px`, width: `${constrainedWidth}px`, height: `${newHeight}px` })
                 imgNodeEl.classList.add('workspace-image-node--anchored')
                 nodeLayerManager.bringToFront(imgNodeEl)
             }
@@ -1244,82 +1834,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
     // are pushed below the overlapping anchored image.
     function applyAnchoredImageSpacing(threadNodeId: string): void {
-        if (!currentCanvasState) return
-        if (webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) return
-
-        const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${threadNodeId}"]`) as HTMLElement | null
-        if (!threadNodeEl) return
-
-        const anchors = anchoredImageManager.getAnchorsForThread(threadNodeId)
-
-        // Clear all previous spacers first
-        const allMessageEls = threadNodeEl.querySelectorAll('[data-message-id]') as NodeListOf<HTMLElement>
-        for (const el of allMessageEls) {
-            el.style.marginBottom = ''
-        }
-
-        if (anchors.length === 0) return
-
-        // Use DOM positions (always up-to-date, even during live resize)
-        const threadTop = parseFloat(threadNodeEl.style.top) || 0
-        const threadRect = threadNodeEl.getBoundingClientRect()
-        const zoom = threadRect.width / threadNodeEl.offsetWidth || 1
-
-        for (const anchor of anchors) {
-            const responseMessageId = anchor.responseMessageId
-            if (!responseMessageId) continue
-
-            const imgEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
-            if (!imgEl) continue
-
-            const msgEl = threadNodeEl.querySelector(`[data-message-id="${responseMessageId}"]`) as HTMLElement | null
-            if (!msgEl) continue
-
-            // Image bottom in canvas coordinates (style.top + offsetHeight are unzoomed)
-            const imgTop = parseFloat(imgEl.style.top) || 0
-            const imgHeight = imgEl.offsetHeight
-            const imageBottom = imgTop + imgHeight
-
-            // Message bottom in canvas coordinates
-            const msgRect = msgEl.getBoundingClientRect()
-            const msgBottomRelative = (msgRect.bottom - threadRect.top) / zoom
-            const msgBottom = threadTop + msgBottomRelative
-
-            // If image extends below message, add margin to push next content down
-            const overhang = imageBottom - msgBottom + OVERLAP_GAP_Y
-            console.log('🔶 [SPACING]', { responseMessageId, imgTop, imgHeight, imageBottom, threadTop, zoom, msgBottomRelative, msgBottom, overhang, willApply: overhang > 0 })
-            if (overhang > 0) {
-                msgEl.style.marginBottom = `${overhang}px`
-            }
-        }
-
-        // After setting margins, grow thread if content is clipped by overflow:hidden.
-        // Temporarily remove the fixed height to measure the natural content height.
-        const currentHeight = threadNodeEl.offsetHeight
-        const savedHeight = threadNodeEl.style.height
-        threadNodeEl.style.height = 'auto'
-        const naturalHeight = threadNodeEl.offsetHeight
-        threadNodeEl.style.height = savedHeight
-
-        if (naturalHeight > currentHeight) {
-            threadNodeEl.style.height = `${naturalHeight}px`
-
-            // Update in-memory canvas state so callers that commit afterwards
-            // will persist the grown height in a single commit.
-            const nodeIdx = currentCanvasState.nodes.findIndex((n: CanvasNode) => n.nodeId === threadNodeId)
-            if (nodeIdx >= 0) {
-                const updatedNode = {
-                    ...currentCanvasState.nodes[nodeIdx],
-                    dimensions: { ...currentCanvasState.nodes[nodeIdx].dimensions, height: naturalHeight }
-                }
-                currentCanvasState = {
-                    ...currentCanvasState,
-                    nodes: currentCanvasState.nodes.map((n: CanvasNode, i: number) => i === nodeIdx ? updatedNode : n)
-                }
-            }
-
-            repositionAllThreadFloatingInputs()
-        }
+        // Disabled for context regions. Messages render in the singleton canvas
+        // chat panel, so there is nothing in the region body to push down.
+        // The region height is driven by contained child dimensions.
     }
 
     function scheduleAnchoredImagesRealign(threadNodeId: string): void {
@@ -1387,57 +1904,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function autoGrowThreadNode(threadNodeId: string): void {
-        if (!currentCanvasState) return
-        if (hiddenEmptyThreadNodeIds.has(threadNodeId)) return
-
-        const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${threadNodeId}"]`) as HTMLElement | null
-        if (!threadNodeEl) return
-
-        // Measure the natural height the thread needs by temporarily removing
-        // the fixed height constraint. The flex column container will size to
-        // fit its children (the editor shrinks to its content via flex:1).
-        // Reading offsetHeight forces a synchronous reflow but no repaint.
-        const currentHeight = threadNodeEl.offsetHeight
-        const savedHeight = threadNodeEl.style.height
-        threadNodeEl.style.height = 'auto'
-        const naturalHeight = Math.max(threadNodeEl.offsetHeight, AI_CHAT_THREAD_MIN_HEIGHT)
-        threadNodeEl.style.height = savedHeight
-
-        if (naturalHeight === currentHeight) return
-
-        threadNodeEl.style.height = `${naturalHeight}px`
-
-        const nodeIdx = currentCanvasState.nodes.findIndex((n: CanvasNode) => n.nodeId === threadNodeId)
-        if (nodeIdx >= 0) {
-            const updatedNode = {
-                ...currentCanvasState.nodes[nodeIdx],
-                dimensions: { ...currentCanvasState.nodes[nodeIdx].dimensions, height: naturalHeight }
-            }
-            currentCanvasState = {
-                ...currentCanvasState,
-                nodes: currentCanvasState.nodes.map((n: CanvasNode, i: number) => i === nodeIdx ? updatedNode : n)
-            }
-        }
-
-        commitCanvasStatePreservingEditors(currentCanvasState)
-        repositionAllThreadFloatingInputs()
-        scheduleEdgesRender()
+        // Disabled for context region nodes.
+        // Region height is driven entirely by its absolute-positioned
+        // children via `expandRegionsToFitChildren()`. Setting height='auto' here
+        // would collapse regions to 0 (or min-height) because their content is abs-pos.
     }
 
     function scheduleThreadAutoGrow(threadNodeId: string): void {
-        pendingAutoGrowThreadNodeIds.add(threadNodeId)
-        if (autoGrowRaf !== null) return
-
-        autoGrowRaf = requestAnimationFrame(() => {
-            autoGrowRaf = null
-
-            const nodeIds = Array.from(pendingAutoGrowThreadNodeIds)
-            pendingAutoGrowThreadNodeIds.clear()
-
-            for (const nodeId of nodeIds) {
-                autoGrowThreadNode(nodeId)
-            }
-        })
+        // Disabled
     }
 
     function destroyAllThreadFloatingInputs(): void {
@@ -1453,9 +1927,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Tracks in-progress partial images per thread (threadId → canvas node info)
     const partialImageTracker = new Map<string, { nodeId: string; fileId: string }>()
 
-    function findSourceThreadNode(threadId: string): AiChatThreadCanvasNode | undefined {
+    function findSourceThreadNode(threadId: string): ContextRegionNode | undefined {
         return currentCanvasState?.nodes.find(
-            (n: CanvasNode): n is AiChatThreadCanvasNode => n.type === 'aiChatThread' && n.referenceId === threadId
+            (n: CanvasNode): n is ContextRegionNode => isContextRegionCanvasNode(n) && n.referenceId === threadId
         )
     }
 
@@ -1506,23 +1980,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const existingNodes = currentCanvasState?.nodes || []
             // Try to find the specific source thread (best effort — legacy path doesn't have threadId)
-            let sourceThreadNode: CanvasNode | undefined
+            let sourceThreadNode: ContextRegionNode | undefined
             for (const n of existingNodes) {
-                if (n.type === 'aiChatThread') {
+                if (isContextRegionCanvasNode(n)) {
                     sourceThreadNode = n
                     break
                 }
             }
 
-            const newX = sourceThreadNode
-                ? sourceThreadNode.position.x + sourceThreadNode.dimensions.width + 50
-                : 50 + (existingNodes.length % 3) * 450
-            const newY = sourceThreadNode
-                ? sourceThreadNode.position.y
-                : 50 + Math.floor(existingNodes.length / 3) * 400
-
-            const width = 400
-            const height = 400
+            const width = sourceThreadNode ? getRegionGeneratedImageSize(sourceThreadNode) : 400
+            const height = width
+            const position = sourceThreadNode
+                ? getNextRegionOutputPosition(sourceThreadNode, width, height, existingNodes)
+                : { x: 50 + (existingNodes.length % 3) * 450, y: 50 + Math.floor(existingNodes.length / 3) * 400 }
 
             const imageNode: ImageCanvasNode = {
                 nodeId: `node-${fileId}`,
@@ -1531,32 +2001,34 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 workspaceId,
                 src: `${API_BASE_URL}${imageUrl}?token=${token}`,
                 aspectRatio: 1,
-                position: { x: newX, y: newY },
+                position,
                 dimensions: { width, height },
                 generatedBy: {
-                    aiChatThreadId: sourceThreadNode?.type === 'aiChatThread' ? (sourceThreadNode as AiChatThreadCanvasNode).referenceId : '',
+                    aiChatThreadId: sourceThreadNode?.referenceId ?? '',
                     responseId,
                     aiModel: aiModel as any,
                     revisedPrompt,
-                    responseMessageId: responseMessageId || '',
+                    responseMessageId: '',
                 }
             }
+
+            const newEdges: WorkspaceEdge[] = sourceThreadNode
+                ? [
+                    ...(currentCanvasState?.edges ?? []),
+                    {
+                        edgeId: `edge-${sourceThreadNode.nodeId}-${imageNode.nodeId}`,
+                        sourceNodeId: sourceThreadNode.nodeId,
+                        targetNodeId: imageNode.nodeId,
+                        sourceHandle: 'right',
+                        targetHandle: 'left',
+                    },
+                ]
+                : currentCanvasState?.edges ?? []
 
             const newCanvasState: CanvasState = {
                 viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                edges: currentCanvasState?.edges ?? [],
+                edges: newEdges,
                 nodes: [...existingNodes, imageNode]
-            }
-
-            if (sourceThreadNode) {
-                const newEdge: WorkspaceEdge = {
-                    edgeId: `edge-${sourceThreadNode.nodeId}-${imageNode.nodeId}`,
-                    sourceNodeId: sourceThreadNode.nodeId,
-                    targetNodeId: imageNode.nodeId,
-                    sourceHandle: 'right',
-                    targetHandle: 'left'
-                }
-                newCanvasState.edges = [...(newCanvasState.edges || []), newEdge]
             }
 
             onCanvasStateChange?.(newCanvasState)
@@ -1595,27 +2067,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const API_BASE_URL = import.meta.env.VITE_API_URL || ''
             const imageSrc = buildImageSrc(imageUrl, API_BASE_URL, token)
 
-            const useAnchored = !webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem
-
-            let imageWidth: number
-            let imageHeight: number
-            let position: { x: number; y: number }
-
-            if (useAnchored) {
-                // Anchored mode: position overlapping the thread (no responseMessageId during partial)
-                const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${sourceThread.nodeId}"]`) as HTMLElement | null
-                const { x, y, constrainedWidth } = computeImagePositionOverlappingThread(
-                    sourceThread, '', threadNodeEl
-                )
-                imageWidth = constrainedWidth
-                imageHeight = constrainedWidth // 1:1 aspect ratio for partials
-                position = { x, y }
-            } else {
-                imageWidth = 400
-                imageHeight = 400
-                const existingCount = countExistingImagesForThread(currentCanvasState?.nodes || [], threadId)
-                position = computeImagePositionNextToThread(sourceThread, existingCount, imageWidth, imageHeight)
-            }
+            const useAnchored = false
+            const imageWidth = getRegionGeneratedImageSize(sourceThread)
+            const imageHeight = imageWidth
+            const position = getNextRegionOutputPosition(sourceThread, imageWidth, imageHeight, currentCanvasState?.nodes || [])
 
             const imageNode: ImageCanvasNode = {
                 nodeId,
@@ -1638,16 +2093,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const existingNodes = currentCanvasState?.nodes || []
             const existingEdges = currentCanvasState?.edges || []
 
-            const newEdges = [...existingEdges]
-            if (!useAnchored) {
-                newEdges.push({
+            const newEdges = [
+                ...existingEdges,
+                {
                     edgeId: `edge-${sourceThread.nodeId}-${nodeId}`,
                     sourceNodeId: sourceThread.nodeId,
                     targetNodeId: nodeId,
                     sourceHandle: 'right',
-                    targetHandle: 'left'
-                })
-            }
+                    targetHandle: 'left',
+                } satisfies WorkspaceEdge,
+            ]
 
             if (useAnchored) {
                 // Grow thread height only if image bottom extends past current thread bottom
@@ -1715,7 +2170,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const token = await AuthService.getTokenSilently()
             const imageSrc = buildImageSrc(imageUrl, API_BASE_URL, token)
 
-            const useAnchored = !webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem
+            const useAnchored = false
 
             if (partial) {
                 // Upgrade existing partial canvas node to complete
@@ -1754,21 +2209,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (borderSvg) borderSvg.remove()
                 const spinnerEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-spinner`)
                 if (spinnerEl) spinnerEl.remove()
-                const collisionExclusions = useAnchored ? anchoredImageManager.getExclusionPairsForCollisions() : undefined
-                const nodeBoxes = nodes.map((n: CanvasNode) => ({
-                    id: n.nodeId,
-                    x: n.position.x,
-                    y: n.position.y,
-                    width: n.dimensions.width,
-                    height: n.dimensions.height,
-                }))
-                const collisionResult = resolveCollisions(nodeBoxes, { excludePairs: collisionExclusions })
+                const collisionExclusions = useAnchored ? anchoredImageManager.getExclusionPairsForCollisions() : new Set<string>()
+                for (const child of nodes) {
+                    if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
+                }
+                const nodesById = getCanvasNodesById(nodes)
+                const nodeBoxes = nodes.map((n: CanvasNode) => {
+                    const worldPosition = getNodeWorldPosition(n, nodesById)
+                    return {
+                        id: n.nodeId,
+                        x: worldPosition.x,
+                        y: worldPosition.y,
+                        width: n.dimensions.width,
+                        height: n.dimensions.height,
+                    }
+                })
+                const collisionResult = resolveCollisions(nodeBoxes, { excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined })
 
                 const resolvedNodes = collisionResult.hasChanges
                     ? nodes.map((n: CanvasNode) => {
                         const resolved = collisionResult.nodes.get(n.nodeId)
                         if (!resolved) return n
-                        return { ...n, position: { x: resolved.x, y: resolved.y } }
+                        const position = n.parentId
+                            ? toParentRelativePosition({ x: resolved.x, y: resolved.y }, n.parentId, getCanvasNodesById(nodes))
+                            : { x: resolved.x, y: resolved.y }
+                        return { ...n, position }
                     })
                     : nodes
 
@@ -1793,10 +2258,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
                     const iconSvg = providerIcons[imageModelProvider]
                     if (iconSvg) {
-                        const badge = document.createElement('div')
-                        badge.className = 'image-model-badge'
-                        badge.innerHTML = iconSvg
-                        badge.title = imageModelProvider
+                        const badge = html`<div className="image-model-badge" innerHTML=${iconSvg} title=${imageModelProvider}></div>` as HTMLDivElement
                         nodeEl.appendChild(badge)
                     }
                 }
@@ -1826,8 +2288,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                         const imgNodeEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"]`) as HTMLElement | null
                         if (imgNodeEl) {
-                            imgNodeEl.style.left = `${x}px`
-                            imgNodeEl.style.top = `${y}px`
+                            applyStyle(imgNodeEl, { left: `${x}px`, top: `${y}px` })
                             imgNodeEl.classList.add('workspace-image-node--anchored')
                             nodeLayerManager.bringToFront(imgNodeEl)
                         }
@@ -1862,24 +2323,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const nodeId = `node-${fileId || uuidv4()}`
 
-                let imageWidth: number
-                let imageHeight: number
-                let position: { x: number; y: number }
-
-                if (useAnchored) {
-                    const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${sourceThread.nodeId}"]`) as HTMLElement | null
-                    const { x, y, constrainedWidth } = computeImagePositionOverlappingThread(
-                        sourceThread, responseMessageId || '', threadNodeEl
-                    )
-                    imageWidth = constrainedWidth
-                    imageHeight = constrainedWidth // 1:1 until real aspect ratio from loaded image
-                    position = { x, y }
-                } else {
-                    imageWidth = 400
-                    imageHeight = 400
-                    const existingCount = countExistingImagesForThread(currentCanvasState?.nodes || [], threadId)
-                    position = computeImagePositionNextToThread(sourceThread, existingCount, imageWidth, imageHeight)
-                }
+                const imageWidth = getRegionGeneratedImageSize(sourceThread)
+                const imageHeight = imageWidth
+                const position = getNextRegionOutputPosition(sourceThread, imageWidth, imageHeight, currentCanvasState?.nodes || [])
 
                 const imageNode: ImageCanvasNode = {
                     nodeId,
@@ -1903,17 +2349,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const existingNodes = currentCanvasState?.nodes || []
                 const existingEdges = currentCanvasState?.edges || []
 
-                const newEdges = [...existingEdges]
-                if (!useAnchored) {
-                    newEdges.push({
+                const newEdges = [
+                    ...existingEdges,
+                    {
                         edgeId: `edge-${sourceThread.nodeId}-${nodeId}`,
                         sourceNodeId: sourceThread.nodeId,
                         targetNodeId: nodeId,
                         sourceHandle: 'right',
                         targetHandle: 'left',
                         sourceMessageId: responseMessageId || undefined,
-                    })
-                }
+                    } satisfies WorkspaceEdge,
+                ]
 
                 let allNodes: CanvasNode[]
                 if (useAnchored) {
@@ -1937,26 +2383,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     allNodes = [...existingNodes, imageNode]
                 }
 
-                const collisionExclusions = useAnchored ? anchoredImageManager.getExclusionPairsForCollisions() : undefined
-                const nodeBoxes = allNodes.map((n: CanvasNode) => ({
-                    id: n.nodeId,
-                    x: n.position.x,
-                    y: n.position.y,
-                    width: n.dimensions.width,
-                    height: n.dimensions.height,
-                }))
-                const collisionResult = resolveCollisions(nodeBoxes, { excludePairs: collisionExclusions })
+                const collisionExclusions = useAnchored ? anchoredImageManager.getExclusionPairsForCollisions() : new Set<string>()
+                for (const child of allNodes) {
+                    if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
+                }
+                const allNodesById = getCanvasNodesById(allNodes)
+                const nodeBoxes = allNodes.map((n: CanvasNode) => {
+                    const worldPosition = getNodeWorldPosition(n, allNodesById)
+                    return {
+                        id: n.nodeId,
+                        x: worldPosition.x,
+                        y: worldPosition.y,
+                        width: n.dimensions.width,
+                        height: n.dimensions.height,
+                    }
+                })
+                const collisionResult = resolveCollisions(nodeBoxes, { excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined })
 
                 const resolvedNodes = collisionResult.hasChanges
                     ? allNodes.map((n: CanvasNode) => {
                         const resolved = collisionResult.nodes.get(n.nodeId)
                         if (!resolved) return n
-                        return { ...n, position: { x: resolved.x, y: resolved.y } }
+                        const position = n.parentId
+                            ? toParentRelativePosition({ x: resolved.x, y: resolved.y }, n.parentId, getCanvasNodesById(allNodes))
+                            : { x: resolved.x, y: resolved.y }
+                        return { ...n, position }
                     })
                     : allNodes
 
                 const resolvedImageNode = collisionResult.hasChanges
-                    ? { ...imageNode, position: collisionResult.nodes.get(nodeId) ? { x: collisionResult.nodes.get(nodeId)!.x, y: collisionResult.nodes.get(nodeId)!.y } : imageNode.position }
+                    ? resolvedNodes.find((node: CanvasNode) => node.nodeId === nodeId) as ImageCanvasNode | undefined ?? imageNode
                     : imageNode
 
                 // Set state but don't commit yet — spacing may grow thread height
@@ -2061,9 +2517,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ? sourceImageNode.position.y
                         : 50 + Math.floor(existingNodes.length / 3) * 400
 
-                    const threadNode: AiChatThreadCanvasNode = {
+                    const threadNode: ContextRegionCanvasNode = {
                         nodeId: `node-${thread.threadId}`,
-                        type: 'aiChatThread',
+                        type: 'contextRegion',
                         referenceId: thread.threadId,
                         position: { x: newX, y: newY },
                         dimensions: { width: 400, height: 500 }
@@ -2088,6 +2544,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
 
                     onCanvasStateChange?.(newCanvasState)
+                    activeAiChatThreadId = thread.threadId
+                    activeAiChatRegionNodeId = threadNode.nodeId
+                    requestAnimationFrame(() => renderActiveAiChatPanel(threadNode, thread))
                 }
             } catch (error) {
                 console.error('Failed to create edit thread:', error)
@@ -2140,6 +2599,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Track pane bounds on resize for visibility detection
     const resizeObserver = new ResizeObserver(() => {
         paneRect = paneEl.getBoundingClientRect()
+        if (activeAiChatPanelWidth !== null) {
+            applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
+        }
         updateVisibleNodes()
     })
     resizeObserver.observe(paneEl)
@@ -2160,6 +2622,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (webUiSettings.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
                 }
+                pendingRegionTitleZoom = vp.zoom
                 if (webUiSettings.useZoomCompensatedConnectorScaling) {
                     scheduleEdgesRender()
                 }
@@ -2176,11 +2639,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createResizeHandle(nodeId: string, corner: ResizeCorner): HTMLElement {
-        const handle = document.createElement('div')
-        handle.className = `document-resize-handle document-resize-${corner} nopan`
-        handle.innerHTML = imageResizeCornerIcon
-        handle.dataset.corner = corner
-        handle.addEventListener('mousedown', (e) => handleResizeStart(e, nodeId, corner))
+        const handle = html`<div
+            className=${`document-resize-handle document-resize-${corner} nopan`}
+            innerHTML=${imageResizeCornerIcon}
+            data=${{ corner }}
+            onmousedown=${(e: MouseEvent) => handleResizeStart(e, nodeId, corner)}
+        ></div>` as HTMLDivElement
 
         // Initialize sizing/position so newly created handles are correct immediately
         const currentZoom = currentCanvasState?.viewport?.zoom ?? 1
@@ -2194,20 +2658,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         extraClasses?: string,
         extraDataAttrs?: Record<string, string>
     ): { nodeEl: HTMLElement; dragOverlay: HTMLElement } {
-        const nodeEl = document.createElement('div')
-        nodeEl.className = `workspace-document-node${extraClasses ? ` ${extraClasses}` : ''}`
-        nodeEl.dataset.nodeId = node.nodeId
-        if (extraDataAttrs) {
-            for (const [key, value] of Object.entries(extraDataAttrs)) {
-                nodeEl.dataset[key] = value
-            }
+        const isContextRegion = isContextRegionCanvasNode(node) && Boolean(extraClasses?.includes('workspace-context-region-node'))
+        const nodeWorldPosition = getNodeWorldPosition(node)
+        const nodeElStyle = {
+            position: 'absolute' as const,
+            left: `${nodeWorldPosition.x}px`,
+            top: `${nodeWorldPosition.y}px`,
+            width: `${node.dimensions.width}px`,
+            height: `${node.dimensions.height}px`,
+            zIndex: isContextRegion
+                ? String(nodeLayerManager.backgroundIndex())
+                : String(nodeLayerManager.currentTopIndex()),
         }
-        nodeEl.style.position = 'absolute'
-        nodeEl.style.left = `${node.position.x}px`
-        nodeEl.style.top = `${node.position.y}px`
-        nodeEl.style.width = `${node.dimensions.width}px`
-        nodeEl.style.height = `${node.dimensions.height}px`
-        nodeEl.style.zIndex = String(nodeLayerManager.currentTopIndex())
+        const nodeEl = html`<div
+            className=${`workspace-document-node${extraClasses ? ` ${extraClasses}` : ''}`}
+            data=${{ nodeId: node.nodeId, ...extraDataAttrs }}
+            style=${nodeElStyle}
+        ></div>` as HTMLDivElement
 
         nodeEl.addEventListener('click', (e) => {
             e.stopPropagation()
@@ -2236,16 +2703,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectNode(node.nodeId)
         })
 
-        const isAiChatThread = node.type === 'aiChatThread'
         for (const corner of RESIZE_CORNERS) {
-            // For aiChatThread nodes, bottom handles go on the floating input instead
-            if (isAiChatThread && corner.startsWith('bottom')) continue
+            // Legacy embedded thread nodes keep bottom handles on the floating input.
+            // Context regions need all four corner handles on the region itself.
+            if (node.type === 'aiChatThread' && !isContextRegion && corner.startsWith('bottom')) continue
             nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
         }
 
-        const dragOverlay = document.createElement('div')
-        dragOverlay.className = 'node-drag-overlay nopan'
-        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
+        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}></div>` as HTMLDivElement
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -2270,6 +2735,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 updateResizeHandles(pendingHandleZoom)
                 pendingHandleZoom = null
             }
+            if (pendingRegionTitleZoom !== null) {
+                updateRegionTitleBars(pendingRegionTitleZoom)
+                pendingRegionTitleZoom = null
+            }
             repositionCanvasBubbleMenu()
             repositionEdgeBubbleMenu()
         })
@@ -2284,16 +2753,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (!connectionManager || !currentCanvasState) return
 
-            const nodesForEdges = currentCanvasState.nodes.map((n: CanvasNode) => {
-                const override = liveNodeOverrides.get(n.nodeId)
-                if (!override) return n
-
-                return {
-                    ...n,
-                    position: override.position ?? n.position,
-                    dimensions: override.dimensions ?? n.dimensions
-                }
-            })
+            const nodesForEdges = getNodesForConnectionManager(currentCanvasState.nodes)
 
             connectionManager.syncNodes(nodesForEdges)
             connectionManager.syncEdges(currentCanvasState.edges)
@@ -2312,8 +2772,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager = null
         }
 
-        edgesLayerEl = document.createElement('div')
-        edgesLayerEl.className = 'workspace-edges-layer'
+        edgesLayerEl = html`<div className="workspace-edges-layer"></div>` as HTMLDivElement
 
         viewportEl.prepend(edgesLayerEl)
 
@@ -2344,7 +2803,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 } else {
                     hideEdgeBubbleMenu()
                 }
-            }
+            },
+            isContextRegionNode: isContextRegionCanvasNode,
         })
 
         if (currentCanvasState) {
@@ -2364,21 +2824,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         position: 'left' | 'right'
         onPointerDown?: (e: MouseEvent) => void
     }): HTMLDivElement {
-        const handle = document.createElement('div')
-        handle.className = [
-            'workspace-handle',
-            'nopan',
-            'connectable',
-            'connectableend',
-            'xy-flow__handle',
-            params.handleType,
-            params.position,
-        ].join(' ')
-
-        handle.dataset.nodeid = params.nodeId
-        handle.dataset.handleid = params.handleId
-        handle.dataset.handlepos = params.position
-        handle.dataset.id = `workspace-${params.nodeId}-${params.handleId}-${params.handleType}`
+        const handle = html`<div
+            className="workspace-handle nopan connectable connectableend xy-flow__handle ${params.handleType} ${params.position}"
+            data=${{ nodeid: params.nodeId, handleid: params.handleId, handlepos: params.position, id: `workspace-${params.nodeId}-${params.handleId}-${params.handleType}` }}
+        ></div>` as HTMLDivElement
 
         if (params.onPointerDown) {
             handle.addEventListener('mousedown', (e) => {
@@ -2432,33 +2881,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? getResizeHandleScaledSizes(zoom)
             : { size: 24, offset: 6 }
 
-        handle.style.width = `${sizePx}px`
-        handle.style.height = `${sizePx}px`
+        applyStyle(handle, { width: `${sizePx}px`, height: `${sizePx}px` })
 
         // Reset positional properties first
-        handle.style.top = ''
-        handle.style.left = ''
-        handle.style.right = ''
-        handle.style.bottom = ''
+        applyStyle(handle, { top: '', left: '', right: '', bottom: '' })
 
+        const pos = { top: '', left: '', right: '', bottom: '' }
         switch (corner) {
-            case 'top-left':
-                handle.style.top = `${-offsetPx}px`
-                handle.style.left = `${-offsetPx}px`
-                break
-            case 'top-right':
-                handle.style.top = `${-offsetPx}px`
-                handle.style.right = `${-offsetPx}px`
-                break
-            case 'bottom-left':
-                handle.style.bottom = `${-offsetPx}px`
-                handle.style.left = `${-offsetPx}px`
-                break
-            case 'bottom-right':
-                handle.style.bottom = `${-offsetPx}px`
-                handle.style.right = `${-offsetPx}px`
-                break
+            case 'top-left':     pos.top = `${-offsetPx}px`; pos.left   = `${-offsetPx}px`; break
+            case 'top-right':    pos.top = `${-offsetPx}px`; pos.right  = `${-offsetPx}px`; break
+            case 'bottom-left':  pos.bottom = `${-offsetPx}px`; pos.left  = `${-offsetPx}px`; break
+            case 'bottom-right': pos.bottom = `${-offsetPx}px`; pos.right = `${-offsetPx}px`; break
         }
+        applyStyle(handle, pos)
     }
 
     function updateResizeHandles(zoom: number) {
@@ -2469,6 +2904,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const corner = (el.dataset.corner as ResizeCorner) || 'bottom-right'
             applyHandleSizing(el, corner, zoom)
         })
+    }
+
+    function getCurrentViewportZoom(): number {
+        return panZoom?.getViewport().zoom ?? currentCanvasState?.viewport?.zoom ?? lastTransform[2] ?? 1
+    }
+
+    // Region title pills live inside the transformed viewport. Use a gentler
+    // low-zoom floor than the bubble menu and keep the visual center tucked
+    // into the region edge so the label never floats away from its card.
+    function applyRegionTitleScale(titleBar: HTMLElement, zoom: number) {
+        const safeZoom = Math.max(zoom, 0.01)
+        const titleVisualScale = Math.max(
+            getAdaptiveZoomMultiplier(safeZoom, { lowZoomPower: 0.2 }),
+            0.72
+        )
+        const scale = titleVisualScale / safeZoom
+        const titleTopPx = -2 - 16 * titleVisualScale
+
+        applyStyle(titleBar, {
+            top: `${titleTopPx / safeZoom}px`,
+            left: `${20 / safeZoom}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+        })
+    }
+
+    function updateRegionTitleBars(zoom: number) {
+        if (!viewportEl) return
+        const titleBars = viewportEl.querySelectorAll('.workspace-ai-chat-thread-region__title-bar')
+        titleBars.forEach((titleBar) => applyRegionTitleScale(titleBar as HTMLElement, zoom))
     }
 
     function handleDragStart(event: MouseEvent, nodeId: string) {
@@ -2520,7 +2985,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         draggingNodeId = resolvedNodeId
         for (const [draggedNodeId, entry] of draggedNodeEntries) {
             entry.el.classList.add('is-dragging')
-            if (draggedNodeId !== resolvedNodeId) {
+            if (isContextRegionNodeElement(entry.el)) {
+                nodeLayerManager.sendToBackground(entry.el)
+            } else if (draggedNodeId !== resolvedNodeId) {
                 nodeLayerManager.bringToFront(entry.el)
             }
         }
@@ -2580,8 +3047,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     height: entry.startHeight,
                 }
 
-                entry.el.style.left = `${currentPos.x}px`
-                entry.el.style.top = `${currentPos.y}px`
+                applyStyle(entry.el, { left: `${currentPos.x}px`, top: `${currentPos.y}px` })
 
                 liveNodeOverrides.set(draggedNodeId, {
                     position: currentPos,
@@ -2589,22 +3055,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
-                    floatingInputEl.style.left = `${currentPos.x}px`
-                    floatingInputEl.style.top = `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`
-                    floatingInputEl.style.width = `${currentDims.width}px`
+                    applyStyle(floatingInputEl, {
+                        left: `${currentPos.x}px`,
+                        top: `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`,
+                        width: `${currentDims.width}px`,
+                    })
                 }
 
                 const threadEntry = threadFloatingInputs.get(draggedNodeId)
                 if (threadEntry) {
-                    threadEntry.el.style.left = `${currentPos.x}px`
-                    threadEntry.el.style.top = `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`
-                    threadEntry.el.style.width = `${currentDims.width}px`
+                    applyStyle(threadEntry.el, {
+                        left: `${currentPos.x}px`,
+                        top: `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`,
+                        width: `${currentDims.width}px`,
+                    })
                 }
 
                 const dragRail = threadRails.get(draggedNodeId)
                 if (dragRail) {
-                    dragRail.style.left = `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-                    dragRail.style.top = `${currentPos.y}px`
+                    applyStyle(dragRail, { left: `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${currentPos.y}px` })
                     const totalH = parseFloat(dragRail.style.height || '0')
                     if (totalH > 0) connectionManager?.setRailHeight(draggedNodeId, totalH)
                 }
@@ -2629,8 +3098,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (anchoredEl) {
                     const newX = startPos.x + deltaX
                     const newY = startPos.y + deltaY
-                    anchoredEl.style.left = `${newX}px`
-                    anchoredEl.style.top = `${newY}px`
+                    applyStyle(anchoredEl, { left: `${newX}px`, top: `${newY}px` })
                     liveNodeOverrides.set(imgId, {
                         position: { x: newX, y: newY },
                         dimensions: { width: anchoredEl.offsetWidth, height: anchoredEl.offsetHeight },
@@ -2643,7 +3111,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             updateSelectionGroupOverlayElement()
         }
 
-        const handleMouseUp = () => {
+        const handleMouseUp = (upEvent: MouseEvent) => {
             for (const [, entry] of draggedNodeEntries) {
                 entry.el.classList.remove('is-dragging')
             }
@@ -2686,29 +3154,132 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
             }
 
-            let updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
-                const draggedPosition = finalDraggedPositions.get(n.nodeId)
-                if (draggedPosition) return { ...n, position: draggedPosition }
+            for (const [imgId] of anchoredImageStartPositions) {
+                const anchoredEl = viewportEl?.querySelector(`[data-node-id="${imgId}"]`) as HTMLElement | null
+                if (anchoredEl) {
+                    finalDraggedPositions.set(imgId, {
+                        x: parseFloat(anchoredEl.style.left),
+                        y: parseFloat(anchoredEl.style.top),
+                    })
+                }
+            }
 
-                const startPos = anchoredImageStartPositions.get(n.nodeId)
-                if (startPos) {
-                    const anchoredEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement | null
-                    if (anchoredEl) {
-                        return { ...n, position: { x: parseFloat(anchoredEl.style.left), y: parseFloat(anchoredEl.style.top) } }
+            const dropPoint = getCanvasPointFromClient(upEvent.clientX, upEvent.clientY)
+            let updatedNodes = currentCanvasState.nodes
+            const originalNodesById = getCanvasNodesById(updatedNodes)
+            const regionNodes = updatedNodes.filter(isContextRegionCanvasNode)
+
+            updatedNodes = updatedNodes.map((node: CanvasNode) => {
+                const finalWorldPosition = finalDraggedPositions.get(node.nodeId)
+                if (!finalWorldPosition) return node
+
+                if (isContextRegionCanvasNode(node)) {
+                    return { ...node, position: finalWorldPosition }
+                }
+
+                const draggedRect: Rect = {
+                    x: finalWorldPosition.x,
+                    y: finalWorldPosition.y,
+                    width: node.dimensions.width,
+                    height: node.dimensions.height,
+                }
+
+                // Pick the best region to adopt this dragged node into. We score
+                // by overlap area, with a bonus when the cursor is inside the
+                // region rect, AND we treat the region rect as having a generous
+                // grace zone around it so users don't have to drop precisely
+                // inside the existing bounds — the region will grow to fit.
+                const grace = 80
+                let containingRegion: ContextRegionNode | null = null
+                let bestRegionScore = 0
+                if (canAdoptNodeIntoContextRegion(node)) {
+                    for (const region of regionNodes) {
+                        if (region.nodeId === node.nodeId) continue
+                        const regionRect = getNodeWorldRect(region, originalNodesById)
+                        const expandedRect: Rect = {
+                            x: regionRect.x - grace,
+                            y: regionRect.y - grace,
+                            width: regionRect.width + grace * 2,
+                            height: regionRect.height + grace * 2,
+                        }
+                        const overlapArea = rectIntersectionArea(draggedRect, expandedRect)
+                        const pointInside = pointInRect(dropPoint, expandedRect)
+                        const score = overlapArea + (pointInside ? draggedRect.width * draggedRect.height : 0)
+                        if (score > bestRegionScore) {
+                            bestRegionScore = score
+                            containingRegion = region
+                        }
                     }
                 }
-                return n
+
+                if (containingRegion) {
+                    // Snap the child to the inner inset (so it never overlaps
+                    // the title pill / left edge) but DO NOT clamp to the
+                    // region's current right/bottom — `expandRegionsToFitChildren`
+                    // grows the region to fit, matching the mockup.
+                    const inset = 48
+                    const relative = toParentRelativePosition(finalWorldPosition, containingRegion.nodeId, originalNodesById)
+                    const snappedRelative = {
+                        x: Math.max(inset, relative.x),
+                        y: Math.max(inset, relative.y),
+                    }
+                    const regionPos = getNodeWorldPosition(containingRegion, originalNodesById)
+                    const snappedWorld = {
+                        x: regionPos.x + snappedRelative.x,
+                        y: regionPos.y + snappedRelative.y,
+                    }
+                    const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+                    if (nodeEl) {
+                        applyStyle(nodeEl, { left: `${snappedWorld.x}px`, top: `${snappedWorld.y}px` })
+                        syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)
+                    }
+
+                    return {
+                        ...node,
+                        parentId: containingRegion.nodeId,
+                        expandParent: true,
+                        position: snappedRelative,
+                    }
+                }
+
+                const releasedNode: CanvasNode = { ...node, position: finalWorldPosition }
+                delete releasedNode.parentId
+                delete releasedNode.expandParent
+                delete releasedNode.extent
+                const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+                if (isGeneratedOutputImageNode(node)) {
+                    anchoredImageManager.removeAnchor(node.nodeId)
+                    nodeEl?.classList.remove('workspace-image-node--anchored')
+                }
+                if (nodeEl) syncContextRegionImageFrame(nodeEl, releasedNode, currentCanvasState.nodes)
+                return releasedNode
             })
+
+            updatedNodes = expandRegionsToFitChildren(updatedNodes)
 
             if (draggedNodeEntries.size === 1) {
                 const collisionExclusions = anchoredImageManager.getExclusionPairsForCollisions()
-                const nodeBoxes = updatedNodes.map((n: CanvasNode) => ({
+
+                // Region containers and their children must not collide. Without
+                // this, the resolver would push children back out of the region
+                // they were just adopted into.
+                for (const child of updatedNodes) {
+                    if (child.parentId) {
+                        collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
+                    }
+                }
+
+                const updatedNodesById = getCanvasNodesById(updatedNodes)
+                const nodeBoxes = updatedNodes.map((n: CanvasNode) => {
+                    const worldPosition = getNodeWorldPosition(n, updatedNodesById)
+                    return {
                     id: n.nodeId,
-                    x: n.position.x,
-                    y: n.position.y,
+                    x: worldPosition.x,
+                    y: worldPosition.y,
                     width: n.dimensions.width,
                     height: n.dimensions.height
-                }))
+                    }
+                })
 
                 const { nodes: movedNodes, hasChanges } = resolveCollisions(nodeBoxes, {
                     iterations: 50,
@@ -2723,13 +3294,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         if (newPos) {
                             const movedNodeEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
                             if (movedNodeEl) {
-                                movedNodeEl.style.left = `${newPos.x}px`
-                                movedNodeEl.style.top = `${newPos.y}px`
+                                applyStyle(movedNodeEl, { left: `${newPos.x}px`, top: `${newPos.y}px` })
                             }
-                            return { ...n, position: newPos }
+                            const nextPosition = n.parentId
+                                ? toParentRelativePosition(newPos, n.parentId, getCanvasNodesById(updatedNodes))
+                                : newPos
+                            return { ...n, position: nextPosition }
                         }
                         return n
                     })
+
+                    // Run region expansion again in case collision resolution pushed
+                    // a child further out than its initial dropped position.
+                    updatedNodes = expandRegionsToFitChildren(updatedNodes)
                 }
             }
 
@@ -2839,8 +3416,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
 
-            nodeEl.style.width = `${newWidth}px`
-            nodeEl.style.height = `${newHeight}px`
+            applyStyle(nodeEl, { width: `${newWidth}px`, height: `${newHeight}px` })
 
             if (isLeft) {
                 const widthDiff = newWidth - startWidth
@@ -2861,6 +3437,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     height: newHeight
                 }
             })
+
+            // If resizing a region child, visibly grow the region in real-time
+            if (node?.parentId) {
+                const regionEl = viewportEl?.querySelector(`[data-node-id="${node.parentId}"]`) as HTMLElement | null
+                if (regionEl) {
+                    const relativeLeft = parseFloat(nodeEl.style.left) || 0
+                    const relativeTop = parseFloat(nodeEl.style.top) || 0
+                    const neededWidth = relativeLeft + newWidth + 48
+                    const neededHeight = relativeTop + newHeight + 48
+                    const currentRegionWidth = parseFloat(regionEl.style.width) || 200
+                    const currentRegionHeight = parseFloat(regionEl.style.height) || 120
+                    if (neededWidth > currentRegionWidth) regionEl.style.width = `${neededWidth}px`
+                    if (neededHeight > currentRegionHeight) regionEl.style.height = `${neededHeight}px`
+                }
+            }
+
             scheduleEdgesRender()
             repositionCanvasBubbleMenu()
 
@@ -2868,9 +3460,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const threadEntry = threadFloatingInputs.get(nodeId)
             if (threadEntry) {
                 const pos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
-                threadEntry.el.style.left = `${pos.x}px`
-                threadEntry.el.style.top = `${pos.y + getThreadTopOffset(nodeId, newHeight)}px`
-                threadEntry.el.style.width = `${newWidth}px`
+                applyStyle(threadEntry.el, { left: `${pos.x}px`, top: `${pos.y + getThreadTopOffset(nodeId, newHeight)}px`, width: `${newWidth}px` })
             }
 
             // Reposition the vertical rail during resize
@@ -2881,9 +3471,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const floatingH = threadEntry ? threadEntry.el.offsetHeight : 0
                 const gap = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : 16
                 const totalH = threadH + gap + floatingH
-                resizeRail.style.left = `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-                resizeRail.style.top = `${pos.y}px`
-                resizeRail.style.height = `${totalH}px`
+                applyStyle(resizeRail, { left: `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${pos.y}px`, height: `${totalH}px` })
                 resizeRail.style.setProperty('--rail-thread-height', `${threadH}px`)
                 connectionManager?.setRailHeight(nodeId, totalH)
             }
@@ -2911,10 +3499,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ? imgElement.naturalWidth / imgElement.naturalHeight : 1
                     const imgH = imgW / ar
 
-                    imgEl.style.left = `${imgX}px`
-                    imgEl.style.top = `${imgY}px`
-                    imgEl.style.width = `${imgW}px`
-                    imgEl.style.height = `${imgH}px`
+                    applyStyle(imgEl, { left: `${imgX}px`, top: `${imgY}px`, width: `${imgW}px`, height: `${imgH}px` })
                 }
                 applyAnchoredImageSpacing(nodeId)
             }
@@ -2947,6 +3532,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             let updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) =>
                 n.nodeId === nodeId ? { ...n, dimensions: newDimensions, position: newPosition } : n
             )
+
+            // Grow regions if we resized a child of a region
+            updatedNodes = expandRegionsToFitChildren(updatedNodes)
 
             // Update anchored image spacer height after image resize
             if (resizeAnchor) {
@@ -2992,10 +3580,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     anchoredImageManager.updateImageSize(anchor.imageNodeId, newImgHeight)
 
                     if (imgEl) {
-                        imgEl.style.left = `${newImgX}px`
-                        imgEl.style.top = `${newImgY}px`
-                        imgEl.style.width = `${newImgWidth}px`
-                        imgEl.style.height = `${newImgHeight}px`
+                        applyStyle(imgEl, { left: `${newImgX}px`, top: `${newImgY}px`, width: `${newImgWidth}px`, height: `${newImgHeight}px` })
                     }
 
                     updatedNodes[imgIdx] = {
@@ -3026,18 +3611,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const { nodeEl, dragOverlay } = createBaseNodeElement(node, undefined, { documentId: node.referenceId })
         dragOverlay.className = 'document-drag-overlay nopan'
 
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'document-node-editor nopan'
+        const editorContainer = html`<div className="document-node-editor nopan"></div>` as HTMLDivElement
         nodeEl.appendChild(editorContainer)
 
         if (doc && doc.content !== undefined) {
             try {
                 const editor = new ProseMirrorEditor({
                     editorMountElement: editorContainer,
-                    content: document.createElement('div'),
+                    content: html`<div></div>` as HTMLDivElement,
                     initialVal: doc.content,
                     isDisabled: false,
                     documentType: 'document',
+                    threadId: null,
                     onEditorChange: (value: any) => {
                         onDocumentContentChange?.({
                             documentId: node.referenceId,
@@ -3050,7 +3635,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         onDocumentTitleChange?.({ documentId: node.referenceId, title })
                     },
                     onAiChatSubmit: () => {},
-                    onAiChatStop: () => {}
+                    onAiChatStop: () => {},
+                    onPromptSubmit: () => {},
+                    onPromptStop: () => {},
+                    isPromptReceiving: () => false,
+                    promptControlFactories: getPromptControlFactories(),
+                    onReceivingStateChange: () => {},
                 })
 
                 documentEditors.set(node.referenceId, {
@@ -3079,178 +3669,58 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
-    function createAiChatThreadNode(node: AiChatThreadCanvasNode, thread: AiChatThread | undefined): HTMLElement {
-        const { nodeEl, dragOverlay } = createBaseNodeElement(
+    function createContextRegionNode(node: ContextRegionNode, thread: AiChatThread | undefined): HTMLElement {
+        const { nodeEl } = createBaseNodeElement(
             node,
-            'workspace-ai-chat-thread-node',
+            'workspace-context-region-node workspace-ai-chat-thread-node workspace-ai-chat-thread-node--region',
             { threadId: node.referenceId }
         )
-        dragOverlay.className = 'document-drag-overlay nopan'
 
-        // Apply theme settings as CSS variables on the thread node
+        // Context regions are labeled bounding boxes on the canvas. The chat
+        // conversation itself opens in the singleton canvas-owned floating panel.
+        // Children dropped into the region are persisted as xyflow-native
+        // parent-child nodes so they move with it and are included in context.
+
         nodeEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
         nodeEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
 
-        // Hide the document title when the setting is off
-        if (!webUiSettings.showHeaderOnAiChatThreadNodes) {
-            nodeEl.classList.add('workspace-ai-chat-thread-node--hide-title')
-        }
-
-        // Add animated gradient background (controlled by settings flag)
-        const gradient = webUiSettings.useShiftingGradientBackgroundOnAiChatThreadNode
-            ? createShiftingGradientBackground(nodeEl)
-            : null
-
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'ai-chat-thread-node-editor nopan'
-        nodeEl.appendChild(editorContainer)
-
-        // Determine the editor content: use thread.content if loaded,
-        // otherwise use a default empty structure so the editor is always
-        // available for message injection (the floating input is always present).
-        const hasContent = thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0
-        const editorContent = hasContent
-            ? thread.content
-            : {
-                type: 'doc',
-                content: [
-                    { type: 'documentTitle', content: [{ type: 'text', text: 'AI Chat' }] },
-                    { type: 'aiChatThread', attrs: { threadId: node.referenceId }, content: [] },
-                ],
-            }
-
-        {
-            try {
-                // Create AiInteractionService for this thread
-                const aiService = new AiInteractionService({
-                    workspaceId,
-                    aiChatThreadId: node.referenceId
-                })
-
-                const editor = new ProseMirrorEditor({
-                    editorMountElement: editorContainer,
-                    content: document.createElement('div'),
-                    initialVal: editorContent,
-                    isDisabled: false,
-                    documentType: 'aiChatThread',
-                    threadId: node.referenceId,
-                    onEditorChange: (value: any) => {
-                        onAiChatThreadContentChange?.({
-                            workspaceId,
-                            threadId: node.referenceId,
-                            content: value
-                        })
-                        updateThreadNodeVisibility(node.nodeId, nodeEl, value)
-                        scheduleThreadAutoGrow(node.nodeId)
-                        scheduleAnchoredImagesRealign(node.nodeId)
-                    },
-                    onProjectTitleChange: () => {},
-                    onAiChatSubmit: async ({ messages, aiModel, imageOptions }: any) => {
-                        // Trigger gradient animation on message send (thread node + floating input)
-                        gradient?.triggerAnimation()
-                        threadFloatingInputs.get(node.nodeId)?.gradient?.triggerAnimation()
-
-                        try {
-                            // Extract context from connected nodes
-                            const aiChatThreadService = servicesStore.getData('aiChatThreadService')
-                            const context = await aiChatThreadService.extractConnectedContext(node.nodeId)
-                            const contextMessage = aiChatThreadService.buildContextMessage(context)
-
-                            // Prepend context message if there's connected content
-                            const messagesWithContext = contextMessage
-                                ? [contextMessage, ...messages]
-                                : messages
-
-                            aiService.sendChatMessage({
-                                messages: messagesWithContext,
-                                aiModel,
-                                aiImageModel: imageOptions?.aiImageModel,
-                                imageSize: imageOptions?.imageGenerationSize
-                            })
-                        } catch (error) {
-                            console.error('Failed to gather context from connected nodes:', error)
-                            // Re-throw to let the UI show an error state
-                            throw error
-                        }
-                    },
-                    onAiChatStop: () => {
-                        aiService.stopChatMessage()
-                    },
-                    onReceivingStateChange: (threadId: string, receiving: boolean) => {
-                        promptInputController.setReceiving(threadId, receiving)
-                    }
-                })
-
-                threadEditors.set(node.referenceId, {
-                    editor,
-                    aiService,
-                    containerEl: nodeEl,
-                    gradientCleanup: gradient?.destroy,
-                    triggerGradientAnimation: () => {
-                        gradient?.triggerAnimation()
-                        threadFloatingInputs.get(node.nodeId)?.gradient?.triggerAnimation()
-                    },
-                })
-
-                // Register with the prompt input controller so it can inject messages
-                promptInputController.registerThreadEditor(node.referenceId, {
-                    editorView: editor.editorView,
-                    triggerGradientAnimation: () => {
-                        gradient?.triggerAnimation()
-                        threadFloatingInputs.get(node.nodeId)?.gradient?.triggerAnimation()
-                    },
-                })
-
-                loadedNodeIds.add(node.nodeId)
-            } catch (error) {
-                console.error('Failed to create AI chat thread editor:', error)
-                editorContainer.innerHTML = ''
-                const errorPlaceholder = createErrorPlaceholder({
-                    message: 'Failed to load AI chat',
-                    retryLabel: 'Retry',
-                    onRetry: () => {
-                        loadedNodeIds.delete(node.nodeId)
-                        renderNodes()
-                    }
-                })
-                editorContainer.appendChild(errorPlaceholder.dom)
-            }
-        }
-
-        // Hide the thread node unless we positively know it has messages.
-        // This covers both "not loaded yet" (thread undefined) and "loaded but
-        // empty" cases, preventing any visible flash on page load.
-        if (!thread || !threadContentHasMessages(thread.content)) {
-            hideThreadNode(nodeEl, node.nodeId)
-        }
-
-        // Create the always-visible per-thread floating prompt input.
-        // Extract saved dropdown attrs from thread content so the floating
-        // input restores the previously-selected model / image options.
-        const threadContentNode = thread?.content?.content?.find(
-            (n: any) => n.type === 'aiChatThread'
-        )
-        const savedDropdownAttrs = threadContentNode?.attrs
-            ? {
-                aiModel: threadContentNode.attrs.aiModel,
-                aiImageModel: threadContentNode.attrs.aiImageModel,
-                imageGenerationSize: threadContentNode.attrs.imageGenerationSize,
-            }
-            : undefined
-        createThreadFloatingInput(node, savedDropdownAttrs)
-
-        // Create the vertical rail element (drag handle + connection proxy)
-        createThreadRail(node)
-
-        // Sync hover state: when thread node is hovered, also show resize handles on floating input
-        nodeEl.addEventListener('mouseenter', () => {
-            const entry = threadFloatingInputs.get(node.nodeId)
-            if (entry) entry.el.classList.add('thread-hovered')
+        // Shifting gradient background — context regions use their own palette so
+        // region-card tuning does not affect shared animated borders.
+        const gradient = createShiftingGradientBackground(nodeEl, {
+            colors: webUiThemeSettings.contextRegionAreaShiftingGradientColors,
         })
-        nodeEl.addEventListener('mouseleave', () => {
-            const entry = threadFloatingInputs.get(node.nodeId)
-            if (entry) entry.el.classList.remove('thread-hovered')
+        regionGradients.set(node.nodeId, gradient)
+
+        // Title bar
+        const titleBar = html`<div className="workspace-ai-chat-thread-region__title-bar nopan"></div>` as HTMLDivElement
+        const titleText = html`<span className="workspace-ai-chat-thread-region__title"></span>` as HTMLSpanElement
+        // Best-effort title from ProseMirror documentTitle node
+        const docTitleNode = thread?.content?.content?.find?.((n: any) => n.type === 'documentTitle')
+        const docTitle = docTitleNode?.content?.[0]?.text ?? 'AI Chat'
+        titleText.textContent = docTitle
+        titleBar.appendChild(titleText)
+        applyRegionTitleScale(titleBar, getCurrentViewportZoom())
+        nodeEl.appendChild(titleBar)
+
+        // Activate-on-click: clicking the context region opens the singleton
+        // canvas-owned chat panel for the thread linked to this region.
+        const activate = (e: Event) => {
+            e.stopPropagation()
+            activateAiChatPanel(node, thread)
+        }
+        titleBar.addEventListener('click', activate)
+        // Background-region click also activates (children intercept their own clicks).
+        nodeEl.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement | null
+            if (!target) return
+            // Only activate when the click landed on the region's own surface,
+            // not a child node nested inside it.
+            if (target === nodeEl || target.closest('.workspace-ai-chat-thread-region__title-bar')) {
+                activateAiChatPanel(node, thread)
+            }
         })
+
+        loadedNodeIds.add(node.nodeId)
 
         return nodeEl
     }
@@ -3261,13 +3731,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             'workspace-image-node',
             { fileId: node.fileId }
         )
+        syncContextRegionImageFrame(nodeEl, node)
         dragOverlay.className = 'image-drag-overlay nopan'
 
         // Create the img element - fills the container
-        const imgEl = document.createElement('img')
-        imgEl.className = 'image-node-img'
-        imgEl.alt = ''
-        imgEl.draggable = false
+        const imgEl = html`<img className="image-node-img" alt="" draggable="false"></img>` as HTMLImageElement
 
         // For data: URLs (streaming partials) and external URLs, use node.src
         // directly. For NATS-stored images, build a canonical path from the
@@ -3280,16 +3748,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : strippedSrc
 
         let retried = false
-        AuthService.getTokenSilently().then(token => {
-            imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
-        }).catch(() => {
-            showImageErrorPlaceholder(imgEl, nodeEl)
-        })
+        ;(async () => {
+            try {
+                const token = await AuthService.getTokenSilently()
+                imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
+            } catch {
+                showImageErrorPlaceholder(imgEl, nodeEl)
+            }
+        })()
 
-        imgEl.onerror = () => {
+        imgEl.onerror = async () => {
             if (!retried) {
                 retried = true
-                AuthService.getTokenSilently().then(token => {
+                try {
+                    const token = await AuthService.getTokenSilently()
                     if (token) {
                         const freshSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token)
                         if (imgEl.src !== freshSrc) {
@@ -3298,7 +3770,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                     }
                     showImageErrorPlaceholder(imgEl, nodeEl)
-                }).catch(() => showImageErrorPlaceholder(imgEl, nodeEl))
+                } catch {
+                    showImageErrorPlaceholder(imgEl, nodeEl)
+                }
             } else {
                 showImageErrorPlaceholder(imgEl, nodeEl)
             }
@@ -3326,7 +3800,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                         return n
                     })
-                    const newState: CanvasState = { ...currentCanvasState, nodes: updatedNodes }
+                    const newState: CanvasState = { ...currentCanvasState, nodes: expandRegionsToFitChildren(updatedNodes) }
                     currentCanvasState = newState
                     onCanvasStateChange(newState)
                 }
@@ -3345,10 +3819,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             const iconSvg = providerIcons[imageModelProvider]
             if (iconSvg) {
-                const badge = document.createElement('div')
-                badge.className = 'image-model-badge'
-                badge.innerHTML = iconSvg
-                badge.title = imageModelProvider
+                const badge = html`<div className="image-model-badge" innerHTML=${iconSvg} title=${imageModelProvider}></div>` as HTMLDivElement
                 nodeEl.appendChild(badge)
             }
         }
@@ -3358,24 +3829,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (isGenerating) {
             // Add loading spinner — three bouncing dots matching AI response message style
-            const spinnerContainer = document.createElement('div')
-            spinnerContainer.className = 'image-generating-spinner'
-            spinnerContainer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:5;pointer-events:none;'
+            const spinnerContainerStyle = {
+                position: 'absolute' as const,
+                top: '0',
+                left: '0',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: '5',
+                pointerEvents: 'none' as const,
+            }
+            const spinnerContainer = html`<div className="image-generating-spinner" style=${spinnerContainerStyle}></div>` as HTMLDivElement
 
-            const dotsWrapper = document.createElement('div')
-            dotsWrapper.style.cssText = 'display:flex;gap:8px;align-items:center;'
+            const dotsWrapperStyle = { display: 'flex', gap: '8px', alignItems: 'center' }
+            const dotsWrapper = html`<div style=${dotsWrapperStyle}></div>` as HTMLDivElement
 
             for (let i = 0; i < 3; i++) {
-                const dot = document.createElement('div')
-                dot.style.cssText = `width:8px;height:8px;border-radius:50%;background:#b0b0b0;animation:img-dot-bounce 1s ${i * 0.15}s infinite ease-in-out;`
+                const dotStyle = { width: '8px', height: '8px', borderRadius: '50%', background: '#b0b0b0', animation: `img-dot-bounce 1s ${i * 0.15}s infinite ease-in-out` }
+                const dot = html`<div style=${dotStyle}></div>` as HTMLDivElement
                 dotsWrapper.appendChild(dot)
             }
 
             // Inject keyframes if not already present
             if (!document.getElementById('img-dot-bounce-keyframes')) {
-                const style = document.createElement('style')
-                style.id = 'img-dot-bounce-keyframes'
-                style.textContent = `@keyframes img-dot-bounce { 0%,80%,100%{transform:scale(1);opacity:.4} 40%{transform:scale(1.3);opacity:1} }`
+                const style = html`<style id="img-dot-bounce-keyframes" innerHTML=${'@keyframes img-dot-bounce { 0%,80%,100%{transform:scale(1);opacity:.4} 40%{transform:scale(1.3);opacity:1} }'}></style>` as HTMLStyleElement
                 document.head.appendChild(style)
             }
 
@@ -3545,8 +4024,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getNodeStructureKey(canvasState: CanvasState | null): string {
         if (!canvasState) return ''
-        // Create a key based on node IDs and types - position/dimension changes don't affect this
-        return canvasState.nodes.map((n: CanvasNode) => `${n.nodeId}:${n.type}`).join(',')
+        // Create a key based on structural fields; position/dimension changes don't affect this
+        return canvasState.nodes.map((n: CanvasNode) => `${n.nodeId}:${n.type}:${n.parentId ?? ''}`).join(',')
     }
 
     let lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
@@ -3559,6 +4038,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ensureEdgesLayer()
         ensureSelectionGroupOverlayElement()
         ensureSelectionRectElement()
+
+        destroyActiveAiChatPanel(false)
 
         for (const [, { editor, aiService }] of documentEditors) {
             if (editor?.destroy) editor.destroy()
@@ -3583,6 +4064,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Clear loaded node tracking on full re-render
         loadedNodeIds.clear()
         hiddenEmptyThreadNodeIds.clear()
+        anchoredImageManager.clear()
+
+        // Clean up per-region gradients (will be recreated for each region node)
+        for (const [, g] of regionGradients) g.destroy()
+        regionGradients.clear()
 
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((t) => [t.threadId, t]))
@@ -3596,10 +4082,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createDocumentNode(docNode, doc)
             } else if (node.type === 'image') {
                 nodeEl = createImageNode(node as ImageCanvasNode)
-            } else if (node.type === 'aiChatThread') {
-                const threadNode = node as AiChatThreadCanvasNode
-                const thread = threadMap.get(threadNode.referenceId)
-                nodeEl = createAiChatThreadNode(threadNode, thread)
+            } else if (isContextRegionCanvasNode(node)) {
+                const thread = threadMap.get(node.referenceId)
+                nodeEl = createContextRegionNode(node, thread)
             } else {
                 // Unknown node type, skip
                 console.warn(`Unknown canvas node type: ${(node as CanvasNode).type}`)
@@ -3628,18 +4113,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncEdges(currentCanvasState.edges)
         scheduleEdgesRender()
 
+        renderActiveAiChatPanel()
+
         lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
 
-        // Re-derive anchored image state from `generatedBy` metadata.
+        // Re-derive legacy anchored image state from `generatedBy` metadata.
         // The anchoredImageManager is in-memory only, so on page refresh
-        // it starts empty. We must scan ImageCanvasNodes that carry
-        // generatedBy metadata and re-register them as anchored.
+        // it starts empty. Generated images with persisted connector edges
+        // remain independent canvas nodes and are not re-registered as anchored.
         if (!webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) {
-            // Build a lookup: threadReferenceId → threadCanvasNode
-            const threadNodesByRef = new Map<string, AiChatThreadCanvasNode>()
+            // Build a lookup: threadReferenceId → context region node
+            const threadNodesByRef = new Map<string, ContextRegionNode>()
             for (const n of currentCanvasState.nodes) {
-                if (n.type === 'aiChatThread') {
-                    threadNodesByRef.set((n as AiChatThreadCanvasNode).referenceId, n as AiChatThreadCanvasNode)
+                if (isContextRegionCanvasNode(n)) {
+                    threadNodesByRef.set(n.referenceId, n)
                 }
             }
 
@@ -3650,6 +4137,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const threadCanvasNode = threadNodesByRef.get(imgNode.generatedBy.aiChatThreadId)
                 if (!threadCanvasNode) continue
+
+                const hasConnectorEdge = hasConnectorEdgeFromThreadToImage(threadCanvasNode.nodeId, imgNode.nodeId)
+                if (hasConnectorEdge) continue
 
                 // Already tracked (e.g. re-render during live session) — skip re-registration
                 if (anchoredImageManager.isAnchored(imgNode.nodeId)) continue
@@ -3692,12 +4182,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // Auto-size all thread nodes to fit their content after initial render
-        for (const node of currentCanvasState.nodes) {
-            if (node.type === 'aiChatThread') {
-                scheduleThreadAutoGrow(node.nodeId)
-            }
-        }
+        // The chat editor now lives in the singleton canvas panel; context
+        // regions grow only when children require more room.
     }
 
     function getDocumentsKey(docs: Document[]): string {
@@ -3744,9 +4230,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
             // Ensure handles match initial zoom
             updateResizeHandles(vp.zoom)
+            updateRegionTitleBars(vp.zoom)
             panZoom.syncViewport(vp)
         } else {
             updateResizeHandles(1)
+            updateRegionTitleBars(1)
         }
     }
 
@@ -3795,6 +4283,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     initializePanZoom()
     initCanvasBubbleMenu()
+    syncActiveAiChatPanelFromState()
     renderNodes()
 
     return {
@@ -3815,6 +4304,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentCanvasState = newCanvasState
             currentDocuments = newDocuments
             currentAiChatThreads = newAiChatThreads
+            syncActiveAiChatPanelFromState()
 
             if (currentCanvasState && connectionManager) {
                 connectionManager.syncNodes(currentCanvasState.nodes)
@@ -3899,6 +4389,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // Clean up per-thread vertical rails
             destroyAllThreadRails()
+
+            // Clean up per-region gradients
+            for (const [, g] of regionGradients) g.destroy()
+            regionGradients.clear()
+
+            destroyActiveAiChatPanel(true)
 
             promptInputController.destroy()
         }

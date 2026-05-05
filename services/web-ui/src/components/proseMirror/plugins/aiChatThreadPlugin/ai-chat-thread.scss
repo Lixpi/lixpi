@@ -251,27 +251,27 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     // ===== USER AVATAR =====
     .user-avatar {
         display: block;
-        width: 21px;
-        height: 21px;
+        width: 20px;
+        height: 20px;
         border-radius: 99px;
-        position: absolute;
+        position: relative;
         user-select: none;
-        left: -36px;
-        bottom: 0.01rem;
         cursor: default;
+        flex: 0 0 auto;
 
         svg {
+            display: block;
+            width: 20px;
+            height: 20px;
             fill: #94999d;
         }
 
         // Assistant providers
         &.assistant-anthropic {
-            left: -36.5px;
-
             svg {
                 // fill: #D97757;;
-                width: 21.5px;
-                height: 21.5px;
+                width: 20px;
+                height: 20px;
             }
         }
 
@@ -286,10 +286,18 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
         &.assistant-google {
             svg {
-                width: 19px;
-                height: 19px;
+                width: 20px;
+                height: 20px;
             }
         }
+    }
+
+    .ai-response-message-meta {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 20px;
+        margin-top: 0.25rem;
     }
 
     // ===== AI RESPONSE MESSAGE =====
@@ -297,16 +305,13 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         position: relative;
         z-index: 2;
         margin: 0;
-        display: flex;
-        align-items: flex-start;
+        display: block;
         padding: 0;
-        gap: 0.4rem;
+        width: 100%;
 
         &.is-empty {
             min-height: $aiResponseMessageEmptyNodeMinHeight;
-            align-items: flex-start;
             padding-top: 0rem;
-            padding-left: 1rem;
         }
 
         // Bubble wrapper contains spinner and content
@@ -316,10 +321,12 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             background: var(--ai-response-bubble-color, #f7f7fd);
             border-radius: 18px 18px 18px 12px;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-            max-width: 85%;
+            margin-left: 0.75rem;
+            width: calc(100% - 0.75rem);
             min-height: $aiResponseMessageEmptyNodeMinHeight;
             min-width: 5rem; // Ensure space for spinner
             position: relative;
+            box-sizing: border-box;
             overflow: visible; // Prevent clipping spinner dots
             transition: max-width 0.3s ease-in-out;
 

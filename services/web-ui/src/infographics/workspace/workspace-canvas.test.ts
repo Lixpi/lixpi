@@ -22,6 +22,34 @@ function loadTs(): string {
 	)
 }
 
+function loadWorkspaceCanvasSvelte(): string {
+	return readFileSync(
+		resolve(__dirname, '../../components/WorkspaceCanvas.svelte'),
+		'utf-8'
+	)
+}
+
+function loadLayout(): string {
+	return readFileSync(
+		resolve(__dirname, '../../views/layouts/layout.svelte'),
+		'utf-8'
+	)
+}
+
+function loadSidebar(): string {
+	return readFileSync(
+		resolve(__dirname, '../../components/Sidebar.svelte'),
+		'utf-8'
+	)
+}
+
+function loadThemeSettings(): string {
+	return readFileSync(
+		resolve(__dirname, '../../webUiThemeSettings.ts'),
+		'utf-8'
+	)
+}
+
 function extractBlock(scss: string, selector: string): string {
 	const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 	const pattern = new RegExp(`${escapedSelector}\\s*\\{`)
@@ -100,6 +128,17 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const badgeBlock = extractBlock(imageNodeBlock, '.image-model-badge')
 		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(1)
 	})
+
+	it('scopes the context-region off-white frame to region child image nodes', () => {
+		const contextRegionBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--context-region-child')
+		expect(contextRegionBlock).toMatch(/background:\s*var\(--context-region-image-frame-color\)/)
+		expect(contextRegionBlock).toContain('box-shadow: 0 0 0 8px var(--context-region-image-frame-color)')
+		expect(contextRegionBlock).not.toContain('#fff')
+		expect(contextRegionBlock).toContain('.image-node-img')
+
+		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--anchored')[0]
+		expect(topLevelSection).not.toContain('workspace-image-node--context-region-child')
+	})
 })
 
 // =============================================================================
@@ -154,53 +193,42 @@ describe('AI chat thread — auto-grow TS infrastructure', () => {
 		expect(ts).toMatch(/function\s+scheduleThreadAutoGrow\s*\(\s*threadNodeId:\s*string\s*\)/)
 	})
 
-	it('autoGrowThreadNode measures natural height using height:auto technique', () => {
+	it('autoGrowThreadNode is disabled for context region nodes', () => {
 		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("threadNodeEl.style.height = 'auto'")
-		expect(fnBody).toContain('threadNodeEl.offsetHeight')
+		expect(fnBody).toContain('Disabled for context region nodes')
+		expect(fnBody).toContain('expandRegionsToFitChildren()')
+		expect(fnBody).not.toContain("threadNodeEl.style.height = 'auto'")
+		expect(fnBody).not.toContain('threadNodeEl.offsetHeight')
 	})
 
-	it('autoGrowThreadNode enforces minimum height via AI_CHAT_THREAD_MIN_HEIGHT', () => {
-		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+	it('scheduleThreadAutoGrow is disabled with autoGrowThreadNode', () => {
+		const fnMatch = ts.match(/function\s+scheduleThreadAutoGrow[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('AI_CHAT_THREAD_MIN_HEIGHT')
+		expect(fnBody).toContain('Disabled')
+		expect(fnBody).not.toContain('requestAnimationFrame')
 	})
 
-	it('autoGrowThreadNode can both grow and shrink (no grow-only guard)', () => {
-		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		// Must use === (skip if equal) not <= (skip if smaller — grow only)
-		expect(fnBody).toMatch(/naturalHeight\s*===\s*currentHeight/)
-		expect(fnBody).not.toMatch(/naturalHeight\s*<=\s*currentHeight/)
-	})
-
-	it('autoGrowThreadNode calls commitCanvasStatePreservingEditors', () => {
-		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('commitCanvasStatePreservingEditors')
-	})
-
-	it('autoGrowThreadNode calls repositionAllThreadFloatingInputs', () => {
-		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+	it('updateThreadNodeVisibility still repositions thread companions when visibility changes', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 		expect(fnBody).toContain('repositionAllThreadFloatingInputs')
 	})
 
-	it('onEditorChange calls scheduleThreadAutoGrow', () => {
-		expect(ts).toMatch(/onEditorChange[\s\S]*?scheduleThreadAutoGrow/)
+	it('updateThreadNodeVisibility schedules disabled auto-grow for compatibility', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('scheduleThreadAutoGrow(nodeId)')
 	})
 
-	it('renderNodes schedules auto-grow for all thread nodes', () => {
+	it('renderNodes does not schedule auto-grow for context regions', () => {
 		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
 		expect(renderMatch).not.toBeNull()
 		const renderBody = renderMatch![0]
-		expect(renderBody).toContain('scheduleThreadAutoGrow')
+		expect(renderBody).not.toContain('scheduleThreadAutoGrow')
 	})
 
 	it('destroy() cleans up autoGrowRaf and pendingAutoGrowThreadNodeIds', () => {
@@ -239,9 +267,13 @@ describe('AI chat thread — empty thread visibility', () => {
 		expect(fnBody).toContain('ai-response-message-wrapper')
 	})
 
-	it('createAiChatThreadNode hides node when thread has no messages or is not yet loaded', () => {
-		expect(ts).toMatch(/!thread\s*\|\|\s*!threadContentHasMessages/)
-		expect(ts).toMatch(/threadContentHasMessages[\s\S]*?hideThreadNode/)
+	it('updateThreadNodeVisibility hides or shows thread nodes from message state', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('threadContentHasMessages')
+		expect(fnBody).toContain('hideThreadNode')
+		expect(fnBody).toContain('showThreadNode')
 	})
 
 	it('CSS hides thread nodes with data-thread-empty attribute', () => {
@@ -250,8 +282,12 @@ describe('AI chat thread — empty thread visibility', () => {
 		expect(scss).toMatch(/data-thread-empty[\s\S]*?visibility:\s*hidden/)
 	})
 
-	it('onEditorChange calls updateThreadNodeVisibility', () => {
-		expect(ts).toMatch(/onEditorChange[\s\S]*?updateThreadNodeVisibility/)
+	it('updateThreadNodeVisibility accepts contentJSON and falls back to message wrappers', () => {
+		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('contentJSON')
+		expect(fnBody).toContain('threadNodeEl.querySelector')
 	})
 
 	it('positionElementBelowNode accounts for hidden thread nodes', () => {
@@ -306,11 +342,12 @@ describe('AI chat thread — empty thread visibility', () => {
 		expect(fnBody).toContain('hideThreadNode')
 	})
 
-	it('autoGrowThreadNode skips hidden threads', () => {
-		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
+	it('hidden thread state collapses thread top offset', () => {
+		const fnMatch = ts.match(/function\s+getThreadTopOffset[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 		expect(fnBody).toContain('hiddenEmptyThreadNodeIds.has')
+		expect(fnBody).toContain('? 0 : threadHeight + 16')
 	})
 
 	it('drag mousemove uses getThreadTopOffset for floating input positioning', () => {
@@ -340,9 +377,196 @@ describe('AI chat thread — document title hidden in workspace', () => {
 		expect(scss).toMatch(/\.workspace-ai-chat-thread-node--hide-title\s+\.document-title\s*\{[^}]*display:\s*none/)
 	})
 
-	it('createAiChatThreadNode adds --hide-title class based on showHeaderOnAiChatThreadNodes setting', () => {
+	it('applies document title visibility to the canvas-owned chat panel', () => {
 		expect(ts).toContain('showHeaderOnAiChatThreadNodes')
 		expect(ts).toContain('workspace-ai-chat-thread-node--hide-title')
+	})
+})
+
+// =============================================================================
+// Resize handles - corner-hover visibility
+// =============================================================================
+
+describe('Resize handles - corner-hover visibility', () => {
+	const scss = loadScss()
+	const ts = loadTs()
+
+	it('does not reveal all resize handles from node hover, selection, or resizing state', () => {
+		const block = extractBlock(scss, '.workspace-document-node')
+
+		expect(block).not.toContain('&:hover .document-resize-handle')
+		expect(block).not.toContain('&.is-selected .document-resize-handle')
+		expect(block).not.toContain('&.is-resizing .document-resize-handle')
+	})
+
+	it('keeps handles as invisible corner hitboxes that reveal only on direct hover or drag', () => {
+		const block = extractBlock(scss, '.document-resize-handle')
+
+		expect(block).toMatch(/opacity:\s*0/)
+		expect(block).toMatch(/pointer-events:\s*auto/)
+		expect(block).toContain('&:hover,')
+		expect(block).toContain('&.is-dragging')
+		expect(block).toMatch(/&:hover,[\s\S]*&\.is-dragging\s*\{[\s\S]*opacity:\s*1/)
+	})
+
+	it('does not reveal floating input resize handles from thread selection', () => {
+		const block = extractBlock(scss, '.ai-prompt-input-thread-persistent')
+
+		expect(block).not.toContain('&.is-selected .document-resize-handle')
+		expect(block).not.toContain('&.thread-hovered .document-resize-handle')
+	})
+
+	it('keeps all four resize handles on context region cards', () => {
+		expect(ts).toContain("const isContextRegion = isContextRegionCanvasNode(node) && Boolean(extraClasses?.includes('workspace-context-region-node'))")
+		expect(ts).toContain("if (node.type === 'aiChatThread' && !isContextRegion && corner.startsWith('bottom')) continue")
+	})
+})
+
+// =============================================================================
+// AI chat region sizing
+// =============================================================================
+
+describe('AI chat region sizing', () => {
+	const ts = loadTs()
+
+	it('preserves manually resized empty region dimensions', () => {
+		const fnMatch = ts.match(/function\s+expandRegionsToFitChildren[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('Empty regions keep their persisted size')
+		expect(fnBody).toContain('node.dimensions.width <= 0 || node.dimensions.height <= 0')
+		expect(fnBody).not.toContain('node.dimensions.width !== 300 || node.dimensions.height !== 200')
+	})
+
+	it('does not shrink manually enlarged regions when children are dropped inside', () => {
+		const fnMatch = ts.match(/function\s+expandRegionsToFitChildren[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('Dropping a small image into a manually enlarged')
+		expect(fnBody).toContain('let width = Math.max(200, node.dimensions.width)')
+		expect(fnBody).toContain('let height = Math.max(120, node.dimensions.height)')
+		expect(fnBody).not.toContain('let width = 200')
+		expect(fnBody).not.toContain('let height = 120')
+	})
+})
+
+// =============================================================================
+// AI chat region layering
+// =============================================================================
+
+describe('AI chat region layering', () => {
+	const ts = loadTs()
+
+	it('keeps context regions on the background layer even when selected or dragged with a group', () => {
+		expect(ts).toContain('function isContextRegionNodeElement(nodeEl: HTMLElement): boolean')
+		expect(ts).toContain("nodeEl.classList.contains('workspace-context-region-node')")
+		expect(ts).toContain('String(nodeLayerManager.backgroundIndex())')
+		expect(ts).toContain('nodeLayerManager.sendToBackground(nextNode)')
+		expect(ts).toContain('nodeLayerManager.sendToBackground(entry.el)')
+	})
+})
+
+// =============================================================================
+// AI chat region proximity connect
+// =============================================================================
+
+describe('AI chat region proximity connect', () => {
+	const ts = loadTs()
+
+	it('excludes context region cards from proximity connect candidates', () => {
+		expect(ts).toContain('function isContextRegionCanvasNode(node: CanvasNode): node is ContextRegionNode')
+		expect(ts).toContain("return node.type === 'contextRegion' || node.type === 'aiChatThread'")
+		expect(ts).toContain('isContextRegionNode: isContextRegionCanvasNode')
+	})
+})
+
+// =============================================================================
+// AI chat region image frame
+// =============================================================================
+
+describe('AI chat region image frame', () => {
+	const ts = loadTs()
+	const themeSettings = loadThemeSettings()
+
+	it('marks images with the frame only when their parent is a context region', () => {
+		expect(ts).toContain("const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'")
+		expect(ts).toContain('function isImageInsideContextRegion(node: ImageCanvasNode')
+		expect(ts).toContain('candidate.nodeId === node.parentId && isContextRegionCanvasNode(candidate)')
+		expect(ts).toContain("node.type === 'image' && isImageInsideContextRegion(node as ImageCanvasNode, nodes)")
+		expect(ts).toContain('nodeEl.classList.toggle(CONTEXT_REGION_IMAGE_CLASS, hasContextRegionFrame)')
+		expect(ts).toContain('syncContextRegionImageFrame(nodeEl, node)')
+	})
+
+	it('uses the theme-configured off-white frame color', () => {
+		expect(themeSettings).toContain('contextRegionImageFrameColor: string')
+		expect(themeSettings).toContain("contextRegionImageFrameColor: '#FCFCFA'")
+		expect(themeSettings).not.toContain("contextRegionImageFrameColor: '#fff'")
+		expect(ts).toContain("paneEl.style.setProperty('--context-region-image-frame-color', webUiThemeSettings.contextRegionImageFrameColor)")
+	})
+
+	it('updates the frame immediately when an image is adopted into or released from a region', () => {
+		expect(ts).toContain('syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)')
+		expect(ts).toContain('if (nodeEl) syncContextRegionImageFrame(nodeEl, releasedNode, currentCanvasState.nodes)')
+	})
+})
+
+// =============================================================================
+// AI chat region gradient palette
+// =============================================================================
+
+describe('AI chat region gradient palette', () => {
+	const ts = loadTs()
+
+	it('uses a dedicated context region area palette instead of the shared gradient colors', () => {
+		expect(ts).toContain('contextRegionAreaShiftingGradientColors')
+		expect(ts).toContain('createShiftingGradientBackground(nodeEl, {')
+		expect(ts).toContain('colors: webUiThemeSettings.contextRegionAreaShiftingGradientColors')
+		expect(ts).not.toContain('const gradient = createShiftingGradientBackground(nodeEl)')
+	})
+})
+
+// =============================================================================
+// AI chat region title zoom compensation
+// =============================================================================
+
+describe('AI chat region title zoom compensation', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+
+	it('scales region title pills with adaptive inverse zoom compensation', () => {
+		expect(ts).toContain('getAdaptiveZoomMultiplier, getResizeHandleScaledSizes')
+		expect(ts).toContain('function applyRegionTitleScale(titleBar: HTMLElement, zoom: number)')
+		expect(ts).toContain('const safeZoom = Math.max(zoom, 0.01)')
+		expect(ts).toContain('getAdaptiveZoomMultiplier(safeZoom, { lowZoomPower: 0.2 })')
+		expect(ts).toContain('0.72')
+		expect(ts).toContain('const scale = titleVisualScale / safeZoom')
+		expect(ts).toContain('titleBar.style.transform = `scale(${scale})`')
+		expect(ts).toContain("titleBar.style.transformOrigin = 'top left'")
+	})
+
+	it('uses the same adaptive zoom curve for the canvas bubble menu', () => {
+		expect(ts).toContain('getVisualScale: () => getAdaptiveZoomMultiplier(getCurrentViewportZoom())')
+	})
+
+	it('keeps title pill connected to the region while scaling', () => {
+		expect(ts).toContain('const titleTopPx = -2 - 16 * titleVisualScale')
+		expect(ts).toContain('titleBar.style.top = `${titleTopPx / safeZoom}px`')
+		expect(ts).toContain('titleBar.style.left = `${20 / safeZoom}px`')
+	})
+
+	it('updates region title pills from the transform side-effect queue', () => {
+		expect(ts).toContain('let pendingRegionTitleZoom: number | null = null')
+		expect(ts).toContain('pendingRegionTitleZoom = vp.zoom')
+		expect(ts).toContain('updateRegionTitleBars(pendingRegionTitleZoom)')
+		expect(ts).toContain('applyRegionTitleScale(titleBar, getCurrentViewportZoom())')
+		expect(ts).toContain('return panZoom?.getViewport().zoom ?? currentCanvasState?.viewport?.zoom ?? lastTransform[2] ?? 1')
+	})
+
+	it('defines title transform origin in CSS as a stable fallback', () => {
+		const block = extractBlock(scss, '.workspace-ai-chat-thread-region__title-bar')
+		expect(block).toMatch(/transform-origin:\s*top left/)
 	})
 })
 
@@ -400,6 +624,12 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/const\s+threadRails:\s*Map<string,\s*HTMLElement>/)
 	})
 
+	it('defines active AI chat panel resize width state', () => {
+		expect(ts).toContain('const AI_CHAT_PANEL_MIN_WIDTH = 320')
+		expect(ts).toContain('let activeAiChatPanelWidth: number | null = null')
+		expect(ts).toContain("style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)")
+	})
+
 	it('defines createThreadRail function', () => {
 		expect(ts).toContain('function createThreadRail(')
 	})
@@ -412,10 +642,10 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toContain('function destroyAllThreadRails(')
 	})
 
-	it('createAiChatThreadNode calls createThreadRail', () => {
-		const fnMatch = ts.match(/function\s+createAiChatThreadNode[\s\S]*?^    \}/m)
+	it('createContextRegionNode leaves rail creation outside the region card renderer', () => {
+		const fnMatch = ts.match(/function\s+createContextRegionNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('createThreadRail(')
+		expect(fnMatch![0]).not.toContain('createThreadRail(')
 	})
 
 	it('repositionAllThreadFloatingInputs also repositions rails', () => {
@@ -515,11 +745,12 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
 	})
 
-	it('updateSelectionDrivenUi hides floating input for image and AI chat thread selections', () => {
+	it('updateSelectionDrivenUi hides floating input for image and context region selections', () => {
 		const fnMatch = ts.match(/function\s+updateSelectionDrivenUi[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("node.type === 'aiChatThread' || node.type === 'image'")
+		expect(fnBody).toContain('isContextRegionCanvasNode(node)')
+		expect(fnBody).toContain("selectedNodeType === 'image'")
 		expect(fnBody).toContain('hideFloatingInput')
 	})
 
@@ -536,21 +767,66 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toContain('onTriggerConnection')
 	})
 
+	it('anchors the canvas image bubble menu to the image node box', () => {
+		expect(ts).toContain('function getCanvasImageBubbleMenuTargetRect(nodeEl: HTMLElement): DOMRect')
+		expect(ts).toContain('return nodeEl.getBoundingClientRect()')
+		expect([...ts.matchAll(/const targetRect = getCanvasImageBubbleMenuTargetRect\(nodeEl\)/g)]).toHaveLength(2)
+		expect([...ts.matchAll(/clampToParent: false/g)]).toHaveLength(2)
+		expect([...ts.matchAll(/animateOnShow: false/g)]).toHaveLength(2)
+		expect(ts).not.toContain("const imgEl = nodeEl.querySelector('img') as HTMLImageElement\n        const targetEl = imgEl || nodeEl")
+	})
+
 	it('onTriggerConnection triggers connection via startConnectionFromMenu', () => {
 		expect(ts).toMatch(/onTriggerConnection.*startConnectionFromMenu|startConnectionFromMenu.*onTriggerConnection/s)
 	})
 
-	it('passes onReceivingStateChange callback to ProseMirrorEditor', () => {
-		expect(ts).toContain('onReceivingStateChange')
-		// The callback must bridge plugin state to promptInputController
-		expect(ts).toMatch(/onReceivingStateChange.*promptInputController\.setReceiving|promptInputController\.setReceiving.*onReceivingStateChange/s)
+	it('keeps AI chat thread editor in the canvas-owned singleton panel', () => {
+		const start = ts.indexOf('function renderActiveAiChatPanel')
+		expect(start).toBeGreaterThan(-1)
+		const end = ts.indexOf('function createFloatingInput', start)
+		expect(end).toBeGreaterThan(start)
+		const fnBody = ts.slice(start, end)
+
+		expect(fnBody).toContain('workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
+		expect(fnBody).toContain('new ProseMirrorEditor')
+		expect(fnBody).toContain('workspace-thread-rail workspace-ai-chat-floating-panel__rail')
+		expect(fnBody).toContain('handleActiveAiChatPanelResizeStart')
+		expect(fnBody).toContain('aiChatThreadRailBoundaryCircle')
+		expect(fnBody).toContain("'--dropdown-popover-box-shadow'")
+		expect(fnBody).toContain('webUiThemeSettings.dropdownPopoverBoxShadow')
+		expect(ts).not.toContain(`AiChat${'Panel.svelte'}`)
 	})
 
-	it('onReceivingStateChange calls promptInputController.setReceiving with threadId and receiving', () => {
-		// Find the onReceivingStateChange callback block and verify it passes both args
-		const callbackMatch = ts.match(/onReceivingStateChange:\s*\(threadId.*?receiving.*?\)\s*=>\s*\{[^}]*\}/s)
-		expect(callbackMatch).not.toBeNull()
-		expect(callbackMatch![0]).toContain('promptInputController.setReceiving(threadId, receiving)')
+	it('uses the floating panel rail as the horizontal resize handle', () => {
+		const scss = loadScss()
+
+		expect(ts).toContain('function handleActiveAiChatPanelResizeStart(')
+		expect(ts).toContain("document.body.style.cursor = 'ew-resize'")
+		expect(scss).toContain('.workspace-thread-rail.workspace-ai-chat-floating-panel__rail')
+		expect(scss).toContain('cursor: ew-resize')
+	})
+
+	it('uses a full-height right-edge chat panel with zoom and avatar offsets', () => {
+		const scss = loadScss()
+		const svelte = loadWorkspaceCanvasSvelte()
+		const layout = loadLayout()
+		const sidebar = loadSidebar()
+
+		expect(scss).toContain('--workspace-ai-chat-sidebar-width')
+		expect(scss).toContain('--workspace-ai-chat-sidebar-edge-gap: 15px')
+		expect(svelte).toContain('class:workspace-canvas--chat-panel-open')
+		expect(scss).toContain('right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap))')
+		expect(scss).toContain('right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline))')
+		expect(scss).toContain('bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
+		expect(layout).toContain('workspace-sidebar-shell')
+		expect(layout).toContain('workspace-sidebar-body')
+		expect(layout).toContain('workspace-sidebar-footer')
+		expect(layout).toContain('<Separator />')
+		expect(layout).toContain('sidebar-user-menu')
+		expect(layout).not.toContain('user-menu--workspace-chat-panel')
+		expect(sidebar).toContain('height: auto !important')
+		expect(sidebar).toContain('flex: 1 1 auto')
+		expect(sidebar).toContain('max-height: none !important')
 	})
 })
 
@@ -595,6 +871,16 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(clickHandler).toContain('selectNode(node.nodeId)')
 		expect(clickHandler).not.toContain('selectNode(selectionTargetNodeId)')
 		expect(clickHandler).not.toContain('selectNode(getSelectionTargetNodeId')
+	})
+
+	it('generated output images stay independently selectable even if anchor metadata exists', () => {
+		const fnMatch = ts.match(/function\s+getSelectionTargetNodeId[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(ts).toContain('function isGeneratedOutputImageNode(')
+		expect(fnBody).toContain('if (isGeneratedOutputImageNode(node)) return nodeId')
+		expect(fnBody.indexOf('if (isGeneratedOutputImageNode(node)) return nodeId')).toBeLessThan(fnBody.indexOf('anchoredImageManager.getAnchor'))
 	})
 
 	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
@@ -770,6 +1056,12 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(ts).toContain('if (!isCanvasBackgroundTarget(event.target)) return')
 		expect(ts).toContain('if (isCanvasBackgroundTarget(e.target)) {')
 		expect(ts).toContain('selectionGroupOverlayEl?.contains(target)')
+	})
+
+	it('does not treat the floating AI chat panel as canvas background', () => {
+		const fnMatch = ts.match(/function\s+isCanvasBackgroundTarget[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain("'.workspace-ai-chat-floating-panel'")
 	})
 
 	// -------------------------------------------------------------------------
@@ -1027,6 +1319,23 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
 		expect(paneMouseDownMatch).not.toBeNull()
 		expect(paneMouseDownMatch![0]).toContain(', true)')
+	})
+
+	it('REGRESSION: generated output images are not adopted into context regions on drag release', () => {
+		expect(ts).toContain('function canAdoptNodeIntoContextRegion(node: CanvasNode): boolean')
+		expect(ts).toContain('return !isGeneratedOutputImageNode(node)')
+
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		expect(fnMatch![0]).toContain('if (canAdoptNodeIntoContextRegion(node))')
+		expect(fnMatch![0]).toContain("classList.remove('workspace-image-node--anchored')")
+	})
+
+	it('REGRESSION: generated images with connector edges are not rehydrated as anchored images', () => {
+		expect(ts).toContain('function hasConnectorEdgeFromThreadToImage(')
+		expect(ts).toContain('anchoredImageManager.clear()')
+		expect(ts).toContain('const hasConnectorEdge = hasConnectorEdgeFromThreadToImage(threadCanvasNode.nodeId, imgNode.nodeId)')
+		expect(ts).toContain('if (hasConnectorEdge) continue')
 	})
 })
 

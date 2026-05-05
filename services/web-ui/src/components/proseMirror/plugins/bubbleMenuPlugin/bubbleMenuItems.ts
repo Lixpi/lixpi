@@ -2,7 +2,7 @@ import type { EditorView } from 'prosemirror-view'
 import type { Schema, Node as ProseMirrorNode } from 'prosemirror-model'
 import { toggleMark, wrapIn, setBlockType } from 'prosemirror-commands'
 import { NodeSelection } from 'prosemirror-state'
-import { createEl } from '$src/utils/domTemplates.ts'
+import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 import AuthService from '$src/services/auth-service.ts'
 import {
@@ -258,8 +258,7 @@ function createButton(
 
     const svg = button.querySelector('svg')
     if (svg) {
-        svg.style.width = `${item.iconSize}px`
-        svg.style.height = `${item.iconSize}px`
+        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
     }
 
     if (markType) {
@@ -395,8 +394,7 @@ function createImageAlignmentButton(
 
     const svg = button.querySelector('svg')
     if (svg) {
-        svg.style.width = `${item.iconSize}px`
-        svg.style.height = `${item.iconSize}px`
+        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
     }
 
     button.addEventListener('click', (e) => {
@@ -433,8 +431,7 @@ function createImageWrapButton(
 
     const svg = button.querySelector('svg')
     if (svg) {
-        svg.style.width = `${item.iconSize}px`
-        svg.style.height = `${item.iconSize}px`
+        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
     }
 
     button.addEventListener('click', (e) => {
@@ -471,8 +468,7 @@ function createImageActionButton(
 
     const svg = button.querySelector('svg')
     if (svg) {
-        svg.style.width = `${item.iconSize}px`
-        svg.style.height = `${item.iconSize}px`
+        applyStyle(svg, { width: `${item.iconSize}px`, height: `${item.iconSize}px` })
     }
 
     button.addEventListener('click', (e) => {
