@@ -14,7 +14,7 @@ import {wrapInList, splitListItem, liftListItem, sinkListItem} from "prosemirror
 import {undo, redo} from "prosemirror-history"
 import {undoInputRule} from "prosemirror-inputrules"
 
-import { documentTitleNodeType } from "$src/components/proseMirror/customNodes/documentTitleNode.js"
+import { documentTitleNodeType } from "$src/components/proseMirror/customNodes/documentTitleNode.ts"
 import { useAiInput, insertAiChatThread } from "$src/components/proseMirror/components/commands.js"
 
 const mac = typeof navigator != "undefined" ? /Mac|iP(hone|[oa]d)/.test(navigator.platform) : false

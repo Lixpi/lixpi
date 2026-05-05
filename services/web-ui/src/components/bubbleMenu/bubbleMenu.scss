@@ -16,13 +16,24 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
     z-index: 100;
     visibility: hidden;
     opacity: 0;
-    transform: translateY(4px);
+    --bubble-menu-visual-scale: 1;
+    transform: translateY(4px) scale(var(--bubble-menu-visual-scale));
+    transform-origin: top left;
     transition: pupOutTransition(opacity, 0.1s), pupOutTransition(transform, 0.1s), visibility 0.1s;
 
     &.is-visible {
         visibility: visible;
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) scale(var(--bubble-menu-visual-scale));
+    }
+
+    &.bubble-menu--no-entrance-motion {
+        transform: scale(var(--bubble-menu-visual-scale));
+        transition: none;
+
+        &.is-visible {
+            transform: scale(var(--bubble-menu-visual-scale));
+        }
     }
 }
 

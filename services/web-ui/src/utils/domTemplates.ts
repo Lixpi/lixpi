@@ -84,3 +84,12 @@ const templateBuilder = new DOMTemplateBuilder()
 
 export const html = templateBuilder.getTemplateFunction()
 export const createEl = templateBuilder.getCreateElementFunction()
+
+// Applies multiple style properties to an existing element at once.
+// Use this instead of setting element.style.X = ... line by line.
+//
+// Example:
+//   applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` })
+export function applyStyle(element: HTMLElement, styles: StyleObject): void {
+    Object.assign(element.style, styles)
+}

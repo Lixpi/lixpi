@@ -17,6 +17,8 @@ export type BubbleMenuPlacement = 'above' | 'below'
 export type BubbleMenuPositionRequest = {
     targetRect: DOMRect
     placement: BubbleMenuPlacement
+    clampToParent?: boolean
+    animateOnShow?: boolean
 }
 
 export type BubbleMenuOptions = {
@@ -24,6 +26,7 @@ export type BubbleMenuOptions = {
     items: BubbleMenuItem[]
     panels?: HTMLElement[]
     debounceDelay?: number
+    getVisualScale?: () => number
     onShow?: (context: string) => void
     onHide?: () => void
 }

@@ -26,6 +26,7 @@ import {
 } from '$src/infographics/connectors/index.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { applyStyle } from '$src/utils/domTemplates.ts'
 
 import type {
 	CanvasNode,
@@ -61,6 +62,7 @@ type ConnectionManagerConfig = {
 	panBy: ({ x, y }: { x: number; y: number }) => Promise<boolean>
 	onEdgesChange: (edges: WorkspaceEdge[]) => void
 	onSelectedEdgeChange?: (edgeId: string | null) => void
+	isContextRegionNode?: (node: CanvasNode) => boolean
 	railOffset?: number
 }
 
@@ -242,6 +244,37 @@ export function computeSpreadTValues(
 	return result
 }
 
+// Stable topological sort for canvas nodes by `parentId`. Roots come first,
+// then their direct children, then grandchildren, and so on. Stable: original
+// relative order is preserved among siblings and within each depth tier.
+//
+// xyflow's `adoptUserNodes` requires parents to appear before their children
+// in the input array; otherwise it logs a "Parent node not found" warning and
+// skips the parent linkage for that node.
+export function topoSortByParent<T extends { nodeId: string; parentId?: string }>(nodes: T[]): T[] {
+	const byId = new Map<string, T>()
+	for (const n of nodes) byId.set(n.nodeId, n)
+
+	const sorted: T[] = []
+	const visiting = new Set<string>()
+	const visited = new Set<string>()
+
+	const visit = (n: T) => {
+		if (visited.has(n.nodeId)) return
+		if (visiting.has(n.nodeId)) return // cycle guard — emit in original order
+		visiting.add(n.nodeId)
+		if (n.parentId && byId.has(n.parentId)) {
+			visit(byId.get(n.parentId)!)
+		}
+		visiting.delete(n.nodeId)
+		visited.add(n.nodeId)
+		sorted.push(n)
+	}
+
+	for (const n of nodes) visit(n)
+	return sorted
+}
+
 export class WorkspaceConnectionManager {
 	private readonly config: ConnectionManagerConfig
 
@@ -304,11 +337,23 @@ export class WorkspaceConnectionManager {
 	public syncNodes(canvasNodes: CanvasNode[]) {
 		this.nodes = canvasNodes
 
-		const xyNodes: NodeBase[] = canvasNodes.map((n) => ({
+		// xyflow's adoptUserNodes requires parents to appear BEFORE their children in the
+		// input array; otherwise it logs a warning and skips parent linkage. Stable
+		// topological sort keeps roots first, then children, preserving original order
+		// among siblings.
+		const sortedCanvasNodes = topoSortByParent(canvasNodes)
+
+		const xyNodes: NodeBase[] = sortedCanvasNodes.map((n) => ({
 			id: n.nodeId,
 			position: { x: n.position.x, y: n.position.y },
 			width: n.dimensions.width,
 			height: n.dimensions.height,
+			// xyflow-native parent-child fields. When `parentId` is set, `position` is
+			// parent-relative; xyflow auto-derives `positionAbsolute`. `expandParent`
+			// causes the parent to grow when this child is moved past its bounds.
+			...(n.parentId !== undefined ? { parentId: n.parentId } : {}),
+			...(n.extent !== undefined ? { extent: n.extent } : {}),
+			...(n.expandParent !== undefined ? { expandParent: n.expandParent } : {}),
 			// `measured` must be set for XYFlow's parseHandles to preserve existing handleBounds
 			measured: { width: n.dimensions.width, height: n.dimensions.height },
 			// Provide synthetic handles so XYHandle can find handle bounds
@@ -956,10 +1001,7 @@ export class WorkspaceConnectionManager {
 		this.lastRenderBoundsKey = key
 		this.connector?.destroy()
 
-		this.config.edgesLayerEl.style.left = `${bounds.left}px`
-		this.config.edgesLayerEl.style.top = `${bounds.top}px`
-		this.config.edgesLayerEl.style.width = `${bounds.width}px`
-		this.config.edgesLayerEl.style.height = `${bounds.height}px`
+		applyStyle(this.config.edgesLayerEl, { left: `${bounds.left}px`, top: `${bounds.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` })
 
 		this.connector = createConnectorRenderer({
 			container: this.config.edgesLayerEl,
@@ -1338,9 +1380,12 @@ export class WorkspaceConnectionManager {
 	) {
 		const draggedNode = this.nodes.find(n => n.nodeId === nodeId)
 		if (!draggedNode) {
-            // console.warn('[Proximity] Dragged node not found in this.nodes', nodeId)
-            return
-        }
+			return
+		}
+		if (this.config.isContextRegionNode?.(draggedNode)) {
+			this.proximityCandidate = null
+			return
+		}
 
 		let closestCandidate: ProximityCandidate | null = null
 		let minDistance = webUiSettings.proximityConnectThreshold
@@ -1353,9 +1398,9 @@ export class WorkspaceConnectionManager {
 			const proxRailOff = this.config.railOffset ?? 0
 			for (const other of this.nodes) {
 				if (other.nodeId === nodeId) continue
+				if (this.config.isContextRegionNode?.(other)) continue
 
-				// Calculate handles for the dragged node
-				const draggedLeft = { x: position.x, y: position.y + dimensions.height / 2 }
+				// Calculate handles for the dragged node.
 				const draggedRight = { x: position.x + dimensions.width, y: position.y + dimensions.height / 2 }
 
 				// Calculate handles for the other node (shift left anchor by railOffset for threads)
@@ -1411,18 +1456,14 @@ export class WorkspaceConnectionManager {
 			this.proximityCandidate?.sourceNodeId !== closestCandidate?.sourceNodeId ||
 			this.proximityCandidate?.targetNodeId !== closestCandidate?.targetNodeId
 		) {
-            console.log('[Proximity] Candidate update:', closestCandidate ? 'FOUND' : 'LOST', closestCandidate)
 			this.proximityCandidate = closestCandidate
 		}
 	}
 
 	public commitProximityConnection() {
 		if (!this.proximityCandidate) {
-            // console.log('[Proximity] No candidate to commit')
-            return
-        }
-
-        console.log('[Proximity] Committing connection!', this.proximityCandidate)
+			return
+		}
 
 		const newEdge: WorkspaceEdge = {
 			edgeId: generateEdgeId(),

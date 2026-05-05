@@ -6,6 +6,7 @@ This plugin provides rich image editing functionality in the ProseMirror editor 
 - **Resize Handles** - Drag any corner handle to resize images (width only, aspect ratio is always preserved)
 - **Percentage Width** - Image widths are stored as percentages for responsive behavior
 - **Bubble Menu Integration** - When an image is selected, the bubble menu shows image-specific options
+- **Partial Image Placeholder** - `aiGeneratedImage` nodes with `isPartial: true` and no `imageData` render a compact generating placeholder using the same wrapper, alignment, and selection behavior as completed images
 
 ## Supported Node Types
 
@@ -106,5 +107,6 @@ The plugin is automatically registered in the editor. To use:
 - `.pm-image-wrapper` - Figure element wrapping the image
 - `.pm-image-align-{left|center|right}` - Alignment modifier classes
 - `.pm-image-wrap-{none|left|right}` - Text wrap modifier classes
+- `.pm-image-generating-placeholder` - Compact dot placeholder for partial generated images without image data
 - `.pm-image-resize-handle` - Base class for resize handle elements
 - `.pm-image-resize-{top-left|top-right|bottom-left|bottom-right}` - Corner-specific handle classes
