@@ -2,7 +2,7 @@
 @import '$src/components/bubbleMenu/bubbleMenu.scss';
 
 :root {
-    --workspace-ai-chat-sidebar-width: min(520px, calc(100vw - 64px));
+    --workspace-ai-chat-sidebar-width: min(380px, calc(100vw - 64px));
     --workspace-ai-chat-sidebar-edge-gap: 15px;
     --workspace-ai-chat-sidebar-padding: 15px;
     --workspace-ai-chat-sidebar-zoom-gap: 15px;
@@ -470,11 +470,17 @@
 /* Override global ProseMirror padding/min-height for the canvas thread */
 .workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
     min-height: 0;
-    padding-bottom: 1rem;
+    padding: 0 0 1rem;
+}
+
+/* Override global ProseMirror padding for the floating chat panel */
+.workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror {
+    padding: 0 var(--workspace-ai-chat-sidebar-padding) 1rem;
 }
 
 .workspace-ai-chat-floating-panel {
     position: absolute;
+    // top: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-top));
     top: calc(-1 * var(--workspace-canvas-padding-top));
     right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline));
     bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
@@ -497,7 +503,7 @@
     .ai-chat-thread-node-editor {
         min-height: 0;
         flex: 1 1 auto;
-        overflow: hidden;
+        overflow-y: auto;
     }
 }
 
@@ -575,6 +581,15 @@
         }
     }
 
+}
+
+.workspace-thread-rail.workspace-ai-chat-floating-panel__rail {
+    cursor: ew-resize;
+    touch-action: none;
+}
+
+.workspace-ai-chat-floating-panel.is-resizing {
+    user-select: none;
 }
 
 

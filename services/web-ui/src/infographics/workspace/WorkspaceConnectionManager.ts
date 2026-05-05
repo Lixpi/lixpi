@@ -243,15 +243,13 @@ export function computeSpreadTValues(
 	return result
 }
 
-/**
- * Stable topological sort for canvas nodes by `parentId`. Roots come first,
- * then their direct children, then grandchildren, and so on. Stable: original
- * relative order is preserved among siblings and within each depth tier.
- *
- * xyflow's `adoptUserNodes` requires parents to appear before their children
- * in the input array; otherwise it logs a "Parent node not found" warning and
- * skips the parent linkage for that node.
- */
+// Stable topological sort for canvas nodes by `parentId`. Roots come first,
+// then their direct children, then grandchildren, and so on. Stable: original
+// relative order is preserved among siblings and within each depth tier.
+//
+// xyflow's `adoptUserNodes` requires parents to appear before their children
+// in the input array; otherwise it logs a "Parent node not found" warning and
+// skips the parent linkage for that node.
 export function topoSortByParent<T extends { nodeId: string; parentId?: string }>(nodes: T[]): T[] {
 	const byId = new Map<string, T>()
 	for (const n of nodes) byId.set(n.nodeId, n)

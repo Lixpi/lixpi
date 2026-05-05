@@ -75,6 +75,30 @@ type ThreadContent = {
     textContent: string
     images?: ImageReference[]
 }
+type AiGeneratedImageAlignment = 'left' | 'center' | 'right'
+type AiGeneratedImageTextWrap = 'none' | 'left' | 'right'
+type AiGeneratedImageAttrs = {
+    imageData: string
+    fileId: string
+    workspaceId: string
+    revisedPrompt: string
+    responseId: string
+    aiModel: string
+    isPartial: boolean
+    partialIndex: number
+    width: string
+    alignment: AiGeneratedImageAlignment
+    textWrap: AiGeneratedImageTextWrap
+}
+type ResponseContext = {
+    responseNode: ProseMirrorNode
+    responseStartPos: number
+    responseEndPos: number
+}
+type ResponseImageNodeInfo = {
+    node: ProseMirrorNode
+    nodePos: number
+}
 type MessageContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
 type Message = { role: string; content: string | MessageContentPart[] }
 type AiChatThreadPluginState = {
@@ -92,6 +116,9 @@ type AiChatThreadPluginState = {
 
 const PLUGIN_KEY = AI_CHAT_THREAD_PLUGIN_KEY as PluginKey<AiChatThreadPluginState>
 const INSERT_THREAD_META = `insert:${aiChatThreadNodeType}`
+const AI_GENERATED_IMAGE_THUMBNAIL_WIDTH = '112px'
+const AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT: AiGeneratedImageAlignment = 'right'
+const AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP: AiGeneratedImageTextWrap = 'none'
 
 // ========== UTILITY MODULES ==========
 
@@ -606,6 +633,174 @@ class AiChatThreadPluginClass {
 
     // ========== STREAMING MANAGEMENT ==========
 
+    private getCurrentResponseContext(state: EditorState, threadId: string): ResponseContext | null {
+        const responseNodeInfo = PositionFinder.findResponseNode(state, threadId)
+        if (!responseNodeInfo.found || responseNodeInfo.endOfNodePos === undefined) return null
+
+        const $endPos = state.doc.resolve(responseNodeInfo.endOfNodePos)
+        const responseNode = $endPos.nodeBefore
+        if (!responseNode || responseNode.type.name !== aiResponseMessageNodeType) return null
+
+        return {
+            responseNode,
+            responseStartPos: responseNodeInfo.endOfNodePos - responseNode.nodeSize,
+            responseEndPos: responseNodeInfo.endOfNodePos,
+        }
+    }
+
+    private findGeneratedImageInResponse(
+        responseContext: ResponseContext,
+        options: {
+            partialIndex?: number
+            fileId?: string
+            responseId?: string
+            partialOnly?: boolean
+            fallbackToLastPartial?: boolean
+        }
+    ): ResponseImageNodeInfo | null {
+        let matchedImage: ResponseImageNodeInfo | null = null
+        let latestPartialImage: ResponseImageNodeInfo | null = null
+
+        responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
+            if (child.type.name !== aiGeneratedImageNodeType) return
+            if (options.partialOnly && !child.attrs.isPartial) return
+
+            const nodeInfo = {
+                node: child,
+                nodePos: responseContext.responseStartPos + 1 + offset,
+            }
+
+            if (child.attrs.isPartial) {
+                latestPartialImage = nodeInfo
+            }
+
+            if (options.fileId && child.attrs.fileId === options.fileId) {
+                matchedImage = nodeInfo
+                return
+            }
+
+            if (options.responseId && child.attrs.responseId === options.responseId) {
+                matchedImage = nodeInfo
+                return
+            }
+
+            if (options.partialIndex !== undefined && child.attrs.partialIndex === options.partialIndex) {
+                matchedImage = nodeInfo
+            }
+        })
+
+        return matchedImage ?? (options.fallbackToLastPartial ? latestPartialImage : null)
+    }
+
+    private buildGeneratedImageAttrs(
+        event: SegmentEvent,
+        isPartial: boolean,
+        partialIndex: number,
+        previousAttrs: Partial<AiGeneratedImageAttrs> = {}
+    ): AiGeneratedImageAttrs {
+        const previousAlignment = previousAttrs.alignment
+        const alignment = previousAlignment === 'left' || previousAlignment === 'center' || previousAlignment === 'right'
+            ? previousAlignment
+            : AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT
+        const previousTextWrap = previousAttrs.textWrap
+        const textWrap = previousTextWrap === 'left' || previousTextWrap === 'right' || previousTextWrap === 'none'
+            ? previousTextWrap
+            : AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP
+
+        return {
+            imageData: event.imageUrl || previousAttrs.imageData || '',
+            fileId: event.fileId || previousAttrs.fileId || '',
+            workspaceId: event.workspaceId || previousAttrs.workspaceId || '',
+            revisedPrompt: event.revisedPrompt || previousAttrs.revisedPrompt || '',
+            responseId: event.responseId || previousAttrs.responseId || '',
+            aiModel: event.aiProvider || previousAttrs.aiModel || '',
+            isPartial,
+            partialIndex,
+            width: previousAttrs.width || AI_GENERATED_IMAGE_THUMBNAIL_WIDTH,
+            alignment,
+            textWrap,
+        }
+    }
+
+    private upsertImagePartialInChat(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId } = event
+        if (!aiChatThreadId) return
+
+        const { state, dispatch } = view
+        const imageNodeType = state.schema.nodes[aiGeneratedImageNodeType]
+        if (!imageNodeType) return
+
+        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId)
+        if (!responseContext) return
+
+        const partialIndex = event.partialIndex ?? 0
+        const existingImage = this.findGeneratedImageInResponse(responseContext, {
+            partialIndex,
+            partialOnly: true,
+        })
+        const imageAttrs = this.buildGeneratedImageAttrs(event, true, partialIndex, existingImage?.node.attrs)
+        const tr = state.tr
+
+        if (existingImage) {
+            tr.setNodeMarkup(existingImage.nodePos, undefined, imageAttrs)
+        } else {
+            tr.insert(responseContext.responseEndPos - 1, imageNodeType.create(imageAttrs))
+        }
+
+        if (tr.docChanged) {
+            dispatch(tr)
+        }
+    }
+
+    private upsertImageCompleteInChat(view: EditorView, event: SegmentEvent): string {
+        const { aiChatThreadId, revisedPrompt } = event
+        if (!aiChatThreadId) return ''
+
+        const { state, dispatch } = view
+        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId)
+        if (!responseContext) return ''
+
+        const responseMessageId = responseContext.responseNode.attrs.id || ''
+        const imageNodeType = state.schema.nodes[aiGeneratedImageNodeType]
+        const existingImage = this.findGeneratedImageInResponse(responseContext, {
+            fileId: event.fileId,
+            responseId: event.responseId,
+            partialOnly: true,
+            fallbackToLastPartial: true,
+        })
+        const partialIndex = existingImage?.node.attrs.partialIndex ?? 0
+        const tr = state.tr
+        let imageNodePos = existingImage?.nodePos
+        let insertionPos = responseContext.responseEndPos - 1
+
+        if (revisedPrompt) {
+            const revisedPromptNode = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
+            const revisedPromptInsertionPos = imageNodePos ?? insertionPos
+            tr.insert(revisedPromptInsertionPos, revisedPromptNode)
+
+            if (imageNodePos !== undefined) {
+                imageNodePos = tr.mapping.map(imageNodePos, 1)
+            } else {
+                insertionPos += revisedPromptNode.nodeSize
+            }
+        }
+
+        if (imageNodeType) {
+            const imageAttrs = this.buildGeneratedImageAttrs(event, false, partialIndex, existingImage?.node.attrs)
+            if (imageNodePos !== undefined) {
+                tr.setNodeMarkup(imageNodePos, undefined, imageAttrs)
+            } else {
+                tr.insert(insertionPos, imageNodeType.create(imageAttrs))
+            }
+        }
+
+        if (tr.docChanged) {
+            dispatch(tr)
+        }
+
+        return responseMessageId
+    }
+
     private startStreaming(view: EditorView): void {
         // Read this editor's threadId from the document — each editor owns exactly one thread
         const threadInfo = PositionFinder.findThreadInsertionPoint(view.state)
@@ -672,7 +867,9 @@ class AiChatThreadPluginClass {
             // Only process events for threads that exist in THIS document
             if (!threadInfo) return
 
-            // Delegate to canvas-side handler — image appears as a canvas node, not inline
+            this.upsertImagePartialInChat(view, event)
+
+            // Delegate to canvas-side handler so the same generation appears on the canvas.
             const callbacks = getAiGeneratedImageCallbacks()
             callbacks.onImagePartialToCanvas?.({
                 threadId: aiChatThreadId,
@@ -691,50 +888,13 @@ class AiChatThreadPluginClass {
         const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider, imageModelProvider } = event
         if (!imageUrl || !aiChatThreadId) return
 
-        const { state, dispatch } = view
+        const { state } = view
 
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, aiChatThreadId)
         if (!threadInfo) return
 
-        // Find the current receiving response message node to:
-        // 1. Insert revised prompt text into it
-        // 2. Read its `id` attr for sourceMessageId on the canvas edge
-        let responseMessageId = ''
-        const responseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
-
-        if (responseNodeInfo.found && responseNodeInfo.endOfNodePos !== undefined) {
-            const $endPos = state.doc.resolve(responseNodeInfo.endOfNodePos)
-            const node = $endPos.nodeBefore
-            if (node && node.type.name === aiResponseMessageNodeType) {
-                responseMessageId = node.attrs.id || ''
-            }
-        }
-
-        // Re-find positions if state changed (though relative positions inside the node shouldn't change, absolutes might)
-        // But since we only modified attributes of the node we just found, we can proceed carefully.
-        // Better to re-resolve if we want to be 100% safe, but let's see.
-        // Actually, inserting text inside the node changes its size.
-
-        // Insert revised prompt as text into the response message (keeps conversation readable)
-        if (revisedPrompt && responseMessageId) {
-             // We need to re-find the response node end position because the document might have changed (though unlikely to affect position *before* it, but safer)
-             // However, setNodeMarkup doesn't change document length so positions are stable.
-             // BUT, we MUST use the new state to create the transaction.
-
-             // Let's re-locate the end position to be safe if we want to insert at end
-             const updatedResponseNodeInfo = PositionFinder.findResponseNode(state, aiChatThreadId)
-
-             if (updatedResponseNodeInfo.found && updatedResponseNodeInfo.endOfNodePos) {
-                const tr = state.tr
-                const insertionPos = updatedResponseNodeInfo.endOfNodePos - 1
-                const p = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-                tr.insert(insertionPos, p)
-                if (tr.docChanged) {
-                    dispatch(tr)
-                }
-             }
-        }
+        const responseMessageId = this.upsertImageCompleteInChat(view, event)
 
         // Delegate image placement to the canvas
         const callbacks = getAiGeneratedImageCallbacks()

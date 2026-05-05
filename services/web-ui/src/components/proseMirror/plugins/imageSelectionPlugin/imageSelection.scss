@@ -43,6 +43,54 @@ $imageSelectionColor: rgba(85, 150, 124, 1);
             pointer-events: none;
         }
     }
+
+    &.is-partial {
+        .pm-image-generating-placeholder {
+            display: flex;
+        }
+    }
+}
+
+.pm-image-generating-placeholder {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    min-height: 84px;
+    aspect-ratio: 1;
+    border: 1px solid rgba(106, 119, 129, 0.18);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 8px rgba(38, 50, 56, 0.08);
+}
+
+.pm-image-generating-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(106, 119, 129, 0.42);
+    animation: pm-image-generating-bounce 1s ease-in-out infinite;
+
+    &:nth-child(2) {
+        animation-delay: 0.12s;
+    }
+
+    &:nth-child(3) {
+        animation-delay: 0.24s;
+    }
+}
+
+@keyframes pm-image-generating-bounce {
+    0%, 80%, 100% {
+        transform: translateY(0);
+        opacity: 0.45;
+    }
+
+    40% {
+        transform: translateY(-3px);
+        opacity: 1;
+    }
 }
 
 // =============================================================================
