@@ -1,6 +1,8 @@
 'use strict'
 
 import { describe, it, expect, vi } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import { NodeSelection } from 'prosemirror-state'
 import { DOMSerializer } from 'prosemirror-model'
 import {
@@ -15,6 +17,13 @@ import {
 	aiResponseMessageNodeSpec,
 	aiResponseMessageNodeView,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiResponseMessageNode.ts'
+
+function loadScss(): string {
+	return readFileSync(
+		resolve(__dirname, 'ai-chat-thread.scss'),
+		'utf-8'
+	)
+}
 
 // =============================================================================
 // aiResponseMessage — id attribute
@@ -314,6 +323,36 @@ describe('aiResponseMessageNodeView — DOM structure', () => {
 		const contentDOM = nodeView.contentDOM as HTMLElement
 
 		expect(contentDOM.className).toBe('ai-response-message-content')
+	})
+
+	it('places the provider avatar below the message bubble, not beside it', () => {
+		const { nodeView } = createResponseNodeView({ aiProvider: 'Google' })
+		const dom = nodeView.dom as HTMLElement
+		const messageRow = dom.querySelector('.ai-response-message')
+		const bubble = dom.querySelector('.ai-response-message-bubble')
+		const meta = dom.querySelector('.ai-response-message-meta')
+		const avatar = dom.querySelector('.user-avatar')
+
+		expect(messageRow).not.toBeNull()
+		expect(bubble).not.toBeNull()
+		expect(meta).not.toBeNull()
+		expect(avatar).not.toBeNull()
+		expect(messageRow!.contains(bubble)).toBe(true)
+		expect(messageRow!.contains(avatar)).toBe(false)
+		expect(meta!.contains(avatar)).toBe(true)
+	})
+
+	it('keeps the provider avatar compact so the bubble can use full width', () => {
+		const scss = loadScss()
+		const avatarBlock = scss.match(/\.user-avatar \{[\s\S]*?\n    \}/)
+		expect(avatarBlock).not.toBeNull()
+		const messageBlock = scss.match(/\.ai-response-message \{[\s\S]*?\.ai-response-message-bubble \{[\s\S]*?\n        \}/)
+		expect(messageBlock).not.toBeNull()
+
+		expect(avatarBlock![0]).toContain('width: 20px')
+		expect(avatarBlock![0]).toContain('height: 20px')
+		expect(messageBlock![0]).toContain('display: block')
+		expect(messageBlock![0]).toContain('width: 100%')
 	})
 
 	it('update() refreshes data-message-id when node id changes', () => {

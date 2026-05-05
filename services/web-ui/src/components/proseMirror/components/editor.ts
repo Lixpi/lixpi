@@ -43,7 +43,7 @@ import { createCodeBlockPlugin, codeBlockInputRule } from '$src/components/prose
 import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNodePlugin"
 
 // Node types
-import { documentTitleNodeType } from "$src/components/proseMirror/customNodes/documentTitleNode.js"
+import { documentTitleNodeType } from "$src/components/proseMirror/customNodes/documentTitleNode.ts"
 
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'

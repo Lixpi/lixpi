@@ -9,6 +9,7 @@ The core `BubbleMenu` class handles:
 - **DOM lifecycle**: Creates `div.bubble-menu > div.bubble-menu-content`, mounts items, manages panels
 - **Context switching**: Shows/hides items based on string-keyed contexts (e.g., `'text'`, `'image'`, `'canvasImage'`)
 - **Transform-aware positioning**: Works correctly inside CSS-transformed ancestors (zoom/pan viewports)
+- **Optional visual scaling**: Consumers can provide a scale curve for menus that should shrink or grow with a canvas zoom level
 - **Show/hide with animation**: CSS transitions via `.is-visible` class
 - **Prevent-hide pattern**: `mousedown` + `preventDefault` prevents focus loss when clicking menu buttons
 - **Scroll/resize tracking**: Repositions on scroll and mobile viewport resize
@@ -58,6 +59,14 @@ menu.show('myContext', {
     placement: 'below',
 })
 
+// Keep the menu attached even if the target is outside the parent bounds
+menu.show('myContext', {
+    targetRect: targetElement.getBoundingClientRect(),
+    placement: 'below',
+    clampToParent: false,
+    animateOnShow: false,
+})
+
 // Reposition (e.g., on resize events)
 menu.reposition()
 
@@ -77,6 +86,7 @@ menu.destroy()
 | `parentEl` | `HTMLElement` | Where to mount the menu DOM |
 | `items` | `BubbleMenuItem[]` | All menu items with context arrays |
 | `panels` | `HTMLElement[]` | Optional secondary panels (e.g., link input) |
+| `getVisualScale` | `() => number` | Optional visual scale applied through `--bubble-menu-visual-scale` before measuring and positioning |
 | `onShow` | `(context: string) => void` | Called when menu becomes visible |
 | `onHide` | `() => void` | Called when menu hides |
 
@@ -117,8 +127,14 @@ type BubbleMenuItem = {
 type BubbleMenuPositionRequest = {
     targetRect: DOMRect
     placement: 'above' | 'below'
+    clampToParent?: boolean
+    animateOnShow?: boolean
 }
 ```
+
+`clampToParent` defaults to `true`. Canvas-attached menus can set it to `false` when the menu should move with an off-screen target instead of staying inside the visible parent bounds.
+
+`animateOnShow` defaults to `true`. Anchored canvas menus can set it to `false` when a first-show transform transition would make the menu appear to drift away from its target.
 
 ## Files
 

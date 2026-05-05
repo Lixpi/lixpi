@@ -12,7 +12,7 @@ const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
 
 import AuthService from '$src/services/auth-service.ts'
-import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
+import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
@@ -233,6 +233,16 @@ export default class AiInteractionService {
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE, payload)
     }
 
-    disconnect() {}
+    disconnect() {
+        const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
+        this.markdownStreamParserUnsubscribe?.()
+        MarkdownStreamParser.removeInstance(this.aiChatThreadId)
+        servicesStore.getData('nats')?.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
+        this.currentAiProvider = null
+    }
+
+    destroy() {
+        this.disconnect()
+    }
 }
 

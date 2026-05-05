@@ -1,5 +1,5 @@
 import { taskRowNodeType, taskRowNodeSpec } from '$src/components/proseMirror/customNodes/taskRowNode.js'
-import { documentTitleNodeType, documentTitleNodeSpec } from '$src/components/proseMirror/customNodes/documentTitleNode.js'
+import { documentTitleNodeType, documentTitleNodeSpec } from '$src/components/proseMirror/customNodes/documentTitleNode.ts'
 import { codeBlockNodeType, codeBlockNodeSpec } from '$src/components/proseMirror/customNodes/codeBlockNode.js'
 
 export const nodeTypes = {

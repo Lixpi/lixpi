@@ -69,11 +69,13 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     const parentWrapper = html`
         <div className="ai-response-message-wrapper">
             <div className="ai-response-message">
-                <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
                 <div className="ai-response-message-bubble">
                     <div className="ai-response-message-spinner" aria-hidden="true"></div>
                     <div className="ai-response-message-content"></div>
                 </div>
+            </div>
+            <div className="ai-response-message-meta">
+                <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
             </div>
         </div>
     `

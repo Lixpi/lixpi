@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { html } from '$src/utils/domTemplates.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { infoBubbleStateManager } from '$src/components/proseMirror/plugins/primitives/infoBubble/infoBubbleStateManager.ts'
 
 type InfoBubbleConfig = {
@@ -178,8 +178,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         left = Math.max(4, Math.min(left, viewportWidth - bubbleRect.width - 4))
         top = Math.max(4, Math.min(top, viewportHeight - bubbleRect.height - 4))
 
-        dom.style.left = `${Math.round(left)}px`
-        dom.style.top = `${Math.round(top)}px`
+        applyStyle(dom, { left: `${Math.round(left)}px`, top: `${Math.round(top)}px` })
 
         // Restore visibility state
         if (!wasVisible) {

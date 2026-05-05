@@ -61,6 +61,7 @@ export class ImageNodeView implements NodeView {
 
     private figure: HTMLElement
     private img: HTMLImageElement
+    private partialPlaceholder: HTMLElement | null = null
     private resizeHandles: Map<ResizeCorner, HTMLElement> = new Map()
 
     private originalAspectRatio = 1
@@ -107,6 +108,7 @@ export class ImageNodeView implements NodeView {
 
         // Assemble DOM
         this.figure.appendChild(this.img)
+        this.syncPartialPlaceholder()
 
         // Store aspect ratio when image loads
         this.img.addEventListener('load', this.handleImageLoad)
@@ -127,6 +129,13 @@ export class ImageNodeView implements NodeView {
     }
 
     private async updateImageSrc(src: string): Promise<void> {
+        if (!src) {
+            this.currentSrcAttr = ''
+            this.img.removeAttribute('src')
+            this.img.style.display = 'none'
+            return
+        }
+
         if (src === this.currentSrcAttr && this.img.src) {
             return
         }
@@ -134,6 +143,8 @@ export class ImageNodeView implements NodeView {
         try {
             const resolvedSrc = await buildImageSrc(src)
             if (this.img.src !== resolvedSrc) {
+                this.figure.querySelector('.image-error-placeholder')?.remove()
+                this.img.style.display = ''
                 this.img.src = resolvedSrc
             }
         } catch (error) {
@@ -145,6 +156,34 @@ export class ImageNodeView implements NodeView {
         const alignment = this.node.attrs.alignment || 'left'
         const textWrap = this.node.attrs.textWrap || 'none'
         return `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`
+    }
+
+    private syncPartialPlaceholder(): void {
+        const shouldShowPlaceholder = Boolean(this.node.attrs.isPartial) && !getImageSrcAttr(this.node)
+        this.figure.classList.toggle('is-partial', Boolean(this.node.attrs.isPartial))
+
+        if (!shouldShowPlaceholder) {
+            this.partialPlaceholder?.remove()
+            this.partialPlaceholder = null
+            if (getImageSrcAttr(this.node)) {
+                this.img.style.display = ''
+            }
+            return
+        }
+
+        this.img.style.display = 'none'
+        if (!this.partialPlaceholder) {
+            this.partialPlaceholder = html`
+                <div className="pm-image-generating-placeholder" aria-label="Image generation in progress">
+                    <span className="pm-image-generating-dot"></span>
+                    <span className="pm-image-generating-dot"></span>
+                    <span className="pm-image-generating-dot"></span>
+                </div>
+            `
+        }
+        if (!this.partialPlaceholder.parentElement) {
+            this.figure.appendChild(this.partialPlaceholder)
+        }
     }
 
     private createResizeHandle(corner: ResizeCorner): HTMLElement {
@@ -270,6 +309,7 @@ export class ImageNodeView implements NodeView {
 
         // Update image src asynchronously to handle auth token
         this.updateImageSrc(getImageSrcAttr(node))
+        this.syncPartialPlaceholder()
 
         if (node.attrs.alt !== this.img.alt) {
             this.img.alt = node.attrs.alt || ''
