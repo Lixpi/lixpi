@@ -67,7 +67,9 @@ fetchData().then((data) => { ... })
 
 ### DOM Templating (web-ui)
 
-In all non-Svelte `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components like dropdowns and bubble menus, canvas code, and any utility that builds UI — always use the `html` tagged template from `domTemplates.ts`:
+**This rule is mandatory. No exceptions outside of test files.**
+
+In all non-Svelte `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components, canvas code (`WorkspaceCanvas.ts`, utilities, etc.), and any other file that builds UI — always use the `html` tagged template from `domTemplates.ts`:
 
 ```typescript
 import { html } from '$src/utils/domTemplates.ts'
@@ -77,12 +79,44 @@ const el = html`
         <span innerHTML=${someIcon}></span>
         <span>Label</span>
     </div>
-`
+` as HTMLDivElement
 ```
 
-Never use `document.createElement` / `Object.assign(el.style, ...)` / manual `el.className = ...` / `el.setAttribute(...)` in these files. The `html` helper produces real DOM nodes (no VDOM) and handles `className`, `innerHTML`, inline `style` objects, `data` attributes, and `on*` event handlers.
+**Never use `document.createElement` in these files.** Also forbidden: `Object.assign(el.style, ...)`, `el.className = ...`, `el.setAttribute(...)`. The `html` helper produces real DOM nodes (no VDOM) and handles:
 
-For SVG icons, import them from `$src/svgIcons/index.ts` and inject via `innerHTML` or string interpolation — never inline SVG markup in component code.
+- `className` — sets `element.className`
+- `innerHTML` — sets `element.innerHTML`
+- `style` — object of camelCase CSS properties passed as a variable reference: `style=${styleObj}`. **Never inline the object literal directly in the template.** Always declare a named variable first:
+  ```ts
+  // CORRECT
+  const railStyle = { position: 'absolute' as const, width: `${WIDTH}px`, zIndex: '9990' }
+  const el = html`<div className="my-rail" style=${railStyle}></div>` as HTMLDivElement
+
+  // WRONG — do not do this
+  const el = html`<div className="my-rail" style=${{ position: 'absolute', width: `${WIDTH}px`, zIndex: '9990' }}></div>` as HTMLDivElement
+  ```
+  The only acceptable exception is a single trivial property where the intent is self-evident: `style=${{ display: 'none' }}`.
+- `data` — object of dataset values (e.g. `data=${{ nodeId: id }}`)
+- `on*` — event handlers (e.g. `onclick=${handler}`)
+
+CSS custom properties (`--foo`) cannot be set via the `style` object — use `.style.setProperty('--foo', value)` on the element after creation. That is fine.
+
+To apply multiple style properties to an **existing** element, use `applyStyle` from `domTemplates.ts` — never set properties one line at a time:
+```ts
+import { applyStyle } from '$src/utils/domTemplates.ts'
+
+// CORRECT
+applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` })
+
+// WRONG — do not do this
+el.style.left = `${x}px`
+el.style.top = `${y}px`
+el.style.width = `${w}px`
+el.style.height = `${h}px`
+```
+Single-property assignments (`el.style.display = 'none'`) are still fine.
+
+For SVG icons, import them from `$src/svgIcons/index.ts` and inject via `innerHTML` — never inline SVG markup in component code.
 
 The only exception is test files (`*.test.ts`) where minimal DOM setup for mocking is acceptable.
 

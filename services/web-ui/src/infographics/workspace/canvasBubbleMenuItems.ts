@@ -6,7 +6,7 @@
 // Framework-agnostic — uses only DOM and callbacks. No ProseMirror imports.
 // =============================================================================
 
-import { createEl } from '$src/utils/domTemplates.ts'
+import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import { trashBinIcon, downloadIcon, triggerNodesConnectionIcon, changeNodesConnectorLineCurve } from '$src/svgIcons/index.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
@@ -41,8 +41,7 @@ function createCanvasButton(config: {
 
     const svg = button.querySelector('svg')
     if (svg) {
-        svg.style.width = `${config.iconSize}px`
-        svg.style.height = `${config.iconSize}px`
+        applyStyle(svg, { width: `${config.iconSize}px`, height: `${config.iconSize}px` })
     }
 
     button.addEventListener('click', (e) => {

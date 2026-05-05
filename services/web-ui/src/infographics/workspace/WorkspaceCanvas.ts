@@ -27,7 +27,7 @@ import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/c
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getAdaptiveZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeImagePositionNextToThread, computeImagePositionOverlappingThread, countExistingImagesForThread, OVERLAP_PADDING_X, OVERLAP_GAP_Y, OVERLAP_WIDTH_RATIO } from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
@@ -266,10 +266,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             },
             onReplaceImage: (nodeId) => {
-                const input = document.createElement('input')
-                input.type = 'file'
-                input.accept = 'image/*'
-                input.style.display = 'none'
+                const input = html`<input type="file" accept="image/*" style=${{ display: 'none' }}></input>` as HTMLInputElement
                 input.addEventListener('change', async () => {
                     const file = input.files?.[0]
                     input.remove()
@@ -554,8 +551,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (node.dimensions.width <= 0 || node.dimensions.height <= 0) {
                     const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
                     if (nodeEl) {
-                        nodeEl.style.width = `300px`
-                        nodeEl.style.height = `200px`
+                        applyStyle(nodeEl, { width: '300px', height: '200px' })
                     }
                     return { ...node, dimensions: { ...node.dimensions, width: 300, height: 200 } }
                 }
@@ -576,8 +572,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
             if (nodeEl) {
-                nodeEl.style.width = `${width}px`
-                nodeEl.style.height = `${height}px`
+                applyStyle(nodeEl, { width: `${width}px`, height: `${height}px` })
             }
 
             return {
@@ -709,9 +704,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!viewportEl) return null
         if (selectionRectEl && viewportEl.contains(selectionRectEl)) return selectionRectEl
 
-        selectionRectEl = document.createElement('div')
-        selectionRectEl.className = 'workspace-selection-rect'
-        selectionRectEl.style.display = 'none'
+        selectionRectEl = html`<div className="workspace-selection-rect" style=${{ display: 'none' }}></div>` as HTMLDivElement
         viewportEl.appendChild(selectionRectEl)
         return selectionRectEl
     }
@@ -720,9 +713,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!viewportEl) return null
         if (selectionGroupOverlayEl && viewportEl.contains(selectionGroupOverlayEl)) return selectionGroupOverlayEl
 
-        selectionGroupOverlayEl = document.createElement('div')
-        selectionGroupOverlayEl.className = 'workspace-selection-group-overlay'
-        selectionGroupOverlayEl.style.display = 'none'
+        selectionGroupOverlayEl = html`<div className="workspace-selection-group-overlay" style=${{ display: 'none' }}></div>` as HTMLDivElement
         selectionGroupOverlayEl.addEventListener('mousedown', (event) => {
             if (!shouldShowSelectionGroupOverlay()) return
             if (event.button !== 0) return
@@ -749,11 +740,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!rectEl) return
 
         const rect = getCanvasRectFromSelection(marqueeSelection)
-        rectEl.style.display = marqueeSelection.moved ? 'block' : 'none'
-        rectEl.style.left = `${rect.x}px`
-        rectEl.style.top = `${rect.y}px`
-        rectEl.style.width = `${rect.width}px`
-        rectEl.style.height = `${rect.height}px`
+        applyStyle(rectEl, {
+            display: marqueeSelection.moved ? 'block' : 'none',
+            left: `${rect.x}px`,
+            top: `${rect.y}px`,
+            width: `${rect.width}px`,
+            height: `${rect.height}px`,
+        })
     }
 
     function hideSelectionRectElement(): void {
@@ -810,11 +803,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return
         }
 
-        overlayEl.style.display = 'block'
-        overlayEl.style.left = `${bounds.x}px`
-        overlayEl.style.top = `${bounds.y}px`
-        overlayEl.style.width = `${bounds.width}px`
-        overlayEl.style.height = `${bounds.height}px`
+        applyStyle(overlayEl, {
+            display: 'block',
+            left: `${bounds.x}px`,
+            top: `${bounds.y}px`,
+            width: `${bounds.width}px`,
+            height: `${bounds.height}px`,
+        })
     }
 
     function updateNodeSelectionClasses(prevSelectedNodeIds: Set<string>, nextSelectedNodeIds: Set<string>): void {
@@ -1202,8 +1197,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const handleMouseUp = () => {
             panelEl.classList.remove('is-resizing')
-            document.body.style.cursor = previousBodyCursor
-            document.body.style.userSelect = previousBodyUserSelect
+            applyStyle(document.body, { cursor: previousBodyCursor, userSelect: previousBodyUserSelect })
 
             document.removeEventListener('mousemove', handleMouseMove)
             document.removeEventListener('mouseup', handleMouseUp)
@@ -1277,12 +1271,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const thread = threadOverride ?? currentAiChatThreads.find((candidate) => candidate.threadId === activeAiChatThreadId)
         destroyActiveAiChatPanel(false)
 
-        const panelEl = document.createElement('div')
-        panelEl.className = 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel'
-        panelEl.dataset.threadId = activeAiChatThreadId
-        panelEl.dataset.regionNodeId = regionNode.nodeId
-        panelEl.addEventListener('mousedown', (event) => event.stopPropagation())
-        panelEl.addEventListener('click', (event) => event.stopPropagation())
+        const panelEl = html`<div
+            className="workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel"
+            data=${{ threadId: activeAiChatThreadId!, regionNodeId: regionNode.nodeId }}
+            onmousedown=${(event: Event) => event.stopPropagation()}
+            onclick=${(event: Event) => event.stopPropagation()}
+        ></div>` as HTMLDivElement
 
         panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
         panelEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
@@ -1295,8 +1289,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? createShiftingGradientBackground(panelEl)
             : null
 
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'ai-chat-thread-node-editor nopan'
+        const editorContainer = html`<div className="ai-chat-thread-node-editor nopan"></div>` as HTMLDivElement
         panelEl.appendChild(editorContainer)
 
         const hasContent = thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0
@@ -1318,7 +1311,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const editor = new ProseMirrorEditor({
             editorMountElement: editorContainer,
-            content: document.createElement('div'),
+            content: html`<div></div>` as HTMLDivElement,
             initialVal: editorContent,
             isDisabled: false,
             documentType: 'aiChatThread',
@@ -1383,21 +1376,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
         })
 
-        const promptEl = document.createElement('div')
-        promptEl.className = 'ai-prompt-input-floating workspace-ai-chat-floating-panel__prompt nopan'
+        const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel__prompt nopan"></div>` as HTMLDivElement
         promptEl.style.setProperty('--dropdown-popover-box-shadow', webUiThemeSettings.dropdownPopoverBoxShadow)
         if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
             activeAiChatPromptGradient = createShiftingGradientBackground(promptEl)
         }
 
-        const promptEditorContainer = document.createElement('div')
-        promptEditorContainer.className = 'floating-input-editor nopan'
+        const promptEditorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
         promptEl.appendChild(promptEditorContainer)
         panelEl.appendChild(promptEl)
 
         activeAiChatPromptEditor = new ProseMirrorEditor({
             editorMountElement: promptEditorContainer,
-            content: document.createElement('div'),
+            content: html`<div></div>` as HTMLDivElement,
             initialVal: {},
             isDisabled: false,
             documentType: 'aiPromptInput',
@@ -1431,26 +1422,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onReceivingStateChange: () => {},
         })
 
-        const rail = document.createElement('div')
-        rail.className = 'workspace-thread-rail workspace-ai-chat-floating-panel__rail nopan'
-        rail.style.position = 'absolute'
-        rail.style.width = `${RAIL_GRAB_WIDTH}px`
-        rail.style.left = `${-RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-        rail.style.top = '0'
-        rail.style.zIndex = '9990'
+        const railStyle = {
+            position: 'absolute' as const,
+            width: `${RAIL_GRAB_WIDTH}px`,
+            left: `${-RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`,
+            top: '0',
+            zIndex: '9990',
+        }
+        const rail = html`<div
+            className="workspace-thread-rail workspace-ai-chat-floating-panel__rail nopan"
+            style=${railStyle}
+            data=${{ threadNodeId: regionNode.nodeId }}
+        ></div>` as HTMLDivElement
         rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
         rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
-        rail.dataset.threadNodeId = regionNode.nodeId
         rail.addEventListener('mousedown', (event) => {
             handleActiveAiChatPanelResizeStart(event, panelEl)
         })
 
-        const line = document.createElement('div')
-        line.className = 'workspace-thread-rail__line'
-
-        const bottomCircle = document.createElement('div')
-        bottomCircle.className = 'workspace-thread-rail__boundary-circle'
-        bottomCircle.innerHTML = aiChatThreadRailBoundaryCircle
+        const line = html`<div className="workspace-thread-rail__line"></div>` as HTMLDivElement
+        const bottomCircle = html`<div className="workspace-thread-rail__boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
         const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
@@ -1479,20 +1470,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createFloatingInput(): void {
         if (floatingInputEl) return
 
-        floatingInputEl = document.createElement('div')
-        floatingInputEl.className = 'ai-prompt-input-floating nopan'
-        floatingInputEl.style.position = 'absolute'
-        floatingInputEl.style.display = 'none'
-        floatingInputEl.style.zIndex = '9999'
-        floatingInputEl.style.width = '400px'
+        const floatingInputStyle = { position: 'absolute' as const, display: 'none', zIndex: '9999', width: '400px' }
+        floatingInputEl = html`<div className="ai-prompt-input-floating nopan" style=${floatingInputStyle}></div>` as HTMLDivElement
 
         // Add gradient background (controlled by settings flag)
         if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
             floatingInputGradient = createShiftingGradientBackground(floatingInputEl)
         }
 
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'floating-input-editor nopan'
+        const editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
         floatingInputEl.appendChild(editorContainer)
 
         const controlFactories = {
@@ -1504,7 +1490,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         floatingInputEditor = new ProseMirrorEditor({
             editorMountElement: editorContainer,
-            content: document.createElement('div'),
+            content: html`<div></div>` as HTMLDivElement,
             initialVal: {},
             isDisabled: false,
             documentType: 'aiPromptInput',
@@ -1562,9 +1548,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const inputX = targetNode.position.x
         const inputY = targetNode.position.y + (targetNode.dimensions?.height ?? 400) + 16
 
-        floatingInputEl.style.left = `${inputX}px`
-        floatingInputEl.style.top = `${inputY}px`
-        floatingInputEl.style.width = `${targetNode.dimensions?.width ?? 400}px`
+        applyStyle(floatingInputEl, {
+            left: `${inputX}px`,
+            top: `${inputY}px`,
+            width: `${targetNode.dimensions?.width ?? 400}px`,
+        })
     }
 
     // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
@@ -1572,19 +1560,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiImageModel?: string; imageGenerationSize?: string }): void {
         if (threadFloatingInputs.has(node.nodeId)) return
 
-        const el = document.createElement('div')
-        el.className = 'ai-prompt-input-floating ai-prompt-input-thread-persistent nopan'
-        el.style.position = 'absolute'
-        el.style.display = 'block'
-        el.style.zIndex = '9999'
-        el.dataset.threadNodeId = node.nodeId
+        const threadInputStyle = { position: 'absolute' as const, display: 'block', zIndex: '9999' }
+        const el = html`<div
+            className="ai-prompt-input-floating ai-prompt-input-thread-persistent nopan"
+            style=${threadInputStyle}
+            data=${{ threadNodeId: node.nodeId }}
+        ></div>` as HTMLDivElement
 
         const gradient = webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode
             ? createShiftingGradientBackground(el)
             : null
 
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'floating-input-editor nopan'
+        const editorContainer = html`<div className="floating-input-editor nopan"></div>` as HTMLDivElement
         el.appendChild(editorContainer)
 
         const controlFactories = {
@@ -1599,7 +1586,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const editor = new ProseMirrorEditor({
             editorMountElement: editorContainer,
-            content: document.createElement('div'),
+            content: html`<div></div>` as HTMLDivElement,
             initialVal: {},
             isDisabled: false,
             documentType: 'aiPromptInput',
@@ -1677,9 +1664,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function positionElementBelowNode(el: HTMLElement, node: CanvasNode): void {
-        el.style.left = `${node.position.x}px`
-        el.style.top = `${node.position.y + getThreadTopOffset(node.nodeId, node.dimensions?.height ?? 400)}px`
-        el.style.width = `${node.dimensions?.width ?? 400}px`
+        applyStyle(el, {
+            left: `${node.position.x}px`,
+            top: `${node.position.y + getThreadTopOffset(node.nodeId, node.dimensions?.height ?? 400)}px`,
+            width: `${node.dimensions?.width ?? 400}px`,
+        })
     }
 
     function repositionAllThreadFloatingInputs(): void {
@@ -1696,21 +1685,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createThreadRail(node: AiChatThreadCanvasNode): void {
         if (threadRails.has(node.nodeId)) return
 
-        const rail = document.createElement('div')
-        rail.className = 'workspace-thread-rail nopan'
-        rail.style.position = 'absolute'
-        rail.style.width = `${RAIL_GRAB_WIDTH}px`
-        rail.style.zIndex = '9990'
+        const railStyle = {
+            position: 'absolute' as const,
+            width: `${RAIL_GRAB_WIDTH}px`,
+            zIndex: '9990',
+        }
+        const rail = html`<div
+            className="workspace-thread-rail nopan"
+            style=${railStyle}
+            data=${{ threadNodeId: node.nodeId }}
+        ></div>` as HTMLDivElement
         rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
         rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
-        rail.dataset.threadNodeId = node.nodeId
 
-        const line = document.createElement('div')
-        line.className = 'workspace-thread-rail__line'
-
-        const bottomCircle = document.createElement('div')
-        bottomCircle.className = 'workspace-thread-rail__boundary-circle'
-        bottomCircle.innerHTML = aiChatThreadRailBoundaryCircle
+        const line = html`<div className="workspace-thread-rail__line"></div>` as HTMLDivElement
+        const bottomCircle = html`<div className="workspace-thread-rail__boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
         const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
@@ -1743,9 +1732,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const floatingHeight = floatingEntry ? floatingEntry.el.offsetHeight : 0
         const totalHeight = threadHeight + gap + floatingHeight
 
-        rail.style.left = `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-        rail.style.top = `${node.position.y}px`
-        rail.style.height = `${totalHeight}px`
+        applyStyle(rail, {
+            left: `${node.position.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`,
+            top: `${node.position.y}px`,
+            height: `${totalHeight}px`,
+        })
         rail.style.setProperty('--rail-thread-height', `${threadHeight}px`)
 
         const boundaryCircle = rail.querySelector('.workspace-thread-rail__boundary-circle') as HTMLElement | null
@@ -1813,10 +1804,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hasChanges = true
 
             if (imgNodeEl) {
-                imgNodeEl.style.left = `${x}px`
-                imgNodeEl.style.top = `${y}px`
-                imgNodeEl.style.width = `${constrainedWidth}px`
-                imgNodeEl.style.height = `${newHeight}px`
+                applyStyle(imgNodeEl, { left: `${x}px`, top: `${y}px`, width: `${constrainedWidth}px`, height: `${newHeight}px` })
                 imgNodeEl.classList.add('workspace-image-node--anchored')
                 nodeLayerManager.bringToFront(imgNodeEl)
             }
@@ -2270,10 +2258,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
                     const iconSvg = providerIcons[imageModelProvider]
                     if (iconSvg) {
-                        const badge = document.createElement('div')
-                        badge.className = 'image-model-badge'
-                        badge.innerHTML = iconSvg
-                        badge.title = imageModelProvider
+                        const badge = html`<div className="image-model-badge" innerHTML=${iconSvg} title=${imageModelProvider}></div>` as HTMLDivElement
                         nodeEl.appendChild(badge)
                     }
                 }
@@ -2303,8 +2288,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                         const imgNodeEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"]`) as HTMLElement | null
                         if (imgNodeEl) {
-                            imgNodeEl.style.left = `${x}px`
-                            imgNodeEl.style.top = `${y}px`
+                            applyStyle(imgNodeEl, { left: `${x}px`, top: `${y}px` })
                             imgNodeEl.classList.add('workspace-image-node--anchored')
                             nodeLayerManager.bringToFront(imgNodeEl)
                         }
@@ -2655,11 +2639,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function createResizeHandle(nodeId: string, corner: ResizeCorner): HTMLElement {
-        const handle = document.createElement('div')
-        handle.className = `document-resize-handle document-resize-${corner} nopan`
-        handle.innerHTML = imageResizeCornerIcon
-        handle.dataset.corner = corner
-        handle.addEventListener('mousedown', (e) => handleResizeStart(e, nodeId, corner))
+        const handle = html`<div
+            className=${`document-resize-handle document-resize-${corner} nopan`}
+            innerHTML=${imageResizeCornerIcon}
+            data=${{ corner }}
+            onmousedown=${(e: MouseEvent) => handleResizeStart(e, nodeId, corner)}
+        ></div>` as HTMLDivElement
 
         // Initialize sizing/position so newly created handles are correct immediately
         const currentZoom = currentCanvasState?.viewport?.zoom ?? 1
@@ -2673,24 +2658,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         extraClasses?: string,
         extraDataAttrs?: Record<string, string>
     ): { nodeEl: HTMLElement; dragOverlay: HTMLElement } {
-        const nodeEl = document.createElement('div')
-        nodeEl.className = `workspace-document-node${extraClasses ? ` ${extraClasses}` : ''}`
-        nodeEl.dataset.nodeId = node.nodeId
-        if (extraDataAttrs) {
-            for (const [key, value] of Object.entries(extraDataAttrs)) {
-                nodeEl.dataset[key] = value
-            }
-        }
         const isContextRegion = isContextRegionCanvasNode(node) && Boolean(extraClasses?.includes('workspace-context-region-node'))
-        nodeEl.style.position = 'absolute'
         const nodeWorldPosition = getNodeWorldPosition(node)
-        nodeEl.style.left = `${nodeWorldPosition.x}px`
-        nodeEl.style.top = `${nodeWorldPosition.y}px`
-        nodeEl.style.width = `${node.dimensions.width}px`
-        nodeEl.style.height = `${node.dimensions.height}px`
-        nodeEl.style.zIndex = isContextRegion
-            ? String(nodeLayerManager.backgroundIndex())
-            : String(nodeLayerManager.currentTopIndex())
+        const nodeElStyle = {
+            position: 'absolute' as const,
+            left: `${nodeWorldPosition.x}px`,
+            top: `${nodeWorldPosition.y}px`,
+            width: `${node.dimensions.width}px`,
+            height: `${node.dimensions.height}px`,
+            zIndex: isContextRegion
+                ? String(nodeLayerManager.backgroundIndex())
+                : String(nodeLayerManager.currentTopIndex()),
+        }
+        const nodeEl = html`<div
+            className=${`workspace-document-node${extraClasses ? ` ${extraClasses}` : ''}`}
+            data=${{ nodeId: node.nodeId, ...extraDataAttrs }}
+            style=${nodeElStyle}
+        ></div>` as HTMLDivElement
 
         nodeEl.addEventListener('click', (e) => {
             e.stopPropagation()
@@ -2726,9 +2710,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
         }
 
-        const dragOverlay = document.createElement('div')
-        dragOverlay.className = 'node-drag-overlay nopan'
-        dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))
+        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}></div>` as HTMLDivElement
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -2790,8 +2772,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager = null
         }
 
-        edgesLayerEl = document.createElement('div')
-        edgesLayerEl.className = 'workspace-edges-layer'
+        edgesLayerEl = html`<div className="workspace-edges-layer"></div>` as HTMLDivElement
 
         viewportEl.prepend(edgesLayerEl)
 
@@ -2843,21 +2824,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         position: 'left' | 'right'
         onPointerDown?: (e: MouseEvent) => void
     }): HTMLDivElement {
-        const handle = document.createElement('div')
-        handle.className = [
-            'workspace-handle',
-            'nopan',
-            'connectable',
-            'connectableend',
-            'xy-flow__handle',
-            params.handleType,
-            params.position,
-        ].join(' ')
-
-        handle.dataset.nodeid = params.nodeId
-        handle.dataset.handleid = params.handleId
-        handle.dataset.handlepos = params.position
-        handle.dataset.id = `workspace-${params.nodeId}-${params.handleId}-${params.handleType}`
+        const handle = html`<div
+            className="workspace-handle nopan connectable connectableend xy-flow__handle ${params.handleType} ${params.position}"
+            data=${{ nodeid: params.nodeId, handleid: params.handleId, handlepos: params.position, id: `workspace-${params.nodeId}-${params.handleId}-${params.handleType}` }}
+        ></div>` as HTMLDivElement
 
         if (params.onPointerDown) {
             handle.addEventListener('mousedown', (e) => {
@@ -2911,33 +2881,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? getResizeHandleScaledSizes(zoom)
             : { size: 24, offset: 6 }
 
-        handle.style.width = `${sizePx}px`
-        handle.style.height = `${sizePx}px`
+        applyStyle(handle, { width: `${sizePx}px`, height: `${sizePx}px` })
 
         // Reset positional properties first
-        handle.style.top = ''
-        handle.style.left = ''
-        handle.style.right = ''
-        handle.style.bottom = ''
+        applyStyle(handle, { top: '', left: '', right: '', bottom: '' })
 
+        const pos = { top: '', left: '', right: '', bottom: '' }
         switch (corner) {
-            case 'top-left':
-                handle.style.top = `${-offsetPx}px`
-                handle.style.left = `${-offsetPx}px`
-                break
-            case 'top-right':
-                handle.style.top = `${-offsetPx}px`
-                handle.style.right = `${-offsetPx}px`
-                break
-            case 'bottom-left':
-                handle.style.bottom = `${-offsetPx}px`
-                handle.style.left = `${-offsetPx}px`
-                break
-            case 'bottom-right':
-                handle.style.bottom = `${-offsetPx}px`
-                handle.style.right = `${-offsetPx}px`
-                break
+            case 'top-left':     pos.top = `${-offsetPx}px`; pos.left   = `${-offsetPx}px`; break
+            case 'top-right':    pos.top = `${-offsetPx}px`; pos.right  = `${-offsetPx}px`; break
+            case 'bottom-left':  pos.bottom = `${-offsetPx}px`; pos.left  = `${-offsetPx}px`; break
+            case 'bottom-right': pos.bottom = `${-offsetPx}px`; pos.right = `${-offsetPx}px`; break
         }
+        applyStyle(handle, pos)
     }
 
     function updateResizeHandles(zoom: number) {
@@ -2966,10 +2922,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const scale = titleVisualScale / safeZoom
         const titleTopPx = -2 - 16 * titleVisualScale
 
-        titleBar.style.top = `${titleTopPx / safeZoom}px`
-        titleBar.style.left = `${20 / safeZoom}px`
-        titleBar.style.transform = `scale(${scale})`
-        titleBar.style.transformOrigin = 'top left'
+        applyStyle(titleBar, {
+            top: `${titleTopPx / safeZoom}px`,
+            left: `${20 / safeZoom}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+        })
     }
 
     function updateRegionTitleBars(zoom: number) {
@@ -3089,8 +3047,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     height: entry.startHeight,
                 }
 
-                entry.el.style.left = `${currentPos.x}px`
-                entry.el.style.top = `${currentPos.y}px`
+                applyStyle(entry.el, { left: `${currentPos.x}px`, top: `${currentPos.y}px` })
 
                 liveNodeOverrides.set(draggedNodeId, {
                     position: currentPos,
@@ -3098,22 +3055,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
-                    floatingInputEl.style.left = `${currentPos.x}px`
-                    floatingInputEl.style.top = `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`
-                    floatingInputEl.style.width = `${currentDims.width}px`
+                    applyStyle(floatingInputEl, {
+                        left: `${currentPos.x}px`,
+                        top: `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`,
+                        width: `${currentDims.width}px`,
+                    })
                 }
 
                 const threadEntry = threadFloatingInputs.get(draggedNodeId)
                 if (threadEntry) {
-                    threadEntry.el.style.left = `${currentPos.x}px`
-                    threadEntry.el.style.top = `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`
-                    threadEntry.el.style.width = `${currentDims.width}px`
+                    applyStyle(threadEntry.el, {
+                        left: `${currentPos.x}px`,
+                        top: `${currentPos.y + getThreadTopOffset(draggedNodeId, currentDims.height)}px`,
+                        width: `${currentDims.width}px`,
+                    })
                 }
 
                 const dragRail = threadRails.get(draggedNodeId)
                 if (dragRail) {
-                    dragRail.style.left = `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-                    dragRail.style.top = `${currentPos.y}px`
+                    applyStyle(dragRail, { left: `${currentPos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${currentPos.y}px` })
                     const totalH = parseFloat(dragRail.style.height || '0')
                     if (totalH > 0) connectionManager?.setRailHeight(draggedNodeId, totalH)
                 }
@@ -3138,8 +3098,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (anchoredEl) {
                     const newX = startPos.x + deltaX
                     const newY = startPos.y + deltaY
-                    anchoredEl.style.left = `${newX}px`
-                    anchoredEl.style.top = `${newY}px`
+                    applyStyle(anchoredEl, { left: `${newX}px`, top: `${newY}px` })
                     liveNodeOverrides.set(imgId, {
                         position: { x: newX, y: newY },
                         dimensions: { width: anchoredEl.offsetWidth, height: anchoredEl.offsetHeight },
@@ -3271,8 +3230,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
                     const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
                     if (nodeEl) {
-                        nodeEl.style.left = `${snappedWorld.x}px`
-                        nodeEl.style.top = `${snappedWorld.y}px`
+                        applyStyle(nodeEl, { left: `${snappedWorld.x}px`, top: `${snappedWorld.y}px` })
                         syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)
                     }
 
@@ -3336,8 +3294,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         if (newPos) {
                             const movedNodeEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
                             if (movedNodeEl) {
-                                movedNodeEl.style.left = `${newPos.x}px`
-                                movedNodeEl.style.top = `${newPos.y}px`
+                                applyStyle(movedNodeEl, { left: `${newPos.x}px`, top: `${newPos.y}px` })
                             }
                             const nextPosition = n.parentId
                                 ? toParentRelativePosition(newPos, n.parentId, getCanvasNodesById(updatedNodes))
@@ -3459,8 +3416,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
 
-            nodeEl.style.width = `${newWidth}px`
-            nodeEl.style.height = `${newHeight}px`
+            applyStyle(nodeEl, { width: `${newWidth}px`, height: `${newHeight}px` })
 
             if (isLeft) {
                 const widthDiff = newWidth - startWidth
@@ -3504,9 +3460,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const threadEntry = threadFloatingInputs.get(nodeId)
             if (threadEntry) {
                 const pos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
-                threadEntry.el.style.left = `${pos.x}px`
-                threadEntry.el.style.top = `${pos.y + getThreadTopOffset(nodeId, newHeight)}px`
-                threadEntry.el.style.width = `${newWidth}px`
+                applyStyle(threadEntry.el, { left: `${pos.x}px`, top: `${pos.y + getThreadTopOffset(nodeId, newHeight)}px`, width: `${newWidth}px` })
             }
 
             // Reposition the vertical rail during resize
@@ -3517,9 +3471,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const floatingH = threadEntry ? threadEntry.el.offsetHeight : 0
                 const gap = hiddenEmptyThreadNodeIds.has(nodeId) ? 0 : 16
                 const totalH = threadH + gap + floatingH
-                resizeRail.style.left = `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`
-                resizeRail.style.top = `${pos.y}px`
-                resizeRail.style.height = `${totalH}px`
+                applyStyle(resizeRail, { left: `${pos.x - RAIL_OFFSET - RAIL_GRAB_WIDTH / 2}px`, top: `${pos.y}px`, height: `${totalH}px` })
                 resizeRail.style.setProperty('--rail-thread-height', `${threadH}px`)
                 connectionManager?.setRailHeight(nodeId, totalH)
             }
@@ -3547,10 +3499,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ? imgElement.naturalWidth / imgElement.naturalHeight : 1
                     const imgH = imgW / ar
 
-                    imgEl.style.left = `${imgX}px`
-                    imgEl.style.top = `${imgY}px`
-                    imgEl.style.width = `${imgW}px`
-                    imgEl.style.height = `${imgH}px`
+                    applyStyle(imgEl, { left: `${imgX}px`, top: `${imgY}px`, width: `${imgW}px`, height: `${imgH}px` })
                 }
                 applyAnchoredImageSpacing(nodeId)
             }
@@ -3631,10 +3580,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     anchoredImageManager.updateImageSize(anchor.imageNodeId, newImgHeight)
 
                     if (imgEl) {
-                        imgEl.style.left = `${newImgX}px`
-                        imgEl.style.top = `${newImgY}px`
-                        imgEl.style.width = `${newImgWidth}px`
-                        imgEl.style.height = `${newImgHeight}px`
+                        applyStyle(imgEl, { left: `${newImgX}px`, top: `${newImgY}px`, width: `${newImgWidth}px`, height: `${newImgHeight}px` })
                     }
 
                     updatedNodes[imgIdx] = {
@@ -3665,15 +3611,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const { nodeEl, dragOverlay } = createBaseNodeElement(node, undefined, { documentId: node.referenceId })
         dragOverlay.className = 'document-drag-overlay nopan'
 
-        const editorContainer = document.createElement('div')
-        editorContainer.className = 'document-node-editor nopan'
+        const editorContainer = html`<div className="document-node-editor nopan"></div>` as HTMLDivElement
         nodeEl.appendChild(editorContainer)
 
         if (doc && doc.content !== undefined) {
             try {
                 const editor = new ProseMirrorEditor({
                     editorMountElement: editorContainer,
-                    content: document.createElement('div'),
+                    content: html`<div></div>` as HTMLDivElement,
                     initialVal: doc.content,
                     isDisabled: false,
                     documentType: 'document',
@@ -3747,10 +3692,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         regionGradients.set(node.nodeId, gradient)
 
         // Title bar
-        const titleBar = document.createElement('div')
-        titleBar.className = 'workspace-ai-chat-thread-region__title-bar nopan'
-        const titleText = document.createElement('span')
-        titleText.className = 'workspace-ai-chat-thread-region__title'
+        const titleBar = html`<div className="workspace-ai-chat-thread-region__title-bar nopan"></div>` as HTMLDivElement
+        const titleText = html`<span className="workspace-ai-chat-thread-region__title"></span>` as HTMLSpanElement
         // Best-effort title from ProseMirror documentTitle node
         const docTitleNode = thread?.content?.content?.find?.((n: any) => n.type === 'documentTitle')
         const docTitle = docTitleNode?.content?.[0]?.text ?? 'AI Chat'
@@ -3792,10 +3735,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         dragOverlay.className = 'image-drag-overlay nopan'
 
         // Create the img element - fills the container
-        const imgEl = document.createElement('img')
-        imgEl.className = 'image-node-img'
-        imgEl.alt = ''
-        imgEl.draggable = false
+        const imgEl = html`<img className="image-node-img" alt="" draggable="false"></img>` as HTMLImageElement
 
         // For data: URLs (streaming partials) and external URLs, use node.src
         // directly. For NATS-stored images, build a canonical path from the
@@ -3879,10 +3819,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             const iconSvg = providerIcons[imageModelProvider]
             if (iconSvg) {
-                const badge = document.createElement('div')
-                badge.className = 'image-model-badge'
-                badge.innerHTML = iconSvg
-                badge.title = imageModelProvider
+                const badge = html`<div className="image-model-badge" innerHTML=${iconSvg} title=${imageModelProvider}></div>` as HTMLDivElement
                 nodeEl.appendChild(badge)
             }
         }
@@ -3892,24 +3829,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (isGenerating) {
             // Add loading spinner — three bouncing dots matching AI response message style
-            const spinnerContainer = document.createElement('div')
-            spinnerContainer.className = 'image-generating-spinner'
-            spinnerContainer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:5;pointer-events:none;'
+            const spinnerContainerStyle = {
+                position: 'absolute' as const,
+                top: '0',
+                left: '0',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: '5',
+                pointerEvents: 'none' as const,
+            }
+            const spinnerContainer = html`<div className="image-generating-spinner" style=${spinnerContainerStyle}></div>` as HTMLDivElement
 
-            const dotsWrapper = document.createElement('div')
-            dotsWrapper.style.cssText = 'display:flex;gap:8px;align-items:center;'
+            const dotsWrapperStyle = { display: 'flex', gap: '8px', alignItems: 'center' }
+            const dotsWrapper = html`<div style=${dotsWrapperStyle}></div>` as HTMLDivElement
 
             for (let i = 0; i < 3; i++) {
-                const dot = document.createElement('div')
-                dot.style.cssText = `width:8px;height:8px;border-radius:50%;background:#b0b0b0;animation:img-dot-bounce 1s ${i * 0.15}s infinite ease-in-out;`
+                const dotStyle = { width: '8px', height: '8px', borderRadius: '50%', background: '#b0b0b0', animation: `img-dot-bounce 1s ${i * 0.15}s infinite ease-in-out` }
+                const dot = html`<div style=${dotStyle}></div>` as HTMLDivElement
                 dotsWrapper.appendChild(dot)
             }
 
             // Inject keyframes if not already present
             if (!document.getElementById('img-dot-bounce-keyframes')) {
-                const style = document.createElement('style')
-                style.id = 'img-dot-bounce-keyframes'
-                style.textContent = `@keyframes img-dot-bounce { 0%,80%,100%{transform:scale(1);opacity:.4} 40%{transform:scale(1.3);opacity:1} }`
+                const style = html`<style id="img-dot-bounce-keyframes" innerHTML=${'@keyframes img-dot-bounce { 0%,80%,100%{transform:scale(1);opacity:.4} 40%{transform:scale(1.3);opacity:1} }'}></style>` as HTMLStyleElement
                 document.head.appendChild(style)
             }
 

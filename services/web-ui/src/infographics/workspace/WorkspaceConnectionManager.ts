@@ -26,6 +26,7 @@ import {
 } from '$src/infographics/connectors/index.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { applyStyle } from '$src/utils/domTemplates.ts'
 
 import type {
 	CanvasNode,
@@ -1000,10 +1001,7 @@ export class WorkspaceConnectionManager {
 		this.lastRenderBoundsKey = key
 		this.connector?.destroy()
 
-		this.config.edgesLayerEl.style.left = `${bounds.left}px`
-		this.config.edgesLayerEl.style.top = `${bounds.top}px`
-		this.config.edgesLayerEl.style.width = `${bounds.width}px`
-		this.config.edgesLayerEl.style.height = `${bounds.height}px`
+		applyStyle(this.config.edgesLayerEl, { left: `${bounds.left}px`, top: `${bounds.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` })
 
 		this.connector = createConnectorRenderer({
 			container: this.config.edgesLayerEl,
