@@ -249,13 +249,16 @@ More generic patterns and folder layout guidance: `$src/components/proseMirror/p
 Quick taste, this is how buttons are built now:
 
 ```ts
-import { html } from '$src/utils/domTemplates.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 
 const button = html`
   <div className="ai-submit-button" onclick=${handleClick}>
     <span className="send-icon" innerHTML=${sendIcon}></span>
   </div>
 `
+
+// To update styles on an existing element, use applyStyle:
+applyStyle(button, { left: `${x}px`, top: `${y}px` })
 ```
 
 ### Composer Controls
