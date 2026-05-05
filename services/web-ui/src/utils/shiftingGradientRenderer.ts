@@ -8,6 +8,7 @@
 //
 // See documentation/features/SHIFTING-GRADIENT.md for full technical details
 
+import { html } from '$src/utils/domTemplates.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 type Color = { r: number; g: number; b: number }
@@ -107,10 +108,9 @@ class ShiftingGradientRenderer {
             this.offscreenCtx = this.offscreenCanvas.getContext('2d')!
         } else {
             // Fallback for older browsers
-            this.offscreenCanvas = document.createElement('canvas')
-            this.offscreenCanvas.width = BITMAP_WIDTH
-            this.offscreenCanvas.height = BITMAP_HEIGHT
-            this.offscreenCtx = this.offscreenCanvas.getContext('2d')!
+            const fallbackCanvas = html`<canvas width=${BITMAP_WIDTH} height=${BITMAP_HEIGHT}></canvas>` as HTMLCanvasElement
+            this.offscreenCanvas = fallbackCanvas
+            this.offscreenCtx = fallbackCanvas.getContext('2d')!
         }
 
         this.imageData = this.offscreenCtx.createImageData(BITMAP_WIDTH, BITMAP_HEIGHT)
@@ -390,9 +390,7 @@ class ShiftingGradientRenderer {
             // Optional tint: render tinted tile via an in-memory canvas.
             let tileSource: CanvasImageSource = image
             if (options.tintColor) {
-                const tintCanvas = document.createElement('canvas')
-                tintCanvas.width = tileW
-                tintCanvas.height = tileH
+                const tintCanvas = html`<canvas width=${tileW} height=${tileH}></canvas>` as HTMLCanvasElement
                 const tintCtx = tintCanvas.getContext('2d')
                 if (tintCtx) {
                     tintCtx.clearRect(0, 0, tileW, tileH)
@@ -458,23 +456,22 @@ class ShiftingGradientRenderer {
 }
 
 // Creates and attaches a shifting gradient background canvas to a container element
-    export function createShiftingGradientBackground(container: HTMLElement, options: ShiftingGradientBackgroundOptions = {}): {
+export function createShiftingGradientBackground(container: HTMLElement, options: ShiftingGradientBackgroundOptions = {}): {
     canvas: HTMLCanvasElement
     destroy: () => void
     triggerAnimation: () => void
 } {
-    const canvas = document.createElement('canvas')
-    canvas.className = 'shifting-gradient-canvas'
-    canvas.style.cssText = `
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 0;
-        pointer-events: none;
-        border-radius: inherit;
-    `
+    const canvasStyle = {
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        zIndex: '0',
+        pointerEvents: 'none',
+        borderRadius: 'inherit',
+    }
+    const canvas = html`<canvas className="shifting-gradient-canvas" style=${canvasStyle}></canvas>` as HTMLCanvasElement
 
     // Set canvas dimensions based on container size
     const updateCanvasSize = () => {
@@ -515,14 +512,18 @@ class ShiftingGradientRenderer {
             const scaleRaw = style.getPropertyValue('--gradient-pattern-scale').trim()
             const alpha = alphaRaw ? Number.parseFloat(alphaRaw) : undefined
             const scale = scaleRaw ? Number.parseFloat(scaleRaw) : undefined
-            renderer.setPattern({
-                url: patternUrl,
-                alpha: Number.isFinite(alpha) ? alpha : undefined,
-                tintColor: tint,
-                scale: Number.isFinite(scale) ? scale : undefined,
-            }).catch((error) => {
-                console.warn('[ShiftingGradientRenderer] Failed to load pattern:', error)
-            })
+            void (async () => {
+                try {
+                    await renderer.setPattern({
+                        url: patternUrl,
+                        alpha: Number.isFinite(alpha) ? alpha : undefined,
+                        tintColor: tint,
+                        scale: Number.isFinite(scale) ? scale : undefined,
+                    })
+                } catch (error) {
+                    console.warn('[ShiftingGradientRenderer] Failed to load pattern:', error)
+                }
+            })()
         }
     } catch {
         // ignore

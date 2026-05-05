@@ -18,7 +18,7 @@ import {
     type AiChatThread,
     type WorkspaceEdge,
 } from '@lixpi/constants'
-import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.js'
+import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon, stabilityIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
@@ -3808,16 +3808,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : strippedSrc
 
         let retried = false
-        AuthService.getTokenSilently().then(token => {
-            imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
-        }).catch(() => {
-            showImageErrorPlaceholder(imgEl, nodeEl)
-        })
+        ;(async () => {
+            try {
+                const token = await AuthService.getTokenSilently()
+                imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
+            } catch {
+                showImageErrorPlaceholder(imgEl, nodeEl)
+            }
+        })()
 
-        imgEl.onerror = () => {
+        imgEl.onerror = async () => {
             if (!retried) {
                 retried = true
-                AuthService.getTokenSilently().then(token => {
+                try {
+                    const token = await AuthService.getTokenSilently()
                     if (token) {
                         const freshSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token)
                         if (imgEl.src !== freshSrc) {
@@ -3826,7 +3830,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                     }
                     showImageErrorPlaceholder(imgEl, nodeEl)
-                }).catch(() => showImageErrorPlaceholder(imgEl, nodeEl))
+                } catch {
+                    showImageErrorPlaceholder(imgEl, nodeEl)
+                }
             } else {
                 showImageErrorPlaceholder(imgEl, nodeEl)
             }

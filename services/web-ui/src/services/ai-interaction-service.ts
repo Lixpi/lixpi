@@ -12,7 +12,7 @@ const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
 
 import AuthService from '$src/services/auth-service.ts'
-import SegmentsReceiver from '$src/services/segmentsReceiver-service.js'
+import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
