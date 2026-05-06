@@ -26,9 +26,11 @@ import {
     resolveStoredImagePath,
     type IndexedImage,
     type LodTier,
+    type PixiEdgeRenderDatum,
     type PixiRendererHealth,
     type WorldPosition,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
+import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
 
 type PixiImageEntry = {
     sprite: Sprite
@@ -65,6 +67,7 @@ export type PixiMediaLayer = {
     setSelectedImageNodes: (selectedNodeIds: Set<string>) => void
     setMarqueeRect: (worldRect: { x: number; y: number; width: number; height: number } | null) => void
     setSelectionOverlayBounds: (worldBounds: { x: number; y: number; width: number; height: number } | null) => void
+    setPixiEdges: (edges: PixiEdgeRenderDatum[]) => void
     destroy: () => void
 }
 
@@ -108,8 +111,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     const app = new Application()
     const world = new Container({ label: 'workspace-pixi-media-world' })
     const fgLayer = new Container({ label: 'workspace-pixi-fg' })
+    const edgeLayer = new Container({ label: 'workspace-pixi-edges' })
     const entries = new Map<string, PixiImageEntry>()
     const selectionOutlines = new Map<string, Graphics>()
+    let edgeRenderer: PixiEdgeRenderer | null = null
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
     const pixiOwnedNodeIds = new Set<string>()
@@ -149,13 +154,18 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             }
 
             app.stage.addChild(world)
+            world.addChild(edgeLayer)
             world.addChild(fgLayer)
+            edgeRenderer = createPixiEdgeRenderer(edgeLayer)
             hostEl.appendChild(app.canvas)
+            // Only position the canvas — DO NOT set width/height explicitly.
+            // `autoDensity: true` + `resizeTo: paneEl` own the canvas pixel
+            // buffer and CSS display size. Overriding them with percentage values
+            // conflicts with PIXI's ResizeObserver and creates an inconsistent
+            // aspect ratio after pane-size changes (e.g. sidebar opening).
             applyStyle(app.canvas as HTMLCanvasElement, {
                 position: 'absolute',
                 inset: '0',
-                width: '100%',
-                height: '100%',
             })
             world.position.set(currentViewport.x, currentViewport.y)
             world.scale.set(currentViewport.zoom, currentViewport.zoom)
@@ -507,6 +517,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         renderNow()
     }
 
+    function setPixiEdges(edges: PixiEdgeRenderDatum[]): void {
+        if (destroyed || !edgeRenderer) return
+        edgeRenderer.render(edges)
+        renderNow()
+    }
+
     function setSelectionOverlayBounds(worldBounds: { x: number; y: number; width: number; height: number } | null): void {
         if (destroyed) return
         if (!worldBounds) {
@@ -547,6 +563,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         marqueeGraphics = null
         groupOverlayGraphics?.destroy()
         groupOverlayGraphics = null
+        edgeRenderer?.destroy()
+        edgeRenderer = null
         for (const [, entry] of textureCache) {
             entry.texture.destroy(true)
         }
@@ -566,6 +584,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         setSelectedImageNodes,
         setMarqueeRect,
         setSelectionOverlayBounds,
+        setPixiEdges,
         destroy,
     }
 }
