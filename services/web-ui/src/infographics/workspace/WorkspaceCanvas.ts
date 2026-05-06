@@ -3069,6 +3069,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     dimensions: currentDims,
                 })
 
+                pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
+
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
                     applyStyle(floatingInputEl, {
                         left: `${currentPos.x}px`,
@@ -3113,11 +3115,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (anchoredEl) {
                     const newX = startPos.x + deltaX
                     const newY = startPos.y + deltaY
+                    const newDims = { width: anchoredEl.offsetWidth, height: anchoredEl.offsetHeight }
                     applyStyle(anchoredEl, { left: `${newX}px`, top: `${newY}px` })
                     liveNodeOverrides.set(imgId, {
                         position: { x: newX, y: newY },
-                        dimensions: { width: anchoredEl.offsetWidth, height: anchoredEl.offsetHeight },
+                        dimensions: newDims,
                     })
+                    pixiMediaLayer?.setNodeLiveTransform(imgId, { x: newX, y: newY }, newDims)
                 }
             }
 
@@ -3248,6 +3252,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         applyStyle(nodeEl, { left: `${snappedWorld.x}px`, top: `${snappedWorld.y}px` })
                         syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)
                     }
+                    pixiMediaLayer?.setNodeLiveTransform(node.nodeId, snappedWorld, node.dimensions)
 
                     return {
                         ...node,
@@ -3311,6 +3316,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             if (movedNodeEl) {
                                 applyStyle(movedNodeEl, { left: `${newPos.x}px`, top: `${newPos.y}px` })
                             }
+                            pixiMediaLayer?.setNodeLiveTransform(n.nodeId, newPos, n.dimensions)
                             const nextPosition = n.parentId
                                 ? toParentRelativePosition(newPos, n.parentId, getCanvasNodesById(updatedNodes))
                                 : newPos
@@ -3442,16 +3448,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl.style.top = `${startTop - heightDiff}px`
             }
 
+            const liveResizePosition = {
+                x: parseFloat(nodeEl.style.left),
+                y: parseFloat(nodeEl.style.top)
+            }
+            const liveResizeDimensions = {
+                width: newWidth,
+                height: newHeight
+            }
             liveNodeOverrides.set(nodeId, {
-                position: {
-                    x: parseFloat(nodeEl.style.left),
-                    y: parseFloat(nodeEl.style.top)
-                },
-                dimensions: {
-                    width: newWidth,
-                    height: newHeight
-                }
+                position: liveResizePosition,
+                dimensions: liveResizeDimensions,
             })
+
+            pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
 
             // If resizing a region child, visibly grow the region in real-time
             if (node?.parentId) {

@@ -15,6 +15,20 @@ import type {
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { decodeImageInWorker, destroyPixiImageDecoder } from '$src/infographics/workspace/pixiImageDecoder.ts'
+import {
+    addPixiLodSizeParam,
+    buildNodesById,
+    buildPixiImageSrc,
+    computeWorldPosition,
+    getPixiLodTier,
+    getVisibleWorldRect,
+    makeIndexedImage,
+    resolveStoredImagePath,
+    type IndexedImage,
+    type LodTier,
+    type PixiRendererHealth,
+    type WorldPosition,
+} from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 type PixiImageEntry = {
     sprite: Sprite
@@ -32,19 +46,14 @@ type TextureEntry = {
     lastUsed: number
 }
 
-type IndexedImage = {
-    minX: number
-    minY: number
-    maxX: number
-    maxY: number
-    nodeId: string
-}
-
-type LodTier = 'color' | 'thumb-256' | 'thumb-1024' | 'full'
-
 export type PixiMediaLayer = {
     sync: (canvasState: CanvasState | null) => void
     setViewport: (viewport: CanvasViewport) => void
+    setNodeLiveTransform: (
+        nodeId: string,
+        worldPosition: WorldPosition,
+        dimensions: { width: number; height: number }
+    ) => void
     destroy: () => void
 }
 
@@ -54,61 +63,15 @@ type PixiMediaLayerOptions = {
     getWorkspaceId: () => string
 }
 
-const transparentPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 const CULLING_MARGIN = 800
 const MAX_TEXTURES = 256
 const MAX_TEXTURE_BYTES = 512 * 1024 * 1024
 
-function buildImageSrc(imageUrl: string, apiBaseUrl: string, token: string | false): string {
-    if (!imageUrl) return transparentPixel
-    if (imageUrl.startsWith('data:')) return imageUrl
-    if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
-    return imageUrl
-}
-
-function isStoredImageSrc(src: string): boolean {
-    const stripped = src.replace(/[?&]token=[^&]+/, '')
-    return stripped.startsWith('/api/') || (stripped.startsWith('http') && stripped.includes('/api/images/'))
-}
-
 async function resolveImageSrc(node: ImageCanvasNode, workspaceId: string): Promise<string> {
     const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-    const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
-    const resolvedSrc = isStoredImageSrc(strippedSrc)
-        ? `/api/images/${workspaceId}/${node.fileId}`
-        : strippedSrc
+    const resolvedSrc = resolveStoredImagePath(node, workspaceId)
     const token = await AuthService.getTokenSilently()
-    return buildImageSrc(resolvedSrc, API_BASE_URL, token || false)
-}
-
-function getLodTier(zoom: number): LodTier {
-    if (zoom < 0.1) return 'color'
-    if (zoom < 0.4) return 'thumb-256'
-    if (zoom < 1) return 'thumb-1024'
-    return 'full'
-}
-
-function addLodSizeParam(url: string, tier: LodTier): string {
-    if (tier === 'full' || tier === 'color') return url
-    if (!url.includes('/api/images/')) return url
-
-    try {
-        const parsed = new URL(url, window.location.origin)
-        parsed.searchParams.set('size', tier === 'thumb-256' ? '256' : '1024')
-        return parsed.toString()
-    } catch {
-        return url
-    }
-}
-
-function makeIndexedImage(node: ImageCanvasNode): IndexedImage {
-    return {
-        minX: node.position.x,
-        minY: node.position.y,
-        maxX: node.position.x + node.dimensions.width,
-        maxY: node.position.y + node.dimensions.height,
-        nodeId: node.nodeId,
-    }
+    return buildPixiImageSrc(resolvedSrc, API_BASE_URL, token || false)
 }
 
 function setPixiOwned(viewportEl: HTMLDivElement, nodeId: string, owned: boolean): void {
@@ -124,7 +87,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         position: 'absolute' as const,
         inset: '0',
         pointerEvents: 'none' as const,
-        zIndex: '0',
+        zIndex: '2',
         overflow: 'hidden',
     }
     const hostEl = html`<div className="workspace-pixi-media-layer" style=${hostStyle}></div>` as HTMLDivElement
@@ -135,14 +98,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     const entries = new Map<string, PixiImageEntry>()
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
+    const pixiOwnedNodeIds = new Set<string>()
     let textureBytes = 0
     let textureClock = 0
     let destroyed = false
-    let ready = false
+    let health: PixiRendererHealth = 'initializing'
     let lastState: CanvasState | null = null
     let requestCounter = 0
     let currentViewport: CanvasViewport = { x: 0, y: 0, zoom: 1 }
-    let currentTier: LodTier = getLodTier(currentViewport.zoom)
+    let currentTier: LodTier = getPixiLodTier(currentViewport.zoom)
 
     void (async () => {
         try {
@@ -176,40 +140,53 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 width: '100%',
                 height: '100%',
             })
-            ready = true
+            world.position.set(currentViewport.x, currentViewport.y)
+            world.scale.set(currentViewport.zoom, currentViewport.zoom)
+            health = 'ready'
             sync(lastState)
+            renderNow()
         } catch (error) {
             console.error('[PixiMediaLayer] Failed to initialize PIXI media layer.', error)
-            ready = false
+            health = 'failed'
+            releaseAllDomOwnership()
         }
     })()
 
     function setViewport(viewport: CanvasViewport): void {
+        if (destroyed) return
         currentViewport = viewport
-        const nextTier = getLodTier(viewport.zoom)
+        const nextTier = getPixiLodTier(viewport.zoom)
         const tierChanged = nextTier !== currentTier
         currentTier = nextTier
         world.position.set(viewport.x, viewport.y)
         world.scale.set(viewport.zoom, viewport.zoom)
-        if (tierChanged && lastState && ready && !destroyed) {
-            sync(lastState)
-            return
+        if (tierChanged && lastState && health === 'ready') {
+            upsertAllImages(lastState)
         }
         updateVisibleImages()
+        renderNow()
+    }
+
+    function upsertAllImages(canvasState: CanvasState): void {
+        spatialIndex.clear()
+        const nodesById = buildNodesById(canvasState.nodes)
+        const imageNodes = canvasState.nodes.filter((node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image')
+        for (const node of imageNodes) {
+            upsertImage(node, computeWorldPosition(node, nodesById))
+        }
     }
 
     function sync(canvasState: CanvasState | null): void {
         lastState = canvasState
-        syncOwnership(canvasState)
-        if (!ready || destroyed || !canvasState) return
+        syncDomOwnership(canvasState)
+        if (!canvasState || health !== 'ready' || destroyed) return
 
-        setViewport(canvasState.viewport)
         const imageNodes = canvasState.nodes.filter((node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image')
         const activeIds = new Set<string>(imageNodes.map((node: ImageCanvasNode) => node.nodeId))
 
         for (const [nodeId, entry] of entries) {
             if (!activeIds.has(nodeId)) {
-                setPixiOwned(viewportEl, nodeId, false)
+                setDomOwnership(nodeId, false)
                 releaseTexture(entry.textureKey)
                 world.removeChild(entry.sprite)
                 world.removeChild(entry.colorRect)
@@ -219,26 +196,86 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             }
         }
 
-        spatialIndex.clear()
-        for (const node of imageNodes) {
-            upsertImage(node)
-        }
+        upsertAllImages(canvasState)
         updateVisibleImages()
+        renderNow()
     }
 
-    function syncOwnership(canvasState: CanvasState | null): void {
-        const imageNodeIds = new Set<string>(
+    function renderNow(): void {
+        if (health !== 'ready' || destroyed) return
+        app.render()
+    }
+
+    // Live drag/resize updates push the new world position straight to the
+    // sprite without going through `sync`, so the PIXI pixels stay locked
+    // to the DOM hitbox during interaction. Once the gesture commits and
+    // `sync` runs with the final canvas state, the sprite is re-positioned
+    // from the same source of truth as the DOM.
+    function setNodeLiveTransform(
+        nodeId: string,
+        worldPosition: WorldPosition,
+        dimensions: { width: number; height: number }
+    ): void {
+        if (destroyed) return
+        const entry = entries.get(nodeId)
+        if (!entry) return
+
+        entry.sprite.position.set(worldPosition.x, worldPosition.y)
+        entry.sprite.width = dimensions.width
+        entry.sprite.height = dimensions.height
+        entry.colorRect.position.set(worldPosition.x, worldPosition.y)
+        drawColorRect(entry.colorRect, dimensions.width, dimensions.height)
+
+        spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
+        const newRect: IndexedImage = {
+            minX: worldPosition.x,
+            minY: worldPosition.y,
+            maxX: worldPosition.x + dimensions.width,
+            maxY: worldPosition.y + dimensions.height,
+            nodeId,
+        }
+        entry.worldRect = newRect
+        spatialIndex.insert(newRect)
+
+        updateVisibleImages()
+        renderNow()
+    }
+
+    function syncDomOwnership(canvasState: CanvasState | null): void {
+        const nextImageNodeIds = new Set<string>(
             canvasState?.nodes
                 .filter((node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image')
                 .map((node: ImageCanvasNode) => node.nodeId) ?? []
         )
 
-        for (const nodeId of imageNodeIds) {
-            setPixiOwned(viewportEl, nodeId, true)
+        for (const nodeId of pixiOwnedNodeIds) {
+            if (!nextImageNodeIds.has(nodeId)) {
+                setDomOwnership(nodeId, false)
+            }
+        }
+
+        for (const nodeId of nextImageNodeIds) {
+            setDomOwnership(nodeId, true)
         }
     }
 
-    function upsertImage(node: ImageCanvasNode): void {
+    function setDomOwnership(nodeId: string, owned: boolean): void {
+        setPixiOwned(viewportEl, nodeId, owned)
+        if (owned) {
+            pixiOwnedNodeIds.add(nodeId)
+        } else {
+            pixiOwnedNodeIds.delete(nodeId)
+        }
+    }
+
+    function releaseAllDomOwnership(): void {
+        for (const nodeId of pixiOwnedNodeIds) {
+            setPixiOwned(viewportEl, nodeId, false)
+        }
+        pixiOwnedNodeIds.clear()
+    }
+
+    function upsertImage(node: ImageCanvasNode, worldPosition: WorldPosition): void {
         let entry = entries.get(node.nodeId)
         if (!entry) {
             const sprite = new Sprite(Texture.EMPTY)
@@ -256,20 +293,19 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 srcKey: '',
                 requestId: 0,
                 textureKey: null,
-                worldRect: makeIndexedImage(node),
+                worldRect: makeIndexedImage(node, worldPosition),
             }
             entries.set(node.nodeId, entry)
         }
 
-        setPixiOwned(viewportEl, node.nodeId, true)
-
-        entry.sprite.position.set(node.position.x, node.position.y)
+        entry.sprite.position.set(worldPosition.x, worldPosition.y)
         entry.sprite.width = node.dimensions.width
         entry.sprite.height = node.dimensions.height
-        entry.colorRect.position.set(node.position.x, node.position.y)
+        entry.colorRect.position.set(worldPosition.x, worldPosition.y)
         drawColorRect(entry.colorRect, node.dimensions.width, node.dimensions.height)
-        entry.worldRect = makeIndexedImage(node)
+        entry.worldRect = makeIndexedImage(node, worldPosition)
         spatialIndex.insert(entry.worldRect)
+        setDomOwnership(node.nodeId, true)
 
         const tier = currentTier
         if (tier === 'color') {
@@ -286,12 +322,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         entry.srcKey = srcKey
         entry.requestId = ++requestCounter
         const requestId = entry.requestId
-        entry.sprite.visible = false
-        entry.colorRect.visible = true
+
+        // Keep the existing texture (if any) visible while the new tier loads.
+        // Only show the color placeholder when no texture has been resolved yet.
+        const hasExistingTexture = entry.textureKey !== null
+        entry.sprite.visible = hasExistingTexture
+        entry.colorRect.visible = !hasExistingTexture
 
         void (async () => {
             try {
-                const resolved = addLodSizeParam(await resolveImageSrc(node, getWorkspaceId()), tier)
+                const resolved = addPixiLodSizeParam(await resolveImageSrc(node, getWorkspaceId()), tier)
                 const texture = await acquireTexture(resolved)
                 if (destroyed || entry?.requestId !== requestId) return
                 releaseTexture(entry.textureKey)
@@ -301,11 +341,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.sprite.height = node.dimensions.height
                 entry.sprite.visible = true
                 entry.colorRect.visible = false
+                renderNow()
             } catch (error) {
                 console.error('[PixiMediaLayer] Failed to load image texture.', error)
                 if (entry?.requestId === requestId) {
-                    entry.sprite.visible = false
-                    entry.colorRect.visible = true
+                    entry.srcKey = ''
+                    if (!hasExistingTexture) {
+                        entry.sprite.visible = false
+                        entry.colorRect.visible = true
+                    }
+                    renderNow()
                 }
             }
         })()
@@ -362,14 +407,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function updateVisibleImages(): void {
-        if (!ready || !lastState) return
+        if (health !== 'ready' || !lastState) return
+        const visibleRect = getVisibleWorldRect(
+            currentViewport,
+            { width: paneEl.clientWidth, height: paneEl.clientHeight },
+            CULLING_MARGIN
+        )
         const visible = new Set(
-            spatialIndex.search({
-                minX: (-currentViewport.x / currentViewport.zoom) - CULLING_MARGIN,
-                minY: (-currentViewport.y / currentViewport.zoom) - CULLING_MARGIN,
-                maxX: ((paneEl.clientWidth - currentViewport.x) / currentViewport.zoom) + CULLING_MARGIN,
-                maxY: ((paneEl.clientHeight - currentViewport.y) / currentViewport.zoom) + CULLING_MARGIN,
-            }).map((item: IndexedImage) => item.nodeId)
+            spatialIndex.search(visibleRect).map((item: IndexedImage) => item.nodeId)
         )
 
         for (const [nodeId, entry] of entries) {
@@ -380,13 +425,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function destroy(): void {
+        const wasReady = health === 'ready'
         destroyed = true
+        health = 'destroyed'
         for (const [nodeId, entry] of entries) {
-            setPixiOwned(viewportEl, nodeId, false)
+            setDomOwnership(nodeId, false)
             releaseTexture(entry.textureKey)
             entry.sprite.destroy()
             entry.colorRect.destroy()
         }
+        releaseAllDomOwnership()
         entries.clear()
         for (const [, entry] of textureCache) {
             entry.texture.destroy(true)
@@ -395,7 +443,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         spatialIndex.clear()
         destroyPixiImageDecoder()
         hostEl.remove()
-        if (ready) {
+        if (wasReady) {
             app.destroy(true, { children: true, texture: false, textureSource: false })
         }
     }
@@ -403,6 +451,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     return {
         sync,
         setViewport,
+        setNodeLiveTransform,
         destroy,
     }
 }
