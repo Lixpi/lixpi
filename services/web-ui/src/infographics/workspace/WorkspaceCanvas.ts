@@ -42,7 +42,7 @@ import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT }
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
-import { createPixiMediaLayer, type PixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 
 import { select } from 'd3-selection'
@@ -180,10 +180,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Anchored image manager - tracks images overlapping their AI chat thread nodes
     const anchoredImageManager = createAnchoredImageManager()
 
+    const pixiSelectionColors: SelectionColors = {
+        nodeOutline: webUiThemeSettings.selectionOutlineColor,
+        marqueeStroke: webUiThemeSettings.selectionMarqueeBorderColor,
+        marqueeFill: webUiThemeSettings.selectionMarqueeBackgroundColor,
+        groupOverlayStroke: webUiThemeSettings.selectionOverlayBorderColor,
+        groupOverlayFill: webUiThemeSettings.selectionOverlayBackgroundColor,
+    }
     pixiMediaLayer = createPixiMediaLayer({
         paneEl,
         viewportEl,
-        getWorkspaceId: () => workspaceId
+        getWorkspaceId: () => workspaceId,
+        selectionColors: pixiSelectionColors,
     })
     viewportBridge = createViewportBridge({
         viewportEl,
@@ -754,20 +762,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function updateSelectionRectElement(): void {
         if (!marqueeSelection) return
 
-        const rectEl = ensureSelectionRectElement()
-        if (!rectEl) return
-
         const rect = getCanvasRectFromSelection(marqueeSelection)
-        applyStyle(rectEl, {
-            display: marqueeSelection.moved ? 'block' : 'none',
-            left: `${rect.x}px`,
-            top: `${rect.y}px`,
-            width: `${rect.width}px`,
-            height: `${rect.height}px`,
-        })
+
+        if (marqueeSelection.moved) {
+            pixiMediaLayer?.setMarqueeRect(rect)
+
+            // DOM rect only for non-PIXI contexts (document/thread nodes);
+            // PIXI draws it for image nodes but DOM fallback keeps it working everywhere.
+            const rectEl = ensureSelectionRectElement()
+            if (rectEl) {
+                applyStyle(rectEl, {
+                    display: 'block',
+                    left: `${rect.x}px`,
+                    top: `${rect.y}px`,
+                    width: `${rect.width}px`,
+                    height: `${rect.height}px`,
+                })
+            }
+        } else {
+            pixiMediaLayer?.setMarqueeRect(null)
+            if (selectionRectEl) selectionRectEl.style.display = 'none'
+        }
     }
 
     function hideSelectionRectElement(): void {
+        pixiMediaLayer?.setMarqueeRect(null)
         if (selectionRectEl) {
             selectionRectEl.style.display = 'none'
         }
@@ -812,10 +831,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function updateSelectionGroupOverlayElement(): void {
+        const bounds = getSelectionOverlayBounds()
+
+        // PIXI draws the visible selection overlay for image nodes.
+        pixiMediaLayer?.setSelectionOverlayBounds(bounds)
+
+        // The DOM element is kept invisible but in place as a drag hit target.
+        // Its background/border are stripped in the SCSS so PIXI owns the visual.
         const overlayEl = ensureSelectionGroupOverlayElement()
         if (!overlayEl) return
 
-        const bounds = getSelectionOverlayBounds()
         if (!bounds) {
             overlayEl.style.display = 'none'
             return
@@ -905,6 +930,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateNodeSelectionClasses(prevSelectedNodeIds, selectedNodeIds)
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
+        pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
     }
 
     function toggleNodeSelection(nodeId: string): void {
@@ -3131,6 +3157,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             scheduleEdgesRender()
             repositionCanvasBubbleMenu()
             updateSelectionGroupOverlayElement()
+            pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
         }
 
         const handleMouseUp = (upEvent: MouseEvent) => {
@@ -3197,6 +3224,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 if (isContextRegionCanvasNode(node)) {
                     return { ...node, position: finalWorldPosition }
+                }
+
+                if (node.parentId && finalDraggedPositions.has(node.parentId)) {
+                    // Parent and child moved together as one selected group. The
+                    // live DOM/PIXI positions are world coordinates, but persisted
+                    // child positions remain parent-relative. Keep the existing
+                    // relative position so the parent's movement carries the child
+                    // exactly once after the state commit.
+                    return node
                 }
 
                 const draggedRect: Rect = {
@@ -3465,13 +3501,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
 
             pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
+            pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
+            pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds())
 
-            // If resizing a region child, visibly grow the region in real-time
+            // If resizing a region child, visibly grow the region in real-time.
+            // `nodeEl.style.left/top` is in world coordinates; convert to parent-
+            // relative before computing the needed region dimensions.
             if (node?.parentId) {
                 const regionEl = viewportEl?.querySelector(`[data-node-id="${node.parentId}"]`) as HTMLElement | null
                 if (regionEl) {
-                    const relativeLeft = parseFloat(nodeEl.style.left) || 0
-                    const relativeTop = parseFloat(nodeEl.style.top) || 0
+                    const worldLeft = parseFloat(nodeEl.style.left) || 0
+                    const worldTop = parseFloat(nodeEl.style.top) || 0
+                    const regionWorldLeft = parseFloat(regionEl.style.left) || 0
+                    const regionWorldTop = parseFloat(regionEl.style.top) || 0
+                    const relativeLeft = worldLeft - regionWorldLeft
+                    const relativeTop = worldTop - regionWorldTop
                     const neededWidth = relativeLeft + newWidth + 48
                     const neededHeight = relativeTop + newHeight + 48
                     const currentRegionWidth = parseFloat(regionEl.style.width) || 200
@@ -3552,10 +3596,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 height: nodeEl.offsetHeight
             }
 
-            const newPosition = {
+            // `nodeEl.style.left/top` is always in viewport-relative world
+            // coordinates (set by `createBaseNodeElement` via `getNodeWorldPosition`).
+            // Context-region children persist `position` as parent-relative, so
+            // convert back before committing.
+            const newWorldPosition = {
                 x: parseFloat(nodeEl.style.left),
                 y: parseFloat(nodeEl.style.top)
             }
+            const resizingNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
+            const newPosition = resizingNode?.parentId
+                ? toParentRelativePosition(newWorldPosition, resizingNode.parentId, getCanvasNodesById())
+                : newWorldPosition
 
             let updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) =>
                 n.nodeId === nodeId ? { ...n, dimensions: newDimensions, position: newPosition } : n

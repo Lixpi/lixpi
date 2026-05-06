@@ -46,6 +46,14 @@ type TextureEntry = {
     lastUsed: number
 }
 
+export type SelectionColors = {
+    nodeOutline: string
+    marqueeStroke: string
+    marqueeFill: string
+    groupOverlayStroke: string
+    groupOverlayFill: string
+}
+
 export type PixiMediaLayer = {
     sync: (canvasState: CanvasState | null) => void
     setViewport: (viewport: CanvasViewport) => void
@@ -54,6 +62,9 @@ export type PixiMediaLayer = {
         worldPosition: WorldPosition,
         dimensions: { width: number; height: number }
     ) => void
+    setSelectedImageNodes: (selectedNodeIds: Set<string>) => void
+    setMarqueeRect: (worldRect: { x: number; y: number; width: number; height: number } | null) => void
+    setSelectionOverlayBounds: (worldBounds: { x: number; y: number; width: number; height: number } | null) => void
     destroy: () => void
 }
 
@@ -61,6 +72,7 @@ type PixiMediaLayerOptions = {
     paneEl: HTMLDivElement
     viewportEl: HTMLDivElement
     getWorkspaceId: () => string
+    selectionColors: SelectionColors
 }
 
 const CULLING_MARGIN = 800
@@ -81,7 +93,7 @@ function setPixiOwned(viewportEl: HTMLDivElement, nodeId: string, owned: boolean
 }
 
 export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaLayer {
-    const { paneEl, viewportEl, getWorkspaceId } = options
+    const { paneEl, viewportEl, getWorkspaceId, selectionColors } = options
 
     const hostStyle = {
         position: 'absolute' as const,
@@ -95,7 +107,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     const app = new Application()
     const world = new Container({ label: 'workspace-pixi-media-world' })
+    const fgLayer = new Container({ label: 'workspace-pixi-fg' })
     const entries = new Map<string, PixiImageEntry>()
+    const selectionOutlines = new Map<string, Graphics>()
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
     const pixiOwnedNodeIds = new Set<string>()
@@ -103,6 +117,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let textureClock = 0
     let destroyed = false
     let health: PixiRendererHealth = 'initializing'
+    let marqueeGraphics: Graphics | null = null
+    let groupOverlayGraphics: Graphics | null = null
     let lastState: CanvasState | null = null
     let requestCounter = 0
     let currentViewport: CanvasViewport = { x: 0, y: 0, zoom: 1 }
@@ -133,6 +149,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             }
 
             app.stage.addChild(world)
+            world.addChild(fgLayer)
             hostEl.appendChild(app.canvas)
             applyStyle(app.canvas as HTMLCanvasElement, {
                 position: 'absolute',
@@ -435,6 +452,83 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
     }
 
+    function setSelectedImageNodes(selectedNodeIds: Set<string>): void {
+        if (destroyed) return
+
+        // Remove outlines for nodes that are no longer selected or no longer exist.
+        for (const [nodeId, g] of selectionOutlines) {
+            if (!selectedNodeIds.has(nodeId) || !entries.has(nodeId)) {
+                g.destroy()
+                selectionOutlines.delete(nodeId)
+            }
+        }
+
+        // Add/update outline for each newly selected PIXI-owned node.
+        for (const nodeId of selectedNodeIds) {
+            const entry = entries.get(nodeId)
+            if (!entry) continue
+
+            let g = selectionOutlines.get(nodeId)
+            if (!g) {
+                g = new Graphics()
+                fgLayer.addChild(g)
+                selectionOutlines.set(nodeId, g)
+            }
+
+            const { x, y } = entry.sprite.position
+            const w = entry.sprite.width
+            const h = entry.sprite.height
+            g.clear()
+            g.roundRect(x, y, w, h, 4)
+            g.stroke({ color: selectionColors.nodeOutline, width: 1.5 / (currentViewport.zoom || 1) })
+        }
+
+        renderNow()
+    }
+
+    function setMarqueeRect(worldRect: { x: number; y: number; width: number; height: number } | null): void {
+        if (destroyed) return
+        if (!worldRect) {
+            marqueeGraphics?.clear()
+            renderNow()
+            return
+        }
+
+        if (!marqueeGraphics) {
+            marqueeGraphics = new Graphics()
+            fgLayer.addChild(marqueeGraphics)
+        }
+
+        marqueeGraphics.clear()
+        marqueeGraphics.roundRect(worldRect.x, worldRect.y, worldRect.width, worldRect.height, 8 / (currentViewport.zoom || 1))
+        marqueeGraphics.fill({ color: selectionColors.marqueeFill })
+        marqueeGraphics.stroke({ color: selectionColors.marqueeStroke, width: 1 / (currentViewport.zoom || 1) })
+
+        renderNow()
+    }
+
+    function setSelectionOverlayBounds(worldBounds: { x: number; y: number; width: number; height: number } | null): void {
+        if (destroyed) return
+        if (!worldBounds) {
+            groupOverlayGraphics?.clear()
+            renderNow()
+            return
+        }
+
+        if (!groupOverlayGraphics) {
+            groupOverlayGraphics = new Graphics()
+            fgLayer.addChild(groupOverlayGraphics)
+        }
+
+        const r = 18 / (currentViewport.zoom || 1)
+        groupOverlayGraphics.clear()
+        groupOverlayGraphics.roundRect(worldBounds.x, worldBounds.y, worldBounds.width, worldBounds.height, r)
+        groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })
+        groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke, width: 1 / (currentViewport.zoom || 1) })
+
+        renderNow()
+    }
+
     function destroy(): void {
         const wasReady = health === 'ready'
         destroyed = true
@@ -447,6 +541,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
         releaseAllDomOwnership()
         entries.clear()
+        for (const [, g] of selectionOutlines) { g.destroy() }
+        selectionOutlines.clear()
+        marqueeGraphics?.destroy()
+        marqueeGraphics = null
+        groupOverlayGraphics?.destroy()
+        groupOverlayGraphics = null
         for (const [, entry] of textureCache) {
             entry.texture.destroy(true)
         }
@@ -463,6 +563,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         sync,
         setViewport,
         setNodeLiveTransform,
+        setSelectedImageNodes,
+        setMarqueeRect,
+        setSelectionOverlayBounds,
         destroy,
     }
 }
