@@ -27,7 +27,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 - `connectors/renderer.ts` — SVG connector rendering
 - `utils/zoomScaling.ts` — zoom-compensated handle scaling
 
-The abandoned full-replacement PIXI attempt is quarantined under `services/web-ui/.legacy-canvas/pixi-full-replacement-attempt/` and is not part of the build.
+Do not follow the historical full-replacement PIXI notes in `documentation/memory/pixi-refactoring.md` as an implementation recipe. The active migration path is incremental: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.
 
 ### @xyflow/system reference
 

@@ -1,0 +1,114 @@
+import type {
+    CanvasNode,
+    CanvasViewport,
+    ImageCanvasNode,
+} from '@lixpi/constants'
+
+export type IndexedImage = {
+    minX: number
+    minY: number
+    maxX: number
+    maxY: number
+    nodeId: string
+}
+
+export type WorldPosition = {
+    x: number
+    y: number
+}
+
+// Walks a node's parent chain and returns its absolute world position.
+// Context-region children store `position` relative to their parent; PIXI
+// renders sprites in world coordinates, so it must accumulate parent offsets
+// the same way the DOM rendering does (via `getNodeWorldPosition`).
+export function computeWorldPosition(
+    node: CanvasNode,
+    nodesById: Map<string, CanvasNode>
+): WorldPosition {
+    let x = 0
+    let y = 0
+    const visited = new Set<string>()
+    let current: CanvasNode | undefined = node
+    while (current) {
+        if (visited.has(current.nodeId)) break
+        visited.add(current.nodeId)
+        x += current.position.x
+        y += current.position.y
+        const parentId = current.parentId
+        if (!parentId) break
+        current = nodesById.get(parentId)
+    }
+    return { x, y }
+}
+
+export function buildNodesById(nodes: ReadonlyArray<CanvasNode>): Map<string, CanvasNode> {
+    return new Map(nodes.map((node: CanvasNode) => [node.nodeId, node]))
+}
+
+export type LodTier = 'color' | 'thumb-256' | 'thumb-1024' | 'full'
+
+export type PixiRendererHealth = 'initializing' | 'ready' | 'failed' | 'destroyed'
+
+export const transparentPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+
+export function buildPixiImageSrc(imageUrl: string, apiBaseUrl: string, token: string | false): string {
+    if (!imageUrl) return transparentPixel
+    if (imageUrl.startsWith('data:')) return imageUrl
+    if (imageUrl.startsWith('/api/')) return `${apiBaseUrl}${imageUrl}${token ? `?token=${token}` : ''}`
+    return imageUrl
+}
+
+export function isStoredImageSrc(src: string): boolean {
+    const stripped = src.replace(/[?&]token=[^&]+/, '')
+    return stripped.startsWith('/api/') || (stripped.startsWith('http') && stripped.includes('/api/images/'))
+}
+
+export function resolveStoredImagePath(node: ImageCanvasNode, workspaceId: string): string {
+    const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
+    return isStoredImageSrc(strippedSrc)
+        ? `/api/images/${workspaceId}/${node.fileId}`
+        : strippedSrc
+}
+
+export function getPixiLodTier(zoom: number): LodTier {
+    if (zoom < 0.1) return 'color'
+    if (zoom < 0.4) return 'thumb-256'
+    if (zoom < 1) return 'thumb-1024'
+    return 'full'
+}
+
+export function addPixiLodSizeParam(url: string, tier: LodTier): string {
+    if (tier === 'full' || tier === 'color') return url
+    if (!url.includes('/api/images/')) return url
+
+    try {
+        const parsed = new URL(url, window.location.origin)
+        parsed.searchParams.set('size', tier === 'thumb-256' ? '256' : '1024')
+        return parsed.toString()
+    } catch {
+        return url
+    }
+}
+
+export function makeIndexedImage(node: ImageCanvasNode, worldPosition: WorldPosition): IndexedImage {
+    return {
+        minX: worldPosition.x,
+        minY: worldPosition.y,
+        maxX: worldPosition.x + node.dimensions.width,
+        maxY: worldPosition.y + node.dimensions.height,
+        nodeId: node.nodeId,
+    }
+}
+
+export function getVisibleWorldRect(
+    viewport: CanvasViewport,
+    paneSize: { width: number; height: number },
+    margin: number
+): Omit<IndexedImage, 'nodeId'> {
+    return {
+        minX: (-viewport.x / viewport.zoom) - margin,
+        minY: (-viewport.y / viewport.zoom) - margin,
+        maxX: ((paneSize.width - viewport.x) / viewport.zoom) + margin,
+        maxY: ((paneSize.height - viewport.y) / viewport.zoom) + margin,
+    }
+}
