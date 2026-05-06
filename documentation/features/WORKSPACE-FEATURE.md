@@ -2,6 +2,8 @@
 
 A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
+> **Renderer migration note (2026-05-05).** The active workspace canvas remains the proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack. Phase 2 now adds PIXI v8 only as a **media layer for image pixels** through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection, and SVG connectors stay in the existing DOM/SVG implementation. The abandoned full-replacement experiment is quarantined under `services/web-ui/.legacy-canvas/pixi-full-replacement-attempt/` and is not part of the build.
+
 ## Core Concepts
 
 **Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents, AI chat threads, and uploaded files.

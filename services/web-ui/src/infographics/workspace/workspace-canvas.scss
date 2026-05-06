@@ -237,6 +237,15 @@
     left: 0;
     transform-origin: 0 0;
     will-change: transform;
+    z-index: 1;
+}
+
+.workspace-pixi-media-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    contain: layout paint;
 }
 
 .workspace-selection-rect {
@@ -625,6 +634,21 @@
 
         .image-node-img {
             border-radius: 6px;
+        }
+    }
+
+    // The PIXI media layer owns image pixels. The DOM node still owns all
+    // interaction chrome: drag overlay, resize handles, generation border,
+    // spinner, provider badge, and context-region frame.
+    &.workspace-image-node--pixi-owned {
+        background: transparent;
+
+        &.workspace-image-node--context-region-child {
+            background: transparent;
+        }
+
+        .image-node-img {
+            opacity: 0;
         }
     }
 
