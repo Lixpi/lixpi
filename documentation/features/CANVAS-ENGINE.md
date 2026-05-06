@@ -1,10 +1,15 @@
 # Canvas Engine
 
-The workspace canvas is built directly on top of `@xyflow/system` — the framework-agnostic core package. It does **not** use `@xyflow/svelte` or `@xyflow/react`. All pan/zoom, drag, resize, and connection logic is wired manually to vanilla TypeScript classes that receive DOM elements and callbacks.
+The workspace canvas is a **DOM/SVG interaction renderer with a PIXI v8 media layer**. The proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack still owns all user interaction and rich UI: ProseMirror, AI chat threads, prompt inputs, bubble menus, resize/drag/selection, context regions, and SVG connectors. PIXI v8 (WebGPU with WebGL fallback) is introduced through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts` to own image pixel rendering.
+
+The canonical architecture document is `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. Its Phase 2 guidance is important: introduce PIXI for **media nodes first**, while document/chat-thread DOM and SVG connectors remain until profiling proves they need migration.
 
 ## Why This Matters
 
-When working on canvas code, you must understand `@xyflow/system` directly — not the Svelte or React wrapper APIs. The Svelte layer (`WorkspaceCanvas.svelte`) is a thin binding that passes DOM elements into the framework-agnostic engine.
+When working on canvas code, you need to know two libraries:
+
+1. **`@xyflow/system`** for pan/zoom and connection math (no Svelte/React wrappers). The Svelte layer (`WorkspaceCanvas.svelte`) is a thin binding.
+2. **PIXI v8** for the media layer (`Application`, `Container`, `Sprite`, `Texture`). The PIXI documentation is the source of truth: <https://pixijs.com/8.x/guides/components/application>.
 
 ## Documentation Navigation
 
@@ -12,9 +17,21 @@ When working on canvas code, you must understand `@xyflow/system` directly — n
 
 For the workspace feature itself — node types, stores, services, data flow, architecture diagrams — see `documentation/features/WORKSPACE-FEATURE.md`.
 
+### Canvas implementation code
+
+The active canvas implementation lives in `services/web-ui/src/infographics/`. Key files:
+
+- `workspace/WorkspaceCanvas.ts` — main canvas orchestrator, DOM nodes, ProseMirror integration, drag/resize/selection, and PIXI media-layer sync points
+- `workspace/pixiMediaLayer.ts` — PIXI v8 media layer for image pixels only
+- `workspace/WorkspaceConnectionManager.ts` — edge creation, proximity connect, candidate detection
+- `connectors/renderer.ts` — SVG connector rendering
+- `utils/zoomScaling.ts` — zoom-compensated handle scaling
+
+The abandoned full-replacement PIXI attempt is quarantined under `services/web-ui/.legacy-canvas/pixi-full-replacement-attempt/` and is not part of the build.
+
 ### @xyflow/system reference
 
-The vendored `@xyflow/system` package has its own documentation set stored in `documentation/vendor-documentation/xyflow/` (persistent, not inside the vendored submodule). Start from the top-level guide and follow its links to per-module docs:
+The vendored `@xyflow/system` package has its own documentation set stored in `documentation/vendor-documentation/xyflow/`. Start from the top-level guide and follow its links to per-module docs:
 
 ```
 documentation/vendor-documentation/xyflow/
@@ -30,11 +47,3 @@ documentation/vendor-documentation/xyflow/
     ├── types-and-constants.md   — Type hierarchies, coordinate spaces, error IDs
     └── utilities.md             — Coordinate conversion, spatial math, node adoption
 ```
-
-### Canvas implementation code
-
-The framework-agnostic canvas engine lives in `services/web-ui/src/infographics/`. Key files:
-
-- `WorkspaceCanvas.ts` — Main canvas class, wires `@xyflow/system` primitives
-- `WorkspaceConnectionManager.ts` — Edge creation, proximity connect, candidate detection
-- `ConnectorRenderer.ts` — Edge/connector SVG rendering

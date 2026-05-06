@@ -42,6 +42,7 @@ import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT }
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+import { createPixiMediaLayer, type PixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer.ts'
 
 import { select } from 'd3-selection'
 
@@ -133,6 +134,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let edgesLayerEl: HTMLDivElement | null = null
+    let pixiMediaLayer: PixiMediaLayer | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
@@ -175,6 +177,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Anchored image manager - tracks images overlapping their AI chat thread nodes
     const anchoredImageManager = createAnchoredImageManager()
+
+    pixiMediaLayer = createPixiMediaLayer({
+        paneEl,
+        viewportEl,
+        getWorkspaceId: () => workspaceId
+    })
+    if (currentCanvasState?.viewport) {
+        pixiMediaLayer.setViewport(currentCanvasState.viewport)
+    }
+    pixiMediaLayer.sync(currentCanvasState)
 
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
@@ -1960,6 +1972,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = createImageNode(imageNode)
         viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(imageNode.nodeId, nodeEl as HTMLDivElement)
+        pixiMediaLayer?.sync(currentCanvasState)
     }
 
     // Persist canvas state without triggering a full re-render.
@@ -2618,6 +2631,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (viewportEl) {
                 viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
             }
+            pixiMediaLayer?.setViewport(vp)
             if (zoomChanged) {
                 if (webUiSettings.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
@@ -2725,6 +2739,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncEdges(nextState.edges)
         connectionManager?.syncNodes(nextState.nodes)
         scheduleEdgesRender()
+        pixiMediaLayer?.sync(nextState)
     }
 
     function scheduleTransformSideEffects() {
@@ -4184,6 +4199,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // The chat editor now lives in the singleton canvas panel; context
         // regions grow only when children require more room.
+        pixiMediaLayer?.sync(currentCanvasState)
     }
 
     function getDocumentsKey(docs: Document[]): string {
@@ -4228,6 +4244,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const vp = currentCanvasState.viewport
             syncViewportInteractionState(vp)
             viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
+            pixiMediaLayer?.setViewport(vp)
             // Ensure handles match initial zoom
             updateResizeHandles(vp.zoom)
             updateRegionTitleBars(vp.zoom)
@@ -4310,6 +4327,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 connectionManager.syncNodes(currentCanvasState.nodes)
                 connectionManager.syncEdges(currentCanvasState.edges)
                 scheduleEdgesRender()
+                pixiMediaLayer?.sync(currentCanvasState)
             }
 
             if (needsRerender) {
@@ -4324,6 +4342,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const vp = newCanvasState.viewport
                 syncViewportInteractionState(vp)
                 viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
+                pixiMediaLayer?.setViewport(vp)
                 panZoom?.syncViewport(vp)
             }
         },
@@ -4352,6 +4371,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hiddenEmptyThreadNodeIds.clear()
             connectionManager?.destroy()
             connectionManager = null
+            pixiMediaLayer?.destroy()
+            pixiMediaLayer = null
             if (panZoom) {
                 panZoom.destroy()
             }
