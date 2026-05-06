@@ -259,14 +259,13 @@
 }
 
 .workspace-selection-group-overlay {
+    // Visual (border + fill) is drawn by the PIXI foreground layer so it
+    // renders above image sprites. This DOM element is kept solely as a
+    // drag hit target and has no visible styling.
     position: absolute;
     z-index: 10000;
     cursor: move;
-    border: 1px solid var(--selection-overlay-border-color);
-    background: var(--selection-overlay-background-color);
-    border-radius: 18px;
     box-sizing: border-box;
-    backdrop-filter: blur(1px);
 }
 
 .workspace-document-node {
@@ -639,12 +638,15 @@
 
     // The PIXI media layer owns image pixels. The DOM node still owns all
     // interaction chrome: drag overlay, resize handles, generation border,
-    // spinner, provider badge, and context-region frame.
+    // spinner, and provider badge. All visible frame/background styling is
+    // stripped so PIXI pixels are the only visible surface.
     &.workspace-image-node--pixi-owned {
         background: transparent;
+        box-shadow: none;
 
         &.workspace-image-node--context-region-child {
             background: transparent;
+            box-shadow: none;
         }
 
         .image-node-img {
