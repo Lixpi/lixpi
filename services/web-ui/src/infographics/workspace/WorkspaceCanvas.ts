@@ -43,6 +43,7 @@ import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 import { createPixiMediaLayer, type PixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 
 import { select } from 'd3-selection'
 
@@ -135,6 +136,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let connectionManager: WorkspaceConnectionManager | null = null
     let edgesLayerEl: HTMLDivElement | null = null
     let pixiMediaLayer: PixiMediaLayer | null = null
+    let viewportBridge: ViewportBridge | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
@@ -183,8 +185,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewportEl,
         getWorkspaceId: () => workspaceId
     })
+    viewportBridge = createViewportBridge({
+        viewportEl,
+        getPixiLayer: () => pixiMediaLayer,
+    })
     if (currentCanvasState?.viewport) {
-        pixiMediaLayer.setViewport(currentCanvasState.viewport)
+        viewportBridge.applyViewport(currentCanvasState.viewport)
     }
     pixiMediaLayer.sync(currentCanvasState)
 
@@ -2628,10 +2634,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Any other DOM mutation (custom properties, style writes, querySelectorAll)
             // invalidates the compositor layer cache and forces a full re-rasterization
             // of every image/text in the viewport, causing visible flickering.
-            if (viewportEl) {
-                viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
-            }
-            pixiMediaLayer?.setViewport(vp)
+            viewportBridge?.applyViewport(vp)
             if (zoomChanged) {
                 if (webUiSettings.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
@@ -4253,8 +4256,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (currentCanvasState?.viewport) {
             const vp = currentCanvasState.viewport
             syncViewportInteractionState(vp)
-            viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
-            pixiMediaLayer?.setViewport(vp)
+            viewportBridge?.applyViewport(vp)
             // Ensure handles match initial zoom
             updateResizeHandles(vp.zoom)
             updateRegionTitleBars(vp.zoom)
@@ -4315,10 +4317,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     return {
         render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
+            const workspaceChanged = Boolean(newWorkspaceId && newWorkspaceId !== workspaceId)
             if (newWorkspaceId) workspaceId = newWorkspaceId
+
+            // Stale drag/resize positions from a previous workspace would corrupt
+            // getNodeWorldPosition for the new workspace's nodes.
+            if (workspaceChanged) {
+                liveNodeOverrides.clear()
+                selectedNodeIds = new Set()
+                selectedEdgeId = null
+                draggingNodeId = null
+                resizingNodeId = null
+            }
+
             // Only do a full re-render if node structure or documents/threads changed
             // Position/dimension updates are handled directly in DOM during drag/resize
-            const needsRerender = shouldRerender(newCanvasState, newDocuments, newAiChatThreads)
+            const needsRerender = shouldRerender(newCanvasState, newDocuments, newAiChatThreads) || workspaceChanged
 
             // Check if viewport actually changed (not just nodes)
             const oldViewport = currentCanvasState?.viewport
@@ -4333,27 +4347,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentAiChatThreads = newAiChatThreads
             syncActiveAiChatPanelFromState()
 
-            if (currentCanvasState && connectionManager) {
-                connectionManager.syncNodes(currentCanvasState.nodes)
-                connectionManager.syncEdges(currentCanvasState.edges)
-                scheduleEdgesRender()
-                pixiMediaLayer?.sync(currentCanvasState)
-            }
-
+            // Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
             if (needsRerender) {
                 renderNodes()
                 lastDocumentsKey = getDocumentsKey(newDocuments)
                 lastThreadsKey = getAiChatThreadsKey(newAiChatThreads)
             }
 
-            // Only sync viewport if it actually changed from external source
-            // Don't reset viewport just because node dimensions were corrected
+            // Apply viewport before PIXI sync so the world transform and culling
+            // rect are current before sprites are positioned or made renderable.
             if (viewportChanged && newCanvasState?.viewport) {
                 const vp = newCanvasState.viewport
                 syncViewportInteractionState(vp)
-                viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
-                pixiMediaLayer?.setViewport(vp)
+                viewportBridge?.applyViewport(vp)
                 panZoom?.syncViewport(vp)
+            }
+
+            if (currentCanvasState && connectionManager) {
+                connectionManager.syncNodes(currentCanvasState.nodes)
+                connectionManager.syncEdges(currentCanvasState.edges)
+                scheduleEdgesRender()
+                pixiMediaLayer?.sync(currentCanvasState)
             }
         },
         destroy() {
@@ -4381,6 +4395,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hiddenEmptyThreadNodeIds.clear()
             connectionManager?.destroy()
             connectionManager = null
+            viewportBridge?.destroy()
+            viewportBridge = null
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
             if (panZoom) {

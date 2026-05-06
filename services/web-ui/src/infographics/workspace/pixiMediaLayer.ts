@@ -181,6 +181,17 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         syncDomOwnership(canvasState)
         if (!canvasState || health !== 'ready' || destroyed) return
 
+        // On workspace switch the external setViewport call arrives after sync.
+        // Apply the state's viewport directly so culling and world transform are
+        // correct before any sprites are positioned or made renderable.
+        const vp = canvasState.viewport
+        if (vp.x !== currentViewport.x || vp.y !== currentViewport.y || vp.zoom !== currentViewport.zoom) {
+            currentViewport = vp
+            currentTier = getPixiLodTier(vp.zoom)
+            world.position.set(vp.x, vp.y)
+            world.scale.set(vp.zoom, vp.zoom)
+        }
+
         const imageNodes = canvasState.nodes.filter((node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image')
         const activeIds = new Set<string>(imageNodes.map((node: ImageCanvasNode) => node.nodeId))
 
