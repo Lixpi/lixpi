@@ -100,6 +100,29 @@ export function makeIndexedImage(node: ImageCanvasNode, worldPosition: WorldPosi
     }
 }
 
+// =============================================================================
+// PIXI edge renderer types
+// =============================================================================
+
+export type PixiEdgeArrow = {
+    x: number
+    y: number
+    // Direction the arrowhead points (into the node it touches)
+    // left anchor = Math.PI, right = 0, top = -Math.PI/2, bottom = Math.PI/2
+    angle: number
+    size: number  // world pixels
+}
+
+export type PixiEdgeRenderDatum = {
+    id: string
+    svgPath: string     // SVG path string in world coordinates
+    strokeColor: string
+    strokeWidth: number
+    isDashed: boolean
+    arrowEnd: PixiEdgeArrow | null
+    arrowStart: PixiEdgeArrow | null
+}
+
 export function getVisibleWorldRect(
     viewport: CanvasViewport,
     paneSize: { width: number; height: number },

@@ -2849,6 +2849,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             },
             isContextRegionNode: isContextRegionCanvasNode,
+            onPixiEdgesReady: (edges) => {
+                pixiMediaLayer?.setPixiEdges(edges)
+            },
         })
 
         if (currentCanvasState) {
@@ -3396,13 +3399,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
         const isImageNode = node?.type === 'image'
 
-        // For images, get aspect ratio from the actual img element (more reliable than stored data)
+        // PIXI owns image pixels; the hidden DOM <img> can finish loading after
+        // workspace switches, so do not derive resize behavior from DOM natural
+        // dimensions. Use the persisted canvas-node aspect ratio instead.
         let aspectRatio: number | null = null
         if (isImageNode) {
-            const imgEl = nodeEl.querySelector('img') as HTMLImageElement
-            if (imgEl && imgEl.naturalWidth && imgEl.naturalHeight) {
-                aspectRatio = imgEl.naturalWidth / imgEl.naturalHeight
-            }
+            aspectRatio = node.aspectRatio || null
         }
 
         resizingNodeId = nodeId
@@ -3858,33 +3860,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // Once image loads, fix container dimensions to match actual aspect ratio
+        // PIXI owns image pixels. The hidden DOM <img> exists only as a legacy
+        // DOM child for interaction chrome compatibility; it must never mutate
+        // canvas state after async load, especially across workspace switches.
         imgEl.onload = () => {
-            const naturalAspect = imgEl.naturalWidth / imgEl.naturalHeight
-            const storedAspect = node.dimensions.width / node.dimensions.height
-
-            // If aspect ratios don't match, fix and persist
-            if (Math.abs(naturalAspect - storedAspect) > 0.01) {
-                const correctedHeight = node.dimensions.width / naturalAspect
-                nodeEl.style.height = `${correctedHeight}px`
-
-                // Persist the corrected dimensions
-                if (currentCanvasState && onCanvasStateChange) {
-                    const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
-                        if (n.nodeId === node.nodeId && n.type === 'image') {
-                            return {
-                                ...n,
-                                dimensions: { width: node.dimensions.width, height: correctedHeight },
-                                aspectRatio: naturalAspect
-                            }
-                        }
-                        return n
-                    })
-                    const newState: CanvasState = { ...currentCanvasState, nodes: expandRegionsToFitChildren(updatedNodes) }
-                    currentCanvasState = newState
-                    onCanvasStateChange(newState)
-                }
-            }
+            return
         }
 
         nodeEl.appendChild(imgEl)
@@ -4399,27 +4379,34 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentAiChatThreads = newAiChatThreads
             syncActiveAiChatPanelFromState()
 
-            // Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
+            // 1. Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
             if (needsRerender) {
                 renderNodes()
                 lastDocumentsKey = getDocumentsKey(newDocuments)
                 lastThreadsKey = getAiChatThreadsKey(newAiChatThreads)
             }
 
-            // Apply viewport before PIXI sync so the world transform and culling
-            // rect are current before sprites are positioned or made renderable.
-            if (viewportChanged && newCanvasState?.viewport) {
-                const vp = newCanvasState.viewport
-                syncViewportInteractionState(vp)
-                viewportBridge?.applyViewport(vp)
-                panZoom?.syncViewport(vp)
-            }
-
+            // 2. Sync PIXI state BEFORE applying the viewport. This ensures
+            //    `lastState` inside the PIXI layer is already the new workspace's
+            //    canvas state when `setViewport` fires. Without this ordering, a
+            //    zoom-tier change during workspace switch would call
+            //    `upsertAllImages(OLD_STATE)`, spawning async texture fetches for
+            //    the old workspace's images that arrive and overwrite new sprites.
             if (currentCanvasState && connectionManager) {
                 connectionManager.syncNodes(currentCanvasState.nodes)
                 connectionManager.syncEdges(currentCanvasState.edges)
                 scheduleEdgesRender()
                 pixiMediaLayer?.sync(currentCanvasState)
+            }
+
+            // 3. Apply viewport after PIXI sync. `setViewport` may trigger
+            //    `upsertAllImages(lastState)` on a tier change, but `lastState`
+            //    is now the new workspace state, so no old sprites are created.
+            if (viewportChanged && newCanvasState?.viewport) {
+                const vp = newCanvasState.viewport
+                syncViewportInteractionState(vp)
+                viewportBridge?.applyViewport(vp)
+                panZoom?.syncViewport(vp)
             }
         },
         destroy() {
