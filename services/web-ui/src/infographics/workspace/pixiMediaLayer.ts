@@ -51,6 +51,11 @@ type PixiImageEntry = {
     textureKey: string | null
     worldRect: IndexedImage
     isVisible: boolean
+    // Last-known geometry used to draw the placeholder colorRect. Compared
+    // before each drawColorRect call so we skip the GPU clear+rebuild when
+    // the node hasn't moved or resized.
+    colorRectW: number
+    colorRectH: number
 }
 
 type TextureEntry = {
@@ -334,6 +339,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (!activeIds.has(nodeId)) {
                 setDomOwnership(nodeId, false)
                 releaseTexture(entry.textureKey)
+                // Remove from spatial index before destroying the entry.
+                spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
                 world.removeChild(entry.sprite)
                 world.removeChild(entry.colorRect)
                 entry.sprite.destroy()
@@ -350,7 +357,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function upsertAllEntries(canvasState: CanvasState): void {
-        spatialIndex.clear()
+        // Do NOT clear the spatial index here. upsertEntry updates each
+        // entry's rect incrementally — remove old rect, insert new — so
+        // the index stays consistent without the O(N log N) full rebuild
+        // that was happening on every sync.
         const nodesById = buildNodesById(canvasState.nodes)
         const imageNodes = canvasState.nodes.filter(
             (node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image'
@@ -382,20 +392,23 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const entry = entries.get(nodeId)
         if (!entry) return
 
-        entry.sprite.position.set(worldPosition.x, worldPosition.y)
-        entry.sprite.width = dimensions.width
-        entry.sprite.height = dimensions.height
-        entry.colorRect.position.set(worldPosition.x, worldPosition.y)
-        drawColorRect(entry.colorRect, dimensions.width, dimensions.height)
+        const x = worldPosition.x
+        const y = worldPosition.y
+        const w = dimensions.width
+        const h = dimensions.height
+
+        entry.sprite.position.set(x, y)
+        entry.sprite.width = w
+        entry.sprite.height = h
+        entry.colorRect.position.set(x, y)
+        if (w !== entry.colorRectW || h !== entry.colorRectH) {
+            drawColorRect(entry.colorRect, w, h)
+            entry.colorRectW = w
+            entry.colorRectH = h
+        }
 
         spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
-        const newRect: IndexedImage = {
-            minX: worldPosition.x,
-            minY: worldPosition.y,
-            maxX: worldPosition.x + dimensions.width,
-            maxY: worldPosition.y + dimensions.height,
-            nodeId,
-        }
+        const newRect: IndexedImage = { minX: x, minY: y, maxX: x + w, maxY: y + h, nodeId }
         entry.worldRect = newRect
         spatialIndex.insert(newRect)
 
@@ -441,8 +454,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function upsertEntry(node: ImageCanvasNode, worldPosition: WorldPosition): void {
-        let entry = entries.get(node.nodeId)
         const newSourceKey = makeSourceKey(node)
+        let entry = entries.get(node.nodeId)
+
         if (!entry) {
             const sprite = new Sprite(Texture.EMPTY)
             sprite.label = `pixi-image-${node.nodeId}`
@@ -453,6 +467,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             colorRect.eventMode = 'none'
             world.addChild(sprite)
             world.addChild(colorRect)
+            const rect = makeIndexedImage(node, worldPosition)
             entry = {
                 sprite,
                 colorRect,
@@ -462,13 +477,22 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 requestedTier: null,
                 requestId: 0,
                 textureKey: null,
-                worldRect: makeIndexedImage(node, worldPosition),
+                worldRect: rect,
                 isVisible: false,
+                colorRectW: -1,
+                colorRectH: -1,
             }
             entries.set(node.nodeId, entry)
-        } else if (entry.sourceKey !== newSourceKey) {
-            // Source image changed (e.g. replaced via "replace image"). Drop
-            // any loaded state so the next visibility pass refetches.
+            spatialIndex.insert(rect)
+            // DOM ownership is new — always set.
+            setDomOwnership(node.nodeId, true)
+            return
+        }
+
+        // Existing entry — only update what changed.
+
+        if (entry.sourceKey !== newSourceKey) {
+            // Source image replaced. Drop loaded state; next visibility pass refetches.
             if (entry.textureKey) releaseTexture(entry.textureKey)
             entry.textureKey = null
             entry.loadedTier = null
@@ -479,18 +503,41 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
 
         entry.nodeRef = node
-        entry.sprite.position.set(worldPosition.x, worldPosition.y)
-        entry.sprite.width = node.dimensions.width
-        entry.sprite.height = node.dimensions.height
-        entry.colorRect.position.set(worldPosition.x, worldPosition.y)
-        drawColorRect(entry.colorRect, node.dimensions.width, node.dimensions.height)
-        entry.worldRect = makeIndexedImage(node, worldPosition)
-        spatialIndex.insert(entry.worldRect)
-        setDomOwnership(node.nodeId, true)
+
+        const x = worldPosition.x
+        const y = worldPosition.y
+        const w = node.dimensions.width
+        const h = node.dimensions.height
+
+        // Sprite transform — always cheap (matrix update only).
+        entry.sprite.position.set(x, y)
+        entry.sprite.width = w
+        entry.sprite.height = h
+
+        // Color-rect geometry — only rebuild GPU path when size actually changed.
+        // Position is a transform update; width/height require path re-upload.
+        entry.colorRect.position.set(x, y)
+        if (w !== entry.colorRectW || h !== entry.colorRectH) {
+            drawColorRect(entry.colorRect, w, h)
+            entry.colorRectW = w
+            entry.colorRectH = h
+        }
+
+        // Spatial index — incremental: remove old rect only if position/size changed.
+        const old = entry.worldRect
+        if (old.minX !== x || old.minY !== y || old.maxX !== x + w || old.maxY !== y + h) {
+            spatialIndex.remove(old, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
+            const newRect = makeIndexedImage(node, worldPosition)
+            entry.worldRect = newRect
+            spatialIndex.insert(newRect)
+        }
+
+        // DOM ownership — skip classList.toggle when already in the right state.
+        if (!pixiOwnedNodeIds.has(node.nodeId)) {
+            setDomOwnership(node.nodeId, true)
+        }
         // IMPORTANT: do NOT trigger texture loading here. Texture loading is
-        // driven by visibility (see `updateVisibleImages` / `ensureTextureForEntry`)
-        // so that a workspace with hundreds of images doesn't spawn hundreds of
-        // concurrent fetches on initial open or on viewport changes.
+        // driven by visibility (updateVisibleImages / ensureTextureForEntry).
     }
 
     function drawColorRect(rect: Graphics, width: number, height: number): void {
@@ -788,8 +835,19 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 candidates.push({ entry, d2: dx * dx + dy * dy })
             }
             candidates.sort((a, b) => a.d2 - b.d2)
-            for (const { entry } of candidates) {
-                ensureTextureForEntry(entry, 'thumb-256')
+
+            // Process at most PREFETCH_BATCH_SIZE images per idle tick so one
+            // callback can't queue thousands of concurrent decode requests.
+            // Remaining candidates will be picked up on the next schedulePrefetch()
+            // call (triggered by the next viewport change or sync).
+            const PREFETCH_BATCH_SIZE = 20
+            for (let i = 0; i < Math.min(candidates.length, PREFETCH_BATCH_SIZE); i++) {
+                ensureTextureForEntry(candidates[i].entry, 'thumb-256')
+            }
+            // If more remain, schedule another idle pass.
+            if (candidates.length > PREFETCH_BATCH_SIZE) {
+                prefetchScheduled = false
+                schedulePrefetch()
             }
         }, 1500)
     }
