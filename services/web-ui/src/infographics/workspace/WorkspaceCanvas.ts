@@ -1460,7 +1460,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         requestAnimationFrame(() => {
             const threadHeight = editorContainer.offsetHeight || Math.max(0, promptEl.offsetTop - 16)
-            rail.style.height = `${panelEl.offsetHeight}px`
             rail.style.setProperty('--rail-thread-height', `${threadHeight}px`)
         })
     }
@@ -2601,6 +2600,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         paneRect = paneEl.getBoundingClientRect()
         if (activeAiChatPanelWidth !== null) {
             applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
+        }
+        if (activeAiChatPanelEl) {
+            const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel__rail')
+            const editorContainer = activeAiChatPanelEl.querySelector<HTMLElement>('.ai-chat-thread-node-editor')
+            if (panelRail && editorContainer) {
+                panelRail.style.setProperty('--rail-thread-height', `${editorContainer.offsetHeight}px`)
+            }
         }
         updateVisibleNodes()
     })
