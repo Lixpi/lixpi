@@ -2,6 +2,12 @@
 
 This module renders the main workspace view—a zoomable, pannable canvas where documents, images, and AI chat threads appear as draggable, resizable cards.
 
+> **Where to look first.**
+>
+> - For the rendering architecture (DOM/SVG interaction layer + PIXI v8 media layer), the LoD-tier loader, the texture cache, the 6-worker decode pool, and the list of remaining performance issues, read [`documentation/features/CANVAS-ENGINE.md`](../../../../../documentation/features/CANVAS-ENGINE.md). That document is the source of truth for any rendering or perf work.
+> - For workspace data flow (stores, services, NATS subjects, AI chat context extraction, image generation), read [`documentation/features/WORKSPACE-FEATURE.md`](../../../../../documentation/features/WORKSPACE-FEATURE.md).
+> - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
+
 ## What It Does
 
 When you open a workspace, you see a canvas. On that canvas are nodes (documents, images, or AI chat threads). You can:
@@ -177,13 +183,16 @@ Image nodes have a simpler structure:
 
 ```
 ┌─────────────────────────────────────────┐
-│                                         │
-│  .image-node-content                    │
-│  (contains img element)                 │
-│                                         │
+│  img.image-node-img                     │
+│   ─ src is empty when PIXI is healthy   │
+│   ─ opacity:0 via .pixi-owned class     │
+│   ─ src is set as a fallback if         │
+│     PIXI fails to initialize            │
 │  .image-drag-overlay                    │
-│  (covers entire image for dragging)     │
-│                                         │
+│   (covers entire image for dragging)    │
+│  .image-model-badge (when generated)    │
+│  .image-generating-spinner (during gen) │
+│  .image-generating-border (during gen)  │
 └─────────────────────────────────────────┘
   ↖ resize     resize ↗
   handle       handle
@@ -191,6 +200,8 @@ Image nodes have a simpler structure:
   ↙ resize     resize ↘
   handle       handle
 ```
+
+The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is kept as the legacy fallback path and as the surface that streams partial pixels during AI image generation (the partial-streaming code path sets `imgEl.src` directly via `querySelector`; once the image is committed to canvas state, PIXI takes over and the DOM `<img>` is hidden via the `workspace-image-node--pixi-owned` class).
 
 Image resize always preserves aspect ratio using the `aspectRatio` value stored when the image was uploaded.
 
@@ -384,9 +395,16 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 
 | File | Purpose |
 |------|---------|
-| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration |
-| `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, edge rendering, selection/deletion |
-| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors |
+| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration, PIXI media layer wiring, fallback path on PIXI failure |
+| `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, SVG edge rendering for hit-testing, PIXI edge data feed, selection/deletion |
+| `pixiMediaLayer.ts` | PIXI v8 media layer for image pixels: sprite registry, texture cache, LoD-tier loader, RBush-based visibility scanner, idle prefetch scheduler, mipmap config |
+| `pixiMediaLayerLogic.ts` | Pure helpers used by the PIXI layer: tier ranking (`tierRank`), world-position math, source URL building, LoD `?size=` injection, world-rect computation |
+| `pixiImageDecoder.ts` | Six-worker decode pool. Round-robin dispatch with per-worker request tracking so a single worker crash does not nuke all in-flight requests |
+| `pixiImageDecodeWorker.ts` | Web Worker body: `fetch` → `createImageBitmap` → transfer the bitmap back to the main thread |
+| `rendering/pixiEdgeRenderer.ts` | Diffed PIXI edge renderer: reuses `Graphics` objects across renders; only repaints when an edge's path/colour/arrow fingerprint changes |
+| `rendering/viewportBridge.ts` | Single call site that applies a viewport change to both the DOM CSS transform and the PIXI world (keeps DOM and PIXI perfectly aligned) |
+| `rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio). Image nodes are handled directly by `pixiMediaLayer`; the registry exists so video/audio handlers can plug in without touching the core |
+| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, and the `workspace-image-node--pixi-owned` opacity rule |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
 | `imagePositioning.ts` | Computes image placement positions (next-to-thread and overlapping-thread modes) |
@@ -409,8 +427,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.image-drag-overlay` | Full-area overlay for dragging images |
 | `.document-node-editor` | ProseMirror container for documents |
 | `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
-| `.image-node-content` | Image container |
-| `.image-node-img` | The actual img element |
+| `.image-node-img` | The DOM `<img>` element (kept as PIXI-failure fallback and as the surface for partial-streaming during AI image generation; `src` is empty while PIXI is healthy) |
+| `.workspace-image-node--pixi-owned` | Class added by `pixiMediaLayer` while PIXI is rendering this image. Sets `opacity: 0` on `.image-node-img` so the PIXI sprite is the only visible surface |
 | `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
 | `.workspace-image-node--context-region-child` | Image node contained by a context region, with the region-only off-white frame |
 | `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
