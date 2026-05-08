@@ -138,6 +138,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let pixiMediaLayer: PixiMediaLayer | null = null
     let viewportBridge: ViewportBridge | null = null
 
+    // Health of the PIXI renderer. Image nodes' DOM `<img>` elements stay
+    // empty (no `src`) while PIXI is healthy so the browser never makes a
+    // second, redundant network round-trip for the same pixels PIXI is
+    // already drawing. If PIXI fails to initialize (e.g. WebGL/WebGPU
+    // unavailable), `pixiHealth` flips to `'failed'` and we backfill src
+    // attributes so the DOM fallback takes over.
+    let pixiHealth: 'initializing' | 'ready' | 'failed' | 'destroyed' = 'initializing'
+    // Per-image-node DOM <img> element registry, keyed by node id. Lets us
+    // assign src in O(1) on PIXI failure without a viewport-wide
+    // querySelector.
+    const imageElByNodeId: Map<string, HTMLImageElement> = new Map()
+    // The resolved (token-less) API path for each image node, captured at
+    // node-creation time. Used to backfill `<img>.src` when PIXI fails.
+    const imageResolvedSrcByNodeId: Map<string, string> = new Map()
+
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
     let transformSideEffectsRaf: number | null = null
@@ -192,6 +207,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewportEl,
         getWorkspaceId: () => workspaceId,
         selectionColors: pixiSelectionColors,
+        onHealthChange: (next) => {
+            pixiHealth = next
+            if (next === 'failed') {
+                // PIXI gave up — every image node falls back to the DOM
+                // <img> renderer. Set `src` on each tracked image element
+                // so the browser starts the (previously skipped) fetch.
+                void backfillDomImageSrcs()
+            }
+        },
     })
     viewportBridge = createViewportBridge({
         viewportEl,
@@ -1984,6 +2008,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (imageUrl.startsWith('http') && imageUrl.includes('/api/images/')) return `${imageUrl}${token ? `?token=${token}` : ''}`
         if (imageUrl.startsWith('http')) return imageUrl
         return `data:image/png;base64,${imageUrl}`
+    }
+
+    // Last-resort fallback when PIXI fails to initialize. Iterates every
+    // tracked image node and sets `<img>.src` so the (CSS-hidden) DOM
+    // `<img>` tag becomes the renderer for that node. This is a one-time
+    // cost per failed init — the canvas keeps working, just on the slower
+    // DOM path used before PIXI was introduced.
+    async function backfillDomImageSrcs(): Promise<void> {
+        if (imageResolvedSrcByNodeId.size === 0) return
+        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+        let token: string | false = false
+        try {
+            token = await AuthService.getTokenSilently()
+        } catch {
+            // proceed without token; public images still work
+        }
+        for (const [nodeId, resolvedSrc] of imageResolvedSrcByNodeId) {
+            const imgEl = imageElByNodeId.get(nodeId)
+            if (!imgEl || imgEl.src) continue
+            imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
+        }
     }
 
     function showImageErrorPlaceholder(imgEl: HTMLImageElement, nodeEl: HTMLElement): void {
@@ -3829,15 +3874,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? `/api/images/${workspaceId}/${node.fileId}`
             : strippedSrc
 
+        // Track this <img> + its resolved API path. Used by the PIXI
+        // health-failure fallback to backfill `src` only on stored images,
+        // and the partial-streaming code path to update src in place.
+        imageElByNodeId.set(node.nodeId, imgEl)
+        if (isStoredImage) imageResolvedSrcByNodeId.set(node.nodeId, resolvedSrc)
+
         let retried = false
-        ;(async () => {
+        const assignSrc = async () => {
             try {
                 const token = await AuthService.getTokenSilently()
                 imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
             } catch {
                 showImageErrorPlaceholder(imgEl, nodeEl)
             }
-        })()
+        }
+
+        // CRITICAL: stored images are rendered by PIXI. Setting `<img>.src`
+        // here would double-fetch every image — once for the (hidden,
+        // opacity:0) DOM `<img>` and once for the PIXI worker. With hundreds
+        // of images that doubles network round-trips and makes the page
+        // crawl through the browser's per-origin HTTP queue.
+        //
+        // For stored images we leave the `<img>` empty until/unless PIXI
+        // signals failure (see `backfillDomImageSrcs`). Data: URLs (in-
+        // progress generations) and external URLs continue to load
+        // immediately, since PIXI only handles stored canvas images.
+        if (!isStoredImage) {
+            void assignSrc()
+        } else if (pixiHealth === 'failed') {
+            void assignSrc()
+        }
 
         imgEl.onerror = async () => {
             if (!retried) {
@@ -4125,6 +4192,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         loadedNodeIds.clear()
         hiddenEmptyThreadNodeIds.clear()
         anchoredImageManager.clear()
+        imageElByNodeId.clear()
+        imageResolvedSrcByNodeId.clear()
 
         // Clean up per-region gradients (will be recreated for each region node)
         for (const [, g] of regionGradients) g.destroy()

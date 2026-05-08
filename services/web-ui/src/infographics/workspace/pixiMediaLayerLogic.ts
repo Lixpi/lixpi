@@ -47,6 +47,20 @@ export function buildNodesById(nodes: ReadonlyArray<CanvasNode>): Map<string, Ca
 
 export type LodTier = 'color' | 'thumb-256' | 'thumb-1024' | 'full'
 
+// Higher rank = higher pixel quality. The PIXI media layer uses this to
+// avoid the classic LoD-pyramid trap of refetching a smaller texture when
+// the user zooms out: a higher-resolution texture already on the GPU can
+// be downsampled for free by mipmapping, so zooming out should never
+// trigger a network round-trip.
+export function tierRank(tier: LodTier): number {
+    switch (tier) {
+        case 'color': return 0
+        case 'thumb-256': return 1
+        case 'thumb-1024': return 2
+        case 'full': return 3
+    }
+}
+
 export type PixiRendererHealth = 'initializing' | 'ready' | 'failed' | 'destroyed'
 
 export const transparentPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
