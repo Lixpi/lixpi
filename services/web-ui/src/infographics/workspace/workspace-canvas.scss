@@ -7,8 +7,8 @@
     --workspace-ai-chat-sidebar-padding: 15px;
     --workspace-ai-chat-sidebar-zoom-gap: 15px;
     --workspace-canvas-padding-top: 32px;
-    --workspace-canvas-padding-inline: 16px;
-    --workspace-canvas-padding-bottom: 16px;
+    --workspace-canvas-padding-inline: 0px;
+    --workspace-canvas-padding-bottom: 0px;
 }
 
 .workspace-canvas {
@@ -480,8 +480,7 @@
 
 .workspace-ai-chat-floating-panel {
     position: absolute;
-    // top: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-top));
-    top: calc(-1 * var(--workspace-canvas-padding-top));
+    top: 0px;
     right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline));
     bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
     width: var(--workspace-ai-chat-sidebar-width);
@@ -586,6 +585,7 @@
 .workspace-thread-rail.workspace-ai-chat-floating-panel__rail {
     cursor: ew-resize;
     touch-action: none;
+    height: 100%;
 }
 
 .workspace-ai-chat-floating-panel.is-resizing {
