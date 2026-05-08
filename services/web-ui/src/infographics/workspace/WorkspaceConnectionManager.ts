@@ -19,11 +19,15 @@ import {
 
 import {
 	createConnectorRenderer,
+	computePath,
+	applyOffset,
 	type ConnectorRenderer,
 	type EdgeConfig,
 	type NodeConfig,
 	type PathType,
+	type AnchorPosition,
 } from '$src/infographics/connectors/index.ts'
+import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { applyStyle } from '$src/utils/domTemplates.ts'
@@ -64,6 +68,7 @@ type ConnectionManagerConfig = {
 	onSelectedEdgeChange?: (edgeId: string | null) => void
 	isContextRegionNode?: (node: CanvasNode) => boolean
 	railOffset?: number
+	onPixiEdgesReady?: (edges: PixiEdgeRenderDatum[]) => void
 }
 
 type RenderBounds = {
@@ -82,6 +87,129 @@ function toRendererPoint(point: { x: number; y: number }, transform: Transform) 
 	return {
 		x: (point.x - transform[0]) / transform[2],
 		y: (point.y - transform[1]) / transform[2]
+	}
+}
+
+// =============================================================================
+// PIXI edge data helpers — compute world-coordinate edge paths for the GPU renderer
+// =============================================================================
+
+function computeWorldAnchorPoint(
+	position: AnchorPosition,
+	t: number,
+	node: NodeConfig
+): { x: number; y: number } {
+	const { x, y, width, height } = node
+	switch (position) {
+		case 'left':   return { x, y: y + height * t }
+		case 'right':  return { x: x + width, y: y + height * t }
+		case 'top':    return { x: x + width * t, y }
+		case 'bottom': return { x: x + width * t, y: y + height }
+		default:       return { x: x + width / 2, y: y + height / 2 }
+	}
+}
+
+function anchorArrowAngle(position: AnchorPosition): number {
+	// Angle = direction the arrowhead tip points (into the node).
+	// left anchor  → edge arrives from the left going rightward  → tip points RIGHT (0)
+	// right anchor → edge arrives from the right going leftward  → tip points LEFT  (π)
+	// top anchor   → edge arrives from above going downward      → tip points DOWN  (π/2)
+	// bottom anchor→ edge arrives from below going upward        → tip points UP    (-π/2)
+	switch (position) {
+		case 'left':   return 0
+		case 'right':  return Math.PI
+		case 'top':    return Math.PI / 2
+		case 'bottom': return -Math.PI / 2
+		default:       return 0
+	}
+}
+
+function computePixiEdgeDatum(
+	edgeConfig: EdgeConfig,
+	worldNodeMap: Map<string, NodeConfig>,
+	isSelected: boolean,
+	defaultColor: string,
+	focusColor: string,
+	markerSize: number,
+	markerOffset: { source: number; target: number }
+): PixiEdgeRenderDatum | null {
+	const {
+		id,
+		source,
+		target,
+		pathType = 'bezier',
+		marker = 'none',
+		markerStart,
+		strokeWidth = 1.2,
+		curvature = 0.25,
+		borderRadius = 24,
+		laneIndex = 0,
+		laneCount = 1,
+		bendPoints,
+	} = edgeConfig
+
+	const sourceNode = worldNodeMap.get(source.nodeId)
+	const targetNode = worldNodeMap.get(target.nodeId)
+	if (!sourceNode || !targetNode) return null
+
+	const srcT = source.t ?? 0.5
+	const tgtT = target.t ?? 0.5
+
+	const rawSrcAnchor = computeWorldAnchorPoint(source.position, srcT, sourceNode)
+	const rawTgtAnchor = computeWorldAnchorPoint(target.position, tgtT, targetNode)
+
+	let srcCoords = applyOffset(rawSrcAnchor.x, rawSrcAnchor.y, source.offset)
+	let tgtCoords = applyOffset(rawTgtAnchor.x, rawTgtAnchor.y, target.offset)
+
+	const srcOff = markerOffset.source ?? 5
+	const tgtOff = markerOffset.target ?? 5
+
+	switch (source.position) {
+		case 'right':  srcCoords = { x: srcCoords.x + srcOff, y: srcCoords.y }; break
+		case 'left':   srcCoords = { x: srcCoords.x - srcOff, y: srcCoords.y }; break
+		case 'top':    srcCoords = { x: srcCoords.x, y: srcCoords.y - srcOff }; break
+		case 'bottom': srcCoords = { x: srcCoords.x, y: srcCoords.y + srcOff }; break
+	}
+	switch (target.position) {
+		case 'right':  tgtCoords = { x: tgtCoords.x + tgtOff, y: tgtCoords.y }; break
+		case 'left':   tgtCoords = { x: tgtCoords.x - tgtOff, y: tgtCoords.y }; break
+		case 'top':    tgtCoords = { x: tgtCoords.x, y: tgtCoords.y - tgtOff }; break
+		case 'bottom': tgtCoords = { x: tgtCoords.x, y: tgtCoords.y + tgtOff }; break
+	}
+
+	const { path: svgPath } = computePath(
+		pathType,
+		srcCoords.x, srcCoords.y,
+		tgtCoords.x, tgtCoords.y,
+		source.position, target.position,
+		curvature, borderRadius, bendPoints,
+		worldNodeMap, source.nodeId, target.nodeId,
+		laneIndex, laneCount
+	)
+
+	const strokeColor = isSelected ? focusColor : defaultColor
+	// Size matches SVG markerWidth so the PIXI polygon scales identically.
+	const arrowSize = markerSize
+
+	// Place arrows at the path endpoints (tgtCoords / srcCoords), not at the
+	// raw node-edge anchors. The marker-offset gap is already built into those
+	// coordinates, matching the SVG marker's refX/refY positioning.
+	const arrowEnd: PixiEdgeArrow | null = marker !== 'none'
+		? { x: tgtCoords.x, y: tgtCoords.y, angle: anchorArrowAngle(target.position), size: arrowSize }
+		: null
+
+	const arrowStart: PixiEdgeArrow | null = markerStart && markerStart !== 'none'
+		? { x: srcCoords.x, y: srcCoords.y, angle: anchorArrowAngle(source.position), size: arrowSize }
+		: null
+
+	return {
+		id,
+		svgPath,
+		strokeColor,
+		strokeWidth,
+		isDashed: edgeConfig.lineStyle === 'dashed',
+		arrowEnd,
+		arrowStart,
 	}
 }
 
@@ -1019,6 +1147,7 @@ export class WorkspaceConnectionManager {
 			this.config.edgesLayerEl.replaceChildren()
 			this.connector = null
 			this.lastRenderBoundsKey = null
+			this.config.onPixiEdgesReady?.([])
 			return
 		}
 
@@ -1030,6 +1159,9 @@ export class WorkspaceConnectionManager {
 
 		const offsetX = bounds.left
 		const offsetY = bounds.top
+
+		// World-coordinate node map for PIXI edge rendering (same data without bounds offset)
+		const worldNodeMap = new Map<string, NodeConfig>()
 
 		// Add nodes for anchor computation (hidden by CSS)
 		const railOff = this.config.railOffset ?? 0
@@ -1049,6 +1181,17 @@ export class WorkspaceConnectionManager {
 				className: 'workspace-edge-node'
 			}
 			this.connector.addNode(nodeConfig)
+
+			// World-coordinate version (no bounds offset) for PIXI GPU rendering
+			worldNodeMap.set(n.nodeId, {
+				id: n.nodeId,
+				shape: 'rect',
+				x: n.position.x - xShift,
+				y: n.position.y,
+				width: n.dimensions.width + xShift,
+				height: railH ?? n.dimensions.height,
+				className: 'workspace-edge-node'
+			})
 		}
 
 		// Get current zoom for proportional scaling
@@ -1060,6 +1203,12 @@ export class WorkspaceConnectionManager {
 			webUiSettings.useZoomCompensatedConnectorScaling
 				? getEdgeScaledSizes(zoom)
 				: { strokeWidth: 2, markerSize: 16, markerOffset: { source: 6, target: 19 } }
+
+		// Read CSS connector colors for PIXI rendering (set as CSS custom props on paneEl)
+		const paneStyle = getComputedStyle(this.config.paneEl)
+		const pixiDefaultColor = paneStyle.getPropertyValue('--connector-line-default-color').trim() || '#000000'
+		const pixiFocusColor = paneStyle.getPropertyValue('--connector-line-focus-color').trim() || '#000000'
+		const pixiEdgeData: PixiEdgeRenderDatum[] = []
 
 		// Compute spread-out t values for edges sharing the same node+side
 		// This prevents multiple edges from converging to the exact same point
@@ -1147,6 +1296,16 @@ export class WorkspaceConnectionManager {
 			}
 
 			this.connector.addEdge(edgeConfig)
+
+			// Collect PIXI edge data in world coordinates
+			if (this.config.onPixiEdgesReady) {
+				const pixiDatum = computePixiEdgeDatum(
+					edgeConfig, worldNodeMap, isSelected,
+					pixiDefaultColor, pixiFocusColor,
+					scaledMarkerSize, scaledMarkerOffset
+				)
+				if (pixiDatum) pixiEdgeData.push(pixiDatum)
+			}
 		}
 
 		// Add in-progress edge (new connection or reconnecting existing edge)
@@ -1267,6 +1426,8 @@ export class WorkspaceConnectionManager {
 		}
 
 		this.connector.render()
+
+		this.config.onPixiEdgesReady?.(pixiEdgeData)
 
 		this.attachEdgeInteractionHandlers()
 	}
