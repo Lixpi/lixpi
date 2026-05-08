@@ -4311,9 +4311,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // The chat editor now lives in the singleton canvas panel; context
-        // regions grow only when children require more room.
-        pixiMediaLayer?.sync(currentCanvasState)
+        // PIXI sync is driven by the caller (render() / commitCanvasState),
+        // not here — avoids a duplicate sync when renderNodes() is called
+        // from render() which syncs PIXI immediately afterwards.
     }
 
     function getDocumentsKey(docs: Document[]): string {

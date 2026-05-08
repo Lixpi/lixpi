@@ -102,45 +102,73 @@ function drawArrowhead(g: Graphics, arrow: PixiEdgeArrow, color: string): void {
     g.fill(color)
 }
 
-export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
-    const edgeGraphics = new Map<string, Graphics>()
+// Stable datum fingerprint used to detect when an edge actually changed.
+// Only redraws the Graphics object when the path, color, width, or arrows differ.
+function edgeDatumKey(e: PixiEdgeRenderDatum): string {
+    const a = e.arrowEnd ? `${e.arrowEnd.x},${e.arrowEnd.y},${e.arrowEnd.angle},${e.arrowEnd.size}` : ''
+    const b = e.arrowStart ? `${e.arrowStart.x},${e.arrowStart.y},${e.arrowStart.angle},${e.arrowStart.size}` : ''
+    return `${e.svgPath}|${e.strokeColor}|${e.strokeWidth}|${e.isDashed ? 1 : 0}|${a}|${b}`
+}
 
-    function clearAll(): void {
-        for (const g of edgeGraphics.values()) {
-            container.removeChild(g)
-            g.destroy()
-        }
-        edgeGraphics.clear()
+export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
+    // Map of edgeId → { Graphics, last datum key }. Graphics are reused
+    // across renders; geometry is only rebuilt when the datum fingerprint
+    // changes. This avoids the original O(edges) destroy+alloc+GPU-upload
+    // cycle on every `scheduleEdgesRender` call.
+    const edgeGraphics = new Map<string, { g: Graphics; key: string }>()
+
+    function destroyEntry(entry: { g: Graphics }): void {
+        container.removeChild(entry.g)
+        entry.g.destroy()
+    }
+
+    function paintEdge(g: Graphics, edge: PixiEdgeRenderDatum): void {
+        g.clear()
+        drawSvgPath(g, edge.svgPath)
+        g.stroke({
+            color: edge.strokeColor,
+            width: edge.strokeWidth,
+            cap: 'round',
+            join: 'round',
+        })
+        if (edge.arrowEnd) drawArrowhead(g, edge.arrowEnd, edge.strokeColor)
+        if (edge.arrowStart) drawArrowhead(g, edge.arrowStart, edge.strokeColor)
     }
 
     function render(edges: PixiEdgeRenderDatum[]): void {
-        clearAll()
+        const incomingIds = new Set(edges.map((e) => e.id))
 
+        // Remove Graphics for edges that no longer exist.
+        for (const [id, entry] of edgeGraphics) {
+            if (!incomingIds.has(id)) {
+                destroyEntry(entry)
+                edgeGraphics.delete(id)
+            }
+        }
+
+        // Update or create Graphics for each incoming edge.
         for (const edge of edges) {
-            const g = new Graphics()
+            const key = edgeDatumKey(edge)
+            const existing = edgeGraphics.get(edge.id)
 
-            drawSvgPath(g, edge.svgPath)
-            g.stroke({
-                color: edge.strokeColor,
-                width: edge.strokeWidth,
-                cap: 'round',
-                join: 'round',
-            })
-
-            if (edge.arrowEnd) {
-                drawArrowhead(g, edge.arrowEnd, edge.strokeColor)
+            if (existing) {
+                // Reuse Graphics object. Only repaint if the edge actually changed.
+                if (existing.key !== key) {
+                    paintEdge(existing.g, edge)
+                    existing.key = key
+                }
+            } else {
+                const g = new Graphics()
+                paintEdge(g, edge)
+                container.addChild(g)
+                edgeGraphics.set(edge.id, { g, key })
             }
-            if (edge.arrowStart) {
-                drawArrowhead(g, edge.arrowStart, edge.strokeColor)
-            }
-
-            container.addChild(g)
-            edgeGraphics.set(edge.id, g)
         }
     }
 
     function destroy(): void {
-        clearAll()
+        for (const entry of edgeGraphics.values()) destroyEntry(entry)
+        edgeGraphics.clear()
     }
 
     return { render, destroy }
