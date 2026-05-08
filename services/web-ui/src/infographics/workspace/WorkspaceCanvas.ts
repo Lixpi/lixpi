@@ -42,6 +42,8 @@ import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT }
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 
 import { select } from 'd3-selection'
 
@@ -133,6 +135,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let edgesLayerEl: HTMLDivElement | null = null
+    let pixiMediaLayer: PixiMediaLayer | null = null
+    let viewportBridge: ViewportBridge | null = null
+
+    // Health of the PIXI renderer. Image nodes' DOM `<img>` elements stay
+    // empty (no `src`) while PIXI is healthy so the browser never makes a
+    // second, redundant network round-trip for the same pixels PIXI is
+    // already drawing. If PIXI fails to initialize (e.g. WebGL/WebGPU
+    // unavailable), `pixiHealth` flips to `'failed'` and we backfill src
+    // attributes so the DOM fallback takes over.
+    let pixiHealth: 'initializing' | 'ready' | 'failed' | 'destroyed' = 'initializing'
+    // Per-image-node DOM <img> element registry, keyed by node id. Lets us
+    // assign src in O(1) on PIXI failure without a viewport-wide
+    // querySelector.
+    const imageElByNodeId: Map<string, HTMLImageElement> = new Map()
+    // The resolved (token-less) API path for each image node, captured at
+    // node-creation time. Used to backfill `<img>.src` when PIXI fails.
+    const imageResolvedSrcByNodeId: Map<string, string> = new Map()
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
@@ -175,6 +194,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Anchored image manager - tracks images overlapping their AI chat thread nodes
     const anchoredImageManager = createAnchoredImageManager()
+
+    const pixiSelectionColors: SelectionColors = {
+        nodeOutline: webUiThemeSettings.selectionOutlineColor,
+        marqueeStroke: webUiThemeSettings.selectionMarqueeBorderColor,
+        marqueeFill: webUiThemeSettings.selectionMarqueeBackgroundColor,
+        groupOverlayStroke: webUiThemeSettings.selectionOverlayBorderColor,
+        groupOverlayFill: webUiThemeSettings.selectionOverlayBackgroundColor,
+    }
+    pixiMediaLayer = createPixiMediaLayer({
+        paneEl,
+        viewportEl,
+        getWorkspaceId: () => workspaceId,
+        selectionColors: pixiSelectionColors,
+        onHealthChange: (next) => {
+            pixiHealth = next
+            if (next === 'failed') {
+                // PIXI gave up — every image node falls back to the DOM
+                // <img> renderer. Set `src` on each tracked image element
+                // so the browser starts the (previously skipped) fetch.
+                void backfillDomImageSrcs()
+            }
+        },
+    })
+    viewportBridge = createViewportBridge({
+        viewportEl,
+        getPixiLayer: () => pixiMediaLayer,
+    })
+    if (currentCanvasState?.viewport) {
+        viewportBridge.applyViewport(currentCanvasState.viewport)
+    }
+    pixiMediaLayer.sync(currentCanvasState)
 
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
@@ -736,20 +786,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function updateSelectionRectElement(): void {
         if (!marqueeSelection) return
 
-        const rectEl = ensureSelectionRectElement()
-        if (!rectEl) return
-
         const rect = getCanvasRectFromSelection(marqueeSelection)
-        applyStyle(rectEl, {
-            display: marqueeSelection.moved ? 'block' : 'none',
-            left: `${rect.x}px`,
-            top: `${rect.y}px`,
-            width: `${rect.width}px`,
-            height: `${rect.height}px`,
-        })
+
+        if (marqueeSelection.moved) {
+            pixiMediaLayer?.setMarqueeRect(rect)
+
+            // DOM rect only for non-PIXI contexts (document/thread nodes);
+            // PIXI draws it for image nodes but DOM fallback keeps it working everywhere.
+            const rectEl = ensureSelectionRectElement()
+            if (rectEl) {
+                applyStyle(rectEl, {
+                    display: 'block',
+                    left: `${rect.x}px`,
+                    top: `${rect.y}px`,
+                    width: `${rect.width}px`,
+                    height: `${rect.height}px`,
+                })
+            }
+        } else {
+            pixiMediaLayer?.setMarqueeRect(null)
+            if (selectionRectEl) selectionRectEl.style.display = 'none'
+        }
     }
 
     function hideSelectionRectElement(): void {
+        pixiMediaLayer?.setMarqueeRect(null)
         if (selectionRectEl) {
             selectionRectEl.style.display = 'none'
         }
@@ -794,10 +855,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function updateSelectionGroupOverlayElement(): void {
+        const bounds = getSelectionOverlayBounds()
+
+        // PIXI draws the visible selection overlay for image nodes.
+        pixiMediaLayer?.setSelectionOverlayBounds(bounds)
+
+        // The DOM element is kept invisible but in place as a drag hit target.
+        // Its background/border are stripped in the SCSS so PIXI owns the visual.
         const overlayEl = ensureSelectionGroupOverlayElement()
         if (!overlayEl) return
 
-        const bounds = getSelectionOverlayBounds()
         if (!bounds) {
             overlayEl.style.display = 'none'
             return
@@ -887,6 +954,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateNodeSelectionClasses(prevSelectedNodeIds, selectedNodeIds)
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
+        pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
     }
 
     function toggleNodeSelection(nodeId: string): void {
@@ -1942,6 +2010,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return `data:image/png;base64,${imageUrl}`
     }
 
+    // Last-resort fallback when PIXI fails to initialize. Iterates every
+    // tracked image node and sets `<img>.src` so the (CSS-hidden) DOM
+    // `<img>` tag becomes the renderer for that node. This is a one-time
+    // cost per failed init — the canvas keeps working, just on the slower
+    // DOM path used before PIXI was introduced.
+    async function backfillDomImageSrcs(): Promise<void> {
+        if (imageResolvedSrcByNodeId.size === 0) return
+        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+        let token: string | false = false
+        try {
+            token = await AuthService.getTokenSilently()
+        } catch {
+            // proceed without token; public images still work
+        }
+        for (const [nodeId, resolvedSrc] of imageResolvedSrcByNodeId) {
+            const imgEl = imageElByNodeId.get(nodeId)
+            if (!imgEl || imgEl.src) continue
+            imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
+        }
+    }
+
     function showImageErrorPlaceholder(imgEl: HTMLImageElement, nodeEl: HTMLElement): void {
         imgEl.style.display = 'none'
         if (nodeEl.querySelector('.image-error-placeholder')) return
@@ -1960,6 +2049,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = createImageNode(imageNode)
         viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(imageNode.nodeId, nodeEl as HTMLDivElement)
+        pixiMediaLayer?.sync(currentCanvasState)
     }
 
     // Persist canvas state without triggering a full re-render.
@@ -2615,9 +2705,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Any other DOM mutation (custom properties, style writes, querySelectorAll)
             // invalidates the compositor layer cache and forces a full re-rasterization
             // of every image/text in the viewport, causing visible flickering.
-            if (viewportEl) {
-                viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
-            }
+            viewportBridge?.applyViewport(vp)
             if (zoomChanged) {
                 if (webUiSettings.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
@@ -2725,6 +2813,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncEdges(nextState.edges)
         connectionManager?.syncNodes(nextState.nodes)
         scheduleEdgesRender()
+        pixiMediaLayer?.sync(nextState)
     }
 
     function scheduleTransformSideEffects() {
@@ -2805,6 +2894,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             },
             isContextRegionNode: isContextRegionCanvasNode,
+            onPixiEdgesReady: (edges) => {
+                pixiMediaLayer?.setPixiEdges(edges)
+            },
         })
 
         if (currentCanvasState) {
@@ -3054,6 +3146,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     dimensions: currentDims,
                 })
 
+                pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
+
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
                     applyStyle(floatingInputEl, {
                         left: `${currentPos.x}px`,
@@ -3098,17 +3192,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (anchoredEl) {
                     const newX = startPos.x + deltaX
                     const newY = startPos.y + deltaY
+                    const newDims = { width: anchoredEl.offsetWidth, height: anchoredEl.offsetHeight }
                     applyStyle(anchoredEl, { left: `${newX}px`, top: `${newY}px` })
                     liveNodeOverrides.set(imgId, {
                         position: { x: newX, y: newY },
-                        dimensions: { width: anchoredEl.offsetWidth, height: anchoredEl.offsetHeight },
+                        dimensions: newDims,
                     })
+                    pixiMediaLayer?.setNodeLiveTransform(imgId, { x: newX, y: newY }, newDims)
                 }
             }
 
             scheduleEdgesRender()
             repositionCanvasBubbleMenu()
             updateSelectionGroupOverlayElement()
+            pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
         }
 
         const handleMouseUp = (upEvent: MouseEvent) => {
@@ -3177,6 +3274,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     return { ...node, position: finalWorldPosition }
                 }
 
+                if (node.parentId && finalDraggedPositions.has(node.parentId)) {
+                    // Parent and child moved together as one selected group. The
+                    // live DOM/PIXI positions are world coordinates, but persisted
+                    // child positions remain parent-relative. Keep the existing
+                    // relative position so the parent's movement carries the child
+                    // exactly once after the state commit.
+                    return node
+                }
+
                 const draggedRect: Rect = {
                     x: finalWorldPosition.x,
                     y: finalWorldPosition.y,
@@ -3233,6 +3339,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         applyStyle(nodeEl, { left: `${snappedWorld.x}px`, top: `${snappedWorld.y}px` })
                         syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)
                     }
+                    pixiMediaLayer?.setNodeLiveTransform(node.nodeId, snappedWorld, node.dimensions)
 
                     return {
                         ...node,
@@ -3296,6 +3403,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             if (movedNodeEl) {
                                 applyStyle(movedNodeEl, { left: `${newPos.x}px`, top: `${newPos.y}px` })
                             }
+                            pixiMediaLayer?.setNodeLiveTransform(n.nodeId, newPos, n.dimensions)
                             const nextPosition = n.parentId
                                 ? toParentRelativePosition(newPos, n.parentId, getCanvasNodesById(updatedNodes))
                                 : newPos
@@ -3336,13 +3444,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
         const isImageNode = node?.type === 'image'
 
-        // For images, get aspect ratio from the actual img element (more reliable than stored data)
+        // PIXI owns image pixels; the hidden DOM <img> can finish loading after
+        // workspace switches, so do not derive resize behavior from DOM natural
+        // dimensions. Use the persisted canvas-node aspect ratio instead.
         let aspectRatio: number | null = null
         if (isImageNode) {
-            const imgEl = nodeEl.querySelector('img') as HTMLImageElement
-            if (imgEl && imgEl.naturalWidth && imgEl.naturalHeight) {
-                aspectRatio = imgEl.naturalWidth / imgEl.naturalHeight
-            }
+            aspectRatio = node.aspectRatio || null
         }
 
         resizingNodeId = nodeId
@@ -3427,23 +3534,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl.style.top = `${startTop - heightDiff}px`
             }
 
+            const liveResizePosition = {
+                x: parseFloat(nodeEl.style.left),
+                y: parseFloat(nodeEl.style.top)
+            }
+            const liveResizeDimensions = {
+                width: newWidth,
+                height: newHeight
+            }
             liveNodeOverrides.set(nodeId, {
-                position: {
-                    x: parseFloat(nodeEl.style.left),
-                    y: parseFloat(nodeEl.style.top)
-                },
-                dimensions: {
-                    width: newWidth,
-                    height: newHeight
-                }
+                position: liveResizePosition,
+                dimensions: liveResizeDimensions,
             })
 
-            // If resizing a region child, visibly grow the region in real-time
+            pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
+            pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
+            pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds())
+
+            // If resizing a region child, visibly grow the region in real-time.
+            // `nodeEl.style.left/top` is in world coordinates; convert to parent-
+            // relative before computing the needed region dimensions.
             if (node?.parentId) {
                 const regionEl = viewportEl?.querySelector(`[data-node-id="${node.parentId}"]`) as HTMLElement | null
                 if (regionEl) {
-                    const relativeLeft = parseFloat(nodeEl.style.left) || 0
-                    const relativeTop = parseFloat(nodeEl.style.top) || 0
+                    const worldLeft = parseFloat(nodeEl.style.left) || 0
+                    const worldTop = parseFloat(nodeEl.style.top) || 0
+                    const regionWorldLeft = parseFloat(regionEl.style.left) || 0
+                    const regionWorldTop = parseFloat(regionEl.style.top) || 0
+                    const relativeLeft = worldLeft - regionWorldLeft
+                    const relativeTop = worldTop - regionWorldTop
                     const neededWidth = relativeLeft + newWidth + 48
                     const neededHeight = relativeTop + newHeight + 48
                     const currentRegionWidth = parseFloat(regionEl.style.width) || 200
@@ -3524,10 +3643,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 height: nodeEl.offsetHeight
             }
 
-            const newPosition = {
+            // `nodeEl.style.left/top` is always in viewport-relative world
+            // coordinates (set by `createBaseNodeElement` via `getNodeWorldPosition`).
+            // Context-region children persist `position` as parent-relative, so
+            // convert back before committing.
+            const newWorldPosition = {
                 x: parseFloat(nodeEl.style.left),
                 y: parseFloat(nodeEl.style.top)
             }
+            const resizingNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
+            const newPosition = resizingNode?.parentId
+                ? toParentRelativePosition(newWorldPosition, resizingNode.parentId, getCanvasNodesById())
+                : newWorldPosition
 
             let updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) =>
                 n.nodeId === nodeId ? { ...n, dimensions: newDimensions, position: newPosition } : n
@@ -3747,15 +3874,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? `/api/images/${workspaceId}/${node.fileId}`
             : strippedSrc
 
+        // Track this <img> + its resolved API path. Used by the PIXI
+        // health-failure fallback to backfill `src` only on stored images,
+        // and the partial-streaming code path to update src in place.
+        imageElByNodeId.set(node.nodeId, imgEl)
+        if (isStoredImage) imageResolvedSrcByNodeId.set(node.nodeId, resolvedSrc)
+
         let retried = false
-        ;(async () => {
+        const assignSrc = async () => {
             try {
                 const token = await AuthService.getTokenSilently()
                 imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
             } catch {
                 showImageErrorPlaceholder(imgEl, nodeEl)
             }
-        })()
+        }
+
+        // CRITICAL: stored images are rendered by PIXI. Setting `<img>.src`
+        // here would double-fetch every image — once for the (hidden,
+        // opacity:0) DOM `<img>` and once for the PIXI worker. With hundreds
+        // of images that doubles network round-trips and makes the page
+        // crawl through the browser's per-origin HTTP queue.
+        //
+        // For stored images we leave the `<img>` empty until/unless PIXI
+        // signals failure (see `backfillDomImageSrcs`). Data: URLs (in-
+        // progress generations) and external URLs continue to load
+        // immediately, since PIXI only handles stored canvas images.
+        if (!isStoredImage) {
+            void assignSrc()
+        } else if (pixiHealth === 'failed') {
+            void assignSrc()
+        }
 
         imgEl.onerror = async () => {
             if (!retried) {
@@ -3778,33 +3927,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // Once image loads, fix container dimensions to match actual aspect ratio
+        // PIXI owns image pixels. The hidden DOM <img> exists only as a legacy
+        // DOM child for interaction chrome compatibility; it must never mutate
+        // canvas state after async load, especially across workspace switches.
         imgEl.onload = () => {
-            const naturalAspect = imgEl.naturalWidth / imgEl.naturalHeight
-            const storedAspect = node.dimensions.width / node.dimensions.height
-
-            // If aspect ratios don't match, fix and persist
-            if (Math.abs(naturalAspect - storedAspect) > 0.01) {
-                const correctedHeight = node.dimensions.width / naturalAspect
-                nodeEl.style.height = `${correctedHeight}px`
-
-                // Persist the corrected dimensions
-                if (currentCanvasState && onCanvasStateChange) {
-                    const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
-                        if (n.nodeId === node.nodeId && n.type === 'image') {
-                            return {
-                                ...n,
-                                dimensions: { width: node.dimensions.width, height: correctedHeight },
-                                aspectRatio: naturalAspect
-                            }
-                        }
-                        return n
-                    })
-                    const newState: CanvasState = { ...currentCanvasState, nodes: expandRegionsToFitChildren(updatedNodes) }
-                    currentCanvasState = newState
-                    onCanvasStateChange(newState)
-                }
-            }
+            return
         }
 
         nodeEl.appendChild(imgEl)
@@ -4065,6 +4192,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         loadedNodeIds.clear()
         hiddenEmptyThreadNodeIds.clear()
         anchoredImageManager.clear()
+        imageElByNodeId.clear()
+        imageResolvedSrcByNodeId.clear()
 
         // Clean up per-region gradients (will be recreated for each region node)
         for (const [, g] of regionGradients) g.destroy()
@@ -4182,8 +4311,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // The chat editor now lives in the singleton canvas panel; context
-        // regions grow only when children require more room.
+        // PIXI sync is driven by the caller (render() / commitCanvasState),
+        // not here — avoids a duplicate sync when renderNodes() is called
+        // from render() which syncs PIXI immediately afterwards.
     }
 
     function getDocumentsKey(docs: Document[]): string {
@@ -4227,7 +4357,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (currentCanvasState?.viewport) {
             const vp = currentCanvasState.viewport
             syncViewportInteractionState(vp)
-            viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
+            viewportBridge?.applyViewport(vp)
             // Ensure handles match initial zoom
             updateResizeHandles(vp.zoom)
             updateRegionTitleBars(vp.zoom)
@@ -4288,10 +4418,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     return {
         render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
+            const workspaceChanged = Boolean(newWorkspaceId && newWorkspaceId !== workspaceId)
             if (newWorkspaceId) workspaceId = newWorkspaceId
+
+            // Stale drag/resize positions from a previous workspace would corrupt
+            // getNodeWorldPosition for the new workspace's nodes.
+            if (workspaceChanged) {
+                liveNodeOverrides.clear()
+                selectedNodeIds = new Set()
+                selectedEdgeId = null
+                draggingNodeId = null
+                resizingNodeId = null
+            }
+
             // Only do a full re-render if node structure or documents/threads changed
             // Position/dimension updates are handled directly in DOM during drag/resize
-            const needsRerender = shouldRerender(newCanvasState, newDocuments, newAiChatThreads)
+            const needsRerender = shouldRerender(newCanvasState, newDocuments, newAiChatThreads) || workspaceChanged
 
             // Check if viewport actually changed (not just nodes)
             const oldViewport = currentCanvasState?.viewport
@@ -4306,24 +4448,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentAiChatThreads = newAiChatThreads
             syncActiveAiChatPanelFromState()
 
-            if (currentCanvasState && connectionManager) {
-                connectionManager.syncNodes(currentCanvasState.nodes)
-                connectionManager.syncEdges(currentCanvasState.edges)
-                scheduleEdgesRender()
-            }
-
+            // 1. Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
             if (needsRerender) {
                 renderNodes()
                 lastDocumentsKey = getDocumentsKey(newDocuments)
                 lastThreadsKey = getAiChatThreadsKey(newAiChatThreads)
             }
 
-            // Only sync viewport if it actually changed from external source
-            // Don't reset viewport just because node dimensions were corrected
+            // 2. Sync PIXI state BEFORE applying the viewport. This ensures
+            //    `lastState` inside the PIXI layer is already the new workspace's
+            //    canvas state when `setViewport` fires. Without this ordering, a
+            //    zoom-tier change during workspace switch would call
+            //    `upsertAllImages(OLD_STATE)`, spawning async texture fetches for
+            //    the old workspace's images that arrive and overwrite new sprites.
+            if (currentCanvasState && connectionManager) {
+                connectionManager.syncNodes(currentCanvasState.nodes)
+                connectionManager.syncEdges(currentCanvasState.edges)
+                scheduleEdgesRender()
+                pixiMediaLayer?.sync(currentCanvasState)
+            }
+
+            // 3. Apply viewport after PIXI sync. `setViewport` may trigger
+            //    `upsertAllImages(lastState)` on a tier change, but `lastState`
+            //    is now the new workspace state, so no old sprites are created.
             if (viewportChanged && newCanvasState?.viewport) {
                 const vp = newCanvasState.viewport
                 syncViewportInteractionState(vp)
-                viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
+                viewportBridge?.applyViewport(vp)
                 panZoom?.syncViewport(vp)
             }
         },
@@ -4352,6 +4503,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hiddenEmptyThreadNodeIds.clear()
             connectionManager?.destroy()
             connectionManager = null
+            viewportBridge?.destroy()
+            viewportBridge = null
+            pixiMediaLayer?.destroy()
+            pixiMediaLayer = null
             if (panZoom) {
                 panZoom.destroy()
             }
