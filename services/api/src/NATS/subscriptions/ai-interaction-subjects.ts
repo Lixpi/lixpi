@@ -4,11 +4,27 @@ import chalk from 'chalk'
 
 import NATS_Service from '@lixpi/nats-service'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
-import { NATS_SUBJECTS, type AiModelId, type AiInteractionChatSendMessagePayload, type AiInteractionChatStopMessagePayload } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    type AiInteractionChatSendMessagePayload,
+} from '@lixpi/constants'
 
 import AiModel from '../../models/ai-model.ts'
+import type { LlmModule, ProviderName } from '../../llm/index.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
+
+let _llmModule: LlmModule | undefined
+
+// Set by server.ts after createLlmModule is built — subscriptions are registered before the module exists.
+export const setLlmModule = (mod: LlmModule): void => {
+    _llmModule = mod
+}
+
+const getLlmModule = (): LlmModule => {
+    if (!_llmModule) throw new Error('LLM module not initialized')
+    return _llmModule
+}
 
 export const aiInteractionSubjects = [
     {
@@ -17,23 +33,12 @@ export const aiInteractionSubjects = [
         queue: 'aiInteraction',
         payloadType: 'json',
         permissions: {
-            pub: {
-                allow: [
-                    AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE
-                ]
-            },
-            sub: {
-                allow: [
-                    `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.>`
-                ]
-            }
+            pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE] },
+            sub: { allow: [`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.>`] },
         },
-        handler: async (data, msg) => {
+        handler: async (data: any, _msg: any) => {
             const {
-                user: {
-                    userId,
-                    stripeCustomerId
-                },
+                user: { userId, stripeCustomerId },
                 messages,
                 aiModel,
                 aiImageModel,
@@ -41,7 +46,7 @@ export const aiInteractionSubjects = [
                 aiChatThreadId,
                 organizationId,
                 enableImageGeneration,
-                imageSize
+                imageSize,
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
                 workspaceId: string
@@ -53,27 +58,31 @@ export const aiInteractionSubjects = [
             } & AiInteractionChatSendMessagePayload
 
             const [provider, model] = (aiModel as string).split(':')
-            const natsService = await NATS_Service.getInstance();
+            const natsService = await NATS_Service.getInstance()
 
             try {
-                // Fetch AI model meta info with pricing (for llm-api service)
-                const aiModelMetaInfo = await AiModel.getAiModel({ provider, model, omitPricing: false })
-
+                const aiModelMetaInfo = await AiModel.getAiModel({
+                    provider: provider!,
+                    model: model!,
+                    omitPricing: false,
+                })
                 if (!aiModelMetaInfo || !aiModelMetaInfo.modelVersion) {
                     err('AI model meta info not found in the database', { aiModel })
-
-                    // Publish error directly to client
-                    natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`, {
-                        error: `AI model not found: ${aiModel}`
-                    })
+                    natsService!.publish(
+                        `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`,
+                        { error: `AI model not found: ${aiModel}` },
+                    )
                     return
                 }
 
-                // Fetch image model meta info if an image model is selected
                 let imageModelMetaInfo: any = null
                 if (aiImageModel) {
                     const [imageProvider, imageModel] = (aiImageModel as string).split(':')
-                    imageModelMetaInfo = await AiModel.getAiModel({ provider: imageProvider, model: imageModel, omitPricing: false })
+                    imageModelMetaInfo = await AiModel.getAiModel({
+                        provider: imageProvider!,
+                        model: imageModel!,
+                        omitPricing: false,
+                    })
                     if (imageModelMetaInfo) {
                         info(`Image model resolved: ${imageProvider}:${imageModel}`)
                     } else {
@@ -81,52 +90,53 @@ export const aiInteractionSubjects = [
                     }
                 }
 
-                // One stream per thread - use workspaceId:aiChatThreadId as unique key
                 const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
                 infoStr([
-                    chalk.cyan('🚀 [AI_INTERACTION] GATEWAY'),
-                    ' :: Forwarding to llm-api',
+                    chalk.cyan('🚀 [AI_INTERACTION]'),
+                    ' :: Invoking LLM module in-process',
                     ' :: instanceKey:',
                     chalk.yellow(instanceKey),
                     ' :: provider:',
-                    chalk.green(provider)
+                    chalk.green(provider!),
                 ])
 
-                // Forward request to llm-api service via internal NATS subject
-                natsService.publish(AI_INTERACTION_SUBJECTS.CHAT_PROCESS, {
-                    messages,
-                    aiModelMetaInfo,
-                    imageModelMetaInfo,
-                    workspaceId,
-                    aiChatThreadId,
-                    enableImageGeneration,
-                    imageSize,
-                    eventMeta: {
-                        userId,
-                        stripeCustomerId,
-                        organizationId,
+                // Fire-and-forget: the LLM module publishes streaming events
+                // directly to NATS as it runs. We do not await here because
+                // NATS message handlers should return quickly so the queue
+                // worker can pick up the next request.
+                getLlmModule()
+                    .process(instanceKey, provider as ProviderName, {
+                        messages,
+                        aiModelMetaInfo,
+                        imageModelMetaInfo,
                         workspaceId,
-                        aiChatThreadId
-                    }
-                })
-
-                infoStr([
-                    chalk.green('✅ [AI_INTERACTION] GATEWAY'),
-                    ' :: Request forwarded to llm-api',
-                    ' :: instanceKey:',
-                    chalk.yellow(instanceKey)
-                ])
-
+                        aiChatThreadId,
+                        enableImageGeneration,
+                        imageSize,
+                        eventMeta: {
+                            userId,
+                            stripeCustomerId,
+                            organizationId,
+                            workspaceId,
+                            aiChatThreadId,
+                        },
+                    })
+                    .catch(e => {
+                        err(`LLM module process failed for ${instanceKey}:`, e)
+                        natsService!.publish(
+                            `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`,
+                            { error: e instanceof Error ? e.message : String(e) },
+                        )
+                    })
             } catch (error) {
-                err('❌ [AI_INTERACTION] GATEWAY ERROR:', error)
-
-                // Publish error to client
-                natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`, {
-                    error: error instanceof Error ? error.message : String(error)
-                })
+                err('❌ [AI_INTERACTION] handler error:', error)
+                natsService!.publish(
+                    `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`,
+                    { error: error instanceof Error ? error.message : String(error) },
+                )
             }
-        }
+        },
     },
 
     // Stop AI message streaming
@@ -136,78 +146,29 @@ export const aiInteractionSubjects = [
         queue: 'aiInteraction',
         payloadType: 'json',
         permissions: {
-            pub: {
-                allow: [
-                    AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE
-                ]
-            }
+            pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE] },
         },
-        handler: async (data, msg) => {
-            const {
-                user: {
-                    userId
-                },
-                workspaceId,
-                aiChatThreadId
-            } = data as {
+        handler: async (data: any, _msg: any) => {
+            const { workspaceId, aiChatThreadId } = data as {
                 user: { userId: string }
                 workspaceId: string
                 aiChatThreadId: string
             }
 
-            const natsService = await NATS_Service.getInstance()
             const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
             infoStr([
-                chalk.yellow('🛑 [AI_INTERACTION] GATEWAY'),
-                ' :: Relaying STOP to llm-api',
+                chalk.yellow('🛑 [AI_INTERACTION]'),
+                ' :: Stopping LLM workflow',
                 ' :: instanceKey:',
-                chalk.red(instanceKey)
+                chalk.red(instanceKey),
             ])
 
-            // Relay stop request to llm-api service
-            natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_STOP}.${instanceKey}`, {
-                workspaceId,
-                aiChatThreadId,
-                userId
-            })
-
-            infoStr([
-                chalk.green('✅ [AI_INTERACTION] GATEWAY'),
-                ' :: STOP request relayed to llm-api',
-                ' :: instanceKey:',
-                chalk.yellow(instanceKey)
-            ])
-        }
-    },
-
-    // Handle errors from llm-api service
-    {
-        subject: `${AI_INTERACTION_SUBJECTS.CHAT_ERROR}.>`,
-        type: 'subscribe',
-        queue: 'aiInteraction',
-        payloadType: 'json',
-        permissions: {
-            sub: {
-                allow: [
-                    `${AI_INTERACTION_SUBJECTS.CHAT_ERROR}.>`
-                ]
+            try {
+                await getLlmModule().stop(instanceKey)
+            } catch (e) {
+                err(`Failed to stop ${instanceKey}:`, e)
             }
         },
-        handler: async (data, msg) => {
-            const { error, instanceKey } = data as { error: string; instanceKey: string }
-
-            const natsService = await NATS_Service.getInstance()
-
-            // Extract workspaceId and aiChatThreadId from instanceKey (format: workspaceId:aiChatThreadId)
-            const [workspaceId, aiChatThreadId] = instanceKey.split(':')
-
-            err('❌ [AI_INTERACTION] ERROR from llm-api:', { instanceKey, error })
-
-            // Forward error to client
-            natsService.publish(`${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`, {
-                error
-            })
-        }
     },
 ]

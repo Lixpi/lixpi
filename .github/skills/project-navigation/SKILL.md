@@ -11,7 +11,7 @@ For the full architecture and service descriptions, read `documentation/PRODUCT-
 
 | Directory | What Lives There |
 |-----------|------------------|
-| `services/` | Core application services (web-ui, api, llm-api, nats, localauth0) |
+| `services/` | Core application services (web-ui, api, nats, localauth0). LLM orchestration lives in `services/api/src/llm/`. |
 | `packages/lixpi/` | Shared TypeScript libraries — each package may have a `ts/` subdirectory |
 | `packages-vendor/` | Vendored third-party packages (xyflow, shadcn-svelte) |
 | `lambda-functions/` | AWS Lambda handlers (billing, Stripe, usage) |
