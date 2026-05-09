@@ -7,8 +7,8 @@
     --workspace-ai-chat-sidebar-padding: 15px;
     --workspace-ai-chat-sidebar-zoom-gap: 15px;
     --workspace-canvas-padding-top: 32px;
-    --workspace-canvas-padding-inline: 16px;
-    --workspace-canvas-padding-bottom: 16px;
+    --workspace-canvas-padding-inline: 0px;
+    --workspace-canvas-padding-bottom: 0px;
 }
 
 .workspace-canvas {
@@ -17,7 +17,7 @@
     display: flex;
     flex-direction: column;
     position: relative;
-    padding: var(--workspace-canvas-padding-top) var(--workspace-canvas-padding-inline) var(--workspace-canvas-padding-bottom);
+    padding: 0;
     overflow: hidden;
 }
 
@@ -237,6 +237,15 @@
     left: 0;
     transform-origin: 0 0;
     will-change: transform;
+    z-index: 1;
+}
+
+.workspace-pixi-media-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    contain: layout paint;
 }
 
 .workspace-selection-rect {
@@ -250,14 +259,13 @@
 }
 
 .workspace-selection-group-overlay {
+    // Visual (border + fill) is drawn by the PIXI foreground layer so it
+    // renders above image sprites. This DOM element is kept solely as a
+    // drag hit target and has no visible styling.
     position: absolute;
     z-index: 10000;
     cursor: move;
-    border: 1px solid var(--selection-overlay-border-color);
-    background: var(--selection-overlay-background-color);
-    border-radius: 18px;
     box-sizing: border-box;
-    backdrop-filter: blur(1px);
 }
 
 .workspace-document-node {
@@ -480,8 +488,7 @@
 
 .workspace-ai-chat-floating-panel {
     position: absolute;
-    // top: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-top));
-    top: calc(-1 * var(--workspace-canvas-padding-top));
+    top: 0px;
     right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline));
     bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
     width: var(--workspace-ai-chat-sidebar-width);
@@ -586,6 +593,7 @@
 .workspace-thread-rail.workspace-ai-chat-floating-panel__rail {
     cursor: ew-resize;
     touch-action: none;
+    height: 100%;
 }
 
 .workspace-ai-chat-floating-panel.is-resizing {
@@ -625,6 +633,24 @@
 
         .image-node-img {
             border-radius: 6px;
+        }
+    }
+
+    // The PIXI media layer owns image pixels. The DOM node still owns all
+    // interaction chrome: drag overlay, resize handles, generation border,
+    // spinner, and provider badge. All visible frame/background styling is
+    // stripped so PIXI pixels are the only visible surface.
+    &.workspace-image-node--pixi-owned {
+        background: transparent;
+        box-shadow: none;
+
+        &.workspace-image-node--context-region-child {
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .image-node-img {
+            opacity: 0;
         }
     }
 
@@ -924,7 +950,10 @@
     transform: translateZ(0);
 
     .connector-svg {
-        // SVG itself doesn't block events
+        // Visual rendering handed to PIXI. Keep SVG in DOM with opacity 0
+        // so isPointInStroke and getPointAtLength still work for hit testing
+        // and edge bubble menu positioning.
+        opacity: 0;
         pointer-events: none;
 
         .workspace-edge-node {

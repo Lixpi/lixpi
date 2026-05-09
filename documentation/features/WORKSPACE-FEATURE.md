@@ -2,6 +2,10 @@
 
 A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
+> **Renderer migration note (2026-05-07).** The active workspace canvas remains the proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack. Phase 2 now ships PIXI v8 (WebGPU with WebGL fallback) as a **media layer for image pixels** through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection, and SVG connectors stay in the existing DOM/SVG implementation. Image-node DOM `<img>` elements are kept as interaction chrome and as a fallback path when PIXI fails to initialize, but their `src` is left empty while PIXI is healthy so the browser does not double-fetch the same pixels.
+>
+> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). Historical full-replacement notes in `documentation/memory/pixi-refactoring.md` are background context, not the active implementation path.
+
 ## Core Concepts
 
 **Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents, AI chat threads, and uploaded files.
@@ -579,20 +583,27 @@ flowchart LR
         CR[ConnectorRenderer]
     end
 
-    subgraph DOM
+    subgraph DOM["DOM (z-index 1)"]
         VP[.workspace-viewport]
-        EDGES[.workspace-edges-layer SVG]
+        EDGES[.workspace-edges-layer SVG<br/>opacity 0, hit-testing only]
         DOCNODES[.workspace-document-node]
-        IMGNODES[.workspace-image-node]
+        IMGNODES[.workspace-image-node<br/>img.src empty when PIXI healthy]
         THREADNODES[.workspace-ai-chat-thread-node]
         HANDLES[.workspace-handle]
         ED[.document-node-editor]
         TED[.ai-chat-thread-node-editor]
-        IMG[img element]
+    end
+
+    subgraph PIXI["PIXI v8 (z-index 2)"]
+        PML[pixiMediaLayer.sync]
+        SPR[Image sprites + colorRect placeholders]
+        PEDG[Pixi edge Graphics — diffed]
+        FG[Selection outlines, marquee, group overlay]
     end
 
     CS --> RN
     CS --> WCM
+    CS --> PML
     DOCS --> RN
     THREADS --> RN
     RN --> CDN
@@ -610,12 +621,18 @@ flowchart LR
     THREADNODES --> VP
     WCM --> XYH
     WCM --> CR
+    WCM --> PEDG
     CR --> EDGES
     EDGES --> VP
     PM --> ED
     PM --> TED
-    CIN --> IMG
+    PML --> SPR
+    PML --> FG
 ```
+
+The DOM viewport hosts every interactive element. PIXI sits on top as a transparent overlay and owns image pixels, image-node selection outlines, marquee rectangles, group-overlay highlights, and edge stroke geometry. Both layers are kept perfectly aligned by `viewportBridge.applyViewport()`, which is the single call site that updates both the DOM CSS transform and the PIXI world container in the same tick.
+
+For the texture cache, LoD-tier loader, decode worker pool, eviction strategy, and the list of remaining performance issues (notably: the API does not actually serve resized thumbnails today), see [CANVAS-ENGINE.md](CANVAS-ENGINE.md).
 
 ## Persistence Strategy
 
