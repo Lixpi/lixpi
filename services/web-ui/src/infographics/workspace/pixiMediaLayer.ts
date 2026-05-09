@@ -32,6 +32,7 @@ import {
     type WorldPosition,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
+import { createPixiGlassLayer, type GlassRegion, type PixiGlassLayer } from '$src/infographics/workspace/pixiGlassLayer.ts'
 
 type PixiImageEntry = {
     sprite: Sprite
@@ -85,9 +86,13 @@ export type PixiMediaLayer = {
     setMarqueeRect: (worldRect: { x: number; y: number; width: number; height: number } | null) => void
     setSelectionOverlayBounds: (worldBounds: { x: number; y: number; width: number; height: number } | null) => void
     setPixiEdges: (edges: PixiEdgeRenderDatum[]) => void
+    syncGlassNodes: (regions: GlassRegion[]) => void
+    syncFloatingPanelGlass: (rect: { x: number; y: number; width: number; height: number; borderRadius: number } | null) => void
     getHealth: () => PixiRendererHealth
     destroy: () => void
 }
+
+export type { GlassRegion }
 
 type PixiMediaLayerOptions = {
     paneEl: HTMLDivElement
@@ -174,6 +179,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     const entries = new Map<string, PixiImageEntry>()
     const selectionOutlines = new Map<string, Graphics>()
     let edgeRenderer: PixiEdgeRenderer | null = null
+    let glassLayer: PixiGlassLayer | null = null
+    // Glass regions that arrived before PIXI finished initialising.
+    // Re-applied in the async init callback once glassLayer is created.
+    let lastGlassRegions: GlassRegion[] = []
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
     const pixiOwnedNodeIds = new Set<string>()
@@ -238,6 +247,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             world.addChild(edgeLayer)
             world.addChild(fgLayer)
             edgeRenderer = createPixiEdgeRenderer(edgeLayer)
+            glassLayer = createPixiGlassLayer({ app, world, fgLayer })
+            // Re-apply any regions that arrived during async PIXI initialisation.
+            if (lastGlassRegions.length > 0) {
+                glassLayer.sync(lastGlassRegions)
+            }
             hostEl.appendChild(app.canvas)
             // Only position the canvas — DO NOT set width/height explicitly.
             // `autoDensity: true` + `resizeTo: paneEl` own the canvas pixel
@@ -270,6 +284,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         currentTier = getPixiLodTier(viewport.zoom)
         world.position.set(viewport.x, viewport.y)
         world.scale.set(viewport.zoom, viewport.zoom)
+        glassLayer?.setViewport(viewport)
         // Visibility update is rAF-coalesced so a 60Hz wheel-zoom doesn't
         // run the spatial-index scan + per-entry iteration 60 times per
         // second — once per frame is enough.
@@ -376,7 +391,13 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         renderRaf = requestAnimationFrame(() => {
             renderRaf = null
             if (destroyed || health !== 'ready') return
+            // Pass 1 (only when glass regions exist): render scene without glass
+            // into sceneRT so the LiquidGlassFilter can sample it for refraction.
+            if (glassLayer?.hasActiveRegions()) glassLayer.renderFrame(app)
+            // Pass 2 (or only pass when no glass): full composite render.
             app.render()
+            // Keep the animation loop running while glass regions are present.
+            if (glassLayer?.hasActiveRegions()) scheduleRender()
         })
     }
 
@@ -389,6 +410,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         dimensions: { width: number; height: number }
     ): void {
         if (destroyed) return
+        // Always forward to glass layer — region nodes don't have image entries
+        // but do have glass quads that must track the dragged position in real time.
+        glassLayer?.updateRegionLiveTransform(nodeId, worldPosition.x, worldPosition.y, dimensions.width, dimensions.height)
         const entry = entries.get(nodeId)
         if (!entry) return
 
@@ -935,6 +959,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         scheduleRender()
     }
 
+    function syncGlassNodes(regions: GlassRegion[]): void {
+        // Always store so we can replay after async PIXI init finishes.
+        lastGlassRegions = regions
+        if (destroyed) return
+        glassLayer?.sync(regions)
+        scheduleRender()
+    }
+
+    function syncFloatingPanelGlass(rect: { x: number; y: number; width: number; height: number; borderRadius: number } | null): void {
+        if (destroyed) return
+        glassLayer?.syncScreenPanel(rect)
+        scheduleRender()
+    }
+
     function getHealth(): PixiRendererHealth {
         return health
     }
@@ -966,6 +1004,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         marqueeGraphics = null
         groupOverlayGraphics?.destroy()
         groupOverlayGraphics = null
+        glassLayer?.destroy()
+        glassLayer = null
         edgeRenderer?.destroy()
         edgeRenderer = null
         for (const [, entry] of textureCache) {
@@ -988,6 +1028,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         setMarqueeRect,
         setSelectionOverlayBounds,
         setPixiEdges,
+        syncGlassNodes,
+        syncFloatingPanelGlass,
         getHealth,
         destroy,
     }

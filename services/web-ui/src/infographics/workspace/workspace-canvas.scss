@@ -339,11 +339,14 @@
  */
 .workspace-context-region-node,
 .workspace-ai-chat-thread-node--region {
-    // The region card. The moving backdrop is rendered by the singleton
-    // `ShiftingGradientRenderer` via a <canvas class="shifting-gradient-canvas">
-    // injected as the first child. A pale base color keeps the empty region
-    // airy like the mockup while the canvas supplies the shifting depth.
-    background: #E5F2EE;
+    // Background is transparent: the PIXI LiquidGlassFilter (z-index 2 on the
+    // pane) renders the liquid glass surface — lens-distorted scene snapshot
+    // plus animated rim lighting — exactly over this node's world-space bounds.
+    // The PIXI canvas renders above the DOM viewport (z-index 1), so it paints
+    // on top of this node's DOM content without blocking pointer events (PIXI
+    // host is pointer-events:none). The shifting-gradient-canvas child remains
+    // in the DOM but is visually occluded by the PIXI glass surface.
+    background: transparent;
     border: none;
     border-radius: 18px;
     box-shadow: 0 8px 20px rgba(94, 119, 111, 0.07);

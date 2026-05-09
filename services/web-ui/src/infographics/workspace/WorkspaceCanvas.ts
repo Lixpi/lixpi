@@ -42,7 +42,7 @@ import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT }
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
-import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { createPixiMediaLayer, type GlassRegion, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 
 import { select } from 'd3-selection'
@@ -225,6 +225,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewportBridge.applyViewport(currentCanvasState.viewport)
     }
     pixiMediaLayer.sync(currentCanvasState)
+    if (currentCanvasState) {
+        pixiMediaLayer.syncGlassNodes(buildGlassRegions(currentCanvasState.nodes))
+    }
 
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
@@ -1295,6 +1298,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPromptGradient?.destroy()
         activeAiChatPanelEl?.remove()
         activeAiChatPanelEl = null
+        pixiMediaLayer?.syncFloatingPanelGlass(null)
         activeAiChatPromptEditor = null
         activeAiChatPromptGradient = null
 
@@ -1521,6 +1525,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatPanelEl = panelEl
         paneEl.appendChild(panelEl)
+
+        // Sync PIXI glass to the floating panel bounds after layout settles.
+        requestAnimationFrame(() => {
+            if (!activeAiChatPanelEl) return
+            const paneRect  = paneEl.getBoundingClientRect()
+            const panelRect = activeAiChatPanelEl.getBoundingClientRect()
+            pixiMediaLayer?.syncFloatingPanelGlass({
+                x: panelRect.left - paneRect.left,
+                y: panelRect.top  - paneRect.top,
+                width: panelRect.width,
+                height: panelRect.height,
+                borderRadius: 10,
+            })
+        })
 
         if (activeAiChatPanelWidth !== null) {
             applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
@@ -2810,6 +2828,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return { nodeEl, dragOverlay }
     }
 
+    function buildGlassRegions(nodes: CanvasNode[]): GlassRegion[] {
+        return nodes
+            .filter(isContextRegionCanvasNode)
+            .map((node: ContextRegionNode) => ({
+                nodeId: node.nodeId,
+                worldX: node.position.x,
+                worldY: node.position.y,
+                width: node.dimensions.width,
+                height: node.dimensions.height,
+                borderRadius: 18,
+            }))
+    }
+
     function commitCanvasState(nextState: CanvasState) {
         // Track image changes and delete orphaned images from storage
         canvasImageLifecycle.trackCanvasState(nextState)
@@ -2820,6 +2851,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncNodes(nextState.nodes)
         scheduleEdgesRender()
         pixiMediaLayer?.sync(nextState)
+        pixiMediaLayer?.syncGlassNodes(buildGlassRegions(nextState.nodes))
     }
 
     function scheduleTransformSideEffects() {
