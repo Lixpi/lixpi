@@ -296,9 +296,6 @@ services:
             lixpi-api:
                 condition: service_healthy
                 restart: true
-            lixpi-llm-api:
-                condition: service_healthy
-                restart: true
 
     lixpi-api:
         container_name: lixpi-api
@@ -347,13 +344,13 @@ services:
             NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
-            NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
 
-            # AI config
+            # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
             OPENAI_API_KEY: ${OPENAI_API_KEY}
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+            LLM_TIMEOUT_SECONDS: 1200
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
 
         volumes:
@@ -417,66 +414,6 @@ services:
                 condition: service_healthy
                 restart: true
             lixpi-nats-3:
-                condition: service_healthy
-                restart: true
-
-    lixpi-llm-api:
-        container_name: lixpi-llm-api
-        profiles: ["main"]
-        restart: always
-        image: lixpi/llm-api
-        build:
-            dockerfile: services/llm-api/Dockerfile
-            context: .
-        environment:
-            # Force color output in the terminal
-            FORCE_COLOR: 1
-            PYTHONUNBUFFERED: 1
-
-            # NATS configuration
-            NATS_SERVERS: ${NATS_SERVERS}
-            NATS_NKEY_SEED: ${NATS_LLM_SERVICE_NKEY_SEED}
-
-            # Auth0 configuration (for JWT verification)
-            AUTH0_DOMAIN: ${AUTH0_DOMAIN}
-            AUTH0_API_IDENTIFIER: ${AUTH0_API_IDENTIFIER}
-
-            # AI Provider API Keys
-            OPENAI_API_KEY: ${OPENAI_API_KEY}
-            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
-
-            # Circuit breaker settings
-            LLM_TIMEOUT_SECONDS: 1200
-
-            # Logging
-            LOG_LEVEL: INFO
-        volumes:
-            # Mount source for hot-reload during development
-            - ./services/llm-api/src:/app/src:cached
-            - ./services/llm-api/pyproject.toml:/app/pyproject.toml:cached
-            # Mount lixpi packages for development
-            - ./packages/lixpi/constants/python:/app/packages/lixpi/constants/python:cached
-            - ./packages/lixpi/debug-tools/python:/app/packages/lixpi/debug-tools/python:cached
-            - ./packages/lixpi/nats-service/python:/app/packages/lixpi/nats-service/python:cached
-            # TLS certificates for NATS connection
-            - caddy-certs:/opt/nats/certs:ro
-
-        networks:
-            - nats
-        working_dir: /app
-        # Health check
-        healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-            start_period: 40s
-        ports:
-            - 8002:8000
-        depends_on:
-            lixpi-api:
                 condition: service_healthy
                 restart: true
 

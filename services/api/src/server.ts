@@ -21,7 +21,7 @@ import { createServer } from 'http'
 import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
-import { aiInteractionSubjects } from './NATS/subscriptions/ai-interaction-subjects.ts'
+import { aiInteractionSubjects, setLlmModule } from './NATS/subscriptions/ai-interaction-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
 import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
@@ -31,6 +31,8 @@ import imageRoutes from './routes/image-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 
 import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
+import { createLlmModule } from './llm/index.ts'
+import { storeWorkspaceImage } from './services/image-storage.ts'
 
 const env = process.env
 
@@ -130,34 +132,18 @@ await startNatsAuthCalloutService({
     algorithms: ['RS256'],
     jwksUri: env.MOCK_AUTH0 === 'true' ? env.MOCK_AUTH0_JWKS_URI : `${env.AUTH0_DOMAIN}/.well-known/jwks.json`,
     natsAuthAccount: env.NATS_AUTH_ACCOUNT,
-    // Configure internal services that use self-issued JWT authentication.
-    // Each service signs its own tokens with an NKey, we verify signatures using public keys.
-    serviceAuthConfigs: [
-        {
-            publicKey: env.NATS_LLM_SERVICE_NKEY_PUBLIC,
-            userId: 'svc:llm-service',
-            permissions: {
-                pub: {
-                    allow: [
-                        "ai.interaction.chat.error.>",           // Publish errors back to API
-                        "ai.interaction.chat.receiveMessage.>",  // Stream LLM responses to web-ui
-                        "$JS.API.>",                             // JetStream API for object store access
-                        "$JS.FC.>",                              // JetStream flow control for large objects
-                        "$JS.ACK.>"                              // JetStream acknowledgements
-                    ]
-                },
-                sub: {
-                    allow: [
-                        "ai.interaction.chat.process",           // Subscribe to chat processing requests
-                        "ai.interaction.chat.stop.>",            // Subscribe to stop requests
-                        "_INBOX.>",                              // Reply inbox for JetStream requests
-                        "$JS.>"                                  // All JetStream subjects for object store
-                    ]
-                }
-            }
-        }
-    ]
+    // For internal-service authentication patterns (NKey-signed JWTs),
+    // see documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md.
+    serviceAuthConfigs: [],
 })
+
+// Initialize the in-process LLM module. The LangGraph workflow that previously
+// ran in the standalone services/llm-api Python service now runs here directly.
+const llmModule = createLlmModule({
+    natsService: await NATS_Service.getInstance(),
+    storeWorkspaceImage,
+})
+setLlmModule(llmModule)
 
 
 
@@ -209,6 +195,11 @@ httpServer.listen(3000, '0.0.0.0', () => {
 // Graceful shutdown (for your application termination handlers)
 process.on('SIGINT', async () => {
     log('Shutting down...')
+    try {
+        await llmModule.shutdown()
+    } catch (e) {
+        err('LLM module shutdown failed:', e)
+    }
     await await NATS_Service.getInstance()!.drain()    // Drains subscriptions and closes connection
     process.exit(0)
 })
