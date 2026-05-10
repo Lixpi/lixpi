@@ -100,8 +100,8 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         privateSubnets,
         serviceName = 'api',
         containerPort = 3000,
-        cpu = 512,         // 0.5 vCPU — bumped baseline for in-process LLM streaming
-        memory = 1024,     // 1024 MiB — bumped baseline for in-process LLM streaming
+        cpu = 512,       // 0.5 vCPU
+        memory = 512,    // 512 MiB
         desiredCount = 1,
         resourceBindings,
         environment,
