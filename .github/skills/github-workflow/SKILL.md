@@ -36,7 +36,7 @@ Examples:
 ### 1. Create the PR
 
 - **Title format**: `LIX-<issue-id> # <description>` (same as commit format).
-- **Base branch**: `main` (unless instructed otherwise).
+- **Base branch**: `develop` (unless instructed otherwise).
 - **Assign the PR** to the current user.
 
 ### 2. Update the Issue
@@ -55,7 +55,7 @@ Include:
 ## Step-by-Step: Full Feature Workflow
 
 1. **Identify the issue** — Use GitHub MCP tools to read the issue and get its ID.
-2. **Create the branch from `main`** — Use `mcp_github_create_branch` with `from_branch: "main"`, then `git fetch origin && git checkout <branch-name>` locally.
+2. **Create the branch from `develop`** — Use `mcp_github_create_branch` with `from_branch: "develop"`, then `git fetch origin && git checkout <branch-name>` locally.
 3. **Stage, commit, and push** — Use local Git CLI:
    - Stage only the relevant files: `git add <file1> <file2> ...` — **never** use `git add -A` or `git add .`.
    - Verify staged files: `git diff --cached --name-only`.
@@ -66,7 +66,7 @@ Include:
 
 ## After PR is Merged
 
-1. Switch to main: `git checkout main`
+1. Switch to develop: `git checkout develop`
 2. Pull the merged changes: `git pull`
 
 ## Tools
@@ -85,7 +85,7 @@ Use **local Git CLI** for all file operations (staging, committing, pushing). Us
 ### GitHub MCP tools — for GitHub API operations
 
 - `mcp_github_get_me` — Get current user for assignment
-- `mcp_github_create_branch` — Create branches (always from `main`)
+- `mcp_github_create_branch` — Create branches (always from `develop`)
 - `mcp_github_create_pull_request` — Open PRs
 - `mcp_github_issue_write` — Create and update issues
 - `mcp_github_issue_read` — Read issue details
