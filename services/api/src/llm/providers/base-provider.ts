@@ -4,8 +4,9 @@ import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
+import type { ProviderName } from '@lixpi/constants'
 
-import { LLM_TIMEOUT_MS, type ProviderName } from '../config.ts'
+import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type ProviderState } from '../graph/state.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
@@ -28,6 +29,10 @@ export type BaseProviderDeps = {
 // Extraction runs have their own dedicated graph in src/llm/extraction/; this graph is
 // for chat threads and image generation only. The resolveFeatures pre-stage handles
 // /use chip resolution by injecting Feature definitions + source crops into state.messages.
+// Top-level chat requests publish START_STREAM before graph invocation so expensive
+// pre-stream VLM/image preprocessing never leaves the browser looking frozen.
+// Transient image-model providers skip their own stream lifecycle because the parent
+// chat stream owns it.
 //
 // Topology:
 //   START → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional]
@@ -134,6 +139,10 @@ export abstract class BaseProvider {
         }, LLM_TIMEOUT_MS)
 
         try {
+            if (!initialState.enableImageGeneration) {
+                this.streamPublisher.start()
+            }
+
             return await this.app.invoke(initialState, {
                 signal: this.abortController.signal,
                 recursionLimit: 25,
@@ -146,6 +155,7 @@ export abstract class BaseProvider {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
             }
             this.streamPublisher.error(message)
+            this.streamPublisher.end()
             return {
                 ...initialState,
                 error: message,

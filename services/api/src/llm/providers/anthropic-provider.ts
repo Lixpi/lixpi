@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt, formatUserMessageWithHack } from '../prompts/load-prompts.ts'
 import {

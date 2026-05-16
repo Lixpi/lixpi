@@ -1,13 +1,12 @@
 'use strict'
 
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { NATS_SUBJECTS, AI_INTERACTION_CONSTANTS, type CanvasFeatureExtractionState, type StageTraceEvent } from '@lixpi/constants'
+import { NATS_SUBJECTS, STREAM_STATUS, type CanvasFeatureExtractionState, type StageTraceEvent } from '@lixpi/constants'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { select } from 'd3-selection'
 import { aiRobotFaceIcon, claudeIcon, geminiIcon, gptAvatarIcon, stabilityIcon } from '$src/svgIcons/index.ts'
 
-const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 const withApiBaseUrl = (url: string): string =>

@@ -3,7 +3,7 @@
 import { warn } from '@lixpi/debug-tools'
 
 import type { AiModelMetaInfo, ChatMessage } from '../graph/state.ts'
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 
 export const TOOL_NAME = 'generate_image'
 

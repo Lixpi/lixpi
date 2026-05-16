@@ -1,10 +1,13 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import type { ImageBranchVlmResolution, StageTraceEvent } from '@lixpi/constants'
-
-import { STREAM_STATUS, type StreamStatus } from '../config.ts'
-import type { ProviderName } from '../config.ts'
+import {
+    STREAM_STATUS,
+    type ImageBranchVlmResolution,
+    type ProviderName,
+    type StageTraceEvent,
+    type StreamStatus,
+} from '@lixpi/constants'
 
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
     `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
@@ -158,6 +161,8 @@ export class TagAwareStream {
 
 export class StreamPublisher {
     private tagBuffer: TagAwareStream
+    private hasStarted = false
+    private hasEnded = false
 
     constructor(
         private readonly nats: NatsService,
@@ -169,6 +174,10 @@ export class StreamPublisher {
     }
 
     start(): void {
+        if (this.hasStarted) return
+
+        this.hasStarted = true
+        this.hasEnded = false
         this.tagBuffer.reset()
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
@@ -184,6 +193,9 @@ export class StreamPublisher {
     }
 
     end(): void {
+        if (!this.hasStarted || this.hasEnded) return
+
+        this.hasEnded = true
         this.tagBuffer.flush()
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {

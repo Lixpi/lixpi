@@ -1,9 +1,9 @@
 'use strict'
 
 import { describe, it, expect, beforeEach } from 'vitest'
+import { STREAM_STATUS } from '@lixpi/constants'
 
 import { StreamPublisher, TagAwareStream } from './stream-publisher.ts'
-import { STREAM_STATUS } from '../config.ts'
 
 type Published = { subject: string, payload: any }
 
@@ -124,6 +124,43 @@ describe('TagAwareStream', () => {
 })
 
 describe('StreamPublisher extraction progress', () => {
+    it('publishes START_STREAM only once when providers start after shared prework', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        publisher.start()
+        publisher.start()
+
+        expect(statuses(nats.published)).toEqual([STREAM_STATUS.START_STREAM])
+    })
+
+    it('publishes END_STREAM only once after duplicate starts', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        publisher.start()
+        publisher.start()
+        publisher.chunk('done')
+        publisher.end()
+        publisher.end()
+
+        expect(statuses(nats.published)).toEqual([
+            STREAM_STATUS.START_STREAM,
+            STREAM_STATUS.STREAMING,
+            STREAM_STATUS.END_STREAM,
+        ])
+        expect(flatTexts(nats.published)).toBe('done')
+    })
+
+    it('does not publish END_STREAM before START_STREAM', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
+
+        publisher.end()
+
+        expect(nats.published).toHaveLength(0)
+    })
+
     it('publishes extraction status and detail on the chat stream', () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'run1', 'Anthropic')

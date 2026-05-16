@@ -7,10 +7,11 @@ import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 import {
     NATS_SUBJECTS,
     type AiInteractionChatSendMessagePayload,
+    type ProviderName,
 } from '@lixpi/constants'
 
 import AiModel from '../../models/ai-model.ts'
-import type { LlmModule, ProviderName } from '../../llm/index.ts'
+import type { LlmModule } from '../../llm/index.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 

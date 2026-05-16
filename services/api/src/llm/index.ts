@@ -1,6 +1,7 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
+import type { ProviderName } from '@lixpi/constants'
 
 import { ProviderRegistry } from './providers/provider-registry.ts'
 import { OpenAIProvider } from './providers/openai-provider.ts'
@@ -10,7 +11,6 @@ import { StabilityProvider } from './providers/stability-provider.ts'
 import { ImageRouter } from './tools/image-router.ts'
 import { ExtractionOrchestrator } from './extraction/orchestrator.ts'
 
-import type { ProviderName } from './config.ts'
 import type { StoreWorkspaceImageFn } from './graph/image-publisher.ts'
 import type { ExtractionInput, ExtractionResult } from './extraction/types.ts'
 
@@ -59,5 +59,4 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     }
 }
 
-export type { ProviderName } from './config.ts'
 export type { ExtractionInput, ExtractionResult } from './extraction/types.ts'

@@ -8,7 +8,7 @@ import { GoogleGenAI } from '@google/genai'
 import type NatsService from '@lixpi/nats-service'
 import { warn, info } from '@lixpi/debug-tools'
 
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
 import { convertAttachmentsForProvider, resolveImageUrls } from '../utils/attachments.ts'
 import { detectCapabilities, type ModelCapabilities } from './capabilities.ts'

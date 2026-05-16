@@ -5,17 +5,17 @@ const prefix = "ProseMirror-prompt"
 export const openPrompt = (options) => {
     let wrapper = document.body.appendChild(document.createElement("div"))
     wrapper.className = prefix
-    
+
     let mouseOutside = (e) => { if (!wrapper.contains(e.target)) close() }
     setTimeout(() => window.addEventListener("mousedown", mouseOutside), 50)
     let close = () => {
         window.removeEventListener("mousedown", mouseOutside)
         if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper)
     }
-    
+
     let domFields = []
     for (let name in options.fields) domFields.push(options.fields[name].render())
-    
+
     let submitButton = document.createElement("button")
     submitButton.type = "submit"
     submitButton.className = prefix + "-submit"
@@ -25,7 +25,7 @@ export const openPrompt = (options) => {
     cancelButton.className = prefix + "-cancel"
     cancelButton.textContent = "Cancel"
     cancelButton.addEventListener("click", close)
-    
+
     let form = wrapper.appendChild(document.createElement("form"))
     if (options.title) form.appendChild(document.createElement("h5")).textContent = options.title
     domFields.forEach(field => {
@@ -36,13 +36,13 @@ export const openPrompt = (options) => {
     buttons.appendChild(submitButton)
     buttons.appendChild(document.createTextNode(" "))
     buttons.appendChild(cancelButton)
-    
+
     let box = wrapper.getBoundingClientRect()
     applyStyle(wrapper, {
         top: ((window.innerHeight - box.height) / 2) + "px",
         left: ((window.innerWidth - box.width) / 2) + "px",
     })
-    
+
     let submit = () => {
         let params = getValues(options.fields, domFields)
         if (params) {
@@ -50,12 +50,12 @@ export const openPrompt = (options) => {
             options.callback(params)
         }
     }
-    
+
     form.addEventListener("submit", e => {
         e.preventDefault()
         submit()
     })
-    
+
     form.addEventListener("keydown", e => {
         if (e.keyCode == 27) {
             e.preventDefault()
@@ -69,7 +69,7 @@ export const openPrompt = (options) => {
             }, 500)
         }
     })
-    
+
     let input = form.elements[0]
     if (input) input.focus()
 }
@@ -104,17 +104,17 @@ export class Field {
     constructor(options) {
         this.options = options
     }
-    
+
     read(dom) { return dom.value }
-    
+
     validateType(value) { return null }
-    
+
     validate(value) {
         if (!value && this.options.required)
         return "Required field"
         return this.validateType(value) || (this.options.validate ? this.options.validate(value) : null)
     }
-    
+
     clean(value) {
         return this.options.clean ? this.options.clean(value) : value
     }

@@ -2,10 +2,10 @@
 
 import { info, err } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
-import { NATS_SUBJECTS } from '@lixpi/constants'
+import { NATS_SUBJECTS, type ProviderName } from '@lixpi/constants'
 import ExtractionRun from '../../models/extraction-run.ts'
 import AiModel from '../../models/ai-model.ts'
-import type { LlmModule, ProviderName } from '../../llm/index.ts'
+import type { LlmModule } from '../../llm/index.ts'
 
 const { FEATURE_EXTRACT } = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
 
