@@ -23,7 +23,7 @@ import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { webUiSettings } from '$src/webUiSettings.ts'
-import type { AiModelId } from '@lixpi/constants'
+import type { AiModelId, ImageBranchVlmResolution } from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
@@ -45,7 +45,7 @@ type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { image
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM' | 'ERROR'
-type ImageSegmentType = 'image_partial' | 'image_complete'
+type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type SegmentEvent = {
     status?: StreamStatus
@@ -68,6 +68,7 @@ type SegmentEvent = {
     partialIndex?: number
     responseId?: string
     revisedPrompt?: string
+    imageBranchResolution?: ImageBranchVlmResolution
     error?: string
 }
 type ImageReference = { fileId: string; workspaceId: string }
@@ -863,6 +864,33 @@ class AiChatThreadPluginClass {
 
             if (type === 'image_complete') {
                 this.handleImageComplete(view, event)
+                return
+            }
+
+            if (type === 'image_branch_resolved') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId && event.imageBranchResolution) {
+                    callbacks.onImageBranchResolvedToCanvas?.({
+                        threadId: effectiveThreadId,
+                        resolution: event.imageBranchResolution,
+                    })
+                }
+                return
+            }
+
+            if (type === 'image_branch_resolution_error') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId) {
+                    callbacks.onImageBranchResolutionErrorToCanvas?.({
+                        threadId: effectiveThreadId,
+                        error: event.error || 'Image branch resolution failed',
+                    })
+                    callbacks.onImageErrorToCanvas?.({
+                        threadId: effectiveThreadId,
+                        error: event.error || 'Image branch resolution failed',
+                    })
+                }
+                this.handleStreamError(view, effectiveThreadId)
                 return
             }
 

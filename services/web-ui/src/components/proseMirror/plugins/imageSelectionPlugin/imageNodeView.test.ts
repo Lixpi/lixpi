@@ -40,7 +40,7 @@ describe('ImageNodeView — error placeholder', () => {
 
 	it('uses html template for the error placeholder, not document.createElement', () => {
 		// Find the error handler block
-		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
 		expect(errorBlock).not.toBeNull()
 		const block = errorBlock![0]
 
@@ -49,7 +49,7 @@ describe('ImageNodeView — error placeholder', () => {
 	})
 
 	it('injects brokenImageIcon via innerHTML attribute, not string interpolation', () => {
-		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
 		expect(errorBlock).not.toBeNull()
 		const block = errorBlock![0]
 
@@ -57,7 +57,7 @@ describe('ImageNodeView — error placeholder', () => {
 	})
 
 	it('checks for existing placeholder before appending (deduplication)', () => {
-		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
 		expect(errorBlock).not.toBeNull()
 		const block = errorBlock![0]
 
@@ -65,15 +65,15 @@ describe('ImageNodeView — error placeholder', () => {
 	})
 
 	it('hides the img element on error', () => {
-		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
 		expect(errorBlock).not.toBeNull()
 		const block = errorBlock![0]
 
-		expect(block).toContain("display = 'none'")
+		expect(block).toContain("applyStyle(this.img, { display: 'none' })")
 	})
 
 	it('no inline SVG markup in source', () => {
-		const errorBlock = ts.match(/addEventListener\('error'[\s\S]*?\}\)/)
+		const errorBlock = ts.match(/this\.img\.addEventListener\('error'[\s\S]*?\n\s*\}\)\n\n\s*\/\/ Handle selection/)
 		expect(errorBlock).not.toBeNull()
 		const block = errorBlock![0]
 
@@ -103,7 +103,7 @@ describe('ImageNodeView — partial generated image placeholder', () => {
 
 		expect(block).toContain("if (!src)")
 		expect(block).toContain("this.img.removeAttribute('src')")
-		expect(block).toContain("this.img.style.display = 'none'")
+		expect(block).toContain("applyStyle(this.img, { display: 'none' })")
 	})
 })
 

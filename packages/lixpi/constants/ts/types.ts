@@ -90,6 +90,93 @@ export type ImageSizeOption = {
 
 export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
 
+export type ImageBranchSelectionMode = 'context-only' | 'edit-active-branch' | 'all-branches' | 'fresh-branch' | 'ambiguous'
+
+export type ImageBranchCandidateRoleHint =
+    | 'base-context'
+    | 'generated-variant'
+    | 'branch-leaf'
+    | 'branch-ancestor'
+    | 'embedded-thread-image'
+
+export type ImageBranchCandidateImage = {
+    nodeId: string
+    fileId?: string
+    workspaceId?: string
+    imageUrl: string
+    roleHints: ImageBranchCandidateRoleHint[]
+    branchId?: string
+    parentImageNodeId?: string
+    ancestorNodeIds: string[]
+    sourceContextNodeIds: string[]
+    sourceMessageId?: string
+    promptText?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    createdAt?: number
+}
+
+export type ImageBranchCandidateSnapshot = {
+    resolverVersion: string
+    threadId: string
+    regionNodeId: string
+    promptText: string
+    promptFingerprint: string
+    candidates: ImageBranchCandidateImage[]
+    transcriptContext: string
+}
+
+export type ImageBranchReferenceRole =
+    | 'target'
+    | 'base-context'
+    | 'style-reference'
+    | 'comparison-target'
+    | 'excluded'
+
+export type ImageBranchVlmReferenceDecision = {
+    nodeId: string
+    role: ImageBranchReferenceRole
+    reason: string
+}
+
+export type ImageBranchVlmResolution = {
+    resolverKind: 'structured-vlm'
+    resolverVersion: string
+    resolverModelProvider: string
+    resolverModelId: string
+    mode: ImageBranchSelectionMode
+    operationKind: ImageGenerationOperationKind
+    targetImageNodeId: string | null
+    parentImageNodeId?: string
+    branchId: string | null
+    includeGeneratedNodeIds: string[]
+    referenceImageNodeIds: string[]
+    sourceContextNodeIds: string[]
+    styleReferenceNodeIds: string[]
+    excludedNodeIds: string[]
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags: string[]
+    styleTags: string[]
+    confidence: number
+    rationale: string
+    decisions: ImageBranchVlmReferenceDecision[]
+}
+
+export type ImageBranchResolvedStreamPayload = {
+    status: 'IMAGE_BRANCH_RESOLVED'
+    aiProvider: string
+    resolution: ImageBranchVlmResolution
+}
+
+export type ImageBranchResolutionErrorStreamPayload = {
+    status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
+    aiProvider: string
+    error: string
+}
+
 export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
@@ -105,8 +192,18 @@ export type ImageGeneratedByMetadata = {
     promptText?: string
     promptFingerprint?: string
     entitySummary?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
     entityTags?: string[]
     styleTags?: string[]
+    targetImageNodeId?: string
+    styleReferenceNodeIds?: string[]
+    excludedNodeIds?: string[]
+    resolverKind?: 'structured-vlm'
+    resolverModelProvider?: string
+    resolverModelId?: string
+    resolverRationale?: string
+    resolverConfidence?: number
     resolverVersion?: string
     createdAt?: number
 }
@@ -466,6 +563,7 @@ export type AiInteractionChatSendMessagePayload = {
     aiModel: AiModelId
     threadId: string
     referencedFeatureIds?: string[]
+    imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {

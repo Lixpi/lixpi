@@ -1,6 +1,7 @@
 'use strict'
 
 import type { ProviderName } from '../config.ts'
+import type { ImageBranchCandidateSnapshot, ImageBranchVlmResolution } from '@lixpi/constants'
 
 export type Usage = {
     promptTokens: number
@@ -86,6 +87,8 @@ export type ProviderState = {
     featureReferenceImages?: string[] | undefined
     imagePromptRetryCount?: number | undefined
     generatedImages?: string[] | undefined
+    imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot | undefined
+    imageBranchResolution?: ImageBranchVlmResolution | undefined
 
     // Multi-turn editing (OpenAI Responses API)
     previousResponseId?: string | undefined
@@ -130,6 +133,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     featureReferenceImages: { reducer: keep },
     imagePromptRetryCount: { reducer: keep, default: () => 0 },
     generatedImages: { reducer: keep },
+    imageBranchCandidateSnapshot: { reducer: keep },
+    imageBranchResolution: { reducer: keep },
     previousResponseId: { reducer: keep },
     referencedFeatureIds: { reducer: keep },
     featureUsagePrompt: { reducer: keep },

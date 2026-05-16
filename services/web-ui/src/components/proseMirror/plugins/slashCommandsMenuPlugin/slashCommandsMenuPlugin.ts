@@ -1,6 +1,6 @@
 import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { createEl } from '$src/utils/domTemplates.ts'
+import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import { SLASH_COMMANDS, filterCommands, type SlashCommand } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts'
 import { documentTitleNodeType } from '$src/components/proseMirror/customNodes/documentTitleNode.ts'
 
@@ -113,7 +113,7 @@ class SlashCommandsMenuView {
         // Convert screen coordinates to local
         const local = this.screenToLocal(coords.left, coords.bottom + 4 * scale)
 
-        Object.assign(this.menu.style, {
+        applyStyle(this.menu, {
             left: `${local.x}px`,
             top: `${local.y}px`,
         })
@@ -210,12 +210,12 @@ class SlashCommandsMenuView {
     }
 
     private show(): void {
-        this.menu.style.visibility = 'visible'
+        applyStyle(this.menu, { visibility: 'visible' })
         this.menu.classList.add('is-visible')
     }
 
     private hide(): void {
-        this.menu.style.visibility = 'hidden'
+        applyStyle(this.menu, { visibility: 'hidden' })
         this.menu.classList.remove('is-visible')
     }
 

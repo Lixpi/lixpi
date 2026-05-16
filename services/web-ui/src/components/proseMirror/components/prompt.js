@@ -1,3 +1,5 @@
+import { applyStyle } from '$src/utils/domTemplates.ts'
+
 const prefix = "ProseMirror-prompt"
 
 export const openPrompt = (options) => {
@@ -36,8 +38,10 @@ export const openPrompt = (options) => {
     buttons.appendChild(cancelButton)
     
     let box = wrapper.getBoundingClientRect()
-    wrapper.style.top = ((window.innerHeight - box.height) / 2) + "px"
-    wrapper.style.left = ((window.innerWidth - box.width) / 2) + "px"
+    applyStyle(wrapper, {
+        top: ((window.innerHeight - box.height) / 2) + "px",
+        left: ((window.innerWidth - box.width) / 2) + "px",
+    })
     
     let submit = () => {
         let params = getValues(options.fields, domFields)
@@ -87,8 +91,10 @@ const getValues = (fields, domFields) => {
 const reportInvalid = (dom, message) => {
     let parent = dom.parentNode
     let msg = parent.appendChild(document.createElement("div"))
-    msg.style.left = (dom.offsetLeft + dom.offsetWidth + 2) + "px"
-    msg.style.top = (dom.offsetTop - 5) + "px"
+    applyStyle(msg, {
+        left: (dom.offsetLeft + dom.offsetWidth + 2) + "px",
+        top: (dom.offsetTop - 5) + "px",
+    })
     msg.className = "ProseMirror-invalid"
     msg.textContent = message
     setTimeout(() => parent.removeChild(msg), 1500)

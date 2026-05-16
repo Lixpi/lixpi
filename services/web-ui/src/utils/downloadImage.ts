@@ -17,6 +17,8 @@
 // (e.g. canvas image nodes).
 // =============================================================================
 
+import { applyStyle } from '$src/utils/domTemplates.ts'
+
 type DownloadImageOptions = {
     filename?: string
     getAuthToken?: () => Promise<string>
@@ -75,7 +77,7 @@ async function downloadViaFetch(imageUrl: string, filename?: string): Promise<vo
     const anchor = document.createElement('a')
     anchor.href = objectUrl
     anchor.download = resolvedFilename
-    anchor.style.display = 'none'
+    applyStyle(anchor, { display: 'none' })
 
     document.body.appendChild(anchor)
     anchor.click()
@@ -101,7 +103,7 @@ async function downloadViaNavigation(imageUrl: string, getAuthToken?: () => Prom
     // The server responds with Content-Disposition: attachment which
     // triggers the browser's native save dialog.
     const iframe = document.createElement('iframe')
-    iframe.style.display = 'none'
+    applyStyle(iframe, { display: 'none' })
     iframe.src = downloadUrl
     document.body.appendChild(iframe)
 

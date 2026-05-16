@@ -1,3 +1,5 @@
+import { applyStyle } from '$src/utils/domTemplates.ts'
+
 const INITIAL_Z_INDEX = 10
 const BACKGROUND_Z_INDEX = 1
 
@@ -7,11 +9,11 @@ export function createNodeLayerManager() {
     return {
         bringToFront(el: HTMLElement) {
             topZIndex++
-            el.style.zIndex = String(topZIndex)
+            applyStyle(el, { zIndex: String(topZIndex) })
         },
 
         sendToBackground(el: HTMLElement) {
-            el.style.zIndex = String(BACKGROUND_Z_INDEX)
+            applyStyle(el, { zIndex: String(BACKGROUND_Z_INDEX) })
         },
 
         currentTopIndex(): number {
