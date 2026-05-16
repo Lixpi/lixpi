@@ -347,7 +347,7 @@ const convertContentForGoogle = (
             if (url.startsWith('data:')) {
                 try {
                     const { mediaType, base64 } = parseDataUrl(url)
-                    out.push({ inline_data: { mime_type: mediaType, data: base64 } })
+                    out.push({ inlineData: { mimeType: mediaType, data: base64 } })
                 } catch (e) {
                     warn(`Failed to parse image data URL for Google: ${e}`)
                 }
