@@ -163,12 +163,6 @@ export class GoogleProvider extends BaseProvider {
                     const errMsg = `Google image model ${modelVersion} returned no inline image data.`
                     err(`[Google:${this.instanceKey}] ${errMsg}`)
                     update.error = errMsg
-                    await this.imagePub.complete({
-                        imageBase64: '',
-                        responseId: '',
-                        revisedPrompt: '',
-                        imageModelId: modelVersion,
-                    })
                 } else {
                     for (let i = 0; i < imageParts.length - 1; i++) {
                         await this.imagePub.partial(imageParts[i]!, i + 1)
@@ -255,7 +249,7 @@ export class GoogleProvider extends BaseProvider {
                 update.aiVendorRequestId = `google-${state.workspaceId}-${state.aiChatThreadId}`
             }
 
-            if (effectiveImageGen) {
+            if (effectiveImageGen && !update.error) {
                 update.imageUsage = {
                     generatedCount: 1,
                     size: imageSize,

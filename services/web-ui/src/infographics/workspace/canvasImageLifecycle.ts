@@ -17,6 +17,7 @@ export function createCanvasImageLifecycleTracker() {
         for (const node of canvasState.nodes) {
             if (node.type === 'image') {
                 const imageNode = node as ImageCanvasNode
+                if (!imageNode.fileId) continue // skip placeholder nodes that have no uploaded file yet
                 images.set(imageNode.fileId, {
                     fileId: imageNode.fileId,
                     workspaceId: imageNode.workspaceId,

@@ -7,6 +7,7 @@ import type {
     ImageCanvasNode,
     DocumentCanvasNode,
     AiChatThreadCanvasNode,
+    ContextRegionCanvasNode,
 } from '@lixpi/constants'
 
 const { AI_CHAT_THREAD_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
@@ -19,7 +20,11 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import type { Document } from '$src/stores/documentStore.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
+import {
+    getGeneratedImageTextByNodeIdFromThreadContent,
+    selectImageBranchForPrompt,
+    type ImageBranchSelection,
+} from '$src/services/ai-image-branching.ts'
 
 // ========== CONTEXT EXTRACTION TYPES ==========
 
@@ -36,6 +41,10 @@ export type ContextItem = {
     workspaceId?: string
     // Links this image to a specific aiResponseMessage within the source AI chat thread
     sourceMessageId?: string
+    branchRole?: 'generated_variant'
+    branchSelectionMode?: ImageBranchSelection['mode']
+    branchId?: string
+    branchSelectionReason?: string
 }
 
 export type ExtractedContext = ContextItem[]
@@ -69,20 +78,14 @@ type ExtractedContent = {
     imageSrcs: string[]
 }
 
-const THREAD_CONTENT_SAVE_DEBOUNCE_MS = 1500
+type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
 
-type PendingThreadContentSave = {
-    timeoutId: ReturnType<typeof setTimeout>
-    payload: {
-        workspaceId: string
-        threadId: string
-        content: any
-    }
+type ExtractConnectedContextOptions = {
+    imagePromptText?: string
+    includeGeneratedImageBranches?: boolean
+    generatedImageTextByNodeId?: Record<string, string>
+    imageBranchSelection?: ImageBranchSelection
 }
-
-const pendingThreadContentSaves = new Map<string, PendingThreadContentSave>()
-
-const getThreadContentSaveKey = (workspaceId: string, threadId: string): string => `${workspaceId}:${threadId}`
 
 // ========== HELPER FUNCTIONS ==========
 
@@ -107,9 +110,7 @@ function findConnectedNodes(
         const sourceNode = nodes.find((n) => n.nodeId === edge.sourceNodeId)
         if (sourceNode) {
             result.push({ node: sourceNode, edge })
-            if (webUiSettings.aiChatContextTraversalDepth === 'full') {
-                result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
-            }
+            result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
         }
     }
 
@@ -175,6 +176,77 @@ function extractContentFromProseMirror(content: string | object): ExtractedConte
     } catch {
         return { text: '', imageSrcs: [] }
     }
+}
+
+function isContextRegionNode(node: CanvasNode | undefined): node is ContextRegionNode {
+    return node?.type === 'contextRegion' || node?.type === 'aiChatThread'
+}
+
+function getGeneratedBranchContextItems(
+    targetNodeId: string,
+    nodes: CanvasNode[],
+    edges: WorkspaceEdge[],
+    options: ExtractConnectedContextOptions
+): ContextItem[] {
+    if (!options.includeGeneratedImageBranches) return []
+
+    const targetNode = nodes.find((node) => node.nodeId === targetNodeId)
+    if (!isContextRegionNode(targetNode)) return []
+
+    const branchSelection = options.imageBranchSelection
+        ?? (options.imagePromptText
+            ? selectImageBranchForPrompt({
+                regionNodeId: targetNode.nodeId,
+                threadId: targetNode.referenceId,
+                nodes,
+                edges,
+                prompt: options.imagePromptText,
+                generatedImageTextByNodeId: options.generatedImageTextByNodeId,
+            })
+            : undefined)
+
+    if (!branchSelection) return []
+
+    if (branchSelection.includeGeneratedNodeIds.length === 0) return []
+
+    const nodesById = new Map(nodes.map((node) => [node.nodeId, node]))
+    return branchSelection.includeGeneratedNodeIds
+        .map((nodeId) => nodesById.get(nodeId))
+        .filter((node): node is ImageCanvasNode => node?.type === 'image')
+        .map((node) => ({
+            type: 'image',
+            nodeId: node.nodeId,
+            content: '',
+            fileId: node.fileId,
+            workspaceId: node.workspaceId,
+            sourceMessageId: node.generatedBy?.responseMessageId,
+            branchRole: 'generated_variant',
+            branchSelectionMode: branchSelection.mode,
+            branchId: branchSelection.branchId ?? undefined,
+            branchSelectionReason: branchSelection.reason,
+        }))
+}
+
+function getContextDedupeKey(item: ContextItem): string {
+    if (item.type === 'image') {
+        return [item.type, item.fileId ?? item.content, item.workspaceId ?? '', item.branchRole ?? 'context'].join(':')
+    }
+
+    return [item.type, item.nodeId, item.title ?? '', item.content].join(':')
+}
+
+function dedupeContextItems(items: ContextItem[]): ContextItem[] {
+    const seen = new Set<string>()
+    const deduped: ContextItem[] = []
+
+    for (const item of items) {
+        const key = getContextDedupeKey(item)
+        if (seen.has(key)) continue
+        seen.add(key)
+        deduped.push(item)
+    }
+
+    return deduped
 }
 
 class AiChatThreadService {
@@ -264,22 +336,9 @@ class AiChatThreadService {
         const isContentOnlyUpdate = content !== undefined && aiModel === undefined && status === undefined
         if (isContentOnlyUpdate) {
             aiChatThreadsStore.updateThread(threadId, { content })
-
-            const saveKey = getThreadContentSaveKey(workspaceId, threadId)
-            const existing = pendingThreadContentSaves.get(saveKey)
-            if (existing) clearTimeout(existing.timeoutId)
-
-            const payload = { workspaceId, threadId, content }
-            const timeoutId = setTimeout(() => {
-                const pending = pendingThreadContentSaves.get(saveKey)
-                if (pending?.timeoutId !== timeoutId) return
-                pendingThreadContentSaves.delete(saveKey)
-                this.sendAiChatThreadUpdateRequest(pending.payload).catch((error) => {
-                    console.error('Failed to update AI chat thread:', error)
-                })
-            }, THREAD_CONTENT_SAVE_DEBOUNCE_MS)
-
-            pendingThreadContentSaves.set(saveKey, { timeoutId, payload })
+            this.sendAiChatThreadUpdateRequest({ workspaceId, threadId, content }).catch((error) => {
+                console.error('Failed to update AI chat thread:', error)
+            })
             return
         }
 
@@ -336,7 +395,7 @@ class AiChatThreadService {
 
     // ========== CONTEXT EXTRACTION ==========
 
-    public async extractConnectedContext(aiChatNodeId: string): Promise<ExtractedContext> {
+    public async extractConnectedContext(aiChatNodeId: string, options: ExtractConnectedContextOptions = {}): Promise<ExtractedContext> {
         const canvasState = workspaceStore.getData('canvasState')
         if (!canvasState) return []
 
@@ -346,9 +405,7 @@ class AiChatThreadService {
         const threadsMap: Map<string, AiChatThread> = aiChatThreadsStore.getData()
 
         const connectedItems = findConnectedNodes(aiChatNodeId, edges, nodes, new Set())
-        if (connectedItems.length === 0) return []
-
-        const context: GatheredContext = []
+        const context: ExtractedContext = []
 
         for (const { node, edge } of connectedItems) {
             if (node.type === 'document') {
@@ -413,7 +470,21 @@ class AiChatThreadService {
             }
         }
 
-        return context
+        const targetNode = nodes.find((node) => node.nodeId === aiChatNodeId)
+        const threadContent = isContextRegionNode(targetNode)
+            ? threadsMap.get(targetNode.referenceId)?.content
+            : undefined
+        const generatedImageTextByNodeId = options.generatedImageTextByNodeId
+            ?? (isContextRegionNode(targetNode)
+                ? getGeneratedImageTextByNodeIdFromThreadContent(threadContent, nodes, targetNode.referenceId)
+                : {})
+
+        context.push(...getGeneratedBranchContextItems(aiChatNodeId, nodes, edges, {
+            ...options,
+            generatedImageTextByNodeId,
+        }))
+
+        return dedupeContextItems(context)
     }
 
     public buildContextMessage(context: ExtractedContext): ContextMessage {
@@ -470,9 +541,20 @@ class AiChatThreadService {
                 imageUrl = `nats-obj://workspace-${item.workspaceId}-files/${item.fileId}`
             }
 
-            const imageMetadata: Record<string, string> = { type: 'standalone_image' }
+            const imageMetadata: Record<string, string> = {
+                type: item.branchRole === 'generated_variant' ? 'generated_image_variant' : 'standalone_image',
+            }
             if (item.sourceMessageId) {
                 imageMetadata.sourceMessageId = item.sourceMessageId
+            }
+            if (item.branchSelectionMode) {
+                imageMetadata.branchSelectionMode = item.branchSelectionMode
+            }
+            if (item.branchId) {
+                imageMetadata.branchId = item.branchId
+            }
+            if (item.branchSelectionReason) {
+                imageMetadata.branchSelectionReason = item.branchSelectionReason
             }
 
             contentBlocks.push({

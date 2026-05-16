@@ -137,9 +137,23 @@ export class ImageRouter {
             }
 
             const finalState = await provider.process(requestData)
+            if (finalState.error) {
+                err(`[ImageRouter] Image generation failed: ${finalState.error}`)
+                return {
+                    error: finalState.error,
+                    errorCode: finalState.errorCode,
+                    errorType: finalState.errorType,
+                }
+            }
+
+            const generatedImages = finalState.generatedImages ?? []
+            if (generatedImages.length === 0) {
+                const message = 'Image generation failed: provider completed without a generated image'
+                err(`[ImageRouter] ${message}`)
+                return { error: message }
+            }
 
             info(`[ImageRouter] Completed successfully instanceKey=${instanceKey}`)
-            const generatedImages = finalState.generatedImages ?? []
             return {
                 ...finalState,
                 generatedImages,
@@ -148,8 +162,9 @@ export class ImageRouter {
                     : undefined),
             }
         } catch (e: any) {
-            err(`[ImageRouter] Image generation failed: ${e?.message ?? e}`)
-            return {}
+            const message = e?.message ?? String(e)
+            err(`[ImageRouter] Image generation failed: ${message}`)
+            return { error: message }
         }
     }
 }

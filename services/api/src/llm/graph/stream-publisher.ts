@@ -225,5 +225,13 @@ export class StreamPublisher {
         if (code) payload.errorCode = code
         if (type) payload.errorType = type
         this.nats.publish(`ai.interaction.chat.error.${instanceKey}`, payload)
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                text: message,
+                status: STREAM_STATUS.ERROR,
+                aiProvider: this.provider,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
     }
 }

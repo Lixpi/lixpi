@@ -45,6 +45,13 @@ import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubb
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
+import {
+    getGeneratedImageTextByNodeIdFromThreadContent,
+    getPromptTextFromMessages,
+    selectImageBranchForPrompt,
+    type ImageBranchSelection,
+} from '$src/services/ai-image-branching.ts'
+import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
@@ -1590,7 +1597,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 try {
                     const aiChatThreadService = servicesStore.getData('aiChatThreadService')
-                    const context = await aiChatThreadService.extractConnectedContext(regionNode.nodeId)
+                    const imagePlacement = rememberGeneratedImagePlacement(
+                        regionNode.referenceId,
+                        regionNode,
+                        messages,
+                        Boolean(imageOptions?.aiImageModel)
+                    )
+                    const context = await aiChatThreadService.extractConnectedContext(regionNode.nodeId, {
+                        imagePromptText: imagePlacement.promptText,
+                        includeGeneratedImageBranches: Boolean(imageOptions?.aiImageModel),
+                        imageBranchSelection: imagePlacement.branchSelection,
+                        generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(regionNode.referenceId),
+                    })
                     const contextMessage = aiChatThreadService.buildContextMessage(context)
                     const messagesWithContext = contextMessage ? [contextMessage, ...messages] : messages
 
@@ -2199,13 +2217,134 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     // Set up callbacks for AI-generated images
+    type PendingGeneratedImagePlacement = {
+        sourceNodeId: string
+        promptText: string
+        branchId: string
+        branchSelection: ImageBranchSelection
+        createdAt: number
+    }
+
     // Tracks in-progress partial images per thread (threadId → canvas node info)
-    const partialImageTracker = new Map<string, { nodeId: string; fileId: string }>()
+    const partialImageTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId: string }>()
+    const pendingGeneratedImagePlacements = new Map<string, PendingGeneratedImagePlacement>()
 
     function findSourceThreadNode(threadId: string): ContextRegionNode | undefined {
         return currentCanvasState?.nodes.find(
             (n: CanvasNode): n is ContextRegionNode => isContextRegionCanvasNode(n) && n.referenceId === threadId
         )
+    }
+
+    function getGeneratedImageSourceNode(threadId: string, sourceThread: ContextRegionNode): CanvasNode {
+        const pendingSourceNodeId = pendingGeneratedImagePlacements.get(threadId)?.sourceNodeId
+        const sourceNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === pendingSourceNodeId)
+        return sourceNode ?? sourceThread
+    }
+
+    function getThreadContentForBranchSelection(threadId: string): unknown {
+        const editorDoc = threadEditors.get(threadId)?.editor?.editorView?.state?.doc
+        if (editorDoc?.toJSON) return editorDoc.toJSON()
+        return aiChatThreadsStore.getThread(threadId)?.content
+    }
+
+    function getGeneratedImageTextByNodeIdForThread(threadId: string): Record<string, string> {
+        return getGeneratedImageTextByNodeIdFromThreadContent(
+            getThreadContentForBranchSelection(threadId),
+            currentCanvasState?.nodes ?? [],
+            threadId
+        )
+    }
+
+    function getNextGeneratedImagePosition(sourceNode: CanvasNode, sourceThread: ContextRegionNode, imageWidth: number, imageHeight: number): { x: number; y: number } {
+        const nodes = currentCanvasState?.nodes || []
+        if (isContextRegionCanvasNode(sourceNode)) {
+            return getNextRegionOutputPosition(sourceThread, imageWidth, imageHeight, nodes)
+        }
+
+        const sourceRect = getNodeWorldRect(sourceNode)
+        const gap = 72
+        const existingChildOutputs = nodes.filter((node: CanvasNode) => {
+            if (node.type !== 'image' || node.parentId) return false
+            return currentCanvasState?.edges.some((edge: WorkspaceEdge) =>
+                edge.sourceNodeId === sourceNode.nodeId && edge.targetNodeId === node.nodeId
+            ) ?? false
+        })
+
+        return {
+            x: sourceRect.x + sourceRect.width + gap,
+            y: sourceRect.y + existingChildOutputs.length * (imageHeight + gap),
+        }
+    }
+
+    function createGeneratedImageEdge(sourceNode: CanvasNode, imageNodeId: string, responseMessageId?: string): WorkspaceEdge {
+        return {
+            edgeId: `edge-${sourceNode.nodeId}-${imageNodeId}`,
+            sourceNodeId: sourceNode.nodeId,
+            targetNodeId: imageNodeId,
+            sourceHandle: 'right',
+            targetHandle: 'left',
+            ...(isContextRegionCanvasNode(sourceNode) && responseMessageId ? { sourceMessageId: responseMessageId } : {}),
+        }
+    }
+
+    function rememberGeneratedImagePlacement(threadId: string, regionNode: ContextRegionNode, messages: any[], hasImageModel: boolean): { promptText: string; branchSelection?: ImageBranchSelection } {
+        if (!hasImageModel) {
+            pendingGeneratedImagePlacements.delete(threadId)
+            return { promptText: '' }
+        }
+
+        const promptText = getPromptTextFromMessages(messages)
+        const branchSelection = selectImageBranchForPrompt({
+            regionNodeId: regionNode.nodeId,
+            threadId: regionNode.referenceId,
+            nodes: currentCanvasState?.nodes ?? [],
+            edges: currentCanvasState?.edges ?? [],
+            prompt: promptText,
+            generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(regionNode.referenceId),
+        })
+        const branchId = branchSelection.branchId ?? `branch-${uuidv4()}`
+        pendingGeneratedImagePlacements.set(threadId, {
+            sourceNodeId: branchSelection.sourceNodeId ?? regionNode.nodeId,
+            promptText,
+            branchId,
+            branchSelection,
+            createdAt: Date.now(),
+        })
+        console.info('[CANVAS] image branch resolution', {
+            threadId,
+            mode: branchSelection.mode,
+            sourceNodeId: branchSelection.sourceNodeId,
+            branchId,
+            operationKind: branchSelection.operationKind,
+            referenceImageNodeIds: branchSelection.referenceImageNodeIds,
+            confidence: branchSelection.confidence,
+            reason: branchSelection.reason,
+            candidates: branchSelection.candidates,
+        })
+        return { promptText, branchSelection }
+    }
+
+    function getPendingGeneratedImageLineage(threadId: string, existingGeneratedBy?: ImageCanvasNode['generatedBy']): Partial<NonNullable<ImageCanvasNode['generatedBy']>> {
+        const placement = pendingGeneratedImagePlacements.get(threadId)
+        if (!placement) return {}
+
+        const sourceNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === placement.sourceNodeId)
+        const parentImageNodeId = sourceNode?.type === 'image' ? sourceNode.nodeId : undefined
+
+        return {
+            branchId: existingGeneratedBy?.branchId ?? placement.branchId,
+            parentImageNodeId: existingGeneratedBy?.parentImageNodeId ?? parentImageNodeId,
+            sourceContextNodeIds: placement.branchSelection.sourceContextNodeIds,
+            referenceImageNodeIds: placement.branchSelection.referenceImageNodeIds,
+            operationKind: placement.branchSelection.operationKind,
+            promptText: placement.promptText,
+            promptFingerprint: placement.branchSelection.promptFingerprint,
+            entitySummary: placement.branchSelection.entitySummary,
+            entityTags: placement.branchSelection.entityTags,
+            styleTags: placement.branchSelection.styleTags,
+            resolverVersion: placement.branchSelection.resolverVersion,
+            createdAt: existingGeneratedBy?.createdAt ?? placement.createdAt,
+        }
     }
 
     function buildImageSrc(imageUrl: string, apiBaseUrl: string, token: string | false): string {
@@ -2331,6 +2470,41 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onCanvasStateChange?.(newCanvasState)
         },
 
+        onImageErrorToCanvas: ({ threadId }) => {
+            pendingGeneratedImagePlacements.delete(threadId)
+            const existing = partialImageTracker.get(threadId)
+            if (!existing || !currentCanvasState) return
+
+            partialImageTracker.delete(threadId)
+            imageElByNodeId.delete(existing.nodeId)
+            imageResolvedSrcByNodeId.delete(existing.nodeId)
+            selectedNodeIds.delete(existing.nodeId)
+
+            // Show error placeholder on the node so the user sees what failed,
+            // then remove it from the canvas state (and DOM) after a short delay.
+            const nodeEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"]`) as HTMLElement | null
+            const spinnerEl = nodeEl?.querySelector('.image-generating-spinner')
+            if (spinnerEl) spinnerEl.remove()
+            const borderSvg = nodeEl?.querySelector('.image-generating-border')
+            if (borderSvg) borderSvg.remove()
+            const imgEl = nodeEl?.querySelector('img.image-node-img') as HTMLImageElement | null
+            if (nodeEl && imgEl) showImageErrorPlaceholder(imgEl, nodeEl)
+
+            const errorNodeId = existing.nodeId
+            setTimeout(() => {
+                if (!currentCanvasState) return
+                const nextState: CanvasState = {
+                    viewport: currentCanvasState.viewport,
+                    nodes: currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId),
+                    edges: currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
+                        edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
+                    ),
+                }
+                commitCanvasStatePreservingEditors(nextState)
+                nodeEl?.remove()
+            }, 4000)
+        },
+
         onImagePartialToCanvas: async (data) => {
             const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId } = data
             console.log('🖼️ [CANVAS] onImagePartialToCanvas', { threadId, fileId, hasExisting: partialImageTracker.has(threadId) })
@@ -2356,9 +2530,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // First partial for this thread — register in tracker IMMEDIATELY before await
             const sourceThread = findSourceThreadNode(threadId)
             if (!sourceThread) return
+            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)
+            const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
             const nodeId = `node-${fileId || uuidv4()}`
-            partialImageTracker.set(threadId, { nodeId, fileId: fileId || '' })
+            partialImageTracker.set(threadId, { nodeId, fileId: fileId || '', sourceNodeId: sourceNode.nodeId })
 
             const token = await AuthService.getTokenSilently()
             const API_BASE_URL = import.meta.env.VITE_API_URL || ''
@@ -2367,7 +2543,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const useAnchored = false
             const imageWidth = getRegionGeneratedImageSize(sourceThread)
             const imageHeight = imageWidth
-            const position = getNextRegionOutputPosition(sourceThread, imageWidth, imageHeight, currentCanvasState?.nodes || [])
+            const position = getNextGeneratedImagePosition(sourceNode, sourceThread, imageWidth, imageHeight)
 
             const imageNode: ImageCanvasNode = {
                 nodeId,
@@ -2382,8 +2558,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     aiChatThreadId: threadId,
                     responseId: '',
                     aiModel: '' as any,
-                    revisedPrompt: '',
+                    revisedPrompt: promptText,
                     responseMessageId: '',
+                    ...getPendingGeneratedImageLineage(threadId),
                 }
             }
 
@@ -2392,13 +2569,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const newEdges = [
                 ...existingEdges,
-                {
-                    edgeId: `edge-${sourceThread.nodeId}-${nodeId}`,
-                    sourceNodeId: sourceThread.nodeId,
-                    targetNodeId: nodeId,
-                    sourceHandle: 'right',
-                    targetHandle: 'left',
-                } satisfies WorkspaceEdge,
+                createGeneratedImageEdge(sourceNode, nodeId),
             ]
 
             if (useAnchored) {
@@ -2470,6 +2641,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const useAnchored = false
 
             if (partial) {
+                const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
                 // Upgrade existing partial canvas node to complete
                 const nodes = (currentCanvasState?.nodes || []).map((n: CanvasNode) => {
                     if (n.nodeId !== partial.nodeId) return n
@@ -2484,8 +2656,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             responseId,
                             aiModel: aiModel as any,
                             imageModelProvider: imageModelProvider || '',
-                            revisedPrompt,
+                            revisedPrompt: revisedPrompt || imgNode.generatedBy?.revisedPrompt || promptText,
                             responseMessageId: responseMessageId || '',
+                            ...getPendingGeneratedImageLineage(threadId, imgNode.generatedBy),
                         },
                     } satisfies ImageCanvasNode
                 })
@@ -2495,11 +2668,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     // Standard mode: set the edge's sourceMessageId to link to the specific AI response
                     edges = edges.map((e: WorkspaceEdge) => {
                         if (e.targetNodeId !== partial.nodeId) return e
-                        return { ...e, sourceMessageId: responseMessageId || undefined }
+                        const sourceNode = (currentCanvasState?.nodes || []).find((node: CanvasNode) => node.nodeId === e.sourceNodeId)
+                        if (sourceNode && isContextRegionCanvasNode(sourceNode)) {
+                            return { ...e, sourceMessageId: responseMessageId || undefined }
+                        }
+                        const { sourceMessageId: _sourceMessageId, ...edgeWithoutSourceMessageId } = e
+                        return edgeWithoutSourceMessageId
                     })
                 }
 
                 partialImageTracker.delete(threadId)
+                pendingGeneratedImagePlacements.delete(threadId)
 
                 // Remove the animated generating border and spinner
                 const borderSvg = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-border`)
@@ -2617,12 +2796,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const sourceThread = findSourceThreadNode(threadId)
                 if (!sourceThread) return
+                const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)
+                const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
                 const nodeId = `node-${fileId || uuidv4()}`
 
                 const imageWidth = getRegionGeneratedImageSize(sourceThread)
                 const imageHeight = imageWidth
-                const position = getNextRegionOutputPosition(sourceThread, imageWidth, imageHeight, currentCanvasState?.nodes || [])
+                const position = getNextGeneratedImagePosition(sourceNode, sourceThread, imageWidth, imageHeight)
 
                 const imageNode: ImageCanvasNode = {
                     nodeId,
@@ -2638,8 +2819,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         responseId,
                         aiModel: aiModel as any,
                         imageModelProvider: imageModelProvider || '',
-                        revisedPrompt,
+                        revisedPrompt: revisedPrompt || promptText,
                         responseMessageId: responseMessageId || '',
+                        ...getPendingGeneratedImageLineage(threadId),
                     },
                 }
 
@@ -2648,14 +2830,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const newEdges = [
                     ...existingEdges,
-                    {
-                        edgeId: `edge-${sourceThread.nodeId}-${nodeId}`,
-                        sourceNodeId: sourceThread.nodeId,
-                        targetNodeId: nodeId,
-                        sourceHandle: 'right',
-                        targetHandle: 'left',
-                        sourceMessageId: responseMessageId || undefined,
-                    } satisfies WorkspaceEdge,
+                    createGeneratedImageEdge(sourceNode, nodeId, responseMessageId || undefined),
                 ]
 
                 let allNodes: CanvasNode[]
@@ -2742,6 +2917,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
 
                 commitCanvasStatePreservingEditors(currentCanvasState)
+                pendingGeneratedImagePlacements.delete(threadId)
             }
         },
 

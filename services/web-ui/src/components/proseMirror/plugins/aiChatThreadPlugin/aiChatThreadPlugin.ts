@@ -44,7 +44,7 @@ type ImageOptions = {
 type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
-type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM'
+type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM' | 'ERROR'
 type ImageSegmentType = 'image_partial' | 'image_complete'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type SegmentEvent = {
@@ -68,6 +68,7 @@ type SegmentEvent = {
     partialIndex?: number
     responseId?: string
     revisedPrompt?: string
+    error?: string
 }
 type ImageReference = { fileId: string; workspaceId: string }
 type ThreadContent = {
@@ -766,6 +767,29 @@ class AiChatThreadPluginClass {
         }
     }
 
+    private removePartialImagesInChat(view: EditorView, threadId: string): void {
+        const responseContext = this.getCurrentResponseContext(view.state, threadId)
+        if (!responseContext) return
+
+        const ranges: Array<{ from: number; to: number }> = []
+        responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
+            if (child.type.name !== aiGeneratedImageNodeType || !child.attrs.isPartial) return
+            const from = responseContext.responseStartPos + 1 + offset
+            ranges.push({ from, to: from + child.nodeSize })
+        })
+
+        if (ranges.length === 0) return
+
+        const tr = view.state.tr
+        for (const range of ranges.reverse()) {
+            tr.delete(range.from, range.to)
+        }
+
+        if (tr.docChanged) {
+            view.dispatch(tr)
+        }
+    }
+
     private upsertImageCompleteInChat(view: EditorView, event: SegmentEvent): string {
         const { aiChatThreadId, revisedPrompt } = event
         if (!aiChatThreadId) return ''
@@ -853,6 +877,18 @@ class AiChatThreadPluginClass {
                 return
             }
 
+            if (status === 'ERROR') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId) {
+                    callbacks.onImageErrorToCanvas?.({
+                        threadId: effectiveThreadId,
+                        error: event.error || 'AI generation failed',
+                    })
+                }
+                this.handleStreamError(view, effectiveThreadId)
+                return
+            }
+
             // Handle text streaming events
             switch (status) {
                 case 'START_STREAM':
@@ -868,6 +904,13 @@ class AiChatThreadPluginClass {
                     break
             }
         })
+    }
+
+    private handleStreamError(view: EditorView, threadId?: string): void {
+        if (threadId) {
+            this.removePartialImagesInChat(view, threadId)
+        }
+        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), threadId)
     }
 
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {

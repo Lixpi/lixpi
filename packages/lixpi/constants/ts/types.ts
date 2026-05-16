@@ -88,6 +88,8 @@ export type ImageSizeOption = {
     label: string
 }
 
+export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
+
 export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
@@ -95,6 +97,18 @@ export type ImageGeneratedByMetadata = {
     imageModelProvider?: string
     revisedPrompt: string
     responseMessageId?: string
+    branchId?: string
+    parentImageNodeId?: string
+    sourceContextNodeIds?: string[]
+    referenceImageNodeIds?: string[]
+    operationKind?: ImageGenerationOperationKind
+    promptText?: string
+    promptFingerprint?: string
+    entitySummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    resolverVersion?: string
+    createdAt?: number
 }
 
 export type ImageCanvasNode = CanvasNodeParentingFields & {
