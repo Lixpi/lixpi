@@ -44,7 +44,7 @@
         imageGenerationSize: ImageGenerationSize
     }
 
-    const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions }: AiChatSendMessagePayload & { imageOptions?: ImageOptions }) => {
+    const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions, referencedFeatureIds }: AiChatSendMessagePayload & { imageOptions?: ImageOptions }) => {
         // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiInteractionInstance})
 
         if (!aiInteractionInstance) {
@@ -58,7 +58,8 @@
             messages,
             aiModel,
             aiImageModel: imageOptions?.aiImageModel,
-            imageSize: imageOptions?.imageGenerationSize
+            imageSize: imageOptions?.imageGenerationSize,
+            referencedFeatureIds,
         })
     }
 

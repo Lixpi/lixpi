@@ -4,7 +4,7 @@ import type NatsService from '@lixpi/nats-service'
 import { info, warn } from '@lixpi/debug-tools'
 
 import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'

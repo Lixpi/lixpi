@@ -1,9 +1,13 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-
-import { STREAM_STATUS, type StreamStatus } from '../config.ts'
-import type { ProviderName } from '../config.ts'
+import {
+    STREAM_STATUS,
+    type ImageBranchVlmResolution,
+    type ProviderName,
+    type StageTraceEvent,
+    type StreamStatus,
+} from '@lixpi/constants'
 
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
     `ai.interaction.chat.receiveMessage.${workspaceId}.${aiChatThreadId}`
@@ -21,6 +25,11 @@ export type ChunkPayload = {
         revisedPrompt?: string
         imageModelProvider?: string
         imageModelId?: string
+        resolution?: ImageBranchVlmResolution
+        error?: string
+        extractionStatus?: string
+        extractionDetail?: string
+        stageTraceEvent?: StageTraceEvent
     }
     aiChatThreadId: string
 }
@@ -152,6 +161,8 @@ export class TagAwareStream {
 
 export class StreamPublisher {
     private tagBuffer: TagAwareStream
+    private hasStarted = false
+    private hasEnded = false
 
     constructor(
         private readonly nats: NatsService,
@@ -163,6 +174,10 @@ export class StreamPublisher {
     }
 
     start(): void {
+        if (this.hasStarted) return
+
+        this.hasStarted = true
+        this.hasEnded = false
         this.tagBuffer.reset()
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
@@ -178,12 +193,60 @@ export class StreamPublisher {
     }
 
     end(): void {
+        if (!this.hasStarted || this.hasEnded) return
+
+        this.hasEnded = true
         this.tagBuffer.flush()
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
                 text: '',
                 status: STREAM_STATUS.END_STREAM,
                 aiProvider: this.provider,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    extractionProgress(status: string, detail: string): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.STREAMING,
+                aiProvider: this.provider,
+                extractionStatus: status,
+                extractionDetail: detail,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    stageTrace(event: StageTraceEvent): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.STREAMING,
+                aiProvider: this.provider,
+                stageTraceEvent: event,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    imageBranchResolved(resolution: ImageBranchVlmResolution): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+                aiProvider: this.provider,
+                resolution,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    imageBranchResolutionError(message: string): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR,
+                aiProvider: this.provider,
+                error: message,
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -198,5 +261,13 @@ export class StreamPublisher {
         if (code) payload.errorCode = code
         if (type) payload.errorType = type
         this.nats.publish(`ai.interaction.chat.error.${instanceKey}`, payload)
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                text: message,
+                status: STREAM_STATUS.ERROR,
+                aiProvider: this.provider,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
     }
 }

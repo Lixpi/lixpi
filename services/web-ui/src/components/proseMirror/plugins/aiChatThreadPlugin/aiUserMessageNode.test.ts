@@ -1,6 +1,7 @@
 'use strict'
 
 import { describe, it, expect, vi } from 'vitest'
+import { applyStyle } from '$src/utils/domTemplates.ts'
 import {
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
@@ -110,7 +111,7 @@ describe('aiUserMessageNodeView — marginBottom survives update()', () => {
         const { nodeView } = createUserMessageNodeView()
         const dom = nodeView.dom as HTMLElement
 
-        dom.style.marginBottom = '150px'
+        applyStyle(dom, { marginBottom: '150px' })
         expect(dom.style.marginBottom).toBe('150px')
 
         const updatedNode = schema.nodes.aiUserMessage.create(
@@ -126,7 +127,7 @@ describe('aiUserMessageNodeView — marginBottom survives update()', () => {
         const { nodeView } = createUserMessageNodeView()
         const dom = nodeView.dom as HTMLElement
 
-        dom.style.marginBottom = '220px'
+        applyStyle(dom, { marginBottom: '220px' })
 
         for (let i = 0; i < 8; i++) {
             const updatedNode = schema.nodes.aiUserMessage.create(

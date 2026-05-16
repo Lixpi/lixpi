@@ -19,7 +19,6 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import type { Document } from '$src/stores/documentStore.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
 
 // ========== CONTEXT EXTRACTION TYPES ==========
 
@@ -92,9 +91,7 @@ function findConnectedNodes(
         const sourceNode = nodes.find((n) => n.nodeId === edge.sourceNodeId)
         if (sourceNode) {
             result.push({ node: sourceNode, edge })
-            if (webUiSettings.aiChatContextTraversalDepth === 'full') {
-                result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
-            }
+            result.push(...findConnectedNodes(edge.sourceNodeId, edges, nodes, visited))
         }
     }
 
@@ -160,6 +157,28 @@ function extractContentFromProseMirror(content: string | object): ExtractedConte
     } catch {
         return { text: '', imageSrcs: [] }
     }
+}
+
+function getContextDedupeKey(item: ContextItem): string {
+    if (item.type === 'image') {
+        return [item.type, item.fileId ?? item.content, item.workspaceId ?? ''].join(':')
+    }
+
+    return [item.type, item.nodeId, item.title ?? '', item.content].join(':')
+}
+
+function dedupeContextItems(items: ContextItem[]): ContextItem[] {
+    const seen = new Set<string>()
+    const deduped: ContextItem[] = []
+
+    for (const item of items) {
+        const key = getContextDedupeKey(item)
+        if (seen.has(key)) continue
+        seen.add(key)
+        deduped.push(item)
+    }
+
+    return deduped
 }
 
 class AiChatThreadService {
@@ -246,24 +265,49 @@ class AiChatThreadService {
         aiModel?: string
         status?: AiChatThreadStatus
     }): Promise<void> {
+        const isContentOnlyUpdate = content !== undefined && aiModel === undefined && status === undefined
+        if (isContentOnlyUpdate) {
+            aiChatThreadsStore.updateThread(threadId, { content })
+            this.sendAiChatThreadUpdateRequest({ workspaceId, threadId, content }).catch((error) => {
+                console.error('Failed to update AI chat thread:', error)
+            })
+            return
+        }
+
         try {
-            const updatePayload: any = {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-                threadId
-            }
-
-            if (content !== undefined) updatePayload.content = content
-            if (aiModel !== undefined) updatePayload.aiModel = aiModel
-            if (status !== undefined) updatePayload.status = status
-
-            await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.UPDATE_AI_CHAT_THREAD, updatePayload)
+            await this.sendAiChatThreadUpdateRequest({ workspaceId, threadId, content, aiModel, status })
 
             // Update in store
             aiChatThreadsStore.updateThread(threadId, { content, aiModel, status })
         } catch (error) {
             console.error('Failed to update AI chat thread:', error)
         }
+    }
+
+    private async sendAiChatThreadUpdateRequest({
+        workspaceId,
+        threadId,
+        content,
+        aiModel,
+        status,
+    }: {
+        workspaceId: string
+        threadId: string
+        content?: any
+        aiModel?: string
+        status?: AiChatThreadStatus
+    }): Promise<void> {
+        const updatePayload: any = {
+            token: await AuthService.getTokenSilently(),
+            workspaceId,
+            threadId
+        }
+
+        if (content !== undefined) updatePayload.content = content
+        if (aiModel !== undefined) updatePayload.aiModel = aiModel
+        if (status !== undefined) updatePayload.status = status
+
+        await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.UPDATE_AI_CHAT_THREAD, updatePayload)
     }
 
     public async deleteAiChatThread({ workspaceId, threadId }: { workspaceId: string; threadId: string }): Promise<void> {
@@ -293,9 +337,7 @@ class AiChatThreadService {
         const threadsMap: Map<string, AiChatThread> = aiChatThreadsStore.getData()
 
         const connectedItems = findConnectedNodes(aiChatNodeId, edges, nodes, new Set())
-        if (connectedItems.length === 0) return []
-
-        const context: GatheredContext = []
+        const context: ExtractedContext = []
 
         for (const { node, edge } of connectedItems) {
             if (node.type === 'document') {
@@ -360,7 +402,7 @@ class AiChatThreadService {
             }
         }
 
-        return context
+        return dedupeContextItems(context)
     }
 
     public buildContextMessage(context: ExtractedContext): ContextMessage {
@@ -417,7 +459,9 @@ class AiChatThreadService {
                 imageUrl = `nats-obj://workspace-${item.workspaceId}-files/${item.fileId}`
             }
 
-            const imageMetadata: Record<string, string> = { type: 'standalone_image' }
+            const imageMetadata: Record<string, string> = {
+                type: 'standalone_image',
+            }
             if (item.sourceMessageId) {
                 imageMetadata.sourceMessageId = item.sourceMessageId
             }

@@ -1,5 +1,6 @@
 import type { CanvasViewport } from '@lixpi/constants'
 import type { PixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { applyStyle } from '$src/utils/domTemplates.ts'
 
 export type ViewportBridge = {
     applyViewport: (viewport: CanvasViewport) => void
@@ -17,7 +18,7 @@ export function createViewportBridge(options: ViewportBridgeOptions): ViewportBr
     const { viewportEl, getPixiLayer } = options
 
     function applyViewport(viewport: CanvasViewport): void {
-        viewportEl.style.transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`
+        applyStyle(viewportEl, { transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})` })
         getPixiLayer()?.setViewport(viewport)
     }
 

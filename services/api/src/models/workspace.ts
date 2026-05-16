@@ -24,25 +24,19 @@ export default {
         workspaceId,
         userId
     }: { workspaceId: string; userId: string }): Promise<Workspace | { error: string }> => {
-        console.log('Workspace.getWorkspace called with:', { workspaceId, userId })
-
         const workspace = await dynamoDBService.getItem({
             tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
             key: { workspaceId },
             origin: `model::Workspace->get(${workspaceId})`
         })
 
-        console.log('Workspace.getWorkspace fetched workspace:', workspace)
-
         if (!workspace || Object.keys(workspace).length === 0) {
             return { error: 'NOT_FOUND' }
         }
 
-        console.log('Workspace accessList:', workspace?.accessList)
         const hasAccess = workspace?.accessList?.some(
             (entry: { userId: string }) => entry.userId === userId
         )
-        console.log('hasAccess:', hasAccess)
 
         if (!hasAccess) {
             return { error: 'PERMISSION_DENIED' }

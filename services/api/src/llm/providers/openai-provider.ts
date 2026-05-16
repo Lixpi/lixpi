@@ -6,7 +6,7 @@ import OpenAI, { toFile } from 'openai'
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
@@ -156,11 +156,28 @@ export class OpenAIProvider extends BaseProvider {
         }
         if (args.tools) requestKwargs.tools = args.tools
 
+        if (args.enableImageGeneration) {
+            info(`[OpenAI:${this.instanceKey}] Responses-API image-gen call ${JSON.stringify({
+                model: args.modelVersion,
+                imageSize: args.state.imageSize,
+                quality: 'high',
+                inputFidelity: 'high',
+                moderation: 'low',
+                partialImages: 3,
+                inputMessageCount: args.inputMessages.length,
+                inputImageCount: args.inputMessages.reduce((count, m) => count + (Array.isArray(m.content)
+                    ? m.content.filter((b: any) => b?.type === 'input_image' || b?.type === 'image_url').length
+                    : 0), 0),
+                promptLen: (args.inputMessages[args.inputMessages.length - 1]?.content as any)?.length ?? 0,
+            }, null, 0)}`)
+        }
+
         const stream = await this.client.responses.create(requestKwargs as any, {
             signal: this.signal,
         })
 
         let imagesGenerated = 0
+        const generatedImages: string[] = []
         for await (const event of stream as any) {
             if (this.shouldStop) {
                 info('Stream stopped by user request')
@@ -195,14 +212,18 @@ export class OpenAIProvider extends BaseProvider {
                     if (args.hasImageModel) {
                         const toolCall = extractToolCall('OpenAI', response)
                         if (toolCall) {
+                            const refs = extractReferenceImages(args.state.messages)
                             update.generatedImagePrompt = toolCall.prompt
-                            update.referenceImages = extractReferenceImages(args.state.messages)
-                            info(
-                                `[OpenAI:${this.instanceKey}] Tool call detected: generate_image ` +
-                                `promptLen=${toolCall.prompt.length}`,
-                            )
+                            update.referenceImages = refs
+                            info(`[OpenAI:${this.instanceKey}] generate_image tool call ${JSON.stringify({
+                                chatModel: args.modelVersion,
+                                targetImageProvider: args.state.imageProviderName,
+                                targetImageModel: args.state.imageModelVersion,
+                                promptLen: toolCall.prompt.length,
+                                referenceImagesExtracted: refs.length,
+                            }, null, 0)}`)
                         } else {
-                            warn(`OpenAI did not emit generate_image tool call for ${this.instanceKey}`)
+                            warn(`[OpenAI:${this.instanceKey}] did not emit generate_image (model=${args.modelVersion}); image gen will not run`)
                         }
                     }
 
@@ -224,6 +245,7 @@ export class OpenAIProvider extends BaseProvider {
                                         revisedPrompt: revisedPrompt as string,
                                         imageModelId: args.state.modelVersion,
                                     })
+                                    generatedImages.push(result)
                                 }
                             }
                         }
@@ -269,6 +291,7 @@ export class OpenAIProvider extends BaseProvider {
                 size: args.state.imageSize ?? 'auto',
                 quality: 'high',
             }
+            update.generatedImages = generatedImages
         }
 
         return update
@@ -324,10 +347,17 @@ export class OpenAIProvider extends BaseProvider {
         if (!prompt) throw new Error('No user prompt found for image generation')
 
         const hasReferences = referenceFiles.length > 0
-        info(
-            `Generating image via images.${hasReferences ? 'edit' : 'generate'} with model: ` +
-            `${args.modelVersion}, size: ${args.imageSize}, references: ${referenceFiles.length}`,
-        )
+        info(`[OpenAI:${this.instanceKey}] image SDK call ${JSON.stringify({
+            api: hasReferences ? 'images.edit' : 'images.generate',
+            model: args.modelVersion,
+            size: args.imageSize,
+            quality: 'high',
+            partialImages: 3,
+            referenceFiles: referenceFiles.length,
+            referenceFileNames: referenceFiles.map(r => r.name),
+            promptLen: prompt.length,
+            promptPreview: prompt.slice(0, 200),
+        }, null, 0)}`)
 
         // Send placeholder for animated border.
         await this.imagePub.partial('', 0)
@@ -382,6 +412,7 @@ export class OpenAIProvider extends BaseProvider {
                     revisedPrompt,
                     imageModelId: args.modelVersion,
                 })
+                update.generatedImages = [imageB64]
                 update.imageUsage = {
                     generatedCount: 1,
                     size: args.imageSize || 'auto',

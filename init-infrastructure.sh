@@ -112,7 +112,7 @@ done
 echo "DynamoDB is ready!"
 
 # Run pulumi-init and wait for it to complete
-docker-compose --env-file "$selected_env" up lixpi-pulumi-init
+docker-compose --env-file "$selected_env" up --build lixpi-pulumi-init
 init_exit_code=$?
 
 # Stop DynamoDB

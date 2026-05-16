@@ -217,11 +217,13 @@ AI chat is rendered by a singleton canvas-owned floating panel. Context regions 
 
 When an AI-generated image is being created, the canvas provides visual feedback before and during generation:
 
-1. **Early placeholder** — The backend emits an `IMAGE_PARTIAL` with an empty `imageUrl` as soon as OpenAI's `response.output_item.added` event fires (before any pixel data arrives). `buildImageSrc` converts the empty URL to a transparent 1×1 PNG data URI so the `<img>` element has a valid source.
-2. **Animated gradient border** — An SVG `linearGradient` border (`.image-generating-border`) is added around the image node using D3 (`d3-selection`). The gradient rotates continuously through the four colors from `webUiThemeSettings.shiftingGradientColors`, matching the `documentShape` animated border style.
-3. **Bounce spinner** — A three-dot bounce animation (`.image-generating-spinner`) appears centered over the image while waiting for the first real partial. The spinner uses inline styles and an injected `@keyframes img-dot-bounce` so it works without external SCSS.
-4. **First real partial** — When `onImagePartialToCanvas` receives a non-empty `imageUrl`, the spinner is removed and the image begins updating progressively.
-5. **Completion** — `onImageCompleteToCanvas` removes both `.image-generating-border` and `.image-generating-spinner` from the image node.
+1. **Candidate snapshot** — On submit with an image model selected, the browser builds an `ImageBranchCandidateSnapshot` from context-region images, generated image nodes, lineage metadata, and thread transcript labels. This snapshot is non-authoritative; it only gives the API VLM candidates to inspect.
+2. **VLM branch resolution** — The API emits `IMAGE_BRANCH_RESOLVED` before image partials. `WorkspaceCanvas.ts` stores that result and uses it for generated-image placement, parent edge selection, and `generatedBy` lineage metadata. `IMAGE_BRANCH_RESOLUTION_ERROR` clears pending placement and stops the generation path visibly.
+3. **Early placeholder** — The backend emits an `IMAGE_PARTIAL` with an empty `imageUrl` as soon as OpenAI's `response.output_item.added` event fires (before any pixel data arrives). `buildImageSrc` converts the empty URL to a transparent 1×1 PNG data URI so the `<img>` element has a valid source.
+4. **Animated gradient border** — An SVG `linearGradient` border (`.image-generating-border`) is added around the image node using D3 (`d3-selection`). The gradient rotates continuously through the four colors from `webUiThemeSettings.shiftingGradientColors`, matching the `documentShape` animated border style.
+5. **Bounce spinner** — A three-dot bounce animation (`.image-generating-spinner`) appears centered over the image while waiting for the first real partial. The spinner uses inline styles and an injected `@keyframes img-dot-bounce` so it works without external SCSS.
+6. **First real partial** — When `onImagePartialToCanvas` receives a non-empty `imageUrl`, the spinner is removed and the image begins updating progressively.
+7. **Completion** — `onImageCompleteToCanvas` removes both `.image-generating-border` and `.image-generating-spinner` from the image node.
 
 ### Image Lifecycle
 

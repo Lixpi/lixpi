@@ -11,6 +11,10 @@ export const NATS_SUBJECTS = natsSubjects
 
 // AI interaction constants
 export const AI_INTERACTION_CONSTANTS = aiInteractionConstants
+export const STREAM_STATUS = AI_INTERACTION_CONSTANTS.STREAM_STATUS as {
+    readonly [K in keyof typeof AI_INTERACTION_CONSTANTS.STREAM_STATUS]: K
+}
+export type StreamStatus = typeof STREAM_STATUS[keyof typeof STREAM_STATUS]
 
 
 export const BILLING_CONFIG: Record<string, string> = {

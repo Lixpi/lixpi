@@ -5,6 +5,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { NodeSelection } from 'prosemirror-state'
 import { DOMSerializer } from 'prosemirror-model'
+import { applyStyle } from '$src/utils/domTemplates.ts'
 import {
 	doc,
 	p,
@@ -264,7 +265,7 @@ describe('aiResponseMessageNodeView — marginBottom survives update()', () => {
 		const dom = nodeView.dom as HTMLElement
 
 		// Simulate applyAnchoredImageSpacing setting marginBottom
-		dom.style.marginBottom = '120px'
+		applyStyle(dom, { marginBottom: '120px' })
 		expect(dom.style.marginBottom).toBe('120px')
 
 		// Simulate ProseMirror calling update() with a new node (e.g. new animation frame)
@@ -284,7 +285,7 @@ describe('aiResponseMessageNodeView — marginBottom survives update()', () => {
 		const { nodeView } = createResponseNodeView()
 		const dom = nodeView.dom as HTMLElement
 
-		dom.style.marginBottom = '200px'
+		applyStyle(dom, { marginBottom: '200px' })
 
 		// Simulate rapid animation frame updates (every 90ms during streaming)
 		for (let frame = 0; frame < 8; frame++) {

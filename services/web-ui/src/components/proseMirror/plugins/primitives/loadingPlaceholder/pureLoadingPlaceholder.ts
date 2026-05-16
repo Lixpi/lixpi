@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { html } from '$src/utils/domTemplates.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 
 type LoadingPlaceholderConfig = {
     size?: 'small' | 'medium' | 'large'
@@ -40,10 +40,10 @@ export function createLoadingPlaceholder(config: LoadingPlaceholderConfig = {}) 
     return {
         dom,
         show() {
-            dom.style.display = 'flex'
+            applyStyle(dom, { display: 'flex' })
         },
         hide() {
-            dom.style.display = 'none'
+            applyStyle(dom, { display: 'none' })
         },
         destroy() {
             dom.remove()
@@ -84,10 +84,10 @@ export function createErrorPlaceholder(config: ErrorPlaceholderConfig = {}) {
     return {
         dom,
         show() {
-            dom.style.display = 'flex'
+            applyStyle(dom, { display: 'flex' })
         },
         hide() {
-            dom.style.display = 'none'
+            applyStyle(dom, { display: 'none' })
         },
         setMessage(newMessage: string) {
             const messageEl = dom.querySelector('.error-message')

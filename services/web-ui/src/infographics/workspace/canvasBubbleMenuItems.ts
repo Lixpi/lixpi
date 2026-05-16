@@ -99,7 +99,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
     const replaceSvg = replaceButton.querySelector('svg')
-    if (replaceSvg) replaceSvg.style.transform = 'rotate(180deg)'
+    if (replaceSvg) applyStyle(replaceSvg, { transform: 'rotate(180deg)' })
 
     const connectButton = createEl('button', {
         className: 'bubble-menu-button',
@@ -109,8 +109,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     })
     const connectSvg = connectButton.querySelector('svg')
     if (connectSvg) {
-        connectSvg.style.width = '16px'
-        connectSvg.style.height = '16px'
+        applyStyle(connectSvg, { width: '16px', height: '16px' })
     }
     connectButton.addEventListener('click', (e) => {
         e.preventDefault()

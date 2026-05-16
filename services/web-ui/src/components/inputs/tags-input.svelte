@@ -10,6 +10,7 @@
     } from '$src/svgIcons'
 
     import { popOutTransition, fadeTransition } from '$src/constants/svelteAnimationTransitions'
+    import { applyStyle } from '$src/utils/domTemplates.ts'
 
     import OrganizationService from '$src/services/organization-service.js'
     import DocumentService from '$src/services/document-service.ts'
@@ -127,7 +128,7 @@
     const updateSuggestionPosition = () => {
         if (tagsInputRef && tagsSuggestionRef) {
             const { height } = tagsInputRef.getBoundingClientRect();
-            tagsSuggestionRef.style.top = `${height + 15}px`;
+            applyStyle(tagsSuggestionRef, { top: `${height + 15}px` });
         }
     };
 

@@ -15,7 +15,11 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     AI_TOKENS_USAGE_TRANSACTIONS: 'AI-Tokens-Usage-Transactions',
     FINANCIAL_TRANSACTIONS: 'Financial-Transactions',
     AI_TOKENS_USAGE_REPORTS: 'AI-Tokens-Usage-Reports',
-    AI_MODELS_LIST: 'AI-Models-List'
+    AI_MODELS_LIST: 'AI-Models-List',
+    FEATURES: 'Features',
+    FEATURES_META: 'Features-Meta',
+    FEATURES_ACCESS_LIST: 'Features-Access-List',
+    EXTRACTION_RUNS: 'Extraction-Runs',
 }
 
 export const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string => `${resourceName}-${orgName}-${stageName}`
