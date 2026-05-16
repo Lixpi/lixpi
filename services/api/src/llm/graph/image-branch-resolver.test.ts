@@ -10,6 +10,11 @@ const portraitUrl = 'nats-obj://workspace-workspace-1-files/portrait-file'
 const landscapeUrl = 'nats-obj://workspace-workspace-1-files/landscape-file'
 const personUrl = 'nats-obj://workspace-workspace-1-files/person-file'
 const featureUrl = 'data:image/png;base64,feature-sample'
+const tinyPngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64',
+)
+const resolvedTinyPngUrl = `data:image/png;base64,${tinyPngBytes.toString('base64')}`
 
 function getImageUrls(messages: ChatMessage[]): string[] {
     return messages.flatMap((message) => {
@@ -103,6 +108,9 @@ function createState(): ProviderState {
 }
 
 function createDeps(parsed: Record<string, unknown>) {
+    const natsService = {
+        getObject: vi.fn(async () => tinyPngBytes),
+    }
     const publisher = {
         imageBranchResolved: vi.fn(),
         imageBranchResolutionError: vi.fn(),
@@ -117,8 +125,9 @@ function createDeps(parsed: Record<string, unknown>) {
 
     return {
         publisher,
+        natsService,
         deps: {
-            natsService: {} as any,
+            natsService: natsService as any,
             publisher: publisher as any,
             callVlm,
         },
@@ -159,9 +168,15 @@ describe('resolveImageBranch', () => {
         expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
         expect(update.imageBranchResolution?.resolverKind).toBe('structured-vlm')
         expect(update.imageBranchResolution?.referenceImageNodeIds).toEqual(['portrait-source', 'landscape-source'])
+        expect(getImageUrls(callVlm.mock.calls[0]?.[0].userMessages ?? [])).toEqual([
+            resolvedTinyPngUrl,
+            resolvedTinyPngUrl,
+            resolvedTinyPngUrl,
+        ])
         expect(imageUrls).toContain(featureUrl)
-        expect(imageUrls).toContain(portraitUrl)
-        expect(imageUrls).toContain(landscapeUrl)
+        expect(imageUrls.filter((url) => url === resolvedTinyPngUrl)).toHaveLength(2)
+        expect(imageUrls).not.toContain(portraitUrl)
+        expect(imageUrls).not.toContain(landscapeUrl)
         expect(imageUrls).not.toContain(personUrl)
     })
 

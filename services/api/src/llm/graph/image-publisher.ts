@@ -1,9 +1,8 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
+import { STREAM_STATUS, type ProviderName } from '@lixpi/constants'
 
-import { STREAM_STATUS } from '../config.ts'
-import type { ProviderName } from '../config.ts'
 import type { StoreImageInput, StoreImageResult } from '../../services/image-storage.ts'
 
 export type StoreWorkspaceImageFn = (input: StoreImageInput) => Promise<StoreImageResult>

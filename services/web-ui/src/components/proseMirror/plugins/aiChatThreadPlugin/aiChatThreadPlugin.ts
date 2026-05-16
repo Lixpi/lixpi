@@ -23,7 +23,14 @@ import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { webUiSettings } from '$src/webUiSettings.ts'
-import type { AiModelId, ImageBranchVlmResolution } from '@lixpi/constants'
+import type {
+    AiInteractionChatSendMessagePayload,
+    AiInteractionChatStopMessagePayload,
+    AiModelId,
+    ImageBranchVlmResolution,
+    ImageGenerationSize,
+    StreamStatus,
+} from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
@@ -34,8 +41,6 @@ const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
 // ========== TYPE DEFINITIONS ==========
 
-import type { AiInteractionChatSendMessagePayload, AiInteractionChatStopMessagePayload, ImageGenerationSize } from '@lixpi/constants'
-
 type ImageOptions = {
     aiImageModel: string
     imageGenerationSize: ImageGenerationSize
@@ -44,7 +49,6 @@ type ImageOptions = {
 type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
-type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM' | 'ERROR'
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type SegmentEvent = {

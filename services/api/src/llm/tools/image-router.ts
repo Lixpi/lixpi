@@ -4,7 +4,7 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
 // or wrong-image issues in logs without dumping base64.

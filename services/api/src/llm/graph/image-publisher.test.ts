@@ -1,8 +1,8 @@
 'use strict'
 
 import { describe, it, expect, vi } from 'vitest'
+import { STREAM_STATUS } from '@lixpi/constants'
 
-import { STREAM_STATUS } from '../config.ts'
 import { ImagePublisher } from './image-publisher.ts'
 
 type Published = { subject: string, payload: any }

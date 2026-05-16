@@ -1,6 +1,6 @@
 'use strict'
 
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 
 // Capability detection for VLM calls. Each provider/model has its own quirks:
 //

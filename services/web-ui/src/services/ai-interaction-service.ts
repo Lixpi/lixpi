@@ -1,6 +1,6 @@
 'use strict'
 
-import { NATS_SUBJECTS, AI_INTERACTION_CONSTANTS } from '@lixpi/constants'
+import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
 import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
@@ -8,7 +8,6 @@ import type {
 } from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
-const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
 
 import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'

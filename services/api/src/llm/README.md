@@ -5,7 +5,7 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. Repla
 ## What it does
 
 - Receives a chat request from the NATS gateway handler (`services/api/src/NATS/subscriptions/ai-interaction-subjects.ts`).
-- Runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`.
+- Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`.
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
 - Routes dual-model image generation: text model emits a `generate_image` tool call, the workflow's conditional edge spawns a transient image-model provider (OpenAI gpt-image-*, Google Gemini, Stability) that uploads the final image to NATS Object Store.
 - Reports token + image usage costs via `decimal.js` pricing math against the model's pricing metadata.
@@ -38,7 +38,7 @@ The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscri
 ```
 src/llm/
     index.ts                     # createLlmModule({ natsService, storeWorkspaceImage })
-    config.ts                    # LLM_TIMEOUT_MS, ProviderName, StreamStatus enum
+    config.ts                    # LLM_TIMEOUT_MS
     graph/
         state.ts                 # ProviderState type + channel reducers (partial-overlay semantics)
         stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + tag-aware <image_prompt> buffering
@@ -91,7 +91,9 @@ cleanup
 END
 ```
 
-`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced.
+Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the browser in a receiving state while pre-stream work such as `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. Transient image-model providers spawned by `ImageRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle.
+
+`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, normalizes candidate image URLs once, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and image router do not downscale the same candidate refs again.
 
 Each provider subclasses `BaseProvider` and implements `streamImpl(state)` — everything else is shared.
 

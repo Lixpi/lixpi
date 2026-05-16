@@ -5,12 +5,12 @@ import type {
     Feature,
     FeatureDraft,
     FeatureSampleRef,
+    ProviderName,
     SceneAssessment,
     StageTraceEvent,
 } from '@lixpi/constants'
 
 import type { AiModelMetaInfo, ChatMessage, ProviderState } from '../graph/state.ts'
-import type { ProviderName } from '../config.ts'
 import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 
 export type ReferenceImage = {

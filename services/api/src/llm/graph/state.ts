@@ -1,7 +1,6 @@
 'use strict'
 
-import type { ProviderName } from '../config.ts'
-import type { ImageBranchCandidateSnapshot, ImageBranchVlmResolution } from '@lixpi/constants'
+import type { ImageBranchCandidateSnapshot, ImageBranchVlmResolution, ProviderName } from '@lixpi/constants'
 
 export type Usage = {
     promptTokens: number

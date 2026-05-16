@@ -6,12 +6,13 @@
     "exports": {
         ".": {
             "import": "./index.ts",
-            "types": "./types.ts"
+            "types": "./index.ts"
         }
     },
     "files": [
         "*.ts",
-        "../nats-subjects.json"
+        "../nats-subjects.json",
+        "../ai-interaction-constants.json"
     ],
     "scripts": {},
     "devDependencies": {

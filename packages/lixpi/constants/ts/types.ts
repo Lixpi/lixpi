@@ -2,6 +2,9 @@
 
 import type { Merge, Except } from 'type-fest'
 
+export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability'] as const
+export type ProviderName = typeof PROVIDER_NAMES[number]
+
 // NOTE: User type restored exactly as originally defined per instruction (commas retained intentionally)
 export type User = {
     userId: string,

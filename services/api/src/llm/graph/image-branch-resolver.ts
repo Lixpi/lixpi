@@ -10,10 +10,11 @@ import type {
     ImageBranchVlmReferenceDecision,
     ImageBranchVlmResolution,
     ImageGenerationOperationKind,
+    ProviderName,
 } from '@lixpi/constants'
 
-import type { ProviderName } from '../config.ts'
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
+import { resolveImageUrls } from '../utils/attachments.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
@@ -218,6 +219,24 @@ const compactCandidateForPrompt = (candidate: ImageBranchCandidateImage): Record
     styleTags: candidate.styleTags ?? [],
     createdAt: candidate.createdAt ?? 0,
 })
+
+const resolveCandidateImageUrls = async (
+    candidates: ImageBranchCandidateImage[],
+    natsService: NatsService,
+): Promise<ImageBranchCandidateImage[]> => {
+    return Promise.all(candidates.map(async (candidate) => {
+        const resolved = await resolveImageUrls([{
+            type: 'input_image',
+            image_url: candidate.imageUrl,
+            detail: 'high',
+        }], natsService)
+
+        if (!Array.isArray(resolved)) return candidate
+        const imageBlock = resolved.find((block) => block?.type === 'input_image')
+        const imageUrl = typeof imageBlock?.image_url === 'string' ? imageBlock.image_url : candidate.imageUrl
+        return imageUrl === candidate.imageUrl ? candidate : { ...candidate, imageUrl }
+    }))
+}
 
 const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
     const snapshot = state.imageBranchCandidateSnapshot
@@ -451,7 +470,8 @@ const buildResolvedBranchMessage = (
 
 export const resolveImageBranch = async (state: ProviderState, deps: ResolveImageBranchDeps): Promise<Partial<ProviderState>> => {
     if (!state.imageModelVersion) return {}
-    if (!state.imageBranchCandidateSnapshot) {
+    const snapshot = state.imageBranchCandidateSnapshot
+    if (!snapshot) {
         const message = 'Image branch candidate snapshot is required for image generation.'
         deps.publisher.imageBranchResolutionError(message)
         throw new Error(message)
@@ -461,11 +481,19 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
     const callVlm = deps.callVlm ?? ((args: VlmCallArgs) => callStructuredVlm<ImageBranchVlmRawResolution>(args))
 
     try {
+        const resolvedCandidates = await resolveCandidateImageUrls(snapshot.candidates, deps.natsService)
+        const resolverState: ProviderState = {
+            ...state,
+            imageBranchCandidateSnapshot: {
+                ...snapshot,
+                candidates: resolvedCandidates,
+            },
+        }
         const result: VlmCallResult<ImageBranchVlmRawResolution> = await callVlm({
             provider,
             modelVersion,
             systemPrompt: SYSTEM_PROMPT,
-            userMessages: buildResolverMessages(state),
+            userMessages: buildResolverMessages(resolverState),
             schema: RESOLUTION_SCHEMA,
             natsService: deps.natsService,
             temperature: 0.1,
@@ -479,9 +507,9 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             resolverProvider: provider,
             resolverModelId: result.modelName || modelVersion,
         })
-        const candidateImageUrls = new Set(state.imageBranchCandidateSnapshot.candidates.map((candidate) => candidate.imageUrl))
+        const candidateImageUrls = new Set(snapshot.candidates.map((candidate) => candidate.imageUrl))
         const cleanedMessages = stripCandidateImageBlocks(state.messages, candidateImageUrls)
-        const resolvedBranchMessage = buildResolvedBranchMessage(resolution, state.imageBranchCandidateSnapshot.candidates)
+        const resolvedBranchMessage = buildResolvedBranchMessage(resolution, resolvedCandidates)
         const messages = [resolvedBranchMessage, ...cleanedMessages]
 
         deps.publisher.imageBranchResolved(resolution)
