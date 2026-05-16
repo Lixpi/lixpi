@@ -69,6 +69,21 @@ type ExtractedContent = {
     imageSrcs: string[]
 }
 
+const THREAD_CONTENT_SAVE_DEBOUNCE_MS = 1500
+
+type PendingThreadContentSave = {
+    timeoutId: ReturnType<typeof setTimeout>
+    payload: {
+        workspaceId: string
+        threadId: string
+        content: any
+    }
+}
+
+const pendingThreadContentSaves = new Map<string, PendingThreadContentSave>()
+
+const getThreadContentSaveKey = (workspaceId: string, threadId: string): string => `${workspaceId}:${threadId}`
+
 // ========== HELPER FUNCTIONS ==========
 
 type ConnectedNodeWithEdge = {
@@ -246,24 +261,62 @@ class AiChatThreadService {
         aiModel?: string
         status?: AiChatThreadStatus
     }): Promise<void> {
+        const isContentOnlyUpdate = content !== undefined && aiModel === undefined && status === undefined
+        if (isContentOnlyUpdate) {
+            aiChatThreadsStore.updateThread(threadId, { content })
+
+            const saveKey = getThreadContentSaveKey(workspaceId, threadId)
+            const existing = pendingThreadContentSaves.get(saveKey)
+            if (existing) clearTimeout(existing.timeoutId)
+
+            const payload = { workspaceId, threadId, content }
+            const timeoutId = setTimeout(() => {
+                const pending = pendingThreadContentSaves.get(saveKey)
+                if (pending?.timeoutId !== timeoutId) return
+                pendingThreadContentSaves.delete(saveKey)
+                this.sendAiChatThreadUpdateRequest(pending.payload).catch((error) => {
+                    console.error('Failed to update AI chat thread:', error)
+                })
+            }, THREAD_CONTENT_SAVE_DEBOUNCE_MS)
+
+            pendingThreadContentSaves.set(saveKey, { timeoutId, payload })
+            return
+        }
+
         try {
-            const updatePayload: any = {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-                threadId
-            }
-
-            if (content !== undefined) updatePayload.content = content
-            if (aiModel !== undefined) updatePayload.aiModel = aiModel
-            if (status !== undefined) updatePayload.status = status
-
-            await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.UPDATE_AI_CHAT_THREAD, updatePayload)
+            await this.sendAiChatThreadUpdateRequest({ workspaceId, threadId, content, aiModel, status })
 
             // Update in store
             aiChatThreadsStore.updateThread(threadId, { content, aiModel, status })
         } catch (error) {
             console.error('Failed to update AI chat thread:', error)
         }
+    }
+
+    private async sendAiChatThreadUpdateRequest({
+        workspaceId,
+        threadId,
+        content,
+        aiModel,
+        status,
+    }: {
+        workspaceId: string
+        threadId: string
+        content?: any
+        aiModel?: string
+        status?: AiChatThreadStatus
+    }): Promise<void> {
+        const updatePayload: any = {
+            token: await AuthService.getTokenSilently(),
+            workspaceId,
+            threadId
+        }
+
+        if (content !== undefined) updatePayload.content = content
+        if (aiModel !== undefined) updatePayload.aiModel = aiModel
+        if (status !== undefined) updatePayload.status = status
+
+        await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.UPDATE_AI_CHAT_THREAD, updatePayload)
     }
 
     public async deleteAiChatThread({ workspaceId, threadId }: { workspaceId: string; threadId: string }): Promise<void> {

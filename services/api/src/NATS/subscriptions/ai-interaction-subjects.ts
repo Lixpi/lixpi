@@ -47,6 +47,7 @@ export const aiInteractionSubjects = [
                 organizationId,
                 enableImageGeneration,
                 imageSize,
+                referencedFeatureIds,
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
                 workspaceId: string
@@ -114,6 +115,7 @@ export const aiInteractionSubjects = [
                         aiChatThreadId,
                         enableImageGeneration,
                         imageSize,
+                        referencedFeatureIds,
                         eventMeta: {
                             userId,
                             stripeCustomerId,

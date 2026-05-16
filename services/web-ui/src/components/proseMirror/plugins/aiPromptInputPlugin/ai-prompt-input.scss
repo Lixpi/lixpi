@@ -55,13 +55,28 @@
         // For canvas-embedded dropdowns we instead position the whole wrapper
         // relative to the dropdown handle (`.dots-dropdown-menu`).
         position: absolute !important;
+        z-index: 10030 !important;
         top: 100% !important;
         right: 0 !important;
         left: auto !important;
         bottom: auto !important;
-        transform: translateY(15px) !important;
+        transform: translateY(var(--static-bubble-gap, 15px)) !important;
         width: max-content;
         height: auto;
+
+        &[data-static-placement="top"] {
+            top: auto !important;
+            bottom: 100% !important;
+            transform: translateY(calc(-1 * var(--static-bubble-gap, 15px))) !important;
+
+            .bubble-wrapper.visible {
+                transform-origin: bottom center;
+            }
+        }
+
+        &[data-static-placement="bottom"] .bubble-wrapper.visible {
+            transform-origin: top center;
+        }
 
         // Make the visible surface participate in this absolute layout.
         .bubble-wrapper {
@@ -71,6 +86,10 @@
             right: auto !important;
             bottom: auto !important;
             transform: none !important;
+        }
+
+        .bubble-body .submenu {
+            max-height: min(280px, var(--static-bubble-max-height, 280px));
         }
 
         // Kill the arrow — M3 menus don't have arrows

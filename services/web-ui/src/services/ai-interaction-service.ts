@@ -192,7 +192,8 @@ export default class AiInteractionService {
         messages,
         aiModel,
         aiImageModel,
-        imageSize
+        imageSize,
+        referencedFeatureIds,
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
@@ -206,6 +207,10 @@ export default class AiInteractionService {
             organizationId
         }
 
+        if (referencedFeatureIds?.length) {
+            payload.referencedFeatureIds = referencedFeatureIds
+        }
+
         // Add image model routing options if an image model is selected
         if (aiImageModel) {
             payload.aiImageModel = aiImageModel
@@ -217,7 +222,8 @@ export default class AiInteractionService {
             aiChatThreadId: this.aiChatThreadId,
             aiModel,
             messageCount: messages.length,
-            hasImageModel: !!aiImageModel
+            hasImageModel: !!aiImageModel,
+            referencedFeatureCount: referencedFeatureIds?.length ?? 0,
         })
 
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)

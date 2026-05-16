@@ -27,8 +27,11 @@ import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
+import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
+import { extractionSubjects, setExtractionLlmModule } from './NATS/subscriptions/extraction-subjects.ts'
 import imageRoutes from './routes/image-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
+import featureRoutes from './routes/feature-routes.ts'
 
 import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
 import { createLlmModule } from './llm/index.ts'
@@ -108,6 +111,8 @@ const subscriptions = [
     ...documentSubjects,
     ...aiChatThreadSubjects,
     ...imageSubjects,
+    ...featureSubjects,
+    ...extractionSubjects,
 ]
 
 // Initialize with your NATS server connection
@@ -144,6 +149,7 @@ const llmModule = createLlmModule({
     storeWorkspaceImage,
 })
 setLlmModule(llmModule)
+setExtractionLlmModule(llmModule)
 
 
 
@@ -167,6 +173,7 @@ app.use('/api/images', imageRoutes)
 
 // Workspace export routes
 app.use('/api/workspaces', workspaceExportRoutes)
+app.use('/api/features', featureRoutes)
 
 
 

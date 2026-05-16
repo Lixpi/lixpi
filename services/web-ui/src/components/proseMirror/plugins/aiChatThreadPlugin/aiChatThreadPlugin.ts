@@ -74,6 +74,7 @@ type ThreadContent = {
     nodeType: string
     textContent: string
     images?: ImageReference[]
+    featureIds?: string[]
 }
 type AiGeneratedImageAlignment = 'left' | 'center' | 'right'
 type AiGeneratedImageTextWrap = 'none' | 'left' | 'right'
@@ -178,9 +179,10 @@ class ContentExtractor {
     }
 
     // Extract text and images from a message block
-    static collectContentWithImages(node: ProseMirrorNode): { text: string; images: ImageReference[] } {
+    static collectContentWithImages(node: ProseMirrorNode): { text: string; images: ImageReference[]; featureIds: string[] } {
         let text = ''
         const images: ImageReference[] = []
+        const featureIds: string[] = []
 
         node.forEach((child: ProseMirrorNode) => {
             if (child.type.name === 'text') {
@@ -196,15 +198,20 @@ class ContentExtractor {
                 if (fileId && workspaceId) {
                     images.push({ fileId, workspaceId })
                 }
+            } else if (child.type.name === 'feature_reference') {
+                const { featureId, featureName } = child.attrs
+                if (featureName) text += `@${featureName}`
+                if (featureId) featureIds.push(featureId)
             } else {
                 // Recurse into other nodes
                 const nested = ContentExtractor.collectContentWithImages(child)
                 text += nested.text
                 images.push(...nested.images)
+                featureIds.push(...nested.featureIds)
             }
         })
 
-        return { text, images }
+        return { text, images, featureIds }
     }
 
     // Simple text extraction without formatting (for backwards compatibility)
@@ -253,10 +260,10 @@ class ContentExtractor {
                 return
             }
 
-            const { text: textContent, images } = ContentExtractor.collectContentWithImages(block)
-            if (!textContent && images.length === 0) return
+            const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
+            if (!textContent && images.length === 0 && featureIds.length === 0) return
 
-            content.push({ nodeType: block.type.name, textContent, images: images.length > 0 ? images : undefined })
+            content.push({ nodeType: block.type.name, textContent, images: images.length > 0 ? images : undefined, featureIds: featureIds.length > 0 ? featureIds : undefined })
         })
 
         return content
@@ -283,13 +290,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0) {
+                    if (textContent || images.length > 0 || featureIds.length > 0) {
                         allThreadsContent.push({
                             nodeType: block.type.name,
                             textContent,
-                            images: images.length > 0 ? images : undefined
+                            images: images.length > 0 ? images : undefined,
+                            featureIds: featureIds.length > 0 ? featureIds : undefined,
                         })
                     }
                 })
@@ -334,13 +342,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0) {
+                    if (textContent || images.length > 0 || featureIds.length > 0) {
                         selectedContent.push({
                             nodeType: block.type.name,
                             textContent,
-                            images: images.length > 0 ? images : undefined
+                            images: images.length > 0 ? images : undefined,
+                            featureIds: featureIds.length > 0 ? featureIds : undefined,
                         })
                     }
                 })
@@ -401,6 +410,10 @@ class ContentExtractor {
         })
 
         return messages
+    }
+
+    static collectReferencedFeatureIds(items: ThreadContent[]): string[] {
+        return Array.from(new Set(items.flatMap((item) => item.featureIds ?? [])))
     }
 }
 
@@ -748,6 +761,7 @@ class AiChatThreadPluginClass {
         }
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
     }
@@ -984,6 +998,7 @@ class AiChatThreadPluginClass {
                 tr.setMeta('setReceiving', { threadId, receiving: true })
                 console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos, responseMessageId })
             }
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
             console.log('🔴 [PLUGIN] handleStreamStart dispatch done', { threadId, docSizeAfter: tr.doc.content.size })
         } catch (error) {
@@ -1062,6 +1077,7 @@ class AiChatThreadPluginClass {
         }
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
     }
@@ -1137,6 +1153,7 @@ class AiChatThreadPluginClass {
         tr.setMeta('setCollapsible', { threadId, active: true })
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
     }
@@ -1166,6 +1183,7 @@ class AiChatThreadPluginClass {
         tr.setMeta('setCollapsible', { threadId, active: false })
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
     }
@@ -1181,7 +1199,7 @@ class AiChatThreadPluginClass {
             aiProvider: aiProvider || 'Anthropic'
         })
 
-        dispatch(state.tr.insert(insertPos, responseNode))
+        dispatch(state.tr.insert(insertPos, responseNode).setMeta('skipDispatch', true))
     }
 
     private createMark(schema: ProseMirrorSchema, style: string): any {
@@ -1318,6 +1336,7 @@ class AiChatThreadPluginClass {
         // Pass threadId for Workspace mode to ensure current thread is always included
         const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
+        const referencedFeatureIds = ContentExtractor.collectReferencedFeatureIds(threadContent)
 
         // Build image generation options if an image model is selected
         const imageOptions = aiImageModel ? {
@@ -1325,7 +1344,7 @@ class AiChatThreadPluginClass {
             imageGenerationSize
         } : undefined
 
-        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions })
+        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions, referencedFeatureIds })
     }
 
     private handleStopRequest(transaction: Transaction): void {

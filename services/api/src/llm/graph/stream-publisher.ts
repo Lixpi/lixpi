@@ -1,6 +1,7 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
+import type { StageTraceEvent } from '@lixpi/constants'
 
 import { STREAM_STATUS, type StreamStatus } from '../config.ts'
 import type { ProviderName } from '../config.ts'
@@ -21,6 +22,9 @@ export type ChunkPayload = {
         revisedPrompt?: string
         imageModelProvider?: string
         imageModelId?: string
+        extractionStatus?: string
+        extractionDetail?: string
+        stageTraceEvent?: StageTraceEvent
     }
     aiChatThreadId: string
 }
@@ -184,6 +188,29 @@ export class StreamPublisher {
                 text: '',
                 status: STREAM_STATUS.END_STREAM,
                 aiProvider: this.provider,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    extractionProgress(status: string, detail: string): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.STREAMING,
+                aiProvider: this.provider,
+                extractionStatus: status,
+                extractionDetail: detail,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    stageTrace(event: StageTraceEvent): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.STREAMING,
+                aiProvider: this.provider,
+                stageTraceEvent: event,
             },
             aiChatThreadId: this.aiChatThreadId,
         })
