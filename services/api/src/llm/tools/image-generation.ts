@@ -247,6 +247,13 @@ export const extractReferenceImages = (messages: ChatMessage[]): string[] => {
                 const data = (block as any).data
                 if (data) pushImage(`data:${mime};base64,${data}`)
             }
+            // Google SDK format: inlineData
+            else if ((block as any).inlineData) {
+                const inline = (block as any).inlineData
+                const mime = inline.mimeType ?? 'image/png'
+                const data = inline.data
+                if (data) pushImage(`data:${mime};base64,${data}`)
+            }
         }
     }
 

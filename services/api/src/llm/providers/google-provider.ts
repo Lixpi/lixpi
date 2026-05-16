@@ -274,6 +274,8 @@ export class GoogleProvider extends BaseProvider {
             if (typeof block !== 'object' || block === null) continue
             if ('text' in block) {
                 parts.push({ text: block.text })
+            } else if ('inlineData' in block) {
+                parts.push({ inlineData: block.inlineData })
             } else if ('inline_data' in block) {
                 const inline = block.inline_data
                 parts.push({ inlineData: { data: inline.data, mimeType: inline.mime_type } })
