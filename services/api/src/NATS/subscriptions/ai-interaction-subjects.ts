@@ -48,6 +48,7 @@ export const aiInteractionSubjects = [
                 enableImageGeneration,
                 imageSize,
                 referencedFeatureIds,
+                imageBranchCandidateSnapshot,
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
                 workspaceId: string
@@ -116,6 +117,7 @@ export const aiInteractionSubjects = [
                         enableImageGeneration,
                         imageSize,
                         referencedFeatureIds,
+                        imageBranchCandidateSnapshot,
                         eventMeta: {
                             userId,
                             stripeCustomerId,

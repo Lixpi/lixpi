@@ -7,7 +7,6 @@ import type {
     ImageCanvasNode,
     DocumentCanvasNode,
     AiChatThreadCanvasNode,
-    ContextRegionCanvasNode,
 } from '@lixpi/constants'
 
 const { AI_CHAT_THREAD_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
@@ -20,11 +19,6 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import type { Document } from '$src/stores/documentStore.ts'
-import {
-    getGeneratedImageTextByNodeIdFromThreadContent,
-    selectImageBranchForPrompt,
-    type ImageBranchSelection,
-} from '$src/services/ai-image-branching.ts'
 
 // ========== CONTEXT EXTRACTION TYPES ==========
 
@@ -41,10 +35,6 @@ export type ContextItem = {
     workspaceId?: string
     // Links this image to a specific aiResponseMessage within the source AI chat thread
     sourceMessageId?: string
-    branchRole?: 'generated_variant'
-    branchSelectionMode?: ImageBranchSelection['mode']
-    branchId?: string
-    branchSelectionReason?: string
 }
 
 export type ExtractedContext = ContextItem[]
@@ -76,15 +66,6 @@ type ProseMirrorDoc = {
 type ExtractedContent = {
     text: string
     imageSrcs: string[]
-}
-
-type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
-
-type ExtractConnectedContextOptions = {
-    imagePromptText?: string
-    includeGeneratedImageBranches?: boolean
-    generatedImageTextByNodeId?: Record<string, string>
-    imageBranchSelection?: ImageBranchSelection
 }
 
 // ========== HELPER FUNCTIONS ==========
@@ -178,58 +159,9 @@ function extractContentFromProseMirror(content: string | object): ExtractedConte
     }
 }
 
-function isContextRegionNode(node: CanvasNode | undefined): node is ContextRegionNode {
-    return node?.type === 'contextRegion' || node?.type === 'aiChatThread'
-}
-
-function getGeneratedBranchContextItems(
-    targetNodeId: string,
-    nodes: CanvasNode[],
-    edges: WorkspaceEdge[],
-    options: ExtractConnectedContextOptions
-): ContextItem[] {
-    if (!options.includeGeneratedImageBranches) return []
-
-    const targetNode = nodes.find((node) => node.nodeId === targetNodeId)
-    if (!isContextRegionNode(targetNode)) return []
-
-    const branchSelection = options.imageBranchSelection
-        ?? (options.imagePromptText
-            ? selectImageBranchForPrompt({
-                regionNodeId: targetNode.nodeId,
-                threadId: targetNode.referenceId,
-                nodes,
-                edges,
-                prompt: options.imagePromptText,
-                generatedImageTextByNodeId: options.generatedImageTextByNodeId,
-            })
-            : undefined)
-
-    if (!branchSelection) return []
-
-    if (branchSelection.includeGeneratedNodeIds.length === 0) return []
-
-    const nodesById = new Map(nodes.map((node) => [node.nodeId, node]))
-    return branchSelection.includeGeneratedNodeIds
-        .map((nodeId) => nodesById.get(nodeId))
-        .filter((node): node is ImageCanvasNode => node?.type === 'image')
-        .map((node) => ({
-            type: 'image',
-            nodeId: node.nodeId,
-            content: '',
-            fileId: node.fileId,
-            workspaceId: node.workspaceId,
-            sourceMessageId: node.generatedBy?.responseMessageId,
-            branchRole: 'generated_variant',
-            branchSelectionMode: branchSelection.mode,
-            branchId: branchSelection.branchId ?? undefined,
-            branchSelectionReason: branchSelection.reason,
-        }))
-}
-
 function getContextDedupeKey(item: ContextItem): string {
     if (item.type === 'image') {
-        return [item.type, item.fileId ?? item.content, item.workspaceId ?? '', item.branchRole ?? 'context'].join(':')
+        return [item.type, item.fileId ?? item.content, item.workspaceId ?? ''].join(':')
     }
 
     return [item.type, item.nodeId, item.title ?? '', item.content].join(':')
@@ -395,7 +327,7 @@ class AiChatThreadService {
 
     // ========== CONTEXT EXTRACTION ==========
 
-    public async extractConnectedContext(aiChatNodeId: string, options: ExtractConnectedContextOptions = {}): Promise<ExtractedContext> {
+    public async extractConnectedContext(aiChatNodeId: string): Promise<ExtractedContext> {
         const canvasState = workspaceStore.getData('canvasState')
         if (!canvasState) return []
 
@@ -470,20 +402,6 @@ class AiChatThreadService {
             }
         }
 
-        const targetNode = nodes.find((node) => node.nodeId === aiChatNodeId)
-        const threadContent = isContextRegionNode(targetNode)
-            ? threadsMap.get(targetNode.referenceId)?.content
-            : undefined
-        const generatedImageTextByNodeId = options.generatedImageTextByNodeId
-            ?? (isContextRegionNode(targetNode)
-                ? getGeneratedImageTextByNodeIdFromThreadContent(threadContent, nodes, targetNode.referenceId)
-                : {})
-
-        context.push(...getGeneratedBranchContextItems(aiChatNodeId, nodes, edges, {
-            ...options,
-            generatedImageTextByNodeId,
-        }))
-
         return dedupeContextItems(context)
     }
 
@@ -542,19 +460,10 @@ class AiChatThreadService {
             }
 
             const imageMetadata: Record<string, string> = {
-                type: item.branchRole === 'generated_variant' ? 'generated_image_variant' : 'standalone_image',
+                type: 'standalone_image',
             }
             if (item.sourceMessageId) {
                 imageMetadata.sourceMessageId = item.sourceMessageId
-            }
-            if (item.branchSelectionMode) {
-                imageMetadata.branchSelectionMode = item.branchSelectionMode
-            }
-            if (item.branchId) {
-                imageMetadata.branchId = item.branchId
-            }
-            if (item.branchSelectionReason) {
-                imageMetadata.branchSelectionReason = item.branchSelectionReason
             }
 
             contentBlocks.push({

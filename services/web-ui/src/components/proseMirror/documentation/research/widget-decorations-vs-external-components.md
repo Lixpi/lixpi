@@ -29,7 +29,7 @@ let deco = Decoration.widget(action.add.pos, widget, {id: action.add.id})
 **Tooltip Example**: Demonstrates external positioning using `coordsAtPos()`
 ```javascript
 let start = view.coordsAtPos(from), end = view.coordsAtPos(to)
-this.tooltip.style.left = (left - box.left) + "px"
+applyStyle(this.tooltip, { left: (left - box.left) + "px" })
 ```
 
 **Lint Example**: Interactive decorations with event handling
@@ -63,7 +63,7 @@ class MenuView {
     // Query commands for enabled state
     this.items.forEach(({command, dom}) => {
       let active = command(this.editorView.state, null, this.editorView)
-      dom.style.display = active ? "" : "none"
+      applyStyle(dom, { display: active ? "" : "none" })
     })
   }
 }

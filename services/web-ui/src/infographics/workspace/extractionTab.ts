@@ -1,6 +1,6 @@
 'use strict'
 
-import { html } from '$src/utils/domTemplates.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { NATS_SUBJECTS, AI_INTERACTION_CONSTANTS, type CanvasFeatureExtractionState, type StageTraceEvent } from '@lixpi/constants'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
@@ -366,7 +366,7 @@ function appendReasoningControls(bodyEl: HTMLElement, initialText = ''): { panel
     if (initialText) reasoningPanel.insertAdjacentText('beforeend', initialText)
     reasoningToggle.addEventListener('click', () => {
         const open = reasoningPanel.style.display !== 'none'
-        reasoningPanel.style.display = open ? 'none' : 'block'
+        applyStyle(reasoningPanel, { display: open ? 'none' : 'block' })
         reasoningToggle.textContent = open ? '▶ Agent reasoning' : '▼ Agent reasoning'
     })
     bodyEl.appendChild(reasoningToggle)
@@ -379,7 +379,7 @@ function appendReasoningControls(bodyEl: HTMLElement, initialText = ''): { panel
         // can see streaming tokens without clicking the toggle.
         openIfClosed: () => {
             if (reasoningPanel.style.display !== 'none') return
-            reasoningPanel.style.display = 'block'
+            applyStyle(reasoningPanel, { display: 'block' })
             reasoningToggle.textContent = '▼ Agent reasoning'
         },
     }

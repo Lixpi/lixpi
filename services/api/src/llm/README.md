@@ -5,7 +5,7 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. Repla
 ## What it does
 
 - Receives a chat request from the NATS gateway handler (`services/api/src/NATS/subscriptions/ai-interaction-subjects.ts`).
-- Runs a 6-node LangGraph state machine per provider: `validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`.
+- Runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`.
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
 - Routes dual-model image generation: text model emits a `generate_image` tool call, the workflow's conditional edge spawns a transient image-model provider (OpenAI gpt-image-*, Google Gemini, Stability) that uploads the final image to NATS Object Store.
 - Reports token + image usage costs via `decimal.js` pricing math against the model's pricing metadata.
@@ -43,6 +43,7 @@ src/llm/
         state.ts                 # ProviderState type + channel reducers (partial-overlay semantics)
         stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + tag-aware <image_prompt> buffering
         image-publisher.ts       # IMAGE_PARTIAL, IMAGE_COMPLETE + content-hash deduped storage
+        image-branch-resolver.ts # Structured VLM target/reference resolver for image generation
     providers/
         base-provider.ts         # Abstract BaseProvider — owns the StateGraph, AbortController, workflow nodes
         provider-registry.ts     # Map<instanceKey, provider> + active-task dedupe via Map<string, AbortController>
@@ -67,6 +68,10 @@ src/llm/
 ## LangGraph workflow
 
 ```
+resolveFeatures
+    ↓
+resolveImageBranch (structured VLM; no-op unless an image model is selected)
+    ↓
 validateRequest
     ↓
 streamTokens (provider-specific streamImpl)
@@ -85,6 +90,8 @@ cleanup
     ↓
 END
 ```
+
+`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced.
 
 Each provider subclasses `BaseProvider` and implements `streamImpl(state)` — everything else is shared.
 

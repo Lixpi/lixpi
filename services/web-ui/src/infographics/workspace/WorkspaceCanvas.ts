@@ -21,6 +21,8 @@ import {
     type CanvasAiChatSidebarTab,
     type CanvasFeatureExtractionState,
     type FeatureMeta,
+    type ImageBranchCandidateSnapshot,
+    type ImageBranchVlmResolution,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
@@ -46,10 +48,9 @@ import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT }
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import {
+    buildImageBranchCandidateSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
     getPromptTextFromMessages,
-    selectImageBranchForPrompt,
-    type ImageBranchSelection,
 } from '$src/services/ai-image-branching.ts'
 import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
@@ -311,7 +312,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             }
                             const newHeight = Math.max(requiredHeight, 200)
                             const threadEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
-                            if (threadEl) threadEl.style.height = `${newHeight}px`
+                            if (threadEl) applyStyle(threadEl, { height: `${newHeight}px` })
                             return { ...n, dimensions: { ...n.dimensions, height: newHeight } }
                         })
                     }
@@ -780,14 +781,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         } else {
             pixiMediaLayer?.setMarqueeRect(null)
-            if (selectionRectEl) selectionRectEl.style.display = 'none'
+            if (selectionRectEl) applyStyle(selectionRectEl, { display: 'none' })
         }
     }
 
     function hideSelectionRectElement(): void {
         pixiMediaLayer?.setMarqueeRect(null)
         if (selectionRectEl) {
-            selectionRectEl.style.display = 'none'
+            applyStyle(selectionRectEl, { display: 'none' })
         }
     }
 
@@ -841,7 +842,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!overlayEl) return
 
         if (!bounds) {
-            overlayEl.style.display = 'none'
+            applyStyle(overlayEl, { display: 'none' })
             return
         }
 
@@ -1234,8 +1235,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const previousBodyUserSelect = document.body.style.userSelect
 
         panelEl.classList.add('is-resizing')
-        document.body.style.cursor = 'ew-resize'
-        document.body.style.userSelect = 'none'
+        applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })
 
         if (panZoom) {
             panZoom.update({
@@ -1603,12 +1603,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         messages,
                         Boolean(imageOptions?.aiImageModel)
                     )
-                    const context = await aiChatThreadService.extractConnectedContext(regionNode.nodeId, {
-                        imagePromptText: imagePlacement.promptText,
-                        includeGeneratedImageBranches: Boolean(imageOptions?.aiImageModel),
-                        imageBranchSelection: imagePlacement.branchSelection,
-                        generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(regionNode.referenceId),
-                    })
+                    const context = await aiChatThreadService.extractConnectedContext(regionNode.nodeId)
                     const contextMessage = aiChatThreadService.buildContextMessage(context)
                     const messagesWithContext = contextMessage ? [contextMessage, ...messages] : messages
 
@@ -1618,6 +1613,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         aiImageModel: imageOptions?.aiImageModel,
                         imageSize: imageOptions?.imageGenerationSize,
                         referencedFeatureIds,
+                        imageBranchCandidateSnapshot: imagePlacement.imageBranchCandidateSnapshot,
                     })
                 } catch (error) {
                     console.error('Failed to gather context from context region:', error)
@@ -1825,12 +1821,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
 
         positionFloatingInput(targetCanvasNode)
-        floatingInputEl.style.display = 'block'
+        applyStyle(floatingInputEl, { display: 'block' })
     }
 
     function hideFloatingInput(): void {
         if (floatingInputEl) {
-            floatingInputEl.style.display = 'none'
+            applyStyle(floatingInputEl, { display: 'none' })
         }
         promptInputController.setTarget(null)
     }
@@ -2034,7 +2030,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const boundaryCircle = rail.querySelector('.workspace-thread-rail__boundary-circle') as HTMLElement | null
         if (boundaryCircle) {
-            boundaryCircle.style.display = isHidden ? 'none' : ''
+            applyStyle(boundaryCircle, { display: isHidden ? 'none' : '' })
         }
 
         connectionManager?.setRailHeight(nodeId, totalHeight)
@@ -2221,7 +2217,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         sourceNodeId: string
         promptText: string
         branchId: string
-        branchSelection: ImageBranchSelection
+        imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
+        imageBranchResolution?: ImageBranchVlmResolution
         createdAt: number
     }
 
@@ -2241,7 +2238,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return sourceNode ?? sourceThread
     }
 
-    function getThreadContentForBranchSelection(threadId: string): unknown {
+    function getThreadContentForBranchSnapshot(threadId: string): unknown {
         const editorDoc = threadEditors.get(threadId)?.editor?.editorView?.state?.doc
         if (editorDoc?.toJSON) return editorDoc.toJSON()
         return aiChatThreadsStore.getThread(threadId)?.content
@@ -2249,7 +2246,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getGeneratedImageTextByNodeIdForThread(threadId: string): Record<string, string> {
         return getGeneratedImageTextByNodeIdFromThreadContent(
-            getThreadContentForBranchSelection(threadId),
+            getThreadContentForBranchSnapshot(threadId),
             currentCanvasState?.nodes ?? [],
             threadId
         )
@@ -2287,14 +2284,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function rememberGeneratedImagePlacement(threadId: string, regionNode: ContextRegionNode, messages: any[], hasImageModel: boolean): { promptText: string; branchSelection?: ImageBranchSelection } {
+    function rememberGeneratedImagePlacement(threadId: string, regionNode: ContextRegionNode, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
         if (!hasImageModel) {
             pendingGeneratedImagePlacements.delete(threadId)
             return { promptText: '' }
         }
 
         const promptText = getPromptTextFromMessages(messages)
-        const branchSelection = selectImageBranchForPrompt({
+        const imageBranchCandidateSnapshot = buildImageBranchCandidateSnapshot({
             regionNodeId: regionNode.nodeId,
             threadId: regionNode.referenceId,
             nodes: currentCanvasState?.nodes ?? [],
@@ -2302,47 +2299,52 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             prompt: promptText,
             generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(regionNode.referenceId),
         })
-        const branchId = branchSelection.branchId ?? `branch-${uuidv4()}`
+        const branchId = `branch-${uuidv4()}`
         pendingGeneratedImagePlacements.set(threadId, {
-            sourceNodeId: branchSelection.sourceNodeId ?? regionNode.nodeId,
+            sourceNodeId: regionNode.nodeId,
             promptText,
             branchId,
-            branchSelection,
+            imageBranchCandidateSnapshot,
             createdAt: Date.now(),
         })
-        console.info('[CANVAS] image branch resolution', {
+        console.info('[CANVAS] image branch candidate snapshot', {
             threadId,
-            mode: branchSelection.mode,
-            sourceNodeId: branchSelection.sourceNodeId,
-            branchId,
-            operationKind: branchSelection.operationKind,
-            referenceImageNodeIds: branchSelection.referenceImageNodeIds,
-            confidence: branchSelection.confidence,
-            reason: branchSelection.reason,
-            candidates: branchSelection.candidates,
+            candidateCount: imageBranchCandidateSnapshot.candidates.length,
+            promptFingerprint: imageBranchCandidateSnapshot.promptFingerprint,
+            candidateNodeIds: imageBranchCandidateSnapshot.candidates.map((candidate: ImageBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId),
         })
-        return { promptText, branchSelection }
+        return { promptText, imageBranchCandidateSnapshot }
     }
 
     function getPendingGeneratedImageLineage(threadId: string, existingGeneratedBy?: ImageCanvasNode['generatedBy']): Partial<NonNullable<ImageCanvasNode['generatedBy']>> {
         const placement = pendingGeneratedImagePlacements.get(threadId)
         if (!placement) return {}
 
-        const sourceNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === placement.sourceNodeId)
-        const parentImageNodeId = sourceNode?.type === 'image' ? sourceNode.nodeId : undefined
+        const resolution = placement.imageBranchResolution
+        const parentImageNodeId = resolution?.targetImageNodeId ?? resolution?.parentImageNodeId
 
         return {
-            branchId: existingGeneratedBy?.branchId ?? placement.branchId,
-            parentImageNodeId: existingGeneratedBy?.parentImageNodeId ?? parentImageNodeId,
-            sourceContextNodeIds: placement.branchSelection.sourceContextNodeIds,
-            referenceImageNodeIds: placement.branchSelection.referenceImageNodeIds,
-            operationKind: placement.branchSelection.operationKind,
+            branchId: existingGeneratedBy?.branchId ?? resolution?.branchId ?? placement.branchId,
+            parentImageNodeId: existingGeneratedBy?.parentImageNodeId ?? parentImageNodeId ?? undefined,
+            sourceContextNodeIds: resolution?.sourceContextNodeIds ?? [],
+            referenceImageNodeIds: resolution?.referenceImageNodeIds ?? [],
+            operationKind: resolution?.operationKind ?? 'new_image',
             promptText: placement.promptText,
-            promptFingerprint: placement.branchSelection.promptFingerprint,
-            entitySummary: placement.branchSelection.entitySummary,
-            entityTags: placement.branchSelection.entityTags,
-            styleTags: placement.branchSelection.styleTags,
-            resolverVersion: placement.branchSelection.resolverVersion,
+            promptFingerprint: placement.imageBranchCandidateSnapshot?.promptFingerprint,
+            visualEntitySummary: resolution?.visualEntitySummary,
+            visualStyleSummary: resolution?.visualStyleSummary,
+            entitySummary: resolution?.visualEntitySummary,
+            entityTags: resolution?.entityTags ?? [],
+            styleTags: resolution?.styleTags ?? [],
+            targetImageNodeId: resolution?.targetImageNodeId ?? undefined,
+            styleReferenceNodeIds: resolution?.styleReferenceNodeIds ?? [],
+            excludedNodeIds: resolution?.excludedNodeIds ?? [],
+            resolverKind: resolution?.resolverKind,
+            resolverModelProvider: resolution?.resolverModelProvider,
+            resolverModelId: resolution?.resolverModelId,
+            resolverRationale: resolution?.rationale,
+            resolverConfidence: resolution?.confidence,
+            resolverVersion: resolution?.resolverVersion ?? placement.imageBranchCandidateSnapshot?.resolverVersion,
             createdAt: existingGeneratedBy?.createdAt ?? placement.createdAt,
         }
     }
@@ -2378,7 +2380,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function showImageErrorPlaceholder(imgEl: HTMLImageElement, nodeEl: HTMLElement): void {
-        imgEl.style.display = 'none'
+        applyStyle(imgEl, { display: 'none' })
         if (nodeEl.querySelector('.image-error-placeholder')) return
 
         nodeEl.appendChild(html`
@@ -2468,6 +2470,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
 
             onCanvasStateChange?.(newCanvasState)
+        },
+
+        onImageBranchResolvedToCanvas: ({ threadId, resolution }) => {
+            const placement = pendingGeneratedImagePlacements.get(threadId)
+            if (!placement) return
+
+            const sourceNodeId = resolution.targetImageNodeId ?? resolution.parentImageNodeId ?? placement.sourceNodeId
+            pendingGeneratedImagePlacements.set(threadId, {
+                ...placement,
+                sourceNodeId,
+                branchId: resolution.branchId ?? placement.branchId,
+                imageBranchResolution: resolution,
+            })
+
+            console.info('[CANVAS] image branch VLM resolution', {
+                threadId,
+                mode: resolution.mode,
+                sourceNodeId,
+                branchId: resolution.branchId,
+                operationKind: resolution.operationKind,
+                referenceImageNodeIds: resolution.referenceImageNodeIds,
+                excludedNodeIds: resolution.excludedNodeIds,
+                confidence: resolution.confidence,
+                rationale: resolution.rationale,
+            })
+        },
+
+        onImageBranchResolutionErrorToCanvas: ({ threadId }) => {
+            pendingGeneratedImagePlacements.delete(threadId)
         },
 
         onImageErrorToCanvas: ({ threadId }) => {
@@ -2586,7 +2617,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     : existingNodes
 
                 if (additionalHeight > 0 && threadEl) {
-                    threadEl.style.height = `${sourceThread.dimensions.height + additionalHeight}px`
+                    applyStyle(threadEl, { height: `${sourceThread.dimensions.height + additionalHeight}px` })
                 }
 
                 const newCanvasState: CanvasState = {
@@ -2841,7 +2872,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const additionalHeight = Math.max(0, imageBottom - threadBottom)
                     const threadEl = viewportEl?.querySelector(`[data-node-id="${sourceThread.nodeId}"]`) as HTMLElement
                     if (additionalHeight > 0 && threadEl) {
-                        threadEl.style.height = `${sourceThread.dimensions.height + additionalHeight}px`
+                        applyStyle(threadEl, { height: `${sourceThread.dimensions.height + additionalHeight}px` })
                     }
                     allNodes = [
                         ...existingNodes.map((n: CanvasNode) =>
@@ -3919,11 +3950,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (isLeft) {
                 const widthDiff = newWidth - startWidth
-                nodeEl.style.left = `${startLeft - widthDiff}px`
+                applyStyle(nodeEl, { left: `${startLeft - widthDiff}px` })
             }
             if (isTop) {
                 const heightDiff = newHeight - startHeight
-                nodeEl.style.top = `${startTop - heightDiff}px`
+                applyStyle(nodeEl, { top: `${startTop - heightDiff}px` })
             }
 
             const liveResizePosition = {
@@ -3959,8 +3990,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const neededHeight = relativeTop + newHeight + 48
                     const currentRegionWidth = parseFloat(regionEl.style.width) || 200
                     const currentRegionHeight = parseFloat(regionEl.style.height) || 120
-                    if (neededWidth > currentRegionWidth) regionEl.style.width = `${neededWidth}px`
-                    if (neededHeight > currentRegionHeight) regionEl.style.height = `${neededHeight}px`
+                    if (neededWidth > currentRegionWidth) applyStyle(regionEl, { width: `${neededWidth}px` })
+                    if (neededHeight > currentRegionHeight) applyStyle(regionEl, { height: `${neededHeight}px` })
                 }
             }
 
@@ -4064,7 +4095,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         if (n.nodeId !== resizeAnchor.threadNodeId) return n
                         const newThreadHeight = Math.max(n.dimensions.height + heightDelta, 200)
                         const threadEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
-                        if (threadEl) threadEl.style.height = `${newThreadHeight}px`
+                        if (threadEl) applyStyle(threadEl, { height: `${newThreadHeight}px` })
                         return { ...n, dimensions: { ...n.dimensions, height: newThreadHeight } }
                     })
                 }

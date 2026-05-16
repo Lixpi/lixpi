@@ -113,7 +113,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         const wasVisible = bubbleWrapper.classList.contains('visible')
         if (!wasVisible) {
             bubbleWrapper.classList.add('visible')
-            bubbleWrapper.style.visibility = 'hidden'
+            applyStyle(bubbleWrapper, { visibility: 'hidden' })
         }
 
         const bubbleRect = bubbleWrapper.getBoundingClientRect()
@@ -121,7 +121,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
 
         if (!wasVisible) {
             bubbleWrapper.classList.remove('visible')
-            bubbleWrapper.style.visibility = ''
+            applyStyle(bubbleWrapper, { visibility: '' })
         }
 
         const spaceBelow = window.innerHeight - anchorRect.bottom - VIEWPORT_MARGIN
@@ -147,7 +147,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         const wasVisible = bubbleWrapper.classList.contains('visible')
         if (!wasVisible) {
             bubbleWrapper.classList.add('visible')
-            bubbleWrapper.style.visibility = 'hidden'
+            applyStyle(bubbleWrapper, { visibility: 'hidden' })
         }
 
         const bubbleRect = bubbleWrapper.getBoundingClientRect()
@@ -216,7 +216,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         // Restore visibility state
         if (!wasVisible) {
             bubbleWrapper.classList.remove('visible')
-            bubbleWrapper.style.visibility = ''
+            applyStyle(bubbleWrapper, { visibility: '' })
         }
     }
 

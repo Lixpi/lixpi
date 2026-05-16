@@ -1,6 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { createEl } from '$src/utils/domTemplates.ts'
+import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 
 export const linkTooltipPluginKey = new PluginKey('linkTooltip')
 
@@ -113,8 +113,7 @@ class LinkTooltipView {
             urlEl.textContent = this.currentHref
         }
 
-        this.tooltip.style.visibility = 'hidden'
-        this.tooltip.style.display = 'block'
+        applyStyle(this.tooltip, { visibility: 'hidden', display: 'block' })
         this.tooltip.classList.add('is-visible')
 
         const scale = this.getScale()
@@ -135,7 +134,7 @@ class LinkTooltipView {
         const maxLeft = parentWidthLocal - tooltipWidthLocal - 8
         const clampedLeft = Math.max(8, Math.min(local.x, maxLeft))
 
-        Object.assign(this.tooltip.style, {
+        applyStyle(this.tooltip, {
             left: `${clampedLeft}px`,
             top: `${local.y}px`,
             visibility: 'visible',
@@ -143,7 +142,7 @@ class LinkTooltipView {
     }
 
     private hide(): void {
-        this.tooltip.style.visibility = 'hidden'
+        applyStyle(this.tooltip, { visibility: 'hidden' })
         this.tooltip.classList.remove('is-visible')
         this.linkElement = null
         this.currentHref = ''

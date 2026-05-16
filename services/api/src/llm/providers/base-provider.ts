@@ -15,6 +15,7 @@ import {
     validateImagePrompt as toolValidateImagePrompt,
 } from '../tools/image-generation.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
+import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
@@ -29,7 +30,7 @@ export type BaseProviderDeps = {
 // /use chip resolution by injecting Feature definitions + source crops into state.messages.
 //
 // Topology:
-//   START → resolveFeatures → validateRequest → streamTokens → [conditional]
+//   START → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -56,6 +57,11 @@ export abstract class BaseProvider {
     private buildWorkflow() {
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
             .addNode('resolveFeatures', async (s: ProviderState) => resolveFeatures(s))
+            .addNode('resolveImageBranch', async (s: ProviderState) => resolveImageBranch(s, {
+                natsService: this.nats,
+                publisher: this.publisher,
+                abortSignal: this.signal,
+            }))
             .addNode('validateRequest', async (s: ProviderState) => this.validateRequest(s))
             .addNode('streamTokens', async (s: ProviderState) => this.streamTokens(s))
             .addNode('validateImagePrompt', async (s: ProviderState) => this.validateImagePromptNode(s))
@@ -64,7 +70,8 @@ export abstract class BaseProvider {
             .addNode('cleanup', async (s: ProviderState) => this.cleanup(s))
 
         graph.addEdge(START, 'resolveFeatures' as any)
-        graph.addEdge('resolveFeatures' as any, 'validateRequest' as any)
+        graph.addEdge('resolveFeatures' as any, 'resolveImageBranch' as any)
+        graph.addEdge('resolveImageBranch' as any, 'validateRequest' as any)
         graph.addEdge('validateRequest' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
             'streamTokens' as any,
@@ -118,6 +125,7 @@ export abstract class BaseProvider {
             imageModelVersion: requestData.imageModelMetaInfo?.modelVersion,
             imageProviderName: requestData.imageModelMetaInfo?.provider,
             imagePromptRetryCount: 0,
+            imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
             referencedFeatureIds: requestData.referencedFeatureIds,
         }
 

@@ -2,7 +2,6 @@
 
 import { NATS_SUBJECTS, AI_INTERACTION_CONSTANTS } from '@lixpi/constants'
 import type {
-    AiModelId,
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
     ImageGenerationSize
@@ -134,6 +133,28 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLVED) {
+                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLVED received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_branch_resolved',
+                    imageBranchResolution: content.resolution,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR) {
+                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLUTION_ERROR received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_branch_resolution_error',
+                    error: content.error || 'Image branch resolution failed',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
                 console.log('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
 
@@ -204,6 +225,7 @@ export default class AiInteractionService {
         aiImageModel,
         imageSize,
         referencedFeatureIds,
+        imageBranchCandidateSnapshot,
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
@@ -221,6 +243,10 @@ export default class AiInteractionService {
             payload.referencedFeatureIds = referencedFeatureIds
         }
 
+        if (imageBranchCandidateSnapshot) {
+            payload.imageBranchCandidateSnapshot = imageBranchCandidateSnapshot
+        }
+
         // Add image model routing options if an image model is selected
         if (aiImageModel) {
             payload.aiImageModel = aiImageModel
@@ -234,6 +260,7 @@ export default class AiInteractionService {
             messageCount: messages.length,
             hasImageModel: !!aiImageModel,
             referencedFeatureCount: referencedFeatureIds?.length ?? 0,
+            imageBranchCandidateCount: imageBranchCandidateSnapshot?.candidates.length ?? 0,
         })
 
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)

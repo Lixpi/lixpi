@@ -1,7 +1,7 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import type { StageTraceEvent } from '@lixpi/constants'
+import type { ImageBranchVlmResolution, StageTraceEvent } from '@lixpi/constants'
 
 import { STREAM_STATUS, type StreamStatus } from '../config.ts'
 import type { ProviderName } from '../config.ts'
@@ -22,6 +22,8 @@ export type ChunkPayload = {
         revisedPrompt?: string
         imageModelProvider?: string
         imageModelId?: string
+        resolution?: ImageBranchVlmResolution
+        error?: string
         extractionStatus?: string
         extractionDetail?: string
         stageTraceEvent?: StageTraceEvent
@@ -211,6 +213,28 @@ export class StreamPublisher {
                 status: STREAM_STATUS.STREAMING,
                 aiProvider: this.provider,
                 stageTraceEvent: event,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    imageBranchResolved(resolution: ImageBranchVlmResolution): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
+                aiProvider: this.provider,
+                resolution,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    imageBranchResolutionError(message: string): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR,
+                aiProvider: this.provider,
+                error: message,
             },
             aiChatThreadId: this.aiChatThreadId,
         })
