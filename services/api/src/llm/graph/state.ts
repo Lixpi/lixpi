@@ -83,10 +83,16 @@ export type ProviderState = {
     // Tool-calling: dual-model image routing
     generatedImagePrompt?: string | undefined
     referenceImages?: string[] | undefined
+    featureReferenceImages?: string[] | undefined
     imagePromptRetryCount?: number | undefined
+    generatedImages?: string[] | undefined
 
     // Multi-turn editing (OpenAI Responses API)
     previousResponseId?: string | undefined
+
+    // Feature reference resolution (/use chips on chat messages)
+    referencedFeatureIds?: string[] | undefined
+    featureUsagePrompt?: string | undefined
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
@@ -121,6 +127,10 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     imageProviderName: { reducer: keep },
     generatedImagePrompt: { reducer: keep },
     referenceImages: { reducer: keep },
+    featureReferenceImages: { reducer: keep },
     imagePromptRetryCount: { reducer: keep, default: () => 0 },
+    generatedImages: { reducer: keep },
     previousResponseId: { reducer: keep },
+    referencedFeatureIds: { reducer: keep },
+    featureUsagePrompt: { reducer: keep },
 }

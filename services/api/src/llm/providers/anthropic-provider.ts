@@ -102,14 +102,18 @@ export class AnthropicProvider extends BaseProvider {
             if (hasImageModel) {
                 const toolCall = extractToolCall('Anthropic', finalMessage)
                 if (toolCall) {
+                    const refs = extractReferenceImages(messages)
                     update.generatedImagePrompt = toolCall.prompt
-                    update.referenceImages = extractReferenceImages(messages)
-                    info(
-                        `[Anthropic:${this.instanceKey}] Tool call detected: generate_image ` +
-                        `promptLen=${toolCall.prompt.length}`,
-                    )
+                    update.referenceImages = refs
+                    info(`[Anthropic:${this.instanceKey}] generate_image tool call ${JSON.stringify({
+                        chatModel: modelVersion,
+                        targetImageProvider: state.imageProviderName,
+                        targetImageModel: state.imageModelVersion,
+                        promptLen: toolCall.prompt.length,
+                        referenceImagesExtracted: refs.length,
+                    }, null, 0)}`)
                 } else {
-                    warn(`Anthropic did not emit generate_image tool call for ${this.instanceKey}`)
+                    warn(`[Anthropic:${this.instanceKey}] did not emit generate_image (model=${modelVersion}); image gen will not run`)
                 }
             }
 

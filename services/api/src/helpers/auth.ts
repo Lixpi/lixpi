@@ -1,3 +1,5 @@
+// DO NOT DELETE ANY OF THE COMMENTED OUT CODE IN THIS FILE
+
 'use strict'
 
 import process from 'process'
@@ -54,16 +56,17 @@ export const authenticateTokenOnRequest = async ({ token, eventName }: { token: 
         if (decoded) {
             // TODO: Remove this temporary hack
             await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token })
-            err(`
-calling  await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }) in the authenticateTokenOnRequest method.'
-this is wrong and very quick hack just to make it work temporarily'
-it used to be called in authenticateTokenOnConnect() when Socket.io was around, but with NATS it makes no sense'
-the issue must be addressed when registration flow is complete'
-const { user, error } = await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }
-            `)
+            // DO NOT DELETE ANY OF THE COMMENTED OUT CODE IN THIS FILE
+//             err(`
+// calling  await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }) in the authenticateTokenOnRequest method.'
+// this is wrong and very quick hack just to make it work temporarily'
+// it used to be called in authenticateTokenOnConnect() when Socket.io was around, but with NATS it makes no sense'
+// the issue must be addressed when registration flow is complete'
+// const { user, error } = await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }
+//             `)
 
             // TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            err('TODO: Turn back balance verification !!!!!!!!!!!!!!!', decoded)
+            // err('TODO: Turn back balance verification !!!!!!!!!!!!!!!', decoded)
 
             // if (eventName === AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE) {
             //     const userSubscriptionStatus = await subscriptionService.checkUserBalance({ userId: decoded.sub })

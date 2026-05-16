@@ -71,12 +71,27 @@ export class ImagePublisher {
         imageModelId: string
     }): Promise<void> {
         const { imageBase64, responseId, revisedPrompt, imageModelId } = args
+        if (!imageBase64) {
+            throw new Error('Image completion failed: provider returned no final image bytes')
+        }
         const buffer = Buffer.from(imageBase64, 'base64')
+        const isPng = buffer.length > 8
+            && buffer[0] === 0x89
+            && buffer[1] === 0x50
+            && buffer[2] === 0x4e
+            && buffer[3] === 0x47
+        const isJpeg = buffer.length > 3
+            && buffer[0] === 0xff
+            && buffer[1] === 0xd8
+            && buffer[2] === 0xff
+        if (!isPng && !isJpeg) {
+            throw new Error('Image completion failed: provider returned bytes that are not a PNG or JPEG image')
+        }
         const result = await this.storeImage({
             workspaceId: this.workspaceId,
             buffer,
-            originalName: 'generated-image.png',
-            mimeType: 'image/png',
+            originalName: isPng ? 'generated-image.png' : 'generated-image.jpg',
+            mimeType: isPng ? 'image/png' : 'image/jpeg',
             useContentHash: true,
         })
 

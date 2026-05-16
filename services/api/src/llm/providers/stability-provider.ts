@@ -237,6 +237,7 @@ export class StabilityProvider extends BaseProvider {
                 size: aspectRatio,
                 quality: 'high',
             },
+            generatedImages: [imageBase64],
         }
     }
 }

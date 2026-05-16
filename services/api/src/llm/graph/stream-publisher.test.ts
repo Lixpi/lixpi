@@ -2,7 +2,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 
-import { TagAwareStream } from './stream-publisher.ts'
+import { StreamPublisher, TagAwareStream } from './stream-publisher.ts'
 import { STREAM_STATUS } from '../config.ts'
 
 type Published = { subject: string, payload: any }
@@ -120,5 +120,23 @@ describe('TagAwareStream', () => {
         expect(nats.published.length).toBe(0)
         stream.push('ompt>x')
         expect(statuses(nats.published)).toContain(STREAM_STATUS.COLLAPSIBLE_START)
+    })
+})
+
+describe('StreamPublisher extraction progress', () => {
+    it('publishes extraction status and detail on the chat stream', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'run1', 'Anthropic')
+
+        publisher.extractionProgress('generating_samples', 'Rendering a texture reference sheet.')
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.subject).toBe('ai.interaction.chat.receiveMessage.ws1.run1')
+        expect(nats.published[0]?.payload.content).toEqual(expect.objectContaining({
+            status: STREAM_STATUS.STREAMING,
+            extractionStatus: 'generating_samples',
+            extractionDetail: 'Rendering a texture reference sheet.',
+            aiProvider: 'Anthropic',
+        }))
     })
 })

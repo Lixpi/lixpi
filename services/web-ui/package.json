@@ -56,7 +56,7 @@
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
-        "pixi.js": "^8.14.0",
+        "pixi.js": "*",
         "rbush": "*",
         "@types/rbush": "*",
         "elkjs": "*",
