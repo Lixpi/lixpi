@@ -3,6 +3,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { EditorState } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
+import { applyStyle } from '$src/utils/domTemplates.ts'
 import {
     doc,
     p,
@@ -109,7 +110,7 @@ describe('aiChatThreadNodeView — height survives update()', () => {
         const dom = nodeView.dom as HTMLElement
 
         // Simulate applyAnchoredImageSpacing growing the thread height
-        dom.style.height = '800px'
+    applyStyle(dom, { height: '800px' })
         expect(dom.style.height).toBe('800px')
 
         // Simulate ProseMirror calling update() with updated attributes
@@ -128,7 +129,7 @@ describe('aiChatThreadNodeView — height survives update()', () => {
         const { nodeView } = createThreadNodeView()
         const dom = nodeView.dom as HTMLElement
 
-        dom.style.height = '1200px'
+        applyStyle(dom, { height: '1200px' })
 
         // Simulate multiple updates during streaming
         const statuses = ['active', 'active', 'completed'] as const

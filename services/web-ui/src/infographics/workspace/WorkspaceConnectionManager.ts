@@ -456,9 +456,7 @@ export class WorkspaceConnectionManager {
 		this.config.viewportEl.classList.add('xyflow__viewport')
 
 		// Let the edges layer be positioned by bounds
-		this.config.edgesLayerEl.style.position = 'absolute'
-		this.config.edgesLayerEl.style.top = '0'
-		this.config.edgesLayerEl.style.left = '0'
+		applyStyle(this.config.edgesLayerEl, { position: 'absolute', top: '0', left: '0' })
 
 	}
 
@@ -528,23 +526,23 @@ export class WorkspaceConnectionManager {
 
 		const node = this.nodeLookup.get(nodeId)
 		if (!node) {
-			console.log('[CONNECT] startConnectionFromMenu: node not found in nodeLookup for', nodeId)
+			// console.log('[CONNECT] startConnectionFromMenu: node not found in nodeLookup for', nodeId)
 			return
 		}
 
 		const sourceHandle: Handle | null = node.internals.handleBounds?.source?.[0] ?? null
 		if (!sourceHandle) {
-			console.log('[CONNECT] startConnectionFromMenu: no sourceHandle.', {
-				handleBounds: node.internals.handleBounds,
-				source: node.internals.handleBounds?.source,
-			})
+			// console.log('[CONNECT] startConnectionFromMenu: no sourceHandle.', {
+			// 	handleBounds: node.internals.handleBounds,
+			// 	source: node.internals.handleBounds?.source,
+			// })
 			return
 		}
 
-		console.log('[CONNECT] startConnectionFromMenu: initiating connection from', nodeId, {
-			sourceHandle,
-			positionAbsolute: node.internals.positionAbsolute,
-		})
+		// console.log('[CONNECT] startConnectionFromMenu: initiating connection from', nodeId, {
+		// 	sourceHandle,
+		// 	positionAbsolute: node.internals.positionAbsolute,
+		// })
 
 		const fromPosition = sourceHandle.position ?? Position.Right
 		const fromX = (sourceHandle.x ?? 0) + node.internals.positionAbsolute.x + (sourceHandle.width ?? 0) / 2
@@ -578,7 +576,7 @@ export class WorkspaceConnectionManager {
 		}
 
 		// Change cursor to crosshair on the pane
-		this.config.paneEl.style.cursor = 'crosshair'
+		applyStyle(this.config.paneEl, { cursor: 'crosshair' })
 
 		let moveLogCounter = 0
 		const onMouseMove = (e: MouseEvent) => {
@@ -595,12 +593,12 @@ export class WorkspaceConnectionManager {
 			}
 
 			if (moveLogCounter++ % 30 === 0) {
-				console.log('[CONNECT] mousemove', {
-					clientX: e.clientX, clientY: e.clientY,
-					screenRel: { x: screenRelX, y: screenRelY },
-					transform,
-					rendererPos,
-				})
+				// console.log('[CONNECT] mousemove', {
+				// 	clientX: e.clientX, clientY: e.clientY,
+				// 	screenRel: { x: screenRelX, y: screenRelY },
+				// 	transform,
+				// 	rendererPos,
+				// })
 			}
 
 			// Find closest target handle
@@ -623,11 +621,11 @@ export class WorkspaceConnectionManager {
 		}
 
 		const onMouseUp = (e: MouseEvent) => {
-			console.log('[CONNECT] onMouseUp in menu connection mode', {
-				toHandle: this.connectionInProgress?.toHandle,
-				isValid: this.connectionInProgress?.isValid,
-				target: e.target,
-			})
+			// console.log('[CONNECT] onMouseUp in menu connection mode', {
+			// 	toHandle: this.connectionInProgress?.toHandle,
+			// 	isValid: this.connectionInProgress?.isValid,
+			// 	target: e.target,
+			// })
 			e.preventDefault()
 			e.stopPropagation()
 
@@ -693,7 +691,7 @@ export class WorkspaceConnectionManager {
 			document.removeEventListener('mouseup', onMouseUp, true)
 			document.removeEventListener('keydown', onKeyDown)
 			this.connectionInProgress = null
-			this.config.paneEl.style.cursor = ''
+			applyStyle(this.config.paneEl, { cursor: '' })
 			this.menuConnectionCleanup = null
 			this.render()
 		}
@@ -776,18 +774,18 @@ export class WorkspaceConnectionManager {
 
 				const dist = Math.sqrt((hx - position.x) ** 2 + (hy - position.y) ** 2)
 
-				console.log('[CONNECT] findClosestHandle candidate:', {
-					nodeId,
-					handleId: handle.id,
-					handleType: handle.type,
-					handleXY: { x: handle.x, y: handle.y },
-					posAbsolute: node.internals.positionAbsolute,
-					computedCenter: { hx, hy },
-					mousePos: position,
-					dist,
-					connectionRadius,
-					withinRadius: dist <= connectionRadius,
-				})
+				// console.log('[CONNECT] findClosestHandle candidate:', {
+				// 	nodeId,
+				// 	handleId: handle.id,
+				// 	handleType: handle.type,
+				// 	handleXY: { x: handle.x, y: handle.y },
+				// 	posAbsolute: node.internals.positionAbsolute,
+				// 	computedCenter: { hx, hy },
+				// 	mousePos: position,
+				// 	dist,
+				// 	connectionRadius,
+				// 	withinRadius: dist <= connectionRadius,
+				// })
 
 				if (dist <= connectionRadius && dist < minDist) {
 					minDist = dist
@@ -1463,9 +1461,9 @@ export class WorkspaceConnectionManager {
 				if (edgeId.startsWith('__workspace-temp')) continue
 
 				const origWidth = path.style.strokeWidth
-				path.style.strokeWidth = `${webUiSettings.nodesConnectorLineClickAreaWidth}`
+				applyStyle(path, { strokeWidth: `${webUiSettings.nodesConnectorLineClickAreaWidth}` })
 				const hit = path.isPointInStroke(point)
-				path.style.strokeWidth = origWidth
+				applyStyle(path, { strokeWidth: origWidth })
 
 				if (hit) {
 					e.preventDefault()
@@ -1517,9 +1515,9 @@ export class WorkspaceConnectionManager {
 				if (edgeId.startsWith('__workspace-temp')) continue
 
 				const origWidth = path.style.strokeWidth
-				path.style.strokeWidth = `${webUiSettings.nodesConnectorLineClickAreaWidth}`
+				applyStyle(path, { strokeWidth: `${webUiSettings.nodesConnectorLineClickAreaWidth}` })
 				const hit = path.isPointInStroke(point)
-				path.style.strokeWidth = origWidth
+				applyStyle(path, { strokeWidth: origWidth })
 
 				if (hit) {
 					isHoveringEdge = true

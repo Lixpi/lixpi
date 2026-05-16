@@ -153,6 +153,36 @@ export const nodes = {
     selectable: false,
     parseDOM: [{tag: "br"}],
     toDOM() { return brDOM }
+  } as NodeSpec,
+
+  /// Feature reference chip — inserted by /use command.
+  feature_reference: {
+    inline: true,
+    atom: true,
+    group: "inline",
+    attrs: {
+      featureId: { default: '' },
+      featureName: { default: '' },
+      category: { default: '' },
+    },
+    parseDOM: [{
+      tag: 'span[data-feature-id]',
+      getAttrs(dom: HTMLElement) {
+        return {
+          featureId: dom.getAttribute('data-feature-id') ?? '',
+          featureName: dom.getAttribute('data-feature-name') ?? '',
+          category: dom.getAttribute('data-feature-category') ?? '',
+        }
+      },
+    }],
+    toDOM(node) {
+      return ['span', {
+        'data-feature-id': node.attrs.featureId,
+        'data-feature-name': node.attrs.featureName,
+        'data-feature-category': node.attrs.category,
+        class: `feature-reference-chip feature-reference-chip--${node.attrs.category || 'default'}`,
+      }, `@${node.attrs.featureName}`]
+    },
   } as NodeSpec
 }
 

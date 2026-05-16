@@ -21,10 +21,17 @@
     import AuthService from '$src/services/auth-service.ts'
     import { createNewFileIcon, imageIcon, aiChatBubbleIcon } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
+    import '$src/infographics/workspace/feature-library-panel.scss'
 
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
+
+    const featureLibraryIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>'
+
+    function handleToggleFeatureLibrary() {
+        renderer?.toggleFeatureLibrary?.()
+    }
 
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
     let canvasState = $derived($workspaceStore.data.canvasState)
@@ -275,7 +282,7 @@
                 workspaceId,
                 threadId,
                 content: initialContent,
-                aiModel: 'anthropic:claude-sonnet-4-20250514'
+                aiModel: ''
             })
 
             if (thread) {
@@ -382,6 +389,11 @@
     class:workspace-canvas--chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
 >
     <div class="workspace-floating-toolbar">
+        <button class="workspace-floating-toolbar__button" onclick={handleToggleFeatureLibrary} aria-label="Feature Library">
+            {@html featureLibraryIcon}
+            <span class="workspace-floating-toolbar__tooltip">Feature Library</span>
+        </button>
+        <div class="workspace-floating-toolbar__divider"></div>
         <button class="workspace-floating-toolbar__button" onclick={handleCreateDocument}>
             {@html createNewFileIcon}
             <span class="workspace-floating-toolbar__tooltip">New Document</span>

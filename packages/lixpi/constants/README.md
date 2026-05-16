@@ -19,8 +19,8 @@ packages/lixpi/constants/
 ### TypeScript
 
 ```typescript
-import { NATS_SUBJECTS } from '@lixpi/constants'
-import type { AiInteractionChatSendMessagePayload, User, AiModel, ImageSizeOption } from '@lixpi/constants'
+import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
+import type { AiInteractionChatSendMessagePayload, User, AiModel, ImageSizeOption, ProviderName, StreamStatus } from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS, WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
@@ -40,6 +40,10 @@ const payload: AiInteractionChatSendMessagePayload = { messages, aiModel, thread
 // AiModel includes imageSizes for image generation providers
 // ImageSizeOption: { value: string; label: string }
 const sizes: ImageSizeOption[] = model.imageSizes ?? []
+
+// Shared stream/provider constants
+const streaming: StreamStatus = STREAM_STATUS.STREAMING
+const provider: ProviderName = 'Anthropic'
 ```
 
 ### Python

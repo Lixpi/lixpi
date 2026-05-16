@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 
@@ -237,6 +237,7 @@ export class StabilityProvider extends BaseProvider {
                 size: aspectRatio,
                 quality: 'high',
             },
+            generatedImages: [imageBase64],
         }
     }
 }

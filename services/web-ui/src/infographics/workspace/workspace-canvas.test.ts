@@ -170,7 +170,7 @@ describe('AI chat thread — workspace CSS overrides for auto-grow', () => {
 	})
 
 	it('sets ProseMirror padding-bottom to 1rem inside workspace thread', () => {
-		expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*padding-bottom:\s*1rem/)
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node\s+\.ai-chat-thread-node-editor\s+\.ProseMirror\s*\{[^}]*padding:\s*0\s+0\s+1rem/)
 	})
 })
 
@@ -199,7 +199,7 @@ describe('AI chat thread — auto-grow TS infrastructure', () => {
 		const fnBody = fnMatch![0]
 		expect(fnBody).toContain('Disabled for context region nodes')
 		expect(fnBody).toContain('expandRegionsToFitChildren()')
-		expect(fnBody).not.toContain("threadNodeEl.style.height = 'auto'")
+		expect(fnBody).not.toMatch(/threadNodeEl\.style\.height\s*=\s*['"]auto['"]/)
 		expect(fnBody).not.toContain('threadNodeEl.offsetHeight')
 	})
 
@@ -542,8 +542,9 @@ describe('AI chat region title zoom compensation', () => {
 		expect(ts).toContain('getAdaptiveZoomMultiplier(safeZoom, { lowZoomPower: 0.2 })')
 		expect(ts).toContain('0.72')
 		expect(ts).toContain('const scale = titleVisualScale / safeZoom')
-		expect(ts).toContain('titleBar.style.transform = `scale(${scale})`')
-		expect(ts).toContain("titleBar.style.transformOrigin = 'top left'")
+		expect(ts).toContain('applyStyle(titleBar, {')
+		expect(ts).toContain('transform: `scale(${scale})`')
+		expect(ts).toContain("transformOrigin: 'top left'")
 	})
 
 	it('uses the same adaptive zoom curve for the canvas bubble menu', () => {
@@ -552,8 +553,8 @@ describe('AI chat region title zoom compensation', () => {
 
 	it('keeps title pill connected to the region while scaling', () => {
 		expect(ts).toContain('const titleTopPx = -2 - 16 * titleVisualScale')
-		expect(ts).toContain('titleBar.style.top = `${titleTopPx / safeZoom}px`')
-		expect(ts).toContain('titleBar.style.left = `${20 / safeZoom}px`')
+		expect(ts).toContain('top: `${titleTopPx / safeZoom}px`')
+		expect(ts).toContain('left: `${20 / safeZoom}px`')
 	})
 
 	it('updates region title pills from the transform side-effect queue', () => {
@@ -656,12 +657,13 @@ describe('Vertical rail — TS infrastructure', () => {
 
 	it('drag mousemove handler repositions the rail', () => {
 		expect(ts).toContain('dragRail')
-		expect(ts).toMatch(/dragRail\.style\.left/)
+		expect(ts).toContain('applyStyle(dragRail, { left:')
 	})
 
 	it('resize mousemove handler repositions the rail', () => {
 		expect(ts).toContain('resizeRail')
-		expect(ts).toMatch(/resizeRail\.style\.height/)
+		expect(ts).toContain('applyStyle(resizeRail, { left:')
+		expect(ts).toContain('height: `${totalH}px`')
 	})
 
 	it('updateNodeSelectionClasses toggles is-selected on the rail', () => {
@@ -697,7 +699,7 @@ describe('Vertical rail — TS infrastructure', () => {
 	it('createThreadRail sets z-index above all nodes to prevent overlap', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain("rail.style.zIndex = '9990'")
+		expect(fnMatch![0]).toContain("zIndex: '9990'")
 	})
 
 	it('createThreadRail appends boundary circle to __line', () => {
@@ -801,7 +803,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		const scss = loadScss()
 
 		expect(ts).toContain('function handleActiveAiChatPanelResizeStart(')
-		expect(ts).toContain("document.body.style.cursor = 'ew-resize'")
+		expect(ts).toContain("applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
 		expect(scss).toContain('.workspace-thread-rail.workspace-ai-chat-floating-panel__rail')
 		expect(scss).toContain('cursor: ew-resize')
 	})
@@ -995,15 +997,15 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('defines and styles the persistent selection overlay', () => {
-		expect(ts).toContain("selectionGroupOverlayEl.className = 'workspace-selection-group-overlay'")
+		expect(ts).toContain('className="workspace-selection-group-overlay"')
 		expect(ts).toContain('function getSelectionOverlayBounds(): Rect | null')
 		expect(ts).toContain('function updateSelectionGroupOverlayElement(): void')
 		expect(ts).toContain('if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
 		expect(ts).toContain('updateSelectionGroupOverlayElement()')
 		expect(scss).toContain('.workspace-selection-group-overlay')
 		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-border-color/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*var\(--selection-overlay-background-color/s)
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*cursor:\s*move/s)
+		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*box-sizing:\s*border-box/s)
 	})
 
 	it('uses the selection overlay as a drag surface for the whole selected group', () => {
@@ -1035,7 +1037,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('renders and styles the marquee selection rectangle', () => {
-		expect(ts).toContain("selectionRectEl.className = 'workspace-selection-rect'")
+		expect(ts).toContain('className="workspace-selection-rect"')
 		expect(scss).toContain('.workspace-selection-rect')
 		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*pointer-events:\s*none/s)
 		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*z-index:\s*10001/s)
@@ -1080,8 +1082,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
 		// The drag overlay must pass the original nodeId so handleDragStart can
 		// resolve it internally and also preserve the original for the click path
-		expect(ts).toContain('dragOverlay.addEventListener(\'mousedown\', (e) => handleDragStart(e, node.nodeId))')
-		expect(ts).not.toContain('dragOverlay.addEventListener(\'mousedown\', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))')
+		expect(ts).toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expect(ts).not.toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
 	it('treats AI chat thread floating input as part of the same selected composite', () => {
@@ -1274,8 +1276,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// of the image.
 		//
 		// Invariant: dragOverlay must pass node.nodeId directly
-		expect(ts).toContain("dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, node.nodeId))")
-		expect(ts).not.toContain("dragOverlay.addEventListener('mousedown', (e) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))")
+		expect(ts).toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expect(ts).not.toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
 	it('REGRESSION: handleDragStart must NOT select on mousedown (deferred selection)', () => {

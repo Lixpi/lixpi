@@ -2,6 +2,9 @@
 
 import type { Merge, Except } from 'type-fest'
 
+export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability'] as const
+export type ProviderName = typeof PROVIDER_NAMES[number]
+
 // NOTE: User type restored exactly as originally defined per instruction (commas retained intentionally)
 export type User = {
     userId: string,
@@ -88,6 +91,95 @@ export type ImageSizeOption = {
     label: string
 }
 
+export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
+
+export type ImageBranchSelectionMode = 'context-only' | 'edit-active-branch' | 'all-branches' | 'fresh-branch' | 'ambiguous'
+
+export type ImageBranchCandidateRoleHint =
+    | 'base-context'
+    | 'generated-variant'
+    | 'branch-leaf'
+    | 'branch-ancestor'
+    | 'embedded-thread-image'
+
+export type ImageBranchCandidateImage = {
+    nodeId: string
+    fileId?: string
+    workspaceId?: string
+    imageUrl: string
+    roleHints: ImageBranchCandidateRoleHint[]
+    branchId?: string
+    parentImageNodeId?: string
+    ancestorNodeIds: string[]
+    sourceContextNodeIds: string[]
+    sourceMessageId?: string
+    promptText?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    createdAt?: number
+}
+
+export type ImageBranchCandidateSnapshot = {
+    resolverVersion: string
+    threadId: string
+    regionNodeId: string
+    promptText: string
+    promptFingerprint: string
+    candidates: ImageBranchCandidateImage[]
+    transcriptContext: string
+}
+
+export type ImageBranchReferenceRole =
+    | 'target'
+    | 'base-context'
+    | 'style-reference'
+    | 'comparison-target'
+    | 'excluded'
+
+export type ImageBranchVlmReferenceDecision = {
+    nodeId: string
+    role: ImageBranchReferenceRole
+    reason: string
+}
+
+export type ImageBranchVlmResolution = {
+    resolverKind: 'structured-vlm'
+    resolverVersion: string
+    resolverModelProvider: string
+    resolverModelId: string
+    mode: ImageBranchSelectionMode
+    operationKind: ImageGenerationOperationKind
+    targetImageNodeId: string | null
+    parentImageNodeId?: string
+    branchId: string | null
+    includeGeneratedNodeIds: string[]
+    referenceImageNodeIds: string[]
+    sourceContextNodeIds: string[]
+    styleReferenceNodeIds: string[]
+    excludedNodeIds: string[]
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags: string[]
+    styleTags: string[]
+    confidence: number
+    rationale: string
+    decisions: ImageBranchVlmReferenceDecision[]
+}
+
+export type ImageBranchResolvedStreamPayload = {
+    status: 'IMAGE_BRANCH_RESOLVED'
+    aiProvider: string
+    resolution: ImageBranchVlmResolution
+}
+
+export type ImageBranchResolutionErrorStreamPayload = {
+    status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
+    aiProvider: string
+    error: string
+}
+
 export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
@@ -95,6 +187,28 @@ export type ImageGeneratedByMetadata = {
     imageModelProvider?: string
     revisedPrompt: string
     responseMessageId?: string
+    branchId?: string
+    parentImageNodeId?: string
+    sourceContextNodeIds?: string[]
+    referenceImageNodeIds?: string[]
+    operationKind?: ImageGenerationOperationKind
+    promptText?: string
+    promptFingerprint?: string
+    entitySummary?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    targetImageNodeId?: string
+    styleReferenceNodeIds?: string[]
+    excludedNodeIds?: string[]
+    resolverKind?: 'structured-vlm'
+    resolverModelProvider?: string
+    resolverModelId?: string
+    resolverRationale?: string
+    resolverConfidence?: number
+    resolverVersion?: string
+    createdAt?: number
 }
 
 export type ImageCanvasNode = CanvasNodeParentingFields & {
@@ -147,13 +261,234 @@ export type WorkspaceEdge = {
     pathType?: WorkspaceEdgePathType
 }
 
+export type FeatureScope = 'workspace' | 'user' | 'organization' | 'public'
+export type FeatureStatus = 'active' | 'reported' | 'removed'
+
+export type FeatureSampleKind = 'source-crop' | 'texture-specimen' | 'applied-medium-probe' | 'palette-board'
+
+export type FeatureSampleCropRegion = {
+    imageRef: string
+    x: number
+    y: number
+    width: number
+    height: number
+    label: string
+    purpose: 'texture-evidence' | 'applied-medium-evidence' | 'subject-detail-evidence' | 'composition-evidence'
+}
+
+export type FeatureSampleRef = {
+    idx: number
+    subject: string
+    rationale?: string
+    aspectRatio?: string
+    ext: string
+    fileId?: string
+    imageUrl?: string
+    kind?: FeatureSampleKind
+    cropRegion?: FeatureSampleCropRegion
+}
+
+export type FeatureSourceImageCrop = {
+    imageRef: string
+    x: number
+    y: number
+    width: number
+    height: number
+    label: string
+    purpose: 'texture-evidence' | 'applied-medium-evidence' | 'subject-detail-evidence' | 'composition-evidence'
+    rationale: string
+}
+
+export type SceneSubject = {
+    label: string
+    bbox: [number, number, number, number]
+    salience: number
+    description: string
+}
+
+export type SceneRegion = {
+    label: string
+    bbox: [number, number, number, number]
+    description: string
+}
+
+export type SceneReference = {
+    imageRef: string
+    subjects: SceneSubject[]
+    regions: SceneRegion[]
+}
+
+export type SceneAssessment = {
+    references: SceneReference[]
+    medium: string
+    axisDominance: Record<string, number>
+    intentResolution: {
+        forcedCategory?: string | null
+        forcedAxes?: string[] | null
+        proposedCategory: string
+    }
+    notes: string
+}
+
+export type AxisExtraction = {
+    axis: string
+    dominance: number
+    fields: Record<string, any>
+    rationale: string
+}
+
+export type FeatureRecommendedSampleSubject = {
+    kind: FeatureSampleKind
+    prompt: string
+    aspectRatio: string
+    rationale: string
+}
+
+export type FeatureDraft = {
+    category: string
+    name: string
+    summary: string
+    tags: string[]
+    instructions: string
+    parameters: Record<string, any>
+    recommendedSampleSubjects: FeatureRecommendedSampleSubject[]
+}
+
+export type StageTraceEvent = {
+    extractionRunId: string
+    stage: string
+    modelName?: string
+    promptHash?: string
+    promptPreview?: string
+    startedAt: number
+    finishedAt: number
+    durationMs: number
+    status: 'ok' | 'error' | 'skipped'
+    errorMessage?: string
+    inputSummary?: string
+    outputSummary?: string
+    outputBytes?: number
+    metricTags?: Record<string, string | number>
+}
+
+export type FeatureSourceContext = {
+    extractionRunId: string
+    sourceWorkspaceId: string
+    sourceImages?: Array<{
+        idx: number
+        imageUrl: string
+        role: 'source-reference'
+    }>
+}
+
+export type Feature = {
+    featureId: string
+    version: number
+    category: string
+    name: string
+    summary: string
+    tags: string[]
+    instructions: string
+    parameters: Record<string, any>
+    sampleImages: FeatureSampleRef[]
+    scope: FeatureScope
+    scopeOwnerId: string
+    status: FeatureStatus
+    ownerUserId: string
+    workspaceId: string
+    sourceContext: FeatureSourceContext
+    reportCount: number
+    createdAt: number
+    updatedAt: number
+}
+
+export type FeatureMeta = {
+    featureId: string
+    category: string
+    name: string
+    summary: string
+    tags: string[]
+    scope: FeatureScope
+    scopeOwnerId: string
+    status: FeatureStatus
+    ownerUserId: string
+    sampleZeroKey?: string
+    sampleZeroUrl?: string
+    updatedAt: number
+}
+
+export type FeatureAccessList = {
+    userId: string
+    featureId: string
+    createdAt: number
+}
+
+export type FeatureReferenceMessageBlock = {
+    featureId: string
+    name: string
+    category: string
+    scope: FeatureScope
+    summary: string
+    instructions: string
+    parameters: Record<string, any>
+    sampleImages: Array<{ idx: number; subject: string; base64: string }>
+}
+
+export type ExtractionRunStatus =
+    | 'pending'
+    | 'analyzing'
+    | 'routing'
+    | 'extracting'
+    | 'extracting_axes'
+    | 'materializing_crops'
+    | 'synthesizing'
+    | 'generating_samples'
+    | 'saving'
+    | 'completed'
+    | 'failed'
+
+export type ExtractionRun = {
+    extractionRunId: string
+    workspaceId: string
+    userId: string
+    status: ExtractionRunStatus
+    featureId?: string
+    transcriptJson?: object
+    sourceContextSnapshot?: object
+    trace?: StageTraceEvent[]
+    error?: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type CanvasAiChatSidebarTab = {
+    tabId: string
+    type: 'thread' | 'extraction'
+    refId: string
+    title: string
+}
+
+export type CanvasFeatureExtractionState = {
+    extractionRunId: string
+    status: ExtractionRunStatus
+    userText?: string
+    aiProvider?: string
+    stepDetails?: Record<string, string>
+    reasoningText?: string
+    featureCard?: Record<string, any>
+    traceEvents?: StageTraceEvent[]
+    error?: string
+    updatedAt: number
+}
+
 export type CanvasState = {
-    viewport: CanvasViewport
+    sourceContext: FeatureSourceContext
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
-    // Workspace-scoped UI state: which AI chat thread is currently active in
-    // the canvas-owned floating chat panel.
     lastActiveAiChatThreadId?: string
+    aiChatSidebarTabs?: CanvasAiChatSidebarTab[]
+    activeAiChatSidebarTabId?: string
+    featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 
 export type Workspace = {
@@ -230,6 +565,8 @@ export type AiInteractionChatSendMessagePayload = {
     messages: Array<{ role: string; content: MessageContent }>
     aiModel: AiModelId
     threadId: string
+    referencedFeatureIds?: string[]
+    imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {

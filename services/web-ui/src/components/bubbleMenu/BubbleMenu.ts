@@ -9,7 +9,7 @@
 // and supply a target rect + placement for positioning.
 // =============================================================================
 
-import { createEl } from '$src/utils/domTemplates.ts'
+import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import type {
     BubbleMenuItem,
     BubbleMenuOptions,
@@ -99,7 +99,7 @@ export class BubbleMenu {
     show(context: string, position: BubbleMenuPositionRequest): void {
         this.updateVisibleItems(context)
         this.menu.classList.toggle(noEntranceMotionClass, position.animateOnShow === false)
-        this.menu.style.visibility = 'hidden'
+        applyStyle(this.menu, { visibility: 'hidden' })
         this.menu.classList.add('is-visible')
         this.onShow?.(context)
         this.lastPosition = position
@@ -108,7 +108,7 @@ export class BubbleMenu {
 
     hide(): void {
         if (!this.isVisible && this.currentContext === '') return
-        this.menu.style.visibility = 'hidden'
+        applyStyle(this.menu, { visibility: 'hidden' })
         this.menu.classList.remove('is-visible')
         this.currentContext = ''
         this.lastPosition = null
@@ -158,7 +158,7 @@ export class BubbleMenu {
         this.currentContext = context
         for (const item of this.items) {
             const isVisible = item.context.includes(context)
-            item.element.style.display = isVisible ? '' : 'none'
+            applyStyle(item.element, { display: isVisible ? '' : 'none' })
         }
     }
 
@@ -180,8 +180,7 @@ export class BubbleMenu {
         }
 
         // Measure menu
-        this.menu.style.visibility = 'hidden'
-        this.menu.style.display = 'flex'
+        applyStyle(this.menu, { visibility: 'hidden', display: 'flex' })
         this.menu.style.setProperty('--bubble-menu-visual-scale', String(visualScale))
         const menuLayoutWidth = this.menu.offsetWidth
         const menuLayoutHeight = this.menu.offsetHeight
@@ -199,7 +198,7 @@ export class BubbleMenu {
             const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
             const finalLeft = shouldClampToParent ? this.clampHorizontal(local.x, menuWidthLocal, scale) : local.x
 
-            Object.assign(this.menu.style, {
+            applyStyle(this.menu, {
                 left: `${finalLeft}px`,
                 top: `${local.y}px`,
                 visibility: 'visible',
@@ -220,7 +219,7 @@ export class BubbleMenu {
                 finalY = this.screenToLocal(0, belowScreenTop).y
             }
 
-            Object.assign(this.menu.style, {
+            applyStyle(this.menu, {
                 left: `${finalLeft}px`,
                 top: `${finalY}px`,
                 visibility: 'visible',

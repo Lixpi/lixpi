@@ -3,7 +3,7 @@ import type { EditorView, NodeView } from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
 import { imageResizeCornerIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
 import AuthService from '$src/services/auth-service.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 
 type ImageAlignment = 'left' | 'center' | 'right'
 type TextWrap = 'none' | 'left' | 'right'
@@ -98,7 +98,7 @@ export class ImageNodeView implements NodeView {
 
         // Apply width if set
         if (node.attrs.width) {
-            this.figure.style.width = node.attrs.width
+            applyStyle(this.figure, { width: node.attrs.width })
             this.figure.dataset.width = node.attrs.width
         }
 
@@ -114,7 +114,7 @@ export class ImageNodeView implements NodeView {
         this.img.addEventListener('load', this.handleImageLoad)
 
         this.img.addEventListener('error', () => {
-            this.img.style.display = 'none'
+            applyStyle(this.img, { display: 'none' })
             if (!this.figure.querySelector('.image-error-placeholder')) {
                 this.figure.appendChild(html`
                     <div className="image-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Image unavailable</span></div>
@@ -132,7 +132,7 @@ export class ImageNodeView implements NodeView {
         if (!src) {
             this.currentSrcAttr = ''
             this.img.removeAttribute('src')
-            this.img.style.display = 'none'
+            applyStyle(this.img, { display: 'none' })
             return
         }
 
@@ -144,7 +144,7 @@ export class ImageNodeView implements NodeView {
             const resolvedSrc = await buildImageSrc(src)
             if (this.img.src !== resolvedSrc) {
                 this.figure.querySelector('.image-error-placeholder')?.remove()
-                this.img.style.display = ''
+                applyStyle(this.img, { display: '' })
                 this.img.src = resolvedSrc
             }
         } catch (error) {
@@ -166,12 +166,12 @@ export class ImageNodeView implements NodeView {
             this.partialPlaceholder?.remove()
             this.partialPlaceholder = null
             if (getImageSrcAttr(this.node)) {
-                this.img.style.display = ''
+                applyStyle(this.img, { display: '' })
             }
             return
         }
 
-        this.img.style.display = 'none'
+        applyStyle(this.img, { display: 'none' })
         if (!this.partialPlaceholder) {
             this.partialPlaceholder = html`
                 <div className="pm-image-generating-placeholder" aria-label="Image generation in progress">
@@ -253,7 +253,7 @@ export class ImageNodeView implements NodeView {
             const widthPercent = Math.round((newWidth / containerWidth) * 100)
 
             // Apply visually during drag
-            this.figure.style.width = `${widthPercent}%`
+            applyStyle(this.figure, { width: `${widthPercent}%` })
 
             // Dispatch custom event so toolbar can reposition
             this.view.dom.dispatchEvent(new CustomEvent('image-resize', { bubbles: true }))
@@ -320,10 +320,10 @@ export class ImageNodeView implements NodeView {
 
         // Update width
         if (node.attrs.width) {
-            this.figure.style.width = node.attrs.width
+            applyStyle(this.figure, { width: node.attrs.width })
             this.figure.dataset.width = node.attrs.width
         } else {
-            this.figure.style.width = ''
+            applyStyle(this.figure, { width: '' })
             delete this.figure.dataset.width
         }
 

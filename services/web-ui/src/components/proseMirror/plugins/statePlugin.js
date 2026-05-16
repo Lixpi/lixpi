@@ -1,10 +1,22 @@
 import { Plugin, PluginKey } from 'prosemirror-state'
 
 export const statePlugin = (initialStateContent, dispatchUpdateCallback, documentTitleChangeCallback) => {
+    const hasInProgressAiContent = (doc) => {
+        let inProgress = false
+        doc.descendants((node) => {
+            const attrs = node.attrs || {}
+            if (attrs.isReceivingAnimation || attrs.isStreaming || attrs.isPartial) {
+                inProgress = true
+                return false
+            }
+        })
+        return inProgress
+    }
+
     const applyPluginState = (tr, _, oldState) => {
         const skipDispatch = tr.getMeta('skipDispatch');
         // If the transaction has the 'skipDispatch' flag set, don't call the update callback
-        if (!skipDispatch && tr.docChanged) {
+        if (!skipDispatch && tr.docChanged && !hasInProgressAiContent(tr.doc)) {
             dispatchUpdateCallback(tr.doc.toJSON());
 
             // Check if 'documentTitle' node's content has changed

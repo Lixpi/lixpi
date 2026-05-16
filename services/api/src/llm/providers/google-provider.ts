@@ -6,7 +6,7 @@ import { GoogleGenAI } from '@google/genai'
 import { info, warn, err } from '@lixpi/debug-tools'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
-import type { ProviderName } from '../config.ts'
+import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
@@ -42,10 +42,12 @@ export class GoogleProvider extends BaseProvider {
         const imageSize = state.imageSize ?? 'auto'
 
         const modalities = (state.aiModelMetaInfo as any)?.modalities ?? []
-        const modelSupportsImageOutput = Array.isArray(modalities) && modalities.some((m: any) =>
-            (typeof m === 'object' ? m?.modality : m) === 'image',
-        )
-        const effectiveImageGen = modelSupportsImageOutput && enableImageGeneration
+        const modelSupportsImageOutput = Array.isArray(modalities) && modalities.some((m: any) => {
+            const modality = typeof m === 'object' ? m?.modality : m
+            return modality === 'image' || modality === 'image_generation'
+        })
+        const modelNameImpliesImageOutput = /gemini-.*(?:-image|image-generation)/i.test(modelVersion)
+        const effectiveImageGen = enableImageGeneration && (modelSupportsImageOutput || modelNameImpliesImageOutput)
 
         const hasImageModel = !!state.imageModelVersion
         const injectTool = hasImageModel && !enableImageGeneration
@@ -77,11 +79,9 @@ export class GoogleProvider extends BaseProvider {
         if (injectTool) {
             const toolDef = getToolForProvider('Google', state.imageModelMetaInfo, state.imageProviderName)
             config.tools = [{
-                functionDeclarations: [{
-                    name: TOOL_NAME,
-                    description: toolDef.description,
-                    parameters: toolDef.parameters,
-                }],
+                functionDeclarations: [
+                    { name: TOOL_NAME, description: toolDef.description, parameters: toolDef.parameters },
+                ],
             }]
         }
 
@@ -111,6 +111,22 @@ export class GoogleProvider extends BaseProvider {
 
             if (effectiveImageGen) {
                 // Native image-generation path (called via ImageRouter).
+                const inputImageCount = contents.reduce((acc, c) => acc + (Array.isArray((c as any).parts)
+                    ? (c as any).parts.filter((p: any) => p?.inlineData || p?.inline_data).length
+                    : 0), 0)
+                const inputTextLen = contents.reduce((acc, c) => acc + (Array.isArray((c as any).parts)
+                    ? (c as any).parts.reduce((s: number, p: any) => s + (typeof p?.text === 'string' ? p.text.length : 0), 0)
+                    : 0), 0)
+                info(`[Google:${this.instanceKey}] image-gen call ${JSON.stringify({
+                    model: modelVersion,
+                    responseModalities: config.responseModalities,
+                    aspectRatio: (config as any).imageConfig?.aspectRatio ?? 'auto',
+                    temperature,
+                    maxOutputTokens: maxTokens,
+                    contentsCount: contents.length,
+                    inputImageCount,
+                    inputTextLen,
+                }, null, 0)}`)
                 await this.imagePub.partial('', 0)
                 const response = await this.client.models.generateContent({
                     model: modelVersion,
@@ -147,12 +163,6 @@ export class GoogleProvider extends BaseProvider {
                     const errMsg = `Google image model ${modelVersion} returned no inline image data.`
                     err(`[Google:${this.instanceKey}] ${errMsg}`)
                     update.error = errMsg
-                    await this.imagePub.complete({
-                        imageBase64: '',
-                        responseId: '',
-                        revisedPrompt: '',
-                        imageModelId: modelVersion,
-                    })
                 } else {
                     for (let i = 0; i < imageParts.length - 1; i++) {
                         await this.imagePub.partial(imageParts[i]!, i + 1)
@@ -164,6 +174,7 @@ export class GoogleProvider extends BaseProvider {
                         revisedPrompt: '',
                         imageModelId: modelVersion,
                     })
+                    update.generatedImages = [final]
                 }
             } else if (injectTool) {
                 const stream = await this.client.models.generateContentStream({
@@ -189,12 +200,16 @@ export class GoogleProvider extends BaseProvider {
                     }
                 }
                 if (detected) {
+                    const refs = extractReferenceImages(resolvedMessages)
                     update.generatedImagePrompt = detected
-                    update.referenceImages = extractReferenceImages(resolvedMessages)
-                    info(
-                        `[Google:${this.instanceKey}] Tool call detected: generate_image ` +
-                        `promptLen=${detected.length}`,
-                    )
+                    update.referenceImages = refs
+                    info(`[Google:${this.instanceKey}] generate_image tool call ${JSON.stringify({
+                        chatModel: modelVersion,
+                        targetImageProvider: state.imageProviderName,
+                        targetImageModel: state.imageModelVersion,
+                        promptLen: detected.length,
+                        referenceImagesExtracted: refs.length,
+                    }, null, 0)}`)
                 } else {
                     warn(`Google did not emit generate_image tool call for ${this.instanceKey}`)
                 }
@@ -234,7 +249,7 @@ export class GoogleProvider extends BaseProvider {
                 update.aiVendorRequestId = `google-${state.workspaceId}-${state.aiChatThreadId}`
             }
 
-            if (effectiveImageGen) {
+            if (effectiveImageGen && !update.error) {
                 update.imageUsage = {
                     generatedCount: 1,
                     size: imageSize,
@@ -259,6 +274,8 @@ export class GoogleProvider extends BaseProvider {
             if (typeof block !== 'object' || block === null) continue
             if ('text' in block) {
                 parts.push({ text: block.text })
+            } else if ('inlineData' in block) {
+                parts.push({ inlineData: block.inlineData })
             } else if ('inline_data' in block) {
                 const inline = block.inline_data
                 parts.push({ inlineData: { data: inline.data, mimeType: inline.mime_type } })

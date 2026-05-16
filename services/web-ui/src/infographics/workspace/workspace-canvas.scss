@@ -514,6 +514,94 @@
     }
 }
 
+.workspace-ai-chat-panel-tabs {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+    overflow-x: auto;
+    padding: 0 var(--workspace-ai-chat-sidebar-padding) 8px;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.workspace-ai-chat-panel-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 150px;
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid rgba(26, 39, 68, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #1a2744;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.68;
+
+    &:hover,
+    &--active {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.94);
+        border-color: rgba(85, 150, 124, 0.38);
+    }
+}
+
+.workspace-ai-chat-panel-tab__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-ai-chat-panel-tab__close {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 13px;
+    opacity: 0.55;
+
+    &:hover {
+        background: rgba(26, 39, 68, 0.1);
+        opacity: 1;
+    }
+}
+
+.workspace-ai-chat-panel-body {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.workspace-ai-chat-panel-body__pane {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.workspace-ai-chat-panel-body__pane--hidden {
+    display: none !important;
+}
+
+.workspace-ai-chat-panel-extraction {
+    padding: 0 var(--workspace-ai-chat-sidebar-padding) 12px;
+    color: #1a2744;
+}
+
 .workspace-ai-chat-floating-panel__prompt {
     position: relative !important;
     display: block !important;
@@ -527,6 +615,10 @@
 
     .ai-prompt-input-wrapper {
         box-shadow: none;
+    }
+
+    &:has(.info-bubble-wrapper.static-position .bubble-wrapper.visible) {
+        z-index: 10000;
     }
 }
 

@@ -4,8 +4,9 @@ import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
+import type { ProviderName } from '@lixpi/constants'
 
-import { LLM_TIMEOUT_MS, type ProviderName } from '../config.ts'
+import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type ProviderState } from '../graph/state.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
@@ -14,6 +15,8 @@ import {
     getImagePromptMaxChars,
     validateImagePrompt as toolValidateImagePrompt,
 } from '../tools/image-generation.ts'
+import { resolveFeatures } from '../graph/feature-resolver.ts'
+import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
@@ -22,12 +25,22 @@ export type BaseProviderDeps = {
     runImageRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
 }
 
-// Shared LangGraph workflow for all LLM providers.
-// validateRequest → streamTokens → [conditional]
-//   generate_image: validateImagePrompt → [conditional]
-//     generate_image: executeImageGeneration → calculateUsage → cleanup → END
-//     skip:                                    calculateUsage → cleanup → END
-//   skip:                                      calculateUsage → cleanup → END
+// Shared LangGraph workflow for chat-style LLM calls (with optional image-gen branch).
+// Extraction runs have their own dedicated graph in src/llm/extraction/; this graph is
+// for chat threads and image generation only. The resolveFeatures pre-stage handles
+// /use chip resolution by injecting Feature definitions + source crops into state.messages.
+// Top-level chat requests publish START_STREAM before graph invocation so expensive
+// pre-stream VLM/image preprocessing never leaves the browser looking frozen.
+// Transient image-model providers skip their own stream lifecycle because the parent
+// chat stream owns it.
+//
+// Topology:
+//   START → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional]
+//     generate_image: validateImagePrompt → [conditional]
+//       generate_image: executeImageGeneration → calculateUsage → cleanup → END
+//       skip:                                    calculateUsage → cleanup → END
+//     skip:                                      calculateUsage → cleanup → END
+//
 // Each provider subclasses BaseProvider and supplies streamImpl(state).
 export abstract class BaseProvider {
     abstract readonly providerName: ProviderName
@@ -48,6 +61,12 @@ export abstract class BaseProvider {
 
     private buildWorkflow() {
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
+            .addNode('resolveFeatures', async (s: ProviderState) => resolveFeatures(s))
+            .addNode('resolveImageBranch', async (s: ProviderState) => resolveImageBranch(s, {
+                natsService: this.nats,
+                publisher: this.publisher,
+                abortSignal: this.signal,
+            }))
             .addNode('validateRequest', async (s: ProviderState) => this.validateRequest(s))
             .addNode('streamTokens', async (s: ProviderState) => this.streamTokens(s))
             .addNode('validateImagePrompt', async (s: ProviderState) => this.validateImagePromptNode(s))
@@ -55,7 +74,9 @@ export abstract class BaseProvider {
             .addNode('calculateUsage', async (s: ProviderState) => this.calculateUsage(s))
             .addNode('cleanup', async (s: ProviderState) => this.cleanup(s))
 
-        graph.addEdge(START, 'validateRequest' as any)
+        graph.addEdge(START, 'resolveFeatures' as any)
+        graph.addEdge('resolveFeatures' as any, 'resolveImageBranch' as any)
+        graph.addEdge('resolveImageBranch' as any, 'validateRequest' as any)
         graph.addEdge('validateRequest' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
             'streamTokens' as any,
@@ -74,7 +95,7 @@ export abstract class BaseProvider {
     }
 
     // Run a request through the LangGraph workflow.
-    async process(requestData: Record<string, any>): Promise<void> {
+    async process(requestData: Record<string, any>): Promise<ProviderState> {
         this.abortController = new AbortController()
         this.streamPublisher = new StreamPublisher(
             this.deps.natsService,
@@ -109,6 +130,8 @@ export abstract class BaseProvider {
             imageModelVersion: requestData.imageModelMetaInfo?.modelVersion,
             imageProviderName: requestData.imageModelMetaInfo?.provider,
             imagePromptRetryCount: 0,
+            imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
+            referencedFeatureIds: requestData.referencedFeatureIds,
         }
 
         const timeoutHandle = setTimeout(() => {
@@ -116,7 +139,11 @@ export abstract class BaseProvider {
         }, LLM_TIMEOUT_MS)
 
         try {
-            await this.app.invoke(initialState, {
+            if (!initialState.enableImageGeneration) {
+                this.streamPublisher.start()
+            }
+
+            return await this.app.invoke(initialState, {
                 signal: this.abortController.signal,
                 recursionLimit: 25,
             })
@@ -128,6 +155,13 @@ export abstract class BaseProvider {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
             }
             this.streamPublisher.error(message)
+            this.streamPublisher.end()
+            return {
+                ...initialState,
+                error: message,
+                streamActive: false,
+                aiRequestFinishedAt: Date.now(),
+            }
         } finally {
             clearTimeout(timeoutHandle)
         }
@@ -239,7 +273,11 @@ export abstract class BaseProvider {
     }
 
     protected async executeImageGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
-        return this.deps.runImageRouter(state)
+        const imageResult = await this.deps.runImageRouter(state)
+        if (imageResult.error) {
+            this.streamPublisher?.error(imageResult.error, imageResult.errorCode, imageResult.errorType)
+        }
+        return imageResult
     }
 
     protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {
