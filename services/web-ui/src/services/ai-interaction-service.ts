@@ -151,6 +151,16 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.ERROR) {
+                this.segmentsReceiver.receiveSegment({
+                    status: 'ERROR',
+                    error: content.text || content.error || 'AI generation failed',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.COLLAPSIBLE_START) {
                 this.segmentsReceiver.receiveSegment({
                     type: 'collapsible_start',

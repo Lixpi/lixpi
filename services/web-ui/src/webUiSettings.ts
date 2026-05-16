@@ -8,7 +8,6 @@ export type WebUiSettings = {
     showHeaderOnAiChatThreadNodes: boolean
     proximityConnectThreshold: number
     menuConnectionSnapRadius: number
-    aiChatContextTraversalDepth: 'direct' | 'full'
     aiChatThreadRailDragGrabWidth: number
     nodesConnectorLineCurve: WorkspaceEdgePathType
     nodesConnectorLineClickAreaWidth: number
@@ -33,16 +32,6 @@ export const webUiSettings: WebUiSettings = {
     // Maximum distance (in renderer-coordinate pixels) at which the menu-driven
     // "Connect to node" interaction snaps to a target handle/rail.
     menuConnectionSnapRadius: 110,
-    // Controls how deeply the system traverses node connections when extracting
-    // context for AI chat threads.
-    //   'direct' — include content only from nodes with a direct incoming edge
-    //              into the AI chat thread (one hop). Best when each thread
-    //              should see only its immediate inputs.
-    //   'full'   — recursively follow all incoming edges, gathering content from
-    //              every reachable upstream node in the graph (transitive closure).
-    //              Use when chains like DocA → DocB → ChatThread should pass
-    //              DocA's content through to the chat.
-    aiChatContextTraversalDepth: 'direct',
     // Width (in pixels) of the invisible drag hit area around the vertical rail line.
     // The visible rail line width is controlled separately by aiChatThreadRailWidth in
     // webUiThemeSettings.ts — this only affects how wide the grabbable zone is.

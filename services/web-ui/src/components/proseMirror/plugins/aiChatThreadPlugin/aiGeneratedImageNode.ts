@@ -89,6 +89,10 @@ export type AiGeneratedImageCallbacks = {
         imageModelProvider: string
         responseMessageId: string
     }) => void
+    onImageErrorToCanvas?: (data: {
+        threadId: string
+        error: string
+    }) => void
 }
 
 let globalCallbacks: AiGeneratedImageCallbacks = {}

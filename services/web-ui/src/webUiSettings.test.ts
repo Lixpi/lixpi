@@ -11,7 +11,6 @@ describe('webUiSettings — shape', () => {
 	it('exports a WebUiSettings type with exactly the expected keys', () => {
 		const keys = Object.keys(webUiSettings).sort()
 		expect(keys).toEqual([
-			'aiChatContextTraversalDepth',
 			'aiChatThreadRailDragGrabWidth',
 			'menuConnectionSnapRadius',
 			'nodesConnectorLineClickAreaWidth',
@@ -36,7 +35,6 @@ describe('webUiSettings — shape', () => {
 			showHeaderOnAiChatThreadNodes: 'boolean',
 			proximityConnectThreshold: 'number',
 			menuConnectionSnapRadius: 'number',
-			aiChatContextTraversalDepth: 'string',
 			aiChatThreadRailDragGrabWidth: 'number',
 			nodesConnectorLineCurve: 'string',
 			nodesConnectorLineClickAreaWidth: 'number',
@@ -80,10 +78,6 @@ describe('webUiSettings — defaults', () => {
 
 	it('menuConnectionSnapRadius defaults to 110', () => {
 		expect(webUiSettings.menuConnectionSnapRadius).toBe(110)
-	})
-
-	it('aiChatContextTraversalDepth defaults to direct', () => {
-		expect(webUiSettings.aiChatContextTraversalDepth).toBe('direct')
 	})
 
 	it('aiChatThreadRailDragGrabWidth defaults to 90', () => {

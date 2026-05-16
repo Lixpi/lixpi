@@ -255,7 +255,11 @@ export abstract class BaseProvider {
     }
 
     protected async executeImageGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
-        return this.deps.runImageRouter(state)
+        const imageResult = await this.deps.runImageRouter(state)
+        if (imageResult.error) {
+            this.streamPublisher?.error(imageResult.error, imageResult.errorCode, imageResult.errorType)
+        }
+        return imageResult
     }
 
     protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {

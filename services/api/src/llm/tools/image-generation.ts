@@ -212,6 +212,13 @@ export const extractToolCall = (
 // Walk conversation history and return any reference images the user attached, in canonical data-URL form.
 export const extractReferenceImages = (messages: ChatMessage[]): string[] => {
     const images: string[] = []
+    const seen = new Set<string>()
+
+    const pushImage = (url: string): void => {
+        if (!url || seen.has(url)) return
+        seen.add(url)
+        images.push(url)
+    }
 
     for (const msg of messages) {
         if (msg.role !== 'user') continue
@@ -224,21 +231,21 @@ export const extractReferenceImages = (messages: ChatMessage[]): string[] => {
             // OpenAI format: input_image with image_url
             if (blockType === 'input_image') {
                 const url = (block as any).image_url
-                if (typeof url === 'string' && url) images.push(url)
+                if (typeof url === 'string') pushImage(url)
             }
             // Anthropic format: image with source
             else if (blockType === 'image') {
                 const source = (block as any).source ?? {}
                 if (source.type === 'base64' && source.data) {
                     const mediaType = source.media_type ?? 'image/png'
-                    images.push(`data:${mediaType};base64,${source.data}`)
+                    pushImage(`data:${mediaType};base64,${source.data}`)
                 }
             }
             // Google format: inline_data
             else if (blockType === 'inline_data') {
                 const mime = (block as any).mime_type ?? 'image/png'
                 const data = (block as any).data
-                if (data) images.push(`data:${mime};base64,${data}`)
+                if (data) pushImage(`data:${mime};base64,${data}`)
             }
         }
     }
