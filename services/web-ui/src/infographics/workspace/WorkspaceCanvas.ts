@@ -56,6 +56,8 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
+import { createPixiContextRegionLayer, type PixiContextRegionLayer } from '$src/infographics/workspace/rendering/pixiContextRegionLayer.ts'
+import { scoreRectAgainstContextRegionCloud, type ContextRegionCloudDatum } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import { createFeatureLibraryPanel } from '$src/infographics/workspace/featureLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 
@@ -150,6 +152,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let connectionManager: WorkspaceConnectionManager | null = null
     let edgesLayerEl: HTMLDivElement | null = null
     let pixiMediaLayer: PixiMediaLayer | null = null
+    let contextRegionLayer: PixiContextRegionLayer | null = null
     let viewportBridge: ViewportBridge | null = null
 
     // Health of the PIXI renderer. Image nodes' DOM `<img>` elements stay
@@ -171,7 +174,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let edgesRaf: number | null = null
     let transformSideEffectsRaf: number | null = null
     let pendingHandleZoom: number | null = null
-    let pendingRegionTitleZoom: number | null = null
     let anchoredRealignRaf: number | null = null
     let autoGrowRaf: number | null = null
     let selectedNodeIds: Set<string> = new Set()
@@ -202,8 +204,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Visibility tracking for lazy loading
     const visibleNodeIds: Set<string> = new Set()
     const loadedNodeIds: Set<string> = new Set()
-    // Per-region shifting gradient backgrounds. Cleaned up on full re-render.
-    const regionGradients: Map<string, { destroy: () => void }> = new Map()
     let paneRect: DOMRect | null = null
 
     // Image lifecycle tracker - handles deletion of orphaned images
@@ -235,14 +235,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         },
     })
+    contextRegionLayer = createPixiContextRegionLayer({
+        paneEl,
+        viewportEl,
+    })
     viewportBridge = createViewportBridge({
         viewportEl,
         getPixiLayer: () => pixiMediaLayer,
+        getContextRegionLayer: () => contextRegionLayer,
     })
     if (currentCanvasState?.viewport) {
         viewportBridge.applyViewport(currentCanvasState.viewport)
     }
     pixiMediaLayer.sync(currentCanvasState)
+    syncContextRegionLayer(currentCanvasState)
 
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
@@ -487,17 +493,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             a.y + a.height > b.y
     }
 
-    function rectIntersectionArea(a: Rect, b: Rect): number {
-        const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x))
-        const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y))
-        return width * height
-    }
-
-    function pointInRect(point: { x: number; y: number }, rect: Rect): boolean {
-        return point.x >= rect.x && point.x <= rect.x + rect.width &&
-            point.y >= rect.y && point.y <= rect.y + rect.height
-    }
-
     function clampInsideRange(value: number, min: number, max: number): number {
         if (min > max) return min
         return Math.min(max, Math.max(min, value))
@@ -539,6 +534,43 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             width: dimensions.width,
             height: dimensions.height,
         }
+    }
+
+    function getAiChatThreadTitle(thread: AiChatThread | undefined): string {
+        const docTitleNode = thread?.content?.content?.find?.((n: any) => n.type === 'documentTitle')
+        return docTitleNode?.content?.[0]?.text ?? 'AI Chat'
+    }
+
+    function getContextRegionCloudDatum(
+        node: ContextRegionNode,
+        thread: AiChatThread | undefined,
+        nodesById: Map<string, CanvasNode>
+    ): ContextRegionCloudDatum {
+        const position = getNodeWorldPosition(node, nodesById)
+        const dimensions = liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
+        return {
+            nodeId: node.nodeId,
+            referenceId: node.referenceId,
+            x: position.x,
+            y: position.y,
+            width: dimensions.width,
+            height: dimensions.height,
+            title: getAiChatThreadTitle(thread),
+            selected: selectedNodeIds.has(node.nodeId),
+        }
+    }
+
+    function getContextRegionCloudDatums(canvasState: CanvasState | null = currentCanvasState): ContextRegionCloudDatum[] {
+        if (!canvasState) return []
+        const nodesById = getCanvasNodesById(canvasState.nodes)
+        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
+        return canvasState.nodes
+            .filter((node: CanvasNode): node is ContextRegionNode => isContextRegionCanvasNode(node))
+            .map((node: ContextRegionNode) => getContextRegionCloudDatum(node, threadMap.get(node.referenceId), nodesById))
+    }
+
+    function syncContextRegionLayer(canvasState: CanvasState | null = currentCanvasState): void {
+        contextRegionLayer?.sync(getContextRegionCloudDatums(canvasState))
     }
 
     function toParentRelativePosition(
@@ -931,6 +963,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
         pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
+        syncContextRegionLayer()
+        for (const nodeId of nextSelectedNodeIds) {
+            if (prevSelectedNodeIds.has(nodeId)) continue
+            const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+            if (node && isContextRegionCanvasNode(node)) contextRegionLayer?.pulseRegion(nodeId)
+        }
     }
 
     function toggleNodeSelection(nodeId: string): void {
@@ -1299,6 +1337,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function activateAiChatPanel(regionNode: ContextRegionNode, thread: AiChatThread | undefined): void {
         activeAiChatRegionNodeId = regionNode.nodeId
         activeAiChatThreadId = regionNode.referenceId
+        contextRegionLayer?.pulseRegion(regionNode.nodeId)
         ensureAiChatSidebarThreadTab(regionNode.referenceId)
         persistAiChatSidebarState()
         renderActiveAiChatPanel(regionNode, thread)
@@ -1594,6 +1633,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onAiChatSubmit: async ({ messages, aiModel, imageOptions, referencedFeatureIds }: any) => {
                 gradient?.triggerAnimation()
                 activeAiChatPromptGradient?.triggerAnimation()
+                contextRegionLayer?.pulseRegion(regionNode.nodeId)
 
                 try {
                     const aiChatThreadService = servicesStore.getData('aiChatThreadService')
@@ -3133,7 +3173,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (webUiSettings.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
                 }
-                pendingRegionTitleZoom = vp.zoom
                 if (webUiSettings.useZoomCompensatedConnectorScaling) {
                     scheduleEdgesRender()
                 }
@@ -3237,6 +3276,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncNodes(nextState.nodes)
         scheduleEdgesRender()
         pixiMediaLayer?.sync(nextState)
+        syncContextRegionLayer(nextState)
     }
 
     function scheduleTransformSideEffects() {
@@ -3246,10 +3286,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (pendingHandleZoom !== null) {
                 updateResizeHandles(pendingHandleZoom)
                 pendingHandleZoom = null
-            }
-            if (pendingRegionTitleZoom !== null) {
-                updateRegionTitleBars(pendingRegionTitleZoom)
-                pendingRegionTitleZoom = null
             }
             repositionCanvasBubbleMenu()
             repositionEdgeBubbleMenu()
@@ -3425,33 +3461,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return panZoom?.getViewport().zoom ?? currentCanvasState?.viewport?.zoom ?? lastTransform[2] ?? 1
     }
 
-    // Region title pills live inside the transformed viewport. Use a gentler
-    // low-zoom floor than the bubble menu and keep the visual center tucked
-    // into the region edge so the label never floats away from its card.
-    function applyRegionTitleScale(titleBar: HTMLElement, zoom: number) {
-        const safeZoom = Math.max(zoom, 0.01)
-        const titleVisualScale = Math.max(
-            getAdaptiveZoomMultiplier(safeZoom, { lowZoomPower: 0.2 }),
-            0.72
-        )
-        const scale = titleVisualScale / safeZoom
-        const titleTopPx = -2 - 16 * titleVisualScale
-
-        applyStyle(titleBar, {
-            top: `${titleTopPx / safeZoom}px`,
-            left: `${20 / safeZoom}px`,
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
-        })
-    }
-
-    function updateRegionTitleBars(zoom: number) {
-        if (!viewportEl) return
-        const titleBars = viewportEl.querySelectorAll('.workspace-ai-chat-thread-region__title-bar')
-        titleBars.forEach((titleBar) => applyRegionTitleScale(titleBar as HTMLElement, zoom))
-    }
-
-    function handleDragStart(event: MouseEvent, nodeId: string) {
+    function handleDragStart(event: MouseEvent, nodeId: string, options: { onClick?: () => void; suppressPaneClick?: boolean } = {}) {
         event.preventDefault()
         event.stopPropagation()
 
@@ -3570,6 +3580,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
+                contextRegionLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
 
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
                     applyStyle(floatingInputEl, {
@@ -3642,6 +3653,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             draggingNodeId = null
             if (dragDidMove) {
                 suppressNextNodeClick = true
+                if (options.suppressPaneClick) suppressNextPaneClick = true
                 window.setTimeout(() => {
                     suppressNextNodeClick = false
                 }, 0)
@@ -3650,6 +3662,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // (not the resolved parent thread) so that clicking an anchored
                 // image selects the image and shows its bubble menu.
                 selectNode(nodeId)
+                if (options.suppressPaneClick) suppressNextPaneClick = true
+                options.onClick?.()
             }
 
             for (const draggedNodeId of draggedNodeEntries.keys()) {
@@ -3688,6 +3702,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             let updatedNodes = currentCanvasState.nodes
             const originalNodesById = getCanvasNodesById(updatedNodes)
             const regionNodes = updatedNodes.filter(isContextRegionCanvasNode)
+            const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
 
             updatedNodes = updatedNodes.map((node: CanvasNode) => {
                 const finalWorldPosition = finalDraggedPositions.get(node.nodeId)
@@ -3713,27 +3728,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     height: node.dimensions.height,
                 }
 
-                // Pick the best region to adopt this dragged node into. We score
-                // by overlap area, with a bonus when the cursor is inside the
-                // region rect, AND we treat the region rect as having a generous
-                // grace zone around it so users don't have to drop precisely
-                // inside the existing bounds — the region will grow to fit.
-                const grace = 80
+                // Pick the best cloud region to adopt this dragged node into.
+                // The score uses the same irregular polygon as region clicks so
+                // transparent corners do not behave like drop targets.
                 let containingRegion: ContextRegionNode | null = null
                 let bestRegionScore = 0
                 if (canAdoptNodeIntoContextRegion(node)) {
                     for (const region of regionNodes) {
                         if (region.nodeId === node.nodeId) continue
-                        const regionRect = getNodeWorldRect(region, originalNodesById)
-                        const expandedRect: Rect = {
-                            x: regionRect.x - grace,
-                            y: regionRect.y - grace,
-                            width: regionRect.width + grace * 2,
-                            height: regionRect.height + grace * 2,
-                        }
-                        const overlapArea = rectIntersectionArea(draggedRect, expandedRect)
-                        const pointInside = pointInRect(dropPoint, expandedRect)
-                        const score = overlapArea + (pointInside ? draggedRect.width * draggedRect.height : 0)
+                        const regionDatum = getContextRegionCloudDatum(region, threadMap.get(region.referenceId), originalNodesById)
+                        const score = scoreRectAgainstContextRegionCloud(regionDatum, draggedRect, dropPoint)
                         if (score > bestRegionScore) {
                             bestRegionScore = score
                             containingRegion = region
@@ -3878,8 +3882,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         resizingNodeId = nodeId
         nodeEl.classList.add('is-resizing')
 
-        const handle = event.currentTarget as HTMLElement
-        handle.classList.add('is-dragging')
+        const handle = event.currentTarget instanceof HTMLElement && event.currentTarget.classList.contains('document-resize-handle')
+            ? event.currentTarget
+            : null
+        handle?.classList.add('is-dragging')
 
         const startX = event.clientX
         const startY = event.clientY
@@ -3971,6 +3977,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
 
             pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
+            contextRegionLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
             pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds())
 
@@ -3992,6 +3999,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const currentRegionHeight = parseFloat(regionEl.style.height) || 120
                     if (neededWidth > currentRegionWidth) applyStyle(regionEl, { width: `${neededWidth}px` })
                     if (neededHeight > currentRegionHeight) applyStyle(regionEl, { height: `${neededHeight}px` })
+                    contextRegionLayer?.setNodeLiveTransform(
+                        node.parentId,
+                        { x: regionWorldLeft, y: regionWorldTop },
+                        {
+                            width: parseFloat(regionEl.style.width) || currentRegionWidth,
+                            height: parseFloat(regionEl.style.height) || currentRegionHeight,
+                        }
+                    )
                 }
             }
 
@@ -4049,7 +4064,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const handleMouseUp = () => {
             nodeEl.classList.remove('is-resizing')
-            handle.classList.remove('is-dragging')
+            handle?.classList.remove('is-dragging')
             resizingNodeId = null
 
             liveNodeOverrides.delete(nodeId)
@@ -4222,53 +4237,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createContextRegionNode(node: ContextRegionNode, thread: AiChatThread | undefined): HTMLElement {
         const { nodeEl } = createBaseNodeElement(
             node,
-            'workspace-context-region-node workspace-ai-chat-thread-node workspace-ai-chat-thread-node--region',
+            'workspace-context-region-node workspace-context-region-node--pixi-owned workspace-ai-chat-thread-node workspace-ai-chat-thread-node--region',
             { threadId: node.referenceId }
         )
 
-        // Context regions are labeled bounding boxes on the canvas. The chat
-        // conversation itself opens in the singleton canvas-owned floating panel.
-        // Children dropped into the region are persisted as xyflow-native
-        // parent-child nodes so they move with it and are included in context.
-
-        nodeEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
-        nodeEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
-
-        // Shifting gradient background — context regions use their own palette so
-        // region-card tuning does not affect shared animated borders.
-        const gradient = createShiftingGradientBackground(nodeEl, {
-            colors: webUiThemeSettings.contextRegionAreaShiftingGradientColors,
-        })
-        regionGradients.set(node.nodeId, gradient)
-
-        // Title bar
-        const titleBar = html`<div className="workspace-ai-chat-thread-region__title-bar nopan"></div>` as HTMLDivElement
-        const titleText = html`<span className="workspace-ai-chat-thread-region__title"></span>` as HTMLSpanElement
-        // Best-effort title from ProseMirror documentTitle node
-        const docTitleNode = thread?.content?.content?.find?.((n: any) => n.type === 'documentTitle')
-        const docTitle = docTitleNode?.content?.[0]?.text ?? 'AI Chat'
-        titleText.textContent = docTitle
-        titleBar.appendChild(titleText)
-        applyRegionTitleScale(titleBar, getCurrentViewportZoom())
-        nodeEl.appendChild(titleBar)
-
-        // Activate-on-click: clicking the context region opens the singleton
-        // canvas-owned chat panel for the thread linked to this region.
-        const activate = (e: Event) => {
-            e.stopPropagation()
-            activateAiChatPanel(node, thread)
-        }
-        titleBar.addEventListener('click', activate)
-        // Background-region click also activates (children intercept their own clicks).
-        nodeEl.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement | null
-            if (!target) return
-            // Only activate when the click landed on the region's own surface,
-            // not a child node nested inside it.
-            if (target === nodeEl || target.closest('.workspace-ai-chat-thread-region__title-bar')) {
-                activateAiChatPanel(node, thread)
-            }
-        })
+        nodeEl.dataset.regionTitle = getAiChatThreadTitle(thread)
 
         loadedNodeIds.add(node.nodeId)
 
@@ -4516,13 +4489,43 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function handlePaneMouseDown(event: MouseEvent): void {
         if (event.button !== 0) return
         if (!isCanvasBackgroundTarget(event.target)) return
-        if (isModSelectionEvent(event)) return
         if (!currentCanvasState) return
+
+        const start = getCanvasPointFromClient(event.clientX, event.clientY)
+        const regionHit = contextRegionLayer?.hitTest(start) ?? { kind: 'none' as const }
+        if (regionHit.kind !== 'none') {
+            if (isModSelectionEvent(event)) {
+                event.preventDefault()
+                event.stopPropagation()
+                toggleNodeSelection(regionHit.nodeId)
+                suppressNextPaneClick = true
+                return
+            }
+
+            if (regionHit.kind === 'resize-handle') {
+                suppressNextPaneClick = true
+                handleResizeStart(event, regionHit.nodeId, regionHit.corner)
+                return
+            }
+
+            const regionNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === regionHit.nodeId)
+            const thread = regionNode && isContextRegionCanvasNode(regionNode)
+                ? currentAiChatThreads.find((candidate) => candidate.threadId === regionNode.referenceId)
+                : undefined
+            handleDragStart(event, regionHit.nodeId, {
+                suppressPaneClick: true,
+                onClick: () => {
+                    if (regionNode && isContextRegionCanvasNode(regionNode)) activateAiChatPanel(regionNode, thread)
+                },
+            })
+            return
+        }
+
+        if (isModSelectionEvent(event)) return
 
         event.preventDefault()
         event.stopPropagation()
 
-        const start = getCanvasPointFromClient(event.clientX, event.clientY)
         marqueeSelection = {
             start,
             current: start,
@@ -4618,10 +4621,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         imageElByNodeId.clear()
         imageResolvedSrcByNodeId.clear()
 
-        // Clean up per-region gradients (will be recreated for each region node)
-        for (const [, g] of regionGradients) g.destroy()
-        regionGradients.clear()
-
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((t) => [t.threadId, t]))
 
@@ -4664,6 +4663,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncNodes(currentCanvasState.nodes)
         connectionManager?.syncEdges(currentCanvasState.edges)
         scheduleEdgesRender()
+        syncContextRegionLayer(currentCanvasState)
 
         renderActiveAiChatPanel()
 
@@ -4783,11 +4783,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             viewportBridge?.applyViewport(vp)
             // Ensure handles match initial zoom
             updateResizeHandles(vp.zoom)
-            updateRegionTitleBars(vp.zoom)
             panZoom.syncViewport(vp)
         } else {
             updateResizeHandles(1)
-            updateRegionTitleBars(1)
         }
     }
 
@@ -4897,6 +4895,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 connectionManager.syncEdges(currentCanvasState.edges)
                 scheduleEdgesRender()
                 pixiMediaLayer?.sync(currentCanvasState)
+                syncContextRegionLayer(currentCanvasState)
             }
 
             // 3. Apply viewport after PIXI sync. `setViewport` may trigger
@@ -4953,6 +4952,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             viewportBridge = null
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
+            contextRegionLayer?.destroy()
+            contextRegionLayer = null
             if (panZoom) {
                 panZoom.destroy()
             }
@@ -4990,10 +4991,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // Clean up per-thread vertical rails
             destroyAllThreadRails()
-
-            // Clean up per-region gradients
-            for (const [, g] of regionGradients) g.destroy()
-            regionGradients.clear()
 
             destroyActiveAiChatPanel(true)
 

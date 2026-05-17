@@ -513,61 +513,56 @@ describe('AI chat region image frame', () => {
 })
 
 // =============================================================================
-// AI chat region gradient palette
+// AI chat region PIXI cloud layer
 // =============================================================================
 
-describe('AI chat region gradient palette', () => {
-	const ts = loadTs()
-
-	it('uses a dedicated context region area palette instead of the shared gradient colors', () => {
-		expect(ts).toContain('contextRegionAreaShiftingGradientColors')
-		expect(ts).toContain('createShiftingGradientBackground(nodeEl, {')
-		expect(ts).toContain('colors: webUiThemeSettings.contextRegionAreaShiftingGradientColors')
-		expect(ts).not.toContain('const gradient = createShiftingGradientBackground(nodeEl)')
-	})
-})
-
-// =============================================================================
-// AI chat region title zoom compensation
-// =============================================================================
-
-describe('AI chat region title zoom compensation', () => {
+describe('AI chat region PIXI cloud layer', () => {
 	const ts = loadTs()
 	const scss = loadScss()
+	const cloudTs = readFileSync(resolve(__dirname, 'rendering/contextRegionClouds.ts'), 'utf8')
+	const cloudLayerTs = readFileSync(resolve(__dirname, 'rendering/pixiContextRegionLayer.ts'), 'utf8')
+	const viewportBridgeTs = readFileSync(resolve(__dirname, 'rendering/viewportBridge.ts'), 'utf8')
 
-	it('scales region title pills with adaptive inverse zoom compensation', () => {
-		expect(ts).toContain('getAdaptiveZoomMultiplier, getResizeHandleScaledSizes')
-		expect(ts).toContain('function applyRegionTitleScale(titleBar: HTMLElement, zoom: number)')
-		expect(ts).toContain('const safeZoom = Math.max(zoom, 0.01)')
-		expect(ts).toContain('getAdaptiveZoomMultiplier(safeZoom, { lowZoomPower: 0.2 })')
-		expect(ts).toContain('0.72')
-		expect(ts).toContain('const scale = titleVisualScale / safeZoom')
-		expect(ts).toContain('applyStyle(titleBar, {')
-		expect(ts).toContain('transform: `scale(${scale})`')
-		expect(ts).toContain("transformOrigin: 'top left'")
+	it('creates a dedicated PIXI context region layer below DOM nodes', () => {
+		expect(ts).toContain('createPixiContextRegionLayer')
+		expect(ts).toContain('let contextRegionLayer: PixiContextRegionLayer | null = null')
+		expect(ts).toContain('contextRegionLayer = createPixiContextRegionLayer({')
+		expect(cloudLayerTs).toContain('className="workspace-pixi-context-region-layer"')
+		expect(scss).toContain('.workspace-pixi-context-region-layer')
+		expect(scss).toContain('z-index: 0')
 	})
 
-	it('uses the same adaptive zoom curve for the canvas bubble menu', () => {
-		expect(ts).toContain('getVisualScale: () => getAdaptiveZoomMultiplier(getCurrentViewportZoom())')
+	it('keeps context region DOM nodes as non-visual PIXI-owned proxies', () => {
+		expect(ts).toContain('workspace-context-region-node--pixi-owned')
+		expect(ts.includes('colors: webUiThemeSettings.contextRegionAreaShiftingGradientColors')).toBe(false)
+		expect(ts.includes('workspace-ai-chat-thread-region__title-bar')).toBe(false)
+		expect(scss).toContain('pointer-events: none')
+		expect(scss).toContain('background: transparent')
 	})
 
-	it('keeps title pill connected to the region while scaling', () => {
-		expect(ts).toContain('const titleTopPx = -2 - 16 * titleVisualScale')
-		expect(ts).toContain('top: `${titleTopPx / safeZoom}px`')
-		expect(ts).toContain('left: `${20 / safeZoom}px`')
+	it('syncs cloud datums through render, commit, selection, and viewport changes', () => {
+		expect(ts).toContain('function getContextRegionCloudDatums')
+		expect(ts).toContain('function syncContextRegionLayer')
+		expect(ts).toContain('syncContextRegionLayer(nextState)')
+		expect(ts).toContain('syncContextRegionLayer(currentCanvasState)')
+		expect(viewportBridgeTs).toContain('getContextRegionLayer?.()?.setViewport(viewport)')
 	})
 
-	it('updates region title pills from the transform side-effect queue', () => {
-		expect(ts).toContain('let pendingRegionTitleZoom: number | null = null')
-		expect(ts).toContain('pendingRegionTitleZoom = vp.zoom')
-		expect(ts).toContain('updateRegionTitleBars(pendingRegionTitleZoom)')
-		expect(ts).toContain('applyRegionTitleScale(titleBar, getCurrentViewportZoom())')
-		expect(ts).toContain('return panZoom?.getViewport().zoom ?? currentCanvasState?.viewport?.zoom ?? lastTransform[2] ?? 1')
+	it('routes pane hits through irregular cloud hit testing before marquee selection', () => {
+		const fnMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('contextRegionLayer?.hitTest(start)')
+		expect(fnBody).toContain("regionHit.kind === 'resize-handle'")
+		expect(fnBody).toContain('handleDragStart(event, regionHit.nodeId, {')
+		expect(fnBody).toContain('activateAiChatPanel(regionNode, thread)')
 	})
 
-	it('defines title transform origin in CSS as a stable fallback', () => {
-		const block = extractBlock(scss, '.workspace-ai-chat-thread-region__title-bar')
-		expect(block).toMatch(/transform-origin:\s*top left/)
+	it('uses shared cloud styles for hit testing and adoption scoring', () => {
+		expect(cloudTs).toContain('export const CONTEXT_REGION_CLOUD_STYLES')
+		expect(cloudTs).toContain('hitTestContextRegionCloud')
+		expect(cloudTs).toContain('scoreRectAgainstContextRegionCloud')
+		expect(ts).toContain('scoreRectAgainstContextRegionCloud(regionDatum, draggedRect, dropPoint)')
 	})
 })
 

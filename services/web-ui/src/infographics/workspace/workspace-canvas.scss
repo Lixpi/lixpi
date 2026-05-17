@@ -248,6 +248,14 @@
     contain: layout paint;
 }
 
+.workspace-pixi-context-region-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    contain: layout paint;
+}
+
 .workspace-selection-rect {
     position: absolute;
     z-index: 10001;
@@ -331,120 +339,21 @@
     }
 }
 
-/*
- * Context region card variant. The node is a labeled bounding box on the
- * canvas. Pointer events on the body pass through so children inside the
- * region remain interactive; the title bar opens the canvas-owned chat panel
- * for the thread linked to this region.
- */
+/* Context regions are rendered by PIXI; the DOM node remains as a geometry proxy. */
 .workspace-context-region-node,
 .workspace-ai-chat-thread-node--region {
-    // The region card. The moving backdrop is rendered by the singleton
-    // `ShiftingGradientRenderer` via a <canvas class="shifting-gradient-canvas">
-    // injected as the first child. A pale base color keeps the empty region
-    // airy like the mockup while the canvas supplies the shifting depth.
-    background: #E5F2EE;
+    background: transparent;
     border: none;
-    border-radius: 18px;
-    box-shadow: 0 8px 20px rgba(94, 119, 111, 0.07);
-    isolation: isolate;
-    // overflow visible so the floating title pill renders outside the box.
-    // The gradient canvas inside has `border-radius: inherit`, so it stays
-    // visually clipped to the rounded corners on its own.
+    border-radius: 0;
+    box-shadow: none;
+    isolation: auto;
     overflow: visible;
-    pointer-events: auto;
+    pointer-events: none;
 
-    // Region is always visible even when empty.
     &[data-thread-empty="true"] {
         visibility: visible;
-        pointer-events: auto;
     }
 
-    // The gradient canvas is injected by createShiftingGradientBackground at
-    // index 0 (first child). Keep it behind everything else.
-    > canvas.shifting-gradient-canvas {
-        z-index: 0;
-        opacity: 0.80;
-    }
-
-    &::before,
-    &::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        pointer-events: none;
-    }
-
-    // Center-depth pass. Keep it airy: the region needs organic depth without
-    // dropping a dark spot into the middle of the gradient.
-    &::before {
-        z-index: 1;
-        background:
-            radial-gradient(ellipse 90% 70% at 50% 55%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 58%, rgba(255, 255, 255, 0) 100%),
-            radial-gradient(ellipse 74% 62% at 50% 58%, rgba(86, 118, 109, 0.08) 0%, rgba(128, 158, 149, 0.045) 42%, rgba(232, 246, 242, 0.01) 72%, rgba(255, 255, 255, 0) 100%),
-            linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 34%, rgba(255, 255, 255, 0) 74%, rgba(255, 255, 255, 0.10) 100%);
-        mix-blend-mode: normal;
-    }
-
-    // Glass edge pass: soft rim-light, faint inner bevel, and edge haze similar
-    // to the sample's frosted border glow.
-    &::after {
-        z-index: 2;
-        background:
-            radial-gradient(ellipse 102% 42% at 50% -8%, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.10) 42%, rgba(255, 255, 255, 0) 72%),
-            radial-gradient(ellipse 94% 44% at 50% 106%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.09) 42%, rgba(255, 255, 255, 0) 76%),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.03) 15%, rgba(255, 255, 255, 0) 84%, rgba(255, 255, 255, 0.22) 100%);
-        box-shadow:
-            inset 0 1px 2px rgba(255, 255, 255, 0.64),
-            inset 1px 0 2px rgba(255, 255, 255, 0.34),
-            inset -1px 0 2px rgba(255, 255, 255, 0.32),
-            inset 0 -1px 2px rgba(255, 255, 255, 0.30),
-            inset 0 14px 34px rgba(255, 255, 255, 0.09),
-            inset 0 -14px 38px rgba(255, 255, 255, 0.08);
-    }
-
-    .workspace-ai-chat-thread-region__title-bar {
-        position: absolute;
-        top: -18px;
-        left: 20px;
-        height: 32px;
-        padding: 0 16px 0 14px;
-        display: inline-flex;
-        align-items: center;
-        gap: 9px;
-        background: #ffffff;
-        color: #1f2937;
-        border: 1px solid rgba(0, 0, 0, 0.04);
-        border-radius: 999px;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-        font-size: 13px;
-        font-weight: 500;
-        line-height: 1;
-        cursor: pointer;
-        user-select: none;
-        transform-origin: top left;
-        z-index: 4;
-
-        &::before {
-            content: '';
-            display: block;
-            width: 9px;
-            height: 9px;
-            border-radius: 999px;
-            background: #A1C3BA; // soft mint-sage — sampled from the title-pill dot in gradient-sample.png
-            flex-shrink: 0;
-        }
-
-        &:hover {
-            background: #fafafa;
-        }
-    }
-
-    .workspace-ai-chat-thread-region__title {
-        white-space: nowrap;
-        letter-spacing: 0.005em;
-    }
 }
 
 .workspace-ai-chat-thread-node .ai-chat-thread-node-editor {
@@ -930,6 +839,11 @@
     &.is-dragging svg {
         transform: scale(1.2);
     }
+}
+
+.workspace-context-region-node--pixi-owned > .document-resize-handle {
+    pointer-events: none;
+    opacity: 0;
 }
 
 .document-drag-overlay {
