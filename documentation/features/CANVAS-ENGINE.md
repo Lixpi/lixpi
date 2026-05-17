@@ -1,8 +1,8 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM/SVG interaction renderer with a PIXI v8 media layer**. The proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack still owns all user interaction and rich UI: ProseMirror, AI chat threads, prompt inputs, bubble menus, resize/drag/selection, context regions, and SVG connectors. PIXI v8 (WebGPU with WebGL fallback) is introduced through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts` to own image pixel rendering.
+The workspace canvas is a **DOM/SVG interaction renderer with PIXI v8 visual layers**. The proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack still owns rich UI and stateful interactions: ProseMirror, AI chat panels, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and SVG connector hit-testing. PIXI v8 (WebGPU with WebGL fallback) now owns image pixel rendering through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts` and context-region watercolor cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
 
-The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. Its Phase 2 guidance is the path being implemented: PIXI takes over media nodes first, while document/chat-thread DOM and SVG connectors remain until profiling proves they need migration.
+The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. Its Phase 2 guidance is the path being implemented: PIXI takes over high-volume visual surfaces incrementally, while document/chat-thread DOM and SVG connector hit-testing remain until profiling proves they need migration.
 
 ## Why This Matters
 
@@ -23,13 +23,15 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 
 | File | Purpose |
 |------|---------|
-| `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media-layer sync points |
+| `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media/context-region sync points |
 | `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
 | `workspace/pixiMediaLayerLogic.ts` | Pure helpers: tier ranking, world-position math, src URL building, LoD-size param injection, world-rect math |
 | `workspace/pixiImageDecoder.ts` | Six-worker decode pool: round-robin dispatch with per-worker request tracking |
 | `workspace/pixiImageDecodeWorker.ts` | Worker body: `fetch` → `createImageBitmap` and post the bitmap back |
+| `workspace/rendering/contextRegionClouds.ts` | Pure context-region cloud geometry: style selection, polygons, hit zones, and adoption scoring |
+| `workspace/rendering/pixiContextRegionLayer.ts` | PIXI v8 context-region layer — shared watercolor textures, cloud sprites, title/chrome `Graphics`, culling, bounded pulse animation |
 | `workspace/rendering/pixiEdgeRenderer.ts` | PIXI edge renderer (diffed; reuses `Graphics`) |
-| `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to both DOM CSS and PIXI |
+| `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to DOM CSS, PIXI media, and PIXI context-region layers |
 | `workspace/rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio) |
 | `workspace/WorkspaceConnectionManager.ts` | Edge creation, proximity connect, candidate detection, and the data feed for `pixiEdgeRenderer` |
 | `connectors/renderer.ts` | SVG connector rendering (still authoritative for hit testing) |
@@ -66,9 +68,14 @@ documentation/vendor-documentation/xyflow/
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Pane[".workspace-pane"]
+        subgraph RegionPixi[".workspace-pixi-context-region-layer (z-index 0, PIXI canvas)"]
+            REGION_WORLD[Context region world Container<br/>scale = viewport.zoom<br/>position = viewport.x, y]
+            CLOUDS[Watercolor cloud sprites<br/>title/chrome Graphics]
+        end
         subgraph Viewport[".workspace-viewport (z-index 1, CSS-transformed)"]
             DOC[Document Nodes]
             THR[AI Chat Thread Nodes]
+            REGION_PROXY[Context region DOM proxies<br/>transparent data-node-id geometry]
             IMG_DOM[Image Node DOM shells<br/>data-node-id only,<br/>img.src is empty when PIXI healthy]
             EDGE_SVG[SVG Edges layer<br/>opacity 0, hit-testing only]
             HANDLE[Handles, drag overlays, resize handles]
@@ -81,18 +88,22 @@ flowchart TB
         end
     end
 
+    RegionPixi --> Viewport
+    REGION_WORLD --> CLOUDS
     Viewport --> PixiCanvas
     WORLD --> EDGE_PIXI
     WORLD --> IMG_SPR
     WORLD --> FG
 ```
 
-The PIXI canvas sits **above** the DOM viewport. Image-node DOM elements are kept (`<div data-node-id>` plus `<img class="image-node-img">`) for two reasons:
+The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Image-node DOM elements are kept (`<div data-node-id>` plus `<img class="image-node-img">`) for two reasons:
 
 1. They host all interaction chrome — drag overlay, resize handles, badges, generation spinner, partial-streaming `<img>` for AI image generation.
 2. They are the DOM fallback if PIXI fails to initialize.
 
 When PIXI is healthy, the DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node--pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
+
+Context-region DOM elements are also kept, but only as transparent geometry proxies for existing drag/resize/selection and parent-child state paths. Their visible watercolor cloud, title pill, selected outline, and resize handles are drawn by `pixiContextRegionLayer`. Empty-region pointer behavior starts in the pane background handler, calls `contextRegionLayer.hitTest(worldPoint)`, and then reuses the existing drag or resize handlers for the matched node.
 
 ### Viewport Bridge
 
@@ -105,10 +116,13 @@ flowchart LR
     CB --> VB[viewportBridge.applyViewport]
     VB --> CSS[viewport CSS transform<br/>translate + scale]
     VB --> PIXI[pixiMediaLayer.setViewport]
+    VB --> REGION[contextRegionLayer.setViewport]
     PIXI --> WORLD[world.position / world.scale]
     PIXI --> VIS[scheduleVisibilityUpdate<br/>rAF-coalesced]
     PIXI --> PRE[schedulePrefetch<br/>idle-coalesced]
     PIXI --> RND[scheduleRender<br/>rAF-coalesced]
+    REGION --> REGION_WORLD[region world.position / world.scale]
+    REGION --> REGION_RND[scheduleRender<br/>rAF-coalesced]
 ```
 
 This gives DOM and PIXI a single, consistent transform every frame. There is no second `app.render()` call from elsewhere in the codebase.
@@ -128,6 +142,17 @@ This gives DOM and PIXI a single, consistent transform every frame. There is no 
 5. Single `updateVisibleImages()` pass to mark renderable flags and fire texture loads for newly-visible entries.
 6. Schedules an idle prefetch tick.
 7. Schedules a render via rAF.
+
+`contextRegionLayer.sync(getContextRegionCloudDatums())` runs alongside media sync after state commits, full DOM rerenders, and selection changes. Each sync:
+
+1. Builds world-space region datums from persisted canvas nodes plus live drag/resize overrides.
+2. Selects a deterministic cloud style from `contextRegionClouds.ts` based on node ID and aspect ratio.
+3. Reuses one generated watercolor `Texture` per cloud style instead of generating per-node bitmaps.
+4. Updates sprite position/size, title text, selected outline, and resize-handle chrome only when geometry or zoom changed.
+5. Culls off-screen clouds with the same viewport world-rect helper used by the media layer.
+6. Schedules a render via rAF.
+
+Cloud hit-testing and drag-adoption scoring use the same shared polygons from `contextRegionClouds.ts`, so transparent rectangle corners do not behave like region body hits or drop targets.
 
 ### Render Scheduling
 

@@ -1,6 +1,6 @@
 # Workspace Canvas
 
-This module renders the main workspace view—a zoomable, pannable canvas where documents, images, and AI chat threads appear as draggable, resizable cards.
+This module renders the main workspace view—a zoomable, pannable canvas where documents, images, AI chat threads, and context regions appear as draggable, resizable canvas nodes.
 
 > **Where to look first.**
 >
@@ -25,6 +25,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
 - **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
 - **Provide AI context** by connecting documents/images to an AI chat thread—connected content is automatically sent to the AI
+- **Group context** by dropping nodes into watercolor context-region clouds
 - **Use the floating prompt input** to send prompts to the currently selected node; for non-thread nodes, the input appears on selection and hides on deselect
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
@@ -50,8 +51,6 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
 - Display an animated 4-color gradient background on the canvas for visual separation
-- Region-style thread containers render that background through `createShiftingGradientBackground()` and add CSS center-depth and edge-glass overlays so the card stays pale, organic, and gently dimensional without a heavy center spot
-- Region title pills use a gentler adaptive zoom floor and a scale-aware top offset, so labels stay readable and remain visually connected to the region edge at very low zoom; the canvas bubble menu uses the shared adaptive zoom curve
 - Each thread has its own `AiInteractionService` instance for AI messaging
 - Support streaming AI responses with real-time token parsing
 - Content is persisted separately from documents in the AI-Chat-Threads table
@@ -71,11 +70,13 @@ All of this happens without the Svelte component knowing the details. It just pa
         - **Connector line mode** (setting = `true`, or any generated image with a persisted connector edge): Images appear as independent canvas nodes positioned to the right of the thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image. Generated output images stay freely draggable and are not adopted into context regions during drag release.
         - In both modes, progressive partial previews update the canvas node in real-time during generation, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
 
-### Region Gradient Fit
-- Region cards use `createShiftingGradientBackground()` as the base; do not replace that with a static CSS gradient
-- The accepted fit uses phase 4 with `webUiThemeSettings.contextRegionAreaShiftingGradientColors = ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1']`
-- At phase 4, color 1 affects the bottom-left and color 2 affects the bottom-right
-- Use `random-useful-things/image-color-analysis-tool/region-gradient-preview.html` for quick visual comparison against `gradient-sample.png`
+    ### Context Region Nodes
+    - Render their visible surface in `rendering/pixiContextRegionLayer.ts`, below the DOM viewport, as pale watercolor-style clouds inspired by the service-architecture diagram asset.
+    - Keep a transparent DOM node with `data-node-id` as a geometry proxy for existing drag, resize, selection, connection-manager, and parent-child state paths.
+    - Route empty-region clicks, drags, and corner resizes through `contextRegionLayer.hitTest()` from the pane background handler; transparent cloud corners are not treated as region body hits.
+    - Use `rendering/contextRegionClouds.ts` for shared style selection, cloud polygons, title/resize hit zones, and adoption scoring. The drag-release adoption path uses the same irregular cloud geometry as click hit-testing.
+    - Pulse subtly on selection, panel activation, and AI submit. PIXI's ticker remains off; the pulse is a bounded requestAnimationFrame animation.
+    - Open the singleton canvas-owned floating chat panel when clicked. The region itself is context grouping chrome, not an embedded ProseMirror editor.
 
 ## Architecture
 
@@ -263,7 +264,7 @@ Node selection is runtime-only UI state and is not persisted into `canvasState`.
 
 **Anchored image click resolution:** The click handler calls `selectNode(node.nodeId)` with the original node ID — it does **not** use `getSelectionTargetNodeId()`. This ensures that clicking an anchored image selects the image itself rather than resolving to the parent thread.
 
-**Context region layering:** Context regions are background containers, not foreground nodes. Region elements use the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while still allowing clicks on empty region surface.
+**Context region layering:** Context regions are background containers, not foreground nodes. Their visible cloud surface is drawn by `.workspace-pixi-context-region-layer` below the DOM viewport. The transparent DOM proxy still uses the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while empty-region clicks are handled by PIXI cloud hit-testing on the pane background path.
 
 **Context region image frame:** Image nodes whose `parentId` points to a context region receive `.workspace-image-node--context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.contextRegionImageFrameColor` and defaults to the slightly off-white `#FCFCFA`. Images outside a context region keep the base transparent image styling.
 
@@ -397,16 +398,18 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 
 | File | Purpose |
 |------|---------|
-| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration, PIXI media layer wiring, fallback path on PIXI failure |
+| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration, PIXI media/context-region layer wiring, fallback path on PIXI media failure |
 | `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, SVG edge rendering for hit-testing, PIXI edge data feed, selection/deletion |
 | `pixiMediaLayer.ts` | PIXI v8 media layer for image pixels: sprite registry, texture cache, LoD-tier loader, RBush-based visibility scanner, idle prefetch scheduler, mipmap config |
 | `pixiMediaLayerLogic.ts` | Pure helpers used by the PIXI layer: tier ranking (`tierRank`), world-position math, source URL building, LoD `?size=` injection, world-rect computation |
 | `pixiImageDecoder.ts` | Six-worker decode pool. Round-robin dispatch with per-worker request tracking so a single worker crash does not nuke all in-flight requests |
 | `pixiImageDecodeWorker.ts` | Web Worker body: `fetch` → `createImageBitmap` → transfer the bitmap back to the main thread |
+| `rendering/contextRegionClouds.ts` | Pure context-region cloud helpers: style selection, polygons, title/resize hit zones, point hit-testing, drag-adoption scoring |
+| `rendering/pixiContextRegionLayer.ts` | PIXI v8 context-region layer: shared watercolor textures, cloud sprites, title/chrome `Graphics`, culling, bounded pulse animation |
 | `rendering/pixiEdgeRenderer.ts` | Diffed PIXI edge renderer: reuses `Graphics` objects across renders; only repaints when an edge's path/colour/arrow fingerprint changes |
-| `rendering/viewportBridge.ts` | Single call site that applies a viewport change to both the DOM CSS transform and the PIXI world (keeps DOM and PIXI perfectly aligned) |
+| `rendering/viewportBridge.ts` | Single call site that applies a viewport change to the DOM CSS transform, PIXI media world, and PIXI context-region world |
 | `rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio). Image nodes are handled directly by `pixiMediaLayer`; the registry exists so video/audio handlers can plug in without touching the core |
-| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, and the `workspace-image-node--pixi-owned` opacity rule |
+| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, the `workspace-image-node--pixi-owned` opacity rule, and the transparent context-region proxy |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
 | `imagePositioning.ts` | Computes image placement positions (next-to-thread and overlapping-thread modes) |
@@ -420,9 +423,11 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-canvas` | Root container |
 | `.workspace-pane` | Pan/zoom target |
 | `.workspace-viewport` | Transformed container for nodes |
+| `.workspace-pixi-context-region-layer` | PIXI canvas host for context-region watercolor clouds below the DOM viewport |
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
-| `.workspace-context-region-node` | Context region card linked to an AI chat thread |
+| `.workspace-context-region-node` | Transparent context-region geometry proxy linked to an AI chat thread |
+| `.workspace-context-region-node--pixi-owned` | Context-region proxy marker; the visible cloud, title, and handles are owned by PIXI hit/render code |
 | `.workspace-ai-chat-thread-node` | Canvas-owned floating AI chat panel styling |
 | `.document-drag-overlay` | Top bar for dragging documents |
 | `.ai-chat-thread-drag-overlay` | Top bar for dragging AI chat threads |
@@ -449,7 +454,7 @@ AI chat thread nodes display an animated shifting gradient background. The gradi
 
 The gradient uses 4 color points with inverse distance weighting and a subtle swirl distortion for an organic feel. When sending a message, the gradient animates to the next phase position.
 
-During region resizing, the gradient canvas keeps the existing bitmap visible while its CSS box changes. When the backing-store size really changes, the renderer redraws immediately; unchanged `ResizeObserver` callbacks are ignored so the canvas is not cleared unnecessarily.
+During thread resizing, the gradient canvas keeps the existing bitmap visible while its CSS box changes. When the backing-store size really changes, the renderer redraws immediately; unchanged `ResizeObserver` callbacks are ignored so the canvas is not cleared unnecessarily.
 
 Both the thread node gradient and the floating user-input gradient are controlled by feature flags in `webUiSettings.ts`:
 
