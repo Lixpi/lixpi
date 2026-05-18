@@ -860,7 +860,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
             const backdropRect = getBackdropRect(entry.datum, style)
             const baseAlpha = entry.datum.selected ? webUiThemeSettings.contextRegionCloudSelectedAlpha : webUiThemeSettings.contextRegionCloudIdleAlpha
             entry.backdrop.alpha = baseAlpha + lift * webUiThemeSettings.contextRegionCloudPulseAlphaLift
-            entry.backdrop.position.set(backdropRect.x, backdropRect.y - lift * webUiThemeSettings.contextRegionCloudPulseLiftPx / Math.max(currentViewport.zoom, 0.01))
+            entry.backdrop.position.set(backdropRect.x, backdropRect.y)
             if (progress >= 1) {
                 entry.pulseStartedAt = null
                 entry.backdrop.alpha = baseAlpha

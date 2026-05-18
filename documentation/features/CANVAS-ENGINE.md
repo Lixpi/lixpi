@@ -35,6 +35,8 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/rendering/pixiEdgeRenderer.ts` | PIXI edge renderer (diffed; reuses `Graphics`) |
 | `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to DOM CSS, PIXI media, and PIXI context-region layers |
 | `workspace/rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio) |
+| `workspace/workspaceRenderStatePlan.ts` | Pure render-state reconciliation for pending local visual commits while store acknowledgements arrive |
+| `workspace/workspaceViewportStatePlan.ts` | Pure stale viewport-only render guard; keeps delayed store viewport updates from overriding the live transform |
 | `workspace/WorkspaceConnectionManager.ts` | Edge creation, proximity connect, candidate detection, and the data feed for `pixiEdgeRenderer` |
 | `connectors/renderer.ts` | SVG connector rendering (still authoritative for hit testing) |
 | `utils/zoomScaling.ts` | Zoom-compensated handle scaling |
@@ -129,9 +131,33 @@ flowchart LR
 
 This gives DOM and PIXI a single, consistent transform every frame. There is no second `app.render()` call from elsewhere in the codebase.
 
+### Viewport State Ownership
+
+During active pan, zoom, drag, resize, and context-region interaction, the live viewport in [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) is the rendering source of truth. The Svelte/store viewport is an acknowledgement and persistence path, not an authority that can replay over the live transform while the canvas is already on screen.
+
+This rule exists because stale viewport-only renders can look exactly like node-position bugs. The failure signature is:
+
+- `viewportChanged: true`
+- `visualStateChanged: false`
+- `needsRerender: false`
+- `oldViewport` and `newViewport` differ by a large pan delta
+- no drag commit, node upsert, edge sync, or PIXI live-transform event explains the visual move
+
+In that state, applying the incoming store viewport through `viewportBridge.applyViewport(...)` teleports the DOM viewport, PIXI media world, and PIXI context-region world together. The user sees clouds and images jump even though no node changed position. The effect is easiest to reproduce after panning far enough that a region leaves the visible area and then dragging or revealing it again, because the stale viewport delta is large and PIXI culling makes the transform replay visually obvious.
+
+Keep these ownership rules intact:
+
+1. `XYPanZoom` `onTransformChange` must update `lastTransform`, `currentCanvasState.viewport`, and any pending local visual commit viewport immediately before calling `viewportBridge.applyViewport(...)`.
+2. [WorkspaceCanvas.svelte](../../services/web-ui/src/components/WorkspaceCanvas.svelte) must persist canvas state with the current live `viewport`, even when the caller passes a `CanvasState` object captured before the latest pan.
+3. Debounced viewport saves must capture the scheduled viewport and abort if a newer viewport arrives before the timer fires.
+4. Store renders that only change viewport, do not change visual node/edge state, do not require a full rerender, and disagree with the live viewport must preserve the live viewport. That guard is isolated in [workspaceViewportStatePlan.ts](../../services/web-ui/src/infographics/workspace/workspaceViewportStatePlan.ts).
+5. Do not call `viewportBridge.applyViewport(...)` from stale-render acknowledgement paths. Use `panZoom.syncViewport(liveViewport)` to keep XYFlow's internal state aligned with the live transform without repainting a stale transform onto DOM and PIXI.
+
+Regression coverage lives in [workspaceViewportStatePlan.test.ts](../../services/web-ui/src/infographics/workspace/workspaceViewportStatePlan.test.ts), [workspaceRenderStatePlan.test.ts](../../services/web-ui/src/infographics/workspace/workspaceRenderStatePlan.test.ts), and the viewport ownership source-shape tests in [workspace-canvas.test.ts](../../services/web-ui/src/infographics/workspace/workspace-canvas.test.ts). If you change viewport persistence, render-state reconciliation, or PIXI viewport sync, update those tests in the same change.
+
 ### Sync Pipeline
 
-`pixiMediaLayer.sync(canvasState)` is called exactly once per state commit (in `commitCanvasState`). Each sync:
+`pixiMediaLayer.sync(canvasState)` is called from the canvas orchestration points that actually need visual layer reconciliation: initial create, full DOM node rerenders, local `commitCanvasState`, and incoming store renders whose node/edge visual sync key changed. Viewport-only renders do not resync image entries; they go through the viewport bridge or the stale viewport guard. Each media sync:
 
 1. Refreshes the per-sync DOM element cache (`viewportEl.querySelectorAll('[data-node-id]')`) so subsequent ownership-class toggles are O(1) lookups instead of repeated DOM queries.
 2. Toggles `workspace-image-node--pixi-owned` on/off only for nodes whose ownership changed (uses `pixiOwnedNodeIds` Set as the source of truth).
@@ -263,7 +289,7 @@ The PIXI media layer has gone through several rounds of perf hardening. The curr
 | **Progressive `thumb-256`-first** | First-paint loads tiny thumbnails for visible sprites; full-tier upgrades happen in idle. |
 | **Idle prefetch (capped)** | Up to 20 unloaded entries per idle tick get pre-cached at `thumb-256`, sorted by viewport distance. Pan reveals already-loaded images. |
 | **DOM `<img>` double-fetch eliminated** | Stored-image `<img>` elements have no `src` attribute while PIXI is healthy. Backfilled on PIXI failure as the fallback path. |
-| **Single PIXI `sync()` per state commit** | The `renderNodes()`-side duplicate sync was removed. Each `commitCanvasState` runs the pipeline exactly once. |
+| **Visual-state-gated PIXI `sync()`** | Media entries resync on initial create, full DOM rerenders, local commits, and store renders with node/edge visual changes. Viewport-only renders do not upsert image entries. |
 | **Incremental RBush** | The spatial index is updated per-node (`remove` + `insert`) only when geometry actually changed, avoiding full rebuilds on every sync. |
 | **`drawColorRect` skip-when-unchanged** | Placeholder geometry is only rebuilt when the node's width or height actually changed; transform updates are matrix-only. |
 | **`syncDomOwnership` skip when no-op** | `classList.toggle` only runs for nodes whose ownership state actually changed. |

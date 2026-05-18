@@ -70,6 +70,8 @@ All of this happens without the Svelte component knowing the details. It just pa
         - **Anchored mode** (setting = `false` without a persisted connector edge): Images are separate canvas nodes that visually overlap the right side of the AI chat thread node. Width is constrained to roughly 68% of the thread width, and each image is continuously re-aligned to the target response bubble as streamed text changes message proportions. The image moves with the thread during drag, and can be detached by dragging its center outside the thread bounds. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image/thread pairs. Messages below an anchored image are pushed down via `applyAnchoredImageSpacing()` which sets `marginBottom` on the response message wrapper; this requires `ignoreMutation()` in the NodeViews (`aiResponseMessageNode`, `aiChatThreadNode`) to return `true` for style attribute mutations so ProseMirror's MutationObserver doesn't wipe the externally-set styles.
         - **Connector line mode** (setting = `true`, or any generated image with a persisted connector edge): Images appear as independent canvas nodes positioned to the right of the thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image. Generated output images stay freely draggable and are not adopted into context regions during drag release.
         - In both modes, progressive partial previews update the canvas node in real-time during generation, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
+    - Drag membership is planned by `workspaceDragPlan.ts`, so context-region drags move only the region and real `parentId` descendants. Legacy anchored-image eligibility is planned by `workspaceAnchoredImagePlan.ts`, which keeps connector-backed generated outputs independent even if stale in-memory anchor state exists.
+        - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active AI chat panel emits a stale metadata render while a local drag commit is still waiting for store acknowledgement, the canvas preserves the locally committed node and edge positions until the store acknowledges the visual state.
 
     ### Context Region Nodes
     - Render their visible surface in `rendering/pixiContextRegionLayer.ts`, below the DOM viewport, as CO2-shaped seafoam cloud textures with the region title drawn by PIXI.
@@ -161,6 +163,8 @@ transform: translate(${x}px, ${y}px) scale(${zoom})
 
 XYPanZoom fires `onTransformChange` on every pan/zoom. We update the CSS and notify Svelte via `onViewportChange`. The Svelte layer debounces and persists to backend.
 
+During interaction, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth. `onTransformChange` updates `currentCanvasState.viewport` immediately, and Svelte persistence is treated as an acknowledgement. If a later store render changes only `viewport` and disagrees with the live transform already on screen, `workspaceViewportStatePlan.ts` preserves the live viewport so a stale debounced save cannot replay an older pan position and make nodes appear to jump.
+
 ### Document Nodes
 
 Each canvas node becomes a `div.workspace-document-node` with:
@@ -206,6 +210,8 @@ Image nodes have a simpler structure:
 ```
 
 The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is kept as the fallback path and as the surface that streams partial pixels during AI image generation (the partial-streaming code path sets `imgEl.src` directly via `querySelector`; once the image is committed to canvas state, PIXI takes over and the DOM `<img>` is hidden via the `workspace-image-node--pixi-owned` class).
+
+New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 
 Image resize always preserves aspect ratio using the `aspectRatio` value stored when the image was uploaded.
 

@@ -836,6 +836,35 @@ describe('WorkspaceConnectionManager — computeMessageSourceT', () => {
 		expect(() => manager.render()).not.toThrow()
 	})
 
+	it('ignores message elements whose viewport rect is outside the registered node rect', () => {
+		const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 300, height: 600 } })
+		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 400, y: 0 }, dimensions: { width: 400, height: 400 } })
+
+		const nodeEl = document.createElement('div')
+		const messageEl = document.createElement('div')
+		messageEl.setAttribute('data-message-id', 'msg-abc')
+		nodeEl.appendChild(messageEl)
+
+		vi.spyOn(nodeEl, 'getBoundingClientRect').mockReturnValue({
+			top: 1000, bottom: 1600, left: 0, right: 300, width: 300, height: 600, x: 0, y: 1000, toJSON: () => ({})
+		})
+		vi.spyOn(messageEl, 'getBoundingClientRect').mockReturnValue({
+			top: 120, bottom: 170, left: 0, right: 300, width: 300, height: 50, x: 0, y: 120, toJSON: () => ({})
+		})
+
+		manager.syncNodes([chatNode, imgNode])
+		manager.syncEdges([makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'chat-1',
+			targetNodeId: 'img-1',
+			sourceMessageId: 'msg-abc',
+		})])
+		manager.registerNodeElement('chat-1', nodeEl as HTMLDivElement)
+
+		expect((manager as any).computeMessageSourceT('chat-1', 'msg-abc')).toBeNull()
+		expect(() => manager.render()).not.toThrow()
+	})
+
 	it('does not find message element when data-message-id does not match', () => {
 		const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 300, height: 600 } })
 		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 400, y: 0 }, dimensions: { width: 400, height: 400 } })

@@ -49,11 +49,16 @@
     const aiChatThreadService = new AiChatThreadService()
 
     function persistCanvasState(newCanvasState: CanvasState) {
-        workspaceStore.updateCanvasState(newCanvasState)
+        const stateToPersist = {
+            ...newCanvasState,
+            viewport,
+        }
+
+        workspaceStore.updateCanvasState(stateToPersist)
         if (workspaceId) {
             servicesStore.getData('workspaceService').updateCanvasState({
                 workspaceId,
-                canvasState: newCanvasState
+                canvasState: stateToPersist
             })
         }
     }
@@ -62,11 +67,18 @@
         viewport = newViewport
 
         if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
+        const scheduledViewport = newViewport
         saveDebounceTimer = setTimeout(() => {
+            if (
+                viewport.x !== scheduledViewport.x ||
+                viewport.y !== scheduledViewport.y ||
+                viewport.zoom !== scheduledViewport.zoom
+            ) return
+
             if (workspaceId && canvasState) {
                 const newCanvasState: CanvasState = {
                     ...canvasState,
-                    viewport: newViewport
+                    viewport: scheduledViewport
                 }
                 persistCanvasState(newCanvasState)
             }
