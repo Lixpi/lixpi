@@ -1,6 +1,8 @@
 # Shifting Gradient Background
 
-The AI Chat Thread nodes in the workspace feature a beautiful animated gradient background that smoothly shifts between color positions. This creates a living, breathing feel for the AI conversation space.
+AI Chat Thread nodes in the workspace use an animated gradient background that smoothly shifts between color positions. This creates a living, breathing feel for the AI conversation space.
+
+Context-region visuals are documented separately in [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
 ## Inspiration
 

@@ -8,46 +8,61 @@ import { resolve } from 'path'
 // HELPERS
 // =============================================================================
 
-function loadScss(): string {
-	return readFileSync(
-		resolve(__dirname, 'workspace-canvas.scss'),
+const sourceFileNames = new Map<string, string>()
+
+function readSourceFile(relativePath: string, displayName = relativePath): string {
+	const source = readFileSync(
+		resolve(__dirname, relativePath),
 		'utf-8'
 	)
+	sourceFileNames.set(source, displayName)
+	return source
+}
+
+function sourceName(source: string): string {
+	return sourceFileNames.get(source) ?? 'source excerpt'
+}
+
+function expectSourceToContain(source: string, snippet: string): void {
+	expect(
+		source.includes(snippet),
+		`${sourceName(source)} should contain:\n${snippet}`
+	).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string): void {
+	expect(
+		source.includes(snippet),
+		`${sourceName(source)} should not contain:\n${snippet}`
+	).toBe(false)
+}
+
+function loadScss(): string {
+	return readSourceFile('workspace-canvas.scss')
 }
 
 function loadTs(): string {
-	return readFileSync(
-		resolve(__dirname, 'WorkspaceCanvas.ts'),
-		'utf-8'
-	)
+	return readSourceFile('WorkspaceCanvas.ts')
+}
+
+function loadPixiMediaLayer(): string {
+	return readSourceFile('pixiMediaLayer.ts')
 }
 
 function loadWorkspaceCanvasSvelte(): string {
-	return readFileSync(
-		resolve(__dirname, '../../components/WorkspaceCanvas.svelte'),
-		'utf-8'
-	)
+	return readSourceFile('../../components/WorkspaceCanvas.svelte', 'components/WorkspaceCanvas.svelte')
 }
 
 function loadLayout(): string {
-	return readFileSync(
-		resolve(__dirname, '../../views/layouts/layout.svelte'),
-		'utf-8'
-	)
+	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
 
 function loadSidebar(): string {
-	return readFileSync(
-		resolve(__dirname, '../../components/Sidebar.svelte'),
-		'utf-8'
-	)
+	return readSourceFile('../../components/Sidebar.svelte', 'components/Sidebar.svelte')
 }
 
 function loadThemeSettings(): string {
-	return readFileSync(
-		resolve(__dirname, '../../webUiThemeSettings.ts'),
-		'utf-8'
-	)
+	return readSourceFile('../../webUiThemeSettings.ts', 'webUiThemeSettings.ts')
 }
 
 function extractBlock(scss: string, selector: string): string {
@@ -138,6 +153,171 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--anchored')[0]
 		expect(topLevelSection).not.toContain('workspace-image-node--context-region-child')
+	})
+})
+
+// =============================================================================
+// PIXI media layer — first sync geometry
+// =============================================================================
+
+describe('PIXI media layer — first sync geometry', () => {
+	const ts = loadPixiMediaLayer()
+
+	it('initializes new image sprite and placeholder geometry during first upsert', () => {
+		const start = ts.indexOf('function upsertEntry')
+		const end = ts.indexOf('function drawColorRect', start)
+		expect(start).toBeGreaterThan(-1)
+		expect(end).toBeGreaterThan(start)
+
+		const fnBody = ts.slice(start, end)
+		const creationIndex = fnBody.indexOf('if (!entry) {')
+		const spritePositionIndex = fnBody.indexOf('entry.sprite.position.set(x, y)')
+		const firstReturnAfterCreation = fnBody.indexOf('return', creationIndex)
+
+		expect(creationIndex).toBeGreaterThan(-1)
+		expect(spritePositionIndex).toBeGreaterThan(creationIndex)
+		expect(firstReturnAfterCreation === -1 || firstReturnAfterCreation > spritePositionIndex).toBe(true)
+		expect(fnBody).toContain('entry.sprite.width = w')
+		expect(fnBody).toContain('entry.sprite.height = h')
+		expect(fnBody).toContain('entry.colorRect.position.set(x, y)')
+		expect(fnBody).toContain('drawColorRect(entry.colorRect, w, h)')
+		expect(fnBody).toContain('entry.colorRectW = w')
+		expect(fnBody).toContain('entry.colorRectH = h')
+	})
+})
+
+// =============================================================================
+// Context-region child world positioning
+// =============================================================================
+
+describe('Workspace canvas — context-region child world positioning', () => {
+	const ts = loadTs()
+
+	it('feeds world-space nodes into the connection manager', () => {
+		const fnMatch = ts.match(/function\s+getNodesForConnectionManager[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('getNodeWorldPosition(node, nodesById)')
+		expect(fnBody).toContain('delete nodeForConnection.parentId')
+		expect(fnBody).toContain('delete nodeForConnection.expandParent')
+		expect(fnBody).toContain('delete nodeForConnection.extent')
+		expect(ts).not.toContain('connectionManager?.syncNodes(nextState.nodes)')
+		expect(ts).not.toContain('connectionManager.syncNodes(currentCanvasState.nodes)')
+	})
+
+	it('checks viewport visibility against world-space node rectangles', () => {
+		const fnMatch = ts.match(/function\s+isNodeInViewport[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('const worldRect = getNodeWorldRect(node)')
+		expect(fnBody).toContain('const screenLeft = worldRect.x * zoom + x')
+		expect(fnBody).not.toContain('node.position.x * zoom')
+	})
+})
+
+// =============================================================================
+// Context-region AI panel — stable reload path
+// =============================================================================
+
+describe('Workspace canvas — context-region AI panel reload stability', () => {
+	const ts = loadTs()
+
+	it('tracks the mounted panel thread separately from the selected active thread', () => {
+		expectSourceToContain(ts, 'let activeAiChatPanelThreadId: string | null = null')
+		expectSourceToContain(ts, 'function destroyActiveAiChatPanel(clearActive = false, panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId): void')
+		expectSourceToContain(ts, 'threadEditors.get(panelThreadId)')
+		expectSourceToContain(ts, 'promptInputController.unregisterThreadEditor(panelThreadId)')
+		expectSourceToContain(ts, 'activeAiChatPanelThreadId = panelThreadId')
+	})
+
+	it('captures panel thread id in editor callbacks instead of reading mutable active thread state', () => {
+		const fnMatch = ts.match(/function\s+renderActiveAiChatPanel[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('const panelThreadId = activeAiChatThreadId')
+		expect(fnBody).toContain('aiChatThreadId: panelThreadId')
+		expect(fnBody).toContain('threadId: panelThreadId')
+		expect(fnBody).toContain('threadEditors.set(panelThreadId')
+		expect(fnBody).toContain('promptInputController.registerThreadEditor(panelThreadId')
+		expect(fnBody).not.toContain('threadId: activeAiChatThreadId!')
+		expect(fnBody).not.toContain('referenceId: activeAiChatThreadId!')
+	})
+
+	it('does not treat AI chat thread content load as a full canvas rerender signal', () => {
+		const fnMatch = ts.match(/function\s+getAiChatThreadsKey[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('return threads.map(t => t.threadId).join')
+		expect(fnBody).not.toContain('t.content')
+	})
+
+	it('refreshes only the active panel when deferred thread content arrives', () => {
+		expectSourceToContain(ts, 'function refreshActiveAiChatPanelWhenContentLoads(): void')
+		expectSourceToContain(ts, 'if (activeAiChatPanelHadContent) return')
+		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, thread)')
+		expectSourceToContain(ts, `} else {
+                refreshActiveAiChatPanelWhenContentLoads()
+            }`)
+	})
+
+	it('preserves local visual drag commits when active-panel renders arrive stale', () => {
+		expectSourceToContain(ts, 'mergeIncomingCanvasStateWithPendingVisualCommit,')
+		expectSourceToContain(ts, 'let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null')
+		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)')
+		expectSourceToContain(ts, 'const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({')
+		expectSourceToContain(ts, 'const effectiveCanvasState = renderStatePlan.state')
+		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
+	})
+})
+
+// =============================================================================
+// Workspace canvas — viewport ownership during store renders
+// =============================================================================
+
+describe('Workspace canvas — viewport ownership during store renders', () => {
+	const ts = loadTs()
+	const svelte = loadWorkspaceCanvasSvelte()
+
+	it('routes viewport-only render decisions through the stale viewport planner', () => {
+		expectSourceToContain(ts, 'shouldPreserveLiveViewportForViewportOnlyRender({')
+		expectSourceToContain(ts, 'incomingViewport: effectiveCanvasState?.viewport,')
+		expectSourceToContain(ts, 'liveViewport,')
+		expectSourceToContain(ts, 'viewportChanged,')
+		expectSourceToContain(ts, 'visualStateChanged,')
+		expectSourceToContain(ts, 'needsRerender,')
+		expectSourceToContain(ts, 'workspaceChanged,')
+	})
+
+	it('keeps viewport-only stale renders from applying a transform jump', () => {
+		expectSourceToContain(ts, 'const liveViewport = getLiveViewport()')
+		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
+		expectSourceToContain(ts, 'panZoom?.syncViewport(liveViewport)')
+		expectSourceNotToContain(ts, 'viewportBridge?.applyViewport(liveViewport)')
+	})
+
+	it('updates local canvas and pending commit viewports immediately during live pan or zoom', () => {
+		expectSourceToContain(ts, 'function updateCurrentCanvasViewport(viewport: Viewport): void')
+		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = updatePendingCanvasVisualCommitViewport(pendingLocalCanvasVisualCommit, viewport)')
+		expectSourceToContain(ts, 'syncViewportInteractionState(vp)')
+		expectSourceToContain(ts, 'updateCurrentCanvasViewport(vp)')
+		expectSourceToContain(ts, 'viewportBridge?.applyViewport(vp)')
+		expectSourceToContain(ts, 'onViewportChange?.(vp)')
+	})
+
+	it('persists every Svelte-side canvas save with the current live viewport', () => {
+		expectSourceToContain(svelte, 'const stateToPersist = {')
+		expectSourceToContain(svelte, '...newCanvasState,')
+		expectSourceToContain(svelte, 'viewport,')
+		expectSourceToContain(svelte, 'workspaceStore.updateCanvasState(stateToPersist)')
+		expectSourceToContain(svelte, 'canvasState: stateToPersist')
+	})
+
+	it('refuses to persist a debounced viewport after a newer viewport arrives', () => {
+		expectSourceToContain(svelte, 'const scheduledViewport = newViewport')
+		expectSourceToContain(svelte, 'viewport.x !== scheduledViewport.x')
+		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
+		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
+		expectSourceToContain(svelte, 'viewport: scheduledViewport')
 	})
 })
 
@@ -278,7 +458,7 @@ describe('AI chat thread — empty thread visibility', () => {
 
 	it('CSS hides thread nodes with data-thread-empty attribute', () => {
 		const scss = loadScss()
-		expect(scss).toContain('data-thread-empty')
+		expectSourceToContain(scss, 'data-thread-empty')
 		expect(scss).toMatch(/data-thread-empty[\s\S]*?visibility:\s*hidden/)
 	})
 
@@ -378,8 +558,8 @@ describe('AI chat thread — document title hidden in workspace', () => {
 	})
 
 	it('applies document title visibility to the canvas-owned chat panel', () => {
-		expect(ts).toContain('showHeaderOnAiChatThreadNodes')
-		expect(ts).toContain('workspace-ai-chat-thread-node--hide-title')
+		expectSourceToContain(ts, 'showHeaderOnAiChatThreadNodes')
+		expectSourceToContain(ts, 'workspace-ai-chat-thread-node--hide-title')
 	})
 })
 
@@ -416,9 +596,17 @@ describe('Resize handles - corner-hover visibility', () => {
 		expect(block).not.toContain('&.thread-hovered .document-resize-handle')
 	})
 
-	it('keeps all four resize handles on context region cards', () => {
-		expect(ts).toContain("const isContextRegion = isContextRegionCanvasNode(node) && Boolean(extraClasses?.includes('workspace-context-region-node'))")
-		expect(ts).toContain("if (node.type === 'aiChatThread' && !isContextRegion && corner.startsWith('bottom')) continue")
+	it('does not create DOM resize handles for context region proxies', () => {
+		const fnMatch = ts.match(/function\s+createBaseNodeElement[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		sourceFileNames.set(fnBody, 'createBaseNodeElement')
+
+		expectSourceToContain(fnBody, "const isContextRegion = isContextRegionCanvasNode(node) && Boolean(extraClasses?.includes('workspace-context-region-node'))")
+		expectSourceToContain(fnBody, 'if (!isContextRegion) {')
+		expectSourceToContain(fnBody, "if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue")
+		expectSourceToContain(fnBody, 'nodeEl.appendChild(createResizeHandle(node.nodeId, corner))')
+		expectSourceNotToContain(fnBody, "if (node.type === 'aiChatThread' && !isContextRegion && corner.startsWith('bottom')) continue")
 	})
 })
 
@@ -460,11 +648,11 @@ describe('AI chat region layering', () => {
 	const ts = loadTs()
 
 	it('keeps context regions on the background layer even when selected or dragged with a group', () => {
-		expect(ts).toContain('function isContextRegionNodeElement(nodeEl: HTMLElement): boolean')
-		expect(ts).toContain("nodeEl.classList.contains('workspace-context-region-node')")
-		expect(ts).toContain('String(nodeLayerManager.backgroundIndex())')
-		expect(ts).toContain('nodeLayerManager.sendToBackground(nextNode)')
-		expect(ts).toContain('nodeLayerManager.sendToBackground(entry.el)')
+		expectSourceToContain(ts, 'function isContextRegionNodeElement(nodeEl: HTMLElement): boolean')
+		expectSourceToContain(ts, "nodeEl.classList.contains('workspace-context-region-node')")
+		expectSourceToContain(ts, 'String(nodeLayerManager.backgroundIndex())')
+		expectSourceToContain(ts, 'nodeLayerManager.sendToBackground(nextNode)')
+		expectSourceToContain(ts, 'nodeLayerManager.sendToBackground(entry.el)')
 	})
 })
 
@@ -476,9 +664,9 @@ describe('AI chat region proximity connect', () => {
 	const ts = loadTs()
 
 	it('excludes context region cards from proximity connect candidates', () => {
-		expect(ts).toContain('function isContextRegionCanvasNode(node: CanvasNode): node is ContextRegionNode')
-		expect(ts).toContain("return node.type === 'contextRegion' || node.type === 'aiChatThread'")
-		expect(ts).toContain('isContextRegionNode: isContextRegionCanvasNode')
+		expectSourceToContain(ts, 'function isContextRegionCanvasNode(node: CanvasNode): node is ContextRegionNode')
+		expectSourceToContain(ts, "return node.type === 'contextRegion' || node.type === 'aiChatThread'")
+		expectSourceToContain(ts, 'isContextRegionNode: isContextRegionCanvasNode')
 	})
 })
 
@@ -491,83 +679,84 @@ describe('AI chat region image frame', () => {
 	const themeSettings = loadThemeSettings()
 
 	it('marks images with the frame only when their parent is a context region', () => {
-		expect(ts).toContain("const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'")
-		expect(ts).toContain('function isImageInsideContextRegion(node: ImageCanvasNode')
-		expect(ts).toContain('candidate.nodeId === node.parentId && isContextRegionCanvasNode(candidate)')
-		expect(ts).toContain("node.type === 'image' && isImageInsideContextRegion(node as ImageCanvasNode, nodes)")
-		expect(ts).toContain('nodeEl.classList.toggle(CONTEXT_REGION_IMAGE_CLASS, hasContextRegionFrame)')
-		expect(ts).toContain('syncContextRegionImageFrame(nodeEl, node)')
+		expectSourceToContain(ts, "const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'")
+		expectSourceToContain(ts, 'function isImageInsideContextRegion(node: ImageCanvasNode')
+		expectSourceToContain(ts, 'candidate.nodeId === node.parentId && isContextRegionCanvasNode(candidate)')
+		expectSourceToContain(ts, "node.type === 'image' && isImageInsideContextRegion(node as ImageCanvasNode, nodes)")
+		expectSourceToContain(ts, 'nodeEl.classList.toggle(CONTEXT_REGION_IMAGE_CLASS, hasContextRegionFrame)')
+		expectSourceToContain(ts, 'syncContextRegionImageFrame(nodeEl, node)')
 	})
 
 	it('uses the theme-configured off-white frame color', () => {
-		expect(themeSettings).toContain('contextRegionImageFrameColor: string')
-		expect(themeSettings).toContain("contextRegionImageFrameColor: '#FCFCFA'")
-		expect(themeSettings).not.toContain("contextRegionImageFrameColor: '#fff'")
-		expect(ts).toContain("paneEl.style.setProperty('--context-region-image-frame-color', webUiThemeSettings.contextRegionImageFrameColor)")
+		expectSourceToContain(themeSettings, 'contextRegionImageFrameColor: string')
+		expectSourceToContain(themeSettings, "contextRegionImageFrameColor: '#FCFCFA'")
+		expectSourceNotToContain(themeSettings, "contextRegionImageFrameColor: '#fff'")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--context-region-image-frame-color', webUiThemeSettings.contextRegionImageFrameColor)")
 	})
 
 	it('updates the frame immediately when an image is adopted into or released from a region', () => {
-		expect(ts).toContain('syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)')
-		expect(ts).toContain('if (nodeEl) syncContextRegionImageFrame(nodeEl, releasedNode, currentCanvasState.nodes)')
+		expectSourceToContain(ts, 'syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)')
+		expectSourceToContain(ts, 'if (nodeEl) syncContextRegionImageFrame(nodeEl, releasedNode, currentCanvasState.nodes)')
 	})
 })
 
 // =============================================================================
-// AI chat region gradient palette
+// AI chat region PIXI cloud layer
 // =============================================================================
 
-describe('AI chat region gradient palette', () => {
-	const ts = loadTs()
-
-	it('uses a dedicated context region area palette instead of the shared gradient colors', () => {
-		expect(ts).toContain('contextRegionAreaShiftingGradientColors')
-		expect(ts).toContain('createShiftingGradientBackground(nodeEl, {')
-		expect(ts).toContain('colors: webUiThemeSettings.contextRegionAreaShiftingGradientColors')
-		expect(ts).not.toContain('const gradient = createShiftingGradientBackground(nodeEl)')
-	})
-})
-
-// =============================================================================
-// AI chat region title zoom compensation
-// =============================================================================
-
-describe('AI chat region title zoom compensation', () => {
+describe('AI chat region PIXI cloud layer', () => {
 	const ts = loadTs()
 	const scss = loadScss()
+	const themeSettings = loadThemeSettings()
+	const cloudTs = readSourceFile('rendering/contextRegionClouds.ts')
+	const cloudLayerTs = readSourceFile('rendering/pixiContextRegionLayer.ts')
+	const viewportBridgeTs = readSourceFile('rendering/viewportBridge.ts')
 
-	it('scales region title pills with adaptive inverse zoom compensation', () => {
-		expect(ts).toContain('getAdaptiveZoomMultiplier, getResizeHandleScaledSizes')
-		expect(ts).toContain('function applyRegionTitleScale(titleBar: HTMLElement, zoom: number)')
-		expect(ts).toContain('const safeZoom = Math.max(zoom, 0.01)')
-		expect(ts).toContain('getAdaptiveZoomMultiplier(safeZoom, { lowZoomPower: 0.2 })')
-		expect(ts).toContain('0.72')
-		expect(ts).toContain('const scale = titleVisualScale / safeZoom')
-		expect(ts).toContain('applyStyle(titleBar, {')
-		expect(ts).toContain('transform: `scale(${scale})`')
-		expect(ts).toContain("transformOrigin: 'top left'")
+	it('creates a dedicated PIXI context region layer below DOM nodes', () => {
+		expectSourceToContain(ts, 'createPixiContextRegionLayer')
+		expectSourceToContain(ts, 'let contextRegionLayer: PixiContextRegionLayer | null = null')
+		expectSourceToContain(ts, 'contextRegionLayer = createPixiContextRegionLayer({')
+		expectSourceToContain(cloudLayerTs, 'className="workspace-pixi-context-region-layer"')
+		expectSourceToContain(scss, '.workspace-pixi-context-region-layer')
+		expectSourceToContain(scss, 'z-index: 0')
 	})
 
-	it('uses the same adaptive zoom curve for the canvas bubble menu', () => {
-		expect(ts).toContain('getVisualScale: () => getAdaptiveZoomMultiplier(getCurrentViewportZoom())')
+	it('keeps context region DOM nodes as non-visual PIXI-owned proxies', () => {
+		expectSourceToContain(ts, 'workspace-context-region-node--pixi-owned')
+		expectSourceNotToContain(themeSettings, 'contextRegionAreaShiftingGradientColors')
+		expectSourceToContain(themeSettings, 'contextRegionCloudGradientColors')
+		expectSourceToContain(themeSettings, 'contextRegionCloudStyles')
+		expectSourceToContain(cloudTs, 'webUiThemeSettings.contextRegionCloudStyles')
+		expectSourceToContain(cloudLayerTs, 'webUiThemeSettings.contextRegionCloudGradientColors')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-thread-region__title-bar')
+		expectSourceToContain(scss, 'pointer-events: none')
+		expectSourceToContain(scss, 'background: transparent')
 	})
 
-	it('keeps title pill connected to the region while scaling', () => {
-		expect(ts).toContain('const titleTopPx = -2 - 16 * titleVisualScale')
-		expect(ts).toContain('top: `${titleTopPx / safeZoom}px`')
-		expect(ts).toContain('left: `${20 / safeZoom}px`')
+	it('syncs cloud datums through render, commit, selection, and viewport changes', () => {
+		expectSourceToContain(ts, 'function getContextRegionCloudDatums')
+		expectSourceToContain(ts, 'function syncContextRegionLayer')
+		expectSourceToContain(ts, 'syncContextRegionLayer(nextState)')
+		expectSourceToContain(ts, 'syncContextRegionLayer(undefined)')
+		expectSourceToContain(ts, 'syncContextRegionLayer(currentCanvasState)')
+		expectSourceToContain(viewportBridgeTs, 'getContextRegionLayer?.()?.setViewport(viewport)')
 	})
 
-	it('updates region title pills from the transform side-effect queue', () => {
-		expect(ts).toContain('let pendingRegionTitleZoom: number | null = null')
-		expect(ts).toContain('pendingRegionTitleZoom = vp.zoom')
-		expect(ts).toContain('updateRegionTitleBars(pendingRegionTitleZoom)')
-		expect(ts).toContain('applyRegionTitleScale(titleBar, getCurrentViewportZoom())')
-		expect(ts).toContain('return panZoom?.getViewport().zoom ?? currentCanvasState?.viewport?.zoom ?? lastTransform[2] ?? 1')
+	it('routes pane hits through irregular cloud hit testing before marquee selection', () => {
+		const fnMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('contextRegionLayer?.hitTest(start)')
+		expect(fnBody).not.toContain("regionHit.kind === 'resize-handle'")
+		expect(fnBody).toContain('handleDragStart(event, regionHit.nodeId, {')
+		expect(fnBody).toContain('activateAiChatPanel(regionNode, thread)')
 	})
 
-	it('defines title transform origin in CSS as a stable fallback', () => {
-		const block = extractBlock(scss, '.workspace-ai-chat-thread-region__title-bar')
-		expect(block).toMatch(/transform-origin:\s*top left/)
+	it('uses shared cloud styles for hit testing and adoption scoring', () => {
+		expectSourceToContain(cloudTs, 'export const CONTEXT_REGION_CLOUD_STYLES')
+		expectSourceToContain(cloudTs, 'hitTestContextRegionCloud')
+		expectSourceToContain(cloudTs, 'scoreRectAgainstContextRegionCloud')
+		expectSourceToContain(ts, 'scoreRectAgainstContextRegionCloud(regionDatum, draggedRect, dropPoint)')
 	})
 })
 
@@ -626,21 +815,21 @@ describe('Vertical rail — TS infrastructure', () => {
 	})
 
 	it('defines active AI chat panel resize width state', () => {
-		expect(ts).toContain('const AI_CHAT_PANEL_MIN_WIDTH = 320')
-		expect(ts).toContain('let activeAiChatPanelWidth: number | null = null')
-		expect(ts).toContain("style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)")
+		expectSourceToContain(ts, 'const AI_CHAT_PANEL_MIN_WIDTH = 320')
+		expectSourceToContain(ts, 'let activeAiChatPanelWidth: number | null = null')
+		expectSourceToContain(ts, "style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)")
 	})
 
 	it('defines createThreadRail function', () => {
-		expect(ts).toContain('function createThreadRail(')
+		expectSourceToContain(ts, 'function createThreadRail(')
 	})
 
 	it('defines repositionThreadRail function', () => {
-		expect(ts).toContain('function repositionThreadRail(')
+		expectSourceToContain(ts, 'function repositionThreadRail(')
 	})
 
 	it('defines destroyAllThreadRails function', () => {
-		expect(ts).toContain('function destroyAllThreadRails(')
+		expectSourceToContain(ts, 'function destroyAllThreadRails(')
 	})
 
 	it('createContextRegionNode leaves rail creation outside the region card renderer', () => {
@@ -656,14 +845,14 @@ describe('Vertical rail — TS infrastructure', () => {
 	})
 
 	it('drag mousemove handler repositions the rail', () => {
-		expect(ts).toContain('dragRail')
-		expect(ts).toContain('applyStyle(dragRail, { left:')
+		expectSourceToContain(ts, 'dragRail')
+		expectSourceToContain(ts, 'applyStyle(dragRail, { left:')
 	})
 
 	it('resize mousemove handler repositions the rail', () => {
-		expect(ts).toContain('resizeRail')
-		expect(ts).toContain('applyStyle(resizeRail, { left:')
-		expect(ts).toContain('height: `${totalH}px`')
+		expectSourceToContain(ts, 'resizeRail')
+		expectSourceToContain(ts, 'applyStyle(resizeRail, { left:')
+		expectSourceToContain(ts, 'height: `${totalH}px`')
 	})
 
 	it('updateNodeSelectionClasses toggles is-selected on the rail', () => {
@@ -757,25 +946,25 @@ describe('Vertical rail — TS infrastructure', () => {
 	})
 
 	it('bubble menu callbacks include onAskAi', () => {
-		expect(ts).toContain('onAskAi')
+		expectSourceToContain(ts, 'onAskAi')
 	})
 
 	it('onAskAi handler creates an AI chat thread and edge', () => {
 		expect(ts).toMatch(/onAskAi.*async|async.*onAskAi/)
-		expect(ts).toContain('createAiChatThread')
+		expectSourceToContain(ts, 'createAiChatThread')
 	})
 
 	it('bubble menu callbacks include onTriggerConnection', () => {
-		expect(ts).toContain('onTriggerConnection')
+		expectSourceToContain(ts, 'onTriggerConnection')
 	})
 
 	it('anchors the canvas image bubble menu to the image node box', () => {
-		expect(ts).toContain('function getCanvasImageBubbleMenuTargetRect(nodeEl: HTMLElement): DOMRect')
-		expect(ts).toContain('return nodeEl.getBoundingClientRect()')
+		expectSourceToContain(ts, 'function getCanvasImageBubbleMenuTargetRect(nodeEl: HTMLElement): DOMRect')
+		expectSourceToContain(ts, 'return nodeEl.getBoundingClientRect()')
 		expect([...ts.matchAll(/const targetRect = getCanvasImageBubbleMenuTargetRect\(nodeEl\)/g)]).toHaveLength(2)
 		expect([...ts.matchAll(/clampToParent: false/g)]).toHaveLength(2)
 		expect([...ts.matchAll(/animateOnShow: false/g)]).toHaveLength(2)
-		expect(ts).not.toContain("const imgEl = nodeEl.querySelector('img') as HTMLImageElement\n        const targetEl = imgEl || nodeEl")
+		expectSourceNotToContain(ts, "const imgEl = nodeEl.querySelector('img') as HTMLImageElement\n        const targetEl = imgEl || nodeEl")
 	})
 
 	it('onTriggerConnection triggers connection via startConnectionFromMenu', () => {
@@ -796,16 +985,16 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnBody).toContain('aiChatThreadRailBoundaryCircle')
 		expect(fnBody).toContain("'--dropdown-popover-box-shadow'")
 		expect(fnBody).toContain('webUiThemeSettings.dropdownPopoverBoxShadow')
-		expect(ts).not.toContain(`AiChat${'Panel.svelte'}`)
+		expectSourceNotToContain(ts, `AiChat${'Panel.svelte'}`)
 	})
 
 	it('uses the floating panel rail as the horizontal resize handle', () => {
 		const scss = loadScss()
 
-		expect(ts).toContain('function handleActiveAiChatPanelResizeStart(')
-		expect(ts).toContain("applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
-		expect(scss).toContain('.workspace-thread-rail.workspace-ai-chat-floating-panel__rail')
-		expect(scss).toContain('cursor: ew-resize')
+		expectSourceToContain(ts, 'function handleActiveAiChatPanelResizeStart(')
+		expectSourceToContain(ts, "applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
+		expectSourceToContain(scss, '.workspace-thread-rail.workspace-ai-chat-floating-panel__rail')
+		expectSourceToContain(scss, 'cursor: ew-resize')
 	})
 
 	it('uses a full-height right-edge chat panel with zoom and avatar offsets', () => {
@@ -814,21 +1003,21 @@ describe('Vertical rail — TS infrastructure', () => {
 		const layout = loadLayout()
 		const sidebar = loadSidebar()
 
-		expect(scss).toContain('--workspace-ai-chat-sidebar-width')
-		expect(scss).toContain('--workspace-ai-chat-sidebar-edge-gap: 15px')
-		expect(svelte).toContain('class:workspace-canvas--chat-panel-open')
-		expect(scss).toContain('right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap))')
-		expect(scss).toContain('right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline))')
-		expect(scss).toContain('bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
-		expect(layout).toContain('workspace-sidebar-shell')
-		expect(layout).toContain('workspace-sidebar-body')
-		expect(layout).toContain('workspace-sidebar-footer')
-		expect(layout).toContain('<Separator />')
-		expect(layout).toContain('sidebar-user-menu')
-		expect(layout).not.toContain('user-menu--workspace-chat-panel')
-		expect(sidebar).toContain('height: auto !important')
-		expect(sidebar).toContain('flex: 1 1 auto')
-		expect(sidebar).toContain('max-height: none !important')
+		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-width')
+		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-edge-gap: 15px')
+		expectSourceToContain(svelte, 'class:workspace-canvas--chat-panel-open')
+		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap))')
+		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline))')
+		expectSourceToContain(scss, 'bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
+		expectSourceToContain(layout, 'workspace-sidebar-shell')
+		expectSourceToContain(layout, 'workspace-sidebar-body')
+		expectSourceToContain(layout, 'workspace-sidebar-footer')
+		expectSourceToContain(layout, '<Separator />')
+		expectSourceToContain(layout, 'sidebar-user-menu')
+		expectSourceNotToContain(layout, 'user-menu--workspace-chat-panel')
+		expectSourceToContain(sidebar, 'height: auto !important')
+		expectSourceToContain(sidebar, 'flex: 1 1 auto')
+		expectSourceToContain(sidebar, 'max-height: none !important')
 	})
 })
 
@@ -845,16 +1034,16 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	// -------------------------------------------------------------------------
 
 	it('stores selected nodes in a Set instead of a single selectedNodeId', () => {
-		expect(ts).toContain('let selectedNodeIds: Set<string> = new Set()')
-		expect(ts).toContain('function setSelectedNodes(')
-		expect(ts).toContain('function toggleNodeSelection(')
+		expectSourceToContain(ts, 'let selectedNodeIds: Set<string> = new Set()')
+		expectSourceToContain(ts, 'function setSelectedNodes(')
+		expectSourceToContain(ts, 'function toggleNodeSelection(')
 	})
 
 	it('single-target UI is derived from getSingleSelectedNodeId', () => {
-		expect(ts).toContain('function getSingleSelectedNodeId(): string | null')
-		expect(ts).toContain('const singleSelectedNodeId = getSingleSelectedNodeId()')
-		expect(ts).toContain('hideCanvasBubbleMenu()')
-		expect(ts).toContain('hideFloatingInput()')
+		expectSourceToContain(ts, 'function getSingleSelectedNodeId(): string | null')
+		expectSourceToContain(ts, 'const singleSelectedNodeId = getSingleSelectedNodeId()')
+		expectSourceToContain(ts, 'hideCanvasBubbleMenu()')
+		expectSourceToContain(ts, 'hideFloatingInput()')
 	})
 
 	// -------------------------------------------------------------------------
@@ -880,9 +1069,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(ts).toContain('function isGeneratedOutputImageNode(')
 		expect(fnBody).toContain('if (isGeneratedOutputImageNode(node)) return nodeId')
-		expect(fnBody.indexOf('if (isGeneratedOutputImageNode(node)) return nodeId')).toBeLessThan(fnBody.indexOf('anchoredImageManager.getAnchor'))
+		expect(fnBody.indexOf('if (isGeneratedOutputImageNode(node)) return nodeId')).toBeLessThan(fnBody.indexOf('getValidAnchorForCanvasImage'))
 	})
 
 	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
@@ -920,10 +1108,10 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('supports Mod-click selection toggling on both node click and drag overlay mousedown', () => {
-		expect(ts).toContain('function isModSelectionEvent(event: MouseEvent): boolean')
-		expect(ts).toContain('return event.metaKey || event.ctrlKey')
-		expect(ts).toContain('toggleNodeSelection(selectionTargetNodeId)')
-		expect(ts).toContain('toggleNodeSelection(resolvedNodeId)')
+		expectSourceToContain(ts, 'function isModSelectionEvent(event: MouseEvent): boolean')
+		expectSourceToContain(ts, 'return event.metaKey || event.ctrlKey')
+		expectSourceToContain(ts, 'toggleNodeSelection(selectionTargetNodeId)')
+		expectSourceToContain(ts, 'toggleNodeSelection(resolvedNodeId)')
 	})
 
 	// -------------------------------------------------------------------------
@@ -933,12 +1121,12 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('tracks selection source (marquee vs click) to control overlay visibility', () => {
 		// selectionIsFromMarquee flag controls whether a single-node selection
 		// shows the overlay. Plain click = no overlay. Marquee = overlay.
-		expect(ts).toContain('let selectionIsFromMarquee = false')
-		expect(ts).toContain('return selectionIsFromMarquee')
+		expectSourceToContain(ts, 'let selectionIsFromMarquee = false')
+		expectSourceToContain(ts, 'return selectionIsFromMarquee')
 
 		// setSelectedNodes accepts a fromMarquee parameter
-		expect(ts).toContain('function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void')
-		expect(ts).toContain('selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0')
+		expectSourceToContain(ts, 'function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void')
+		expectSourceToContain(ts, 'selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0')
 	})
 
 	it('shouldShowSelectionGroupOverlay returns true for multi-select or marquee, false for plain click', () => {
@@ -997,30 +1185,30 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('defines and styles the persistent selection overlay', () => {
-		expect(ts).toContain('className="workspace-selection-group-overlay"')
-		expect(ts).toContain('function getSelectionOverlayBounds(): Rect | null')
-		expect(ts).toContain('function updateSelectionGroupOverlayElement(): void')
-		expect(ts).toContain('if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
-		expect(ts).toContain('updateSelectionGroupOverlayElement()')
-		expect(scss).toContain('.workspace-selection-group-overlay')
+		expectSourceToContain(ts, 'className="workspace-selection-group-overlay"')
+		expectSourceToContain(ts, 'function getSelectionOverlayBounds(): Rect | null')
+		expectSourceToContain(ts, 'function updateSelectionGroupOverlayElement(): void')
+		expectSourceToContain(ts, 'if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
+		expectSourceToContain(ts, 'updateSelectionGroupOverlayElement()')
+		expectSourceToContain(scss, '.workspace-selection-group-overlay')
 		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
 		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*cursor:\s*move/s)
 		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*box-sizing:\s*border-box/s)
 	})
 
 	it('uses the selection overlay as a drag surface for the whole selected group', () => {
-		expect(ts).toContain("selectionGroupOverlayEl.addEventListener('mousedown'")
-		expect(ts).toContain('if (!shouldShowSelectionGroupOverlay()) return')
-		expect(ts).toContain('const primaryNodeId = Array.from(selectedNodeIds)[0]')
-		expect(ts).toContain('handleDragStart(event, primaryNodeId)')
+		expectSourceToContain(ts, "selectionGroupOverlayEl.addEventListener('mousedown'")
+		expectSourceToContain(ts, 'if (!shouldShowSelectionGroupOverlay()) return')
+		expectSourceToContain(ts, 'const primaryNodeId = Array.from(selectedNodeIds)[0]')
+		expectSourceToContain(ts, 'handleDragStart(event, primaryNodeId)')
 	})
 
 	it('wires selection colors from webUiThemeSettings to CSS custom properties', () => {
-		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)")
-		expect(ts).toContain("paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)")
 		expect(scss).toMatch(/var\(--selection-outline-color/)
 	})
 
@@ -1029,16 +1217,16 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	// -------------------------------------------------------------------------
 
 	it('defines marquee selection helpers and pane mousedown listener', () => {
-		expect(ts).toContain('type MarqueeSelectionState = {')
-		expect(ts).toContain('function handlePaneMouseDown(event: MouseEvent): void')
-		expect(ts).toContain("paneEl.addEventListener('mousedown', handlePaneMouseDown, true)")
-		expect(ts).toContain('function ensureSelectionRectElement(): HTMLDivElement | null')
-		expect(ts).toContain('function getSelectableNodeIdsInRect(rect: Rect): string[]')
+		expectSourceToContain(ts, 'type MarqueeSelectionState = {')
+		expectSourceToContain(ts, 'function handlePaneMouseDown(event: MouseEvent): void')
+		expectSourceToContain(ts, "paneEl.addEventListener('mousedown', handlePaneMouseDown, true)")
+		expectSourceToContain(ts, 'function ensureSelectionRectElement(): HTMLDivElement | null')
+		expectSourceToContain(ts, 'function getSelectableNodeIdsInRect(rect: Rect): string[]')
 	})
 
 	it('renders and styles the marquee selection rectangle', () => {
-		expect(ts).toContain('className="workspace-selection-rect"')
-		expect(scss).toContain('.workspace-selection-rect')
+		expectSourceToContain(ts, 'className="workspace-selection-rect"')
+		expectSourceToContain(scss, '.workspace-selection-rect')
 		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*pointer-events:\s*none/s)
 		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*z-index:\s*10001/s)
 		expect(scss).toMatch(/\.workspace-selection-rect\s*\{[^}]*var\(--selection-marquee-border-color/s)
@@ -1046,18 +1234,18 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('syncs viewport interaction state before first pan so selection works immediately on load', () => {
-		expect(ts).toContain('function syncViewportInteractionState(viewport: Viewport): void')
-		expect(ts).toContain('lastTransform = [viewport.x, viewport.y, viewport.zoom]')
-		expect(ts).toContain('paneRect = paneEl.getBoundingClientRect()')
-		expect(ts).toContain('syncViewportInteractionState(initialViewport)')
-		expect(ts).toContain('syncViewportInteractionState(vp)')
+		expectSourceToContain(ts, 'function syncViewportInteractionState(viewport: Viewport): void')
+		expectSourceToContain(ts, 'lastTransform = [viewport.x, viewport.y, viewport.zoom]')
+		expectSourceToContain(ts, 'paneRect = paneEl.getBoundingClientRect()')
+		expectSourceToContain(ts, 'syncViewportInteractionState(initialViewport)')
+		expectSourceToContain(ts, 'syncViewportInteractionState(vp)')
 	})
 
 	it('treats transparent canvas children as background so marquee and outside-click clear still work', () => {
-		expect(ts).toContain('function isCanvasBackgroundTarget(target: EventTarget | null): boolean')
-		expect(ts).toContain('if (!isCanvasBackgroundTarget(event.target)) return')
-		expect(ts).toContain('if (isCanvasBackgroundTarget(e.target)) {')
-		expect(ts).toContain('selectionGroupOverlayEl?.contains(target)')
+		expectSourceToContain(ts, 'function isCanvasBackgroundTarget(target: EventTarget | null): boolean')
+		expectSourceToContain(ts, 'if (!isCanvasBackgroundTarget(event.target)) return')
+		expectSourceToContain(ts, 'if (isCanvasBackgroundTarget(e.target)) {')
+		expectSourceToContain(ts, 'selectionGroupOverlayEl?.contains(target)')
 	})
 
 	it('does not treat the floating AI chat panel as canvas background', () => {
@@ -1073,28 +1261,31 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('maps anchored AI-chat images to parent thread for marquee and resolves inside handleDragStart', () => {
 		// getSelectionTargetNodeId is used in marquee hit-testing and inside
 		// handleDragStart, but NOT in the nodeEl click handler
-		expect(ts).toContain('function getSelectionTargetNodeId(nodeId: string): string')
-		expect(ts).toContain('const anchor = anchoredImageManager.getAnchor(nodeId)')
-		expect(ts).toContain('selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))')
-		expect(ts).toContain('const resolvedNodeId = getSelectionTargetNodeId(nodeId)')
+		expectSourceToContain(ts, 'function getSelectionTargetNodeId(nodeId: string): string')
+		expectSourceToContain(ts, 'const anchor = getValidAnchorForCanvasImage(nodeId)')
+		expectSourceToContain(ts, 'selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))')
+		expectSourceToContain(ts, 'resolveSelectionTargetNodeId: getSelectionTargetNodeId')
+		expectSourceToContain(ts, 'isAnchoredImageNode: (candidateNodeId: string) => Boolean(getValidAnchorForCanvasImage(candidateNodeId))')
+		expectSourceToContain(ts, 'getAnchorsForThread: getValidAnchorsForCanvasThread')
+		expectSourceToContain(ts, 'const resolvedNodeId = dragPlan.resolvedNodeId')
 	})
 
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
 		// The drag overlay must pass the original nodeId so handleDragStart can
 		// resolve it internally and also preserve the original for the click path
-		expect(ts).toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
-		expect(ts).not.toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
+		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
 	it('treats AI chat thread floating input as part of the same selected composite', () => {
-		expect(ts).toContain('function getSelectionBoundsForNode(node: CanvasNode): Rect')
-		expect(ts).toContain('const threadFloatingInput = threadFloatingInputs.get(node.nodeId)')
-		expect(ts).toContain('const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)')
-		expect(ts).toContain('const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width')
-		expect(ts).toContain('const inputHeight = threadFloatingInput.el.offsetHeight')
-		expect(ts).toContain('rectsOverlap(rect, getSelectionBoundsForNode(node))')
-		expect(ts).toContain("threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')")
-		expect(ts).toContain("threadFloatingInputs.get(nodeId)?.el.classList.remove('is-selected')")
+		expectSourceToContain(ts, 'function getSelectionBoundsForNode(node: CanvasNode): Rect')
+		expectSourceToContain(ts, 'const threadFloatingInput = threadFloatingInputs.get(node.nodeId)')
+		expectSourceToContain(ts, 'const inputTop = position.y + getThreadTopOffset(node.nodeId, dimensions.height)')
+		expectSourceToContain(ts, 'const inputWidth = threadFloatingInput.el.offsetWidth || dimensions.width')
+		expectSourceToContain(ts, 'const inputHeight = threadFloatingInput.el.offsetHeight')
+		expectSourceToContain(ts, 'rectsOverlap(rect, getSelectionBoundsForNode(node))')
+		expectSourceToContain(ts, "threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')")
+		expectSourceToContain(ts, "threadFloatingInputs.get(nodeId)?.el.classList.remove('is-selected')")
 		expect(scss).toMatch(/\.ai-prompt-input-thread-persistent\s*\{[\s\S]*?&\.is-selected/)
 	})
 
@@ -1128,9 +1319,9 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('includes anchored AI images when computing the selection overlay bounds', () => {
-		expect(ts).toContain('for (const anchor of anchoredImageManager.getAnchorsForThread(nodeId)) {')
-		expect(ts).toContain('overlayNodeIds.add(anchor.imageNodeId)')
-		expect(ts).toContain('const rect = getSelectionBoundsForNode(node)')
+		expectSourceToContain(ts, 'for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {')
+		expectSourceToContain(ts, 'overlayNodeIds.add(anchor.imageNodeId)')
+		expectSourceToContain(ts, 'const rect = getSelectionBoundsForNode(node)')
 	})
 
 	// -------------------------------------------------------------------------
@@ -1175,22 +1366,32 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	// -------------------------------------------------------------------------
 
 	it('group drag uses selected nodes as drag participants', () => {
-		expect(ts).toContain('function getDraggableNodeIds(primaryNodeId: string): string[]')
-		expect(ts).toContain('const draggedNodeIds = getDraggableNodeIds(resolvedNodeId)')
-		expect(ts).toContain('const draggedNodeEntries = new Map<string, {')
-		expect(ts).toContain('for (const [draggedNodeId, entry] of draggedNodeEntries)')
+		expectSourceToContain(ts, 'const dragPlan = computeWorkspaceDragPlan({')
+		expectSourceToContain(ts, 'selectedNodeIds,')
+		expectSourceToContain(ts, 'const draggedNodeIds = dragPlan.draggedNodeIds')
+		expectSourceToContain(ts, 'const draggedNodeEntries = new Map<string, {')
+		expectSourceToContain(ts, 'for (const [draggedNodeId, entry] of draggedNodeEntries)')
 	})
 
 	it('preserves multi-selection after drag by suppressing the follow-up click collapse', () => {
-		expect(ts).toContain('let suppressNextNodeClick = false')
-		expect(ts).toContain('if (suppressNextNodeClick) {')
-		expect(ts).toContain('if (dragDidMove) {')
-		expect(ts).toContain('suppressNextNodeClick = true')
+		expectSourceToContain(ts, 'let suppressNextNodeClick = false')
+		expectSourceToContain(ts, 'if (suppressNextNodeClick) {')
+		expectSourceToContain(ts, 'if (!dragDidMove) {')
+		expectSourceToContain(ts, 'suppressNextNodeClick = true')
 	})
 
 	it('group drag skips collision resolution for multi-node moves to preserve rigid spacing', () => {
-		expect(ts).toContain('if (draggedNodeEntries.size === 1) {')
-		expect(ts).toContain('resolveCollisions(nodeBoxes')
+		expectSourceToContain(ts, 'if (dragPlan.allowCollisionResolution) {')
+		expectSourceToContain(ts, 'resolveCollisions(nodeBoxes')
+	})
+
+	it('context-region drag skips proximity checks during movement', () => {
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('if (dragPlan.allowProximityConnection) {')
+		expect(fnBody).toContain('connectionManager?.checkProximity(resolvedNodeId, currentPos, currentDims)')
 	})
 })
 
@@ -1276,8 +1477,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// of the image.
 		//
 		// Invariant: dragOverlay must pass node.nodeId directly
-		expect(ts).toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
-		expect(ts).not.toContain('onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
+		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
 	it('REGRESSION: handleDragStart must NOT select on mousedown (deferred selection)', () => {
@@ -1315,7 +1516,7 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// always produce a visible overlay regardless of count.
 		//
 		// Invariant: selectionIsFromMarquee must make the overlay visible
-		expect(ts).toContain('return selectionIsFromMarquee')
+		expectSourceToContain(ts, 'return selectionIsFromMarquee')
 
 		// The marquee handler must pass fromMarquee=true
 		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
@@ -1324,8 +1525,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 	})
 
 	it('REGRESSION: generated output images are not adopted into context regions on drag release', () => {
-		expect(ts).toContain('function canAdoptNodeIntoContextRegion(node: CanvasNode): boolean')
-		expect(ts).toContain('return !isGeneratedOutputImageNode(node)')
+		expectSourceToContain(ts, 'canAdoptNodeIntoContextRegion,')
+		expectSourceToContain(ts, `} from '$src/infographics/workspace/workspaceAnchoredImagePlan.ts'`)
 
 		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
@@ -1334,10 +1535,12 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 	})
 
 	it('REGRESSION: generated images with connector edges are not rehydrated as anchored images', () => {
-		expect(ts).toContain('function hasConnectorEdgeFromThreadToImage(')
-		expect(ts).toContain('anchoredImageManager.clear()')
-		expect(ts).toContain('const hasConnectorEdge = hasConnectorEdgeFromThreadToImage(threadCanvasNode.nodeId, imgNode.nodeId)')
-		expect(ts).toContain('if (hasConnectorEdge) continue')
+		expectSourceToContain(ts, 'canUseLegacyAnchorForImage,')
+		expectSourceToContain(ts, 'filterValidAnchorsForThread,')
+		expectSourceToContain(ts, 'anchoredImageManager.clear()')
+		expectSourceToContain(ts, 'if (!canUseLegacyAnchorForImage({')
+		expectSourceToContain(ts, 'const { validAnchors, staleAnchors } = filterValidAnchorsForThread({')
+		expectSourceToContain(ts, 'removeStaleAnchors(staleAnchors)')
 	})
 })
 
@@ -1390,7 +1593,7 @@ describe('Image loading — URL resolution strategy', () => {
 
 	it('render() accepts optional newWorkspaceId parameter and updates workspaceId', () => {
 		expect(ts).toMatch(/render\(.*newWorkspaceId\?: string/)
-		expect(ts).toContain('if (newWorkspaceId) workspaceId = newWorkspaceId')
+		expectSourceToContain(ts, 'if (newWorkspaceId) workspaceId = newWorkspaceId')
 	})
 })
 
@@ -1402,7 +1605,7 @@ describe('Image error placeholder — SVG icon from svgIcons', () => {
 	const ts = loadTs()
 
 	it('imports brokenImageIcon from svgIcons', () => {
-		expect(ts).toContain('brokenImageIcon')
+		expectSourceToContain(ts, 'brokenImageIcon')
 		expect(ts).toMatch(/import\s*\{[^}]*brokenImageIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
 	})
 
@@ -1454,10 +1657,10 @@ describe('buildImageSrc — URL construction logic', () => {
 
 	it('prepends apiBaseUrl for /api/ paths', () => {
 		expect(ts).toMatch(/if\s*\(\s*imageUrl\.startsWith\(\s*['"]\/api\/['"]\s*\)/)
-		expect(ts).toContain('`${apiBaseUrl}${imageUrl}')
+		expectSourceToContain(ts, '`${apiBaseUrl}${imageUrl}')
 	})
 
 	it('appends token as query param for API URLs', () => {
-		expect(ts).toContain('`?token=${token}`')
+		expectSourceToContain(ts, '`?token=${token}`')
 	})
 })
