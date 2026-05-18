@@ -492,6 +492,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             a.y < b.y + b.height &&
             a.y + a.height > b.y
     }
+    function rectContainsCanvasPoint(rect: Rect, point: { x: number; y: number }): boolean {
+        return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
+    }
+    
+    function getNodeHitBeforeContextRegion(point: { x: number; y: number }): CanvasNode | null {
+        if (!currentCanvasState) return null
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        for (let i = currentCanvasState.nodes.length - 1; i >= 0; i--) {
+            const node = currentCanvasState.nodes[i]
+            if (node.type !== 'image' && node.type !== 'document') continue
+            const rect = getNodeWorldRect(node, nodesById)
+            if (rectContainsCanvasPoint(rect, point)) return node
+        }
+        return null
+    }
 
     function clampInsideRange(value: number, min: number, max: number): number {
         if (min > max) return min
@@ -991,14 +1006,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         setSelectedNodes(new Set())
     }
 
+    function includeContextRegionDescendants(nodeIds: string[]): string[] {
+        if (!currentCanvasState) return nodeIds
+
+        const draggableNodeIds = new Set(nodeIds)
+        const pendingParentIds = [...nodeIds]
+        while (pendingParentIds.length > 0) {
+            const parentId = pendingParentIds.pop()
+            if (!parentId) continue
+
+            const parentNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === parentId)
+            if (!parentNode || !isContextRegionCanvasNode(parentNode)) continue
+
+            for (const child of currentCanvasState.nodes) {
+                if (child.parentId !== parentId || draggableNodeIds.has(child.nodeId)) continue
+                draggableNodeIds.add(child.nodeId)
+                pendingParentIds.push(child.nodeId)
+            }
+        }
+
+        return [...draggableNodeIds]
+    }
+
     function getDraggableNodeIds(primaryNodeId: string): string[] {
         const effectivePrimaryNodeId = getSelectionTargetNodeId(primaryNodeId)
-        if (!isNodeSelected(effectivePrimaryNodeId)) return [effectivePrimaryNodeId]
+        if (!isNodeSelected(effectivePrimaryNodeId)) return includeContextRegionDescendants([effectivePrimaryNodeId])
 
         const draggableNodeIds = Array.from(selectedNodeIds).filter((nodeId) => !anchoredImageManager.isAnchored(nodeId))
-        if (draggableNodeIds.length > 0) return draggableNodeIds
+        if (draggableNodeIds.length > 0) return includeContextRegionDescendants(draggableNodeIds)
 
-        return [effectivePrimaryNodeId]
+        return includeContextRegionDescendants([effectivePrimaryNodeId])
     }
 
     function isCanvasBackgroundTarget(target: EventTarget | null): boolean {
@@ -4492,6 +4529,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!currentCanvasState) return
 
         const start = getCanvasPointFromClient(event.clientX, event.clientY)
+        const nodeHit = getNodeHitBeforeContextRegion(start)
+        if (nodeHit) {
+            handleDragStart(event, nodeHit.nodeId, { suppressPaneClick: true })
+            return
+        }
+
         const regionHit = contextRegionLayer?.hitTest(start) ?? { kind: 'none' as const }
         if (regionHit.kind !== 'none') {
             if (isModSelectionEvent(event)) {
