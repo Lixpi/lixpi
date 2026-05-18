@@ -495,7 +495,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function rectContainsCanvasPoint(rect: Rect, point: { x: number; y: number }): boolean {
         return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
     }
-    
+
     function getNodeHitBeforeContextRegion(point: { x: number; y: number }): CanvasNode | null {
         if (!currentCanvasState) return null
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)

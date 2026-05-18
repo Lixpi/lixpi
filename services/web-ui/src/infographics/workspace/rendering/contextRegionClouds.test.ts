@@ -65,17 +65,19 @@ describe('context region clouds — irregular hit testing', () => {
     })
 
     it('rejects transparent rectangle corners outside the cloud polygon', () => {
-        const hit = hitTestContextRegionCloud(makeDatum(), { x: 130, y: 85 }, 1)
+        const datum = makeDatum()
+        const bounds = getContextRegionCloudBounds(datum)
+        const hit = hitTestContextRegionCloud(datum, { x: bounds.x + 4, y: bounds.y + 4 }, 1)
 
         expect(hit).toEqual({ kind: 'none' })
     })
 
-    it('detects title and resize handle zones before body hits', () => {
+    it('detects title zones before body hits and does not expose resize-handle hits', () => {
         const datum = makeDatum()
         const title = getContextRegionCloudTitleRect(datum, 1)
 
         expect(hitTestContextRegionCloud(datum, { x: title.x + 8, y: title.y + 8 }, 1)).toEqual({ kind: 'title', nodeId: 'region-1' })
-        expect(hitTestContextRegionCloud(datum, { x: datum.x + datum.width, y: datum.y + datum.height }, 1)).toEqual({ kind: 'resize-handle', nodeId: 'region-1', corner: 'bottom-right' })
+        expect(hitTestContextRegionCloud(datum, { x: datum.x + datum.width, y: datum.y + datum.height }, 1).kind).not.toBe('resize-handle')
     })
 })
 
@@ -86,6 +88,7 @@ describe('context region clouds — irregular hit testing', () => {
 describe('context region clouds — adoption scoring', () => {
     it('scores a dragged rect inside the cloud higher than a rect in an empty corner', () => {
         const datum = makeDatum()
+        const bounds = getContextRegionCloudBounds(datum)
         const insideScore = scoreRectAgainstContextRegionCloud(
             datum,
             { x: 230, y: 160, width: 80, height: 80 },
@@ -93,8 +96,8 @@ describe('context region clouds — adoption scoring', () => {
         )
         const cornerScore = scoreRectAgainstContextRegionCloud(
             datum,
-            { x: 92, y: 72, width: 40, height: 40 },
-            { x: 100, y: 80 }
+            { x: bounds.x + 2, y: bounds.y + 2, width: 20, height: 20 },
+            { x: bounds.x + 4, y: bounds.y + 4 }
         )
 
         expect(insideScore).toBeGreaterThan(0)

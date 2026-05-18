@@ -2,9 +2,9 @@
 
 A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
-> **Renderer migration note (2026-05-07).** The active workspace canvas remains the proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack. Phase 2 now ships PIXI v8 (WebGPU with WebGL fallback) as a **media layer for image pixels** through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection, and SVG connectors stay in the existing DOM/SVG implementation. Image-node DOM `<img>` elements are kept as interaction chrome and as a fallback path when PIXI fails to initialize, but their `src` is left empty while PIXI is healthy so the browser does not double-fetch the same pixels.
+> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM/SVG interactions and PIXI v8 (WebGPU with WebGL fallback) for high-volume visual layers. The media layer renders image pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection, and SVG connectors stay in the DOM/SVG implementation. Image-node DOM `<img>` elements are kept as interaction chrome and as a fallback path when PIXI fails to initialize, but their `src` is left empty while PIXI is healthy so the browser does not double-fetch the same pixels.
 >
-> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). Historical full-replacement notes in `documentation/memory/pixi-refactoring.md` are background context, not the active implementation path.
+> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For the CO2-shaped seafoam context-region cloud system specifically, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
 ## Core Concepts
 
@@ -630,7 +630,7 @@ flowchart LR
     PML --> FG
 ```
 
-The DOM viewport hosts every interactive element. PIXI sits on top as a transparent overlay and owns image pixels, image-node selection outlines, marquee rectangles, group-overlay highlights, and edge stroke geometry. Both layers are kept perfectly aligned by `viewportBridge.applyViewport()`, which is the single call site that updates both the DOM CSS transform and the PIXI world container in the same tick.
+The DOM viewport hosts every interactive element. PIXI uses two visual layers: the context-region layer below the DOM viewport owns CO2-shaped region cloud surfaces, while the media layer above the DOM viewport owns image pixels, image-node selection outlines, marquee rectangles, group-overlay highlights, and edge stroke geometry. All layers are kept aligned by `viewportBridge.applyViewport()`, which is the single call site that updates the DOM CSS transform and both PIXI world containers in the same tick.
 
 For the texture cache, LoD-tier loader, decode worker pool, eviction strategy, and the list of remaining performance issues (notably: the API does not actually serve resized thumbnails today), see [CANVAS-ENGINE.md](CANVAS-ENGINE.md).
 
@@ -651,7 +651,7 @@ Edge changes are persisted immediately when edges are created, deleted, or recon
 Images on the canvas are tracked by `canvasImageLifecycle.ts`. When an image node is removed from the canvas state:
 
 1. The tracker compares previous and current canvas states
-2. Detects which fileIds are no longer present
+2. Detects which fileIds are missing from the current canvas state
 3. Calls `deleteImage()` from `imageUtils.ts` to delete from storage
 4. The same `deleteImage()` utility is shared with ProseMirror's `imageLifecyclePlugin`
 
@@ -1210,14 +1210,14 @@ The following items are pending implementation:
 
 ### Context Icon for AI Chat Thread Nodes
 
-The "branch" icon at the bottom-right corner of AI chat thread cards currently uses the old `contextSelector` plugin. It needs to be refactored to work with the workspace edge system:
+The "branch" icon at the bottom-right corner of AI chat thread cards uses the `contextSelector` plugin. It needs to be refactored to work with the workspace edge system:
 
 - [ ] Refactor icon click handler to work with workspace connection system
 - [ ] Show popover listing nodes connected TO this thread (incoming edges)
 - [ ] Allow quick disconnect (remove edge) from the popover
 - [ ] Optionally highlight connected edges on canvas when popover is open
 
-### Cleanup Old Code
+### Cleanup Candidates
 
 Once the context icon is refactored:
 
