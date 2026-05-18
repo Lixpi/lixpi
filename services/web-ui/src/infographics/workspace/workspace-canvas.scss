@@ -841,11 +841,6 @@
     }
 }
 
-.workspace-context-region-node--pixi-owned > .document-resize-handle {
-    pointer-events: none;
-    opacity: 0;
-}
-
 .document-drag-overlay {
     position: absolute;
     top: 0;
