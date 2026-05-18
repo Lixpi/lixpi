@@ -1,3 +1,30 @@
+export type ContextRegionCloudThemePoint = { x: number; y: number }
+
+export type ContextRegionCloudThemeSize = { width: number; height: number }
+
+export type ContextRegionCloudThemeGradientPositions = [
+    ContextRegionCloudThemePoint,
+    ContextRegionCloudThemePoint,
+    ContextRegionCloudThemePoint,
+    ContextRegionCloudThemePoint,
+]
+
+export type ContextRegionCloudThemePalette = {
+    pool: string
+    bloom: string
+    edge: string
+    ink: string
+}
+
+export type ContextRegionCloudThemeStyle = {
+    key: string
+    aspect: 'wide' | 'square' | 'tall'
+    bleedRatio: number
+    titleAnchor: ContextRegionCloudThemePoint
+    palette: ContextRegionCloudThemePalette
+    seed: number
+}
+
 export type WebUiThemeSettings = {
     aiResponseMessageBubbleColor: string
     aiChatThreadNodeBoxShadow: string
@@ -22,16 +49,56 @@ export type WebUiThemeSettings = {
     // context selection).
     // Hex strings. The shifting gradient renderer converts these to RGB internally.
     shiftingGradientColors: [string, string, string, string]
-    // Four gradient colors used only by the workspace context region area cards.
-    // Kept separate so region visual tuning does not change shared animated borders.
-    contextRegionAreaShiftingGradientColors: [string, string, string, string]
-    // Frame color for image nodes contained by workspace context region cards.
+
+
+    // Context region cloud visual settings.
+    contextRegionCloudTextureSize: ContextRegionCloudThemeSize
+    contextRegionCloudMaskAlphaThreshold: number
+    contextRegionCloudMinBleed: number
+    contextRegionCloudGradientBaseColor: string
+    contextRegionCloudGradientColors: [string, string, string, string]
+    contextRegionCloudGradientPositions: ContextRegionCloudThemeGradientPositions
+    contextRegionCloudStyles: ContextRegionCloudThemeStyle[]
+    contextRegionCloudBorderEnabled: boolean
+    contextRegionCloudBorderMainAlpha: number
+    contextRegionCloudBorderThoughtCircleAlpha: number
+    contextRegionCloudIdleAlpha: number
+    contextRegionCloudSelectedAlpha: number
+    contextRegionCloudPulseDurationMs: number
+    contextRegionCloudPulseAlphaLift: number
+    contextRegionCloudPulseLiftPx: number
+    contextRegionCloudTitleFontFamily: string
+    contextRegionCloudTitleFontSize: number
+    contextRegionCloudTitleFontWeight: string
+    contextRegionCloudTitleAlpha: number
+    contextRegionCloudTitleHeight: number
+    contextRegionCloudTitleCharWidth: number
+    contextRegionCloudTitleMinWidth: number
+    contextRegionCloudTitleMaxWidth: number
+    contextRegionCloudTitlePaddingX: number
+    contextRegionCloudTitleMinX: number
+    contextRegionCloudTitleGap: number
     contextRegionImageFrameColor: string
 }
 
 const brandColors = {
     steelBlue: '#5d656d'
 }
+
+const contextRegionCloudPalettes = {
+    mist: {
+        pool: '#C7DAD4',
+        bloom: '#EEF8F5',
+        edge: '#A1C3BA',
+        ink: '#1F2937',
+    },
+    seafoam: {
+        pool: '#C7DAD4',
+        bloom: '#EEF8F5',
+        edge: '#8FB5AB',
+        ink: '#1F2937',
+    },
+} satisfies Record<string, ContextRegionCloudThemePalette>
 
 export const webUiThemeSettings: WebUiThemeSettings = {
     // Background color for AI response message bubbles and their pigtail (speech bubble tail).
@@ -80,11 +147,48 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // and the animated border overlays (image generation, document thread shape).
     // Dreamy sky pastel palette — whisper pink, lavender, periwinkle, orchid.
     shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
-    // Four gradient colors used only by workspace context region area cards.
-    // Pale sage/glass palette fit to the region backdrop in gradient-sample.png.
+
+
+    // Context region cloud visual settings.
+    // Pale seafoam palette fit to the region backdrop in gradient-sample.png.
     // The center needs visible depth without collapsing into a gray block.
-    contextRegionAreaShiftingGradientColors: ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'],
-    // Region-contained image frame. Kept just off white so it remains soft against
-    // the pale region gradient while still reading as a clear frame.
+    contextRegionCloudTextureSize: { width: 1080, height: 1080 },
+    contextRegionCloudMaskAlphaThreshold: 0.045,
+    contextRegionCloudMinBleed: 28,
+    contextRegionCloudGradientBaseColor: '#E5F2EE',
+    contextRegionCloudGradientColors: ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'],
+    contextRegionCloudGradientPositions: [
+        { x: 0.2, y: 0.9 },
+        { x: 0.65, y: 0.75 },
+        { x: 0.8, y: 0.1 },
+        { x: 0.35, y: 0.25 },
+    ],
+    contextRegionCloudStyles: [
+        { key: 'seafoam-wide-a', aspect: 'wide', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, palette: contextRegionCloudPalettes.mist, seed: 1103 },
+        { key: 'seafoam-wide-b', aspect: 'wide', bleedRatio: 0.32, titleAnchor: { x: 0.10, y: 0.12 }, palette: contextRegionCloudPalettes.seafoam, seed: 1291 },
+        { key: 'seafoam-square-a', aspect: 'square', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, palette: contextRegionCloudPalettes.mist, seed: 1427 },
+        { key: 'seafoam-square-b', aspect: 'square', bleedRatio: 0.31, titleAnchor: { x: 0.13, y: 0.12 }, palette: contextRegionCloudPalettes.seafoam, seed: 1559 },
+        { key: 'seafoam-tall-a', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.14, y: 0.12 }, palette: contextRegionCloudPalettes.mist, seed: 1667 },
+        { key: 'seafoam-tall-b', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.13, y: 0.12 }, palette: contextRegionCloudPalettes.seafoam, seed: 1789 },
+    ],
+    contextRegionCloudBorderEnabled: false,
+    contextRegionCloudBorderMainAlpha: 0.22,
+    contextRegionCloudBorderThoughtCircleAlpha: 0.20,
+    contextRegionCloudIdleAlpha: 0.98,
+    contextRegionCloudSelectedAlpha: 1,
+    contextRegionCloudPulseDurationMs: 700,
+    contextRegionCloudPulseAlphaLift: 0.02,
+    contextRegionCloudPulseLiftPx: 3,
+    contextRegionCloudTitleFontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+    contextRegionCloudTitleFontSize: 20,
+    contextRegionCloudTitleFontWeight: '650',
+    contextRegionCloudTitleAlpha: 0.80,
+    contextRegionCloudTitleHeight: 30,
+    contextRegionCloudTitleCharWidth: 8.25,
+    contextRegionCloudTitleMinWidth: 112,
+    contextRegionCloudTitleMaxWidth: 280,
+    contextRegionCloudTitlePaddingX: 20,
+    contextRegionCloudTitleMinX: 22,
+    contextRegionCloudTitleGap: 10,
     contextRegionImageFrameColor: '#FCFCFA',
 }
