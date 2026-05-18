@@ -250,6 +250,10 @@ The transparent DOM proxy is compatibility glue, not the visual surface. Do not 
 - `world.position` and `world.scale` to the PIXI media layer.
 - `world.position` and `world.scale` to the PIXI context-region layer.
 
+The live viewport in `WorkspaceCanvas.ts` owns rendering during interaction. Svelte/store viewport persistence is an acknowledgement path. Do not let a delayed store render that changes only `viewport` replay an older pan transform over the current DOM and PIXI worlds. The stale-render guard in `workspaceViewportStatePlan.ts` must preserve the live viewport when `viewportChanged` is true but visual node/edge state did not change and no full rerender is needed.
+
+This matters for clouds because context-region visuals are viewport-synced PIXI sprites below the DOM layer. A stale viewport replay moves the cloud layer, media layer, and DOM viewport together, so the symptom looks like a cloud or generated image position jump even though the persisted node coordinates are unchanged.
+
 The context-region PIXI application is initialized with:
 
 - `preference: 'webgpu'` with WebGL fallback.
@@ -351,6 +355,8 @@ Do not edit `WorkspaceCanvas` region behavior without checking image/document hi
 
 Do not update only one copy of the CO2 path constants. Rendering and hit/adoption geometry must move together.
 
+Do not treat persisted `canvasState.viewport` as authoritative during an active interaction. The live transform in `WorkspaceCanvas.ts` must win over delayed viewport-only Svelte/store renders.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Check |
@@ -363,6 +369,7 @@ Do not update only one copy of the CO2 path constants. Rendering and hit/adoptio
 | Texture looks pale or flat | Gradient/overlay alpha washed out color and grain | Check seafoam gradient mix, bloom overlays, and final alpha. |
 | Border does not match the cloud | Border drawn as generic stroke or separate sprite | Use the baked exact vector ring path controlled by `contextRegionCloudBorderEnabled`. |
 | Pan/zoom stutters with many regions | Runtime work moved into gestures | Look for per-region texture generation, live filters, or continuous ticker usage. |
+| Clouds or generated images jump after panning, with no node-position commit | Stale viewport-only store render replayed an older transform | Check whether the render changed only `viewport` while visual state stayed equivalent, then verify the stale viewport guard in `workspaceViewportStatePlan.ts` still preserves the live transform. |
 
 ## Future Work
 

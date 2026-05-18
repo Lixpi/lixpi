@@ -951,10 +951,7 @@
     transform: translateZ(0);
 
     .connector-svg {
-        // Visual rendering handed to PIXI. Keep SVG in DOM with opacity 0
-        // so isPointInStroke and getPointAtLength still work for hit testing
-        // and edge bubble menu positioning.
-        opacity: 0;
+        opacity: 1;
         pointer-events: none;
 
         .workspace-edge-node {

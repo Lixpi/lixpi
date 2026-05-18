@@ -45,6 +45,10 @@ function loadTs(): string {
 	return readSourceFile('WorkspaceCanvas.ts')
 }
 
+function loadPixiMediaLayer(): string {
+	return readSourceFile('pixiMediaLayer.ts')
+}
+
 function loadWorkspaceCanvasSvelte(): string {
 	return readSourceFile('../../components/WorkspaceCanvas.svelte', 'components/WorkspaceCanvas.svelte')
 }
@@ -149,6 +153,171 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--anchored')[0]
 		expect(topLevelSection).not.toContain('workspace-image-node--context-region-child')
+	})
+})
+
+// =============================================================================
+// PIXI media layer — first sync geometry
+// =============================================================================
+
+describe('PIXI media layer — first sync geometry', () => {
+	const ts = loadPixiMediaLayer()
+
+	it('initializes new image sprite and placeholder geometry during first upsert', () => {
+		const start = ts.indexOf('function upsertEntry')
+		const end = ts.indexOf('function drawColorRect', start)
+		expect(start).toBeGreaterThan(-1)
+		expect(end).toBeGreaterThan(start)
+
+		const fnBody = ts.slice(start, end)
+		const creationIndex = fnBody.indexOf('if (!entry) {')
+		const spritePositionIndex = fnBody.indexOf('entry.sprite.position.set(x, y)')
+		const firstReturnAfterCreation = fnBody.indexOf('return', creationIndex)
+
+		expect(creationIndex).toBeGreaterThan(-1)
+		expect(spritePositionIndex).toBeGreaterThan(creationIndex)
+		expect(firstReturnAfterCreation === -1 || firstReturnAfterCreation > spritePositionIndex).toBe(true)
+		expect(fnBody).toContain('entry.sprite.width = w')
+		expect(fnBody).toContain('entry.sprite.height = h')
+		expect(fnBody).toContain('entry.colorRect.position.set(x, y)')
+		expect(fnBody).toContain('drawColorRect(entry.colorRect, w, h)')
+		expect(fnBody).toContain('entry.colorRectW = w')
+		expect(fnBody).toContain('entry.colorRectH = h')
+	})
+})
+
+// =============================================================================
+// Context-region child world positioning
+// =============================================================================
+
+describe('Workspace canvas — context-region child world positioning', () => {
+	const ts = loadTs()
+
+	it('feeds world-space nodes into the connection manager', () => {
+		const fnMatch = ts.match(/function\s+getNodesForConnectionManager[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('getNodeWorldPosition(node, nodesById)')
+		expect(fnBody).toContain('delete nodeForConnection.parentId')
+		expect(fnBody).toContain('delete nodeForConnection.expandParent')
+		expect(fnBody).toContain('delete nodeForConnection.extent')
+		expect(ts).not.toContain('connectionManager?.syncNodes(nextState.nodes)')
+		expect(ts).not.toContain('connectionManager.syncNodes(currentCanvasState.nodes)')
+	})
+
+	it('checks viewport visibility against world-space node rectangles', () => {
+		const fnMatch = ts.match(/function\s+isNodeInViewport[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('const worldRect = getNodeWorldRect(node)')
+		expect(fnBody).toContain('const screenLeft = worldRect.x * zoom + x')
+		expect(fnBody).not.toContain('node.position.x * zoom')
+	})
+})
+
+// =============================================================================
+// Context-region AI panel — stable reload path
+// =============================================================================
+
+describe('Workspace canvas — context-region AI panel reload stability', () => {
+	const ts = loadTs()
+
+	it('tracks the mounted panel thread separately from the selected active thread', () => {
+		expectSourceToContain(ts, 'let activeAiChatPanelThreadId: string | null = null')
+		expectSourceToContain(ts, 'function destroyActiveAiChatPanel(clearActive = false, panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId): void')
+		expectSourceToContain(ts, 'threadEditors.get(panelThreadId)')
+		expectSourceToContain(ts, 'promptInputController.unregisterThreadEditor(panelThreadId)')
+		expectSourceToContain(ts, 'activeAiChatPanelThreadId = panelThreadId')
+	})
+
+	it('captures panel thread id in editor callbacks instead of reading mutable active thread state', () => {
+		const fnMatch = ts.match(/function\s+renderActiveAiChatPanel[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('const panelThreadId = activeAiChatThreadId')
+		expect(fnBody).toContain('aiChatThreadId: panelThreadId')
+		expect(fnBody).toContain('threadId: panelThreadId')
+		expect(fnBody).toContain('threadEditors.set(panelThreadId')
+		expect(fnBody).toContain('promptInputController.registerThreadEditor(panelThreadId')
+		expect(fnBody).not.toContain('threadId: activeAiChatThreadId!')
+		expect(fnBody).not.toContain('referenceId: activeAiChatThreadId!')
+	})
+
+	it('does not treat AI chat thread content load as a full canvas rerender signal', () => {
+		const fnMatch = ts.match(/function\s+getAiChatThreadsKey[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expect(fnBody).toContain('return threads.map(t => t.threadId).join')
+		expect(fnBody).not.toContain('t.content')
+	})
+
+	it('refreshes only the active panel when deferred thread content arrives', () => {
+		expectSourceToContain(ts, 'function refreshActiveAiChatPanelWhenContentLoads(): void')
+		expectSourceToContain(ts, 'if (activeAiChatPanelHadContent) return')
+		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, thread)')
+		expectSourceToContain(ts, `} else {
+                refreshActiveAiChatPanelWhenContentLoads()
+            }`)
+	})
+
+	it('preserves local visual drag commits when active-panel renders arrive stale', () => {
+		expectSourceToContain(ts, 'mergeIncomingCanvasStateWithPendingVisualCommit,')
+		expectSourceToContain(ts, 'let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null')
+		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)')
+		expectSourceToContain(ts, 'const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({')
+		expectSourceToContain(ts, 'const effectiveCanvasState = renderStatePlan.state')
+		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
+	})
+})
+
+// =============================================================================
+// Workspace canvas — viewport ownership during store renders
+// =============================================================================
+
+describe('Workspace canvas — viewport ownership during store renders', () => {
+	const ts = loadTs()
+	const svelte = loadWorkspaceCanvasSvelte()
+
+	it('routes viewport-only render decisions through the stale viewport planner', () => {
+		expectSourceToContain(ts, 'shouldPreserveLiveViewportForViewportOnlyRender({')
+		expectSourceToContain(ts, 'incomingViewport: effectiveCanvasState?.viewport,')
+		expectSourceToContain(ts, 'liveViewport,')
+		expectSourceToContain(ts, 'viewportChanged,')
+		expectSourceToContain(ts, 'visualStateChanged,')
+		expectSourceToContain(ts, 'needsRerender,')
+		expectSourceToContain(ts, 'workspaceChanged,')
+	})
+
+	it('keeps viewport-only stale renders from applying a transform jump', () => {
+		expectSourceToContain(ts, 'const liveViewport = getLiveViewport()')
+		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
+		expectSourceToContain(ts, 'panZoom?.syncViewport(liveViewport)')
+		expectSourceNotToContain(ts, 'viewportBridge?.applyViewport(liveViewport)')
+	})
+
+	it('updates local canvas and pending commit viewports immediately during live pan or zoom', () => {
+		expectSourceToContain(ts, 'function updateCurrentCanvasViewport(viewport: Viewport): void')
+		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = updatePendingCanvasVisualCommitViewport(pendingLocalCanvasVisualCommit, viewport)')
+		expectSourceToContain(ts, 'syncViewportInteractionState(vp)')
+		expectSourceToContain(ts, 'updateCurrentCanvasViewport(vp)')
+		expectSourceToContain(ts, 'viewportBridge?.applyViewport(vp)')
+		expectSourceToContain(ts, 'onViewportChange?.(vp)')
+	})
+
+	it('persists every Svelte-side canvas save with the current live viewport', () => {
+		expectSourceToContain(svelte, 'const stateToPersist = {')
+		expectSourceToContain(svelte, '...newCanvasState,')
+		expectSourceToContain(svelte, 'viewport,')
+		expectSourceToContain(svelte, 'workspaceStore.updateCanvasState(stateToPersist)')
+		expectSourceToContain(svelte, 'canvasState: stateToPersist')
+	})
+
+	it('refuses to persist a debounced viewport after a newer viewport arrives', () => {
+		expectSourceToContain(svelte, 'const scheduledViewport = newViewport')
+		expectSourceToContain(svelte, 'viewport.x !== scheduledViewport.x')
+		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
+		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
+		expectSourceToContain(svelte, 'viewport: scheduledViewport')
 	})
 })
 
@@ -568,6 +737,7 @@ describe('AI chat region PIXI cloud layer', () => {
 		expectSourceToContain(ts, 'function getContextRegionCloudDatums')
 		expectSourceToContain(ts, 'function syncContextRegionLayer')
 		expectSourceToContain(ts, 'syncContextRegionLayer(nextState)')
+		expectSourceToContain(ts, 'syncContextRegionLayer(undefined)')
 		expectSourceToContain(ts, 'syncContextRegionLayer(currentCanvasState)')
 		expectSourceToContain(viewportBridgeTs, 'getContextRegionLayer?.()?.setViewport(viewport)')
 	})
@@ -899,9 +1069,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expectSourceToContain(ts, 'function isGeneratedOutputImageNode(')
 		expect(fnBody).toContain('if (isGeneratedOutputImageNode(node)) return nodeId')
-		expect(fnBody.indexOf('if (isGeneratedOutputImageNode(node)) return nodeId')).toBeLessThan(fnBody.indexOf('anchoredImageManager.getAnchor'))
+		expect(fnBody.indexOf('if (isGeneratedOutputImageNode(node)) return nodeId')).toBeLessThan(fnBody.indexOf('getValidAnchorForCanvasImage'))
 	})
 
 	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
@@ -1093,9 +1262,12 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		// getSelectionTargetNodeId is used in marquee hit-testing and inside
 		// handleDragStart, but NOT in the nodeEl click handler
 		expectSourceToContain(ts, 'function getSelectionTargetNodeId(nodeId: string): string')
-		expectSourceToContain(ts, 'const anchor = anchoredImageManager.getAnchor(nodeId)')
+		expectSourceToContain(ts, 'const anchor = getValidAnchorForCanvasImage(nodeId)')
 		expectSourceToContain(ts, 'selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))')
-		expectSourceToContain(ts, 'const resolvedNodeId = getSelectionTargetNodeId(nodeId)')
+		expectSourceToContain(ts, 'resolveSelectionTargetNodeId: getSelectionTargetNodeId')
+		expectSourceToContain(ts, 'isAnchoredImageNode: (candidateNodeId: string) => Boolean(getValidAnchorForCanvasImage(candidateNodeId))')
+		expectSourceToContain(ts, 'getAnchorsForThread: getValidAnchorsForCanvasThread')
+		expectSourceToContain(ts, 'const resolvedNodeId = dragPlan.resolvedNodeId')
 	})
 
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
@@ -1147,7 +1319,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('includes anchored AI images when computing the selection overlay bounds', () => {
-		expectSourceToContain(ts, 'for (const anchor of anchoredImageManager.getAnchorsForThread(nodeId)) {')
+		expectSourceToContain(ts, 'for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {')
 		expectSourceToContain(ts, 'overlayNodeIds.add(anchor.imageNodeId)')
 		expectSourceToContain(ts, 'const rect = getSelectionBoundsForNode(node)')
 	})
@@ -1194,8 +1366,9 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	// -------------------------------------------------------------------------
 
 	it('group drag uses selected nodes as drag participants', () => {
-		expectSourceToContain(ts, 'function getDraggableNodeIds(primaryNodeId: string): string[]')
-		expectSourceToContain(ts, 'const draggedNodeIds = getDraggableNodeIds(resolvedNodeId)')
+		expectSourceToContain(ts, 'const dragPlan = computeWorkspaceDragPlan({')
+		expectSourceToContain(ts, 'selectedNodeIds,')
+		expectSourceToContain(ts, 'const draggedNodeIds = dragPlan.draggedNodeIds')
 		expectSourceToContain(ts, 'const draggedNodeEntries = new Map<string, {')
 		expectSourceToContain(ts, 'for (const [draggedNodeId, entry] of draggedNodeEntries)')
 	})
@@ -1203,13 +1376,22 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('preserves multi-selection after drag by suppressing the follow-up click collapse', () => {
 		expectSourceToContain(ts, 'let suppressNextNodeClick = false')
 		expectSourceToContain(ts, 'if (suppressNextNodeClick) {')
-		expectSourceToContain(ts, 'if (dragDidMove) {')
+		expectSourceToContain(ts, 'if (!dragDidMove) {')
 		expectSourceToContain(ts, 'suppressNextNodeClick = true')
 	})
 
 	it('group drag skips collision resolution for multi-node moves to preserve rigid spacing', () => {
-		expectSourceToContain(ts, 'if (draggedNodeEntries.size === 1) {')
+		expectSourceToContain(ts, 'if (dragPlan.allowCollisionResolution) {')
 		expectSourceToContain(ts, 'resolveCollisions(nodeBoxes')
+	})
+
+	it('context-region drag skips proximity checks during movement', () => {
+		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('if (dragPlan.allowProximityConnection) {')
+		expect(fnBody).toContain('connectionManager?.checkProximity(resolvedNodeId, currentPos, currentDims)')
 	})
 })
 
@@ -1343,8 +1525,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 	})
 
 	it('REGRESSION: generated output images are not adopted into context regions on drag release', () => {
-		expectSourceToContain(ts, 'function canAdoptNodeIntoContextRegion(node: CanvasNode): boolean')
-		expectSourceToContain(ts, 'return !isGeneratedOutputImageNode(node)')
+		expectSourceToContain(ts, 'canAdoptNodeIntoContextRegion,')
+		expectSourceToContain(ts, `} from '$src/infographics/workspace/workspaceAnchoredImagePlan.ts'`)
 
 		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
@@ -1353,10 +1535,12 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 	})
 
 	it('REGRESSION: generated images with connector edges are not rehydrated as anchored images', () => {
-		expectSourceToContain(ts, 'function hasConnectorEdgeFromThreadToImage(')
+		expectSourceToContain(ts, 'canUseLegacyAnchorForImage,')
+		expectSourceToContain(ts, 'filterValidAnchorsForThread,')
 		expectSourceToContain(ts, 'anchoredImageManager.clear()')
-		expectSourceToContain(ts, 'const hasConnectorEdge = hasConnectorEdgeFromThreadToImage(threadCanvasNode.nodeId, imgNode.nodeId)')
-		expectSourceToContain(ts, 'if (hasConnectorEdge) continue')
+		expectSourceToContain(ts, 'if (!canUseLegacyAnchorForImage({')
+		expectSourceToContain(ts, 'const { validAnchors, staleAnchors } = filterValidAnchorsForThread({')
+		expectSourceToContain(ts, 'removeStaleAnchors(staleAnchors)')
 	})
 })
 

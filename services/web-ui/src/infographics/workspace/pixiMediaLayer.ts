@@ -191,6 +191,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let requestCounter = 0
     let currentViewport: CanvasViewport = { x: 0, y: 0, zoom: 1 }
     let currentTier: LodTier = getPixiLodTier(currentViewport.zoom)
+    let latestPixiEdges: PixiEdgeRenderDatum[] = []
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
@@ -238,6 +239,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             world.addChild(edgeLayer)
             world.addChild(fgLayer)
             edgeRenderer = createPixiEdgeRenderer(edgeLayer)
+            edgeRenderer.render(latestPixiEdges)
             hostEl.appendChild(app.canvas)
             // Only position the canvas — DO NOT set width/height explicitly.
             // `autoDensity: true` + `resizeTo: paneEl` own the canvas pixel
@@ -486,12 +488,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             spatialIndex.insert(rect)
             // DOM ownership is new — always set.
             setDomOwnership(node.nodeId, true)
-            return
-        }
-
-        // Existing entry — only update what changed.
-
-        if (entry.sourceKey !== newSourceKey) {
+        } else if (entry.sourceKey !== newSourceKey) {
             // Source image replaced. Drop loaded state; next visibility pass refetches.
             if (entry.textureKey) releaseTexture(entry.textureKey)
             entry.textureKey = null
@@ -773,9 +770,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     // it is intentionally lean: spatial index search + map iteration only.
     function updateVisibleImages(): void {
         if (health !== 'ready' || !lastState || destroyed) return
+        const paneBounds = paneEl.clientWidth > 0 && paneEl.clientHeight > 0
+            ? null
+            : paneEl.getBoundingClientRect()
         const visibleRect = getVisibleWorldRect(
             currentViewport,
-            { width: paneEl.clientWidth, height: paneEl.clientHeight },
+            {
+                width: paneEl.clientWidth || paneBounds?.width || 0,
+                height: paneEl.clientHeight || paneBounds?.height || 0,
+            },
             VISIBILITY_MARGIN
         )
         const visibleNodeIds = new Set(
@@ -908,8 +911,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function setPixiEdges(edges: PixiEdgeRenderDatum[]): void {
-        if (destroyed || !edgeRenderer) return
-        edgeRenderer.render(edges)
+        if (destroyed) return
+        latestPixiEdges = edges
+        if (!edgeRenderer) return
+        edgeRenderer.render(latestPixiEdges)
         scheduleRender()
     }
 

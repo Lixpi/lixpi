@@ -18,7 +18,7 @@ A workspace is the primary container where users organize and edit their documen
 
 **Image** — An uploaded image file stored in NATS Object Store. Referenced by canvas nodes and automatically deleted when removed from the canvas.
 
-**Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off.
+**Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off. While a workspace is open, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform.
 
 ## System Architecture
 
