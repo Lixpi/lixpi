@@ -25,6 +25,8 @@ export type WebUiThemeSettings = {
     // Four gradient colors used only by the workspace context region area cards.
     // Kept separate so region visual tuning does not change shared animated borders.
     contextRegionAreaShiftingGradientColors: [string, string, string, string]
+    // Whether workspace context region clouds draw their baked outline border.
+    contextRegionCloudBorderEnabled: boolean
     // Frame color for image nodes contained by workspace context region cards.
     contextRegionImageFrameColor: string
 }
@@ -84,6 +86,8 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // Pale sage/glass palette fit to the region backdrop in gradient-sample.png.
     // The center needs visible depth without collapsing into a gray block.
     contextRegionAreaShiftingGradientColors: ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'],
+    // Exact vector outline around workspace context region clouds.
+    contextRegionCloudBorderEnabled: false,
     // Region-contained image frame. Kept just off white so it remains soft against
     // the pale region gradient while still reading as a clear frame.
     contextRegionImageFrameColor: '#FCFCFA',

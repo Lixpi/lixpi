@@ -7,6 +7,7 @@ import {
     Texture,
 } from 'pixi.js'
 
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { getVisibleWorldRect, type PixiRendererHealth, type WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import {
@@ -60,12 +61,26 @@ type WatercolorTextureSize = { width: number; height: number }
 
 const VISIBILITY_MARGIN = 1600
 const PULSE_DURATION_MS = 700
+const CONTEXT_REGION_TEXTURE_VERSION = 4
 const CO2_CLOUD_VIEWBOX_SIZE = 512
 const CO2_CLOUD_MAIN_PATH = 'm482.856 229.936c12.391-15.534 19.801-35.216 19.801-56.63 0-50.198-40.694-90.892-90.892-90.892-5.966 0-11.796.581-17.441 1.679-25.94-49.959-78.143-84.093-138.324-84.093s-112.384 34.134-138.324 84.093c-5.645-1.097-11.475-1.679-17.441-1.679-50.198 0-90.892 40.694-90.892 90.892 0 21.415 7.41 41.096 19.801 56.63-18.325 25.172-29.144 56.158-29.144 89.676 0 84.244 68.293 152.538 152.537 152.538 5.374 0 10.683-.282 15.914-.824 21.017 24.873 52.435 40.674 87.549 40.674s66.532-15.801 87.549-40.674c5.231.542 10.539.824 15.914.824 84.244 0 152.537-68.294 152.537-152.538 0-33.518-10.819-64.504-29.144-89.676z'
 const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
 const MASK_ALPHA_THRESHOLD = 0.045
+const REGION_GRADIENT_BASE_COLOR = hexToRgb('#E5F2EE')
+const REGION_GRADIENT_COLORS = ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'].map(hexToRgb)
+const REGION_GRADIENT_PHASE_POSITIONS = [
+    { x: 0.8, y: 0.1 },
+    { x: 0.6, y: 0.2 },
+    { x: 0.35, y: 0.25 },
+    { x: 0.25, y: 0.6 },
+    { x: 0.2, y: 0.9 },
+    { x: 0.4, y: 0.8 },
+    { x: 0.65, y: 0.75 },
+    { x: 0.75, y: 0.4 },
+]
+const REGION_GRADIENT_POSITIONS = Array.from({ length: 4 }, (_, index) => REGION_GRADIENT_PHASE_POSITIONS[(4 + index * 2) % REGION_GRADIENT_PHASE_POSITIONS.length])
 
 function makeRandom(seed: number): () => number {
     let value = seed >>> 0
@@ -106,6 +121,37 @@ function mixRgb(from: RgbColor, to: RgbColor, amount: number): RgbColor {
         g: lerp(from.g, to.g, clamped),
         b: lerp(from.b, to.b, clamped),
     }
+}
+
+function getRegionGradientColor(directPixelX: number, directPixelY: number): RgbColor {
+    const centerDistanceX = directPixelX - 0.5
+    const centerDistanceY = directPixelY - 0.5
+    const centerDistance = Math.sqrt(centerDistanceX * centerDistanceX + centerDistanceY * centerDistanceY)
+    const swirlFactor = 0.35 * centerDistance
+    const theta = swirlFactor * swirlFactor * 0.8 * 8.0
+    const sinTheta = Math.sin(theta)
+    const cosTheta = Math.cos(theta)
+    const pixelX = clamp(0.5 + centerDistanceX * cosTheta - centerDistanceY * sinTheta)
+    const pixelY = clamp(0.5 + centerDistanceX * sinTheta + centerDistanceY * cosTheta)
+    let r = 0
+    let g = 0
+    let b = 0
+    let distanceSum = 0
+
+    for (let i = 0; i < REGION_GRADIENT_COLORS.length; i++) {
+        const dx = pixelX - REGION_GRADIENT_POSITIONS[i].x
+        const dy = pixelY - REGION_GRADIENT_POSITIONS[i].y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        let weight = Math.max(0, 0.9 - dist)
+        weight = weight * weight * weight * weight
+        distanceSum += weight
+        r += weight * REGION_GRADIENT_COLORS[i].r
+        g += weight * REGION_GRADIENT_COLORS[i].g
+        b += weight * REGION_GRADIENT_COLORS[i].b
+    }
+
+    if (distanceSum === 0) return REGION_GRADIENT_COLORS[0]
+    return { r: r / distanceSum, g: g / distanceSum, b: b / distanceSum }
 }
 
 function setPixel(data: Uint8ClampedArray, index: number, color: RgbColor, alpha: number): void {
@@ -338,6 +384,61 @@ function addExactCo2CloudBorder(ctx: CanvasRenderingContext2D, style: ContextReg
     ctx.globalCompositeOperation = 'source-over'
 }
 
+function addRegionGradientPreviewOverlays(ctx: CanvasRenderingContext2D, size: WatercolorTextureSize): void {
+    const { width, height } = size
+    ctx.save()
+    ctx.globalCompositeOperation = 'source-atop'
+
+    drawGradientEllipse(ctx, {
+        x: width * 0.50,
+        y: height * 0.55,
+        rx: width * 0.45,
+        ry: height * 0.35,
+        stops: [
+            { offset: 0, color: 'rgba(255, 255, 255, 0.10)' },
+            { offset: 0.58, color: 'rgba(255, 255, 255, 0.04)' },
+            { offset: 1, color: 'rgba(255, 255, 255, 0)' },
+        ],
+    })
+    drawGradientEllipse(ctx, {
+        x: width * 0.50,
+        y: height * 0.58,
+        rx: width * 0.37,
+        ry: height * 0.31,
+        stops: [
+            { offset: 0, color: 'rgba(86, 118, 109, 0.065)' },
+            { offset: 0.42, color: 'rgba(128, 158, 149, 0.038)' },
+            { offset: 0.72, color: 'rgba(232, 246, 242, 0.010)' },
+            { offset: 1, color: 'rgba(255, 255, 255, 0)' },
+        ],
+    })
+
+    const topGradient = ctx.createRadialGradient(width * 0.5, -height * 0.08, 0, width * 0.5, -height * 0.08, width * 0.52)
+    topGradient.addColorStop(0, 'rgba(255, 255, 255, 0.18)')
+    topGradient.addColorStop(0.42, 'rgba(255, 255, 255, 0.075)')
+    topGradient.addColorStop(0.72, 'rgba(255, 255, 255, 0)')
+    ctx.fillStyle = topGradient
+    ctx.fillRect(0, 0, width, height)
+
+    const bottomGradient = ctx.createRadialGradient(width * 0.5, height * 1.06, 0, width * 0.5, height * 1.06, width * 0.52)
+    bottomGradient.addColorStop(0, 'rgba(255, 255, 255, 0.14)')
+    bottomGradient.addColorStop(0.42, 'rgba(255, 255, 255, 0.060)')
+    bottomGradient.addColorStop(0.76, 'rgba(255, 255, 255, 0)')
+    ctx.fillStyle = bottomGradient
+    ctx.fillRect(0, 0, width, height)
+
+    const sideGradient = ctx.createLinearGradient(0, 0, width, 0)
+    sideGradient.addColorStop(0, 'rgba(255, 255, 255, 0.18)')
+    sideGradient.addColorStop(0.15, 'rgba(255, 255, 255, 0.030)')
+    sideGradient.addColorStop(0.84, 'rgba(255, 255, 255, 0)')
+    sideGradient.addColorStop(1, 'rgba(255, 255, 255, 0.15)')
+    ctx.fillStyle = sideGradient
+    ctx.fillRect(0, 0, width, height)
+
+    ctx.restore()
+    ctx.globalCompositeOperation = 'source-over'
+}
+
 function hashGrid(x: number, y: number, seed: number): number {
     let value = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(seed, 224682251)
     value = Math.imul(value ^ value >>> 13, 1274126177)
@@ -409,7 +510,6 @@ function getMaskEdgeStrength(maskData: Uint8ClampedArray, width: number, height:
 function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegionCloudStyle, size: WatercolorTextureSize, maskData: Uint8ClampedArray): void {
     const { width, height } = size
     const imageData = ctx.createImageData(width, height)
-    const wash = hexToRgb(style.palette.wash)
     const pool = hexToRgb(style.palette.pool)
     const bloom = hexToRgb(style.palette.bloom)
     const edge = hexToRgb(style.palette.edge)
@@ -435,12 +535,15 @@ function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegi
             const poolWeight = clamp(edgeStrength * 0.10 + smoothstep(0.62, 0.92, pigmentNoise) * 0.18)
             const bloomWeight = clamp(interior * smoothstep(0.55, 0.94, washNoise) * 0.50)
             const paperLift = (paperNoise - 0.5) * 0.18 + (fiberNoise - 0.5) * 0.065
-            let color = mixRgb(wash, pool, poolWeight * 0.64)
-            color = mixRgb(color, edge, edgeStrength * 0.08)
-            color = mixRgb(color, bloom, bloomWeight * 0.58 + Math.max(0, paperLift) * 0.26)
+            const previewGradientColor = getRegionGradientColor(x / width, y / height)
+            const baseGradientColor = mixRgb(REGION_GRADIENT_BASE_COLOR, previewGradientColor, 0.86)
+            let color = mixRgb(baseGradientColor, pool, poolWeight * 0.22)
+            color = mixRgb(color, edge, edgeStrength * 0.045)
+            color = mixRgb(color, bloom, bloomWeight * 0.18 + Math.max(0, paperLift) * 0.08)
+            color = mixRgb(color, previewGradientColor, 0.46 + paperNoise * 0.16)
 
-            const granulation = 0.84 + paperNoise * 0.24 + fiberNoise * 0.10
-            const alpha = clamp(shapeAlpha * (0.095 + interior * 0.165) * granulation + edgeStrength * 0.020)
+            const granulation = 0.88 + paperNoise * 0.18 + fiberNoise * 0.07
+            const alpha = clamp(shapeAlpha * (0.50 + interior * 0.20) * granulation + edgeStrength * 0.030)
             setPixel(imageData.data, index, color, alpha)
         }
     }
@@ -535,10 +638,11 @@ function createWatercolorTexture(style: ContextRegionCloudStyle): Texture {
     drawWatercolorMask(maskCtx, size)
     const maskData = maskCtx.getImageData(0, 0, width, height).data
     paintWatercolorPixels(ctx, style, size, maskData)
+    addRegionGradientPreviewOverlays(ctx, size)
     addCo2CloudPaintPools(ctx, style, size, random)
     addWatercolorCutbacks(ctx, style, size, random)
     addWatercolorPigmentSpeckles(ctx, style, size, random)
-    addExactCo2CloudBorder(ctx, style, size)
+    if (webUiThemeSettings.contextRegionCloudBorderEnabled) addExactCo2CloudBorder(ctx, style, size)
     applyCo2CloudMask(ctx, size)
 
     return Texture.from(canvas)
@@ -631,10 +735,12 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
     }
 
     function getTexture(style: ContextRegionCloudStyle): Texture {
-        const existing = textureCache.get(style.key)
+        const borderKey = webUiThemeSettings.contextRegionCloudBorderEnabled ? 'border' : 'no-border'
+        const textureKey = `${CONTEXT_REGION_TEXTURE_VERSION}:${borderKey}:${style.key}`
+        const existing = textureCache.get(textureKey)
         if (existing) return existing
         const texture = createWatercolorTexture(style)
-        textureCache.set(style.key, texture)
+        textureCache.set(textureKey, texture)
         return texture
     }
 

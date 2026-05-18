@@ -164,29 +164,29 @@ const TALL_POLYGON_B: ContextRegionCloudPoint[] = [
     { x: 0.19, y: 0.03 },
 ]
 
-const PALE_LAVENDER: ContextRegionCloudPalette = {
-    wash: '#DBC2E8',
-    pool: '#BE8FD2',
-    bloom: '#F0DFF5',
-    edge: '#9460AC',
-    ink: '#72427F',
+const REGION_MIST: ContextRegionCloudPalette = {
+    wash: '#DDECE7',
+    pool: '#C7DAD4',
+    bloom: '#EEF8F5',
+    edge: '#A1C3BA',
+    ink: '#1F2937',
 }
 
-const PALE_VIOLET: ContextRegionCloudPalette = {
-    wash: '#D5B3E6',
-    pool: '#B27ACB',
-    bloom: '#EDD9F5',
-    edge: '#8753A4',
-    ink: '#663775',
+const REGION_SEAFOAM: ContextRegionCloudPalette = {
+    wash: '#D6E7E1',
+    pool: '#C7DAD4',
+    bloom: '#EEF8F5',
+    edge: '#8FB5AB',
+    ink: '#1F2937',
 }
 
 export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = [
-    { key: 'lavender-wide-a', aspect: 'wide', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, hitPolygon: WIDE_POLYGON_A, palette: PALE_LAVENDER, seed: 1103 },
-    { key: 'lavender-wide-b', aspect: 'wide', bleedRatio: 0.32, titleAnchor: { x: 0.10, y: 0.12 }, hitPolygon: WIDE_POLYGON_B, palette: PALE_VIOLET, seed: 1291 },
-    { key: 'lavender-square-a', aspect: 'square', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, hitPolygon: SQUARE_POLYGON_A, palette: PALE_LAVENDER, seed: 1427 },
-    { key: 'lavender-square-b', aspect: 'square', bleedRatio: 0.31, titleAnchor: { x: 0.13, y: 0.12 }, hitPolygon: SQUARE_POLYGON_B, palette: PALE_VIOLET, seed: 1559 },
-    { key: 'lavender-tall-a', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.14, y: 0.12 }, hitPolygon: TALL_POLYGON_A, palette: PALE_LAVENDER, seed: 1667 },
-    { key: 'lavender-tall-b', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.13, y: 0.12 }, hitPolygon: TALL_POLYGON_B, palette: PALE_VIOLET, seed: 1789 },
+    { key: 'lavender-wide-a', aspect: 'wide', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, hitPolygon: WIDE_POLYGON_A, palette: REGION_MIST, seed: 1103 },
+    { key: 'lavender-wide-b', aspect: 'wide', bleedRatio: 0.32, titleAnchor: { x: 0.10, y: 0.12 }, hitPolygon: WIDE_POLYGON_B, palette: REGION_SEAFOAM, seed: 1291 },
+    { key: 'lavender-square-a', aspect: 'square', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, hitPolygon: SQUARE_POLYGON_A, palette: REGION_MIST, seed: 1427 },
+    { key: 'lavender-square-b', aspect: 'square', bleedRatio: 0.31, titleAnchor: { x: 0.13, y: 0.12 }, hitPolygon: SQUARE_POLYGON_B, palette: REGION_SEAFOAM, seed: 1559 },
+    { key: 'lavender-tall-a', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.14, y: 0.12 }, hitPolygon: TALL_POLYGON_A, palette: REGION_MIST, seed: 1667 },
+    { key: 'lavender-tall-b', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.13, y: 0.12 }, hitPolygon: TALL_POLYGON_B, palette: REGION_SEAFOAM, seed: 1789 },
 ]
 
 function isSvgPathCommand(token: string): boolean {
