@@ -1,17 +1,9 @@
 export type ContextRegionCloudAspect = 'wide' | 'square' | 'tall'
-export type ContextRegionCloudStyleKey =
-    | 'lavender-wide-a'
-    | 'lavender-wide-b'
-    | 'lavender-square-a'
-    | 'lavender-square-b'
-    | 'lavender-tall-a'
-    | 'lavender-tall-b'
 
 export type ContextRegionCloudPoint = { x: number; y: number }
 export type ContextRegionCloudRect = { x: number; y: number; width: number; height: number }
 
 export type ContextRegionCloudPalette = {
-    wash: string
     pool: string
     bloom: string
     edge: string
@@ -19,11 +11,10 @@ export type ContextRegionCloudPalette = {
 }
 
 export type ContextRegionCloudStyle = {
-    key: ContextRegionCloudStyleKey
+    key: string
     aspect: ContextRegionCloudAspect
     bleedRatio: number
     titleAnchor: ContextRegionCloudPoint
-    hitPolygon: ContextRegionCloudPoint[]
     palette: ContextRegionCloudPalette
     seed: number
 }
@@ -39,13 +30,10 @@ export type ContextRegionCloudDatum = {
     selected: boolean
 }
 
-export type ContextRegionCloudResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-
 export type ContextRegionCloudHit =
     | { kind: 'none' }
     | { kind: 'body'; nodeId: string }
     | { kind: 'title'; nodeId: string }
-    | { kind: 'resize-handle'; nodeId: string; corner: ContextRegionCloudResizeCorner }
 
 type SvgPathSampleState = {
     x: number
@@ -63,109 +51,7 @@ const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
 
-const WIDE_POLYGON_A: ContextRegionCloudPoint[] = [
-    { x: -0.06, y: 0.48 },
-    { x: 0.01, y: 0.28 },
-    { x: 0.13, y: 0.17 },
-    { x: 0.27, y: 0.08 },
-    { x: 0.42, y: 0.04 },
-    { x: 0.58, y: 0.05 },
-    { x: 0.75, y: 0.10 },
-    { x: 0.91, y: 0.21 },
-    { x: 1.05, y: 0.42 },
-    { x: 1.07, y: 0.58 },
-    { x: 0.98, y: 0.77 },
-    { x: 0.82, y: 0.90 },
-    { x: 0.63, y: 0.96 },
-    { x: 0.43, y: 0.95 },
-    { x: 0.23, y: 0.88 },
-    { x: 0.06, y: 0.72 },
-]
-
-const WIDE_POLYGON_B: ContextRegionCloudPoint[] = [
-    { x: -0.07, y: 0.42 },
-    { x: 0.04, y: 0.22 },
-    { x: 0.20, y: 0.11 },
-    { x: 0.36, y: 0.05 },
-    { x: 0.53, y: 0.07 },
-    { x: 0.70, y: 0.04 },
-    { x: 0.90, y: 0.17 },
-    { x: 1.07, y: 0.38 },
-    { x: 1.04, y: 0.62 },
-    { x: 0.93, y: 0.82 },
-    { x: 0.72, y: 0.94 },
-    { x: 0.54, y: 0.91 },
-    { x: 0.35, y: 0.98 },
-    { x: 0.14, y: 0.84 },
-    { x: 0.01, y: 0.64 },
-]
-
-const SQUARE_POLYGON_A: ContextRegionCloudPoint[] = [
-    { x: -0.06, y: 0.46 },
-    { x: 0.02, y: 0.24 },
-    { x: 0.22, y: 0.06 },
-    { x: 0.47, y: 0.00 },
-    { x: 0.70, y: 0.06 },
-    { x: 0.93, y: 0.23 },
-    { x: 1.06, y: 0.49 },
-    { x: 0.98, y: 0.76 },
-    { x: 0.77, y: 0.95 },
-    { x: 0.51, y: 1.02 },
-    { x: 0.26, y: 0.94 },
-    { x: 0.05, y: 0.73 },
-]
-
-const SQUARE_POLYGON_B: ContextRegionCloudPoint[] = [
-    { x: -0.04, y: 0.39 },
-    { x: 0.10, y: 0.15 },
-    { x: 0.34, y: 0.03 },
-    { x: 0.58, y: 0.02 },
-    { x: 0.84, y: 0.14 },
-    { x: 1.04, y: 0.39 },
-    { x: 1.02, y: 0.66 },
-    { x: 0.85, y: 0.90 },
-    { x: 0.59, y: 0.99 },
-    { x: 0.34, y: 0.96 },
-    { x: 0.11, y: 0.84 },
-    { x: -0.06, y: 0.62 },
-]
-
-const TALL_POLYGON_A: ContextRegionCloudPoint[] = [
-    { x: 0.48, y: -0.06 },
-    { x: 0.72, y: 0.02 },
-    { x: 0.90, y: 0.16 },
-    { x: 1.05, y: 0.36 },
-    { x: 1.02, y: 0.58 },
-    { x: 0.94, y: 0.79 },
-    { x: 0.75, y: 0.98 },
-    { x: 0.49, y: 1.05 },
-    { x: 0.25, y: 0.97 },
-    { x: 0.08, y: 0.82 },
-    { x: -0.05, y: 0.57 },
-    { x: -0.02, y: 0.35 },
-    { x: 0.10, y: 0.14 },
-    { x: 0.28, y: 0.02 },
-]
-
-const TALL_POLYGON_B: ContextRegionCloudPoint[] = [
-    { x: 0.41, y: -0.05 },
-    { x: 0.68, y: 0.03 },
-    { x: 0.88, y: 0.18 },
-    { x: 1.03, y: 0.41 },
-    { x: 0.97, y: 0.64 },
-    { x: 1.04, y: 0.82 },
-    { x: 0.78, y: 1.01 },
-    { x: 0.52, y: 0.98 },
-    { x: 0.31, y: 1.05 },
-    { x: 0.10, y: 0.86 },
-    { x: -0.04, y: 0.62 },
-    { x: 0.02, y: 0.38 },
-    { x: -0.02, y: 0.20 },
-    { x: 0.19, y: 0.03 },
-]
-
 const REGION_MIST: ContextRegionCloudPalette = {
-    wash: '#DDECE7',
     pool: '#C7DAD4',
     bloom: '#EEF8F5',
     edge: '#A1C3BA',
@@ -173,7 +59,6 @@ const REGION_MIST: ContextRegionCloudPalette = {
 }
 
 const REGION_SEAFOAM: ContextRegionCloudPalette = {
-    wash: '#D6E7E1',
     pool: '#C7DAD4',
     bloom: '#EEF8F5',
     edge: '#8FB5AB',
@@ -181,12 +66,12 @@ const REGION_SEAFOAM: ContextRegionCloudPalette = {
 }
 
 export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = [
-    { key: 'lavender-wide-a', aspect: 'wide', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, hitPolygon: WIDE_POLYGON_A, palette: REGION_MIST, seed: 1103 },
-    { key: 'lavender-wide-b', aspect: 'wide', bleedRatio: 0.32, titleAnchor: { x: 0.10, y: 0.12 }, hitPolygon: WIDE_POLYGON_B, palette: REGION_SEAFOAM, seed: 1291 },
-    { key: 'lavender-square-a', aspect: 'square', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, hitPolygon: SQUARE_POLYGON_A, palette: REGION_MIST, seed: 1427 },
-    { key: 'lavender-square-b', aspect: 'square', bleedRatio: 0.31, titleAnchor: { x: 0.13, y: 0.12 }, hitPolygon: SQUARE_POLYGON_B, palette: REGION_SEAFOAM, seed: 1559 },
-    { key: 'lavender-tall-a', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.14, y: 0.12 }, hitPolygon: TALL_POLYGON_A, palette: REGION_MIST, seed: 1667 },
-    { key: 'lavender-tall-b', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.13, y: 0.12 }, hitPolygon: TALL_POLYGON_B, palette: REGION_SEAFOAM, seed: 1789 },
+    { key: 'seafoam-wide-a', aspect: 'wide', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, palette: REGION_MIST, seed: 1103 },
+    { key: 'seafoam-wide-b', aspect: 'wide', bleedRatio: 0.32, titleAnchor: { x: 0.10, y: 0.12 }, palette: REGION_SEAFOAM, seed: 1291 },
+    { key: 'seafoam-square-a', aspect: 'square', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, palette: REGION_MIST, seed: 1427 },
+    { key: 'seafoam-square-b', aspect: 'square', bleedRatio: 0.31, titleAnchor: { x: 0.13, y: 0.12 }, palette: REGION_SEAFOAM, seed: 1559 },
+    { key: 'seafoam-tall-a', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.14, y: 0.12 }, palette: REGION_MIST, seed: 1667 },
+    { key: 'seafoam-tall-b', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.13, y: 0.12 }, palette: REGION_SEAFOAM, seed: 1789 },
 ]
 
 function isSvgPathCommand(token: string): boolean {
@@ -377,13 +262,6 @@ export function getContextRegionCloudBounds(datum: ContextRegionCloudDatum, styl
     return getContextRegionCloudVisualBounds(datum, style)
 }
 
-export function getContextRegionCloudPolygon(datum: ContextRegionCloudDatum, style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)): ContextRegionCloudPoint[] {
-    return style.hitPolygon.map((point) => ({
-        x: datum.x + point.x * datum.width,
-        y: datum.y + point.y * datum.height,
-    }))
-}
-
 export function isPointInPolygon(point: ContextRegionCloudPoint, polygon: ContextRegionCloudPoint[]): boolean {
     let inside = false
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -437,18 +315,6 @@ export function getContextRegionCloudTitleRect(datum: ContextRegionCloudDatum, z
         width,
         height,
     }
-}
-
-export function getContextRegionCloudResizeHandleRects(datum: ContextRegionCloudDatum, zoom: number): Array<{ corner: ContextRegionCloudResizeCorner; rect: ContextRegionCloudRect }> {
-    const safeZoom = Math.max(zoom, 0.01)
-    const size = 28 / safeZoom
-    const half = size / 2
-    return [
-        { corner: 'top-left', rect: { x: datum.x - half, y: datum.y - half, width: size, height: size } },
-        { corner: 'top-right', rect: { x: datum.x + datum.width - half, y: datum.y - half, width: size, height: size } },
-        { corner: 'bottom-left', rect: { x: datum.x - half, y: datum.y + datum.height - half, width: size, height: size } },
-        { corner: 'bottom-right', rect: { x: datum.x + datum.width - half, y: datum.y + datum.height - half, width: size, height: size } },
-    ]
 }
 
 export function hitTestContextRegionCloud(datum: ContextRegionCloudDatum, point: ContextRegionCloudPoint, zoom: number): ContextRegionCloudHit {

@@ -3290,11 +3290,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectNode(node.nodeId)
         })
 
-        for (const corner of RESIZE_CORNERS) {
-            // Legacy embedded thread nodes keep bottom handles on the floating input.
-            // Context regions need all four corner handles on the region itself.
-            if (node.type === 'aiChatThread' && !isContextRegion && corner.startsWith('bottom')) continue
-            nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
+        if (!isContextRegion) {
+            for (const corner of RESIZE_CORNERS) {
+                // Legacy embedded thread nodes keep bottom handles on the floating input.
+                if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue
+                nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
+            }
         }
 
         const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}></div>` as HTMLDivElement
@@ -3766,7 +3767,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
 
                 // Pick the best cloud region to adopt this dragged node into.
-                // The score uses the same irregular polygon as region clicks so
+                // The score uses the same CO2 cloud mask as region clicks so
                 // transparent corners do not behave like drop targets.
                 let containingRegion: ContextRegionNode | null = null
                 let bestRegionScore = 0
@@ -4545,12 +4546,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
-            if (regionHit.kind === 'resize-handle') {
-                suppressNextPaneClick = true
-                handleResizeStart(event, regionHit.nodeId, regionHit.corner)
-                return
-            }
-
             const regionNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === regionHit.nodeId)
             const thread = regionNode && isContextRegionCanvasNode(regionNode)
                 ? currentAiChatThreads.find((candidate) => candidate.threadId === regionNode.referenceId)
@@ -4843,11 +4838,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (isCanvasBackgroundTarget(e.target)) {
             clearNodeSelection()
             selectedEdgeId = null
-            connectionManager?.deselect()
+                // Pick the best cloud region to adopt this dragged node into.
             hideEdgeBubbleMenu()
         }
     })
-
+                // transparent corners do not behave like drop targets.
     const onKeyDown = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement | null
         const isTyping = !!target && (
@@ -4991,7 +4986,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             hiddenEmptyThreadNodeIds.clear()
             connectionManager?.destroy()
             connectionManager = null
-            viewportBridge?.destroy()
             viewportBridge = null
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null

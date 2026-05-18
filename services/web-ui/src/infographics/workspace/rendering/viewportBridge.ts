@@ -5,7 +5,6 @@ import { applyStyle } from '$src/utils/domTemplates.ts'
 
 export type ViewportBridge = {
     applyViewport: (viewport: CanvasViewport) => void
-    destroy: () => void
 }
 
 type ViewportBridgeOptions = {
@@ -25,9 +24,5 @@ export function createViewportBridge(options: ViewportBridgeOptions): ViewportBr
         getContextRegionLayer?.()?.setViewport(viewport)
     }
 
-    function destroy(): void {
-        // No owned resources; provided for lifecycle symmetry with other modules.
-    }
-
-    return { applyViewport, destroy }
+    return { applyViewport }
 }
