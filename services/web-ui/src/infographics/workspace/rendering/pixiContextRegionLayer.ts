@@ -60,27 +60,12 @@ type RgbColor = { r: number; g: number; b: number }
 type WatercolorTextureSize = { width: number; height: number }
 
 const VISIBILITY_MARGIN = 1600
-const PULSE_DURATION_MS = 700
 const CONTEXT_REGION_TEXTURE_VERSION = 4
 const CO2_CLOUD_VIEWBOX_SIZE = 512
 const CO2_CLOUD_MAIN_PATH = 'm482.856 229.936c12.391-15.534 19.801-35.216 19.801-56.63 0-50.198-40.694-90.892-90.892-90.892-5.966 0-11.796.581-17.441 1.679-25.94-49.959-78.143-84.093-138.324-84.093s-112.384 34.134-138.324 84.093c-5.645-1.097-11.475-1.679-17.441-1.679-50.198 0-90.892 40.694-90.892 90.892 0 21.415 7.41 41.096 19.801 56.63-18.325 25.172-29.144 56.158-29.144 89.676 0 84.244 68.293 152.538 152.537 152.538 5.374 0 10.683-.282 15.914-.824 21.017 24.873 52.435 40.674 87.549 40.674s66.532-15.801 87.549-40.674c5.231.542 10.539.824 15.914.824 84.244 0 152.537-68.294 152.537-152.538 0-33.518-10.819-64.504-29.144-89.676z'
 const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
-const MASK_ALPHA_THRESHOLD = 0.045
-const REGION_GRADIENT_BASE_COLOR = hexToRgb('#E5F2EE')
-const REGION_GRADIENT_COLORS = ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'].map(hexToRgb)
-const REGION_GRADIENT_PHASE_POSITIONS = [
-    { x: 0.8, y: 0.1 },
-    { x: 0.6, y: 0.2 },
-    { x: 0.35, y: 0.25 },
-    { x: 0.25, y: 0.6 },
-    { x: 0.2, y: 0.9 },
-    { x: 0.4, y: 0.8 },
-    { x: 0.65, y: 0.75 },
-    { x: 0.75, y: 0.4 },
-]
-const REGION_GRADIENT_POSITIONS = Array.from({ length: 4 }, (_, index) => REGION_GRADIENT_PHASE_POSITIONS[(4 + index * 2) % REGION_GRADIENT_PHASE_POSITIONS.length])
 
 function makeRandom(seed: number): () => number {
     let value = seed >>> 0
@@ -123,7 +108,12 @@ function mixRgb(from: RgbColor, to: RgbColor, amount: number): RgbColor {
     }
 }
 
-function getRegionGradientColor(directPixelX: number, directPixelY: number): RgbColor {
+function getRegionGradientColor(
+    directPixelX: number,
+    directPixelY: number,
+    gradientColors: RgbColor[],
+    gradientPositions: Array<{ x: number; y: number }>
+): RgbColor {
     const centerDistanceX = directPixelX - 0.5
     const centerDistanceY = directPixelY - 0.5
     const centerDistance = Math.sqrt(centerDistanceX * centerDistanceX + centerDistanceY * centerDistanceY)
@@ -138,19 +128,19 @@ function getRegionGradientColor(directPixelX: number, directPixelY: number): Rgb
     let b = 0
     let distanceSum = 0
 
-    for (let i = 0; i < REGION_GRADIENT_COLORS.length; i++) {
-        const dx = pixelX - REGION_GRADIENT_POSITIONS[i].x
-        const dy = pixelY - REGION_GRADIENT_POSITIONS[i].y
+    for (let i = 0; i < gradientColors.length; i++) {
+        const dx = pixelX - gradientPositions[i].x
+        const dy = pixelY - gradientPositions[i].y
         const dist = Math.sqrt(dx * dx + dy * dy)
         let weight = Math.max(0, 0.9 - dist)
         weight = weight * weight * weight * weight
         distanceSum += weight
-        r += weight * REGION_GRADIENT_COLORS[i].r
-        g += weight * REGION_GRADIENT_COLORS[i].g
-        b += weight * REGION_GRADIENT_COLORS[i].b
+        r += weight * gradientColors[i].r
+        g += weight * gradientColors[i].g
+        b += weight * gradientColors[i].b
     }
 
-    if (distanceSum === 0) return REGION_GRADIENT_COLORS[0]
+    if (distanceSum === 0) return gradientColors[0]
     return { r: r / distanceSum, g: g / distanceSum, b: b / distanceSum }
 }
 
@@ -167,7 +157,7 @@ function rgba(hex: string, alpha: number): string {
 }
 
 function getTemplateSize(): WatercolorTextureSize {
-    return { width: 1080, height: 1080 }
+    return webUiThemeSettings.contextRegionCloudTextureSize
 }
 
 function drawGradientEllipse(
@@ -369,8 +359,8 @@ function addExactCo2CloudBorder(ctx: CanvasRenderingContext2D, style: ContextReg
     const ringCtx = ringCanvas.getContext('2d')
     if (!ringCtx) return
 
-    fillCo2MainCloudShape(ringCtx, size, rgba(style.palette.edge, 0.22))
-    fillCo2ThoughtCircles(ringCtx, size, rgba(style.palette.edge, 0.20))
+    fillCo2MainCloudShape(ringCtx, size, rgba(style.palette.edge, webUiThemeSettings.contextRegionCloudBorderMainAlpha))
+    fillCo2ThoughtCircles(ringCtx, size, rgba(style.palette.edge, webUiThemeSettings.contextRegionCloudBorderThoughtCircleAlpha))
 
     ringCtx.globalCompositeOperation = 'destination-out'
     fillCo2MainCloudShape(ringCtx, size, 'rgba(0, 0, 0, 1)', 0.965)
@@ -513,6 +503,10 @@ function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegi
     const pool = hexToRgb(style.palette.pool)
     const bloom = hexToRgb(style.palette.bloom)
     const edge = hexToRgb(style.palette.edge)
+    const gradientBaseColor = hexToRgb(webUiThemeSettings.contextRegionCloudGradientBaseColor)
+    const gradientColors = webUiThemeSettings.contextRegionCloudGradientColors.map(hexToRgb)
+    const gradientPositions = webUiThemeSettings.contextRegionCloudGradientPositions
+    const maskAlphaThreshold = webUiThemeSettings.contextRegionCloudMaskAlphaThreshold
     const seed = style.seed
     const minSize = Math.min(width, height)
 
@@ -520,11 +514,11 @@ function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegi
         for (let x = 0; x < width; x++) {
             const index = (y * width + x) * 4
             const rawAlpha = maskData[index + 3] / 255
-            if (rawAlpha < MASK_ALPHA_THRESHOLD) continue
+            if (rawAlpha < maskAlphaThreshold) continue
 
             const normalizedX = x / minSize
             const normalizedY = y / minSize
-            const shapeAlpha = smoothstep(MASK_ALPHA_THRESHOLD, 0.72, rawAlpha)
+            const shapeAlpha = smoothstep(maskAlphaThreshold, 0.72, rawAlpha)
             const edgeStrength = getMaskEdgeStrength(maskData, width, height, x, y, rawAlpha)
             const paperNoise = fractalNoise(normalizedX * 28, normalizedY * 28, seed + 11, 3)
             const washNoise = fractalNoise(normalizedX * 7.5, normalizedY * 7.5, seed + 101, 4)
@@ -535,8 +529,8 @@ function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegi
             const poolWeight = clamp(edgeStrength * 0.10 + smoothstep(0.62, 0.92, pigmentNoise) * 0.18)
             const bloomWeight = clamp(interior * smoothstep(0.55, 0.94, washNoise) * 0.50)
             const paperLift = (paperNoise - 0.5) * 0.18 + (fiberNoise - 0.5) * 0.065
-            const previewGradientColor = getRegionGradientColor(x / width, y / height)
-            const baseGradientColor = mixRgb(REGION_GRADIENT_BASE_COLOR, previewGradientColor, 0.86)
+            const previewGradientColor = getRegionGradientColor(x / width, y / height, gradientColors, gradientPositions)
+            const baseGradientColor = mixRgb(gradientBaseColor, previewGradientColor, 0.86)
             let color = mixRgb(baseGradientColor, pool, poolWeight * 0.22)
             color = mixRgb(color, edge, edgeStrength * 0.045)
             color = mixRgb(color, bloom, bloomWeight * 0.18 + Math.max(0, paperLift) * 0.08)
@@ -672,13 +666,13 @@ function drawTitle(text: Text, datum: ContextRegionCloudDatum, style: ContextReg
     text.text = datum.title
     text.style = {
         fill: colorNumber(style.palette.ink),
-        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        fontSize: 20 / Math.max(zoom, 0.01),
-        fontWeight: '650',
+        fontFamily: webUiThemeSettings.contextRegionCloudTitleFontFamily,
+        fontSize: webUiThemeSettings.contextRegionCloudTitleFontSize / Math.max(zoom, 0.01),
+        fontWeight: webUiThemeSettings.contextRegionCloudTitleFontWeight,
     }
     text.position.set(rect.x, rect.y)
     text.scale.set(1)
-    text.alpha = 0.80
+    text.alpha = webUiThemeSettings.contextRegionCloudTitleAlpha
 }
 
 function drawChrome(entry: PixiContextRegionEntry, viewport: ContextRegionViewport): void {
@@ -793,7 +787,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         entry.backdrop.position.set(backdropRect.x, backdropRect.y)
         entry.backdrop.width = backdropRect.size
         entry.backdrop.height = backdropRect.size
-        entry.backdrop.alpha = datum.selected ? 1 : 0.98
+        entry.backdrop.alpha = datum.selected ? webUiThemeSettings.contextRegionCloudSelectedAlpha : webUiThemeSettings.contextRegionCloudIdleAlpha
 
         const geometryKey = getGeometryKey(datum, currentViewport)
         if (entry.geometryKey !== geometryKey) {
@@ -860,15 +854,16 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         for (const entry of entries.values()) {
             if (entry.pulseStartedAt === null) continue
             const elapsed = now - entry.pulseStartedAt
-            const progress = Math.min(1, elapsed / PULSE_DURATION_MS)
+            const progress = Math.min(1, elapsed / webUiThemeSettings.contextRegionCloudPulseDurationMs)
             const lift = Math.sin(progress * Math.PI)
             const style = getContextRegionCloudStyle(entry.datum.nodeId, entry.datum.width, entry.datum.height)
             const backdropRect = getBackdropRect(entry.datum, style)
-            entry.backdrop.alpha = (entry.datum.selected ? 1 : 0.98) + lift * 0.02
-            entry.backdrop.position.set(backdropRect.x, backdropRect.y - lift * 3 / Math.max(currentViewport.zoom, 0.01))
+            const baseAlpha = entry.datum.selected ? webUiThemeSettings.contextRegionCloudSelectedAlpha : webUiThemeSettings.contextRegionCloudIdleAlpha
+            entry.backdrop.alpha = baseAlpha + lift * webUiThemeSettings.contextRegionCloudPulseAlphaLift
+            entry.backdrop.position.set(backdropRect.x, backdropRect.y - lift * webUiThemeSettings.contextRegionCloudPulseLiftPx / Math.max(currentViewport.zoom, 0.01))
             if (progress >= 1) {
                 entry.pulseStartedAt = null
-                entry.backdrop.alpha = entry.datum.selected ? 1 : 0.98
+                entry.backdrop.alpha = baseAlpha
                 entry.backdrop.position.set(backdropRect.x, backdropRect.y)
             } else {
                 hasActivePulse = true

@@ -1,23 +1,14 @@
-export type ContextRegionCloudAspect = 'wide' | 'square' | 'tall'
+import {
+    webUiThemeSettings,
+    type ContextRegionCloudThemeStyle,
+} from '$src/webUiThemeSettings.ts'
+
+export type ContextRegionCloudAspect = ContextRegionCloudThemeStyle['aspect']
 
 export type ContextRegionCloudPoint = { x: number; y: number }
 export type ContextRegionCloudRect = { x: number; y: number; width: number; height: number }
-
-export type ContextRegionCloudPalette = {
-    pool: string
-    bloom: string
-    edge: string
-    ink: string
-}
-
-export type ContextRegionCloudStyle = {
-    key: string
-    aspect: ContextRegionCloudAspect
-    bleedRatio: number
-    titleAnchor: ContextRegionCloudPoint
-    palette: ContextRegionCloudPalette
-    seed: number
-}
+export type ContextRegionCloudPalette = ContextRegionCloudThemeStyle['palette']
+export type ContextRegionCloudStyle = ContextRegionCloudThemeStyle
 
 export type ContextRegionCloudDatum = {
     nodeId: string
@@ -51,28 +42,7 @@ const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
 
-const REGION_MIST: ContextRegionCloudPalette = {
-    pool: '#C7DAD4',
-    bloom: '#EEF8F5',
-    edge: '#A1C3BA',
-    ink: '#1F2937',
-}
-
-const REGION_SEAFOAM: ContextRegionCloudPalette = {
-    pool: '#C7DAD4',
-    bloom: '#EEF8F5',
-    edge: '#8FB5AB',
-    ink: '#1F2937',
-}
-
-export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = [
-    { key: 'seafoam-wide-a', aspect: 'wide', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, palette: REGION_MIST, seed: 1103 },
-    { key: 'seafoam-wide-b', aspect: 'wide', bleedRatio: 0.32, titleAnchor: { x: 0.10, y: 0.12 }, palette: REGION_SEAFOAM, seed: 1291 },
-    { key: 'seafoam-square-a', aspect: 'square', bleedRatio: 0.30, titleAnchor: { x: 0.12, y: 0.12 }, palette: REGION_MIST, seed: 1427 },
-    { key: 'seafoam-square-b', aspect: 'square', bleedRatio: 0.31, titleAnchor: { x: 0.13, y: 0.12 }, palette: REGION_SEAFOAM, seed: 1559 },
-    { key: 'seafoam-tall-a', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.14, y: 0.12 }, palette: REGION_MIST, seed: 1667 },
-    { key: 'seafoam-tall-b', aspect: 'tall', bleedRatio: 0.30, titleAnchor: { x: 0.13, y: 0.12 }, palette: REGION_SEAFOAM, seed: 1789 },
-]
+export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = webUiThemeSettings.contextRegionCloudStyles
 
 function isSvgPathCommand(token: string): boolean {
     return /^[a-z]$/i.test(token)
@@ -244,7 +214,7 @@ export function getContextRegionCloudStyle(nodeId: string, width: number, height
 }
 
 export function getContextRegionCloudBleed(style: ContextRegionCloudStyle, rect: Pick<ContextRegionCloudDatum, 'width' | 'height'>): number {
-    return Math.max(28, Math.min(rect.width, rect.height) * style.bleedRatio)
+    return Math.max(webUiThemeSettings.contextRegionCloudMinBleed, Math.min(rect.width, rect.height) * style.bleedRatio)
 }
 
 function getContextRegionCloudVisualBounds(datum: ContextRegionCloudDatum, style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)): ContextRegionCloudRect {
@@ -306,12 +276,18 @@ export function getContextRegionCloudTitleRect(datum: ContextRegionCloudDatum, z
     const safeZoom = Math.max(zoom, 0.01)
     const style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
     const bounds = getContextRegionCloudVisualBounds(datum, style)
-    const height = 30 / safeZoom
-    const charWidth = 8.25 / safeZoom
-    const width = Math.min(280 / safeZoom, Math.max(112 / safeZoom, datum.title.length * charWidth + 20 / safeZoom))
+    const height = webUiThemeSettings.contextRegionCloudTitleHeight / safeZoom
+    const charWidth = webUiThemeSettings.contextRegionCloudTitleCharWidth / safeZoom
+    const width = Math.min(
+        webUiThemeSettings.contextRegionCloudTitleMaxWidth / safeZoom,
+        Math.max(
+            webUiThemeSettings.contextRegionCloudTitleMinWidth / safeZoom,
+            datum.title.length * charWidth + webUiThemeSettings.contextRegionCloudTitlePaddingX / safeZoom
+        )
+    )
     return {
-        x: bounds.x + Math.max(22 / safeZoom, bounds.width * style.titleAnchor.x),
-        y: bounds.y - height - 10 / safeZoom,
+        x: bounds.x + Math.max(webUiThemeSettings.contextRegionCloudTitleMinX / safeZoom, bounds.width * style.titleAnchor.x),
+        y: bounds.y - height - webUiThemeSettings.contextRegionCloudTitleGap / safeZoom,
         width,
         height,
     }

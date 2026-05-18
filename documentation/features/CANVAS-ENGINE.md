@@ -1,8 +1,8 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM/SVG interaction renderer with PIXI v8 visual layers**. The proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack still owns rich UI and stateful interactions: ProseMirror, AI chat panels, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and SVG connector hit-testing. PIXI v8 (WebGPU with WebGL fallback) now owns image pixel rendering through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts` and context-region watercolor cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
+The workspace canvas is a **DOM/SVG interaction renderer with PIXI v8 visual layers**. The proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and SVG connector hit-testing. PIXI v8 (WebGPU with WebGL fallback) owns image pixel rendering through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts` and context-region CO2-shaped cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
 
-The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. Its Phase 2 guidance is the path being implemented: PIXI takes over high-volume visual surfaces incrementally, while document/chat-thread DOM and SVG connector hit-testing remain until profiling proves they need migration.
+The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. Its Phase 2 guidance defines the current path: PIXI owns high-volume visual surfaces incrementally, while document/chat-thread DOM and SVG connector hit-testing remain until profiling proves they need migration.
 
 ## Why This Matters
 
@@ -17,6 +17,8 @@ When working on canvas code, you need to know two libraries:
 
 For the workspace feature itself — node types, stores, services, data flow, architecture diagrams — see `documentation/features/WORKSPACE-FEATURE.md`.
 
+For context-region cloud rendering, shape-based hit testing, adoption scoring, and performance constraints, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
+
 ### Canvas implementation code
 
 The active canvas implementation lives in `services/web-ui/src/infographics/`. Key files:
@@ -28,8 +30,8 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/pixiMediaLayerLogic.ts` | Pure helpers: tier ranking, world-position math, src URL building, LoD-size param injection, world-rect math |
 | `workspace/pixiImageDecoder.ts` | Six-worker decode pool: round-robin dispatch with per-worker request tracking |
 | `workspace/pixiImageDecodeWorker.ts` | Worker body: `fetch` → `createImageBitmap` and post the bitmap back |
-| `workspace/rendering/contextRegionClouds.ts` | Pure context-region cloud geometry: style selection, polygons, hit zones, and adoption scoring |
-| `workspace/rendering/pixiContextRegionLayer.ts` | PIXI v8 context-region layer — shared watercolor textures, cloud sprites, title/chrome `Graphics`, culling, bounded pulse animation |
+| `workspace/rendering/contextRegionClouds.ts` | Pure context-region cloud geometry: style selection, CO2 SVG-mask hit zones, title hit zones, and adoption scoring |
+| `workspace/rendering/pixiContextRegionLayer.ts` | PIXI v8 context-region layer — shared CO2-shaped seafoam textures, cloud sprites, PIXI title text, optional baked border, culling, bounded pulse animation |
 | `workspace/rendering/pixiEdgeRenderer.ts` | PIXI edge renderer (diffed; reuses `Graphics`) |
 | `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to DOM CSS, PIXI media, and PIXI context-region layers |
 | `workspace/rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio) |
@@ -37,7 +39,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `connectors/renderer.ts` | SVG connector rendering (still authoritative for hit testing) |
 | `utils/zoomScaling.ts` | Zoom-compensated handle scaling |
 
-Do not follow the historical full-replacement PIXI notes in `documentation/memory/pixi-refactoring.md` as an implementation recipe. The active migration path is incremental: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.
+Use the incremental canvas architecture documented here as the implementation recipe: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.
 
 ### @xyflow/system reference
 
@@ -70,7 +72,7 @@ flowchart TB
     subgraph Pane[".workspace-pane"]
         subgraph RegionPixi[".workspace-pixi-context-region-layer (z-index 0, PIXI canvas)"]
             REGION_WORLD[Context region world Container<br/>scale = viewport.zoom<br/>position = viewport.x, y]
-            CLOUDS[Watercolor cloud sprites<br/>title/chrome Graphics]
+            CLOUDS[CO2 cloud sprites<br/>title Text]
         end
         subgraph Viewport[".workspace-viewport (z-index 1, CSS-transformed)"]
             DOC[Document Nodes]
@@ -103,7 +105,7 @@ The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region c
 
 When PIXI is healthy, the DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node--pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
 
-Context-region DOM elements are also kept, but only as transparent geometry proxies for existing drag/resize/selection and parent-child state paths. Their visible watercolor cloud, title pill, selected outline, and resize handles are drawn by `pixiContextRegionLayer`. Empty-region pointer behavior starts in the pane background handler, calls `contextRegionLayer.hitTest(worldPoint)`, and then reuses the existing drag or resize handlers for the matched node.
+Context-region DOM elements are also kept, but only as transparent geometry proxies for existing drag, selection, connection-manager, and parent-child state paths. Their visible CO2-shaped cloud and title text are drawn by `pixiContextRegionLayer`. Empty-region pointer behavior starts in the pane background handler, calls `contextRegionLayer.hitTest(worldPoint)`, and then reuses the existing drag handler for the matched node.
 
 ### Viewport Bridge
 
@@ -147,12 +149,12 @@ This gives DOM and PIXI a single, consistent transform every frame. There is no 
 
 1. Builds world-space region datums from persisted canvas nodes plus live drag/resize overrides.
 2. Selects a deterministic cloud style from `contextRegionClouds.ts` based on node ID and aspect ratio.
-3. Reuses one generated watercolor `Texture` per cloud style instead of generating per-node bitmaps.
-4. Updates sprite position/size, title text, selected outline, and resize-handle chrome only when geometry or zoom changed.
+3. Reuses one generated seafoam `Texture` per cloud style and border setting instead of generating per-node bitmaps.
+4. Updates sprite position/size and title text only when geometry or zoom changed.
 5. Culls off-screen clouds with the same viewport world-rect helper used by the media layer.
 6. Schedules a render via rAF.
 
-Cloud hit-testing and drag-adoption scoring use the same shared polygons from `contextRegionClouds.ts`, so transparent rectangle corners do not behave like region body hits or drop targets.
+Cloud hit-testing and drag-adoption scoring use the same sampled CO2 SVG mask from `contextRegionClouds.ts`, so transparent rectangle corners do not behave like region body hits or drop targets.
 
 ### Render Scheduling
 
@@ -262,7 +264,7 @@ The PIXI media layer has gone through several rounds of perf hardening. The curr
 | **Idle prefetch (capped)** | Up to 20 unloaded entries per idle tick get pre-cached at `thumb-256`, sorted by viewport distance. Pan reveals already-loaded images. |
 | **DOM `<img>` double-fetch eliminated** | Stored-image `<img>` elements have no `src` attribute while PIXI is healthy. Backfilled on PIXI failure as the fallback path. |
 | **Single PIXI `sync()` per state commit** | The `renderNodes()`-side duplicate sync was removed. Each `commitCanvasState` runs the pipeline exactly once. |
-| **Incremental RBush** | The spatial index is updated per-node (`remove` + `insert`) only when geometry actually changed. Used to be wiped + rebuilt on every sync. |
+| **Incremental RBush** | The spatial index is updated per-node (`remove` + `insert`) only when geometry actually changed, avoiding full rebuilds on every sync. |
 | **`drawColorRect` skip-when-unchanged** | Placeholder geometry is only rebuilt when the node's width or height actually changed; transform updates are matrix-only. |
 | **`syncDomOwnership` skip when no-op** | `classList.toggle` only runs for nodes whose ownership state actually changed. |
 | **PIXI edge renderer diff** | `Graphics` objects are reused across renders; geometry is only repainted when the edge fingerprint changes. |
@@ -361,7 +363,7 @@ When tuning, these are the knobs that exist today (all in `pixiMediaLayer.ts` un
 | Constant | Default | What it does | When to change |
 |----------|---------|--------------|----------------|
 | `VISIBILITY_MARGIN` | `1200` | World-unit margin past the viewport. Sprites within this band are eligible for texture loading. | Increase for smoother pan reveal at the cost of more in-flight loads. |
-| `PREFETCH_MARGIN` | `4000` | Margin used by the prefetch ring (currently unused since prefetch loops over all entries; legacy). | Re-introduce as a hard cap if prefetch becomes too aggressive on huge workspaces. |
+| `PREFETCH_MARGIN` | `4000` | Reserved margin for a prefetch ring; current prefetch loops over all entries. | Re-introduce as a hard cap if prefetch becomes too aggressive on huge workspaces. |
 | `PREFETCH_BATCH_SIZE` | `20` | Max entries processed per idle prefetch tick. | Lower if idle decoding starves urgent visibility loads; raise if first-screen prefetch is too slow. |
 | `MAX_TEXTURES` | `2000` | Hard count limit for the texture cache. | Lower on memory-constrained devices (iPad, mobile). |
 | `MAX_TEXTURE_BYTES` | `768 MB` | Hard byte limit for the texture cache. | Lower for low-VRAM devices. WebGL on iPad has ~256 MB practical ceiling. |
@@ -377,7 +379,7 @@ When tuning, these are the knobs that exist today (all in `pixiMediaLayer.ts` un
 `WorkspaceCanvas.ts` subscribes:
 
 - **`ready`**: do nothing — image-node DOM `<img>` elements stay empty (no `src`), PIXI draws.
-- **`failed`**: call `backfillDomImageSrcs()` which iterates every tracked image node and sets its `<img>.src` to the resolved API URL. The DOM falls back to the legacy renderer.
+- **`failed`**: call `backfillDomImageSrcs()` which iterates every tracked image node and sets its `<img>.src` to the resolved API URL. The DOM image path becomes the fallback renderer.
 
 This means **PIXI failure is non-fatal**. The user sees images either way; only the rendering quality / large-canvas performance degrades.
 
