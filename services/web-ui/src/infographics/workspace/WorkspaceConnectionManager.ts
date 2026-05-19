@@ -257,6 +257,14 @@ function computeTFromPointerPosition(
 	return t
 }
 
+function resolveEdgeAnchorT(node: CanvasNode | undefined, t: number | undefined): number {
+	return node?.type === 'image' ? 0.5 : t ?? 0.5
+}
+
+function canAutoAlignTargetT(node: CanvasNode | undefined): boolean {
+	return Boolean(node && node.type !== 'image')
+}
+
 function isSameConnection(
 	a: WorkspaceEdge,
 	b: { sourceNodeId: string; targetNodeId: string; sourceHandle?: string | null; targetHandle?: string | null }
@@ -307,12 +315,13 @@ export function computeSpreadTValues(
 		const sourceY = sourceNode ? sourceNode.position.y + sourceNode.dimensions.height / 2 : 0
 
 		// Default to stored T or 0.5
-		let targetT = edge.targetT ?? 0.5
+		const sourceT = resolveEdgeAnchorT(sourceNode, edge.sourceT)
+		let targetT = resolveEdgeAnchorT(targetNode, edge.targetT)
 
 		// Dynamic auto-align: If source Y hits the target node, FORCE straight line alignment
 		// This ensures that even during dragging or node moving, the line attempts to stay straight
 		// For off-axis nodes, we clamp to the nearest corner (top/bottom) instead of snapping to center
-		if (sourceNode && targetNode) {
+		if (sourceNode && canAutoAlignTargetT(targetNode)) {
 			const targetHeight = targetNode.dimensions.height
 
 			// When the target is shorter than the minimum slide height, snap to center
@@ -333,7 +342,7 @@ export function computeSpreadTValues(
 
 		// Initialize with values
 		result.set(edge.edgeId, {
-			sourceT: edge.sourceT ?? 0.5,
+			sourceT,
 			targetT,
 			laneIndex: 0,
 			laneCount: 1,
@@ -345,6 +354,7 @@ export function computeSpreadTValues(
 	// Sort by TARGET node's Y position so lines don't cross
 	for (const [, group] of sourceGroups) {
 		if (group.length <= 1) continue
+		if (nodeMap.get(group[0]?.sourceNodeId)?.type === 'image') continue
 
 		// Sort by target node Y position (smaller Y = higher on screen = smaller t)
 		group.sort((a, b) => {
@@ -526,8 +536,8 @@ export class WorkspaceConnectionManager {
 		nodeById: Map<string, CanvasNode>,
 		worldNodeMap: Map<string, NodeConfig>
 	): EdgeAnchor {
-		const resolvedT = t ?? 0.5
 		const node = nodeById.get(nodeId)
+		const resolvedT = resolveEdgeAnchorT(node, t)
 		const nodeConfig = worldNodeMap.get(nodeId)
 		const offset = this.getContextRegionAnchorOffset(node, nodeConfig, position, resolvedT)
 
@@ -735,7 +745,7 @@ export class WorkspaceConnectionManager {
 				const sourceNode = this.nodes.find(n => n.nodeId === nodeId)
 				const targetNode = this.nodes.find(n => n.nodeId === toNodeId)
 
-				if (sourceNode && targetNode) {
+				if (sourceNode && canAutoAlignTargetT(targetNode)) {
 					const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT
 					const targetTop = targetNode.position.y
 					const targetBottom = targetTop + targetNode.dimensions.height
@@ -989,7 +999,7 @@ export class WorkspaceConnectionManager {
 				const sourceNode = this.nodes.find(n => n.nodeId === fromNodeId)
 				const targetNode = this.nodes.find(n => n.nodeId === toNodeId)
 
-				if (sourceNode && targetNode) {
+				if (sourceNode && canAutoAlignTargetT(targetNode)) {
 					const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT
 					const targetTop = targetNode.position.y
 					const targetBottom = targetTop + targetNode.dimensions.height
@@ -1045,7 +1055,9 @@ export class WorkspaceConnectionManager {
 					updatedEdge.sourceNodeId = finalState.toNode.id
 					updatedEdge.sourceHandle = finalState.toHandle?.id ?? undefined
 					// Compute t from drop position
-					if (reconnectedNode && finalState.toHandle) {
+					if (reconnectedNode?.type === 'image') {
+						updatedEdge.sourceT = 0.5
+					} else if (reconnectedNode && finalState.toHandle) {
 						updatedEdge.sourceT = computeTFromPointerPosition(
 							finalState.toHandle.y,
 							reconnectedNode.position.y,
@@ -1058,7 +1070,9 @@ export class WorkspaceConnectionManager {
 					updatedEdge.targetNodeId = finalState.toNode.id
 					updatedEdge.targetHandle = finalState.toHandle?.id ?? undefined
 					// Compute t from drop position
-					if (reconnectedNode && finalState.toHandle) {
+					if (reconnectedNode?.type === 'image') {
+						updatedEdge.targetT = 0.5
+					} else if (reconnectedNode && finalState.toHandle) {
 						updatedEdge.targetT = computeTFromPointerPosition(
 							finalState.toHandle.y,
 							reconnectedNode.position.y,
@@ -1333,7 +1347,7 @@ export class WorkspaceConnectionManager {
 					// This prevents the arrow from pointing to the bottom of the target when the thread is long
 					const sourceNode = this.nodes.find(n => n.nodeId === e.sourceNodeId)
 					const targetNode = this.nodes.find(n => n.nodeId === e.targetNodeId)
-					if (sourceNode && targetNode) {
+					if (sourceNode && canAutoAlignTargetT(targetNode)) {
 						const targetHeight = targetNode.dimensions.height
 
 						if (targetHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
