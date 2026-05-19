@@ -171,6 +171,67 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         expect(result.allowCollisionResolution).toBe(false)
     })
 
+    it('moves every selected context region as one group', () => {
+        const regionA = makeRegion({ nodeId: 'region-a' })
+        const regionB = makeRegion({ nodeId: 'region-b' })
+
+        const result = plan({
+            nodes: [regionA, regionB],
+            primaryNodeId: 'region-b',
+            selectedNodeIds: new Set(['region-a', 'region-b']),
+        })
+
+        expect(result.resolvedNodeId).toBe('region-b')
+        expect(result.draggedNodeIds).toEqual(['region-a', 'region-b'])
+        expect(result.moveAnchoredImageIds).toEqual([])
+        expect(result.allowProximityConnection).toBe(false)
+        expect(result.allowCollisionResolution).toBe(false)
+    })
+
+    it('moves selected regions with their real children but not unrelated leaves', () => {
+        const regionA = makeRegion({ nodeId: 'region-a' })
+        const regionB = makeRegion({ nodeId: 'region-b' })
+        const childA = makeImage({ nodeId: 'child-a', parentId: 'region-a', position: { x: 48, y: 72 } })
+        const childB = makeImage({ nodeId: 'child-b', parentId: 'region-b', position: { x: 64, y: 80 } })
+        const unrelatedLeaf = makeImage({ nodeId: 'unrelated-leaf', position: { x: 900, y: 240 } })
+
+        const result = plan({
+            nodes: [regionA, childA, regionB, childB, unrelatedLeaf],
+            primaryNodeId: 'region-a',
+            selectedNodeIds: new Set(['region-a', 'region-b']),
+        })
+
+        expect(result.draggedNodeIds).toEqual(['region-a', 'region-b', 'child-b', 'child-a'])
+        expect(result.draggedNodeIds).not.toContain('unrelated-leaf')
+        expect(result.moveAnchoredImageIds).toEqual([])
+    })
+
+    it('moves mixed selected groups that include a context region without pulling generated outputs', () => {
+        const region = makeRegion({ nodeId: 'region-1', referenceId: 'thread-1' })
+        const document = makeDocument({ nodeId: 'doc-1' })
+        const generatedOutput = makeImage({
+            nodeId: 'generated-output',
+            position: { x: 760, y: 120 },
+            generatedBy: {
+                aiChatThreadId: 'thread-1',
+                responseId: 'response-1',
+                aiModel: 'openai:gpt-4o' as any,
+                responseMessageId: 'message-1',
+            },
+        })
+
+        const result = plan({
+            nodes: [region, document, generatedOutput],
+            primaryNodeId: 'region-1',
+            selectedNodeIds: new Set(['region-1', 'doc-1', 'generated-output']),
+        })
+
+        expect(result.draggedNodeIds).toEqual(['region-1', 'doc-1'])
+        expect(result.draggedNodeIds).not.toContain('generated-output')
+        expect(result.moveAnchoredImageIds).toEqual([])
+        expect(result.allowCollisionResolution).toBe(false)
+    })
+
     it('disables global collision resolution for context region release', () => {
         const result = plan({
             nodes: [makeRegion({ nodeId: 'region-1' })],
