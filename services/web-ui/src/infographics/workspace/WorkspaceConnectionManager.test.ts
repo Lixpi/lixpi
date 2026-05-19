@@ -8,6 +8,7 @@ import {
 	getEdgeAnchorPositions,
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
+import { getContextRegionCloudAnchorPoint } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import { webUiSettings } from '$src/webUiSettings.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
@@ -81,6 +82,28 @@ function mockPaneBounds(paneEl: HTMLDivElement) {
 		y: 0,
 		toJSON: () => ({})
 	})
+}
+
+function getRenderedEdgeStart(edgesLayerEl: HTMLDivElement, edgeId: string): { x: number; y: number } {
+	const path = edgesLayerEl.querySelector(`#edge-${edgeId}`) as SVGPathElement | null
+	expect(path).not.toBeNull()
+
+	const pathData = path?.getAttribute('d') ?? ''
+	const match = pathData.match(/^M\s*([-\d.]+)[,\s]+([-\d.]+)/)
+	expect(match).not.toBeNull()
+
+	return {
+		x: Number(match?.[1] ?? 0),
+		y: Number(match?.[2] ?? 0),
+	}
+}
+
+function getEdgesLayerLeft(edgesLayerEl: HTMLDivElement): number {
+	return Number.parseFloat(edgesLayerEl.style.left || '0') || 0
+}
+
+function getEdgesLayerTop(edgesLayerEl: HTMLDivElement): number {
+	return Number.parseFloat(edgesLayerEl.style.top || '0') || 0
 }
 
 // =============================================================================
@@ -530,6 +553,88 @@ describe('WorkspaceConnectionManager — menu connections', () => {
 		expect(closest.nodeId).toBe('chat-1')
 		expect(closest.x).toBe(495)
 		expect(closest.y).toBe(430)
+	})
+})
+
+// =============================================================================
+// RENDERING — context region cloud anchors
+// =============================================================================
+
+describe('WorkspaceConnectionManager — context region edge anchors', () => {
+	it('renders context-region edge endpoints from the cloud outline and recomputes them after resize', () => {
+		const config = {
+			...createMockConfig(),
+			isContextRegionNode: (node: CanvasNode) => node.type === 'contextRegion',
+		}
+		const manager = new WorkspaceConnectionManager(config)
+		const regionNode = makeNode({
+			nodeId: 'region-1',
+			type: 'contextRegion',
+			position: { x: 100, y: 80 },
+			dimensions: { width: 400, height: 260 },
+		})
+		const imageNode = makeNode({
+			nodeId: 'img-1',
+			type: 'image',
+			position: { x: 780, y: 120 },
+			dimensions: { width: 260, height: 260 },
+		})
+		const edge = makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: regionNode.nodeId,
+			targetNodeId: imageNode.nodeId,
+			sourceT: 0.5,
+			targetT: 0.5,
+		})
+
+		manager.syncNodes([regionNode, imageNode])
+		manager.syncEdges([edge])
+		manager.render()
+
+		const sourceMarkerOffset = 6
+		const layerLeft = getEdgesLayerLeft(config.edgesLayerEl)
+		const layerTop = getEdgesLayerTop(config.edgesLayerEl)
+		const start = getRenderedEdgeStart(config.edgesLayerEl, edge.edgeId)
+		const anchor = getContextRegionCloudAnchorPoint({
+			nodeId: regionNode.nodeId,
+			referenceId: regionNode.referenceId,
+			x: regionNode.position.x,
+			y: regionNode.position.y,
+			width: regionNode.dimensions.width,
+			height: regionNode.dimensions.height,
+			title: '',
+			selected: false,
+		}, 'right', 0.5)
+		const rectangularStartX = regionNode.position.x + regionNode.dimensions.width + sourceMarkerOffset - layerLeft
+
+		expect(start.x).toBeCloseTo(anchor.x + sourceMarkerOffset - layerLeft, 2)
+		expect(start.y).toBeCloseTo(anchor.y - layerTop, 2)
+		expect(start.x).toBeGreaterThan(rectangularStartX + 1)
+
+		const resizedRegionNode = {
+			...regionNode,
+			dimensions: { width: 620, height: 360 },
+		}
+		manager.syncNodes([resizedRegionNode, imageNode])
+		manager.render()
+
+		const resizedLayerLeft = getEdgesLayerLeft(config.edgesLayerEl)
+		const resizedLayerTop = getEdgesLayerTop(config.edgesLayerEl)
+		const resizedStart = getRenderedEdgeStart(config.edgesLayerEl, edge.edgeId)
+		const resizedAnchor = getContextRegionCloudAnchorPoint({
+			nodeId: resizedRegionNode.nodeId,
+			referenceId: resizedRegionNode.referenceId,
+			x: resizedRegionNode.position.x,
+			y: resizedRegionNode.position.y,
+			width: resizedRegionNode.dimensions.width,
+			height: resizedRegionNode.dimensions.height,
+			title: '',
+			selected: false,
+		}, 'right', 0.5)
+
+		expect(resizedStart.x).toBeCloseTo(resizedAnchor.x + sourceMarkerOffset - resizedLayerLeft, 2)
+		expect(resizedStart.y).toBeCloseTo(resizedAnchor.y - resizedLayerTop, 2)
+		expect(resizedAnchor.x).toBeGreaterThan(anchor.x)
 	})
 })
 
