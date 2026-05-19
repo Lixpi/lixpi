@@ -23,10 +23,16 @@ import {
 	applyOffset,
 	type ConnectorRenderer,
 	type EdgeConfig,
+	type EdgeAnchor,
 	type NodeConfig,
 	type PathType,
 	type AnchorPosition,
 } from '$src/infographics/connectors/index.ts'
+import {
+	getContextRegionCloudAnchorPoint,
+	getContextRegionCloudBounds,
+	type ContextRegionCloudDatum,
+} from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
@@ -45,8 +51,8 @@ type ProximityCandidate = {
 	sourceHandle: 'left' | 'right'
 	targetNodeId: string
 	targetHandle: 'left' | 'right'
-    sourceT?: number
-    targetT?: number
+	sourceT?: number
+	targetT?: number
 }
 
 type HandleMeta = {
@@ -78,6 +84,12 @@ type RenderBounds = {
 	height: number
 }
 
+type EdgeNodeGeometry = {
+	x: number
+	y: number
+	width: number
+	height: number
+}
 
 function generateEdgeId(): string {
 	const random = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
@@ -88,6 +100,19 @@ function toRendererPoint(point: { x: number; y: number }, transform: Transform) 
 	return {
 		x: (point.x - transform[0]) / transform[2],
 		y: (point.y - transform[1]) / transform[2]
+	}
+}
+
+function toContextRegionCloudDatum(node: CanvasNode): ContextRegionCloudDatum {
+	return {
+		nodeId: node.nodeId,
+		referenceId: node.referenceId,
+		x: node.position.x,
+		y: node.position.y,
+		width: node.dimensions.width,
+		height: node.dimensions.height,
+		title: '',
+		selected: false,
 	}
 }
 
@@ -448,6 +473,75 @@ export class WorkspaceConnectionManager {
 			if (railH === undefined) return n
 			return { ...n, dimensions: { ...n.dimensions, height: railH } }
 		})
+	}
+
+	private isContextRegionEdgeNode(node: CanvasNode | undefined): boolean {
+		return Boolean(node && this.config.isContextRegionNode?.(node))
+	}
+
+	private getEdgeNodeGeometry(node: CanvasNode): EdgeNodeGeometry {
+		if (this.isContextRegionEdgeNode(node)) {
+			const bounds = getContextRegionCloudBounds(toContextRegionCloudDatum(node))
+			return {
+				x: bounds.x,
+				y: bounds.y,
+				width: bounds.width,
+				height: bounds.height,
+			}
+		}
+
+		const railOffset = this.config.railOffset ?? 0
+		const xShift = node.type === 'aiChatThread' ? railOffset : 0
+		const railHeight = node.type === 'aiChatThread' ? this.railHeights.get(node.nodeId) : undefined
+
+		return {
+			x: node.position.x - xShift,
+			y: node.position.y,
+			width: node.dimensions.width + xShift,
+			height: railHeight ?? node.dimensions.height,
+		}
+	}
+
+	private getContextRegionAnchorOffset(
+		node: CanvasNode | undefined,
+		nodeConfig: NodeConfig | undefined,
+		position: AnchorPosition,
+		t: number
+	): { x: number; y: number } | undefined {
+		if (!this.isContextRegionEdgeNode(node) || !nodeConfig) return undefined
+
+		const rawAnchor = computeWorldAnchorPoint(position, t, nodeConfig)
+		const cloudAnchor = getContextRegionCloudAnchorPoint(toContextRegionCloudDatum(node), position, t)
+
+		return {
+			x: cloudAnchor.x - rawAnchor.x,
+			y: cloudAnchor.y - rawAnchor.y,
+		}
+	}
+
+	private buildEdgeAnchor(
+		nodeId: string,
+		position: AnchorPosition,
+		t: number | undefined,
+		nodeById: Map<string, CanvasNode>,
+		worldNodeMap: Map<string, NodeConfig>
+	): EdgeAnchor {
+		const resolvedT = t ?? 0.5
+		const node = nodeById.get(nodeId)
+		const nodeConfig = worldNodeMap.get(nodeId)
+		const offset = this.getContextRegionAnchorOffset(node, nodeConfig, position, resolvedT)
+
+		return {
+			nodeId,
+			position,
+			t: resolvedT,
+			...(offset ? { offset } : {}),
+		}
+	}
+
+	private includeEdgeNodeGeometry(node: CanvasNode, includeRect: (x: number, y: number, width: number, height: number) => void): void {
+		const geometry = this.getEdgeNodeGeometry(node)
+		includeRect(geometry.x, geometry.y, geometry.width, geometry.height)
 	}
 
 	public constructor(config: ConnectionManagerConfig) {
@@ -1043,24 +1137,24 @@ export class WorkspaceConnectionManager {
 		let maxX = -Infinity
 		let maxY = -Infinity
 
-		const includeRect = (x: number, y: number, w: number, h: number) => {
+		const includeRect = (x: number, y: number, width: number, height: number) => {
 			minX = Math.min(minX, x)
 			minY = Math.min(minY, y)
-			maxX = Math.max(maxX, x + w)
-			maxY = Math.max(maxY, y + h)
+			maxX = Math.max(maxX, x + width)
+			maxY = Math.max(maxY, y + height)
 		}
 
 		for (const edge of this.edges) {
 			const source = nodeById.get(edge.sourceNodeId)
 			const target = nodeById.get(edge.targetNodeId)
-			if (source) includeRect(source.position.x, source.position.y, source.dimensions.width, source.dimensions.height)
-			if (target) includeRect(target.position.x, target.position.y, target.dimensions.width, target.dimensions.height)
+			if (source) this.includeEdgeNodeGeometry(source, includeRect)
+			if (target) this.includeEdgeNodeGeometry(target, includeRect)
 		}
 
 		if (this.connectionInProgress) {
 			const fromNode = this.nodes.find((node) => node.nodeId === this.connectionInProgress?.fromHandle?.nodeId)
 			if (fromNode) {
-				includeRect(fromNode.position.x, fromNode.position.y, fromNode.dimensions.width, fromNode.dimensions.height)
+				this.includeEdgeNodeGeometry(fromNode, includeRect)
 			}
 
 			includeRect(this.connectionInProgress.from.x, this.connectionInProgress.from.y, 1, 1)
@@ -1073,7 +1167,7 @@ export class WorkspaceConnectionManager {
 			const toNodeId = this.connectionInProgress.toHandle?.nodeId ?? this.connectionInProgress.toNode?.id
 			const toNode = toNodeId ? this.nodes.find((node) => node.nodeId === toNodeId) : null
 			if (toNode) {
-				includeRect(toNode.position.x, toNode.position.y, toNode.dimensions.width, toNode.dimensions.height)
+				this.includeEdgeNodeGeometry(toNode, includeRect)
 			}
 
 			includeRect(to.x, to.y, 1, 1)
@@ -1082,8 +1176,8 @@ export class WorkspaceConnectionManager {
 		if (this.proximityCandidate) {
 			const proxSource = nodeById.get(this.proximityCandidate.sourceNodeId)
 			const proxTarget = nodeById.get(this.proximityCandidate.targetNodeId)
-			if (proxSource) includeRect(proxSource.position.x, proxSource.position.y, proxSource.dimensions.width, proxSource.dimensions.height)
-			if (proxTarget) includeRect(proxTarget.position.x, proxTarget.position.y, proxTarget.dimensions.width, proxTarget.dimensions.height)
+			if (proxSource) this.includeEdgeNodeGeometry(proxSource, includeRect)
+			if (proxTarget) this.includeEdgeNodeGeometry(proxTarget, includeRect)
 		}
 
 		if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
@@ -1138,37 +1232,33 @@ export class WorkspaceConnectionManager {
 
 		const offsetX = bounds.left
 		const offsetY = bounds.top
+		const nodeById = new Map(this.nodes.map((node) => [node.nodeId, node]))
 
 		// World-coordinate node map for PIXI edge rendering (same data without bounds offset)
 		const worldNodeMap = new Map<string, NodeConfig>()
 
 		// Add nodes for anchor computation (hidden by CSS)
-		const railOff = this.config.railOffset ?? 0
-		for (const n of this.nodes) {
-			// For aiChatThread nodes shift the left anchor by -railOffset
-			// so connector lines attach to the vertical rail, and extend
-			// height to full rail span (thread + gap + floating input)
-			const xShift = n.type === 'aiChatThread' ? railOff : 0
-			const railH = n.type === 'aiChatThread' ? this.railHeights.get(n.nodeId) : undefined
+		for (const canvasNode of this.nodes) {
+			const geometry = this.getEdgeNodeGeometry(canvasNode)
 			const nodeConfig: NodeConfig = {
-				id: n.nodeId,
+				id: canvasNode.nodeId,
 				shape: 'rect',
-				x: n.position.x - offsetX - xShift,
-				y: n.position.y - offsetY,
-				width: n.dimensions.width + xShift,
-				height: railH ?? n.dimensions.height,
+				x: geometry.x - offsetX,
+				y: geometry.y - offsetY,
+				width: geometry.width,
+				height: geometry.height,
 				className: 'workspace-edge-node'
 			}
 			this.connector.addNode(nodeConfig)
 
 			// World-coordinate version (no bounds offset) for PIXI GPU rendering
-			worldNodeMap.set(n.nodeId, {
-				id: n.nodeId,
+			worldNodeMap.set(canvasNode.nodeId, {
+				id: canvasNode.nodeId,
 				shape: 'rect',
-				x: n.position.x - xShift,
-				y: n.position.y,
-				width: n.dimensions.width + xShift,
-				height: railH ?? n.dimensions.height,
+				x: geometry.x,
+				y: geometry.y,
+				width: geometry.width,
+				height: geometry.height,
 				className: 'workspace-edge-node'
 			})
 		}
@@ -1262,8 +1352,8 @@ export class WorkspaceConnectionManager {
 
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
-				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
-				target: { nodeId: e.targetNodeId, position: target, t: targetT },
+				source: this.buildEdgeAnchor(e.sourceNodeId, source, sourceT, nodeById, worldNodeMap),
+				target: this.buildEdgeAnchor(e.targetNodeId, target, targetT, nodeById, worldNodeMap),
 				pathType: e.pathType ?? webUiSettings.nodesConnectorLineCurve,
 				marker: isSelected ? 'arrowhead-selected' : 'arrowhead',
 				markerSize: scaledMarkerSize,
@@ -1348,21 +1438,23 @@ export class WorkspaceConnectionManager {
 				sourcePosition = this.connectionInProgress.fromHandle.position as 'left' | 'right'
 			}
 
+			const snappedTargetT = snappedTargetNode && snappedTargetPosition && this.connectionInProgress.toHandle
+				? computeTFromPointerPosition(
+					this.connectionInProgress.toHandle.y,
+					snappedTargetNode.position.y,
+					this.isContextRegionEdgeNode(snappedTargetNode)
+						? snappedTargetNode.dimensions.height
+						: snappedTargetNode.type === 'aiChatThread'
+						? (this.railHeights.get(snappedTargetNode.nodeId) ?? snappedTargetNode.dimensions.height)
+						: snappedTargetNode.dimensions.height,
+				)
+				: undefined
+
 			const tempEdge: EdgeConfig = {
 				id: '__workspace-temp-edge',
-				source: { nodeId: sourceNodeId, position: sourcePosition },
+				source: this.buildEdgeAnchor(sourceNodeId, sourcePosition, undefined, nodeById, worldNodeMap),
 				target: snappedTargetNode && snappedTargetPosition && this.connectionInProgress.toHandle
-					? {
-						nodeId: snappedTargetNode.nodeId,
-						position: snappedTargetPosition,
-						t: computeTFromPointerPosition(
-							this.connectionInProgress.toHandle.y,
-							snappedTargetNode.position.y,
-							snappedTargetNode.type === 'aiChatThread'
-								? (this.railHeights.get(snappedTargetNode.nodeId) ?? snappedTargetNode.dimensions.height)
-								: snappedTargetNode.dimensions.height,
-						),
-					}
+					? this.buildEdgeAnchor(snappedTargetNode.nodeId, snappedTargetPosition, snappedTargetT, nodeById, worldNodeMap)
 					: { nodeId: tempNodeId, position: 'center' },
 				pathType: webUiSettings.nodesConnectorLineCurve,
 				marker: 'arrowhead',
@@ -1377,21 +1469,15 @@ export class WorkspaceConnectionManager {
 
 		// Draw potential proximity connection
 		if (this.proximityCandidate && !this.connectionInProgress) {
-            // Retrieve computed values or fall back to candidate/default
-            const computed = spreadTValues.get('__workspace-proximity-temp')
+			// Retrieve computed values or fall back to candidate/default
+			const computed = spreadTValues.get('__workspace-proximity-temp')
+			const sourceT = computed?.sourceT ?? this.proximityCandidate.sourceT
+			const targetT = computed?.targetT ?? this.proximityCandidate.targetT
 
 			const ghostEdge: EdgeConfig = {
 				id: '__workspace-proximity-edge',
-				source: {
-					nodeId: this.proximityCandidate.sourceNodeId,
-					position: this.proximityCandidate.sourceHandle,
-					t: computed?.sourceT ?? this.proximityCandidate.sourceT
-				},
-				target: {
-					nodeId: this.proximityCandidate.targetNodeId,
-					position: this.proximityCandidate.targetHandle,
-					t: computed?.targetT ?? this.proximityCandidate.targetT
-				},
+				source: this.buildEdgeAnchor(this.proximityCandidate.sourceNodeId, this.proximityCandidate.sourceHandle, sourceT, nodeById, worldNodeMap),
+				target: this.buildEdgeAnchor(this.proximityCandidate.targetNodeId, this.proximityCandidate.targetHandle, targetT, nodeById, worldNodeMap),
 				pathType: webUiSettings.nodesConnectorLineCurve,
 				marker: 'arrowhead',
 				markerSize: scaledMarkerSize,
