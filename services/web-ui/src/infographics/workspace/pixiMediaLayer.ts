@@ -187,8 +187,6 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let health: PixiRendererHealth = 'initializing'
     let marqueeGraphics: Graphics | null = null
     let groupOverlayGraphics: Graphics | null = null
-    let currentMarqueeRect: { x: number; y: number; width: number; height: number } | null = null
-    let currentGroupOverlayBounds: { x: number; y: number; width: number; height: number } | null = null
     let lastState: CanvasState | null = null
     let requestCounter = 0
     let currentViewport: CanvasViewport = { x: 0, y: 0, zoom: 1 }
@@ -901,13 +899,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function setMarqueeRect(worldRect: { x: number; y: number; width: number; height: number } | null): void {
         if (destroyed) return
         if (!worldRect || !Number.isFinite(worldRect.width) || !Number.isFinite(worldRect.height) || worldRect.width <= 0 || worldRect.height <= 0) {
-            currentMarqueeRect = null
             marqueeGraphics = destroyForegroundGraphics(marqueeGraphics)
             scheduleRender()
             return
         }
-
-        currentMarqueeRect = { ...worldRect }
 
         marqueeGraphics = destroyForegroundGraphics(marqueeGraphics)
         marqueeGraphics = new Graphics()
@@ -931,13 +926,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function setSelectionOverlayBounds(worldBounds: { x: number; y: number; width: number; height: number } | null): void {
         if (destroyed) return
         if (!worldBounds || !Number.isFinite(worldBounds.width) || !Number.isFinite(worldBounds.height) || worldBounds.width <= 0 || worldBounds.height <= 0) {
-            currentGroupOverlayBounds = null
             groupOverlayGraphics = destroyForegroundGraphics(groupOverlayGraphics)
             scheduleRender()
             return
         }
-
-        currentGroupOverlayBounds = { ...worldBounds }
 
         groupOverlayGraphics = destroyForegroundGraphics(groupOverlayGraphics)
         groupOverlayGraphics = new Graphics()
