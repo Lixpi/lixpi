@@ -227,6 +227,77 @@ Drop adoption uses the same geometry model. `scoreRectAgainstContextRegionCloud(
 
 This shared geometry rule is non-negotiable: visible pixels, body clicks, title placement, and adoption scoring must remain aligned. Rectangular math is allowed only as a cheap broad phase.
 
+## Interaction Invariants
+
+Context regions are visually different from normal rectangular nodes, but they still pass through the shared canvas interaction system. Keep these invariants intact when changing selection, marquee, drag, resize, edge, or PIXI rendering behavior.
+
+### Plain Clicks And Selection Overlays
+
+A plain click on a single context region must not draw a selection border, cloud outline, group rectangle, or filled overlay. Plain single-node clicks on editable document and AI chat thread nodes also must not show the group overlay, because that overlay can block ProseMirror editing.
+
+The selection rectangle is reserved for two states:
+
+1. More than one selected node.
+2. A selection created by marquee, even if the marquee contains only one node.
+
+This rule belongs in `shouldShowSelectionGroupOverlay()` in [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts): empty selection returns `false`, multi-selection returns `true`, and single selection returns `selectionIsFromMarquee`. Do not special-case context regions in that function.
+
+Context regions should use bounded pulse feedback for activation. Do not reintroduce selected cloud chrome in [pixiContextRegionLayer.ts](../../services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts). The PIXI context-region layer should draw the cloud surface and title, not a second selected silhouette.
+
+### Marquee Starts Only From Empty Canvas Movement
+
+Marquee selection must start only when all of these are true:
+
+1. The pointer down happened on empty canvas after image/document/thread/context-region hit precedence failed.
+2. The user moved farther than the drag threshold.
+3. Any previous marquee and stale selection state was cleared before assigning the new `marqueeSelection` object.
+
+Do not create `marqueeSelection` during `mousedown`. Creating it before pointer movement makes plain empty-canvas clicks clear selection and makes context-region cloud clicks look like accidental marquee starts.
+
+When checking context-region hits before marquee, use both layers of hit detection:
+
+- `contextRegionLayer.hitTest(worldPoint)` for title/body shape hits.
+- The region's visual cloud bounds from `getSelectionOverlayBoundsForNode(...)` as a fallback before treating the point as empty canvas.
+
+The bounds fallback exists because the visible cloud can extend beyond the transparent DOM proxy rectangle and beyond the strict interior/title hit zones. It is only a guard against empty-canvas fallthrough; foreground image/document/thread hits still win first.
+
+### Drag And Resize Scope
+
+Dragging or resizing a context region must not automatically include connected, anchored, generated, or leaf nodes. A region move is visually about the region and its real contained descendants, not every related image or generated output in the graph.
+
+The drag plan should follow these rules:
+
+| Situation | Drag participants |
+|---|---|
+| Single context-region drag | The region plus real parented descendants needed for live visual movement. |
+| Multi-selected context-region drag | Every selected context region plus each selected region's real parented descendants. |
+| Anchored image nodes | Excluded from context-region drag sets. |
+| Generated output image nodes | Excluded from context-region drag sets. |
+| Connected nodes through edges | Excluded unless they are also real selected or parented drag participants. |
+
+Keep this logic centralized in [workspaceDragPlan.ts](../../services/web-ui/src/infographics/workspace/workspaceDragPlan.ts). Do not rebuild ad hoc participant sets in `WorkspaceCanvas.ts`.
+
+### Edge Visibility And PIXI Graphics Paths
+
+Connector lines are independent of node selection. Selecting a context region must not filter, hide, or resync edges differently. If a selection visual creates artifacts around connectors, fix the selection visual or PIXI renderer; do not hide edges based on selected nodes.
+
+PIXI `Graphics` path state must be isolated. In [pixiEdgeRenderer.ts](../../services/web-ui/src/infographics/workspace/rendering/pixiEdgeRenderer.ts), edge painting starts a new path before drawing the SVG path, and arrowhead drawing starts and closes its own path before fill. Without that path isolation, a previous edge segment can weld to a later arrowhead and produce long stray lines.
+
+The same cleanup principle applies to context-region chrome: if `Graphics` children are rebuilt, remove and destroy old children first. Stale `Graphics` objects are a common cause of ghost outlines after selection, drag, or rerender.
+
+### Regression Coverage
+
+Changes in this area should update or add focused regression coverage in the same commit:
+
+| Test file | What it protects |
+|---|---|
+| [workspace-canvas.test.ts](../../services/web-ui/src/infographics/workspace/workspace-canvas.test.ts) | Selection overlay source rules, no plain-click border, marquee defer-until-move behavior, context-region bounds hit fallback, connector visibility, and pane hit precedence. |
+| [workspaceDragPlan.test.ts](../../services/web-ui/src/infographics/workspace/workspaceDragPlan.test.ts) | Context-region drag participant sets, multi-region group drag, and anchored/generated image exclusions. |
+| [pixiContextRegionLayer.test.ts](../../services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.test.ts) | No selected-cloud chrome path and proper `Graphics` cleanup. |
+| [pixiEdgeRenderer.test.ts](../../services/web-ui/src/infographics/workspace/rendering/pixiEdgeRenderer.test.ts) | Edge and arrowhead `Graphics` path isolation. |
+
+If a future change intentionally changes one of these invariants, update this document and the tests together so the new behavior is explicit.
+
 ## Workspace Integration
 
 `WorkspaceCanvas` remains the orchestration owner:
@@ -234,9 +305,11 @@ This shared geometry rule is non-negotiable: visible pixels, body clicks, title 
 - Builds region datums from current canvas nodes and AI chat thread titles.
 - Keeps transparent context-region DOM nodes registered with `data-node-id` so existing drag, selection, connection, and parent-child paths still work.
 - Skips resize-handle creation for context-region proxies.
-- Routes pane-background clicks through image/document precedence, then cloud hit testing.
+- Routes pane-background clicks through image/document precedence, then cloud hit testing, then visual-bounds fallback before empty-canvas marquee handling.
 - Calls the normal drag machinery when a cloud body/title is clicked, so dragging a region still uses the existing canvas drag lifecycle.
-- Includes context-region descendants in the live dragged set so children move visually with the parent region during drag, not only after commit.
+- Includes context-region descendants in the live dragged set so real parented children move visually with the parent region during drag, not only after commit.
+- Excludes anchored/generated image leaves from context-region drag sets unless a future interaction model explicitly makes those nodes real region children.
+- Shows the group selection rectangle only for marquee-sourced selections or multi-selection, never for a plain single context-region click.
 - Uses CO2 cloud scoring when releasing a dragged node to decide parent adoption.
 - Keeps generated output image nodes from being adopted into regions.
 
@@ -337,6 +410,18 @@ Do not apply masks component-by-component. Apply the CO2 mask once at the end of
 
 Do not create a separate selected outline cloud sprite. Selection should stay subtle and should not require a second silhouette copy.
 
+Do not make `shouldShowSelectionGroupOverlay()` depend on context-region node type. Plain single context-region clicks must not draw a border; only marquee selection and multi-selection show the rectangle.
+
+Do not assign `marqueeSelection` on `mousedown`. Defer marquee state until pointer movement crosses the threshold from an empty-canvas start.
+
+Do not let context-region visual bounds fall through to empty-canvas marquee. The visible cloud can extend beyond the transparent DOM proxy and strict body/title hit shape.
+
+Do not include anchored image leaves, generated output images, or merely connected nodes in context-region drag/resize participant sets.
+
+Do not hide or filter connector edges based on node selection. Connector visibility is independent of selection state.
+
+Do not draw multiple PIXI `Graphics` paths without path isolation or cleanup. Begin a fresh path before edge drawing, begin and close arrowhead paths, and destroy stale context-region chrome children before replacing them.
+
 Do not animate every cloud continuously. Use bounded event pulses and then stop scheduling frames.
 
 Do not generate or upload per-region textures while dragging, resizing, panning, or zooming. Runtime gestures should update transforms and culling only.
@@ -364,7 +449,14 @@ Do not treat persisted `canvasState.viewport` as authoritative during an active 
 | Cloud pixels and clicks do not line up | Renderer shape and geometry shape diverged | Compare CO2 constants in `pixiContextRegionLayer.ts` and `contextRegionClouds.ts`. |
 | Cloud becomes a square/rectangle hit target | Rectangular broad phase used as final hit | Inspect `hitTestContextRegionCloud(...)` and adoption scoring. |
 | Image clicks inside a region start dragging the region | Foreground hit precedence broke | Check `getNodeHitBeforeContextRegion(...)` in `WorkspaceCanvas.ts`. |
+| Clicking the visible cloud starts marquee | Visual-bounds fallback was removed or runs after empty-canvas handling | Check `getContextRegionBoundsHit(...)` and pane `mousedown` ordering in `WorkspaceCanvas.ts`. |
+| Plain click on a context region draws a rectangle or border | `shouldShowSelectionGroupOverlay()` special-cased context regions | The function should return `false` for empty selection, `true` for multi-selection, and `selectionIsFromMarquee` for single selection. |
+| Empty-canvas click clears selection even without movement | Marquee state is created on `mousedown` | Create `marqueeSelection` only after pointer movement exceeds the threshold. |
 | Children lag behind while dragging a region | Descendants were not included in live drag set | Check `includeContextRegionDescendants(...)` and live transforms. |
+| Multi-selected context regions do not move together | Drag plan ignored the selected set for context-region drags | Check `computeWorkspaceDragPlan(...)` in `workspaceDragPlan.ts`. |
+| Anchored/generated images move with a context region unexpectedly | Drag participant set includes related leaves instead of real region children | Check anchored-image and generated-output exclusions in `workspaceDragPlan.ts`. |
+| Connector lines disappear when selecting regions | Edge rendering is filtered by selection | Keep `connectionManager.syncEdges(...)` and PIXI edge sync independent of selected node IDs. |
+| Long stray lines appear through arrowheads | PIXI `Graphics` path state leaked between edge path and arrowhead drawing | Check `beginPath()` / `closePath()` isolation in `pixiEdgeRenderer.ts`. |
 | A ghost cloud appears on selection | Separate selection silhouette was reintroduced | Keep selection chrome separate from a duplicate cloud sprite. |
 | Texture looks pale or flat | Gradient/overlay alpha washed out color and grain | Check seafoam gradient mix, bloom overlays, and final alpha. |
 | Border does not match the cloud | Border drawn as generic stroke or separate sprite | Use the baked exact vector ring path controlled by `contextRegionCloudBorderEnabled`. |
