@@ -184,6 +184,14 @@ describe('PIXI media layer — first sync geometry', () => {
 		expect(fnBody).toContain('entry.colorRectW = w')
 		expect(fnBody).toContain('entry.colorRectH = h')
 	})
+
+	it('supports optional fill for selection overlays', () => {
+		expectSourceToContain(ts, 'type SelectionOverlayOptions = {')
+		expectSourceToContain(ts, 'fill?: boolean')
+		expectSourceToContain(ts, 'options: SelectionOverlayOptions = {}')
+		expectSourceToContain(ts, 'if (options.fill !== false) groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })')
+		expectSourceToContain(ts, 'groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke')
+	})
 })
 
 // =============================================================================
@@ -1129,9 +1137,10 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	// Selection overlay rules
 	// -------------------------------------------------------------------------
 
-	it('tracks selection source (marquee vs click) to control overlay visibility', () => {
-		// selectionIsFromMarquee flag controls whether a single-node selection
-		// shows the overlay. Plain click = no overlay. Marquee = overlay.
+	it('tracks selection source to control overlay visibility', () => {
+		// selectionIsFromMarquee controls whether a single-node selection shows
+		// the overlay. Plain clicks on any node, including context regions, do
+		// not draw a selection rectangle. Marquee selection does.
 		expectSourceToContain(ts, 'let selectionIsFromMarquee = false')
 		expectSourceToContain(ts, 'return selectionIsFromMarquee')
 
@@ -1153,6 +1162,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 		// Single node = overlay only if selected via marquee
 		expect(fnBody).toContain('return selectionIsFromMarquee')
+		expect(fnBody).not.toContain('const selectedNodeId = getSingleSelectedNodeId()')
+		expect(fnBody).not.toContain('const selectedNode = currentCanvasState.nodes.find')
 
 		// Must NOT contain any node-type special casing (e.g. aiChatThread)
 		expect(fnBody).not.toContain("'aiChatThread'")
@@ -1201,7 +1212,6 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, 'function getSelectionOverlayBoundsForNode(')
 		expectSourceToContain(ts, 'function updateSelectionGroupOverlayElement(): void')
 		expectSourceToContain(ts, 'if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
-		expectSourceToContain(ts, 'if (overlayNodes.every((node: CanvasNode) => isContextRegionCanvasNode(node))) return null')
 		expectSourceToContain(ts, 'getContextRegionCloudBounds(datum)')
 		expectSourceToContain(ts, 'updateSelectionGroupOverlayElement()')
 		expectSourceToContain(scss, '.workspace-selection-group-overlay')
@@ -1215,6 +1225,24 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, 'if (!shouldShowSelectionGroupOverlay()) return')
 		expectSourceToContain(ts, 'const primaryNodeId = Array.from(selectedNodeIds)[0]')
 		expectSourceToContain(ts, 'handleDragStart(event, primaryNodeId)')
+	})
+
+	it('keeps connector lines visible when context regions are selected', () => {
+		expectSourceNotToContain(ts, 'function getEdgesForConnectionManager')
+		expectSourceNotToContain(ts, 'syncEdges(getEdgesForConnectionManager')
+		expectSourceNotToContain(ts, 'selectedContextRegionNodeIds')
+		expectSourceToContain(ts, 'connectionManager?.syncEdges(nextState.edges)')
+		expectSourceToContain(ts, 'connectionManager.syncEdges(currentCanvasState.edges)')
+	})
+
+	it('keeps the overlay hit target active for multi-region group drag but hidden for a single region', () => {
+		const fnMatch = ts.match(/function\s+shouldUseSelectionGroupOverlayHitTarget[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expect(fnBody).toContain('if (selectedNodeIds.size > 1) return true')
+		expect(fnBody).toContain('if (node && !isContextRegionCanvasNode(node)) return true')
+		expect(fnBody).toContain('return false')
 	})
 
 	it('wires selection colors from webUiThemeSettings to CSS custom properties', () => {
@@ -1268,6 +1296,74 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		const fnMatch = ts.match(/function\s+isCanvasBackgroundTarget[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		expect(fnMatch![0]).toContain("'.workspace-ai-chat-floating-panel'")
+	})
+
+	it('does not start marquee when mousedown is inside a context-region node bounds', () => {
+		expectSourceToContain(ts, 'function getContextRegionBoundsHit(point: { x: number; y: number }): ContextRegionNode | null')
+		expectSourceToContain(ts, 'const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))')
+		expectSourceToContain(ts, 'if (!isContextRegionCanvasNode(node)) continue')
+		expectSourceToContain(ts, 'const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)')
+		expectSourceToContain(ts, 'if (rectContainsCanvasPoint(rect, point)) return node')
+
+		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
+		expect(paneMouseDownMatch).not.toBeNull()
+		const fnBody = paneMouseDownMatch![0]
+
+		const boundsHitIndex = fnBody.indexOf('const regionBoundsHit = getContextRegionBoundsHit(start)')
+		const boundsReturnIndex = fnBody.indexOf('if (regionBoundsHit) {')
+		const marqueeIndex = fnBody.indexOf('marqueeSelection = {')
+
+		expect(boundsHitIndex).toBeGreaterThanOrEqual(0)
+		expect(boundsReturnIndex).toBeGreaterThan(boundsHitIndex)
+		expect(marqueeIndex).toBeGreaterThan(boundsReturnIndex)
+		expect(fnBody).toContain('handleDragStart(event, regionBoundsHit.nodeId, {')
+		expect(fnBody).toContain('return')
+	})
+
+	it('creates marquee selection state only after empty-canvas pointer movement', () => {
+		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
+		expect(paneMouseDownMatch).not.toBeNull()
+		const fnBody = paneMouseDownMatch![0]
+
+		const moveHandlerIndex = fnBody.indexOf('const handleMouseMove = (moveEvent: MouseEvent) => {')
+		const movementGateIndex = fnBody.indexOf('if (!marqueeSelection && movedX <= 3 && movedY <= 3) return')
+		const marqueeCreateIndex = fnBody.indexOf('marqueeSelection = {')
+		const selectedClearIndex = fnBody.indexOf('if (selectedNodeIds.size > 0) setSelectedNodes(new Set())')
+
+		expect(moveHandlerIndex).toBeGreaterThanOrEqual(0)
+		expect(movementGateIndex).toBeGreaterThan(moveHandlerIndex)
+		expect(selectedClearIndex).toBeGreaterThan(movementGateIndex)
+		expect(marqueeCreateIndex).toBeGreaterThan(selectedClearIndex)
+		expect(fnBody).toContain('moved: true')
+	})
+
+	it('does not draw any overlay for a plain single context-region click', () => {
+		const showMatch = ts.match(/function\s+shouldShowSelectionGroupOverlay[\s\S]*?^    \}/m)
+		expect(showMatch).not.toBeNull()
+		const showBody = showMatch![0]
+
+		expect(showBody).toContain('return selectionIsFromMarquee')
+		expect(showBody).not.toContain('isContextRegionCanvasNode(selectedNode)')
+
+		const fillMatch = ts.match(/function\s+shouldFillSelectionOverlayBounds[\s\S]*?^    \}/m)
+		expect(fillMatch).not.toBeNull()
+		const fillBody = fillMatch![0]
+
+		expect(fillBody).toContain('if (selectedNodeIds.size !== 1) return true')
+		expect(fillBody).toContain('if (selectionIsFromMarquee) return true')
+		expect(fillBody).toContain('return !(selectedNode && isContextRegionCanvasNode(selectedNode))')
+		expectSourceToContain(ts, 'pixiMediaLayer?.setSelectionOverlayBounds(bounds, { fill: shouldFillSelectionOverlayBounds() })')
+		expectSourceToContain(ts, 'pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds(), { fill: shouldFillSelectionOverlayBounds() })')
+	})
+
+	it('treats context-region bounds as node hits before pan/zoom can start marquee', () => {
+		const panePointerDownMatch = ts.match(/function\s+handlePanePointerDown[\s\S]*?^    \}/m)
+		expect(panePointerDownMatch).not.toBeNull()
+		const fnBody = panePointerDownMatch![0]
+
+		expect(fnBody).toContain("const regionBoundsHit = nodeHit || regionHit.kind !== 'none' ? null : getContextRegionBoundsHit(start)")
+		expect(fnBody).toContain("const hitNodeId = nodeHit?.nodeId ?? (regionHit.kind !== 'none' ? regionHit.nodeId : regionBoundsHit?.nodeId ?? null)")
+		expect(fnBody).toContain('suspendPanZoomForNodePointer(hitNodeId)')
 	})
 
 	// -------------------------------------------------------------------------
@@ -1335,10 +1431,20 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, "node.type === 'aiChatThread' && hiddenEmptyThreadNodeIds.has(node.nodeId) && rectsOverlap(rect, getSelectionBoundsForNode(node))")
 	})
 
-	it('includes anchored AI images when computing the selection overlay bounds', () => {
-		expectSourceToContain(ts, 'for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {')
-		expectSourceToContain(ts, 'overlayNodeIds.add(anchor.imageNodeId)')
-		expectSourceToContain(ts, 'const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)')
+	it('includes anchored AI images for thread selection overlay bounds but not for context-region overlay bounds', () => {
+		const fnMatch = ts.match(/function\s+getSelectionOverlayBounds\(\): Rect \| null[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		const selectedNodeIndex = fnBody.indexOf('const selectedNode = nodesById.get(nodeId)')
+		const contextRegionContinueIndex = fnBody.indexOf('if (selectedNode && isContextRegionCanvasNode(selectedNode)) continue')
+		const anchorLoopIndex = fnBody.indexOf('for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {')
+
+		expect(selectedNodeIndex).toBeGreaterThanOrEqual(0)
+		expect(contextRegionContinueIndex).toBeGreaterThan(selectedNodeIndex)
+		expect(anchorLoopIndex).toBeGreaterThan(contextRegionContinueIndex)
+		expect(fnBody).toContain('overlayNodeIds.add(anchor.imageNodeId)')
+		expect(fnBody).toContain('const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)')
 	})
 
 	// -------------------------------------------------------------------------
@@ -1432,16 +1538,17 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		//   2. Overlay covers the thread content → resize handles activate
 		//   3. User cannot click into ProseMirror to edit text
 		//
-		// Invariant: shouldShowSelectionGroupOverlay must NOT check node.type
+		// Invariant: shouldShowSelectionGroupOverlay must NOT check raw node.type,
+		// the aiChatThread string, or context-region node types. Plain single-node
+		// clicks never draw the group overlay; marquee/multi-selection does.
 		const fnMatch = ts.match(/function\s+shouldShowSelectionGroupOverlay[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
 		expect(fnBody).not.toContain("'aiChatThread'")
 		expect(fnBody).not.toContain('node.type')
-		// Must not look up individual node objects to check their type
-		expect(fnBody).not.toContain('getNode(')
-		expect(fnBody).not.toContain('.nodes.find')
+		expect(fnBody).not.toContain('isContextRegionCanvasNode(selectedNode)')
+		expect(fnBody).toContain('return selectionIsFromMarquee')
 	})
 
 	it('REGRESSION: clicking AI chat thread content must NOT trigger selectNode', () => {
@@ -1696,13 +1803,32 @@ describe('Marquee selection — stale group overlay suppressed during active mar
 		expectSourceToContain(fnBody, 'if (marqueeSelection) return null')
 	})
 
-	it('calls updateSelectionGroupOverlayElement immediately when marquee starts', () => {
-		// The group overlay must be cleared right when marqueeSelection is assigned,
-		// so the stale overlay from a prior selection does not linger during the drag.
-		const marqueStartMatch = ts.match(
-			/marqueeSelection\s*=\s*\{[\s\S]*?moved:\s*false[\s\S]*?\}[\s\S]*?updateSelectionRectElement\(\)[\s\S]*?updateSelectionGroupOverlayElement\(\)/
+	it('clears stale selection before creating marquee selection state', () => {
+		// Marquee state is now deferred until the pointer actually moves from empty
+		// canvas. Any old group overlay must be cleared before marqueeSelection is
+		// assigned, and marquee-selected nodes must be applied while marqueeSelection
+		// is active so getSelectionOverlayBounds suppresses the stale overlay.
+		const mouseMoveMatches = Array.from(
+			ts.matchAll(/const handleMouseMove = \(moveEvent: MouseEvent\) => \{[\s\S]*?const handleMouseUp = \(\) => \{/g),
+			(match) => match[0],
 		)
-		expect(marqueStartMatch).not.toBeNull()
+		const fnBody = mouseMoveMatches.find((body) =>
+			body.includes('getSelectableNodeIdsInRect(getCanvasRectFromSelection(marqueeSelection))'),
+		)
+		expect(fnBody).toBeDefined()
+
+		expect(fnBody!).toContain('if (!marqueeSelection && movedX <= 3 && movedY <= 3) return')
+
+		const clearIndex = fnBody!.indexOf('if (selectedNodeIds.size > 0) setSelectedNodes(new Set())')
+		const marqueeStartIndex = fnBody!.indexOf('marqueeSelection = {')
+		expect(clearIndex).toBeGreaterThan(-1)
+		expect(marqueeStartIndex).toBeGreaterThan(clearIndex)
+		expect(fnBody!).toContain('moved: true')
+
+		const updateRectIndex = fnBody!.indexOf('updateSelectionRectElement()')
+		const marqueeSelectIndex = fnBody!.indexOf('setSelectedNodes(new Set(selectedIds), true)')
+		expect(updateRectIndex).toBeGreaterThan(marqueeStartIndex)
+		expect(marqueeSelectIndex).toBeGreaterThan(updateRectIndex)
 	})
 
 	it('calls updateSelectionGroupOverlayElement on mouseup after clearing marqueeSelection', () => {

@@ -576,6 +576,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return null
     }
 
+    function getContextRegionBoundsHit(point: { x: number; y: number }): ContextRegionNode | null {
+        if (!currentCanvasState) return null
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
+        for (let i = currentCanvasState.nodes.length - 1; i >= 0; i--) {
+            const node = currentCanvasState.nodes[i]
+            if (!isContextRegionCanvasNode(node)) continue
+            const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)
+            if (rectContainsCanvasPoint(rect, point)) return node
+        }
+        return null
+    }
+
     function getConnectedNodeIds(nodeId: string, canvasState: CanvasState | null = currentCanvasState): string[] {
         if (!canvasState) return []
         const connectedNodeIds = new Set<string>()
@@ -971,13 +984,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function clearMarqueeInteractionState(): void {
+        marqueeSelection = null
+        hideSelectionRectElement()
+        pixiMediaLayer?.setSelectionOverlayBounds(null)
+        if (selectionGroupOverlayEl) applyStyle(selectionGroupOverlayEl, { display: 'none' })
+    }
+
     function getSelectionOverlayBounds(): Rect | null {
         if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null
         if (marqueeSelection) return null
 
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         const overlayNodeIds = new Set<string>()
         for (const nodeId of selectedNodeIds) {
             overlayNodeIds.add(nodeId)
+
+            const selectedNode = nodesById.get(nodeId)
+            if (selectedNode && isContextRegionCanvasNode(selectedNode)) continue
+
             for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {
                 overlayNodeIds.add(anchor.imageNodeId)
             }
@@ -985,9 +1010,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const overlayNodes = currentCanvasState.nodes.filter((node: CanvasNode) => overlayNodeIds.has(node.nodeId))
         if (overlayNodes.length === 0) return null
-        if (overlayNodes.every((node: CanvasNode) => isContextRegionCanvasNode(node))) return null
 
-        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
 
         const bounds = overlayNodes.map((node: CanvasNode) => {
@@ -1014,11 +1037,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function shouldUseSelectionGroupOverlayHitTarget(): boolean {
+        if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return false
+        if (selectedNodeIds.size > 1) return true
+
+        for (const nodeId of selectedNodeIds) {
+            const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+            if (node && !isContextRegionCanvasNode(node)) return true
+        }
+
+        return false
+    }
+
+    function shouldFillSelectionOverlayBounds(): boolean {
+        if (!currentCanvasState) return true
+        if (selectedNodeIds.size !== 1) return true
+        if (selectionIsFromMarquee) return true
+
+        const selectedNodeId = getSingleSelectedNodeId()
+        const selectedNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === selectedNodeId)
+        return !(selectedNode && isContextRegionCanvasNode(selectedNode))
+    }
+
     function updateSelectionGroupOverlayElement(): void {
         const bounds = getSelectionOverlayBounds()
 
         // PIXI draws the visible selection overlay for image nodes.
-        pixiMediaLayer?.setSelectionOverlayBounds(bounds)
+        pixiMediaLayer?.setSelectionOverlayBounds(bounds, { fill: shouldFillSelectionOverlayBounds() })
 
         // The DOM element is kept invisible but in place as a drag hit target.
         // Its background/border are stripped in the SCSS so PIXI owns the visual.
@@ -1026,6 +1071,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!overlayEl) return
 
         if (!bounds) {
+            applyStyle(overlayEl, { display: 'none' })
+            return
+        }
+
+        if (!shouldUseSelectionGroupOverlayHitTarget()) {
             applyStyle(overlayEl, { display: 'none' })
             return
         }
@@ -1107,15 +1157,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         showFloatingInput(singleSelectedNodeId)
     }
 
+    function clearSelectedEdgeSelection(force = false): void {
+        if (!force && !selectedEdgeId) return
+        selectedEdgeId = null
+        connectionManager?.deselect()
+        hideEdgeBubbleMenu()
+    }
+
     function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void {
         const prevSelectedNodeIds = selectedNodeIds
         selectedNodeIds = nextSelectedNodeIds
         selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0
+        if (currentCanvasState) connectionManager?.syncEdges(currentCanvasState.edges)
+        if (nextSelectedNodeIds.size > 0) clearSelectedEdgeSelection()
         updateNodeSelectionClasses(prevSelectedNodeIds, selectedNodeIds)
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
         pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
         syncContextRegionLayer(undefined)
+        scheduleEdgesRender()
         for (const nodeId of nextSelectedNodeIds) {
             if (prevSelectedNodeIds.has(nodeId)) continue
             const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
@@ -3467,7 +3527,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId, isContextRegion ? { suppressPaneClick: true, allowSelection: false } : {})}></div>` as HTMLDivElement
+        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId, isContextRegion ? { suppressPaneClick: true } : {})}></div>` as HTMLDivElement
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -4121,6 +4181,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Find the node to check if it's an image (for aspect ratio locking)
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
         const isImageNode = node?.type === 'image'
+        const isContextRegionResize = isContextRegionNodeElement(nodeEl)
 
         // PIXI owns image pixels; the hidden DOM <img> can finish loading after
         // workspace switches, so do not derive resize behavior from DOM natural
@@ -4164,7 +4225,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Anchored image resize constraints
         const resizeAnchor = isImageNode ? getValidAnchorForCanvasImage(nodeId) : undefined
-        const resizeAnchorsForThread = !isImageNode ? getValidAnchorsForCanvasThread(nodeId) : []
+        const resizeAnchorsForThread = !isImageNode && !isContextRegionResize ? getValidAnchorsForCanvasThread(nodeId) : []
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = directionX === 0 ? 0 : ((moveEvent.clientX - startX) / currentZoom) * directionX
@@ -4232,7 +4293,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             contextRegionLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
-            pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds())
+            pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds(), { fill: shouldFillSelectionOverlayBounds() })
 
             // If resizing a region child, visibly grow the region in real-time.
             // `nodeEl.style.left/top` is in world coordinates; convert to parent-
@@ -4751,7 +4812,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const start = getCanvasPointFromClient(event.clientX, event.clientY)
         const nodeHit = getNodeHitBeforeContextRegion(start)
         const regionHit = nodeHit ? { kind: 'none' as const } : contextRegionLayer?.hitTest(start) ?? { kind: 'none' as const }
-        const hitNodeId = nodeHit?.nodeId ?? (regionHit.kind !== 'none' ? regionHit.nodeId : null)
+        const regionBoundsHit = nodeHit || regionHit.kind !== 'none' ? null : getContextRegionBoundsHit(start)
+        const hitNodeId = nodeHit?.nodeId ?? (regionHit.kind !== 'none' ? regionHit.nodeId : regionBoundsHit?.nodeId ?? null)
         if (!hitNodeId) return
 
         suspendPanZoomForNodePointer(hitNodeId)
@@ -4778,6 +4840,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         const regionHit = contextRegionLayer?.hitTest(point) ?? { kind: 'none' as const }
+        if (regionHit.kind === 'none' && getContextRegionBoundsHit(point)) {
+            paneEl.style.cursor = ''
+            return
+        }
         paneEl.style.cursor = regionHit.kind === 'resize' ? regionHit.cursor : ''
     }
 
@@ -4811,10 +4877,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 : undefined
             handleDragStart(event, regionHit.nodeId, {
                 suppressPaneClick: true,
-                allowSelection: false,
                 onClick: () => {
                     if (regionNode && isContextRegionCanvasNode(regionNode)) activateAiChatPanel(regionNode, thread)
                 },
+            })
+            return
+        }
+
+        const regionBoundsHit = getContextRegionBoundsHit(start)
+        if (regionBoundsHit) {
+            const thread = currentAiChatThreads.find((candidate) => candidate.threadId === regionBoundsHit.referenceId)
+            handleDragStart(event, regionBoundsHit.nodeId, {
+                suppressPaneClick: true,
+                onClick: () => activateAiChatPanel(regionBoundsHit, thread),
             })
             return
         }
@@ -4823,15 +4898,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         event.preventDefault()
         event.stopPropagation()
-        connectionManager?.cancelTransientConnection()
-
-        marqueeSelection = {
-            start,
-            current: start,
-            moved: false,
-        }
-        updateSelectionRectElement()
-        updateSelectionGroupOverlayElement()
+        clearMarqueeInteractionState()
 
         if (panZoom) {
             panZoom.update({
@@ -4844,15 +4911,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
-            if (!marqueeSelection) return
-
-            marqueeSelection.current = getCanvasPointFromClient(moveEvent.clientX, moveEvent.clientY)
             const movedX = Math.abs(moveEvent.clientX - event.clientX)
             const movedY = Math.abs(moveEvent.clientY - event.clientY)
-            marqueeSelection.moved = marqueeSelection.moved || movedX > 3 || movedY > 3
-            updateSelectionRectElement()
+            if (!marqueeSelection && movedX <= 3 && movedY <= 3) return
 
-            if (!marqueeSelection.moved) return
+            if (!marqueeSelection) {
+                connectionManager?.cancelTransientConnection()
+                clearSelectedEdgeSelection(true)
+                clearMarqueeInteractionState()
+                if (selectedNodeIds.size > 0) setSelectedNodes(new Set())
+
+                marqueeSelection = {
+                    start,
+                    current: start,
+                    moved: true,
+                }
+            }
+
+            marqueeSelection.current = getCanvasPointFromClient(moveEvent.clientX, moveEvent.clientY)
+            marqueeSelection.moved = true
+            updateSelectionRectElement()
 
             const selectedIds = getSelectableNodeIdsInRect(getCanvasRectFromSelection(marqueeSelection))
             setSelectedNodes(new Set(selectedIds), true)
@@ -5115,8 +5193,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (isCanvasBackgroundTarget(e.target)) {
             clearNodeSelection()
-            selectedEdgeId = null
-            hideEdgeBubbleMenu()
+            clearSelectedEdgeSelection(true)
         }
     })
 
@@ -5129,10 +5206,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
 
         if (e.key === 'Escape') {
-            selectedEdgeId = null
-            connectionManager?.deselect()
+            clearSelectedEdgeSelection(true)
             selectNode(null)
-            hideEdgeBubbleMenu()
             return
         }
 
