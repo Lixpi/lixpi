@@ -608,6 +608,14 @@ describe('Resize handles - corner-hover visibility', () => {
 		expectSourceToContain(fnBody, 'nodeEl.appendChild(createResizeHandle(node.nodeId, corner))')
 		expectSourceNotToContain(fnBody, "if (node.type === 'aiChatThread' && !isContextRegion && corner.startsWith('bottom')) continue")
 	})
+
+	it('routes context region resize through cloud-edge hit testing', () => {
+		expectSourceToContain(ts, "type ResizeHandle = ResizeCorner | ContextRegionCloudResizeHandle")
+		expectSourceToContain(ts, 'function handlePaneMouseMove(event: MouseEvent): void')
+		expectSourceToContain(ts, "paneEl.style.cursor = regionHit.kind === 'resize' ? regionHit.cursor : ''")
+		expectSourceToContain(ts, "if (regionHit.kind === 'resize') {")
+		expectSourceToContain(ts, 'handleResizeStart(event, regionHit.nodeId, regionHit.handle)')
+	})
 })
 
 // =============================================================================
@@ -747,7 +755,8 @@ describe('AI chat region PIXI cloud layer', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 		expect(fnBody).toContain('contextRegionLayer?.hitTest(start)')
-		expect(fnBody).not.toContain("regionHit.kind === 'resize-handle'")
+		expect(fnBody).toContain("regionHit.kind === 'resize'")
+		expect(fnBody).toContain('handleResizeStart(event, regionHit.nodeId, regionHit.handle)')
 		expect(fnBody).toContain('handleDragStart(event, regionHit.nodeId, {')
 		expect(fnBody).toContain('activateAiChatPanel(regionNode, thread)')
 	})
@@ -755,7 +764,9 @@ describe('AI chat region PIXI cloud layer', () => {
 	it('uses shared cloud styles for hit testing and adoption scoring', () => {
 		expectSourceToContain(cloudTs, 'export const CONTEXT_REGION_CLOUD_STYLES')
 		expectSourceToContain(cloudTs, 'hitTestContextRegionCloud')
+		expectSourceToContain(cloudTs, 'rectIntersectsContextRegionCloud')
 		expectSourceToContain(cloudTs, 'scoreRectAgainstContextRegionCloud')
+		expectSourceToContain(ts, 'rectIntersectsContextRegionCloud(datum, rect)')
 		expectSourceToContain(ts, 'scoreRectAgainstContextRegionCloud(regionDatum, draggedRect, dropPoint)')
 	})
 })
@@ -1187,8 +1198,11 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('defines and styles the persistent selection overlay', () => {
 		expectSourceToContain(ts, 'className="workspace-selection-group-overlay"')
 		expectSourceToContain(ts, 'function getSelectionOverlayBounds(): Rect | null')
+		expectSourceToContain(ts, 'function getSelectionOverlayBoundsForNode(')
 		expectSourceToContain(ts, 'function updateSelectionGroupOverlayElement(): void')
 		expectSourceToContain(ts, 'if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null')
+		expectSourceToContain(ts, 'if (overlayNodes.every((node: CanvasNode) => isContextRegionCanvasNode(node))) return null')
+		expectSourceToContain(ts, 'getContextRegionCloudBounds(datum)')
 		expectSourceToContain(ts, 'updateSelectionGroupOverlayElement()')
 		expectSourceToContain(scss, '.workspace-selection-group-overlay')
 		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
@@ -1221,7 +1235,9 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, 'function handlePaneMouseDown(event: MouseEvent): void')
 		expectSourceToContain(ts, "paneEl.addEventListener('mousedown', handlePaneMouseDown, true)")
 		expectSourceToContain(ts, 'function ensureSelectionRectElement(): HTMLDivElement | null')
+		expectSourceToContain(ts, 'function selectionRectIntersectsNode(')
 		expectSourceToContain(ts, 'function getSelectableNodeIdsInRect(rect: Rect): string[]')
+		expectSourceToContain(ts, 'rectIntersectsContextRegionCloud(datum, rect)')
 	})
 
 	it('renders and styles the marquee selection rectangle', () => {
@@ -1273,7 +1289,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
 		// The drag overlay must pass the original nodeId so handleDragStart can
 		// resolve it internally and also preserve the original for the click path
-		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId,')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
@@ -1315,13 +1331,14 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		// Must NOT filter out hidden empty threads — they are still visible
 		// via their floating input and must be selectable
 		expect(fnBody).not.toContain('hiddenEmptyThreadNodeIds')
-		expect(fnBody).toContain('rectsOverlap(rect, getSelectionBoundsForNode(node))')
+		expect(fnBody).toContain('selectionRectIntersectsNode(rect, node, nodesById, threadMap)')
+		expectSourceToContain(ts, "node.type === 'aiChatThread' && hiddenEmptyThreadNodeIds.has(node.nodeId) && rectsOverlap(rect, getSelectionBoundsForNode(node))")
 	})
 
 	it('includes anchored AI images when computing the selection overlay bounds', () => {
 		expectSourceToContain(ts, 'for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {')
 		expectSourceToContain(ts, 'overlayNodeIds.add(anchor.imageNodeId)')
-		expectSourceToContain(ts, 'const rect = getSelectionBoundsForNode(node)')
+		expectSourceToContain(ts, 'const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)')
 	})
 
 	// -------------------------------------------------------------------------
@@ -1340,16 +1357,16 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 		// Selection must NOT happen unconditionally on mousedown — it is deferred
 		// behind wasAlreadySelected and dragDidMove guards
-		expect(fnBody).toContain('const wasAlreadySelected = isNodeSelected(resolvedNodeId)')
+		expectSourceToContain(fnBody, 'const wasAlreadySelected = isNodeSelected(resolvedNodeId)')
 		expect(fnBody).not.toMatch(/if \(!isNodeSelected\(resolvedNodeId\)\) \{\s*\n\s*selectNode\(resolvedNodeId\)/)
 
 		// On first meaningful mouse movement → select the resolved (thread) node for drag
-		expect(fnBody).toContain('if (!wasAlreadySelected) {')
-		expect(fnBody).toContain('selectNode(resolvedNodeId)')
+		expectSourceToContain(fnBody, 'if (allowSelection && !wasAlreadySelected) {')
+		expectSourceToContain(fnBody, 'selectNode(resolvedNodeId)')
 
 		// On mouseup without movement (click) → select the original nodeId
 		// so clicking an anchored image selects the image, not the thread
-		expect(fnBody).toContain('selectNode(nodeId)')
+		expectSourceToContain(fnBody, 'selectNode(nodeId)')
 	})
 
 	it('does not move nodes in handleMouseMove until the drag threshold is exceeded', () => {
@@ -1477,7 +1494,7 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// of the image.
 		//
 		// Invariant: dragOverlay must pass node.nodeId directly
-		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId,')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
@@ -1662,5 +1679,37 @@ describe('buildImageSrc — URL construction logic', () => {
 
 	it('appends token as query param for API URLs', () => {
 		expectSourceToContain(ts, '`?token=${token}`')
+	})
+})
+
+// =============================================================================
+// Marquee selection — stale group overlay artifact fix
+// =============================================================================
+
+describe('Marquee selection — stale group overlay suppressed during active marquee', () => {
+	const ts = loadTs()
+
+	it('getSelectionOverlayBounds returns null when marqueeSelection is active', () => {
+		const fnMatch = ts.match(/function\s+getSelectionOverlayBounds\(\)[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+		expectSourceToContain(fnBody, 'if (marqueeSelection) return null')
+	})
+
+	it('calls updateSelectionGroupOverlayElement immediately when marquee starts', () => {
+		// The group overlay must be cleared right when marqueeSelection is assigned,
+		// so the stale overlay from a prior selection does not linger during the drag.
+		const marqueStartMatch = ts.match(
+			/marqueeSelection\s*=\s*\{[\s\S]*?moved:\s*false[\s\S]*?\}[\s\S]*?updateSelectionRectElement\(\)[\s\S]*?updateSelectionGroupOverlayElement\(\)/
+		)
+		expect(marqueStartMatch).not.toBeNull()
+	})
+
+	it('calls updateSelectionGroupOverlayElement on mouseup after clearing marqueeSelection', () => {
+		// The overlay must be restored for the final selection once marqueeSelection is nulled.
+		const mouseUpMatch = ts.match(
+			/marqueeSelection\s*=\s*null[\s\S]*?hideSelectionRectElement\(\)[\s\S]*?updateSelectionGroupOverlayElement\(\)/
+		)
+		expect(mouseUpMatch).not.toBeNull()
 	})
 })

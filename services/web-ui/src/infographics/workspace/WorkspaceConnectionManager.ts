@@ -78,6 +78,7 @@ type RenderBounds = {
 	height: number
 }
 
+
 function generateEdgeId(): string {
 	const random = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
 	return `edge-${random}`
@@ -520,6 +521,25 @@ export class WorkspaceConnectionManager {
 		}
 	}
 
+	public cancelTransientConnection(): void {
+		const hadTransientConnection = Boolean(this.connectionInProgress || this.reconnectingEdge || this.proximityCandidate || this.menuConnectionCleanup)
+		const menuCleanup = this.menuConnectionCleanup
+
+		this.menuConnectionCleanup = null
+		this.connectionInProgress = null
+		this.reconnectingEdge = null
+		this.proximityCandidate = null
+
+		if (menuCleanup) {
+			menuCleanup()
+			return
+		}
+
+		if (hadTransientConnection) {
+			this.render()
+		}
+	}
+
 	public startConnectionFromMenu(nodeId: string) {
 		// Cancel any existing menu connection
 		this.menuConnectionCleanup?.()
@@ -817,9 +837,11 @@ export class WorkspaceConnectionManager {
 			},
 
 			cancelConnection: () => {
-				this.connectionInProgress = null
-				this.reconnectingEdge = null
-				this.render()
+				this.cancelTransientConnection()
+			},
+
+			onConnectEnd: () => {
+				requestAnimationFrame(() => this.cancelTransientConnection())
 			},
 
 			isValidConnection: (connection: Connection) => {
