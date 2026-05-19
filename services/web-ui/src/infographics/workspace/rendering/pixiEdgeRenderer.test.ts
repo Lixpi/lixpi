@@ -37,12 +37,24 @@ describe('pixiEdgeRenderer — path isolation regression guards', () => {
 
         const clearIndex = paintEdge.indexOf('g.clear()')
         const beginPathIndex = paintEdge.indexOf('g.beginPath()')
-        const drawPathIndex = paintEdge.indexOf('drawSvgPath(g, edge.svgPath)')
+        const drawPathIndex = paintEdge.indexOf('drawSvgPath(g, edge.svgPath, viewport)')
         const strokeIndex = paintEdge.indexOf('g.stroke({')
 
         expect(beginPathIndex).toBeGreaterThan(clearIndex)
         expect(drawPathIndex).toBeGreaterThan(beginPathIndex)
         expect(strokeIndex).toBeGreaterThan(drawPathIndex)
+    })
+
+    it('strokes edges in screen pixels using the current viewport', () => {
+        const paintEdge = extractTopLevelFunction(source, 'paintEdge')
+        const drawArrowhead = extractTopLevelFunction(source, 'drawArrowhead')
+        const edgeDatumKey = extractTopLevelFunction(source, 'edgeDatumKey')
+
+        expect(paintEdge).toContain('width: screenStrokeWidth')
+        expect(paintEdge).toContain('scaleCanvasChromeToScreenForZoom(edge.strokeWidth, viewport.zoom)')
+        expect(drawArrowhead).toContain('scaleCanvasChromeToScreenForZoom(arrow.size, viewport.zoom)')
+        expect(paintEdge).toContain('drawArrowhead(g, edge.arrowEnd, edge.strokeColor, viewport)')
+        expect(edgeDatumKey).toContain('${viewport.x},${viewport.y},${viewport.zoom}')
     })
 
     it('draws arrowheads as closed independent paths', () => {

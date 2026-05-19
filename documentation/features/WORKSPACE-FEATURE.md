@@ -2,7 +2,7 @@
 
 A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
-> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM/SVG interactions and PIXI v8 (WebGPU with WebGL fallback) for high-volume visual layers. The media layer renders image pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection, and SVG connectors stay in the DOM/SVG implementation. Image-node DOM `<img>` elements are kept as interaction chrome and as a fallback path when PIXI fails to initialize, but their `src` is left empty while PIXI is healthy so the browser does not double-fetch the same pixels.
+> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Image-node DOM `<img>` elements are interaction chrome and the partial-streaming surface during AI image generation. Stored image nodes leave their DOM `<img>` without `src` so the browser does not double-fetch pixels already owned by PIXI. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
 >
 > For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For the CO2-shaped seafoam context-region cloud system specifically, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
@@ -42,7 +42,7 @@ flowchart TB
             WC[WorkspaceCanvas.ts]
             WCM[WorkspaceConnectionManager]
             XY[XYPanZoom]
-            CR[ConnectorRenderer]
+            PER[PIXI Edge Renderer]
         end
 
         subgraph Services["Frontend Services"]
@@ -68,7 +68,7 @@ flowchart TB
     WCS --> WC
     WC --> XY
     WC --> WCM
-    WCM --> CR
+    WCM --> PER
 
     WCS --> WSvc
     WCS --> DSvc
@@ -580,12 +580,11 @@ flowchart LR
     subgraph ConnectionManager["WorkspaceConnectionManager"]
         WCM[syncNodes/syncEdges]
         XYH[XYHandle API]
-        CR[ConnectorRenderer]
+        PXD[PIXI edge datum cache]
     end
 
     subgraph DOM["DOM (z-index 1)"]
         VP[.workspace-viewport]
-        EDGES[.workspace-edges-layer SVG<br/>opacity 0, hit-testing only]
         DOCNODES[.workspace-document-node]
         IMGNODES[.workspace-image-node<br/>img.src empty when PIXI healthy]
         THREADNODES[.workspace-ai-chat-thread-node]
@@ -620,10 +619,9 @@ flowchart LR
     IMGNODES --> VP
     THREADNODES --> VP
     WCM --> XYH
-    WCM --> CR
+    WCM --> PXD
     WCM --> PEDG
-    CR --> EDGES
-    EDGES --> VP
+    PXD --> PEDG
     PM --> ED
     PM --> TED
     PML --> SPR
@@ -765,7 +763,7 @@ Visual connections (edges/arrows) between canvas nodes allow users to show relat
 
 - **Connection handles** on each node (visible on hover)
 - **Drag-to-connect** interaction using `XYHandle.onPointerDown` from `@xyflow/system`
-- **Edge rendering** using ConnectorRenderer from `src/infographics/connectors/`
+- **Edge rendering** through PIXI edge data produced by `WorkspaceConnectionManager.ts` and drawn by `pixiEdgeRenderer.ts`
 - **Edge selection and deletion** (click to select, Delete/Backspace to remove)
 - **Persistence** of edges in `CanvasState`
 
@@ -789,10 +787,10 @@ flowchart TB
     end
 
     subgraph "Rendering"
-        CR[createConnectorRenderer]
-        SVG[SVG Edge Layer]
+        PXD[PIXI edge data]
+        PER[pixiEdgeRenderer Graphics]
         HANDLES[Handle DOM Elements]
-        CR --> SVG
+        PXD --> PER
     end
 
     subgraph "Canvas"
@@ -802,12 +800,12 @@ flowchart TB
     end
 
     WC --> WCM
-    WC --> CR
     WC --> HANDLES
     NODES --> HANDLES
     WCM -->|onConnect| WE
-    WE -->|render| CR
-    XYH -->|in-progress line| SVG
+    WE -->|syncEdges| WCM
+    WCM -->|setPixiEdges| PXD
+    XYH -->|in-progress state| WCM
 ```
 
 ### Connection Flow
@@ -819,7 +817,7 @@ sequenceDiagram
     participant Handle as Source Handle DOM
     participant XYH as XYHandle.onPointerDown
     participant WCM as WorkspaceConnectionManager
-    participant SVG as Edge SVG Layer
+    participant PIXI as PIXI Edge Layer
     participant Target as Target Handle DOM
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 1: START DRAG
@@ -832,7 +830,7 @@ sequenceDiagram
         activate XYH
         XYH->>WCM: updateConnection(inProgress)
         activate WCM
-        WCM->>SVG: Render temp line from source
+        WCM->>PIXI: Emit temp edge datum
         deactivate Handle
     end
 
@@ -845,7 +843,7 @@ sequenceDiagram
             User->>XYH: pointermove
             XYH->>XYH: Find closest valid handle
             XYH->>WCM: updateConnection(newPosition)
-            WCM->>SVG: Update temp line endpoint
+            WCM->>PIXI: Update temp edge datum
         end
     end
 
@@ -859,7 +857,7 @@ sequenceDiagram
         XYH->>WCM: onConnect({ source, target })
         deactivate XYH
         WCM->>WCM: Add edge to state
-        WCM->>SVG: Render permanent edge
+        WCM->>PIXI: Emit permanent edge datum
         deactivate WCM
     end
 ```
@@ -876,11 +874,14 @@ classDiagram
         -edges: WorkspaceEdge[]
         -selectedEdgeId: string | null
         -connectionInProgress: ConnectionState | null
-        -connectorRenderer: ConnectorRenderer
+        -cachedPixiEdgeData: PixiEdgeRenderDatum[]
+        -cachedFlattenedEdgePaths: Map
 
         +syncNodes(canvasNodes: CanvasNode[])
         +syncEdges(edges: WorkspaceEdge[])
         +onHandlePointerDown(event, handleMeta)
+        +recomputePixiEdgesOnly(zoom: number)
+        +getEdgeMidpointRect(edgeId: string)
         +selectEdge(edgeId: string)
         +deleteSelectedEdge()
         +render()
@@ -907,6 +908,8 @@ Responsibilities:
 - Tracks in-progress connection state for rendering the temporary line
 - Validates connections (no duplicates, no self-loops)
 - Delegates to `XYHandle.onPointerDown` for the actual drag interaction
+- Builds PIXI edge render data from shared connector path math
+- Uses cached flattened PIXI path data for edge hit testing and bubble-menu anchoring
 - Manages edge selection state
 
 ### Handle DOM Elements
@@ -931,14 +934,14 @@ Handles are:
 
 ### Edge Rendering
 
-Edges are rendered as SVG paths using `createConnectorRenderer` from `src/infographics/connectors/`. The edge layer sits below node cards but above the canvas background.
+Edges are rendered as PIXI `Graphics` by `services/web-ui/src/infographics/workspace/rendering/pixiEdgeRenderer.ts`. `WorkspaceConnectionManager.ts` builds edge render data with shared path helpers from `src/infographics/connectors/paths.ts`, then sends it to the PIXI media layer for drawing, hit testing, and bubble-menu anchoring.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
     subgraph "Z-Order (bottom to top)"
         BG[Canvas Background]
-        EDGES[Edge SVG Layer]
+        EDGES[PIXI Edge Layer]
         NODES[Node Cards]
         HANDLES[Handle Overlays]
     end
@@ -948,9 +951,10 @@ flowchart LR
 
 Edge styling:
 - Path type: `horizontal-bezier`
-- Stroke width: `2px` (3px when selected)
-- Marker (arrowhead) size: `12px`
-- Color: `rgba(190, 190, 200, 0.95)` (primary color when selected)
+- Stroke width: `2px` from the zoom compensation floor upward
+- Marker (arrowhead) size: `16px` from the zoom compensation floor upward
+- Color: CSS connector custom properties from the workspace pane, using the focus color when selected
+- Temporary and proximity edges render dashed
 
 ### Edge Selection and Deletion
 

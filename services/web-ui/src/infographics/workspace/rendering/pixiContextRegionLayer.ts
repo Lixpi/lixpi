@@ -9,6 +9,7 @@ import {
 
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { scaleCanvasChromeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { getVisibleWorldRect, type PixiRendererHealth, type WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import {
     getContextRegionCloudBleed,
@@ -667,7 +668,7 @@ function drawTitle(text: Text, datum: ContextRegionCloudDatum, style: ContextReg
     text.style = {
         fill: colorNumber(style.palette.ink),
         fontFamily: webUiThemeSettings.contextRegionCloudTitleFontFamily,
-        fontSize: webUiThemeSettings.contextRegionCloudTitleFontSize / Math.max(zoom, 0.01),
+        fontSize: scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleFontSize, zoom),
         fontWeight: webUiThemeSettings.contextRegionCloudTitleFontWeight,
     }
     text.position.set(rect.x, rect.y)
@@ -918,8 +919,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
             scheduleRender()
         } catch (error) {
             console.error('Failed to initialize PIXI context region layer:', error)
-            hostEl.remove()
-            setHealth('failed')
+            throw error
         }
     })()
 

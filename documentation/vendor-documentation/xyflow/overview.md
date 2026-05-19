@@ -76,7 +76,7 @@ Lixpi's canvas integration lives in `services/web-ui/src/infographics/`. The int
 
 2. **XYHandle** — Used for handle-based connections. Lixpi also has a menu-triggered connection flow that bypasses XYHandle entirely, creating synthetic handles and tracking the connection manually.
 
-3. **Edge path functions** — Called by the D3-based ConnectorRenderer. Lixpi extends these with custom path types (orthogonal routing, horizontal Bézier) and a t-value spreading algorithm that fans out parallel edges to prevent overlap.
+3. **Edge path functions** — Called by `WorkspaceConnectionManager.ts` when it builds PIXI edge data. Lixpi extends these with custom path types (orthogonal routing, horizontal Bézier) and a t-value spreading algorithm that fans out parallel edges to prevent overlap; `pixiEdgeRenderer.ts` draws the visible connector pixels.
 
 4. **`adoptUserNodes`** — Called after every node structure change to keep XYFlow's internal NodeLookup in sync. Node handles are defined synthetically (not from DOM measurement) with explicit positions.
 
