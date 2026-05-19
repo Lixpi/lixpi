@@ -4,7 +4,7 @@ This module renders the main workspace view—a zoomable, pannable canvas where 
 
 > **Where to look first.**
 >
-> - For the rendering architecture (DOM/SVG interaction layer + PIXI v8 media layer), the LoD-tier loader, the texture cache, the 6-worker decode pool, and the list of remaining performance issues, read [`documentation/features/CANVAS-ENGINE.md`](../../../../../documentation/features/CANVAS-ENGINE.md). That document is the source of truth for any rendering or perf work.
+> - For the rendering architecture (DOM interaction layer + PIXI v8 media/edge layers), the LoD-tier loader, the texture cache, the 6-worker decode pool, and the list of remaining performance issues, read [`documentation/features/CANVAS-ENGINE.md`](../../../../../documentation/features/CANVAS-ENGINE.md). That document is the source of truth for any rendering or perf work.
 > - For context-region cloud rendering, CO2-mask hit testing, adoption scoring, theme toggles, and gotchas, read [`documentation/features/CONTEXT-REGION-CLOUDS.md`](../../../../../documentation/features/CONTEXT-REGION-CLOUDS.md).
 > - For workspace data flow (stores, services, NATS subjects, AI chat context extraction, image generation), read [`documentation/features/WORKSPACE-FEATURE.md`](../../../../../documentation/features/WORKSPACE-FEATURE.md).
 > - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
@@ -192,10 +192,8 @@ Image nodes have a simpler structure:
 ```
 ┌─────────────────────────────────────────┐
 │  img.image-node-img                     │
-│   ─ src is empty when PIXI is healthy   │
+│   ─ no src for stored images            │
 │   ─ opacity:0 via .pixi-owned class     │
-│   ─ src is set as a fallback if         │
-│     PIXI fails to initialize            │
 │  .image-drag-overlay                    │
 │   (covers entire image for dragging)    │
 │  .image-model-badge (when generated)    │
@@ -209,7 +207,7 @@ Image nodes have a simpler structure:
   handle       handle
 ```
 
-The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is kept as the fallback path and as the surface that streams partial pixels during AI image generation (the partial-streaming code path sets `imgEl.src` directly via `querySelector`; once the image is committed to canvas state, PIXI takes over and the DOM `<img>` is hidden via the `workspace-image-node--pixi-owned` class).
+The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is the partial-streaming surface during AI image generation; once the image is committed to canvas state, PIXI owns the stored image pixels and the DOM `<img>` remains hidden via the `workspace-image-node--pixi-owned` class.
 
 New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 
@@ -335,15 +333,14 @@ Rendering note: full re-renders are triggered when node structure or document lo
 
 ### Workspace Edges
 
-Edges are stored in `canvasState.edges` and rendered using the existing infographics connector renderer. Connection interactions are handled by `WorkspaceConnectionManager.ts` using `@xyflow/system`'s `XYHandle`.
+Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. Connection interactions are handled by `WorkspaceConnectionManager.ts` using `@xyflow/system`'s `XYHandle`.
 
 - Node DOM elements get left/right connection handles (target/source)
 - Edge direction follows the drag direction (arrow points toward the node you dragged TO)
 - **Proximity Connect**: Dragging a node near a connectable graph node shows a dashed ghost line; dropping creates the connection automatically (threshold configured via `webUiSettings.proximityConnectThreshold`). Context region cards are excluded from proximity connect because they are containment backgrounds, not graph endpoints.
-- **Context-region cloud anchors**: When an edge connects to a context region, `WorkspaceConnectionManager.ts` asks `contextRegionClouds.ts` for the sampled CO2 cloud outline at that side/t value. The rendered SVG connector and PIXI edge data use that outline point plus the normal marker gap, so resizing a region recalculates connector endpoints against the visible cloud instead of the transparent rectangular proxy.
-- **Zoom-compensated scaling**: Connector stroke width and arrowhead marker sizes can be inversely scaled based on zoom level so they appear at constant visual size. Controlled by `useZoomCompensatedConnectorScaling` in `webUiSettings.ts` (default `false` — connectors use fixed base sizes and scale naturally with the canvas zoom)
-- **Pan-optimized rendering**: During pure panning (no drag, zoom, or edge changes), edge re-rendering is skipped entirely since the edges SVG moves with the viewport via CSS transform. During zoom, edge re-rendering is also skipped unless `useZoomCompensatedConnectorScaling` is enabled; with the default setting (`false`) connectors simply scale with the viewport like the nodes. Explicit data mutations (node drag, resize, edge add/remove) still trigger a render. Resize handle updates remain zoom-gated. The connector renderer uses D3's `selectAll().data().join()` pattern for efficient incremental DOM updates when re-renders do occur — existing elements are matched by ID and only their attributes are updated instead of clear-and-rebuild.
-- **Layout containment**: The edges layer and connector SVG use `contain: layout style` to isolate their layout from the rest of the document, avoiding cascading reflows during viewport transforms.
+- **Context-region cloud anchors**: When an edge connects to a context region, `WorkspaceConnectionManager.ts` asks `contextRegionClouds.ts` for the sampled CO2 cloud outline at that side/t value. The PIXI edge data uses that outline point plus the normal marker gap, so resizing a region recalculates connector endpoints against the visible cloud instead of the transparent rectangular proxy.
+- **Zoom-compensated scaling**: Connector stroke width, arrowhead marker sizes, marker offsets, invisible hit areas, and context-region titles use bounded inverse zoom. From 40% upward, their screen size stays constant; below 40%, world size freezes so overview zooms naturally render them thinner instead of chunky. Connector scaling is controlled by `useZoomCompensatedConnectorScaling` in `webUiSettings.ts` (default `true`). Workspace connector pixels, hit testing, and edge bubble menu anchoring all use cached PIXI path data.
+- **Pan-optimized rendering**: During pure panning (no drag, zoom, or edge changes), edge re-rendering is skipped because the PIXI edge layer can redraw from the current viewport transform. During zoom, `WorkspaceConnectionManager.ts` recomputes only the PIXI edge datum affected by zoom-compensated marker offsets, then the PIXI layer flushes immediately. Explicit data mutations (node drag, resize, edge add/remove) still trigger a full edge datum render. Resize handle updates remain zoom-gated.
 - Clicking an edge selects it and shows a bubble menu below it with a Delete action
 - Deleting an edge updates `canvasState.edges` via the normal persistence flow
 
@@ -412,8 +409,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 
 | File | Purpose |
 |------|---------|
-| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration, PIXI media/context-region layer wiring, fallback path on PIXI media failure |
-| `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, SVG edge rendering for hit-testing, PIXI edge data feed, selection/deletion |
+| `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration, and PIXI media/context-region layer wiring |
+| `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, PIXI edge data feed, cached path hit-testing, bubble-menu anchoring, selection/deletion |
 | `pixiMediaLayer.ts` | PIXI v8 media layer for image pixels: sprite registry, texture cache, LoD-tier loader, RBush-based visibility scanner, idle prefetch scheduler, mipmap config |
 | `pixiMediaLayerLogic.ts` | Pure helpers used by the PIXI layer: tier ranking (`tierRank`), world-position math, source URL building, LoD `?size=` injection, world-rect computation |
 | `pixiImageDecoder.ts` | Six-worker decode pool. Round-robin dispatch with per-worker request tracking so a single worker crash does not nuke all in-flight requests |
@@ -448,7 +445,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.image-drag-overlay` | Full-area overlay for dragging images |
 | `.document-node-editor` | ProseMirror container for documents |
 | `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
-| `.image-node-img` | The DOM `<img>` element (kept as PIXI-failure fallback and as the surface for partial-streaming during AI image generation; `src` is empty while PIXI is healthy) |
+| `.image-node-img` | The DOM `<img>` element used for partial-streaming during AI image generation; stored image nodes keep it source-less so PIXI is the only stored-image pixel renderer |
 | `.workspace-image-node--pixi-owned` | Class added by `pixiMediaLayer` while PIXI is rendering this image. Sets `opacity: 0` on `.image-node-img` so the PIXI sprite is the only visible surface |
 | `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
 | `.workspace-image-node--context-region-child` | Image node contained by a context region, with the region-only off-white frame |

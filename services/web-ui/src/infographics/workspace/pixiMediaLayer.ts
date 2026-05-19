@@ -89,6 +89,7 @@ export type PixiMediaLayer = {
     setMarqueeRect: (worldRect: { x: number; y: number; width: number; height: number } | null) => void
     setSelectionOverlayBounds: (worldBounds: { x: number; y: number; width: number; height: number } | null, options?: SelectionOverlayOptions) => void
     setPixiEdges: (edges: PixiEdgeRenderDatum[]) => void
+    renderNow: () => void
     getHealth: () => PixiRendererHealth
     destroy: () => void
 }
@@ -239,11 +240,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 return
             }
 
+            app.stage.addChild(edgeLayer)
             app.stage.addChild(world)
-            world.addChild(edgeLayer)
             world.addChild(fgLayer)
             edgeRenderer = createPixiEdgeRenderer(edgeLayer)
-            edgeRenderer.render(latestPixiEdges)
+            edgeRenderer.render(latestPixiEdges, currentViewport)
             hostEl.appendChild(app.canvas)
             // Only position the canvas — DO NOT set width/height explicitly.
             // `autoDensity: true` + `resizeTo: paneEl` own the canvas pixel
@@ -261,8 +262,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             scheduleRender()
         } catch (error) {
             console.error('[PixiMediaLayer] Failed to initialize PIXI media layer.', error)
-            setHealth('failed')
-            releaseAllDomOwnership()
+            throw error
         }
     })()
 
@@ -276,6 +276,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         currentTier = getPixiLodTier(viewport.zoom)
         world.position.set(viewport.x, viewport.y)
         world.scale.set(viewport.zoom, viewport.zoom)
+        edgeRenderer?.render(latestPixiEdges, viewport)
         // Visibility update is rAF-coalesced so a 60Hz wheel-zoom doesn't
         // run the spatial-index scan + per-entry iteration 60 times per
         // second — once per frame is enough.
@@ -336,6 +337,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             currentTier = getPixiLodTier(vp.zoom)
             world.position.set(vp.x, vp.y)
             world.scale.set(vp.zoom, vp.zoom)
+            edgeRenderer?.render(latestPixiEdges, vp)
         }
 
         const imageNodes = canvasState.nodes.filter((node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image')
@@ -384,6 +386,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (destroyed || health !== 'ready') return
             app.render()
         })
+    }
+
+    function renderNow(): void {
+        if (destroyed || health !== 'ready') return
+        if (renderRaf !== null) {
+            cancelAnimationFrame(renderRaf)
+            renderRaf = null
+        }
+        app.render()
     }
 
     function destroyForegroundGraphics(graphics: Graphics | null): null {
@@ -923,7 +934,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (destroyed) return
         latestPixiEdges = edges
         if (!edgeRenderer) return
-        edgeRenderer.render(latestPixiEdges)
+        edgeRenderer.render(latestPixiEdges, currentViewport)
         scheduleRender()
     }
 
@@ -1000,6 +1011,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         setMarqueeRect,
         setSelectionOverlayBounds,
         setPixiEdges,
+        renderNow,
         getHealth,
         destroy,
     }

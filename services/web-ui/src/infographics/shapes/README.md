@@ -130,7 +130,6 @@ Typical workflow for building an infographic:
 ```typescript
 import { select } from 'd3-selection'
 import { createThreadShape, createIconShape, createLabelShape } from '$src/infographics/shapes/index.ts'
-import { createConnectorRenderer } from '$src/infographics/connectors/index.ts'
 
 // 1. Create container
 const container = document.querySelector('.visualization')
@@ -138,9 +137,8 @@ const svg = select(container)
     .append('svg')
     .attr('viewBox', '0 0 400 200')
 
-// 2. Create groups for shapes and edges
+// 2. Create a group for shapes
 const shapesGroup = svg.append('g').attr('class', 'shapes')
-const edgesGroup = svg.append('g').attr('class', 'edges')
 
 // 3. Create and render shapes
 const docShape = createThreadShape({
@@ -172,39 +170,14 @@ const docAnchors = docShape.getAnchors()
 const contextAnchors = contextShape.getAnchors()
 const llmAnchors = llmShape.getAnchors()
 
-// 5. Create connector for edges
-const connector = createConnectorRenderer({
-    container: edgesGroup.node(),
-    width: 400,
-    height: 200
-})
-
-// 6. Add edges using shape anchors
-connector.addEdge({
-    id: 'doc-to-context',
-    source: {
-        nodeId: 'doc',
-        position: 'right',
-        // Use anchor coordinates from shape
-    },
-    target: {
-        nodeId: 'context',
-        position: 'left'
-    },
-    marker: 'arrowhead'
-})
-
-connector.render()
-
-// 7. Update shapes dynamically
+// 5. Update shapes dynamically
 docShape.update({ disabled: true })
 contextShape.update({ text: 'Updated Context' })
 
-// 8. Clean up
+// 6. Clean up
 docShape.destroy()
 contextShape.destroy()
 llmShape.destroy()
-connector.destroy()
 ```
 
 ## Styling
@@ -228,26 +201,24 @@ Then in your consumer's SCSS:
 }
 ```
 
-## Integration with Connectors
+## Integration with Edges
 
-Shapes and connectors are designed to work together:
+Shapes and edge renderers are designed to work together:
 
 1. **Shapes** render visual nodes
-2. **Connectors** render edges between nodes
+2. **Edge renderers** render connections between nodes
 3. **Anchors** bridge the two systems
 
 ```typescript
 // Shape provides anchors
 const anchors = shape.getAnchors()
 
-// Connector uses anchors for edge endpoints
-connector.addEdge({
-    source: { nodeId: shape.id, position: 'right' },
-    target: { nodeId: otherShape.id, position: 'left' }
-})
+// Edge renderers can use anchor coordinates for endpoints
+const start = anchors.right
+const end = otherShape.getAnchors().left
 ```
 
-The connector system automatically resolves anchor coordinates based on node IDs and positions.
+Consumer renderers can either use these anchor coordinates directly or map their own node IDs and anchor positions to edge endpoints.
 
 ## Design Principles
 
