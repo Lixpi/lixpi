@@ -210,7 +210,7 @@ When enabled, the border is baked into the shared texture as an exact vector rin
 
 The texture cache key includes border state. If the default changes, the cache naturally produces separate `border` and `no-border` textures.
 
-## Hit Testing And Adoption
+## Hit Testing, Anchoring, And Adoption
 
 Context region hit testing is shape-based:
 
@@ -218,14 +218,16 @@ Context region hit testing is shape-based:
 2. It first checks image and document node rectangles through `getNodeHitBeforeContextRegion(...)` so region hits do not steal clicks from content inside the cloud.
 3. If no foreground node wins, it asks `contextRegionLayer.hitTest(worldPoint)`.
 4. The layer checks datums from topmost to bottommost.
-5. `hitTestContextRegionCloud(...)` checks the title rect first, then the CO2 body shape.
-6. A hit returns only `title`, `body`, or `none`.
+5. `hitTestContextRegionCloud(...)` checks the title rect first, then the CO2 body shape and edge band.
+6. A hit returns `title`, `body`, `resize`, or `none`.
 
-There is no `resize-handle` hit result for context regions now. Context region DOM proxies also do not create resize handles.
+Context region DOM proxies do not create DOM resize handles. Hovering the sampled cloud edge returns a `resize` hit with the matching sector handle and cursor.
+
+Connector anchoring uses the same geometry source. `getContextRegionCloudAnchorPoint(...)` starts from the logical side/t value used by `WorkspaceConnectionManager`, then ray-scans inward against the CO2 cloud mask to find the visible cloud outline. The connection manager applies that point as an edge-specific endpoint offset for both SVG connector paths and PIXI edge data. When the region is resized, the next edge render rebuilds the cloud datum from the live dimensions, so lines keep the same visual gap from the irregular outline instead of sticking to the transparent DOM rectangle.
 
 Drop adoption uses the same geometry model. `scoreRectAgainstContextRegionCloud(...)` broad-phase checks the square cloud bounds, then samples the dragged node's center, corners, edge midpoints, and drop point against the CO2 cloud shape. Transparent corners do not count as region body or drop target.
 
-This shared geometry rule is non-negotiable: visible pixels, body clicks, title placement, and adoption scoring must remain aligned. Rectangular math is allowed only as a cheap broad phase.
+This shared geometry rule is non-negotiable: visible pixels, connector anchors, resize hits, body clicks, title placement, and adoption scoring must remain aligned. Rectangular math is allowed only as a cheap broad phase.
 
 ## Interaction Invariants
 
@@ -293,6 +295,8 @@ Changes in this area should update or add focused regression coverage in the sam
 |---|---|
 | [workspace-canvas.test.ts](../../services/web-ui/src/infographics/workspace/workspace-canvas.test.ts) | Selection overlay source rules, no plain-click border, marquee defer-until-move behavior, context-region bounds hit fallback, connector visibility, and pane hit precedence. |
 | [workspaceDragPlan.test.ts](../../services/web-ui/src/infographics/workspace/workspaceDragPlan.test.ts) | Context-region drag participant sets, multi-region group drag, and anchored/generated image exclusions. |
+| [contextRegionClouds.test.ts](../../services/web-ui/src/infographics/workspace/rendering/contextRegionClouds.test.ts) | CO2 silhouette hit testing, connector anchor sampling, selection-rect intersection, and adoption scoring. |
+| [WorkspaceConnectionManager.test.ts](../../services/web-ui/src/infographics/workspace/WorkspaceConnectionManager.test.ts) | Context-region connector endpoints use cloud-outline anchors and recalculate after region resize. |
 | [pixiContextRegionLayer.test.ts](../../services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.test.ts) | No selected-cloud chrome path and proper `Graphics` cleanup. |
 | [pixiEdgeRenderer.test.ts](../../services/web-ui/src/infographics/workspace/rendering/pixiEdgeRenderer.test.ts) | Edge and arrowhead `Graphics` path isolation. |
 

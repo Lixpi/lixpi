@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+    getContextRegionCloudAnchorPoint,
     getContextRegionCloudAspect,
     getContextRegionCloudBounds,
     getContextRegionCloudResizeCursor,
     getContextRegionCloudStyle,
     getContextRegionCloudTitleRect,
     hitTestContextRegionCloud,
+    isPointInContextRegionCloudShape,
     rectIntersectsContextRegionCloud,
     scoreRectAgainstContextRegionCloud,
     type ContextRegionCloudDatum,
@@ -98,6 +100,33 @@ describe('context region clouds — irregular hit testing', () => {
 
         expect(rectIntersectsContextRegionCloud(datum, { x: 250, y: 180, width: 40, height: 40 })).toBe(true)
         expect(rectIntersectsContextRegionCloud(datum, { x: bounds.x + 2, y: bounds.y + 2, width: 16, height: 16 })).toBe(false)
+    })
+})
+
+// =============================================================================
+// CONNECTOR ANCHORS
+// =============================================================================
+
+describe('context region clouds — connector anchors', () => {
+    it('places connector anchors on the irregular cloud outline instead of the logical rectangle', () => {
+        const datum = makeDatum()
+        const anchor = getContextRegionCloudAnchorPoint(datum, 'right', 0.5)
+
+        expect(isPointInContextRegionCloudShape(datum, anchor)).toBe(true)
+        expect(anchor.x).toBeGreaterThan(datum.x + datum.width)
+        expect(anchor.y).toBe(datum.y + datum.height / 2)
+    })
+
+    it('recomputes connector anchors from resized cloud dimensions', () => {
+        const original = makeDatum()
+        const resized = makeDatum({ width: 620, height: 360 })
+
+        const originalAnchor = getContextRegionCloudAnchorPoint(original, 'right', 0.5)
+        const resizedAnchor = getContextRegionCloudAnchorPoint(resized, 'right', 0.5)
+
+        expect(isPointInContextRegionCloudShape(resized, resizedAnchor)).toBe(true)
+        expect(resizedAnchor.x).toBeGreaterThan(originalAnchor.x)
+        expect(resizedAnchor.y).toBe(resized.y + resized.height / 2)
     })
 })
 

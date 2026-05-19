@@ -180,7 +180,7 @@ Regression coverage lives in [workspaceViewportStatePlan.test.ts](../../services
 5. Culls off-screen clouds with the same viewport world-rect helper used by the media layer.
 6. Schedules a render via rAF.
 
-Cloud hit-testing and drag-adoption scoring use the same sampled CO2 SVG mask from `contextRegionClouds.ts`, so transparent rectangle corners do not behave like region body hits or drop targets.
+Cloud connector anchoring, resize-edge hit testing, body hit testing, and drag-adoption scoring use the same sampled CO2 SVG mask from `contextRegionClouds.ts`, so connector lines follow the visible irregular outline and transparent rectangle corners do not behave like region body hits or drop targets. `WorkspaceConnectionManager.ts` keeps SVG connector paths and PIXI edge data aligned by applying cloud-anchor offsets from `getContextRegionCloudAnchorPoint(...)` during each edge render, including live resize renders.
 
 ### Render Scheduling
 
