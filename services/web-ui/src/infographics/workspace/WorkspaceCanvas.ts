@@ -73,18 +73,24 @@ import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericI
 import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createPixiContextRegionLayer, type PixiContextRegionLayer } from '$src/infographics/workspace/rendering/pixiContextRegionLayer.ts'
-import { scoreRectAgainstContextRegionCloud, type ContextRegionCloudDatum } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
+import * as contextRegionCloudGeometry from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
+import {
+    getContextRegionCloudBounds,
+    scoreRectAgainstContextRegionCloud,
+    type ContextRegionCloudDatum,
+    type ContextRegionCloudResizeHandle,
+} from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import { createFeatureLibraryPanel } from '$src/infographics/workspace/featureLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 
 import { select } from 'd3-selection'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+type ResizeHandle = ResizeCorner | ContextRegionCloudResizeHandle
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'
 const NODE_DRAG_START_THRESHOLD_PX = 6
-
 type DocumentEditorEntry = {
     editor: any
     aiService: AiInteractionService | null
@@ -107,6 +113,12 @@ type MarqueeSelectionState = {
     moved: boolean
 }
 
+type DragStartOptions = {
+    onClick?: () => void
+    suppressPaneClick?: boolean
+    allowSelection?: boolean
+}
+
 type WorkspaceCanvasCallbacks = {
     onViewportChange?: (viewport: Viewport) => void
     onCanvasStateChange?: (state: CanvasState) => void
@@ -124,6 +136,23 @@ type WorkspaceCanvasOptions = {
     aiChatThreads: AiChatThread[]
     panZoomConfig?: Partial<ReturnType<typeof defaultPanZoomConfig>>
 } & WorkspaceCanvasCallbacks
+
+function getResizeCursorForHandle(handlePosition: ResizeHandle): string {
+    switch (handlePosition) {
+        case 'top':
+        case 'bottom':
+            return 'ns-resize'
+        case 'left':
+        case 'right':
+            return 'ew-resize'
+        case 'top-left':
+        case 'bottom-right':
+            return 'nwse-resize'
+        case 'top-right':
+        case 'bottom-left':
+            return 'nesw-resize'
+    }
+}
 
 function defaultPanZoomConfig(onTransformChange: (transform: Transform) => void) {
     return {
@@ -223,7 +252,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null
     let nodePointerPanLockNodeId: string | null = null
     let paneNoPanAddedForNodePointer = false
-
     // Visibility tracking for lazy loading
     const visibleNodeIds: Set<string> = new Set()
     const loadedNodeIds: Set<string> = new Set()
@@ -827,13 +855,49 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function getSelectionOverlayBoundsForNode(
+        node: CanvasNode,
+        nodesById: Map<string, CanvasNode>,
+        threadMap: Map<string, AiChatThread>
+    ): Rect {
+        if (!isContextRegionCanvasNode(node)) return getSelectionBoundsForNode(node)
+
+        const datum = getContextRegionCloudDatum(node, threadMap.get(node.referenceId), nodesById)
+        return getContextRegionCloudBounds(datum)
+    }
+
+    function selectionRectIntersectsNode(
+        rect: Rect,
+        node: CanvasNode,
+        nodesById: Map<string, CanvasNode>,
+        threadMap: Map<string, AiChatThread>
+    ): boolean {
+        if (!isContextRegionCanvasNode(node)) return rectsOverlap(rect, getSelectionBoundsForNode(node))
+
+        if (node.type === 'aiChatThread' && hiddenEmptyThreadNodeIds.has(node.nodeId) && rectsOverlap(rect, getSelectionBoundsForNode(node))) {
+            return true
+        }
+
+        const datum = getContextRegionCloudDatum(node, threadMap.get(node.referenceId), nodesById)
+        if (typeof contextRegionCloudGeometry.rectIntersectsContextRegionCloud === 'function') {
+            return contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datum, rect)
+        }
+
+        return scoreRectAgainstContextRegionCloud(datum, rect, {
+            x: rect.x + rect.width / 2,
+            y: rect.y + rect.height / 2,
+        }) > 0
+    }
+
     function getSelectableNodeIdsInRect(rect: Rect): string[] {
         if (!currentCanvasState) return []
 
         const selectedNodeIdsInRect = new Set<string>()
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
 
         currentCanvasState.nodes
-            .filter((node: CanvasNode) => rectsOverlap(rect, getSelectionBoundsForNode(node)))
+            .filter((node: CanvasNode) => selectionRectIntersectsNode(rect, node, nodesById, threadMap))
             .forEach((node: CanvasNode) => {
                 selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))
             })
@@ -909,6 +973,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getSelectionOverlayBounds(): Rect | null {
         if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null
+        if (marqueeSelection) return null
 
         const overlayNodeIds = new Set<string>()
         for (const nodeId of selectedNodeIds) {
@@ -920,9 +985,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const overlayNodes = currentCanvasState.nodes.filter((node: CanvasNode) => overlayNodeIds.has(node.nodeId))
         if (overlayNodes.length === 0) return null
+        if (overlayNodes.every((node: CanvasNode) => isContextRegionCanvasNode(node))) return null
+
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
 
         const bounds = overlayNodes.map((node: CanvasNode) => {
-            const rect = getSelectionBoundsForNode(node)
+            const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)
             return {
                 left: rect.x,
                 top: rect.y,
@@ -1074,10 +1143,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         setSelectedNodes(new Set())
     }
 
+    function getContextRegionTargetNodeId(target: EventTarget | null): string | null {
+        if (!(target instanceof Element)) return null
+        if (!paneEl.contains(target)) return null
+        const nodeEl = target.closest('[data-node-id]') as HTMLElement | null
+        const nodeId = nodeEl?.dataset.nodeId
+        if (!nodeId || !currentCanvasState) return null
+
+        const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+        return node && isContextRegionCanvasNode(node) ? nodeId : null
+    }
+
     function isCanvasBackgroundTarget(target: EventTarget | null): boolean {
         if (!(target instanceof Element)) return false
         if (!paneEl.contains(target)) return false
         if (selectionGroupOverlayEl?.contains(target)) return false
+        if (getContextRegionTargetNodeId(target)) return true
 
         return !target.closest([
             '[data-node-id]',
@@ -3367,6 +3448,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
+            if (isContextRegion) return
+
             if (isModSelectionEvent(e)) {
                 const selectionTargetNodeId = getSelectionTargetNodeId(node.nodeId)
                 toggleNodeSelection(selectionTargetNodeId)
@@ -3384,7 +3467,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}></div>` as HTMLDivElement
+        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId, isContextRegion ? { suppressPaneClick: true, allowSelection: false } : {})}></div>` as HTMLDivElement
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -3586,11 +3669,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return panZoom?.getViewport().zoom ?? currentCanvasState?.viewport?.zoom ?? lastTransform[2] ?? 1
     }
 
-    function handleDragStart(event: MouseEvent, nodeId: string, options: { onClick?: () => void; suppressPaneClick?: boolean } = {}) {
+    function handleDragStart(event: MouseEvent, nodeId: string, options: DragStartOptions = {}) {
         event.preventDefault()
         event.stopPropagation()
 
         if (!currentCanvasState) return
+        const allowSelection = options.allowSelection !== false
 
         const dragPlan = computeWorkspaceDragPlan({
             nodes: currentCanvasState.nodes,
@@ -3603,7 +3687,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const resolvedNodeId = dragPlan.resolvedNodeId
 
         if (isModSelectionEvent(event)) {
-            toggleNodeSelection(resolvedNodeId)
+            if (allowSelection) {
+                toggleNodeSelection(resolvedNodeId)
+            } else {
+                if (options.suppressPaneClick) suppressNextPaneClick = true
+                options.onClick?.()
+            }
             releasePanZoomForNodePointer()
             return
         }
@@ -3701,7 +3790,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const deltaY = (moveEvent.clientY - startY) / currentZoom
             if (!dragDidMove && Math.hypot(screenDeltaX, screenDeltaY) >= NODE_DRAG_START_THRESHOLD_PX) {
                 dragDidMove = true
-                if (!wasAlreadySelected) {
+                if (allowSelection && !wasAlreadySelected) {
                     selectNode(resolvedNodeId)
                 }
                 activateDragVisuals()
@@ -3813,7 +3902,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // No drag occurred — this was a click. Do not run drag-release
                 // adoption or collision logic; those paths can legitimately move
                 // connected/nearby nodes and must only run after actual movement.
-                selectNode(nodeId)
+                if (allowSelection) selectNode(nodeId)
                 if (options.suppressPaneClick) suppressNextPaneClick = true
                 options.onClick?.()
                 return
@@ -4009,12 +4098,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         document.addEventListener('mouseup', handleMouseUp)
     }
 
-    function handleResizeStart(event: MouseEvent, nodeId: string, corner: ResizeCorner) {
+    function handleResizeStart(event: MouseEvent, nodeId: string, handlePosition: ResizeHandle) {
         event.preventDefault()
         event.stopPropagation()
 
         const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement
-        if (!nodeEl || !currentCanvasState) return
+        if (!nodeEl || !currentCanvasState) {
+            releasePanZoomForNodePointer()
+            return
+        }
+
+        const resizeCursor = getResizeCursorForHandle(handlePosition)
+        const previousPaneCursor = paneEl.style.cursor
+        const previousBodyCursor = document.body.style.cursor
+        const previousBodyUserSelect = document.body.style.userSelect
+        const previousDocumentCursor = document.documentElement.style.cursor
+
+        paneEl.style.cursor = resizeCursor
+        applyStyle(document.body, { cursor: resizeCursor, userSelect: 'none' })
+        applyStyle(document.documentElement, { cursor: resizeCursor })
 
         // Find the node to check if it's an image (for aspect ratio locking)
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
@@ -4044,10 +4146,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const startTop = parseFloat(nodeEl.style.top)
         const currentZoom = panZoom?.getViewport().zoom ?? 1
 
-        const isLeft = corner.includes('left')
-        const isTop = corner.includes('top')
-        const directionX = isLeft ? -1 : 1
-        const directionY = isTop ? -1 : 1
+        const isLeft = handlePosition.includes('left')
+        const isRight = handlePosition.includes('right')
+        const isTop = handlePosition.includes('top')
+        const isBottom = handlePosition.includes('bottom')
+        const directionX = isLeft ? -1 : isRight ? 1 : 0
+        const directionY = isTop ? -1 : isBottom ? 1 : 0
 
         if (panZoom) {
             panZoom.update({
@@ -4063,8 +4167,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const resizeAnchorsForThread = !isImageNode ? getValidAnchorsForCanvasThread(nodeId) : []
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
-            const deltaX = ((moveEvent.clientX - startX) / currentZoom) * directionX
-            const deltaY = ((moveEvent.clientY - startY) / currentZoom) * directionY
+            const deltaX = directionX === 0 ? 0 : ((moveEvent.clientX - startX) / currentZoom) * directionX
+            const deltaY = directionY === 0 ? 0 : ((moveEvent.clientY - startY) / currentZoom) * directionY
 
             let newWidth = startWidth + deltaX
             let newHeight = startHeight + deltaY
@@ -4215,12 +4319,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodeEl.classList.remove('is-resizing')
             handle?.classList.remove('is-dragging')
             resizingNodeId = null
+            paneEl.style.cursor = previousPaneCursor
+            applyStyle(document.body, { cursor: previousBodyCursor, userSelect: previousBodyUserSelect })
+            applyStyle(document.documentElement, { cursor: previousDocumentCursor })
 
             liveNodeOverrides.delete(nodeId)
 
             document.removeEventListener('mousemove', handleMouseMove)
             document.removeEventListener('mouseup', handleMouseUp)
 
+            releasePanZoomForNodePointer()
             if (panZoom) {
                 panZoom.update(panZoomConfig)
             }
@@ -4649,6 +4757,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         suspendPanZoomForNodePointer(hitNodeId)
     }
 
+    function handlePaneMouseMove(event: MouseEvent): void {
+        if (resizingNodeId) return
+
+        if (!currentCanvasState || draggingNodeId || marqueeSelection) {
+            paneEl.style.cursor = ''
+            return
+        }
+
+        if (!isCanvasBackgroundTarget(event.target)) {
+            paneEl.style.cursor = ''
+            return
+        }
+
+        const point = getCanvasPointFromClient(event.clientX, event.clientY)
+        const nodeHit = getNodeHitBeforeContextRegion(point)
+        if (nodeHit) {
+            paneEl.style.cursor = ''
+            return
+        }
+
+        const regionHit = contextRegionLayer?.hitTest(point) ?? { kind: 'none' as const }
+        paneEl.style.cursor = regionHit.kind === 'resize' ? regionHit.cursor : ''
+    }
+
+    function handlePaneMouseLeave(): void {
+        if (resizingNodeId) return
+        paneEl.style.cursor = ''
+    }
+
     function handlePaneMouseDown(event: MouseEvent): void {
         if (event.button !== 0) return
         if (!isCanvasBackgroundTarget(event.target)) return
@@ -4663,12 +4800,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const regionHit = contextRegionLayer?.hitTest(start) ?? { kind: 'none' as const }
         if (regionHit.kind !== 'none') {
-            if (isModSelectionEvent(event)) {
-                event.preventDefault()
-                event.stopPropagation()
-                toggleNodeSelection(regionHit.nodeId)
-                suppressNextPaneClick = true
-                releasePanZoomForNodePointer()
+            if (regionHit.kind === 'resize') {
+                handleResizeStart(event, regionHit.nodeId, regionHit.handle)
                 return
             }
 
@@ -4678,6 +4811,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 : undefined
             handleDragStart(event, regionHit.nodeId, {
                 suppressPaneClick: true,
+                allowSelection: false,
                 onClick: () => {
                     if (regionNode && isContextRegionCanvasNode(regionNode)) activateAiChatPanel(regionNode, thread)
                 },
@@ -4689,6 +4823,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         event.preventDefault()
         event.stopPropagation()
+        connectionManager?.cancelTransientConnection()
 
         marqueeSelection = {
             start,
@@ -4696,6 +4831,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             moved: false,
         }
         updateSelectionRectElement()
+        updateSelectionGroupOverlayElement()
 
         if (panZoom) {
             panZoom.update({
@@ -4729,6 +4865,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             marqueeSelection = null
             hideSelectionRectElement()
+            connectionManager?.cancelTransientConnection()
+            updateSelectionGroupOverlayElement()
 
             if (panZoom) {
                 panZoom.update(panZoomConfig)
@@ -4965,6 +5103,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     paneEl.addEventListener('pointerdown', handlePanePointerDown, true)
+    paneEl.addEventListener('mousemove', handlePaneMouseMove, true)
+    paneEl.addEventListener('mouseleave', handlePaneMouseLeave)
     paneEl.addEventListener('mousedown', handlePaneMouseDown, true)
 
     paneEl.addEventListener('click', (e) => {
@@ -5137,7 +5277,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             window.removeEventListener('keydown', onKeyDown)
             window.removeEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)
             paneEl.removeEventListener('pointerdown', handlePanePointerDown, true)
+            paneEl.removeEventListener('mousemove', handlePaneMouseMove, true)
+            paneEl.removeEventListener('mouseleave', handlePaneMouseLeave)
             paneEl.removeEventListener('mousedown', handlePaneMouseDown, true)
+            paneEl.style.cursor = ''
             if (edgesRaf !== null) {
                 cancelAnimationFrame(edgesRaf)
                 edgesRaf = null
