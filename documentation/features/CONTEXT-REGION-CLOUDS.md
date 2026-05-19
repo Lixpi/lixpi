@@ -75,7 +75,7 @@ The layer order is deliberate:
 | Layer | Why it exists |
 |---|---|
 | PIXI context-region layer below DOM | Draws seafoam cloud backdrops and titles without covering document/editor DOM content. |
-| DOM viewport | Keeps ProseMirror, chat, drag overlays, selection paths, transparent region proxies, image chrome, and SVG connector hit-testing. |
+| DOM viewport | Keeps ProseMirror, chat, drag overlays, selection paths, transparent region proxies, image chrome, and connector handle hit targets. |
 | PIXI media layer above DOM | Draws image pixels, edge visuals, image selection outlines, and other high-volume visual surfaces. |
 
 Do not move region visuals into the media layer. The media layer sits above DOM content, so a semi-transparent cloud there can wash over documents and image chrome.
@@ -223,7 +223,7 @@ Context region hit testing is shape-based:
 
 Context region DOM proxies do not create DOM resize handles. Hovering the sampled cloud edge returns a `resize` hit with the matching sector handle and cursor.
 
-Connector anchoring uses the same geometry source. `getContextRegionCloudAnchorPoint(...)` starts from the logical side/t value used by `WorkspaceConnectionManager`, then ray-scans inward against the CO2 cloud mask to find the visible cloud outline. The connection manager applies that point as an edge-specific endpoint offset for both SVG connector paths and PIXI edge data. When the region is resized, the next edge render rebuilds the cloud datum from the live dimensions, so lines keep the same visual gap from the irregular outline instead of sticking to the transparent DOM rectangle.
+Connector anchoring uses the same geometry source. `getContextRegionCloudAnchorPoint(...)` starts from the logical side/t value used by `WorkspaceConnectionManager`, then ray-scans inward against the CO2 cloud mask to find the visible cloud outline. The connection manager applies that point as an edge-specific endpoint offset in PIXI edge data. When the region is resized, the next edge render rebuilds the cloud datum from the live dimensions, so lines keep the same visual gap from the irregular outline instead of sticking to the transparent DOM rectangle.
 
 Drop adoption uses the same geometry model. `scoreRectAgainstContextRegionCloud(...)` broad-phase checks the square cloud bounds, then samples the dragged node's center, corners, edge midpoints, and drop point against the CO2 cloud shape. Transparent corners do not count as region body or drop target.
 
@@ -333,7 +333,7 @@ This matters for clouds because context-region visuals are viewport-synced PIXI 
 
 The context-region PIXI application is initialized with:
 
-- `preference: 'webgpu'` with WebGL fallback.
+- `preference: 'webgpu'`.
 - Transparent background.
 - `autoStart: false`.
 - `sharedTicker: false`.

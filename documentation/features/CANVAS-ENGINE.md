@@ -1,8 +1,8 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM/SVG interaction renderer with PIXI v8 visual layers**. The proven `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and SVG connector hit-testing. PIXI v8 (WebGPU with WebGL fallback) owns image pixel rendering through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts` and context-region CO2-shaped cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
+The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. PIXI v8 owns image pixel rendering, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; it owns context-region CO2-shaped cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
 
-The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. Its Phase 2 guidance defines the current path: PIXI owns high-volume visual surfaces incrementally, while document/chat-thread DOM and SVG connector hit-testing remain until profiling proves they need migration.
+The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. The current path is renderer ownership by workload: DOM owns text-rich controls and interaction structure; PIXI owns high-volume pixels, connector strokes, context-region clouds, and canvas chrome.
 
 ## Why This Matters
 
@@ -80,8 +80,7 @@ flowchart TB
             DOC[Document Nodes]
             THR[AI Chat Thread Nodes]
             REGION_PROXY[Context region DOM proxies<br/>transparent data-node-id geometry]
-            IMG_DOM[Image Node DOM shells<br/>data-node-id only,<br/>img.src is empty when PIXI healthy]
-            EDGE_SVG[SVG Edges layer<br/>opacity 0, hit-testing only]
+            IMG_DOM[Image Node DOM shells<br/>data-node-id + interaction chrome]
             HANDLE[Handles, drag overlays, resize handles]
         end
         subgraph PixiCanvas[".workspace-pixi-media-layer (z-index 2, PIXI canvas)"]
@@ -103,9 +102,9 @@ flowchart TB
 The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Image-node DOM elements are kept (`<div data-node-id>` plus `<img class="image-node-img">`) for two reasons:
 
 1. They host all interaction chrome — drag overlay, resize handles, badges, generation spinner, partial-streaming `<img>` for AI image generation.
-2. They are the DOM fallback if PIXI fails to initialize.
+2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 
-When PIXI is healthy, the DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node--pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
+The DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node--pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
 
 Context-region DOM elements are also kept, but only as transparent geometry proxies for existing drag, selection, connection-manager, and parent-child state paths. Their visible CO2-shaped cloud and title text are drawn by `pixiContextRegionLayer`. Empty-region pointer behavior starts in the pane background handler, calls `contextRegionLayer.hitTest(worldPoint)`, and then reuses the existing drag handler for the matched node.
 
@@ -288,7 +287,7 @@ The PIXI media layer has gone through several rounds of perf hardening. The curr
 | **Never-downgrade tier policy** | Once a higher-tier texture is on the GPU, zoom-out never re-fetches a lower tier — mipmaps handle downsampling for free. |
 | **Progressive `thumb-256`-first** | First-paint loads tiny thumbnails for visible sprites; full-tier upgrades happen in idle. |
 | **Idle prefetch (capped)** | Up to 20 unloaded entries per idle tick get pre-cached at `thumb-256`, sorted by viewport distance. Pan reveals already-loaded images. |
-| **DOM `<img>` double-fetch eliminated** | Stored-image `<img>` elements have no `src` attribute while PIXI is healthy. Backfilled on PIXI failure as the fallback path. |
+| **DOM `<img>` double-fetch eliminated** | Stored-image `<img>` elements have no `src` attribute; PIXI is the only stored-image pixel renderer. |
 | **Visual-state-gated PIXI `sync()`** | Media entries resync on initial create, full DOM rerenders, local commits, and store renders with node/edge visual changes. Viewport-only renders do not upsert image entries. |
 | **Incremental RBush** | The spatial index is updated per-node (`remove` + `insert`) only when geometry actually changed, avoiding full rebuilds on every sync. |
 | **`drawColorRect` skip-when-unchanged** | Placeholder geometry is only rebuilt when the node's width or height actually changed; transform updates are matrix-only. |
@@ -321,36 +320,25 @@ Consequences:
 
 **Recommended: option 2.** Generate `thumb-256.webp` and `thumb-1024.webp` at upload time, both in NATS Object Store. Adds at most ~20 % storage but gives instant LoD payloads for every viewport size. WebP at 75 % quality for a 256 × 256 image is typically ~10 KB, so the entire workspace cache fits comfortably in RAM.
 
-### 2. SVG edge layer + PIXI edge layer rendered in parallel
-
-`WorkspaceConnectionManager.render()` produces both an SVG layer (in DOM, opacity 0 — used for hit-testing via `isPointInStroke`) and the data feed for `pixiEdgeRenderer`. Hit-testing is the only reason the SVG is still there; it is duplicate work on every edge change.
-
-**Fix options:**
-
-1. **Replace SVG hit-testing with PIXI ray-casting** against the PIXI edge `Graphics` objects (use `getBounds()` for a rough check, then per-pixel sample the rendered surface for fine hit). Drops the entire SVG layer.
-2. **Implement geometric hit-testing on the edge data** (distance-to-bezier-curve / distance-to-orthogonal-segments). Requires no rendered surface at all and works on raw `PixiEdgeRenderDatum` data.
-
-Option 2 is the cleanest and removes a whole layer.
-
-### 3. `getComputedStyle` on every edge render
+### 2. `getComputedStyle` on every edge render
 
 `WorkspaceConnectionManager.render()` reads `--connector-line-default-color` and `--connector-line-focus-color` via `getComputedStyle(paneEl)` on every render. `getComputedStyle` can force a style flush.
 
 **Fix:** cache the resolved CSS variable values once at construction and on a `MutationObserver` for `<html>` class changes (theme toggle).
 
-### 4. `selectEdge` triggers a synchronous, non-coalesced render
+### 3. `selectEdge` triggers a synchronous, non-coalesced render
 
 `WorkspaceConnectionManager.selectEdge()` calls `this.render()` synchronously — it does not go through the `scheduleEdgesRender()` rAF coalescer. For a graph with hundreds of edges, clicking to select one runs a full edge-data rebuild + PIXI repaint outside the frame loop.
 
 **Fix:** route `selectEdge` through `scheduleEdgesRender()`. Selection ID is mutated synchronously; render is deferred.
 
-### 5. Selection / marquee / group overlay `Graphics.clear()` per update
+### 4. Selection / marquee / group overlay `Graphics.clear()` per update
 
 `setSelectedImageNodes`, `setMarqueeRect`, and `setSelectionOverlayBounds` always call `g.clear()` and rebuild geometry, even when the bounds and zoom-dependent stroke width haven't changed within an epsilon. Less impactful than the image-side `drawColorRect` skip but the same shape of optimization.
 
 **Fix:** mirror the `colorRectW / colorRectH` skip pattern in those three functions.
 
-### 6. Workspace-switch full sprite teardown
+### 5. Workspace-switch full sprite teardown
 
 When the user switches workspaces, every PIXI sprite + `Graphics` is destroyed and re-created. For users moving between two image-heavy workspaces back-to-back, this flushes both texture and sprite caches.
 
@@ -358,27 +346,21 @@ When the user switches workspaces, every PIXI sprite + `Graphics` is destroyed a
 
 This is a bigger refactor (multi-workspace sprite lifecycle) and only worth doing if profiling shows the pattern is common.
 
-### 7. PIXI v8 VRAM regression for large texture counts
+### 6. PIXI v8 VRAM regression for large texture counts
 
 PIXI v8 (any 8.x version) has a known regression where `Texture.from(bitmap)` uses ~2× the GPU memory of v7 because the WebGPU upload path internally converts ImageBitmap → canvas, doubling the allocation (see [pixijs/pixijs#11331](https://github.com/pixijs/pixijs/issues/11331)). The fix landed in a PR merged ~May 2025 and Lixpi pins `^8.14.0` to pick it up. **Verify with `pnpm why pixi.js` that the resolved version is ≥ 8.14.0** — if a transitive dependency pins an older 8.x, the regression returns and Safari iOS will crash on workspaces with dozens of images.
 
-### 8. Decode worker pool has no priority
+### 7. Decode worker pool has no priority
 
 The 6-worker decode pool is round-robin. There is no notion of "the user is looking at this region right now, prioritize it over background prefetch." If the user opens a large workspace and immediately starts panning, prefetch decodes still occupy worker slots even though visibility-driven decodes for the focus area should jump the queue.
 
 **Fix:** add an `urgent: boolean` flag to `decodeImageInWorker(url, urgent)`. Maintain two queues per worker; drain `urgent` before `normal`. `ensureTextureForEntry` calls from `updateVisibleImages` set `urgent: true`; calls from `schedulePrefetch` set `urgent: false`.
 
-### 9. No connection-aware backoff
+### 8. No connection-aware backoff
 
 If the API is slow or returning errors, the PIXI layer keeps retrying indefinitely (each visibility pass calls `ensureTextureForEntry` which fires a new fetch on every error path). With hundreds of nodes this can hammer a struggling backend.
 
 **Fix:** track per-entry retry count + last error timestamp. On error, set a cooldown (`Math.min(2 ** retries, 30) * 1000` ms) before another fetch is allowed for that entry. Reset on success.
-
-### 10. `isPointInStroke` for edge hit-testing
-
-`WorkspaceConnectionManager.attachEdgeInteractionHandlers` walks every edge SVG path on every `mousemove` to update the hover cursor, calling `path.isPointInStroke(point)` per edge. For a graph with hundreds of edges, this is a significant per-frame cost during pure mouse movement.
-
-**Fix:** spatial index the edges (RBush, like the images) keyed by their bounding box. On `mousemove` only test edges whose bounding box contains the cursor.
 
 ---
 
@@ -398,18 +380,11 @@ When tuning, these are the knobs that exist today (all in `pixiMediaLayer.ts` un
 
 ---
 
-## Health and Fallback
+## PIXI Initialization Contract
 
-`createPixiMediaLayer` accepts an `onHealthChange(health)` callback. Health states: `initializing → ready` (success) or `initializing → failed` (init error).
+`createPixiMediaLayer` accepts an `onHealthChange(health)` callback for `initializing → ready → destroyed`. PIXI initialization errors are fatal: the app logs the initialization error and rethrows it. Stored image nodes do not set DOM `<img>.src` as a recovery path.
 
-`WorkspaceCanvas.ts` subscribes:
-
-- **`ready`**: do nothing — image-node DOM `<img>` elements stay empty (no `src`), PIXI draws.
-- **`failed`**: call `backfillDomImageSrcs()` which iterates every tracked image node and sets its `<img>.src` to the resolved API URL. The DOM image path becomes the fallback renderer.
-
-This means **PIXI failure is non-fatal**. The user sees images either way; only the rendering quality / large-canvas performance degrades.
-
-The DOM image-element registry in `WorkspaceCanvas.ts` (`imageElByNodeId`, `imageResolvedSrcByNodeId` Maps) is populated in `createImageNode` and cleared in `renderNodes` when DOM is rebuilt.
+Stored image DOM `<img>` elements stay source-less by design. The only image-node code path that writes `imgEl.src` is the partial-streaming path for AI image generation or non-stored external/data URLs.
 
 ---
 

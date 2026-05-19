@@ -17,6 +17,25 @@ export type WorldPosition = {
     y: number
 }
 
+export function getSafeViewportZoom(viewport: Pick<CanvasViewport, 'zoom'>): number {
+    return Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
+}
+
+export function worldPointToScreenPoint(
+    point: { x: number; y: number },
+    viewport: CanvasViewport
+): { x: number; y: number } {
+    const zoom = getSafeViewportZoom(viewport)
+    return {
+        x: point.x * zoom + viewport.x,
+        y: point.y * zoom + viewport.y,
+    }
+}
+
+export function worldSizeToScreenSize(size: number, viewport: Pick<CanvasViewport, 'zoom'>): number {
+    return size * getSafeViewportZoom(viewport)
+}
+
 // Walks a node's parent chain and returns its absolute world position.
 // Context-region children store `position` relative to their parent; PIXI
 // renders sprites in world coordinates, so it must accumulate parent offsets
@@ -61,7 +80,7 @@ export function tierRank(tier: LodTier): number {
     }
 }
 
-export type PixiRendererHealth = 'initializing' | 'ready' | 'failed' | 'destroyed'
+export type PixiRendererHealth = 'initializing' | 'ready' | 'destroyed'
 
 export const transparentPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
@@ -124,14 +143,14 @@ export type PixiEdgeArrow = {
     // Direction the arrowhead points (into the node it touches)
     // left anchor = Math.PI, right = 0, top = -Math.PI/2, bottom = Math.PI/2
     angle: number
-    size: number  // world pixels
+    size: number  // base screen pixels; renderer applies viewport thresholding
 }
 
 export type PixiEdgeRenderDatum = {
     id: string
     svgPath: string     // SVG path string in world coordinates
     strokeColor: string
-    strokeWidth: number
+    strokeWidth: number // base screen pixels; renderer applies viewport thresholding
     isDashed: boolean
     arrowEnd: PixiEdgeArrow | null
     arrowStart: PixiEdgeArrow | null

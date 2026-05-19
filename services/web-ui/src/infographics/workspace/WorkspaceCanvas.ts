@@ -32,7 +32,7 @@ import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getAdaptiveZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { getCanvasChromeZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeImagePositionNextToThread, computeImagePositionOverlappingThread, countExistingImagesForThread, OVERLAP_PADDING_X, OVERLAP_GAP_Y, OVERLAP_WIDTH_RATIO } from '$src/infographics/workspace/imagePositioning.ts'
@@ -196,25 +196,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let lastTransform: Transform = [0, 0, 1]
 
     let connectionManager: WorkspaceConnectionManager | null = null
-    let edgesLayerEl: HTMLDivElement | null = null
     let pixiMediaLayer: PixiMediaLayer | null = null
     let contextRegionLayer: PixiContextRegionLayer | null = null
     let viewportBridge: ViewportBridge | null = null
-
-    // Health of the PIXI renderer. Image nodes' DOM `<img>` elements stay
-    // empty (no `src`) while PIXI is healthy so the browser never makes a
-    // second, redundant network round-trip for the same pixels PIXI is
-    // already drawing. If PIXI fails to initialize (e.g. WebGL/WebGPU
-    // unavailable), `pixiHealth` flips to `'failed'` and we backfill src
-    // attributes so the DOM fallback takes over.
-    let pixiHealth: 'initializing' | 'ready' | 'failed' | 'destroyed' = 'initializing'
-    // Per-image-node DOM <img> element registry, keyed by node id. Lets us
-    // assign src in O(1) on PIXI failure without a viewport-wide
-    // querySelector.
-    const imageElByNodeId: Map<string, HTMLImageElement> = new Map()
-    // The resolved (token-less) API path for each image node, captured at
-    // node-creation time. Used to backfill `<img>.src` when PIXI fails.
-    const imageResolvedSrcByNodeId: Map<string, string> = new Map()
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
@@ -276,15 +260,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewportEl,
         getWorkspaceId: () => workspaceId,
         selectionColors: pixiSelectionColors,
-        onHealthChange: (next) => {
-            pixiHealth = next
-            if (next === 'failed') {
-                // PIXI gave up — every image node falls back to the DOM
-                // <img> renderer. Set `src` on each tracked image element
-                // so the browser starts the (previously skipped) fetch.
-                void backfillDomImageSrcs()
-            }
-        },
     })
     contextRegionLayer = createPixiContextRegionLayer({
         paneEl,
@@ -470,7 +445,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         canvasBubbleMenu = new BubbleMenu({
             parentEl: paneEl,
             items: canvasBubbleMenuItems.items,
-            getVisualScale: () => getAdaptiveZoomMultiplier(getCurrentViewportZoom()),
+            getVisualScale: () => getCanvasChromeZoomMultiplier(getCurrentViewportZoom()),
         })
     }
 
@@ -959,8 +934,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (marqueeSelection.moved) {
             pixiMediaLayer?.setMarqueeRect(rect)
 
-            // DOM rect only for non-PIXI contexts (document/thread nodes);
-            // PIXI draws it for image nodes but DOM fallback keeps it working everywhere.
+            // DOM rect covers document/thread selection while PIXI renders image-node chrome.
             const rectEl = ensureSelectionRectElement()
             if (rectEl) {
                 applyStyle(rectEl, {
@@ -1286,77 +1260,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getEdgeMidpointRect(pathEl: SVGPathElement): DOMRect {
-        const length = pathEl.getTotalLength()
-        const mid = length / 2
-        const svg = pathEl.ownerSVGElement!
-        const ctm = pathEl.getScreenCTM()
-
-        if (!ctm) {
-            const bbox = pathEl.getBoundingClientRect()
-            return new DOMRect(bbox.left + bbox.width / 2, bbox.top + bbox.height / 2, 1, 1)
-        }
-
-        const pt = svg.createSVGPoint()
-
-        pt.x = pathEl.getPointAtLength(mid).x
-        pt.y = pathEl.getPointAtLength(mid).y
-        const screenMid = pt.matrixTransform(ctm)
-
-        pt.x = pathEl.getPointAtLength(Math.max(0, mid - 1)).x
-        pt.y = pathEl.getPointAtLength(Math.max(0, mid - 1)).y
-        const screenP1 = pt.matrixTransform(ctm)
-
-        pt.x = pathEl.getPointAtLength(Math.min(length, mid + 1)).x
-        pt.y = pathEl.getPointAtLength(Math.min(length, mid + 1)).y
-        const screenP2 = pt.matrixTransform(ctm)
-
-        const dx = screenP2.x - screenP1.x
-        const dy = screenP2.y - screenP1.y
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
-
-        let nx = -dy / dist
-        let ny = dx / dist
-
-        // Force normal to point DOWN (positive Y) so it works well with placement: 'below'
-        if (ny < 0) {
-            nx = -nx
-            ny = -ny
-        }
-
-        // We want the center of the menu to be exactly 28px away from the line
-        // (assuming ~18px menu radius + 10px desired gap)
-        const menuRadius = 18
-        const gap = 10
-        const distance = menuRadius + gap
-
-        const menuCenterX = screenMid.x + nx * distance
-        const menuCenterY = screenMid.y + ny * distance
-
-        // BubbleMenu with placement 'below' places the menu at:
-        // center X = targetRect.left + width/2
-        // top Y = targetRect.bottom + 8 (assuming scale 1)
-        // So if we pass a 1x1 rect at (targetX, targetY):
-        // menuCenterX = targetX
-        // menuTop = targetY + 1 + 8 = targetY + 9
-        // Since we want menuTop = menuCenterY - menuRadius:
-        // targetY + 9 = menuCenterY - menuRadius
-
-        const targetX = menuCenterX
-        const targetY = menuCenterY - menuRadius - 9
-
-        return new DOMRect(targetX, targetY, 1, 1)
-    }
-
     function showEdgeBubbleMenu(edgeId: string) {
-        if (!canvasBubbleMenu || !canvasBubbleMenuItems || !edgesLayerEl) return
+        if (!canvasBubbleMenu || !canvasBubbleMenuItems || !connectionManager) return
 
         canvasBubbleMenuItems.setActiveEdgeId(edgeId)
 
-        const pathEl = edgesLayerEl.querySelector(`path#edge-${edgeId}`) as SVGPathElement | null
-        if (!pathEl) return
-
-        const targetRect = getEdgeMidpointRect(pathEl)
+        const targetRect = connectionManager.getEdgeMidpointRect(edgeId)
+        if (!targetRect) return
         canvasBubbleMenu.show(CANVAS_EDGE_CONTEXT, { targetRect, placement: 'below' })
     }
 
@@ -1366,12 +1276,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function repositionEdgeBubbleMenu() {
-        if (!canvasBubbleMenu?.isVisible || !selectedEdgeId || !edgesLayerEl) return
+        if (!canvasBubbleMenu?.isVisible || !selectedEdgeId || !connectionManager) return
 
-        const pathEl = edgesLayerEl.querySelector(`path#edge-${selectedEdgeId}`) as SVGPathElement | null
-        if (!pathEl) return
-
-        const targetRect = getEdgeMidpointRect(pathEl)
+        const targetRect = connectionManager.getEdgeMidpointRect(selectedEdgeId)
+        if (!targetRect) return
         canvasBubbleMenu.reposition({ targetRect, placement: 'below' })
     }
 
@@ -2625,27 +2533,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return `data:image/png;base64,${imageUrl}`
     }
 
-    // Last-resort fallback when PIXI fails to initialize. Iterates every
-    // tracked image node and sets `<img>.src` so the (CSS-hidden) DOM
-    // `<img>` tag becomes the renderer for that node. This is a one-time
-    // cost per failed init — the canvas keeps working, just on the slower
-    // DOM path used before PIXI was introduced.
-    async function backfillDomImageSrcs(): Promise<void> {
-        if (imageResolvedSrcByNodeId.size === 0) return
-        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-        let token: string | false = false
-        try {
-            token = await AuthService.getTokenSilently()
-        } catch {
-            // proceed without token; public images still work
-        }
-        for (const [nodeId, resolvedSrc] of imageResolvedSrcByNodeId) {
-            const imgEl = imageElByNodeId.get(nodeId)
-            if (!imgEl || imgEl.src) continue
-            imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
-        }
-    }
-
     function showImageErrorPlaceholder(imgEl: HTMLImageElement, nodeEl: HTMLElement): void {
         applyStyle(imgEl, { display: 'none' })
         if (nodeEl.querySelector('.image-error-placeholder')) return
@@ -2779,8 +2666,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!existing || !currentCanvasState) return
 
             partialImageTracker.delete(threadId)
-            imageElByNodeId.delete(existing.nodeId)
-            imageResolvedSrcByNodeId.delete(existing.nodeId)
             selectedNodeIds.delete(existing.nodeId)
 
             // Show error placeholder on the node so the user sees what failed,
@@ -3411,6 +3296,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     pendingHandleZoom = vp.zoom
                 }
                 if (webUiSettings.useZoomCompensatedConnectorScaling) {
+                    // Recompute and flush the connector canvas in the same turn as the DOM
+                    // viewport transform. If the pan/zoom callback runs inside a rAF, waiting
+                    // for PIXI's scheduled rAF lets the browser paint one frame where nodes
+                    // have moved but connectors still show the previous canvas bitmap.
+                    const pixiEdgesRecomputed = connectionManager?.recomputePixiEdgesOnly(vp.zoom) ?? false
+                    if (pixiEdgesRecomputed) pixiMediaLayer?.renderNow()
                     scheduleEdgesRender()
                 }
             }
@@ -3578,24 +3469,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function ensureEdgesLayer() {
-        if (edgesLayerEl && viewportEl.contains(edgesLayerEl)) {
+    function ensureConnectionManager() {
+        if (connectionManager) {
             return
         }
-
-        if (connectionManager) {
-            connectionManager.destroy()
-            connectionManager = null
-        }
-
-        edgesLayerEl = html`<div className="workspace-edges-layer"></div>` as HTMLDivElement
-
-        viewportEl.prepend(edgesLayerEl)
 
         connectionManager = new WorkspaceConnectionManager({
             paneEl,
             viewportEl,
-            edgesLayerEl,
             getTransform: () => lastTransform,
             railOffset: RAIL_OFFSET,
             panBy: async ({ x, y }) => {
@@ -4588,12 +4469,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? `/api/images/${workspaceId}/${node.fileId}`
             : strippedSrc
 
-        // Track this <img> + its resolved API path. Used by the PIXI
-        // health-failure fallback to backfill `src` only on stored images,
-        // and the partial-streaming code path to update src in place.
-        imageElByNodeId.set(node.nodeId, imgEl)
-        if (isStoredImage) imageResolvedSrcByNodeId.set(node.nodeId, resolvedSrc)
-
         let retried = false
         const assignSrc = async () => {
             try {
@@ -4604,19 +4479,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // CRITICAL: stored images are rendered by PIXI. Setting `<img>.src`
-        // here would double-fetch every image — once for the (hidden,
-        // opacity:0) DOM `<img>` and once for the PIXI worker. With hundreds
-        // of images that doubles network round-trips and makes the page
-        // crawl through the browser's per-origin HTTP queue.
-        //
-        // For stored images we leave the `<img>` empty until/unless PIXI
-        // signals failure (see `backfillDomImageSrcs`). Data: URLs (in-
-        // progress generations) and external URLs continue to load
-        // immediately, since PIXI only handles stored canvas images.
+        // Stored images are rendered by PIXI. Setting `<img>.src` here would
+        // double-fetch every image: once for the hidden DOM `<img>` and once for
+        // the PIXI worker. Data URLs and external URLs still load directly because
+        // PIXI only owns stored canvas images.
         if (!isStoredImage) {
-            void assignSrc()
-        } else if (pixiHealth === 'failed') {
             void assignSrc()
         }
 
@@ -4641,8 +4508,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        // PIXI owns image pixels. The hidden DOM <img> exists only as a legacy
-        // DOM child for interaction chrome compatibility; it must never mutate
+        // PIXI owns image pixels. The hidden DOM <img> exists as part of the
+        // image-node DOM structure for interaction chrome; it must never mutate
         // canvas state after async load, especially across workspace switches.
         imgEl.onload = () => {
             return
@@ -4963,7 +4830,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         viewportEl.innerHTML = ''
 
-        ensureEdgesLayer()
+        ensureConnectionManager()
         ensureSelectionGroupOverlayElement()
         ensureSelectionRectElement()
 
@@ -4993,8 +4860,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         loadedNodeIds.clear()
         hiddenEmptyThreadNodeIds.clear()
         anchoredImageManager.clear()
-        imageElByNodeId.clear()
-        imageResolvedSrcByNodeId.clear()
 
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((t) => [t.threadId, t]))

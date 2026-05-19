@@ -53,12 +53,10 @@ function makeEdge(overrides: Partial<WorkspaceEdge> & { edgeId: string; sourceNo
 function createMockConfig() {
 	const paneEl = document.createElement('div')
 	const viewportEl = document.createElement('div')
-	const edgesLayerEl = document.createElement('div')
 
 	return {
 		paneEl,
 		viewportEl,
-		edgesLayerEl,
 		getTransform: () => [0, 0, 1] as [number, number, number],
 		panBy: vi.fn().mockResolvedValue(true),
 		onEdgesChange: vi.fn(),
@@ -84,11 +82,12 @@ function mockPaneBounds(paneEl: HTMLDivElement) {
 	})
 }
 
-function getRenderedEdgeStart(edgesLayerEl: HTMLDivElement, edgeId: string): { x: number; y: number } {
-	const path = edgesLayerEl.querySelector(`#edge-${edgeId}`) as SVGPathElement | null
-	expect(path).not.toBeNull()
+function getRenderedPixiEdgeStart(onPixiEdgesReady: ReturnType<typeof vi.fn>, edgeId: string): { x: number; y: number } {
+	const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ id: string; svgPath: string }> | undefined
+	const edge = pixiEdges?.find((candidate) => candidate.id === edgeId)
+	expect(edge).toBeDefined()
 
-	const pathData = path?.getAttribute('d') ?? ''
+	const pathData = edge?.svgPath ?? ''
 	const match = pathData.match(/^M\s*([-\d.]+)[,\s]+([-\d.]+)/)
 	expect(match).not.toBeNull()
 
@@ -96,14 +95,6 @@ function getRenderedEdgeStart(edgesLayerEl: HTMLDivElement, edgeId: string): { x
 		x: Number(match?.[1] ?? 0),
 		y: Number(match?.[2] ?? 0),
 	}
-}
-
-function getEdgesLayerLeft(edgesLayerEl: HTMLDivElement): number {
-	return Number.parseFloat(edgesLayerEl.style.left || '0') || 0
-}
-
-function getEdgesLayerTop(edgesLayerEl: HTMLDivElement): number {
-	return Number.parseFloat(edgesLayerEl.style.top || '0') || 0
 }
 
 // =============================================================================
@@ -561,10 +552,42 @@ describe('WorkspaceConnectionManager — menu connections', () => {
 // =============================================================================
 
 describe('WorkspaceConnectionManager — context region edge anchors', () => {
+	it('renders workspace connector data through PIXI only at screenshot zoom levels', () => {
+		let zoom = 1
+		const onPixiEdgesReady = vi.fn()
+		const config = {
+			...createMockConfig(),
+			getTransform: () => [0, 0, zoom] as [number, number, number],
+			onPixiEdgesReady,
+		}
+		const manager = new WorkspaceConnectionManager(config)
+		const sourceNode = makeNode({ nodeId: 'source-1', type: 'image', position: { x: 0, y: 0 }, dimensions: { width: 120, height: 120 } })
+		const targetNode = makeNode({ nodeId: 'target-1', type: 'image', position: { x: 500, y: 0 }, dimensions: { width: 120, height: 120 } })
+		const edge = makeEdge({ edgeId: 'edge-pixi-only', sourceNodeId: sourceNode.nodeId, targetNodeId: targetNode.nodeId })
+
+		manager.syncNodes([sourceNode, targetNode])
+		manager.syncEdges([edge])
+
+		for (const nextZoom of [0.41, 0.48, 0.52, 0.84, 1.04, 1.93, 2.0]) {
+			zoom = nextZoom
+			manager.render()
+
+			const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ id: string; strokeWidth: number; arrowEnd: { size: number } | null; svgPath: string }>
+			expect(pixiEdges).toHaveLength(1)
+			expect(pixiEdges[0].id).toBe(edge.edgeId)
+			expect(pixiEdges[0].svgPath).toMatch(/^M\s/)
+			expect(pixiEdges[0].strokeWidth).toBe(2)
+			expect(pixiEdges[0].arrowEnd?.size ?? 0).toBe(16)
+			expect(config.viewportEl.querySelector('svg.connector-svg')).toBeNull()
+		}
+	})
+
 	it('renders context-region edge endpoints from the cloud outline and recomputes them after resize', () => {
+		const onPixiEdgesReady = vi.fn()
 		const config = {
 			...createMockConfig(),
 			isContextRegionNode: (node: CanvasNode) => node.type === 'contextRegion',
+			onPixiEdgesReady,
 		}
 		const manager = new WorkspaceConnectionManager(config)
 		const regionNode = makeNode({
@@ -592,9 +615,7 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 		manager.render()
 
 		const sourceMarkerOffset = 6
-		const layerLeft = getEdgesLayerLeft(config.edgesLayerEl)
-		const layerTop = getEdgesLayerTop(config.edgesLayerEl)
-		const start = getRenderedEdgeStart(config.edgesLayerEl, edge.edgeId)
+		const start = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
 		const anchor = getContextRegionCloudAnchorPoint({
 			nodeId: regionNode.nodeId,
 			referenceId: regionNode.referenceId,
@@ -605,10 +626,10 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 			title: '',
 			selected: false,
 		}, 'right', 0.5)
-		const rectangularStartX = regionNode.position.x + regionNode.dimensions.width + sourceMarkerOffset - layerLeft
+		const rectangularStartX = regionNode.position.x + regionNode.dimensions.width + sourceMarkerOffset
 
-		expect(start.x).toBeCloseTo(anchor.x + sourceMarkerOffset - layerLeft, 2)
-		expect(start.y).toBeCloseTo(anchor.y - layerTop, 2)
+		expect(start.x).toBeCloseTo(anchor.x + sourceMarkerOffset, 2)
+		expect(start.y).toBeCloseTo(anchor.y, 2)
 		expect(start.x).toBeGreaterThan(rectangularStartX + 1)
 
 		const resizedRegionNode = {
@@ -618,9 +639,7 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 		manager.syncNodes([resizedRegionNode, imageNode])
 		manager.render()
 
-		const resizedLayerLeft = getEdgesLayerLeft(config.edgesLayerEl)
-		const resizedLayerTop = getEdgesLayerTop(config.edgesLayerEl)
-		const resizedStart = getRenderedEdgeStart(config.edgesLayerEl, edge.edgeId)
+		const resizedStart = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
 		const resizedAnchor = getContextRegionCloudAnchorPoint({
 			nodeId: resizedRegionNode.nodeId,
 			referenceId: resizedRegionNode.referenceId,
@@ -632,8 +651,8 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 			selected: false,
 		}, 'right', 0.5)
 
-		expect(resizedStart.x).toBeCloseTo(resizedAnchor.x + sourceMarkerOffset - resizedLayerLeft, 2)
-		expect(resizedStart.y).toBeCloseTo(resizedAnchor.y - resizedLayerTop, 2)
+		expect(resizedStart.x).toBeCloseTo(resizedAnchor.x + sourceMarkerOffset, 2)
+		expect(resizedStart.y).toBeCloseTo(resizedAnchor.y, 2)
 		expect(resizedAnchor.x).toBeGreaterThan(anchor.x)
 	})
 })

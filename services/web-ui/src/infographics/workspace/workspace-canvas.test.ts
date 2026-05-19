@@ -1812,6 +1812,7 @@ describe('Marquee selection — stale group overlay suppressed during active mar
 			ts.matchAll(/const handleMouseMove = \(moveEvent: MouseEvent\) => \{[\s\S]*?const handleMouseUp = \(\) => \{/g),
 			(match) => match[0],
 		)
+
 		const fnBody = mouseMoveMatches.find((body) =>
 			body.includes('getSelectableNodeIdsInRect(getCanvasRectFromSelection(marqueeSelection))'),
 		)
@@ -1837,5 +1838,57 @@ describe('Marquee selection — stale group overlay suppressed during active mar
 			/marqueeSelection\s*=\s*null[\s\S]*?hideSelectionRectElement\(\)[\s\S]*?updateSelectionGroupOverlayElement\(\)/
 		)
 		expect(mouseUpMatch).not.toBeNull()
+	})
+})
+
+// =============================================================================
+// Workspace connector rendering
+// =============================================================================
+
+describe('workspace connectors — PIXI owns visible pixels', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+
+	it('does not use CSS readiness classes to hide SVG connector pixels', () => {
+		expectSourceNotToContain(ts, 'workspace-pixi-media-ready')
+		expectSourceNotToContain(scss, 'workspace-pixi-media-ready')
+	})
+
+	it('does not create a workspace SVG connector layer', () => {
+		expectSourceToContain(ts, 'onPixiEdgesReady: (edges) => {')
+		const managerTs = readSourceFile('WorkspaceConnectionManager.ts')
+		expectSourceNotToContain(ts, 'workspace-edges-layer')
+		expectSourceNotToContain(scss, 'workspace-edges-layer')
+		expectSourceNotToContain(managerTs, 'createConnectorRenderer')
+		expectSourceNotToContain(managerTs, 'isPointInStroke')
+		expectSourceNotToContain(managerTs, 'SVGPathElement')
+		expectSourceNotToContain(managerTs, 'svgVisible: false')
+		expectSourceToContain(managerTs, 'cachedPixiEdgeData')
+		expectSourceToContain(managerTs, 'getEdgeMidpointRect(edgeId: string)')
+		expectSourceToContain(managerTs, 'addPixiEdgeDatum(edgeConfig, isSelected)')
+		expectSourceToContain(managerTs, 'addPixiEdgeDatum(tempEdge, false)')
+		expectSourceToContain(managerTs, 'addPixiEdgeDatum(ghostEdge, false)')
+	})
+
+	it('renders PIXI connectors in an unscaled screen-space layer', () => {
+		const pixiLayerTs = readSourceFile('pixiMediaLayer.ts')
+		expectSourceToContain(pixiLayerTs, 'app.stage.addChild(edgeLayer)')
+		expectSourceToContain(pixiLayerTs, 'app.stage.addChild(world)')
+		expectSourceNotToContain(pixiLayerTs, 'world.addChild(edgeLayer)')
+		expectSourceToContain(pixiLayerTs, 'edgeRenderer.render(latestPixiEdges, currentViewport)')
+		expectSourceToContain(pixiLayerTs, 'edgeRenderer?.render(latestPixiEdges, viewport)')
+	})
+
+	it('does not provide a DOM image fallback for PIXI initialization failure', () => {
+		const pixiLayerTs = readSourceFile('pixiMediaLayer.ts')
+		const pixiLogicTs = readSourceFile('pixiMediaLayerLogic.ts')
+		const contextRegionLayerTs = readSourceFile('rendering/pixiContextRegionLayer.ts')
+
+		expectSourceNotToContain(ts, 'backfillDomImageSrcs')
+		expectSourceNotToContain(ts, 'imageResolvedSrcByNodeId')
+		expectSourceNotToContain(ts, "pixiHealth === 'failed'")
+		expectSourceNotToContain(pixiLayerTs, "setHealth('failed')")
+		expectSourceNotToContain(contextRegionLayerTs, "setHealth('failed')")
+		expectSourceNotToContain(pixiLogicTs, "'failed'")
 	})
 })
