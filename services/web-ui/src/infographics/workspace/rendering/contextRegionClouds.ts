@@ -2,6 +2,7 @@ import {
     webUiThemeSettings,
     type ContextRegionCloudThemeStyle,
 } from '$src/webUiThemeSettings.ts'
+import { scaleCanvasChromeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 
 export type ContextRegionCloudAspect = ContextRegionCloudThemeStyle['aspect']
 
@@ -503,21 +504,21 @@ export function getContextRegionCloudResizeCursor(handle: ContextRegionCloudResi
 }
 
 export function getContextRegionCloudTitleRect(datum: ContextRegionCloudDatum, zoom: number): ContextRegionCloudRect {
-    const safeZoom = Math.max(zoom, 0.01)
     const style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
     const bounds = getContextRegionCloudVisualBounds(datum, style)
-    const height = webUiThemeSettings.contextRegionCloudTitleHeight / safeZoom
-    const charWidth = webUiThemeSettings.contextRegionCloudTitleCharWidth / safeZoom
+    const height = scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleHeight, zoom)
+    const charWidth = scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleCharWidth, zoom)
+    const paddingX = scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitlePaddingX, zoom)
     const width = Math.min(
-        webUiThemeSettings.contextRegionCloudTitleMaxWidth / safeZoom,
+        scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleMaxWidth, zoom),
         Math.max(
-            webUiThemeSettings.contextRegionCloudTitleMinWidth / safeZoom,
-            datum.title.length * charWidth + webUiThemeSettings.contextRegionCloudTitlePaddingX / safeZoom
+            scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleMinWidth, zoom),
+            datum.title.length * charWidth + paddingX
         )
     )
     return {
-        x: bounds.x + Math.max(webUiThemeSettings.contextRegionCloudTitleMinX / safeZoom, bounds.width * style.titleAnchor.x),
-        y: bounds.y - height - webUiThemeSettings.contextRegionCloudTitleGap / safeZoom,
+        x: bounds.x + Math.max(scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleMinX, zoom), bounds.width * style.titleAnchor.x),
+        y: bounds.y - height - scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleGap, zoom),
         width,
         height,
     }

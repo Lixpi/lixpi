@@ -3,10 +3,13 @@
 import { describe, it, expect } from 'vitest'
 import {
 	getAdaptiveZoomMultiplier,
+	scaleCanvasChromeForZoom,
+	scaleCanvasChromeToScreenForZoom,
 	scaleForZoom,
 	getEdgeScaledSizes,
 	getResizeHandleScaledSizes,
 } from '$src/infographics/utils/zoomScaling.ts'
+import { worldSizeToScreenSize } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 // =============================================================================
 // getAdaptiveZoomMultiplier
@@ -48,6 +51,7 @@ describe('getAdaptiveZoomMultiplier', () => {
 		// 1 + (3 - 1) * 1.0 = 3
 		expect(getAdaptiveZoomMultiplier(3, { highZoomGrowth: 1.0 })).toBe(3)
 	})
+
 })
 
 // =============================================================================
@@ -97,27 +101,132 @@ describe('getEdgeScaledSizes', () => {
 		}
 	})
 
-	it('stroke width uses constant scaling (inversely proportional)', () => {
-		const half = getEdgeScaledSizes(0.5)
-		const double = getEdgeScaledSizes(2.0)
+	it('keeps connector visual sizes exactly constant throughout the scaling band', () => {
+		const base = {
+			strokeWidth: 2,
+			markerSize: 16,
+			markerOffsetSource: 6,
+			markerOffsetTarget: 19,
+			clickAreaWidth: 24,
+		}
 
-		// baseStrokeWidth = 2
-		expect(half.strokeWidth).toBe(4)   // 2 / 0.5
-		expect(double.strokeWidth).toBe(1) // 2 / 2.0
+		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const sizes = getEdgeScaledSizes(zoom)
+
+			expect(sizes.strokeWidth * zoom).toBeCloseTo(base.strokeWidth, 10)
+			expect(sizes.markerSize * zoom).toBeCloseTo(base.markerSize, 10)
+			expect(sizes.markerOffset.source * zoom).toBeCloseTo(base.markerOffsetSource, 10)
+			expect(sizes.markerOffset.target * zoom).toBeCloseTo(base.markerOffsetTarget, 10)
+			expect(sizes.clickAreaWidth * zoom).toBeCloseTo(base.clickAreaWidth, 10)
+		}
 	})
 
-	it('marker size uses adaptive scaling', () => {
-		const low = getEdgeScaledSizes(0.25)
-		const high = getEdgeScaledSizes(2.0)
+	it('never lets the visual connector size grow with zoom above 100%', () => {
+		const baseStroke = 2
+		for (let zoomStep = 100; zoomStep <= 500; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const sizes = getEdgeScaledSizes(zoom)
+			const visual = sizes.strokeWidth * zoom
+			expect(visual).toBeCloseTo(baseStroke, 10)
+		}
+	})
 
-		// Adaptive at low zoom: (16 * multiplier) / zoom
-		// Should be different from constant: 16 / zoom
-		const constantLow = 16 / 0.25 // 64
-		expect(low.markerSize).toBeLessThan(constantLow)
+	it('freezes connector world sizes below the scaling band so visual sizes thin only while zooming farther out', () => {
+		const minZoom = 0.4
+		let previousVisualStrokeWidth = 0
 
-		// At high zoom: marker grows relative to constant
-		const constantHigh = 16 / 2.0 // 8
-		expect(high.markerSize).toBeGreaterThan(constantHigh)
+		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const sizes = getEdgeScaledSizes(zoom)
+			const visualStrokeWidth = sizes.strokeWidth * zoom
+
+			expect(sizes.strokeWidth).toBeCloseTo(2 / minZoom, 10)
+			expect(sizes.markerSize).toBeCloseTo(16 / minZoom, 10)
+			expect(sizes.markerOffset.source).toBeCloseTo(6 / minZoom, 10)
+			expect(sizes.markerOffset.target).toBeCloseTo(19 / minZoom, 10)
+			expect(sizes.clickAreaWidth).toBeCloseTo(24 / minZoom, 10)
+			expect(visualStrokeWidth).toBeCloseTo(2 * zoom / minZoom, 10)
+			expect(visualStrokeWidth).toBeLessThan(2)
+			expect(visualStrokeWidth).toBeGreaterThan(previousVisualStrokeWidth)
+
+			previousVisualStrokeWidth = visualStrokeWidth
+		}
+	})
+
+	it('does not change visual connector sizes at any zoom above the lower threshold', () => {
+		for (const zoom of [0.4, 0.41, 0.48, 0.5, 0.84, 1.0, 1.04, 1.93, 2.0, 2.5, 3.0, 5.0]) {
+			const sizes = getEdgeScaledSizes(zoom)
+			expect(sizes.strokeWidth * zoom).toBeCloseTo(2, 10)
+			expect(sizes.markerSize * zoom).toBeCloseTo(16, 10)
+		}
+	})
+
+	it('renders connector chrome at identical PIXI screen sizes for every zoom percent above the lower threshold', () => {
+		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const viewport = { x: 17, y: -29, zoom }
+			const sizes = getEdgeScaledSizes(zoom)
+
+			expect(worldSizeToScreenSize(sizes.strokeWidth, viewport)).toBeCloseTo(2, 10)
+			expect(worldSizeToScreenSize(sizes.markerSize, viewport)).toBeCloseTo(16, 10)
+			expect(worldSizeToScreenSize(sizes.markerOffset.source, viewport)).toBeCloseTo(6, 10)
+			expect(worldSizeToScreenSize(sizes.markerOffset.target, viewport)).toBeCloseTo(19, 10)
+			expect(worldSizeToScreenSize(sizes.clickAreaWidth, viewport)).toBeCloseTo(24, 10)
+		}
+	})
+
+	it('renders PIXI connector screen sizes from base pixels instead of stale world widths', () => {
+		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
+			const zoom = zoomStep / 100
+
+			expect(scaleCanvasChromeToScreenForZoom(2, zoom)).toBeCloseTo(2, 10)
+			expect(scaleCanvasChromeToScreenForZoom(16, zoom)).toBeCloseTo(16, 10)
+		}
+	})
+
+	it('only thins PIXI connector screen sizes while zooming out below the lower threshold', () => {
+		let previousStroke = 0
+		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const viewport = { x: 0, y: 0, zoom }
+			const sizes = getEdgeScaledSizes(zoom)
+			const stroke = worldSizeToScreenSize(sizes.strokeWidth, viewport)
+
+			expect(stroke).toBeCloseTo(2 * zoom / 0.4, 10)
+			expect(stroke).toBeLessThan(2)
+			expect(stroke).toBeGreaterThan(previousStroke)
+			previousStroke = stroke
+		}
+	})
+
+	it('thins PIXI connector base pixels only below the lower threshold', () => {
+		let previousStroke = 0
+		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const stroke = scaleCanvasChromeToScreenForZoom(2, zoom)
+
+			expect(stroke).toBeCloseTo(2 * zoom / 0.4, 10)
+			expect(stroke).toBeLessThan(2)
+			expect(stroke).toBeGreaterThan(previousStroke)
+			previousStroke = stroke
+		}
+	})
+
+	it('uses the same deterministic bounded curve for context-region title sizes', () => {
+		const baseTitleFontSize = 20
+
+		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom) * zoom).toBeCloseTo(baseTitleFontSize, 10)
+		}
+
+		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom)).toBeCloseTo(baseTitleFontSize / 0.4, 10)
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom) * zoom).toBeCloseTo(baseTitleFontSize * zoom / 0.4, 10)
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom) * zoom).toBeLessThan(baseTitleFontSize)
+		}
 	})
 
 	it('accepts custom base config', () => {
