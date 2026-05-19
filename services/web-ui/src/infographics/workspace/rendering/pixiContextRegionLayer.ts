@@ -10,6 +10,7 @@ import {
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { getVisibleWorldRect, type PixiRendererHealth, type WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
+import * as contextRegionCloudGeometry from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import {
     getContextRegionCloudBleed,
     getContextRegionCloudBounds,
@@ -660,6 +661,32 @@ function getBackdropRect(datum: ContextRegionCloudDatum, style: ContextRegionClo
     }
 }
 
+function drawSelectedCloudChrome(chrome: Graphics, datum: ContextRegionCloudDatum, style: ContextRegionCloudStyle, zoom: number): void {
+    if (typeof contextRegionCloudGeometry.getContextRegionCloudOutline !== 'function') return
+
+    const outline = contextRegionCloudGeometry.getContextRegionCloudOutline(datum, style)
+    const strokeWidth = 1.5 / zoom
+    const fill = { color: webUiThemeSettings.selectionOverlayBackgroundColor }
+    const stroke = {
+        color: webUiThemeSettings.selectionOverlayBorderColor,
+        width: strokeWidth,
+        join: 'round' as const,
+        cap: 'round' as const,
+    }
+
+    for (const polygon of outline.polygons) {
+        chrome.poly(polygon, true)
+        chrome.fill(fill)
+        chrome.stroke(stroke)
+    }
+
+    for (const circle of outline.circles) {
+        chrome.circle(circle.x, circle.y, circle.radius)
+        chrome.fill(fill)
+        chrome.stroke(stroke)
+    }
+}
+
 function drawTitle(text: Text, datum: ContextRegionCloudDatum, style: ContextRegionCloudStyle, zoom: number): void {
     const rect = getContextRegionCloudTitleRect(datum, zoom)
 
@@ -684,6 +711,7 @@ function drawChrome(entry: PixiContextRegionEntry, viewport: ContextRegionViewpo
     drawTitle(titleText, datum, style, zoom)
 
     if (!datum.selected) return
+    drawSelectedCloudChrome(chrome, datum, style, zoom)
 }
 
 function getGeometryKey(datum: ContextRegionCloudDatum, viewport: ContextRegionViewport): string {

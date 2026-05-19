@@ -273,13 +273,13 @@ Node selection is runtime-only UI state and is not persisted into `canvasState`.
 
 **Anchored image click resolution:** The click handler calls `selectNode(node.nodeId)` with the original node ID — it does **not** use `getSelectionTargetNodeId()`. This ensures that clicking an anchored image selects the image itself rather than resolving to the parent thread.
 
-**Context region layering:** Context regions are background containers, not foreground nodes. Their visible cloud surface is drawn by `.workspace-pixi-context-region-layer` below the DOM viewport. The transparent DOM proxy still uses the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while empty-region clicks are handled by PIXI cloud hit-testing on the pane background path. Region proxy nodes do not create DOM resize handles; sizing changes come from persisted node dimensions and automatic expansion to fit children.
+**Context region layering:** Context regions are background containers, not foreground nodes. Their visible cloud surface is drawn by `.workspace-pixi-context-region-layer` below the DOM viewport. The transparent DOM proxy still uses the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while empty-region clicks are handled by PIXI cloud hit-testing on the pane background path. Region proxy nodes do not create DOM resize handles; hovering the cloud silhouette edge shows a resize cursor and starts resize from the matching edge sector. Sizing changes also come from persisted node dimensions and automatic expansion to fit children.
 
 **Context region image frame:** Image nodes whose `parentId` points to a context region receive `.workspace-image-node--context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.contextRegionImageFrameColor` and defaults to the slightly off-white `#FCFCFA`. Images outside a context region keep the base transparent image styling.
 
 #### Marquee Selection
 
-Empty-space drag draws a marquee rectangle and selects all overlapping nodes. During marquee hit-testing, anchored AI images resolve to their parent thread via `getSelectionTargetNodeId()`.
+Empty-space drag draws a marquee rectangle and selects all overlapping nodes. During marquee hit-testing, anchored AI images resolve to their parent thread via `getSelectionTargetNodeId()`. Context regions use the CO2 cloud silhouette for marquee intersection, not the transparent rectangular DOM proxy.
 
 **Empty AI chat threads** (no messages yet) are included in marquee selection. Although the thread node itself is hidden, its floating input is visible and the selection bounds for hidden threads use only the floating input's dimensions — not the invisible thread area. This prevents phantom selection over areas the user cannot see.
 
@@ -295,6 +295,8 @@ The selection group overlay (z-index 10000) appears based on two conditions:
 | 0 nodes selected | No |
 
 This is controlled by the `selectionIsFromMarquee` flag. `setSelectedNodes(ids, fromMarquee)` stores the flag; `shouldShowSelectionGroupOverlay()` checks `size > 1 || selectionIsFromMarquee`. The function does not inspect node types — no special-casing for AI chat threads or any other node type.
+
+Region-only selections suppress the rectangular group overlay and use PIXI cloud chrome for the visible selected state, so selecting a context region does not draw a square around the transparent proxy bounds.
 
 #### Deferred Selection in Drag
 
