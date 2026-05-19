@@ -10,7 +10,6 @@ import {
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { getVisibleWorldRect, type PixiRendererHealth, type WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
-import * as contextRegionCloudGeometry from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import {
     getContextRegionCloudBleed,
     getContextRegionCloudBounds,
@@ -661,32 +660,6 @@ function getBackdropRect(datum: ContextRegionCloudDatum, style: ContextRegionClo
     }
 }
 
-function drawSelectedCloudChrome(chrome: Graphics, datum: ContextRegionCloudDatum, style: ContextRegionCloudStyle, zoom: number): void {
-    if (typeof contextRegionCloudGeometry.getContextRegionCloudOutline !== 'function') return
-
-    const outline = contextRegionCloudGeometry.getContextRegionCloudOutline(datum, style)
-    const strokeWidth = 1.5 / zoom
-    const fill = { color: webUiThemeSettings.selectionOverlayBackgroundColor }
-    const stroke = {
-        color: webUiThemeSettings.selectionOverlayBorderColor,
-        width: strokeWidth,
-        join: 'round' as const,
-        cap: 'round' as const,
-    }
-
-    for (const polygon of outline.polygons) {
-        chrome.poly(polygon, true)
-        chrome.fill(fill)
-        chrome.stroke(stroke)
-    }
-
-    for (const circle of outline.circles) {
-        chrome.circle(circle.x, circle.y, circle.radius)
-        chrome.fill(fill)
-        chrome.stroke(stroke)
-    }
-}
-
 function drawTitle(text: Text, datum: ContextRegionCloudDatum, style: ContextRegionCloudStyle, zoom: number): void {
     const rect = getContextRegionCloudTitleRect(datum, zoom)
 
@@ -703,15 +676,21 @@ function drawTitle(text: Text, datum: ContextRegionCloudDatum, style: ContextReg
 }
 
 function drawChrome(entry: PixiContextRegionEntry, viewport: ContextRegionViewport): void {
-    const { datum, chrome, titleText } = entry
+    const { datum, titleText } = entry
     const zoom = Math.max(viewport.zoom, 0.01)
+
+    for (const child of [...entry.container.children]) {
+        if (!(child instanceof Graphics)) continue
+        entry.container.removeChild(child)
+        child.destroy()
+    }
+
+    const chrome = new Graphics()
+    entry.container.addChildAt(chrome, 1)
+    entry.chrome = chrome
+
     const style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
-    chrome.clear()
-
     drawTitle(titleText, datum, style, zoom)
-
-    if (!datum.selected) return
-    drawSelectedCloudChrome(chrome, datum, style, zoom)
 }
 
 function getGeometryKey(datum: ContextRegionCloudDatum, viewport: ContextRegionViewport): string {
@@ -855,13 +834,16 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
     function setNodeLiveTransform(nodeId: string, worldPosition: WorldPosition, dimensions: { width: number; height: number }): void {
         const entry = entries.get(nodeId)
         if (!entry) return
-        syncEntry({
+        const liveDatum = {
             ...entry.datum,
             x: worldPosition.x,
             y: worldPosition.y,
             width: dimensions.width,
             height: dimensions.height,
-        })
+        }
+        currentRegions = currentRegions.map((region) => region.nodeId === nodeId ? liveDatum : region)
+        syncEntry(liveDatum)
+        updateVisibility()
         scheduleRender()
     }
 
