@@ -187,6 +187,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let health: PixiRendererHealth = 'initializing'
     let marqueeGraphics: Graphics | null = null
     let groupOverlayGraphics: Graphics | null = null
+    let currentMarqueeRect: { x: number; y: number; width: number; height: number } | null = null
+    let currentGroupOverlayBounds: { x: number; y: number; width: number; height: number } | null = null
     let lastState: CanvasState | null = null
     let requestCounter = 0
     let currentViewport: CanvasViewport = { x: 0, y: 0, zoom: 1 }
@@ -380,6 +382,13 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (destroyed || health !== 'ready') return
             app.render()
         })
+    }
+
+    function destroyForegroundGraphics(graphics: Graphics | null): null {
+        if (!graphics) return null
+        graphics.parent?.removeChild(graphics)
+        graphics.destroy()
+        return null
     }
 
     // Live drag/resize updates push the new world position straight to the
@@ -891,18 +900,19 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function setMarqueeRect(worldRect: { x: number; y: number; width: number; height: number } | null): void {
         if (destroyed) return
-        if (!worldRect) {
-            marqueeGraphics?.clear()
+        if (!worldRect || !Number.isFinite(worldRect.width) || !Number.isFinite(worldRect.height) || worldRect.width <= 0 || worldRect.height <= 0) {
+            currentMarqueeRect = null
+            marqueeGraphics = destroyForegroundGraphics(marqueeGraphics)
             scheduleRender()
             return
         }
 
-        if (!marqueeGraphics) {
-            marqueeGraphics = new Graphics()
-            fgLayer.addChild(marqueeGraphics)
-        }
+        currentMarqueeRect = { ...worldRect }
 
-        marqueeGraphics.clear()
+        marqueeGraphics = destroyForegroundGraphics(marqueeGraphics)
+        marqueeGraphics = new Graphics()
+        fgLayer.addChild(marqueeGraphics)
+
         marqueeGraphics.roundRect(worldRect.x, worldRect.y, worldRect.width, worldRect.height, 8 / (currentViewport.zoom || 1))
         marqueeGraphics.fill({ color: selectionColors.marqueeFill })
         marqueeGraphics.stroke({ color: selectionColors.marqueeStroke, width: 1 / (currentViewport.zoom || 1) })
@@ -920,19 +930,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function setSelectionOverlayBounds(worldBounds: { x: number; y: number; width: number; height: number } | null): void {
         if (destroyed) return
-        if (!worldBounds) {
-            groupOverlayGraphics?.clear()
+        if (!worldBounds || !Number.isFinite(worldBounds.width) || !Number.isFinite(worldBounds.height) || worldBounds.width <= 0 || worldBounds.height <= 0) {
+            currentGroupOverlayBounds = null
+            groupOverlayGraphics = destroyForegroundGraphics(groupOverlayGraphics)
             scheduleRender()
             return
         }
 
-        if (!groupOverlayGraphics) {
-            groupOverlayGraphics = new Graphics()
-            fgLayer.addChild(groupOverlayGraphics)
-        }
+        currentGroupOverlayBounds = { ...worldBounds }
+
+        groupOverlayGraphics = destroyForegroundGraphics(groupOverlayGraphics)
+        groupOverlayGraphics = new Graphics()
+        fgLayer.addChild(groupOverlayGraphics)
 
         const r = 18 / (currentViewport.zoom || 1)
-        groupOverlayGraphics.clear()
         groupOverlayGraphics.roundRect(worldBounds.x, worldBounds.y, worldBounds.width, worldBounds.height, r)
         groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })
         groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke, width: 1 / (currentViewport.zoom || 1) })

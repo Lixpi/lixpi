@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
     getContextRegionCloudAspect,
     getContextRegionCloudBounds,
+    getContextRegionCloudResizeCursor,
     getContextRegionCloudStyle,
     getContextRegionCloudTitleRect,
     hitTestContextRegionCloud,
+    rectIntersectsContextRegionCloud,
     scoreRectAgainstContextRegionCloud,
     type ContextRegionCloudDatum,
 } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
@@ -72,12 +74,30 @@ describe('context region clouds — irregular hit testing', () => {
         expect(hit).toEqual({ kind: 'none' })
     })
 
-    it('detects title zones before body hits and does not expose resize-handle hits', () => {
+    it('detects title zones before body hits', () => {
         const datum = makeDatum()
         const title = getContextRegionCloudTitleRect(datum, 1)
 
         expect(hitTestContextRegionCloud(datum, { x: title.x + 8, y: title.y + 8 }, 1)).toEqual({ kind: 'title', nodeId: 'region-1' })
-        expect(hitTestContextRegionCloud(datum, { x: datum.x + datum.width, y: datum.y + datum.height }, 1).kind).not.toBe('resize-handle')
+    })
+
+    it('detects resize hits along the irregular cloud edge', () => {
+        const datum = makeDatum()
+        const bounds = getContextRegionCloudBounds(datum)
+        const hit = hitTestContextRegionCloud(datum, { x: bounds.x + bounds.width - 2, y: bounds.y + bounds.height * 0.62 }, 1)
+
+        expect(hit.kind).toBe('resize')
+        if (hit.kind !== 'resize') return
+        expect(hit.handle).toBe('right')
+        expect(hit.cursor).toBe(getContextRegionCloudResizeCursor('right'))
+    })
+
+    it('uses the cloud silhouette for selection-rect intersection', () => {
+        const datum = makeDatum()
+        const bounds = getContextRegionCloudBounds(datum)
+
+        expect(rectIntersectsContextRegionCloud(datum, { x: 250, y: 180, width: 40, height: 40 })).toBe(true)
+        expect(rectIntersectsContextRegionCloud(datum, { x: bounds.x + 2, y: bounds.y + 2, width: 16, height: 16 })).toBe(false)
     })
 })
 
