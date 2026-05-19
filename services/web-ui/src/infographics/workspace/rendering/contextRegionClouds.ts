@@ -9,6 +9,7 @@ export type ContextRegionCloudPoint = { x: number; y: number }
 export type ContextRegionCloudRect = { x: number; y: number; width: number; height: number }
 export type ContextRegionCloudPalette = ContextRegionCloudThemeStyle['palette']
 export type ContextRegionCloudStyle = ContextRegionCloudThemeStyle
+export type ContextRegionCloudAnchorSide = 'left' | 'right' | 'top' | 'bottom' | 'center'
 export type ContextRegionCloudResizeHandle = 'top-left' | 'top' | 'top-right' | 'right' | 'bottom-right' | 'bottom' | 'bottom-left' | 'left'
 export type ContextRegionCloudCircle = { x: number; y: number; radius: number }
 export type ContextRegionCloudOutline = {
@@ -49,6 +50,9 @@ const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
 const EDGE_HIT_SCREEN_RADIUS_PX = 24
+const EDGE_ANCHOR_SAMPLE_STEPS = 128
+const EDGE_ANCHOR_BINARY_SEARCH_STEPS = 12
+const EDGE_ANCHOR_CROSS_AXIS_STEPS = 96
 const EDGE_SAMPLE_DIRECTIONS = [
     { x: 1, y: 0 },
     { x: -1, y: 0 },
@@ -301,8 +305,7 @@ function isPointInCo2Circle(point: ContextRegionCloudPoint, circle: { x: number;
     return dx * dx + dy * dy <= circle.radius * circle.radius
 }
 
-function isPointInCo2CloudShape(datum: ContextRegionCloudDatum, point: ContextRegionCloudPoint, style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)): boolean {
-    const bounds = getContextRegionCloudVisualBounds(datum, style)
+function isPointInCo2CloudBoundsShape(bounds: ContextRegionCloudRect, point: ContextRegionCloudPoint): boolean {
     if (!rectContainsPoint(bounds, point)) return false
 
     const cloudPoint = worldPointToCo2CloudPoint(bounds, point)
@@ -310,6 +313,11 @@ function isPointInCo2CloudShape(datum: ContextRegionCloudDatum, point: ContextRe
         if (isPointInCo2Circle(cloudPoint, circle)) return true
     }
     return CO2_CLOUD_POLYGONS.some((polygon) => isPointInPolygon(cloudPoint, polygon))
+}
+
+function isPointInCo2CloudShape(datum: ContextRegionCloudDatum, point: ContextRegionCloudPoint, style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)): boolean {
+    const bounds = getContextRegionCloudVisualBounds(datum, style)
+    return isPointInCo2CloudBoundsShape(bounds, point)
 }
 
 export function isPointInContextRegionCloudShape(datum: ContextRegionCloudDatum, point: ContextRegionCloudPoint): boolean {
@@ -322,6 +330,118 @@ export function getContextRegionCloudOutline(datum: ContextRegionCloudDatum, sty
         polygons: CO2_CLOUD_POLYGONS.map((polygon) => polygon.map((point) => co2CloudPointToWorldPoint(bounds, point))),
         circles: CO2_CLOUD_CIRCLES.map((circle) => co2CloudCircleToWorldCircle(bounds, circle)),
     }
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value))
+}
+
+function getContextRegionCloudLogicalAnchorPoint(
+    datum: ContextRegionCloudDatum,
+    side: ContextRegionCloudAnchorSide,
+    t: number
+): ContextRegionCloudPoint {
+    const safeT = clamp(t, 0, 1)
+    switch (side) {
+        case 'left': return { x: datum.x, y: datum.y + datum.height * safeT }
+        case 'right': return { x: datum.x + datum.width, y: datum.y + datum.height * safeT }
+        case 'top': return { x: datum.x + datum.width * safeT, y: datum.y }
+        case 'bottom': return { x: datum.x + datum.width * safeT, y: datum.y + datum.height }
+        case 'center': return { x: datum.x + datum.width / 2, y: datum.y + datum.height / 2 }
+    }
+}
+
+function getCrossAxisSearchValues(preferred: number, min: number, max: number): number[] {
+    const clampedPreferred = clamp(preferred, min, max)
+    const values = [clampedPreferred]
+    const range = max - min
+
+    for (let step = 1; step <= EDGE_ANCHOR_CROSS_AXIS_STEPS; step++) {
+        const offset = range * step / EDGE_ANCHOR_CROSS_AXIS_STEPS
+        const lower = clampedPreferred - offset
+        const upper = clampedPreferred + offset
+        if (lower >= min) values.push(lower)
+        if (upper <= max) values.push(upper)
+    }
+
+    return values
+}
+
+function findCloudBoundary(
+    bounds: ContextRegionCloudRect,
+    fixedAxisValue: number,
+    side: Exclude<ContextRegionCloudAnchorSide, 'center'>
+): ContextRegionCloudPoint | null {
+    const isHorizontal = side === 'left' || side === 'right'
+    const axisStart = side === 'right'
+        ? bounds.x + bounds.width
+        : side === 'left'
+        ? bounds.x
+        : side === 'bottom'
+        ? bounds.y + bounds.height
+        : bounds.y
+    const axisSize = isHorizontal ? bounds.width : bounds.height
+    const direction = side === 'right' || side === 'bottom' ? -1 : 1
+    let previousAxisValue = axisStart
+
+    const makePoint = (axisValue: number) => isHorizontal
+        ? { x: axisValue, y: fixedAxisValue }
+        : { x: fixedAxisValue, y: axisValue }
+
+    if (isPointInCo2CloudBoundsShape(bounds, makePoint(axisStart))) {
+        return makePoint(axisStart)
+    }
+
+    for (let step = 1; step <= EDGE_ANCHOR_SAMPLE_STEPS; step++) {
+        const axisValue = axisStart + direction * axisSize * step / EDGE_ANCHOR_SAMPLE_STEPS
+        if (!isPointInCo2CloudBoundsShape(bounds, makePoint(axisValue))) {
+            previousAxisValue = axisValue
+            continue
+        }
+
+        let outsideAxisValue = previousAxisValue
+        let insideAxisValue = axisValue
+        for (let refine = 0; refine < EDGE_ANCHOR_BINARY_SEARCH_STEPS; refine++) {
+            const midAxisValue = (outsideAxisValue + insideAxisValue) / 2
+            if (isPointInCo2CloudBoundsShape(bounds, makePoint(midAxisValue))) {
+                insideAxisValue = midAxisValue
+            } else {
+                outsideAxisValue = midAxisValue
+            }
+        }
+        return makePoint(insideAxisValue)
+    }
+
+    return null
+}
+
+export function getContextRegionCloudAnchorPoint(
+    datum: ContextRegionCloudDatum,
+    side: ContextRegionCloudAnchorSide,
+    t: number = 0.5,
+    style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
+): ContextRegionCloudPoint {
+    const logicalPoint = getContextRegionCloudLogicalAnchorPoint(datum, side, t)
+    if (side === 'center') return logicalPoint
+
+    const bounds = getContextRegionCloudVisualBounds(datum, style)
+
+    if (side === 'left' || side === 'right') {
+        const yValues = getCrossAxisSearchValues(logicalPoint.y, bounds.y, bounds.y + bounds.height)
+        for (const y of yValues) {
+            const boundary = findCloudBoundary(bounds, y, side)
+            if (boundary) return boundary
+        }
+        return logicalPoint
+    }
+
+    const xValues = getCrossAxisSearchValues(logicalPoint.x, bounds.x, bounds.x + bounds.width)
+    for (const x of xValues) {
+        const boundary = findCloudBoundary(bounds, x, side)
+        if (boundary) return boundary
+    }
+
+    return logicalPoint
 }
 
 function isPointNearCo2CloudEdge(
