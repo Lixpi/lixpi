@@ -73,6 +73,10 @@ export type SelectionColors = {
     groupOverlayFill: string
 }
 
+type SelectionOverlayOptions = {
+    fill?: boolean
+}
+
 export type PixiMediaLayer = {
     sync: (canvasState: CanvasState | null) => void
     setViewport: (viewport: CanvasViewport) => void
@@ -83,7 +87,7 @@ export type PixiMediaLayer = {
     ) => void
     setSelectedImageNodes: (selectedNodeIds: Set<string>) => void
     setMarqueeRect: (worldRect: { x: number; y: number; width: number; height: number } | null) => void
-    setSelectionOverlayBounds: (worldBounds: { x: number; y: number; width: number; height: number } | null) => void
+    setSelectionOverlayBounds: (worldBounds: { x: number; y: number; width: number; height: number } | null, options?: SelectionOverlayOptions) => void
     setPixiEdges: (edges: PixiEdgeRenderDatum[]) => void
     getHealth: () => PixiRendererHealth
     destroy: () => void
@@ -923,7 +927,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         scheduleRender()
     }
 
-    function setSelectionOverlayBounds(worldBounds: { x: number; y: number; width: number; height: number } | null): void {
+    function setSelectionOverlayBounds(worldBounds: { x: number; y: number; width: number; height: number } | null, options: SelectionOverlayOptions = {}): void {
         if (destroyed) return
         if (!worldBounds || !Number.isFinite(worldBounds.width) || !Number.isFinite(worldBounds.height) || worldBounds.width <= 0 || worldBounds.height <= 0) {
             groupOverlayGraphics = destroyForegroundGraphics(groupOverlayGraphics)
@@ -937,7 +941,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
         const r = 18 / (currentViewport.zoom || 1)
         groupOverlayGraphics.roundRect(worldBounds.x, worldBounds.y, worldBounds.width, worldBounds.height, r)
-        groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })
+        if (options.fill !== false) groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })
         groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke, width: 1 / (currentViewport.zoom || 1) })
 
         scheduleRender()

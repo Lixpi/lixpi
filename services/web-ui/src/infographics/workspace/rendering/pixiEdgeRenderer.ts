@@ -98,7 +98,9 @@ function drawArrowhead(g: Graphics, arrow: PixiEdgeArrow, color: string): void {
 
     const flat: number[] = []
     for (const [px, py] of verts) { flat.push(px, py) }
+    g.beginPath()
     g.poly(flat)
+    g.closePath()
     g.fill(color)
 }
 
@@ -124,6 +126,7 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
 
     function paintEdge(g: Graphics, edge: PixiEdgeRenderDatum): void {
         g.clear()
+        g.beginPath()
         drawSvgPath(g, edge.svgPath)
         g.stroke({
             color: edge.strokeColor,

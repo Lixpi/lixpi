@@ -57,12 +57,14 @@ export function computeWorkspaceDragPlan(input: WorkspaceDragPlanInput): Workspa
     const isContextRegionDrag = isContextRegionNode(primaryNode)
 
     let baseDraggedNodeIds: string[]
-    if (isContextRegionDrag) {
-        baseDraggedNodeIds = [resolvedNodeId]
-    } else if (!input.selectedNodeIds.has(resolvedNodeId)) {
+    if (!input.selectedNodeIds.has(resolvedNodeId)) {
         baseDraggedNodeIds = [resolvedNodeId]
     } else {
-        baseDraggedNodeIds = Array.from(input.selectedNodeIds).filter((nodeId) => !input.isAnchoredImageNode(nodeId))
+        baseDraggedNodeIds = Array.from(input.selectedNodeIds).filter((nodeId) => {
+            if (input.isAnchoredImageNode(nodeId)) return false
+            if (isContextRegionDrag && isGeneratedOutputImageNode(nodesById.get(nodeId))) return false
+            return true
+        })
         if (baseDraggedNodeIds.length === 0) baseDraggedNodeIds = [resolvedNodeId]
     }
 
