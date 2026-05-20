@@ -55,7 +55,7 @@ export function resolveCollisions(
                 const A = boxes[i]
                 const B = boxes[j]
 
-                // Skip excluded pairs (e.g. anchored images overlapping their thread)
+                // Skip excluded pairs such as parent/child nodes that are allowed to overlap.
                 if (excludePairs && (excludePairs.has(`${A.id}-${B.id}`) || excludePairs.has(`${B.id}-${A.id}`))) {
                     continue
                 }

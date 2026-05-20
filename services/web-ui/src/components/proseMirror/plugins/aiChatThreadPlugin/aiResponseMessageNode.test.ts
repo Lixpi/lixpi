@@ -264,7 +264,7 @@ describe('aiResponseMessageNodeView — marginBottom survives update()', () => {
 		const { nodeView } = createResponseNodeView()
 		const dom = nodeView.dom as HTMLElement
 
-		// Simulate applyAnchoredImageSpacing setting marginBottom
+		// Simulate a canvas layout pass setting marginBottom.
 		applyStyle(dom, { marginBottom: '120px' })
 		expect(dom.style.marginBottom).toBe('120px')
 
