@@ -265,7 +265,7 @@ The bounds fallback exists because the visible cloud can extend beyond the trans
 
 ### Drag And Resize Scope
 
-Dragging or resizing a context region must not automatically include connected, anchored, generated, or leaf nodes. A region move is visually about the region and its real contained descendants, not every related image or generated output in the graph.
+Dragging or resizing a context region must not automatically include connected, generated, or leaf nodes. A region move is visually about the region and its real contained descendants, not every related image or generated output in the graph.
 
 The drag plan should follow these rules:
 
@@ -273,7 +273,6 @@ The drag plan should follow these rules:
 |---|---|
 | Single context-region drag | The region plus real parented descendants needed for live visual movement. |
 | Multi-selected context-region drag | Every selected context region plus each selected region's real parented descendants. |
-| Anchored image nodes | Excluded from context-region drag sets. |
 | Generated output image nodes | Excluded from context-region drag sets. |
 | Connected nodes through edges | Excluded unless they are also real selected or parented drag participants. |
 
@@ -294,7 +293,7 @@ Changes in this area should update or add focused regression coverage in the sam
 | Test file | What it protects |
 |---|---|
 | [workspace-canvas.test.ts](../../services/web-ui/src/infographics/workspace/workspace-canvas.test.ts) | Selection overlay source rules, no plain-click border, marquee defer-until-move behavior, context-region bounds hit fallback, connector visibility, and pane hit precedence. |
-| [workspaceDragPlan.test.ts](../../services/web-ui/src/infographics/workspace/workspaceDragPlan.test.ts) | Context-region drag participant sets, multi-region group drag, and anchored/generated image exclusions. |
+| [workspaceDragPlan.test.ts](../../services/web-ui/src/infographics/workspace/workspaceDragPlan.test.ts) | Context-region drag participant sets, multi-region group drag, and generated image exclusions. |
 | [contextRegionClouds.test.ts](../../services/web-ui/src/infographics/workspace/rendering/contextRegionClouds.test.ts) | CO2 silhouette hit testing, connector anchor sampling, selection-rect intersection, and adoption scoring. |
 | [WorkspaceConnectionManager.test.ts](../../services/web-ui/src/infographics/workspace/WorkspaceConnectionManager.test.ts) | Context-region connector endpoints use cloud-outline anchors and recalculate after region resize. |
 | [pixiContextRegionLayer.test.ts](../../services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.test.ts) | No selected-cloud chrome path and proper `Graphics` cleanup. |
@@ -312,7 +311,7 @@ If a future change intentionally changes one of these invariants, update this do
 - Routes pane-background clicks through image/document precedence, then cloud hit testing, then visual-bounds fallback before empty-canvas marquee handling.
 - Calls the normal drag machinery when a cloud body/title is clicked, so dragging a region still uses the existing canvas drag lifecycle.
 - Includes context-region descendants in the live dragged set so real parented children move visually with the parent region during drag, not only after commit.
-- Excludes anchored/generated image leaves from context-region drag sets unless a future interaction model explicitly makes those nodes real region children.
+- Excludes generated image leaves from context-region drag sets unless a future interaction model explicitly makes those nodes real region children.
 - Shows the group selection rectangle only for marquee-sourced selections or multi-selection, never for a plain single context-region click.
 - Uses CO2 cloud scoring when releasing a dragged node to decide parent adoption.
 - Keeps generated output image nodes from being adopted into regions.
@@ -420,7 +419,7 @@ Do not assign `marqueeSelection` on `mousedown`. Defer marquee state until point
 
 Do not let context-region visual bounds fall through to empty-canvas marquee. The visible cloud can extend beyond the transparent DOM proxy and strict body/title hit shape.
 
-Do not include anchored image leaves, generated output images, or merely connected nodes in context-region drag/resize participant sets.
+Do not include generated output images or merely connected nodes in context-region drag/resize participant sets.
 
 Do not hide or filter connector edges based on node selection. Connector visibility is independent of selection state.
 
@@ -458,7 +457,7 @@ Do not treat persisted `canvasState.viewport` as authoritative during an active 
 | Empty-canvas click clears selection even without movement | Marquee state is created on `mousedown` | Create `marqueeSelection` only after pointer movement exceeds the threshold. |
 | Children lag behind while dragging a region | Descendants were not included in live drag set | Check `includeContextRegionDescendants(...)` and live transforms. |
 | Multi-selected context regions do not move together | Drag plan ignored the selected set for context-region drags | Check `computeWorkspaceDragPlan(...)` in `workspaceDragPlan.ts`. |
-| Anchored/generated images move with a context region unexpectedly | Drag participant set includes related leaves instead of real region children | Check anchored-image and generated-output exclusions in `workspaceDragPlan.ts`. |
+| Generated images move with a context region unexpectedly | Drag participant set includes related leaves instead of real region children | Check generated-output exclusions in `workspaceDragPlan.ts`. |
 | Connector lines disappear when selecting regions | Edge rendering is filtered by selection | Keep `connectionManager.syncEdges(...)` and PIXI edge sync independent of selected node IDs. |
 | Long stray lines appear through arrowheads | PIXI `Graphics` path state leaked between edge path and arrowhead drawing | Check `beginPath()` / `closePath()` isolation in `pixiEdgeRenderer.ts`. |
 | A ghost cloud appears on selection | Separate selection silhouette was reintroduced | Keep selection chrome separate from a duplicate cloud sprite. |

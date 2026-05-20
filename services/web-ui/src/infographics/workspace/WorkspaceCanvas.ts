@@ -35,16 +35,12 @@ import { WorkspaceConnectionManager } from '$src/infographics/workspace/Workspac
 import { getCanvasChromeZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
-import { computeImagePositionNextToThread, computeImagePositionOverlappingThread, countExistingImagesForThread, OVERLAP_PADDING_X, OVERLAP_GAP_Y, OVERLAP_WIDTH_RATIO } from '$src/infographics/workspace/imagePositioning.ts'
+import { computeImagePositionNextToThread, countExistingImagesForThread } from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
-import { createAnchoredImageManager, type AnchoredImageEntry } from '$src/infographics/workspace/anchoredImageManager.ts'
 import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceDragPlan.ts'
 import {
     canAdoptNodeIntoContextRegion,
-    canUseLegacyAnchorForImage,
-    filterValidAnchorsForThread,
-    isGeneratedOutputImageNode,
-} from '$src/infographics/workspace/workspaceAnchoredImagePlan.ts'
+} from '$src/infographics/workspace/workspaceImageNodePlan.ts'
 import {
     createPendingCanvasVisualCommit,
     getCanvasVisualSyncKey,
@@ -187,7 +183,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)
     paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)
     paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)
-    paneEl.style.setProperty('--context-region-image-frame-color', webUiThemeSettings.contextRegionImageFrameColor)
+    paneEl.style.setProperty('--workspace-image-selected-box-shadow', webUiThemeSettings.imageNode.selectedBoxShadow)
+    paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', webUiThemeSettings.imageNode.contextRegionChildImageFrameColor)
+    paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', webUiThemeSettings.imageNode.contextRegionChildImageDropShadow)
+    paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', webUiThemeSettings.imageNode.modelBadgeBoxShadow)
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
@@ -204,7 +203,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let edgesRaf: number | null = null
     let transformSideEffectsRaf: number | null = null
     let pendingHandleZoom: number | null = null
-    let anchoredRealignRaf: number | null = null
     let autoGrowRaf: number | null = null
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
@@ -216,7 +214,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectionIsFromMarquee = false
     let suppressNextPaneClick = false
     let suppressNextNodeClick = false
-    const pendingAnchoredRealignThreadNodeIds: Set<string> = new Set()
     const pendingAutoGrowThreadNodeIds: Set<string> = new Set()
     const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
@@ -245,11 +242,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const canvasImageLifecycle = createCanvasImageLifecycleTracker()
     canvasImageLifecycle.initializeFromCanvasState(currentCanvasState)
 
-    // Anchored image manager - tracks images overlapping their AI chat thread nodes
-    const anchoredImageManager = createAnchoredImageManager()
-
     const pixiSelectionColors: SelectionColors = {
-        nodeOutline: webUiThemeSettings.selectionOutlineColor,
         marqueeStroke: webUiThemeSettings.selectionMarqueeBorderColor,
         marqueeFill: webUiThemeSettings.selectionMarqueeBackgroundColor,
         groupOverlayStroke: webUiThemeSettings.selectionOverlayBorderColor,
@@ -260,6 +253,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewportEl,
         getWorkspaceId: () => workspaceId,
         selectionColors: pixiSelectionColors,
+        onImageIntrinsicSize: handleImageIntrinsicSize,
     })
     contextRegionLayer = createPixiContextRegionLayer({
         paneEl,
@@ -309,46 +303,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onDeleteNode: (nodeId) => {
                 if (!currentCanvasState) return
 
-                // Clean up anchored image state when deleting an anchored image
-                const removedAnchor = anchoredImageManager.removeAnchor(nodeId)
-
-                // Clean up anchored images when deleting a thread that owns them
-                const threadAnchors = anchoredImageManager.getAnchorsForThread(nodeId)
-                for (const anchor of threadAnchors) {
-                    anchoredImageManager.removeAnchor(anchor.imageNodeId)
-                    const imgEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement
-                    if (imgEl) imgEl.classList.remove('workspace-image-node--anchored')
-                }
-
-                let updatedNodes = currentCanvasState.nodes.filter((n: CanvasNode) => n.nodeId !== nodeId)
+                const updatedNodes = currentCanvasState.nodes.filter((n: CanvasNode) => n.nodeId !== nodeId)
                 const updatedEdges = currentCanvasState.edges.filter(
                     (e: WorkspaceEdge) => e.sourceNodeId !== nodeId && e.targetNodeId !== nodeId
                 )
-
-                // Shrink thread height when deleting an anchored image
-                if (removedAnchor) {
-                    // Find the deleted image node to calculate shrink amount
-                    const deletedImgNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-                    if (deletedImgNode) {
-                        updatedNodes = updatedNodes.map((n: CanvasNode) => {
-                            if (n.nodeId !== removedAnchor.threadNodeId) return n
-                            // Recalculate: find max image bottom among remaining anchored images
-                            const remainingAnchors = anchoredImageManager.getAnchorsForThread(n.nodeId)
-                            let requiredHeight = 200 // minimum
-                            for (const a of remainingAnchors) {
-                                const imgN = updatedNodes.find((nn: CanvasNode) => nn.nodeId === a.imageNodeId)
-                                if (imgN) {
-                                    const imgBottom = (imgN.position.y + imgN.dimensions.height + OVERLAP_GAP_Y) - n.position.y
-                                    requiredHeight = Math.max(requiredHeight, imgBottom)
-                                }
-                            }
-                            const newHeight = Math.max(requiredHeight, 200)
-                            const threadEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
-                            if (threadEl) applyStyle(threadEl, { height: `${newHeight}px` })
-                            return { ...n, dimensions: { ...n.dimensions, height: newHeight } }
-                        })
-                    }
-                }
 
                 selectNode(null)
                 commitCanvasState({ ...currentCanvasState, nodes: updatedNodes, edges: updatedEdges })
@@ -460,45 +418,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function isNodeSelected(nodeId: string): boolean {
         return selectedNodeIds.has(nodeId)
-    }
-
-    function getSelectionTargetNodeId(nodeId: string): string {
-        const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-        if (isGeneratedOutputImageNode(node)) return nodeId
-
-        const anchor = getValidAnchorForCanvasImage(nodeId)
-        return anchor?.threadNodeId ?? nodeId
-    }
-
-    function removeStaleAnchors(staleAnchors: AnchoredImageEntry[]): void {
-        for (const anchor of staleAnchors) {
-            anchoredImageManager.removeAnchor(anchor.imageNodeId)
-            const imgEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
-            imgEl?.classList.remove('workspace-image-node--anchored')
-        }
-    }
-
-    function getValidAnchorsForCanvasThread(threadNodeId: string): AnchoredImageEntry[] {
-        if (!currentCanvasState) return []
-        const anchors = anchoredImageManager.getAnchorsForThread(threadNodeId)
-        if (anchors.length === 0) return []
-
-        const { validAnchors, staleAnchors } = filterValidAnchorsForThread({
-            anchors,
-            nodes: currentCanvasState.nodes,
-            edges: currentCanvasState.edges,
-            threadNodeId,
-        })
-
-        removeStaleAnchors(staleAnchors)
-        return validAnchors
-    }
-
-    function getValidAnchorForCanvasImage(imageNodeId: string): AnchoredImageEntry | undefined {
-        const anchor = anchoredImageManager.getAnchor(imageNodeId)
-        if (!anchor) return undefined
-        return getValidAnchorsForCanvasThread(anchor.threadNodeId)
-            .find((candidate: AnchoredImageEntry) => candidate.imageNodeId === imageNodeId)
     }
 
     function isContextRegionNodeElement(nodeEl: HTMLElement): boolean {
@@ -658,6 +577,75 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function syncPixiMediaLayer(canvasState: CanvasState | null = currentCanvasState): void {
         pixiMediaLayer?.sync(canvasState)
+    }
+
+    function fitImageDimensionsToAspectRatio(
+        dimensions: { width: number; height: number },
+        aspectRatio: number
+    ): { width: number; height: number } {
+        const widthFromHeight = dimensions.height * aspectRatio
+        if (widthFromHeight <= dimensions.width) {
+            return { width: widthFromHeight, height: dimensions.height }
+        }
+        return { width: dimensions.width, height: dimensions.width / aspectRatio }
+    }
+
+    function handleImageIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
+        if (!currentCanvasState) return
+        if (draggingNodeId === size.nodeId || resizingNodeId === size.nodeId) return
+        if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) return
+
+        const intrinsicAspectRatio = size.width / size.height
+        if (!Number.isFinite(intrinsicAspectRatio) || intrinsicAspectRatio <= 0) return
+
+        const imageNode = currentCanvasState.nodes.find(
+            (node: CanvasNode): node is ImageCanvasNode => node.type === 'image' && node.nodeId === size.nodeId
+        )
+        if (!imageNode) return
+
+        const fittedDimensions = fitImageDimensionsToAspectRatio(imageNode.dimensions, intrinsicAspectRatio)
+        const aspectChanged = Math.abs((imageNode.aspectRatio || 0) - intrinsicAspectRatio) > 0.001
+        const widthChanged = Math.abs(imageNode.dimensions.width - fittedDimensions.width) > 0.5
+        const heightChanged = Math.abs(imageNode.dimensions.height - fittedDimensions.height) > 0.5
+        if (!aspectChanged && !widthChanged && !heightChanged) return
+
+        const positionOffset = {
+            x: (imageNode.dimensions.width - fittedDimensions.width) / 2,
+            y: (imageNode.dimensions.height - fittedDimensions.height) / 2,
+        }
+        const nextPosition = {
+            x: imageNode.position.x + positionOffset.x,
+            y: imageNode.position.y + positionOffset.y,
+        }
+
+        const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
+            if (node.nodeId !== imageNode.nodeId) return node
+            return {
+                ...imageNode,
+                aspectRatio: intrinsicAspectRatio,
+                position: nextPosition,
+                dimensions: fittedDimensions,
+            }
+        })
+
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const worldPosition = getNodeWorldPosition(imageNode, nodesById)
+        const nodeEl = viewportEl?.querySelector(`[data-node-id="${imageNode.nodeId}"]`) as HTMLElement | null
+        if (nodeEl) {
+            applyStyle(nodeEl, {
+                left: `${worldPosition.x + positionOffset.x}px`,
+                top: `${worldPosition.y + positionOffset.y}px`,
+                width: `${fittedDimensions.width}px`,
+                height: `${fittedDimensions.height}px`,
+            })
+        }
+
+        commitCanvasStatePreservingEditors({
+            ...currentCanvasState,
+            nodes: updatedNodes,
+        })
+        repositionCanvasBubbleMenu()
+        updateSelectionGroupOverlayElement()
     }
 
     function toParentRelativePosition(
@@ -887,7 +875,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         currentCanvasState.nodes
             .filter((node: CanvasNode) => selectionRectIntersectsNode(rect, node, nodesById, threadMap))
             .forEach((node: CanvasNode) => {
-                selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))
+                selectedNodeIdsInRect.add(node.nodeId)
             })
 
         return Array.from(selectedNodeIdsInRect)
@@ -973,13 +961,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const overlayNodeIds = new Set<string>()
         for (const nodeId of selectedNodeIds) {
             overlayNodeIds.add(nodeId)
-
-            const selectedNode = nodesById.get(nodeId)
-            if (selectedNode && isContextRegionCanvasNode(selectedNode)) continue
-
-            for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {
-                overlayNodeIds.add(anchor.imageNodeId)
-            }
         }
 
         const overlayNodes = currentCanvasState.nodes.filter((node: CanvasNode) => overlayNodeIds.has(node.nodeId))
@@ -1083,12 +1064,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     nodeLayerManager.sendToBackground(nextNode)
                 } else {
                     nodeLayerManager.bringToFront(nextNode)
-
-                    const threadAnchors = getValidAnchorsForCanvasThread(nodeId)
-                    for (const anchor of threadAnchors) {
-                        const anchoredEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
-                        if (anchoredEl) nodeLayerManager.bringToFront(anchoredEl)
-                    }
                 }
             }
 
@@ -2219,108 +2194,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.clearRailHeights()
     }
 
-    function realignAnchoredImagesForThread(threadNodeId: string): void {
-        if (!currentCanvasState) return
-        if (webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) return
-        if (draggingNodeId === threadNodeId || resizingNodeId === threadNodeId) return
-
-        const threadNode = currentCanvasState.nodes.find(
-            (n: CanvasNode): n is AiChatThreadCanvasNode => n.type === 'aiChatThread' && n.nodeId === threadNodeId
-        )
-        if (!threadNode) return
-
-        const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${threadNode.nodeId}"]`) as HTMLElement | null
-        if (!threadNodeEl) return
-
-        const anchors = getValidAnchorsForCanvasThread(threadNode.nodeId)
-        if (anchors.length === 0) return
-
-        const anchorByImageId = new Map(anchors.map((anchor) => [anchor.imageNodeId, anchor]))
-        let hasChanges = false
-
-        const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
-            if (node.type !== 'image') return node
-
-            const anchor = anchorByImageId.get(node.nodeId)
-            if (!anchor) return node
-
-            if (draggingNodeId === node.nodeId || resizingNodeId === node.nodeId) {
-                return node
-            }
-
-            const { x, y, constrainedWidth } = computeImagePositionOverlappingThread(
-                threadNode,
-                anchor.responseMessageId || '',
-                threadNodeEl
-            )
-
-            // Recalculate height preserving aspect ratio
-            const imgNodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
-            const imgElement = imgNodeEl?.querySelector('img') as HTMLImageElement | null
-            const ar = imgElement?.naturalWidth && imgElement?.naturalHeight
-                ? imgElement.naturalWidth / imgElement.naturalHeight : 1
-            const newHeight = constrainedWidth / ar
-
-            const posChanged = Math.abs(node.position.x - x) > 0.5 || Math.abs(node.position.y - y) > 0.5
-            const sizeChanged = Math.abs(node.dimensions.width - constrainedWidth) > 0.5
-            if (!posChanged && !sizeChanged) return node
-
-            hasChanges = true
-
-            if (imgNodeEl) {
-                applyStyle(imgNodeEl, { left: `${x}px`, top: `${y}px`, width: `${constrainedWidth}px`, height: `${newHeight}px` })
-                imgNodeEl.classList.add('workspace-image-node--anchored')
-                nodeLayerManager.bringToFront(imgNodeEl)
-            }
-
-            return {
-                ...node,
-                position: { x, y },
-                dimensions: { width: constrainedWidth, height: newHeight },
-            }
-        })
-
-        if (!hasChanges) {
-            applyAnchoredImageSpacing(threadNodeId)
-            return
-        }
-
-        // Update currentCanvasState with new image positions BEFORE spacing,
-        // so applyAnchoredImageSpacing can grow the thread height and the
-        // single commit below persists everything (positions + height).
-        currentCanvasState = { ...currentCanvasState, nodes: updatedNodes }
-        applyAnchoredImageSpacing(threadNodeId)
-
-        commitCanvasStatePreservingEditors(currentCanvasState)
-
-        scheduleEdgesRender()
-        repositionCanvasBubbleMenu()
-    }
-    // are pushed below the overlapping anchored image.
-    function applyAnchoredImageSpacing(threadNodeId: string): void {
-        // Disabled for context regions. Messages render in the singleton canvas
-        // chat panel, so there is nothing in the region body to push down.
-        // The region height is driven by contained child dimensions.
-    }
-
-    function scheduleAnchoredImagesRealign(threadNodeId: string): void {
-        if (webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) return
-
-        pendingAnchoredRealignThreadNodeIds.add(threadNodeId)
-        if (anchoredRealignRaf !== null) return
-
-        anchoredRealignRaf = requestAnimationFrame(() => {
-            anchoredRealignRaf = null
-
-            const nodeIds = Array.from(pendingAnchoredRealignThreadNodeIds)
-            pendingAnchoredRealignThreadNodeIds.clear()
-
-            for (const nodeId of nodeIds) {
-                realignAnchoredImagesForThread(nodeId)
-            }
-        })
-    }
-
     const AI_CHAT_THREAD_MIN_HEIGHT = 150
 
     function threadContentHasMessages(content: any): boolean {
@@ -2727,7 +2600,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const API_BASE_URL = import.meta.env.VITE_API_URL || ''
             const imageSrc = buildImageSrc(imageUrl, API_BASE_URL, token)
 
-            const useAnchored = false
             const imageWidth = getRegionGeneratedImageSize(sourceThread)
             const imageHeight = imageWidth
             const position = getNextGeneratedImagePosition(sourceNode, sourceThread, imageWidth, imageHeight)
@@ -2759,59 +2631,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 createGeneratedImageEdge(sourceNode, nodeId),
             ]
 
-            if (useAnchored) {
-                // Grow thread height only if image bottom extends past current thread bottom
-                const imageBottom = position.y + imageHeight + OVERLAP_GAP_Y
-                const threadBottom = sourceThread.position.y + sourceThread.dimensions.height
-                const additionalHeight = Math.max(0, imageBottom - threadBottom)
-                const threadEl = viewportEl?.querySelector(`[data-node-id="${sourceThread.nodeId}"]`) as HTMLElement
-                const updatedNodes = additionalHeight > 0
-                    ? existingNodes.map((n: CanvasNode) => {
-                        if (n.nodeId !== sourceThread.nodeId) return n
-                        return { ...n, dimensions: { ...n.dimensions, height: n.dimensions.height + additionalHeight } }
-                    })
-                    : existingNodes
-
-                if (additionalHeight > 0 && threadEl) {
-                    applyStyle(threadEl, { height: `${sourceThread.dimensions.height + additionalHeight}px` })
-                }
-
-                const newCanvasState: CanvasState = {
-                    viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    nodes: [...updatedNodes, imageNode],
-                    edges: newEdges,
-                }
-                commitCanvasStatePreservingEditors(newCanvasState)
-                appendImageNodeToDOM(imageNode)
-
-                // Mark image as anchored (no responseMessageId yet — will be set on complete)
-                anchoredImageManager.anchorImage({
-                    imageNodeId: nodeId,
-                    threadNodeId: sourceThread.nodeId,
-                    threadReferenceId: sourceThread.referenceId,
-                    responseMessageId: '',
-                    imageHeight: imageHeight,
-                })
-
-                // Apply anchored CSS class
-                const imgNodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement
-                if (imgNodeEl) {
-                    imgNodeEl.classList.add('workspace-image-node--anchored')
-                    nodeLayerManager.bringToFront(imgNodeEl)
-                }
-
-                // Reposition thread floating input after height change
-                repositionAllThreadFloatingInputs()
-                applyAnchoredImageSpacing(sourceThread.nodeId)
-            } else {
-                const newCanvasState: CanvasState = {
-                    viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    nodes: [...existingNodes, imageNode],
-                    edges: newEdges,
-                }
-                commitCanvasStatePreservingEditors(newCanvasState)
-                appendImageNodeToDOM(imageNode)
+            const newCanvasState: CanvasState = {
+                viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                nodes: [...existingNodes, imageNode],
+                edges: newEdges,
             }
+            commitCanvasStatePreservingEditors(newCanvasState)
+            appendImageNodeToDOM(imageNode)
         },
 
         onImageCompleteToCanvas: async (data) => {
@@ -2823,8 +2649,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const API_BASE_URL = import.meta.env.VITE_API_URL || ''
             const token = await AuthService.getTokenSilently()
             const imageSrc = buildImageSrc(imageUrl, API_BASE_URL, token)
-
-            const useAnchored = false
 
             if (partial) {
                 const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
@@ -2849,19 +2673,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     } satisfies ImageCanvasNode
                 })
 
-                let edges = currentCanvasState?.edges || []
-                if (!useAnchored) {
-                    // Standard mode: set the edge's sourceMessageId to link to the specific AI response
-                    edges = edges.map((e: WorkspaceEdge) => {
-                        if (e.targetNodeId !== partial.nodeId) return e
-                        const sourceNode = (currentCanvasState?.nodes || []).find((node: CanvasNode) => node.nodeId === e.sourceNodeId)
-                        if (sourceNode && isContextRegionCanvasNode(sourceNode)) {
-                            return { ...e, sourceMessageId: responseMessageId || undefined }
-                        }
-                        const { sourceMessageId: _sourceMessageId, ...edgeWithoutSourceMessageId } = e
-                        return edgeWithoutSourceMessageId
-                    })
-                }
+                const edges = (currentCanvasState?.edges || []).map((e: WorkspaceEdge) => {
+                    if (e.targetNodeId !== partial.nodeId) return e
+                    const sourceNode = (currentCanvasState?.nodes || []).find((node: CanvasNode) => node.nodeId === e.sourceNodeId)
+                    if (sourceNode && isContextRegionCanvasNode(sourceNode)) {
+                        return { ...e, sourceMessageId: responseMessageId || undefined }
+                    }
+                    const { sourceMessageId: _sourceMessageId, ...edgeWithoutSourceMessageId } = e
+                    return edgeWithoutSourceMessageId
+                })
 
                 partialImageTracker.delete(threadId)
                 pendingGeneratedImagePlacements.delete(threadId)
@@ -2871,7 +2691,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (borderSvg) borderSvg.remove()
                 const spinnerEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-spinner`)
                 if (spinnerEl) spinnerEl.remove()
-                const collisionExclusions = useAnchored ? anchoredImageManager.getExclusionPairsForCollisions() : new Set<string>()
+                const collisionExclusions = new Set<string>()
                 for (const child of nodes) {
                     if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
                 }
@@ -2925,54 +2745,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
                 }
 
-                if (useAnchored && responseMessageId) {
-                    // Update anchored entry with the real responseMessageId and
-                    // realign against the finalized response message layout.
-                    const existingAnchor = anchoredImageManager.getAnchor(partial.nodeId)
-                    if (existingAnchor) {
-                        anchoredImageManager.removeAnchor(partial.nodeId)
-                    }
-
-                    const sourceThread = findSourceThreadNode(threadId)
-                    if (sourceThread) {
-                        const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${sourceThread.nodeId}"]`) as HTMLElement | null
-                        const imageNode = resolvedNodes.find((n: CanvasNode) => n.nodeId === partial.nodeId) as ImageCanvasNode | undefined
-                        const imgHeight = imageNode?.dimensions.height ?? 400
-                        const { x, y } = computeImagePositionOverlappingThread(
-                            sourceThread,
-                            responseMessageId,
-                            threadNodeEl
-                        )
-
-                        const repositionedNodes = resolvedNodes.map((n: CanvasNode) =>
-                            n.nodeId === partial.nodeId ? { ...n, position: { x, y } } : n
-                        )
-
-                        const imgNodeEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"]`) as HTMLElement | null
-                        if (imgNodeEl) {
-                            applyStyle(imgNodeEl, { left: `${x}px`, top: `${y}px` })
-                            imgNodeEl.classList.add('workspace-image-node--anchored')
-                            nodeLayerManager.bringToFront(imgNodeEl)
-                        }
-
-                        anchoredImageManager.anchorImage({
-                            imageNodeId: partial.nodeId,
-                            threadNodeId: sourceThread.nodeId,
-                            threadReferenceId: sourceThread.referenceId,
-                            responseMessageId,
-                            imageHeight: imgHeight,
-                        })
-
-                        // Apply spacing before commit so grown height is persisted
-                        currentCanvasState = {
-                            viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                            nodes: repositionedNodes,
-                            edges,
-                        }
-                        applyAnchoredImageSpacing(sourceThread.nodeId)
-                        commitCanvasState(currentCanvasState)
-                    }
-                }
             } else {
                 // No partial existed — IMAGE_COMPLETE without prior IMAGE_PARTIAL.
                 // Guard against duplicates: skip if this fileId is already on canvas
@@ -3019,29 +2791,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     createGeneratedImageEdge(sourceNode, nodeId, responseMessageId || undefined),
                 ]
 
-                let allNodes: CanvasNode[]
-                if (useAnchored) {
-                    // Grow thread height only if image bottom extends past current thread bottom
-                    const imageBottom = position.y + imageHeight + OVERLAP_GAP_Y
-                    const threadBottom = sourceThread.position.y + sourceThread.dimensions.height
-                    const additionalHeight = Math.max(0, imageBottom - threadBottom)
-                    const threadEl = viewportEl?.querySelector(`[data-node-id="${sourceThread.nodeId}"]`) as HTMLElement
-                    if (additionalHeight > 0 && threadEl) {
-                        applyStyle(threadEl, { height: `${sourceThread.dimensions.height + additionalHeight}px` })
-                    }
-                    allNodes = [
-                        ...existingNodes.map((n: CanvasNode) =>
-                            n.nodeId === sourceThread.nodeId && additionalHeight > 0
-                                ? { ...n, dimensions: { ...n.dimensions, height: n.dimensions.height + additionalHeight } }
-                                : n
-                        ),
-                        imageNode,
-                    ]
-                } else {
-                    allNodes = [...existingNodes, imageNode]
-                }
+                const allNodes: CanvasNode[] = [...existingNodes, imageNode]
 
-                const collisionExclusions = useAnchored ? anchoredImageManager.getExclusionPairsForCollisions() : new Set<string>()
+                const collisionExclusions = new Set<string>()
                 for (const child of allNodes) {
                     if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
                 }
@@ -3073,34 +2825,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     ? resolvedNodes.find((node: CanvasNode) => node.nodeId === nodeId) as ImageCanvasNode | undefined ?? imageNode
                     : imageNode
 
-                // Set state but don't commit yet — spacing may grow thread height
                 currentCanvasState = {
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
                     nodes: resolvedNodes,
                     edges: newEdges,
                 }
                 appendImageNodeToDOM(resolvedImageNode)
-
-                if (useAnchored) {
-                    anchoredImageManager.anchorImage({
-                        imageNodeId: nodeId,
-                        threadNodeId: sourceThread.nodeId,
-                        threadReferenceId: sourceThread.referenceId,
-                        responseMessageId: responseMessageId || '',
-                        imageHeight: imageHeight,
-                    })
-
-                    // Apply anchored class and z-index
-                    const imgNodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement
-                    if (imgNodeEl) {
-                        imgNodeEl.classList.add('workspace-image-node--anchored')
-                        nodeLayerManager.bringToFront(imgNodeEl)
-                    }
-
-                    // Apply spacing before commit so grown height is persisted
-                    applyAnchoredImageSpacing(sourceThread.nodeId)
-                    repositionAllThreadFloatingInputs()
-                }
 
                 commitCanvasStatePreservingEditors(currentCanvasState)
                 pendingGeneratedImagePlacements.delete(threadId)
@@ -3402,8 +3132,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (isContextRegion) return
 
             if (isModSelectionEvent(e)) {
-                const selectionTargetNodeId = getSelectionTargetNodeId(node.nodeId)
-                toggleNodeSelection(selectionTargetNodeId)
+                toggleNodeSelection(node.nodeId)
                 return
             }
 
@@ -3621,9 +3350,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             nodes: currentCanvasState.nodes,
             primaryNodeId: nodeId,
             selectedNodeIds,
-            resolveSelectionTargetNodeId: getSelectionTargetNodeId,
-            isAnchoredImageNode: (candidateNodeId: string) => Boolean(getValidAnchorForCanvasImage(candidateNodeId)),
-            getAnchorsForThread: getValidAnchorsForCanvasThread,
         })
         const resolvedNodeId = dragPlan.resolvedNodeId
 
@@ -3710,17 +3436,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         }
 
-        const anchoredImageStartPositions = new Map<string, { x: number; y: number }>()
-        for (const imageNodeId of dragPlan.moveAnchoredImageIds) {
-            const anchoredEl = viewportEl?.querySelector(`[data-node-id="${imageNodeId}"]`) as HTMLElement | null
-            if (anchoredEl) {
-                anchoredImageStartPositions.set(imageNodeId, {
-                    x: parseFloat(anchoredEl.style.left),
-                    y: parseFloat(anchoredEl.style.top),
-                })
-            }
-        }
-
         const singleSelectedNodeId = getSingleSelectedNodeId()
         let dragDidMove = false
 
@@ -3799,21 +3514,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 connectionManager?.checkProximity(resolvedNodeId, currentPos, currentDims)
             }
 
-            for (const [imgId, startPos] of anchoredImageStartPositions) {
-                const anchoredEl = viewportEl?.querySelector(`[data-node-id="${imgId}"]`) as HTMLElement | null
-                if (anchoredEl) {
-                    const newX = startPos.x + deltaX
-                    const newY = startPos.y + deltaY
-                    const newDims = { width: anchoredEl.offsetWidth, height: anchoredEl.offsetHeight }
-                    applyStyle(anchoredEl, { left: `${newX}px`, top: `${newY}px` })
-                    liveNodeOverrides.set(imgId, {
-                        position: { x: newX, y: newY },
-                        dimensions: newDims,
-                    })
-                    pixiMediaLayer?.setNodeLiveTransform(imgId, { x: newX, y: newY }, newDims)
-                }
-            }
-
             scheduleEdgesRender()
             repositionCanvasBubbleMenu()
             updateSelectionGroupOverlayElement()
@@ -3829,9 +3529,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             for (const draggedNodeId of draggedNodeEntries.keys()) {
                 liveNodeOverrides.delete(draggedNodeId)
-            }
-            for (const [imgId] of anchoredImageStartPositions) {
-                liveNodeOverrides.delete(imgId)
             }
 
             document.removeEventListener('mousemove', handleMouseMove)
@@ -3865,16 +3562,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     x: parseFloat(entry.el.style.left),
                     y: parseFloat(entry.el.style.top),
                 })
-            }
-
-            for (const [imgId] of anchoredImageStartPositions) {
-                const anchoredEl = viewportEl?.querySelector(`[data-node-id="${imgId}"]`) as HTMLElement | null
-                if (anchoredEl) {
-                    finalDraggedPositions.set(imgId, {
-                        x: parseFloat(anchoredEl.style.left),
-                        y: parseFloat(anchoredEl.style.top),
-                    })
-                }
             }
 
             const dropPoint = getCanvasPointFromClient(upEvent.clientX, upEvent.clientY)
@@ -3960,10 +3647,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 delete releasedNode.expandParent
                 delete releasedNode.extent
                 const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
-                if (isGeneratedOutputImageNode(node)) {
-                    anchoredImageManager.removeAnchor(node.nodeId)
-                    nodeEl?.classList.remove('workspace-image-node--anchored')
-                }
                 if (nodeEl) syncContextRegionImageFrame(nodeEl, releasedNode, currentCanvasState.nodes)
                 return releasedNode
             })
@@ -3971,7 +3654,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             updatedNodes = expandRegionsToFitChildren(updatedNodes)
 
             if (dragPlan.allowCollisionResolution) {
-                const collisionExclusions = anchoredImageManager.getExclusionPairsForCollisions()
+                const collisionExclusions = new Set<string>()
 
                 // Region containers and their children must not collide. Without
                 // this, the resolver would push children back out of the region
@@ -4104,10 +3787,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         }
 
-        // Anchored image resize constraints
-        const resizeAnchor = isImageNode ? getValidAnchorForCanvasImage(nodeId) : undefined
-        const resizeAnchorsForThread = !isImageNode && !isContextRegionResize ? getValidAnchorsForCanvasThread(nodeId) : []
-
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = directionX === 0 ? 0 : ((moveEvent.clientX - startX) / currentZoom) * directionX
             const deltaY = directionY === 0 ? 0 : ((moveEvent.clientY - startY) / currentZoom) * directionY
@@ -4133,18 +3812,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Re-apply aspect ratio after min constraints for images
             if (isImageNode && aspectRatio) {
                 newHeight = newWidth / aspectRatio
-            }
-
-            // Constrain anchored image width to fit within thread bounds
-            if (resizeAnchor) {
-                const threadNode = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === resizeAnchor.threadNodeId)
-                if (threadNode) {
-                    const maxWidth = Math.floor(threadNode.dimensions.width * OVERLAP_WIDTH_RATIO)
-                    if (newWidth > maxWidth) {
-                        newWidth = maxWidth
-                        if (aspectRatio) newHeight = newWidth / aspectRatio
-                    }
-                }
             }
 
             applyStyle(nodeEl, { width: `${newWidth}px`, height: `${newHeight}px` })
@@ -4228,33 +3895,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 connectionManager?.setRailHeight(nodeId, totalH)
             }
 
-            // Real-time anchored image repositioning during thread resize
-            if (resizeAnchorsForThread.length > 0) {
-                const liveThreadDims = { width: newWidth, height: newHeight }
-                const liveThreadPos = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) }
-                const liveThread = {
-                    ...(currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId) as AiChatThreadCanvasNode),
-                    position: liveThreadPos,
-                    dimensions: liveThreadDims,
-                }
-                for (const anchor of resizeAnchorsForThread) {
-                    const imgEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement | null
-                    if (!imgEl) continue
-
-                    const { x: imgX, y: imgY, constrainedWidth: imgW } = computeImagePositionOverlappingThread(
-                        liveThread,
-                        anchor.responseMessageId || '',
-                        nodeEl
-                    )
-                    const imgElement = imgEl.querySelector('img') as HTMLImageElement | null
-                    const ar = imgElement?.naturalWidth && imgElement?.naturalHeight
-                        ? imgElement.naturalWidth / imgElement.naturalHeight : 1
-                    const imgH = imgW / ar
-
-                    applyStyle(imgEl, { left: `${imgX}px`, top: `${imgY}px`, width: `${imgW}px`, height: `${imgH}px` })
-                }
-                applyAnchoredImageSpacing(nodeId)
-            }
         }
 
         const handleMouseUp = () => {
@@ -4300,65 +3940,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Grow regions if we resized a child of a region
             updatedNodes = expandRegionsToFitChildren(updatedNodes)
 
-            // Update anchored image spacer height after image resize
-            if (resizeAnchor) {
-                anchoredImageManager.updateImageSize(nodeId, newDimensions.height)
-                const heightDelta = newDimensions.height - startHeight
-                if (heightDelta !== 0) {
-                    updatedNodes = updatedNodes.map((n: CanvasNode) => {
-                        if (n.nodeId !== resizeAnchor.threadNodeId) return n
-                        const newThreadHeight = Math.max(n.dimensions.height + heightDelta, 200)
-                        const threadEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
-                        if (threadEl) applyStyle(threadEl, { height: `${newThreadHeight}px` })
-                        return { ...n, dimensions: { ...n.dimensions, height: newThreadHeight } }
-                    })
-                }
-                // No spacer dispatch needed — images are positioned side-by-side, not below text
-            }
-
-            // Adjust anchored images when thread is resized
-            if (resizeAnchorsForThread.length > 0) {
-                const threadNodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
-                const updatedThread = {
-                    ...(currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId) as AiChatThreadCanvasNode),
-                    position: newPosition,
-                    dimensions: newDimensions,
-                }
-
-                for (const anchor of resizeAnchorsForThread) {
-                    const imgIdx = updatedNodes.findIndex((n: CanvasNode) => n.nodeId === anchor.imageNodeId)
-                    if (imgIdx === -1) continue
-                    const imgNode = updatedNodes[imgIdx] as ImageCanvasNode
-                    const imgEl = viewportEl?.querySelector(`[data-node-id="${anchor.imageNodeId}"]`) as HTMLElement
-
-                    const { x: newImgX, y: newImgY, constrainedWidth: newImgWidth } = computeImagePositionOverlappingThread(
-                        updatedThread,
-                        anchor.responseMessageId || '',
-                        threadNodeEl
-                    )
-
-                    const imgElement = imgEl?.querySelector('img') as HTMLImageElement | null
-                    const ar = imgElement?.naturalWidth && imgElement?.naturalHeight
-                        ? imgElement.naturalWidth / imgElement.naturalHeight : 1
-                    const newImgHeight = newImgWidth / ar
-                    anchoredImageManager.updateImageSize(anchor.imageNodeId, newImgHeight)
-
-                    if (imgEl) {
-                        applyStyle(imgEl, { left: `${newImgX}px`, top: `${newImgY}px`, width: `${newImgWidth}px`, height: `${newImgHeight}px` })
-                    }
-
-                    updatedNodes[imgIdx] = {
-                        ...imgNode,
-                        position: { x: newImgX, y: newImgY },
-                        dimensions: { width: newImgWidth, height: newImgHeight },
-                    }
-                }
-                // No spacer dispatch needed — images are side-by-side
-            }
-
-            // Apply spacing before commit so the grown height is persisted
             currentCanvasState = { ...currentCanvasState, nodes: updatedNodes }
-            applyAnchoredImageSpacing(nodeId)
 
             commitCanvasState(currentCanvasState)
 
@@ -4859,7 +4441,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Clear loaded node tracking on full re-render
         loadedNodeIds.clear()
         hiddenEmptyThreadNodeIds.clear()
-        anchoredImageManager.clear()
 
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((t) => [t.threadId, t]))
@@ -4908,74 +4489,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         renderActiveAiChatPanel()
 
         lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
-
-        // Re-derive legacy anchored image state from `generatedBy` metadata.
-        // The anchoredImageManager is in-memory only, so on page refresh
-        // it starts empty. Generated images with persisted connector edges
-        // remain independent canvas nodes and are not re-registered as anchored.
-        if (!webUiSettings.renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem) {
-            // Build a lookup: threadReferenceId → context region node
-            const threadNodesByRef = new Map<string, ContextRegionNode>()
-            for (const n of currentCanvasState.nodes) {
-                if (isContextRegionCanvasNode(n)) {
-                    threadNodesByRef.set(n.referenceId, n)
-                }
-            }
-
-            for (const node of currentCanvasState.nodes) {
-                if (node.type !== 'image') continue
-                const imgNode = node as ImageCanvasNode
-                if (!imgNode.generatedBy) continue
-
-                const threadCanvasNode = threadNodesByRef.get(imgNode.generatedBy.aiChatThreadId)
-                if (!threadCanvasNode) continue
-
-                if (!canUseLegacyAnchorForImage({
-                    threadNode: threadCanvasNode,
-                    imageNode: imgNode,
-                    edges: currentCanvasState.edges,
-                })) continue
-
-                // Already tracked (e.g. re-render during live session) — skip re-registration
-                if (anchoredImageManager.isAnchored(imgNode.nodeId)) continue
-
-                // Use responseMessageId persisted in generatedBy metadata.
-                // This is the ProseMirror node `id` of the response message that
-                // triggered image generation — set during onImageCompleteToCanvas.
-                const responseMessageId = imgNode.generatedBy.responseMessageId || ''
-
-                anchoredImageManager.anchorImage({
-                    imageNodeId: imgNode.nodeId,
-                    threadNodeId: threadCanvasNode.nodeId,
-                    threadReferenceId: threadCanvasNode.referenceId,
-                    responseMessageId,
-                    imageHeight: imgNode.dimensions.height,
-                })
-            }
-
-            // Now apply CSS classes and bring anchored images to front
-            for (const node of currentCanvasState.nodes) {
-                if (node.type !== 'image') continue
-                if (!anchoredImageManager.isAnchored(node.nodeId)) continue
-
-                const imgEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement
-                if (imgEl) {
-                    imgEl.classList.add('workspace-image-node--anchored')
-                    nodeLayerManager.bringToFront(imgEl)
-                }
-            }
-
-            // Apply anchored image spacing to push messages below images
-            const threadsWithAnchors = new Set<string>()
-            for (const node of currentCanvasState.nodes) {
-                if (node.type !== 'image') continue
-                const anchor = anchoredImageManager.getAnchor(node.nodeId)
-                if (anchor) threadsWithAnchors.add(anchor.threadNodeId)
-            }
-            for (const tid of threadsWithAnchors) {
-                applyAnchoredImageSpacing(tid)
-            }
-        }
 
         // PIXI sync is driven by the caller (render() / commitCanvasState),
         // not here — avoids a duplicate sync when renderNodes() is called
@@ -5229,11 +4742,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 cancelAnimationFrame(transformSideEffectsRaf)
                 transformSideEffectsRaf = null
             }
-            if (anchoredRealignRaf !== null) {
-                cancelAnimationFrame(anchoredRealignRaf)
-                anchoredRealignRaf = null
-            }
-            pendingAnchoredRealignThreadNodeIds.clear()
             if (autoGrowRaf !== null) {
                 cancelAnimationFrame(autoGrowRaf)
                 autoGrowRaf = null
