@@ -2332,6 +2332,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function getActiveImageTargetNodeIdForThread(threadId: string, regionNode: ContextRegionNode): string | undefined {
+        const selectedNodeId = getSingleSelectedNodeId()
+        if (!selectedNodeId) return undefined
+
+        const selectedNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === selectedNodeId)
+        if (selectedNode?.type !== 'image') return undefined
+
+        const selectedImage = selectedNode as ImageCanvasNode
+        if (selectedImage.generatedBy?.aiChatThreadId === threadId) return selectedImage.nodeId
+        if (selectedImage.parentId === regionNode.nodeId) return selectedImage.nodeId
+        if (currentCanvasState?.edges.some((edge: WorkspaceEdge) => edge.sourceNodeId === selectedImage.nodeId && edge.targetNodeId === regionNode.nodeId)) return selectedImage.nodeId
+
+        return undefined
+    }
+
     function rememberGeneratedImagePlacement(threadId: string, regionNode: ContextRegionNode, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
         if (!hasImageModel) {
             pendingGeneratedImagePlacements.delete(threadId)
@@ -2339,9 +2354,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         const promptText = getPromptTextFromMessages(messages)
+        const activeTargetNodeId = getActiveImageTargetNodeIdForThread(regionNode.referenceId, regionNode)
         const imageBranchCandidateSnapshot = buildImageBranchCandidateSnapshot({
             regionNodeId: regionNode.nodeId,
             threadId: regionNode.referenceId,
+            activeTargetNodeId,
             nodes: currentCanvasState?.nodes ?? [],
             edges: currentCanvasState?.edges ?? [],
             prompt: promptText,
@@ -2359,6 +2376,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadId,
             candidateCount: imageBranchCandidateSnapshot.candidates.length,
             promptFingerprint: imageBranchCandidateSnapshot.promptFingerprint,
+            activeTargetNodeId: imageBranchCandidateSnapshot.activeTargetNodeId,
             candidateNodeIds: imageBranchCandidateSnapshot.candidates.map((candidate: ImageBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId),
         })
         return { promptText, imageBranchCandidateSnapshot }

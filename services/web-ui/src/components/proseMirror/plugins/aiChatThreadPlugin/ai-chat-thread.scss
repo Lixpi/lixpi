@@ -565,19 +565,37 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         &:hover {
             background: rgba(0, 0, 0, 0.04);
         }
+
+        .ai-collapsible-block-summary-title {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ai-collapsible-block-summary-meta {
+            margin-left: auto;
+            color: rgba(0, 0, 0, 0.38);
+            font-size: 0.72rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
     }
 
     &[open] > summary::before {
         transform: rotate(90deg);
     }
 
-    .ai-collapsible-block-content {
+    .ai-collapsible-block-body {
         padding: 0.5rem 0.75rem;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .ai-collapsible-block-content {
         color: rgba(0, 0, 0, 0.5);
         font-size: 0.78rem;
         font-style: italic;
         line-height: 1.5;
-        border-top: 1px solid rgba(0, 0, 0, 0.06);
 
         > *:first-child { margin-top: 0; }
         > *:last-child { margin-bottom: 0; }
@@ -586,6 +604,172 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             font-size: 0.78rem !important;
             font-style: italic;
         }
+    }
+
+    .ai-image-generation-section-label {
+        display: none;
+        color: rgba(0, 0, 0, 0.45);
+        font-size: 0.68rem;
+        font-style: normal;
+        font-weight: 700;
+        letter-spacing: 0;
+        margin-bottom: 0.35rem;
+        text-transform: uppercase;
+    }
+
+    .ai-image-generation-tool-prompt-section,
+    .ai-image-generation-final-prompt-section,
+    .ai-image-generation-reference-section,
+    .ai-image-generation-resolver-section {
+        margin: 0;
+
+        & + section {
+            margin-top: 0.85rem;
+            padding-top: 0.85rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+        }
+    }
+
+    .ai-image-generation-tool-prompt-section.has-trace .ai-image-generation-section-label,
+    .ai-image-generation-final-prompt-section .ai-image-generation-section-label,
+    .ai-image-generation-reference-section .ai-image-generation-section-label,
+    .ai-image-generation-resolver-section .ai-image-generation-section-label {
+        display: block;
+    }
+
+    .ai-image-generation-tool-prompt-fallback,
+    .ai-image-generation-final-prompt {
+        margin: 0;
+        max-height: 14rem;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: rgba(0, 0, 0, 0.58);
+        font-family: inherit;
+        font-size: 0.76rem;
+        font-style: normal;
+        line-height: 1.45;
+    }
+
+    .ai-image-generation-reference-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+        gap: 0.55rem;
+    }
+
+    .ai-image-generation-reference {
+        margin: 0;
+        min-width: 0;
+    }
+
+    .ai-image-generation-reference-thumb {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1;
+        overflow: hidden;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.035);
+    }
+
+    .ai-image-generation-reference-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .ai-image-generation-reference-unavailable,
+    .ai-image-generation-empty-references {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3.8rem;
+        padding: 0.4rem;
+        color: rgba(0, 0, 0, 0.42);
+        font-size: 0.7rem;
+        font-style: normal;
+        text-align: center;
+    }
+
+    .ai-image-generation-reference figcaption {
+        display: flex;
+        flex-direction: column;
+        gap: 0.08rem;
+        margin-top: 0.25rem;
+        min-width: 0;
+    }
+
+    .ai-image-generation-reference-label,
+    .ai-image-generation-reference-role,
+    .ai-image-generation-excluded-label,
+    .ai-image-generation-excluded-node,
+    .ai-image-generation-excluded-reason,
+    .ai-image-generation-resolver-summary,
+    .ai-image-generation-resolver-rationale {
+        font-style: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .ai-image-generation-reference-label {
+        color: rgba(0, 0, 0, 0.62);
+        font-size: 0.68rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+
+    .ai-image-generation-reference-role {
+        color: rgba(0, 0, 0, 0.42);
+        font-size: 0.64rem;
+        line-height: 1.2;
+    }
+
+    .ai-image-generation-resolver-summary {
+        color: rgba(0, 0, 0, 0.58);
+        font-size: 0.74rem;
+        font-weight: 600;
+        line-height: 1.35;
+    }
+
+    .ai-image-generation-resolver-rationale {
+        margin-top: 0.25rem;
+        color: rgba(0, 0, 0, 0.52);
+        font-size: 0.74rem;
+        line-height: 1.4;
+    }
+
+    .ai-image-generation-excluded-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin: 0.55rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .ai-image-generation-excluded-reference {
+        display: grid;
+        gap: 0.1rem;
+        padding: 0.45rem 0.5rem;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.035);
+    }
+
+    .ai-image-generation-excluded-label {
+        color: rgba(0, 0, 0, 0.62);
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .ai-image-generation-excluded-node {
+        color: rgba(0, 0, 0, 0.42);
+        font-size: 0.64rem;
+    }
+
+    .ai-image-generation-excluded-reason {
+        color: rgba(0, 0, 0, 0.52);
+        font-size: 0.7rem;
+        line-height: 1.35;
     }
 
     &.is-streaming > summary::after {
