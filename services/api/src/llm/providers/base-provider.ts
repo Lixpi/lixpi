@@ -15,6 +15,7 @@ import {
     getImagePromptMaxChars,
     validateImagePrompt as toolValidateImagePrompt,
 } from '../tools/image-generation.ts'
+import { buildImageGenerationTrace } from '../tools/image-generation-trace.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 
@@ -273,6 +274,15 @@ export abstract class BaseProvider {
     }
 
     protected async executeImageGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
+        const trace = buildImageGenerationTrace(state)
+        if (trace) {
+            try {
+                this.streamPublisher?.imageGenerationTrace(trace)
+            } catch (error: any) {
+                warn(`[BaseProvider] Skipping IMAGE_GENERATION_TRACE publish: ${error?.message ?? String(error)}`)
+            }
+        }
+
         const imageResult = await this.deps.runImageRouter(state)
         if (imageResult.error) {
             this.streamPublisher?.error(imageResult.error, imageResult.errorCode, imageResult.errorType)

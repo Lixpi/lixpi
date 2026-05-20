@@ -215,11 +215,12 @@ sequenceDiagram
 
 **`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
 - Content: `(paragraph | block)*`
-- Attributes: `title, isOpen, isStreaming`
+- Attributes: `title, isOpen, isStreaming, imageGenerationTrace, imageGenerationTraceId`
 - DOM: `details.ai-collapsible-block > summary + div.ai-collapsible-block-content`
-- Shows "Preparing image generation prompt" while streaming, "Image generation prompt" when done
+- Shows "Preparing image generation prompt" while the text-model prompt is streaming, then upgrades to "Image generation details" when the backend publishes `IMAGE_GENERATION_TRACE`
 - Collapsed by default; spinner indicator while streaming
 - The NodeView handles summary `mousedown` and `click` directly so the thread-level focus handler does not swallow the toggle interaction
+- The upgraded details view shows the streamed chat-model prompt, the final prompt sent to the image model when it differs, thumbnails for every reference image actually sent to the image model when the backend can provide a preview-safe URL, and structured resolver audit notes for excluded branch candidates. Trace events never embed inline image data; they persist NATS-backed workspace image URLs or authenticated feature sample URLs, so compact trace metadata can be stored in the ProseMirror document and rehydrated after page reload without making image bytes part of editor or NATS payload state.
 - Content: Empty (atom node)
 - Attributes:
   - `imageData: string` - Image URL or base64 data
@@ -235,6 +236,7 @@ sequenceDiagram
 - DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
 - **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
 - **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements and mirrored in chat history as compact `aiGeneratedImage` references. The plugin delegates branch-resolution and image events to `WorkspaceCanvas.ts` via `onImageBranchResolvedToCanvas`, `onImageBranchResolutionErrorToCanvas`, `onImagePartialToCanvas`, and `onImageCompleteToCanvas` callbacks. `handleImagePartial` only guards on `!aiChatThreadId` (not `!imageUrl`), allowing early empty-URL `IMAGE_PARTIAL` events through so the canvas and chat history can create placeholder nodes before any pixel data arrives. Repeated partial events update the same chat placeholder, and completion converts it into the final thumbnail. A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it, and the image appears to the right of the thread. The revised prompt text and a right-aligned thumbnail reference are inserted in the AI response message. The thumbnail uses the `aiGeneratedImage.alignment` attribute handled by `imageSelectionPlugin`, so the bubble menu can change it through the same alignment controls as other editor images.
+- **IMAGE GENERATION TRACE:** `AiInteractionService` bypasses markdown parsing for `IMAGE_GENERATION_TRACE` and forwards an `image_generation_trace` segment to the plugin. The plugin updates the current `aiCollapsibleBlock` in the receiving `aiResponseMessage` instead of adding a second disclosure, preserving the streamed prompt content and adding the backend-confirmed final prompt/reference audit metadata.
 - **MULTI-MODAL CONTEXT:** Connected canvas images are included in AI requests via the workspace edge system (`ai-chat-thread-service.ts` → `extractConnectedContext()`). Generated branch candidates are sent separately as an `ImageBranchCandidateSnapshot`; the API-side structured VLM resolver decides which candidate images become image-model references. Legacy inline `aiGeneratedImage` nodes in older threads are still extracted via `ContentExtractor.collectContentWithImages()` for backwards compatibility.
 
 ## DOM Template System

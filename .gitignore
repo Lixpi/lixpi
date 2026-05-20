@@ -24,6 +24,7 @@ dist
 .env.production
 .env*.local
 .env.development
+.env.*
 
 # temp & debug files
 temp-ai-responses/
@@ -40,3 +41,6 @@ temp-ai-responses/
 
 # Agents temp files
 documentation/memory/*
+
+.vscode/
+.aws/

@@ -52,6 +52,9 @@ const ANTHROPIC_ADAPTIVE_ONLY = [
     /^claude-opus-4-7\b/i,
     /^claude-mythos/i,
 ]
+const ANTHROPIC_NO_TEMPERATURE = [
+    /^claude-opus-4-7\b/i,
+]
 const ANTHROPIC_ADAPTIVE_OR_MANUAL = [
     /^claude-opus-4-6\b/i,
     /^claude-sonnet-4-6\b/i,
@@ -78,16 +81,17 @@ export const detectCapabilities = (provider: ProviderName, modelVersion: string)
     const mv = modelVersion ?? ''
 
     if (provider === 'Anthropic') {
+        const supportsTemperature = !matchAny(mv, ANTHROPIC_NO_TEMPERATURE)
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature: true, supportsSystemPrompt: true }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
         }
         if (matchAny(mv, ANTHROPIC_ADAPTIVE_OR_MANUAL)) {
-            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature: true, supportsSystemPrompt: true }
+            return { provider, modelVersion: mv, thinkingMode: 'adaptive', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
         }
         if (matchAny(mv, ANTHROPIC_MANUAL_ONLY)) {
-            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature: true, supportsSystemPrompt: true }
+            return { provider, modelVersion: mv, thinkingMode: 'manual', requiresAutoToolChoiceWithThinking: true, supportsTemperature, supportsSystemPrompt: true }
         }
-        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature: true, supportsSystemPrompt: true }
+        return { provider, modelVersion: mv, thinkingMode: 'none', requiresAutoToolChoiceWithThinking: false, supportsTemperature, supportsSystemPrompt: true }
     }
 
     if (provider === 'OpenAI') {
