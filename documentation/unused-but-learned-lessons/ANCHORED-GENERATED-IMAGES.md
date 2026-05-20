@@ -2,6 +2,8 @@
 
 Status: retired from the active workspace canvas implementation.
 
+More info here: https://github.com/Lixpi/lixpi/pull/171
+
 This note preserves the design because it solved a real interaction problem in an interesting way, even though the product moved to connector-backed generated image nodes.
 
 ## Original Goal
