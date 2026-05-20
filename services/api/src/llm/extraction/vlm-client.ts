@@ -181,7 +181,8 @@ const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: ModelCapabilities, 
         // Model didn't call the tool. If thinking was enabled (which forces
         // tool_choice='auto'), we can retry without thinking to force the call.
         // Otherwise this is a hard failure.
-        return { needsRetry: useThinking, rawText }
+        if (useThinking) return { needsRetry: true, rawText }
+        throw new Error(`Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" even with forced tool_choice. rawText preview=${rawText.slice(0, 200)}`)
     }
 
     return {

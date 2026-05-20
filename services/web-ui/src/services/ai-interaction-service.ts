@@ -4,6 +4,7 @@ import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
 import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
+    ImageGenerationTrace,
     ImageGenerationSize
 } from '@lixpi/constants'
 
@@ -118,6 +119,22 @@ export default class AiInteractionService {
             }
 
             // Handle image generation events (bypass markdown parser)
+            if (content.status === STREAM_STATUS.IMAGE_GENERATION_TRACE) {
+                const imageGenerationTrace = content.imageGenerationTrace as ImageGenerationTrace
+                console.log('[AI_INTERACTION] IMAGE_GENERATION_TRACE received:', {
+                    imageModelId: imageGenerationTrace?.imageModelId,
+                    referenceCount: imageGenerationTrace?.referenceImages.length ?? 0,
+                    excludedReferenceCount: imageGenerationTrace?.excludedReferences.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_generation_trace',
+                    imageGenerationTrace,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_PARTIAL) {
                 console.log('[AI_INTERACTION] IMAGE_PARTIAL received:', content)
                 this.segmentsReceiver.receiveSegment({

@@ -8,6 +8,7 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. Repla
 - Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`.
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
 - Routes dual-model image generation: text model emits a `generate_image` tool call, the workflow's conditional edge spawns a transient image-model provider (OpenAI gpt-image-*, Google Gemini, Stability) that uploads the final image to NATS Object Store.
+- Publishes an `IMAGE_GENERATION_TRACE` event immediately before invoking the transient image-model provider. The trace contains the text-model tool prompt, the final routed image-model prompt, every reference-image slot sent to the image model, preview-safe image URLs when available, and resolver audit metadata for selected/excluded branch candidates.
 - Reports token + image usage costs via `decimal.js` pricing math against the model's pricing metadata.
 
 ## Public surface
@@ -53,6 +54,7 @@ src/llm/
         stability-provider.ts    # Stability v2beta REST (multipart, no streaming)
     tools/
         image-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
+        image-generation-trace.ts # Final image-model prompt + reference-image trace payload builder
         image-router.ts          # Spawns transient image-model provider for generate_image tool calls
     utils/
         attachments.ts           # nats-obj:// resolver, magic-byte MIME detection, sharp downscaling
@@ -93,7 +95,9 @@ END
 
 Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the browser in a receiving state while pre-stream work such as `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. Transient image-model providers spawned by `ImageRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle.
 
-`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, normalizes candidate image URLs once, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and image router do not downscale the same candidate refs again.
+`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, normalizes candidate image URLs once, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. When the snapshot includes `activeTargetNodeId` / an `active-target` role hint, the resolver prompt treats that candidate as a weak UI selection hint for purely deictic edit prompts while still requiring the selected pixels to match any explicit subject named by the user. For example, a selected goat must not win a prompt that says "that man"; the resolver should choose a visible man candidate or return ambiguous. If the selected target/identity reference is an existing generated candidate, the resolver continues that generated branch even for substantial palette or medium changes; targetless `fresh-branch` is reserved for genuinely new subjects with no generated target. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and image router do not downscale the same candidate refs again.
+
+When the text provider emits `generate_image`, `BaseProvider.executeImageGeneration()` builds and publishes an `IMAGE_GENERATION_TRACE` payload before calling `ImageRouter`. `ImageRouter` uses the same `buildImageModelPrompt()` helper as the trace builder, so the prompt shown in chat is the exact prompt routed to the image-model provider, including `/use` feature-transfer wrapping when present. The trace must never carry inline image data. Branch references point back to their workspace image object, and `/use` feature sample references point to the authenticated feature sample route, so persisted chat history can render reference thumbnails after a page reload without storing image bytes in NATS stream payloads or ProseMirror state.
 
 Each provider subclasses `BaseProvider` and implements `streamImpl(state)` — everything else is shared.
 

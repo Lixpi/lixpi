@@ -12,10 +12,11 @@ type FeatureSampleReference = {
     idx: number
     subject: string
     imageUrl: string
+    traceImageUrl: string
     kind: 'sample'
 }
 
-type CacheEntry = { messages: ChatMessage[]; referenceImages: string[]; usagePrompt: string; cachedAt: number }
+type CacheEntry = { messages: ChatMessage[]; referenceImages: string[]; traceImageUrls: string[]; usagePrompt: string; cachedAt: number }
 const resolverCache = new Map<string, CacheEntry>()
 
 const pruneCache = () => {
@@ -96,6 +97,7 @@ export const resolveFeatures = async (state: ProviderState): Promise<Partial<Pro
     const natsService = NATS_Service.getInstance()
     const featureMessages: ChatMessage[] = []
     const featureReferenceImages: string[] = []
+    const featureReferenceImageTraceUrls: string[] = []
     const featureUsagePrompts: string[] = []
 
     for (const featureId of ids) {
@@ -104,6 +106,7 @@ export const resolveFeatures = async (state: ProviderState): Promise<Partial<Pro
         if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
             featureMessages.push(...cached.messages)
             featureReferenceImages.push(...cached.referenceImages)
+            featureReferenceImageTraceUrls.push(...cached.traceImageUrls)
             featureUsagePrompts.push(cached.usagePrompt)
             continue
         }
@@ -123,7 +126,13 @@ export const resolveFeatures = async (state: ProviderState): Promise<Partial<Pro
                         const data = await natsService.getObject(bucketName, objectKey)
                         if (data) {
                             const mimeType = getSampleMimeType(sampleRef.ext)
-                            samples.push({ idx: sampleRef.idx, subject: sampleRef.subject, imageUrl: `data:${mimeType};base64,${Buffer.from(data).toString('base64')}`, kind: 'sample' })
+                            samples.push({
+                                idx: sampleRef.idx,
+                                subject: sampleRef.subject,
+                                imageUrl: `data:${mimeType};base64,${Buffer.from(data).toString('base64')}`,
+                                traceImageUrl: `/api/features/${encodeURIComponent(featureId)}/samples/${sampleRef.idx}?workspaceId=${encodeURIComponent(feature.workspaceId)}`,
+                                kind: 'sample',
+                            })
                         }
                     } catch {}
                 }
@@ -134,10 +143,12 @@ export const resolveFeatures = async (state: ProviderState): Promise<Partial<Pro
             const referenceMessage = buildFeatureReferenceMessage(feature.name, feature.category, references)
             const messages = referenceMessage ? [definitionMessage, referenceMessage] : [definitionMessage]
             const referenceImages = references.map((sample) => sample.imageUrl)
+            const traceImageUrls = references.map((sample) => sample.traceImageUrl)
             const usagePrompt = buildFeatureUsagePrompt(feature, references)
-            resolverCache.set(cacheKey, { messages, referenceImages, usagePrompt, cachedAt: Date.now() })
+            resolverCache.set(cacheKey, { messages, referenceImages, traceImageUrls, usagePrompt, cachedAt: Date.now() })
             featureMessages.push(...messages)
             featureReferenceImages.push(...referenceImages)
+            featureReferenceImageTraceUrls.push(...traceImageUrls)
             featureUsagePrompts.push(usagePrompt)
         } catch (e) { err(`Failed to resolve feature ${featureId}:`, e) }
     }
@@ -147,6 +158,7 @@ export const resolveFeatures = async (state: ProviderState): Promise<Partial<Pro
         messages: [...featureMessages, ...state.messages],
         referenceImages: [...featureReferenceImages, ...(state.referenceImages ?? [])],
         featureReferenceImages,
+        featureReferenceImageTraceUrls,
         featureUsagePrompt: featureUsagePrompts.join('\n\n'),
     }
 }

@@ -4,6 +4,7 @@ import type NatsService from '@lixpi/nats-service'
 import {
     STREAM_STATUS,
     type ImageBranchVlmResolution,
+    type ImageGenerationTrace,
     type ProviderName,
     type StageTraceEvent,
     type StreamStatus,
@@ -26,6 +27,7 @@ export type ChunkPayload = {
         imageModelProvider?: string
         imageModelId?: string
         resolution?: ImageBranchVlmResolution
+        imageGenerationTrace?: ImageGenerationTrace
         error?: string
         extractionStatus?: string
         extractionDetail?: string
@@ -236,6 +238,17 @@ export class StreamPublisher {
                 status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
                 aiProvider: this.provider,
                 resolution,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    imageGenerationTrace(trace: ImageGenerationTrace): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
+                aiProvider: this.provider,
+                imageGenerationTrace: trace,
             },
             aiChatThreadId: this.aiChatThreadId,
         })

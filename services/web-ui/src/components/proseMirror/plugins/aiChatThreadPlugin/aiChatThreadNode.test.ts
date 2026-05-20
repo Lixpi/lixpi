@@ -19,6 +19,58 @@ import {
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
+import type { ImageGenerationTrace } from '@lixpi/constants'
+
+function createImageGenerationTrace(overrides: Partial<ImageGenerationTrace> = {}): ImageGenerationTrace {
+    return {
+        traceVersion: 'image-generation-trace-v1',
+        chatModelProvider: 'Anthropic',
+        chatModelId: 'claude-sonnet-4-6',
+        imageModelProvider: 'Google',
+        imageModelId: 'gemini-2.5-flash-image',
+        imageSize: '1:1',
+        toolPrompt: 'Paint the same man in orange monochrome.',
+        finalPrompt: 'Paint the same man in orange monochrome.',
+        promptWasChanged: false,
+        referenceImages: [
+            {
+                id: 'branch:person-generated',
+                source: 'branch-candidate',
+                imageUrl: 'nats-obj://workspace-workspace-1-files/person-file',
+                label: 'painted portrait of the man',
+                role: 'target',
+                nodeId: 'person-generated',
+                fileId: 'person-file',
+                workspaceId: 'workspace-1',
+                branchId: 'branch-person',
+                reason: 'selected generated portrait branch',
+            },
+        ],
+        excludedReferences: [
+            {
+                nodeId: 'goat-generated',
+                label: 'painted goat',
+                role: 'excluded',
+                reason: 'different subject branch',
+                branchId: 'branch-goat',
+            },
+        ],
+        resolver: {
+            resolverKind: 'structured-vlm',
+            resolverVersion: 'image-branch-vlm-v1',
+            resolverModelProvider: 'Anthropic',
+            resolverModelId: 'claude-sonnet-4-6',
+            mode: 'edit-active-branch',
+            operationKind: 'style_transfer',
+            confidence: 0.95,
+            rationale: 'Continue the generated portrait branch.',
+            targetImageNodeId: 'person-generated',
+            parentImageNodeId: 'person-generated',
+            branchId: 'branch-person',
+        },
+        ...overrides,
+    }
+}
 
 // =============================================================================
 // Helper: instantiate aiChatThreadNodeView with minimal mocks
@@ -378,6 +430,102 @@ describe('aiChatThreadPlugin — onReceivingStateChange callback', () => {
 })
 
 // =============================================================================
+// aiChatThreadPlugin — image generation trace
+// =============================================================================
+
+describe('aiChatThreadPlugin — image generation trace', () => {
+    function createView(children: any[] = [p('Generating image')]) {
+        const plugin = createAiChatThreadPlugin({
+            sendAiRequestHandler: vi.fn(),
+            stopAiRequestHandler: vi.fn(),
+            placeholders: { titlePlaceholder: 'Title', paragraphPlaceholder: 'Type here…' },
+        })
+        const mount = document.createElement('div')
+        document.body.appendChild(mount)
+        const view = new EditorView(mount, {
+            state: EditorState.create({
+                doc: doc(
+                    thread(
+                        { threadId: 'thread-1' },
+                        response(
+                            { id: 'resp-1', isReceivingAnimation: true, aiProvider: 'Anthropic' },
+                            ...children
+                        )
+                    )
+                ),
+                schema,
+                plugins: [plugin],
+            }),
+        })
+
+        return { view, mount }
+    }
+
+    function getCollapsibleNodes(view: EditorView): any[] {
+        const collapsibleNodes: any[] = []
+        view.state.doc.descendants((node: any) => {
+            if (node.type.name === 'aiCollapsibleBlock') collapsibleNodes.push(node)
+        })
+        return collapsibleNodes
+    }
+
+    it('inserts a persisted image-generation trace block into the active response', () => {
+        const { view, mount } = createView()
+        const trace = createImageGenerationTrace()
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_generation_trace',
+            aiChatThreadId: 'thread-1',
+            imageGenerationTrace: trace,
+        })
+
+        const collapsibleNodes = getCollapsibleNodes(view)
+        expect(collapsibleNodes).toHaveLength(1)
+        expect(collapsibleNodes[0].attrs).toMatchObject({
+            title: 'Image generation details',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTrace: trace,
+            imageGenerationTraceId: null,
+        })
+
+        view.destroy()
+        mount.remove()
+    })
+
+    it('updates an existing prompt details block instead of inserting a duplicate', () => {
+        const existingBlock = schema.nodes.aiCollapsibleBlock.create(
+            { title: 'Image generation prompt', isOpen: true, isStreaming: true },
+            schema.nodes.paragraph.create(null, schema.text('Original tool prompt'))
+        )
+        const { view, mount } = createView([p('Generating image'), existingBlock])
+        const trace = createImageGenerationTrace({
+            finalPrompt: 'Final trace prompt',
+            promptWasChanged: true,
+        })
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_generation_trace',
+            aiChatThreadId: 'thread-1',
+            imageGenerationTrace: trace,
+        })
+
+        const collapsibleNodes = getCollapsibleNodes(view)
+        expect(collapsibleNodes).toHaveLength(1)
+        expect(collapsibleNodes[0].attrs).toMatchObject({
+            title: 'Image generation details',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTrace: trace,
+        })
+        expect(collapsibleNodes[0].textContent).toBe('Original tool prompt')
+
+        view.destroy()
+        mount.remove()
+    })
+})
+
+// =============================================================================
 // aiChatThreadPlugin — generated image completion
 // =============================================================================
 
@@ -414,7 +562,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
 
     function getGeneratedImageNodes(view: EditorView): any[] {
         const imageNodes: any[] = []
-        view.state.doc.descendants((node) => {
+        view.state.doc.descendants((node: any) => {
             if (node.type.name === 'aiGeneratedImage') {
                 imageNodes.push(node)
             }

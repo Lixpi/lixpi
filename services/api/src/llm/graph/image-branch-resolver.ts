@@ -183,6 +183,10 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
 const SYSTEM_PROMPT = [
     'You are Lixpi\'s image branch resolver. Your job is to inspect the user prompt plus labeled candidate images and assign visual roles before image generation.',
     'Always ground decisions in the actual candidate pixels. Do not route from regexes, recency, prompt text alone, or guessed entity tags.',
+    'If the candidate metadata includes roleHints containing "active-target" or the prompt context names an Active target nodeId, treat that as a weak UI selection hint only. It is not visual truth and must never override the user prompt or candidate pixels.',
+    'Purely deictic prompts like "this", "that", "it", or "make it" usually refer to the active-target candidate. Deictic prompts with an explicit visible subject like "that man", "that guy", "that person", "that goat", "that portrait", or "that landscape" must target a candidate whose pixels match that named subject. If the active target visibly conflicts with the named subject, exclude it and choose the matching candidate; if no candidate matches, return mode="ambiguous" with low confidence.',
+    'For style/medium changes to an active-target candidate, return mode="edit-active-branch", operationKind="edit_existing", targetImageNodeId set to the active target nodeId, and include the active target as a reference only when the prompt is purely deictic or the active target visibly matches the named subject. Do not use the active target for a different visible subject or a fresh unrelated image.',
+    'If the prompt identifies an existing generated candidate or branch as the subject/identity, continue that generated branch even when the requested palette, medium, or style changes substantially. If you include a generated candidate as the target/identity reference, set targetImageNodeId to that generated candidate, set parentImageNodeId to that candidate, preserve its branchId when available, and do not return targetless mode="fresh-branch".',
     'Separate target identity from style/source evidence. A phrase like "draw a goat in the style of that landscape painting" means the goat is the requested subject and the landscape can be style evidence; unrelated generated portraits must be excluded.',
     'referenceImageNodeIds is authoritative: include only candidate nodeIds that should be sent to the image model. Exclude distractors aggressively because unrelated generated variants contaminate identity.',
     'If the prompt is genuinely impossible to resolve from the candidate images, return mode="ambiguous" with low confidence and explain why.',
@@ -249,6 +253,7 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
             `Prompt fingerprint: ${snapshot.promptFingerprint}`,
             `Thread ID: ${snapshot.threadId}`,
             `Region node ID: ${snapshot.regionNodeId}`,
+            snapshot.activeTargetNodeId ? `Active target node ID: ${snapshot.activeTargetNodeId}` : undefined,
             '',
             'Candidate metadata JSON:',
             JSON.stringify(snapshot.candidates.map(compactCandidateForPrompt), null, 2),
@@ -257,7 +262,7 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
             snapshot.transcriptContext,
             '',
             'Inspect each attached candidate image. Return strict JSON using the tool schema. Use nodeId values exactly as given.',
-        ].join('\n'),
+        ].filter((line): line is string => typeof line === 'string').join('\n'),
     }]
 
     for (const candidate of snapshot.candidates) {
@@ -313,6 +318,37 @@ const sanitizeDecisions = (
     return out
 }
 
+const isGeneratedCandidate = (candidate: ImageBranchCandidateImage): boolean =>
+    candidate.roleHints.includes('generated-variant')
+
+const findGeneratedTargetReference = (args: {
+    candidateByNodeId: Map<string, ImageBranchCandidateImage>
+    referenceImageNodeIds: string[]
+    styleReferenceNodeIds: string[]
+    decisions: ImageBranchVlmReferenceDecision[]
+}): ImageBranchCandidateImage | undefined => {
+    const styleReferenceNodeIds = new Set(args.styleReferenceNodeIds)
+    const decisionByNodeId = new Map(args.decisions.map((decision) => [decision.nodeId, decision]))
+    const generatedReferences = args.referenceImageNodeIds
+        .map((nodeId) => args.candidateByNodeId.get(nodeId))
+        .filter((candidate): candidate is ImageBranchCandidateImage => Boolean(candidate && isGeneratedCandidate(candidate)))
+        .filter((candidate) => !styleReferenceNodeIds.has(candidate.nodeId))
+        .filter((candidate) => decisionByNodeId.get(candidate.nodeId)?.role !== 'style-reference')
+
+    const explicitTargetReferences = generatedReferences.filter((candidate) => {
+        const role = decisionByNodeId.get(candidate.nodeId)?.role
+        return role === 'target' || role === 'base-context'
+    })
+    let targetReferences = explicitTargetReferences
+    if (targetReferences.length === 0 && args.decisions.length === 0) {
+        targetReferences = generatedReferences
+    }
+    if (targetReferences.length === 1) return targetReferences[0]
+
+    const leafReferences = targetReferences.filter((candidate) => candidate.roleHints.includes('branch-leaf'))
+    return leafReferences.length === 1 ? leafReferences[0] : undefined
+}
+
 const sanitizeResolution = (args: {
     parsed: ImageBranchVlmRawResolution
     state: ProviderState
@@ -322,19 +358,41 @@ const sanitizeResolution = (args: {
     const snapshot = args.state.imageBranchCandidateSnapshot
     if (!snapshot) throw new Error('Image branch candidate snapshot is required')
 
-    const candidateByNodeId = new Map(snapshot.candidates.map((candidate) => [candidate.nodeId, candidate]))
-    const mode = args.parsed.mode as ImageBranchVlmResolution['mode']
-    const operationKind = args.parsed.operationKind as ImageGenerationOperationKind
+    const candidateByNodeId: Map<string, ImageBranchCandidateImage> = new Map(snapshot.candidates.map((candidate: ImageBranchCandidateImage) => [candidate.nodeId, candidate]))
+    let mode = args.parsed.mode as ImageBranchVlmResolution['mode']
+    let operationKind = args.parsed.operationKind as ImageGenerationOperationKind
     if (!VALID_MODES.has(mode)) throw new Error(`Image branch resolver returned invalid mode: ${args.parsed.mode}`)
     if (!VALID_OPERATION_KINDS.has(operationKind)) throw new Error(`Image branch resolver returned invalid operationKind: ${args.parsed.operationKind}`)
 
-    const targetImageNodeId = normalizeOptionalNodeId(args.parsed.targetImageNodeId)
-    const parentImageNodeId = normalizeOptionalNodeId(args.parsed.parentImageNodeId) ?? targetImageNodeId ?? undefined
+    let targetImageNodeId = normalizeOptionalNodeId(args.parsed.targetImageNodeId)
+    let parentImageNodeId = normalizeOptionalNodeId(args.parsed.parentImageNodeId) ?? targetImageNodeId ?? undefined
     const includeGeneratedNodeIds = normalizeStringArray(args.parsed.includeGeneratedNodeIds)
     const referenceImageNodeIds = normalizeStringArray(args.parsed.referenceImageNodeIds)
     const sourceContextNodeIds = normalizeStringArray(args.parsed.sourceContextNodeIds)
     const styleReferenceNodeIds = normalizeStringArray(args.parsed.styleReferenceNodeIds)
-    const excludedNodeIds = normalizeStringArray(args.parsed.excludedNodeIds)
+    let excludedNodeIds = normalizeStringArray(args.parsed.excludedNodeIds)
+    const decisions = sanitizeDecisions(args.parsed.decisions, candidateByNodeId)
+
+    let rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
+    if (!targetImageNodeId && (mode === 'fresh-branch' || operationKind === 'new_image' || operationKind === 'fresh_branch')) {
+        const generatedTarget = findGeneratedTargetReference({
+            candidateByNodeId,
+            referenceImageNodeIds,
+            styleReferenceNodeIds,
+            decisions,
+        })
+        if (generatedTarget) {
+            targetImageNodeId = generatedTarget.nodeId
+            parentImageNodeId = generatedTarget.nodeId
+            mode = 'edit-active-branch'
+            if (operationKind === 'new_image' || operationKind === 'fresh_branch') operationKind = 'style_transfer'
+            excludedNodeIds = excludedNodeIds.filter((nodeId) => nodeId !== generatedTarget.nodeId)
+            rationale = [
+                rationale,
+                `Resolver guard continued generated branch via selected target reference ${generatedTarget.nodeId}.`,
+            ].filter(Boolean).join(' ')
+        }
+    }
 
     assertKnownNodeIds('targetImageNodeId', targetImageNodeId ? [targetImageNodeId] : [], candidateByNodeId)
     assertKnownNodeIds('parentImageNodeId', parentImageNodeId ? [parentImageNodeId] : [], candidateByNodeId)
@@ -352,7 +410,6 @@ const sanitizeResolution = (args: {
     }
 
     const confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
-    const rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
     if (mode === 'ambiguous') {
         throw new Error(`Image branch resolver could not disambiguate: ${rationale || 'ambiguous visual reference'}`)
     }
@@ -362,7 +419,7 @@ const sanitizeResolution = (args: {
 
     const targetCandidate = targetImageNodeId ? candidateByNodeId.get(targetImageNodeId) : undefined
     const rawBranchId = normalizeOptionalNodeId(args.parsed.branchId)
-    const branchId = rawBranchId ?? targetCandidate?.branchId ?? `branch-${randomUUID()}`
+    const branchId = targetCandidate?.branchId ?? rawBranchId ?? `branch-${randomUUID()}`
 
     return {
         resolverKind: RESOLVER_KIND,
@@ -385,7 +442,7 @@ const sanitizeResolution = (args: {
         styleTags: normalizeStringArray(args.parsed.styleTags),
         confidence,
         rationale,
-        decisions: sanitizeDecisions(args.parsed.decisions, candidateByNodeId),
+        decisions,
     }
 }
 
@@ -412,6 +469,7 @@ const stripCandidateImageBlocks = (messages: ChatMessage[], candidateImageUrls: 
         const filtered: Array<Record<string, any>> = []
         for (let index = 0; index < message.content.length; index++) {
             const block = message.content[index]
+            if (block === undefined) continue
             if (typeof block !== 'object' || block === null) {
                 filtered.push(block)
                 continue
@@ -507,7 +565,7 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             resolverProvider: provider,
             resolverModelId: result.modelName || modelVersion,
         })
-        const candidateImageUrls = new Set(snapshot.candidates.map((candidate) => candidate.imageUrl))
+        const candidateImageUrls: Set<string> = new Set(snapshot.candidates.map((candidate: ImageBranchCandidateImage) => candidate.imageUrl))
         const cleanedMessages = stripCandidateImageBlocks(state.messages, candidateImageUrls)
         const resolvedBranchMessage = buildResolvedBranchMessage(resolution, resolvedCandidates)
         const messages = [resolvedBranchMessage, ...cleanedMessages]
@@ -518,12 +576,14 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             aiChatThreadId: state.aiChatThreadId,
             provider,
             model: result.modelName || modelVersion,
+            activeTargetNodeId: snapshot.activeTargetNodeId,
             mode: resolution.mode,
             operationKind: resolution.operationKind,
             targetImageNodeId: resolution.targetImageNodeId,
             referenceImageNodeIds: resolution.referenceImageNodeIds,
             excludedNodeIds: resolution.excludedNodeIds,
             confidence: resolution.confidence,
+            rationale: resolution.rationale,
         }, null, 0)}`)
 
         return {
