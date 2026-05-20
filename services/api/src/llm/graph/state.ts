@@ -84,6 +84,7 @@ export type ProviderState = {
     generatedImagePrompt?: string | undefined
     referenceImages?: string[] | undefined
     featureReferenceImages?: string[] | undefined
+    featureReferenceImageTraceUrls?: string[] | undefined
     imagePromptRetryCount?: number | undefined
     generatedImages?: string[] | undefined
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot | undefined
@@ -130,6 +131,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     generatedImagePrompt: { reducer: keep },
     referenceImages: { reducer: keep },
     featureReferenceImages: { reducer: keep },
+    featureReferenceImageTraceUrls: { reducer: keep },
     imagePromptRetryCount: { reducer: keep, default: () => 0 },
     generatedImages: { reducer: keep },
     imageBranchCandidateSnapshot: { reducer: keep },

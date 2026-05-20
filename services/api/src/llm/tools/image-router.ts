@@ -4,7 +4,10 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
-import type { ProviderName } from '@lixpi/constants'
+import {
+    buildImageModelPrompt,
+    normalizeImageSize,
+} from './image-generation-trace.ts'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
 // or wrong-image issues in logs without dumping base64.
@@ -22,23 +25,6 @@ const fingerprintRef = (url: string): string => {
     }
     if (url.startsWith('https://') || url.startsWith('http://')) return url.slice(0, 120)
     return `${url.slice(0, 60)}…`
-}
-
-const normalizeImageSize = (imageProvider: ProviderName | undefined, imageSize: string | undefined): string => {
-    if (!imageSize || imageSize === 'auto') return 'auto'
-    const ratioForSize: Record<string, string> = {
-        '1024x1024': '1:1',
-        '1536x1024': '3:2',
-        '1024x1536': '2:3',
-    }
-    const sizeForRatio: Record<string, string> = {
-        '1:1': '1024x1024',
-        '3:2': '1536x1024',
-        '2:3': '1024x1536',
-    }
-    if (imageProvider === 'OpenAI') return sizeForRatio[imageSize] ?? imageSize
-    if (imageProvider === 'Google' || imageProvider === 'Stability') return ratioForSize[imageSize] ?? imageSize
-    return imageSize
 }
 
 // Routes a generate_image tool call from a text model to the configured image-model provider.
@@ -69,16 +55,7 @@ export class ImageRouter {
         const featureReferenceImages = state.featureReferenceImages ?? []
         const hasFeatureReferences = featureReferenceImages.length > 0
         const featureUsagePrompt = state.featureUsagePrompt?.trim()
-        const imageModelPrompt = hasFeatureReferences || featureUsagePrompt
-            ? [
-                'MANDATORY /use FEATURE TRANSFER: the attached feature reference image(s) and feature brief are not optional inspiration. They define the medium the generated image must be made of.',
-                'The new subject MUST be CONSTRUCTED FROM this medium itself \u2014 brush strokes, washes, paper tooth, grain, deckle behavior, palette, edge softness, and mark-making must appear on the subject\'s own surface (its body, fur, skin, form), not only as a frame or background. A clean, smooth, digitally-rendered subject placed on top of a textured paper backdrop is a REJECTED result.',
-                'Do not copy the reference subject, composition, pose, or layout. Carry only the medium and its mark-making behavior.',
-                featureUsagePrompt ? `FEATURE BRIEF:\n${featureUsagePrompt}` : undefined,
-                'USER IMAGE REQUEST:',
-                prompt,
-            ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
-            : prompt
+        const imageModelPrompt = buildImageModelPrompt(state)
 
         // Structured log of the FULL invocation chain so we can verify exactly
         // which model is being invoked, at what quality, with which references.

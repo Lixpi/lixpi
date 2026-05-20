@@ -20,6 +20,7 @@ import {
     extractReferenceImages,
     getToolForProvider,
 } from '../tools/image-generation.ts'
+import { detectCapabilities } from '../extraction/capabilities.ts'
 
 export class AnthropicProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Anthropic'
@@ -145,13 +146,17 @@ export class AnthropicProvider extends BaseProvider {
         prompt: string,
         maxChars: number,
     ): Promise<string | undefined> {
-        const response = await this.client.messages.create({
+        const request: Record<string, any> = {
             model: state.modelVersion,
             messages: [{ role: 'user', content: `Original image prompt:\n${prompt}` }],
             max_tokens: Math.max(256, Math.ceil((maxChars + 3) / 4) + 128),
-            temperature: 0.2,
             system: buildImagePromptRewriteInstruction(maxChars),
-        })
+        }
+        if (detectCapabilities('Anthropic', state.modelVersion).supportsTemperature) {
+            request.temperature = 0.2
+        }
+
+        const response = await this.client.messages.create(request as any)
 
         const texts: string[] = []
         for (const block of response.content ?? []) {

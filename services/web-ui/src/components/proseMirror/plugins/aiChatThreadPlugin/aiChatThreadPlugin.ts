@@ -28,6 +28,7 @@ import type {
     AiInteractionChatStopMessagePayload,
     AiModelId,
     ImageBranchVlmResolution,
+    ImageGenerationTrace,
     ImageGenerationSize,
     StreamStatus,
 } from '@lixpi/constants'
@@ -49,7 +50,7 @@ type ImageOptions = {
 type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
-type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error'
+type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type SegmentEvent = {
     status?: StreamStatus
@@ -73,6 +74,7 @@ type SegmentEvent = {
     responseId?: string
     revisedPrompt?: string
     imageBranchResolution?: ImageBranchVlmResolution
+    imageGenerationTrace?: ImageGenerationTrace
     error?: string
 }
 type ImageReference = { fileId: string; workspaceId: string }
@@ -861,6 +863,11 @@ class AiChatThreadPluginClass {
             const { state, dispatch } = view
 
             // Handle image generation events
+            if (type === 'image_generation_trace') {
+                this.handleImageGenerationTrace(view, event)
+                return
+            }
+
             if (type === 'image_partial') {
                 this.handleImagePartial(view, event)
                 return
@@ -962,7 +969,7 @@ class AiChatThreadPluginClass {
             const callbacks = getAiGeneratedImageCallbacks()
             callbacks.onImagePartialToCanvas?.({
                 threadId: aiChatThreadId,
-                imageUrl,
+                imageUrl: imageUrl || '',
                 fileId: fileId || '',
                 workspaceId: workspaceId || '',
                 partialIndex: partialIndex || 0,
@@ -998,6 +1005,47 @@ class AiChatThreadPluginClass {
             imageModelProvider: imageModelProvider || '',
             responseMessageId,
         })
+    }
+
+    private handleImageGenerationTrace(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId: threadId, imageGenerationTrace } = event
+        if (!threadId || !imageGenerationTrace) return
+
+        const { state, dispatch } = view
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
+        if (!threadInfo) return
+
+        const tr = state.tr
+        const attrs = {
+            title: 'Image generation details',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTrace,
+            imageGenerationTraceId: null,
+        }
+        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId)
+
+        if (collapsibleInfo.found && collapsibleInfo.nodePos !== undefined) {
+            const collapsibleNode = state.doc.nodeAt(collapsibleInfo.nodePos)
+            if (collapsibleNode?.type.name === aiCollapsibleBlockNodeType) {
+                tr.setNodeMarkup(collapsibleInfo.nodePos, undefined, {
+                    ...collapsibleNode.attrs,
+                    ...attrs,
+                })
+            }
+        } else {
+            const responseInfo = PositionFinder.findResponseNode(state, threadId)
+            if (!responseInfo.found || !responseInfo.endOfNodePos) return
+            const collapsibleNode = state.schema.nodes[aiCollapsibleBlockNodeType].create(attrs)
+            tr.insert(responseInfo.endOfNodePos - 1, collapsibleNode)
+        }
+
+        tr.setMeta('setCollapsible', { threadId, active: false })
+
+        if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
+            dispatch(tr)
+        }
     }
 
     private handleCreateVariantRequest(view: EditorView, node: ProseMirrorNode, pos: number): void {

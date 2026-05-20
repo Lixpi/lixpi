@@ -176,4 +176,5 @@ describe('StreamPublisher extraction progress', () => {
             aiProvider: 'Anthropic',
         }))
     })
+
 })

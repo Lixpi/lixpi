@@ -18,6 +18,7 @@ type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
 type BuildImageBranchCandidateSnapshotParams = {
     regionNodeId: string
     threadId: string
+    activeTargetNodeId?: string
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
     prompt: string
@@ -308,7 +309,11 @@ function addCandidate(candidatesById: Map<string, ImageBranchCandidateImage>, ca
     candidatesById.set(candidate.nodeId, existing ? mergeCandidate(existing, candidate) : candidate)
 }
 
-function createBaseContextCandidate(image: ImageCanvasNode): ImageBranchCandidateImage {
+function addActiveTargetHint(roleHints: ImageBranchCandidateRoleHint[], imageNodeId: string, activeTargetNodeId: string | undefined): ImageBranchCandidateRoleHint[] {
+    return uniqueRoleHints(imageNodeId === activeTargetNodeId ? [...roleHints, 'active-target'] : roleHints)
+}
+
+function createBaseContextCandidate(image: ImageCanvasNode, activeTargetNodeId: string | undefined): ImageBranchCandidateImage {
     const generatedBy = image.generatedBy
     const roleHints: ImageBranchCandidateRoleHint[] = ['base-context']
     if (generatedBy) roleHints.push('generated-variant')
@@ -318,7 +323,7 @@ function createBaseContextCandidate(image: ImageCanvasNode): ImageBranchCandidat
         fileId: image.fileId,
         workspaceId: image.workspaceId,
         imageUrl: getImageUrl(image),
-        roleHints,
+        roleHints: addActiveTargetHint(roleHints, image.nodeId, activeTargetNodeId),
         branchId: generatedBy?.branchId,
         parentImageNodeId: generatedBy?.parentImageNodeId,
         ancestorNodeIds: generatedBy?.parentImageNodeId ? [generatedBy.parentImageNodeId, image.nodeId] : [image.nodeId],
@@ -341,6 +346,7 @@ function createGeneratedCandidate(args: {
     sourceContextNodeIds: string[]
     leafNodeIds: Set<string>
     generatedImageTextByNodeId: Record<string, string>
+    activeTargetNodeId?: string
 }): ImageBranchCandidateImage {
     const ancestorNodeIds = collectImageBranchAncestors(args.image, args.imagesById, args.edges, args.regionNodeId)
     const generatedBy = args.image.generatedBy
@@ -352,7 +358,7 @@ function createGeneratedCandidate(args: {
         fileId: args.image.fileId,
         workspaceId: args.image.workspaceId,
         imageUrl: getImageUrl(args.image),
-        roleHints,
+        roleHints: addActiveTargetHint(roleHints, args.image.nodeId, args.activeTargetNodeId),
         branchId: getBranchIdForImage(args.image, ancestorNodeIds, args.imagesById),
         parentImageNodeId: generatedBy?.parentImageNodeId,
         ancestorNodeIds,
@@ -367,7 +373,7 @@ function createGeneratedCandidate(args: {
     }
 }
 
-function buildTranscriptContext(candidates: ImageBranchCandidateImage[], prompt: string): string {
+function buildTranscriptContext(candidates: ImageBranchCandidateImage[], prompt: string, activeTargetNodeId: string | undefined): string {
     const candidateLines = candidates.map((candidate) => [
         `nodeId=${candidate.nodeId}`,
         `roles=${candidate.roleHints.join(',')}`,
@@ -379,14 +385,16 @@ function buildTranscriptContext(candidates: ImageBranchCandidateImage[], prompt:
 
     return [
         `Current user prompt: ${prompt}`,
+        activeTargetNodeId ? `Active target nodeId: ${activeTargetNodeId}` : undefined,
         'Candidate image labels:',
         ...candidateLines,
-    ].join('\n')
+    ].filter((line): line is string => typeof line === 'string').join('\n')
 }
 
 export function buildImageBranchCandidateSnapshot({
     regionNodeId,
     threadId,
+    activeTargetNodeId,
     nodes,
     edges,
     prompt,
@@ -400,7 +408,7 @@ export function buildImageBranchCandidateSnapshot({
     const candidatesById = new Map<string, ImageBranchCandidateImage>()
 
     for (const image of contextImages) {
-        addCandidate(candidatesById, createBaseContextCandidate(image))
+        addCandidate(candidatesById, createBaseContextCandidate(image, activeTargetNodeId))
     }
 
     for (const image of generatedImages) {
@@ -412,6 +420,7 @@ export function buildImageBranchCandidateSnapshot({
             sourceContextNodeIds,
             leafNodeIds,
             generatedImageTextByNodeId,
+            activeTargetNodeId,
         }))
     }
 
@@ -420,10 +429,11 @@ export function buildImageBranchCandidateSnapshot({
         resolverVersion: RESOLVER_VERSION,
         threadId,
         regionNodeId,
+        ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
         promptText: prompt,
         promptFingerprint: fingerprintPrompt(prompt),
         candidates,
-        transcriptContext: buildTranscriptContext(candidates, prompt),
+        transcriptContext: buildTranscriptContext(candidates, prompt, activeTargetNodeId),
     }
 }
 

@@ -101,6 +101,7 @@ export type ImageBranchCandidateRoleHint =
     | 'branch-leaf'
     | 'branch-ancestor'
     | 'embedded-thread-image'
+    | 'active-target'
 
 export type ImageBranchCandidateImage = {
     nodeId: string
@@ -125,6 +126,7 @@ export type ImageBranchCandidateSnapshot = {
     resolverVersion: string
     threadId: string
     regionNodeId: string
+    activeTargetNodeId?: string
     promptText: string
     promptFingerprint: string
     candidates: ImageBranchCandidateImage[]
@@ -178,6 +180,64 @@ export type ImageBranchResolutionErrorStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
     aiProvider: string
     error: string
+}
+
+export type ImageGenerationTraceReferenceRole = ImageBranchReferenceRole | 'feature-reference' | 'message-reference'
+
+export type ImageGenerationTraceReference = {
+    id: string
+    imageUrl: string
+    source: 'branch-candidate' | 'feature-reference' | 'message-reference'
+    label: string
+    role: ImageGenerationTraceReferenceRole
+    nodeId?: string
+    fileId?: string
+    workspaceId?: string
+    branchId?: string
+    reason?: string
+}
+
+export type ImageGenerationTraceExcludedReference = {
+    nodeId: string
+    label: string
+    role: 'excluded'
+    reason: string
+    fileId?: string
+    workspaceId?: string
+    branchId?: string
+}
+
+export type ImageGenerationTrace = {
+    traceVersion: 'image-generation-trace-v1'
+    chatModelProvider: string
+    chatModelId: string
+    imageModelProvider: string
+    imageModelId: string
+    imageSize: string
+    toolPrompt: string
+    finalPrompt: string
+    promptWasChanged: boolean
+    referenceImages: ImageGenerationTraceReference[]
+    excludedReferences: ImageGenerationTraceExcludedReference[]
+    resolver?: {
+        resolverKind: 'structured-vlm'
+        resolverVersion: string
+        resolverModelProvider: string
+        resolverModelId: string
+        mode: ImageBranchSelectionMode
+        operationKind: ImageGenerationOperationKind
+        confidence: number
+        rationale: string
+        targetImageNodeId: string | null
+        parentImageNodeId?: string
+        branchId: string | null
+    }
+}
+
+export type ImageGenerationTraceStreamPayload = {
+    status: 'IMAGE_GENERATION_TRACE'
+    aiProvider: string
+    imageGenerationTrace: ImageGenerationTrace
 }
 
 export type ImageGeneratedByMetadata = {

@@ -2,7 +2,10 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { buildImageBranchCandidateSnapshot } from '$src/services/ai-image-branching.ts'
+import {
+    buildImageBranchCandidateSnapshot,
+    getGeneratedImageTextByNodeIdFromThreadContent,
+} from '$src/services/ai-image-branching.ts'
 import type { CanvasNode, WorkspaceEdge } from '@lixpi/constants'
 
 const regionNode = {
@@ -83,6 +86,33 @@ const goatGeneratedNode = {
     },
 } satisfies CanvasNode
 
+const refinedPersonGeneratedNode = {
+    nodeId: 'person-refined',
+    type: 'image',
+    fileId: 'person-refined-file',
+    workspaceId: 'workspace-1',
+    src: '/api/images/workspace-1/person-refined-file',
+    aspectRatio: 1,
+    position: { x: 480, y: 0 },
+    dimensions: { width: 100, height: 100 },
+    generatedBy: {
+        aiChatThreadId: 'thread-1',
+        responseId: 'response-refined',
+        responseMessageId: 'response-refined-message',
+        aiModel: 'OpenAI:gpt-4.1' as any,
+        revisedPrompt: 'orange monochrome portrait with glasses',
+        parentImageNodeId: 'person-generated',
+        branchId: 'branch-person',
+        promptText: 'make the same man orange monochrome',
+        sourceContextNodeIds: ['portrait-source'],
+        visualEntitySummary: 'orange monochrome portrait of the same man with glasses',
+        visualStyleSummary: 'restrained orange monochrome palette',
+        entityTags: ['person'],
+        styleTags: ['orange', 'monochrome'],
+        createdAt: 3,
+    },
+} satisfies CanvasNode
+
 function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGeneratedNode]) {
     return buildImageBranchCandidateSnapshot({
         regionNodeId: 'region-1',
@@ -131,5 +161,95 @@ describe('buildImageBranchCandidateSnapshot', () => {
 
         expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('nats-obj://workspace-workspace-1-files/person-generated-file')
         expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).toContain('nats-obj://workspace-workspace-1-files/portrait-file')
+    })
+
+    it('adds an active-target hint without moving that candidate ahead of other candidates', () => {
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'region-1',
+            threadId: 'thread-1',
+            activeTargetNodeId: 'goat-generated',
+            nodes: [regionNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, goatGeneratedNode],
+            edges: [
+                { edgeId: 'edge-region-person', sourceNodeId: 'region-1', targetNodeId: 'person-generated' },
+                { edgeId: 'edge-region-goat', sourceNodeId: 'region-1', targetNodeId: 'goat-generated' },
+            ],
+            prompt: 'make that guy orange monochrome',
+        })
+
+        const candidateIds = snapshot.candidates.map((candidate) => candidate.nodeId)
+        const goatCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'goat-generated')
+
+        expect(snapshot.activeTargetNodeId).toBe('goat-generated')
+        expect(goatCandidate?.roleHints).toContain('active-target')
+        expect(candidateIds.indexOf('person-generated')).toBeLessThan(candidateIds.indexOf('goat-generated'))
+        expect(snapshot.transcriptContext).toContain('Active target nodeId: goat-generated')
+        expect(snapshot.transcriptContext).toContain('nodeId=goat-generated | roles=generated-variant,branch-leaf,active-target')
+    })
+
+    it('marks generated ancestors and leaves so the API can preserve branch lineage', () => {
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'region-1',
+            threadId: 'thread-1',
+            nodes: [regionNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
+            edges: [
+                { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
+            ],
+            prompt: 'make that guy more monochromatic',
+        })
+
+        const firstBranchImage = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-generated')
+        const branchLeaf = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-refined')
+
+        expect(firstBranchImage?.roleHints).toContain('branch-ancestor')
+        expect(branchLeaf?.roleHints).toContain('branch-leaf')
+        expect(branchLeaf).toMatchObject({
+            branchId: 'branch-person',
+            parentImageNodeId: 'person-generated',
+            ancestorNodeIds: ['person-generated', 'person-refined'],
+            sourceContextNodeIds: ['portrait-source', 'landscape-source'],
+        })
+    })
+
+    it('folds thread response text into generated branch prompt text', () => {
+        const threadContent = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiUserMessage',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'make him painterly' }] }],
+                },
+                {
+                    type: 'aiResponseMessage',
+                    attrs: { id: 'response-refined-message' },
+                    content: [
+                        { type: 'paragraph', content: [{ type: 'text', text: 'Created a refined painted portrait.' }] },
+                        { type: 'aiGeneratedImage', attrs: { revisedPrompt: 'thread image prompt text' } },
+                    ],
+                },
+            ],
+        }
+        const generatedImageTextByNodeId = getGeneratedImageTextByNodeIdFromThreadContent(
+            threadContent,
+            [personGeneratedNode, refinedPersonGeneratedNode],
+            'thread-1'
+        )
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'region-1',
+            threadId: 'thread-1',
+            nodes: [regionNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
+            edges: [
+                { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
+            ],
+            prompt: 'make that guy more painterly',
+            generatedImageTextByNodeId,
+        })
+        const branchLeaf = snapshot.candidates.find((candidate) => candidate.nodeId === 'person-refined')
+
+        expect(generatedImageTextByNodeId['person-refined']).toContain('make him painterly')
+        expect(generatedImageTextByNodeId['person-refined']).toContain('Created a refined painted portrait.')
+        expect(generatedImageTextByNodeId['person-refined']).toContain('thread image prompt text')
+        expect(branchLeaf?.promptText).toContain('make the same man orange monochrome')
+        expect(branchLeaf?.promptText).toContain('thread image prompt text')
+        expect(branchLeaf?.visualEntitySummary).toBe('orange monochrome portrait of the same man with glasses')
     })
 })
