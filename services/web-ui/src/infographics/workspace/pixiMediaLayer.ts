@@ -66,7 +66,6 @@ type TextureEntry = {
 }
 
 export type SelectionColors = {
-    nodeOutline: string
     marqueeStroke: string
     marqueeFill: string
     groupOverlayStroke: string
@@ -99,6 +98,7 @@ type PixiMediaLayerOptions = {
     viewportEl: HTMLDivElement
     getWorkspaceId: () => string
     selectionColors: SelectionColors
+    onImageIntrinsicSize?: (size: { nodeId: string; width: number; height: number }) => void
     onHealthChange?: (health: PixiRendererHealth) => void
 }
 
@@ -160,7 +160,7 @@ async function resolveImageSrc(node: ImageCanvasNode, workspaceId: string): Prom
 }
 
 export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaLayer {
-    const { paneEl, viewportEl, getWorkspaceId, selectionColors, onHealthChange } = options
+    const { paneEl, viewportEl, getWorkspaceId, selectionColors, onImageIntrinsicSize, onHealthChange } = options
 
     const hostStyle = {
         position: 'absolute' as const,
@@ -177,7 +177,6 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     const fgLayer = new Container({ label: 'workspace-pixi-fg' })
     const edgeLayer = new Container({ label: 'workspace-pixi-edges' })
     const entries = new Map<string, PixiImageEntry>()
-    const selectionOutlines = new Map<string, Graphics>()
     let edgeRenderer: PixiEdgeRenderer | null = null
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
@@ -647,8 +646,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.loadedTier = fetchTier
                 entry.requestedTier = null
                 entry.sprite.texture = texture
-                entry.sprite.width = node.dimensions.width
-                entry.sprite.height = node.dimensions.height
+                if (Number.isFinite(texture.width) && Number.isFinite(texture.height) && texture.width > 0 && texture.height > 0) {
+                    onImageIntrinsicSize?.({ nodeId: node.nodeId, width: texture.width, height: texture.height })
+                }
+                entry.sprite.position.set(entry.worldRect.minX, entry.worldRect.minY)
+                entry.sprite.width = entry.nodeRef.dimensions.width
+                entry.sprite.height = entry.nodeRef.dimensions.height
                 entry.sprite.visible = true
                 entry.colorRect.visible = false
                 if (oldKey && oldKey !== resolved) releaseTexture(oldKey)
@@ -877,38 +880,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }, 1500)
     }
 
-    function setSelectedImageNodes(selectedNodeIds: Set<string>): void {
+    function setSelectedImageNodes(_selectedNodeIds: Set<string>): void {
         if (destroyed) return
-
-        // Remove outlines for nodes that are no longer selected or no longer exist.
-        for (const [nodeId, g] of selectionOutlines) {
-            if (!selectedNodeIds.has(nodeId) || !entries.has(nodeId)) {
-                g.destroy()
-                selectionOutlines.delete(nodeId)
-            }
-        }
-
-        // Add/update outline for each newly selected PIXI-owned node.
-        for (const nodeId of selectedNodeIds) {
-            const entry = entries.get(nodeId)
-            if (!entry) continue
-
-            let g = selectionOutlines.get(nodeId)
-            if (!g) {
-                g = new Graphics()
-                fgLayer.addChild(g)
-                selectionOutlines.set(nodeId, g)
-            }
-
-            const { x, y } = entry.sprite.position
-            const w = entry.sprite.width
-            const h = entry.sprite.height
-            g.clear()
-            g.roundRect(x, y, w, h, 4)
-            g.stroke({ color: selectionColors.nodeOutline, width: 1.5 / (currentViewport.zoom || 1) })
-        }
-
-        scheduleRender()
     }
 
     function setMarqueeRect(worldRect: { x: number; y: number; width: number; height: number } | null): void {
@@ -983,8 +956,6 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         releaseAllDomOwnership()
         entries.clear()
         nodeElCache.clear()
-        for (const [, g] of selectionOutlines) { g.destroy() }
-        selectionOutlines.clear()
         marqueeGraphics?.destroy()
         marqueeGraphics = null
         groupOverlayGraphics?.destroy()

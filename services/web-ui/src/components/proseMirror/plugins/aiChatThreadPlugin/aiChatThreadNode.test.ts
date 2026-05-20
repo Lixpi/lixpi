@@ -109,7 +109,7 @@ describe('aiChatThreadNodeView — height survives update()', () => {
         const { nodeView } = createThreadNodeView()
         const dom = nodeView.dom as HTMLElement
 
-        // Simulate applyAnchoredImageSpacing growing the thread height
+        // Simulate a canvas layout pass growing the thread height.
     applyStyle(dom, { height: '800px' })
         expect(dom.style.height).toBe('800px')
 

@@ -37,6 +37,20 @@ function expectSourceNotToContain(source: string, snippet: string): void {
 	).toBe(false)
 }
 
+function expectExcerptToContain(excerpt: string, snippet: string, label = 'source excerpt'): void {
+	expect(
+		excerpt.includes(snippet),
+		`${label} should contain:\n${snippet}`
+	).toBe(true)
+}
+
+function expectExcerptNotToContain(excerpt: string, snippet: string, label = 'source excerpt'): void {
+	expect(
+		excerpt.includes(snippet),
+		`${label} should not contain:\n${snippet}`
+	).toBe(false)
+}
+
 function loadScss(): string {
 	return readSourceFile('workspace-canvas.scss')
 }
@@ -89,6 +103,30 @@ function extractBlock(scss: string, selector: string): string {
 	return scss.slice(match.index, end + 1)
 }
 
+function extractBlockContainingSelector(scss: string, selector: string): string {
+	const selectorIndex = scss.indexOf(selector)
+	if (selectorIndex === -1) return ''
+
+	const openIndex = scss.indexOf('{', selectorIndex)
+	if (openIndex === -1) return ''
+
+	let depth = 0
+	let end = openIndex
+
+	for (let i = openIndex + 1; i < scss.length; i++) {
+		if (scss[i] === '{') depth++
+		if (scss[i] === '}') {
+			if (depth === 0) {
+				end = i
+				break
+			}
+			depth--
+		}
+	}
+
+	return scss.slice(selectorIndex, end + 1)
+}
+
 function extractBoxShadowValues(block: string): string[] {
 	const matches = [...block.matchAll(/box-shadow:\s*([^;]+);/g)]
 	return matches.map(m => m[1].trim())
@@ -117,8 +155,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expect(extractBoxShadowValues(hoverImgBlock)).toHaveLength(0)
 	})
 
-	it('no is-selected or focus-within box-shadow override on any node', () => {
-		// No box-shadow should appear in selected/focus-within rules
+	it('keeps document selected/focus styling from adding box-shadow', () => {
 		expect(docNodeBlock).not.toMatch(/is-selected[\s\S]*?box-shadow/)
 		expect(docNodeBlock).not.toMatch(/focus-within[\s\S]*?box-shadow/)
 	})
@@ -128,30 +165,31 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expect(docNodeBlock).not.toContain('transition:box-shadow')
 	})
 
-	it('.workspace-image-node base has no top-level box-shadow, while anchored mode does', () => {
+	it('.workspace-image-node base has no top-level box-shadow', () => {
 		// The base .workspace-image-node container itself must not set a root box-shadow.
 		// Nested children such as provider badges may still have their own shadows.
-		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--anchored')[0]
+		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--context-region-child')[0]
 		expect(topLevelSection).not.toMatch(/^\s*box-shadow:/m)
-
-		// Anchored variant is allowed to have a shadow.
-		const anchoredBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--anchored')
-		const anchoredShadows = extractBoxShadowValues(anchoredBlock)
-		expect(anchoredShadows).toHaveLength(1)
 
 		// Nested provider badge shadow remains allowed.
 		const badgeBlock = extractBlock(imageNodeBlock, '.image-model-badge')
 		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(1)
 	})
 
+	it('uses a theme-configured shadow for selected image nodes', () => {
+		const selectedBlock = extractBlockContainingSelector(imageNodeBlock, '&.is-selected')
+		expectExcerptToContain(selectedBlock, 'box-shadow: var(--workspace-image-selected-box-shadow)', 'selected image selector block')
+		expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
+	})
+
 	it('scopes the context-region off-white frame to region child image nodes', () => {
 		const contextRegionBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--context-region-child')
-		expect(contextRegionBlock).toMatch(/background:\s*var\(--context-region-image-frame-color\)/)
-		expect(contextRegionBlock).toContain('box-shadow: 0 0 0 8px var(--context-region-image-frame-color)')
+		expect(contextRegionBlock).toMatch(/background:\s*var\(--workspace-image-context-region-child-image-frame-color\)/)
+		expect(contextRegionBlock).toContain('box-shadow: 0 0 0 8px var(--workspace-image-context-region-child-image-frame-color), var(--workspace-image-context-region-child-image-drop-shadow)')
 		expect(contextRegionBlock).not.toContain('#fff')
 		expect(contextRegionBlock).toContain('.image-node-img')
 
-		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--anchored')[0]
+		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--context-region-child')[0]
 		expect(topLevelSection).not.toContain('workspace-image-node--context-region-child')
 	})
 })
@@ -704,10 +742,12 @@ describe('AI chat region image frame', () => {
 	})
 
 	it('uses the theme-configured off-white frame color', () => {
-		expectSourceToContain(themeSettings, 'contextRegionImageFrameColor: string')
-		expectSourceToContain(themeSettings, "contextRegionImageFrameColor: '#FCFCFA'")
-		expectSourceNotToContain(themeSettings, "contextRegionImageFrameColor: '#fff'")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--context-region-image-frame-color', webUiThemeSettings.contextRegionImageFrameColor)")
+		expectSourceToContain(themeSettings, 'type WebUiImageNodeThemeSettings = {')
+		expectSourceToContain(themeSettings, 'contextRegionChildImageFrameColor: string')
+		expectSourceToContain(themeSettings, "contextRegionChildImageFrameColor: '#FCFCFA'")
+		expectSourceNotToContain(themeSettings, "contextRegionChildImageFrameColor: '#fff'")
+		expectSourceNotToContain(themeSettings, 'contextRegionImageFrameColor')
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', webUiThemeSettings.imageNode.contextRegionChildImageFrameColor)")
 	})
 
 	it('updates the frame immediately when an image is adopted into or released from a region', () => {
@@ -1069,11 +1109,9 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	// Click interaction rules
 	// -------------------------------------------------------------------------
 
-	it('plain click on node selects the node directly without resolving anchored images to parent thread', () => {
+	it('plain click on node selects the node directly', () => {
 		// The click handler must call selectNode(node.nodeId) — the original
-		// node, NOT getSelectionTargetNodeId(). This ensures that clicking an
-		// anchored image selects the image (showing its bubble menu), not the
-		// parent thread.
+		// node, with no pre-resolution through deprecated placement state.
 		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
 		expect(clickMatch).not.toBeNull()
 		const clickHandler = clickMatch![0]
@@ -1083,13 +1121,13 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(clickHandler).not.toContain('selectNode(getSelectionTargetNodeId')
 	})
 
-	it('generated output images stay independently selectable even if anchor metadata exists', () => {
-		const fnMatch = ts.match(/function\s+getSelectionTargetNodeId[\s\S]*?^    \}/m)
+	it('marquee selection stores intersected node ids directly', () => {
+		const fnMatch = ts.match(/function\s+getSelectableNodeIdsInRect[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('if (isGeneratedOutputImageNode(node)) return nodeId')
-		expect(fnBody.indexOf('if (isGeneratedOutputImageNode(node)) return nodeId')).toBeLessThan(fnBody.indexOf('getValidAnchorForCanvasImage'))
+		expect(fnBody).toContain('selectedNodeIdsInRect.add(node.nodeId)')
+		expect(fnBody).not.toContain('getSelectionTargetNodeId')
 	})
 
 	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
@@ -1115,21 +1153,20 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(editorCheckIndex).toBeLessThan(selectNodeIndex)
 	})
 
-	it('Mod-click still triggers selection toggling even inside editor content', () => {
-		// Mod-click must always toggle selection, so the isModSelectionEvent
-		// check is in the click handler alongside the editor bypass
+	it('Mod-click triggers selection toggling from node chrome', () => {
+		// Mod-click on node chrome toggles selection from the click handler.
 		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
 		expect(clickMatch).not.toBeNull()
 		const clickHandler = clickMatch![0]
 
-		expect(clickHandler).toContain('if (isModSelectionEvent(e))')
-		expect(clickHandler).toContain('toggleNodeSelection(selectionTargetNodeId)')
+		expectExcerptToContain(clickHandler, 'if (isModSelectionEvent(e))', 'node click handler')
+		expectExcerptToContain(clickHandler, 'toggleNodeSelection(node.nodeId)', 'node click handler')
 	})
 
 	it('supports Mod-click selection toggling on both node click and drag overlay mousedown', () => {
 		expectSourceToContain(ts, 'function isModSelectionEvent(event: MouseEvent): boolean')
 		expectSourceToContain(ts, 'return event.metaKey || event.ctrlKey')
-		expectSourceToContain(ts, 'toggleNodeSelection(selectionTargetNodeId)')
+		expectSourceToContain(ts, 'toggleNodeSelection(node.nodeId)')
 		expectSourceToContain(ts, 'toggleNodeSelection(resolvedNodeId)')
 	})
 
@@ -1254,6 +1291,13 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(scss).toMatch(/var\(--selection-outline-color/)
 	})
 
+	it('wires image theme settings from webUiThemeSettings to CSS custom properties', () => {
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', webUiThemeSettings.imageNode.selectedBoxShadow)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', webUiThemeSettings.imageNode.contextRegionChildImageFrameColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', webUiThemeSettings.imageNode.contextRegionChildImageDropShadow)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', webUiThemeSettings.imageNode.modelBadgeBoxShadow)")
+	})
+
 	// -------------------------------------------------------------------------
 	// Marquee selection
 	// -------------------------------------------------------------------------
@@ -1366,25 +1410,9 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnBody).toContain('suspendPanZoomForNodePointer(hitNodeId)')
 	})
 
-	// -------------------------------------------------------------------------
-	// Anchored AI image resolution
-	// -------------------------------------------------------------------------
-
-	it('maps anchored AI-chat images to parent thread for marquee and resolves inside handleDragStart', () => {
-		// getSelectionTargetNodeId is used in marquee hit-testing and inside
-		// handleDragStart, but NOT in the nodeEl click handler
-		expectSourceToContain(ts, 'function getSelectionTargetNodeId(nodeId: string): string')
-		expectSourceToContain(ts, 'const anchor = getValidAnchorForCanvasImage(nodeId)')
-		expectSourceToContain(ts, 'selectedNodeIdsInRect.add(getSelectionTargetNodeId(node.nodeId))')
-		expectSourceToContain(ts, 'resolveSelectionTargetNodeId: getSelectionTargetNodeId')
-		expectSourceToContain(ts, 'isAnchoredImageNode: (candidateNodeId: string) => Boolean(getValidAnchorForCanvasImage(candidateNodeId))')
-		expectSourceToContain(ts, 'getAnchorsForThread: getValidAnchorsForCanvasThread')
-		expectSourceToContain(ts, 'const resolvedNodeId = dragPlan.resolvedNodeId')
-	})
-
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
 		// The drag overlay must pass the original nodeId so handleDragStart can
-		// resolve it internally and also preserve the original for the click path
+		// preserve the original for the click path.
 		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId,')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
@@ -1431,32 +1459,14 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, "node.type === 'aiChatThread' && hiddenEmptyThreadNodeIds.has(node.nodeId) && rectsOverlap(rect, getSelectionBoundsForNode(node))")
 	})
 
-	it('includes anchored AI images for thread selection overlay bounds but not for context-region overlay bounds', () => {
-		const fnMatch = ts.match(/function\s+getSelectionOverlayBounds\(\): Rect \| null[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		const selectedNodeIndex = fnBody.indexOf('const selectedNode = nodesById.get(nodeId)')
-		const contextRegionContinueIndex = fnBody.indexOf('if (selectedNode && isContextRegionCanvasNode(selectedNode)) continue')
-		const anchorLoopIndex = fnBody.indexOf('for (const anchor of getValidAnchorsForCanvasThread(nodeId)) {')
-
-		expect(selectedNodeIndex).toBeGreaterThanOrEqual(0)
-		expect(contextRegionContinueIndex).toBeGreaterThan(selectedNodeIndex)
-		expect(anchorLoopIndex).toBeGreaterThan(contextRegionContinueIndex)
-		expect(fnBody).toContain('overlayNodeIds.add(anchor.imageNodeId)')
-		expect(fnBody).toContain('const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)')
-	})
-
 	// -------------------------------------------------------------------------
 	// Deferred selection in handleDragStart (regression: overlay stealing clicks)
 	// -------------------------------------------------------------------------
 
-	it('defers selection in handleDragStart so the overlay does not steal mouseup from anchored images', () => {
+	it('defers selection in handleDragStart so the overlay does not steal mouseup', () => {
 		// REGRESSION GUARD: the selection overlay (z-index 10000) must not
-		// appear between mousedown and mouseup when clicking an anchored image.
-		// If selectNode(resolvedNodeId) ran on mousedown, the overlay would
-		// appear instantly and intercept mouseup, preventing the image from
-		// being selected and its bubble menu from appearing.
+		// appear between mousedown and mouseup. If selectNode(resolvedNodeId)
+		// ran on mousedown, the overlay could intercept mouseup/click.
 		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
@@ -1470,8 +1480,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(fnBody, 'if (allowSelection && !wasAlreadySelected) {')
 		expectSourceToContain(fnBody, 'selectNode(resolvedNodeId)')
 
-		// On mouseup without movement (click) → select the original nodeId
-		// so clicking an anchored image selects the image, not the thread
+		// On mouseup without movement (click) → select the original nodeId.
 		expectSourceToContain(fnBody, 'selectNode(nodeId)')
 	})
 
@@ -1574,16 +1583,10 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		expect(bailOutIndex).toBeLessThan(selectNodeIndex)
 	})
 
-	it('REGRESSION: clicking anchored image must select the IMAGE (not parent thread)', () => {
-		// Root cause: nodeEl click handler called
-		// selectNode(getSelectionTargetNodeId(node.nodeId)) which resolved
-		// anchored images to their parent thread. This meant clicking an
-		// anchored image selected the thread instead, and the image bubble
-		// menu never appeared.
-		//
+	it('REGRESSION: clicking an image node selects the image node directly', () => {
 		// Invariant: click handler must call selectNode(node.nodeId) with
-		// the original nodeId, never pre-resolving through
-		// getSelectionTargetNodeId
+		// the original nodeId, never pre-resolving through deprecated
+		// generated-image placement state.
 		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
 		expect(clickMatch).not.toBeNull()
 		const clickHandler = clickMatch![0]
@@ -1607,11 +1610,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 
 	it('REGRESSION: handleDragStart must NOT select on mousedown (deferred selection)', () => {
 		// Root cause: handleDragStart immediately called selectNode(resolvedNodeId)
-		// on mousedown. For anchored images, resolvedNodeId = parent thread.
-		// Selecting the thread caused shouldShowSelectionGroupOverlay to return
-		// true (AI chat thread special case), showing the overlay at z-index 10000.
-		// The overlay intercepted mouseup, so the image click handler never fired,
-		// preventing bubble menu from appearing.
+		// on mousedown. That could show the overlay at z-index 10000 and
+		// intercept mouseup before the click path ran.
 		//
 		// Invariant: selection must be deferred:
 		//   - On drag movement → selectNode(resolvedNodeId) for group drag
@@ -1650,21 +1650,11 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 
 	it('REGRESSION: generated output images are not adopted into context regions on drag release', () => {
 		expectSourceToContain(ts, 'canAdoptNodeIntoContextRegion,')
-		expectSourceToContain(ts, `} from '$src/infographics/workspace/workspaceAnchoredImagePlan.ts'`)
+		expectSourceToContain(ts, `} from '$src/infographics/workspace/workspaceImageNodePlan.ts'`)
 
 		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		expect(fnMatch![0]).toContain('if (canAdoptNodeIntoContextRegion(node))')
-		expect(fnMatch![0]).toContain("classList.remove('workspace-image-node--anchored')")
-	})
-
-	it('REGRESSION: generated images with connector edges are not rehydrated as anchored images', () => {
-		expectSourceToContain(ts, 'canUseLegacyAnchorForImage,')
-		expectSourceToContain(ts, 'filterValidAnchorsForThread,')
-		expectSourceToContain(ts, 'anchoredImageManager.clear()')
-		expectSourceToContain(ts, 'if (!canUseLegacyAnchorForImage({')
-		expectSourceToContain(ts, 'const { validAnchors, staleAnchors } = filterValidAnchorsForThread({')
-		expectSourceToContain(ts, 'removeStaleAnchors(staleAnchors)')
 	})
 })
 

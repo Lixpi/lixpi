@@ -66,11 +66,9 @@ All of this happens without the Svelte component knowing the details. It just pa
     - **Menu-driven connect snap** — the image-node “Connect to node” action snaps against that same full rail geometry, including the floating input area for empty threads, and only commits the edge on mouse release so the snap preview is visible before creation. The snap distance is configurable via `webUiSettings.menuConnectionSnapRadius`
     - **Floating panel resize** — the canvas-owned AI chat panel reuses the same full-height outer rail on its left edge as the horizontal resize target. Dragging that rail changes `--workspace-ai-chat-sidebar-width`, keeping the panel right edge fixed and preserving the zoom indicator offset
     - The horizontal offset from the node edge is configurable via `aiChatThreadRailOffset` in `webUiThemeSettings.ts` (default -2px). Negative values move the rail inside the node boundary; the rail is rendered at z-index 9990 (above all nodes, below floating inputs) to ensure it stays visible regardless of node layering
-- **AI-generated images** can appear in two modes controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
-        - **Anchored mode** (setting = `false` without a persisted connector edge): Images are separate canvas nodes that visually overlap the right side of the AI chat thread node. Width is constrained to roughly 68% of the thread width, and each image is continuously re-aligned to the target response bubble as streamed text changes message proportions. The image moves with the thread during drag, and can be detached by dragging its center outside the thread bounds. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image/thread pairs. Messages below an anchored image are pushed down via `applyAnchoredImageSpacing()` which sets `marginBottom` on the response message wrapper; this requires `ignoreMutation()` in the NodeViews (`aiResponseMessageNode`, `aiChatThreadNode`) to return `true` for style attribute mutations so ProseMirror's MutationObserver doesn't wipe the externally-set styles.
-        - **Connector line mode** (setting = `true`, or any generated image with a persisted connector edge): Images appear as independent canvas nodes positioned to the right of the thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image. Generated output images stay freely draggable and are not adopted into context regions during drag release.
-        - In both modes, progressive partial previews update the canvas node in real-time during generation, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
-    - Drag membership is planned by `workspaceDragPlan.ts`, so context-region drags move only the region and real `parentId` descendants. Legacy anchored-image eligibility is planned by `workspaceAnchoredImagePlan.ts`, which keeps connector-backed generated outputs independent even if stale in-memory anchor state exists.
+- **AI-generated images** appear as independent canvas nodes positioned to the right of the source thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image. Generated output images stay freely draggable and are not adopted into context regions during drag release.
+        - Progressive partial previews update the canvas node in real-time during generation, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
+    - Drag membership is planned by `workspaceDragPlan.ts`, so context-region drags move only the region and real `parentId` descendants. Generated-image adoption rules live in `workspaceImageNodePlan.ts`, which keeps generated outputs independent unless a future interaction model explicitly makes them real region children.
         - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active AI chat panel emits a stale metadata render while a local drag commit is still waiting for store acknowledgement, the canvas preserves the locally committed node and edge positions until the store acknowledges the visual state.
 
     ### Context Region Nodes
@@ -266,20 +264,17 @@ Node selection is runtime-only UI state and is not persisted into `canvasState`.
 | Plain click on empty space | Clears the selection |
 | Mod-click on node | Toggles that node in/out of the selection |
 | Click on ProseMirror editor content | Passes through to the editor — no selection change, no resize handles |
-| Click on anchored AI image | Selects the **image** (not the parent thread), showing the image bubble menu |
 | Hover a node corner | Shows only that corner's resize handle |
 
 **Editor content bypass:** The `nodeEl` click handler checks `isContentEditable`, `.ProseMirror`, and `.ai-chat-thread-wrapper` and bails out before reaching `selectNode`. This prevents clicks inside AI chat thread content from triggering node selection UI (resize handles, outline), which would block text editing. Mod-click still fires through the bypass to allow toggling selection.
 
-**Anchored image click resolution:** The click handler calls `selectNode(node.nodeId)` with the original node ID — it does **not** use `getSelectionTargetNodeId()`. This ensures that clicking an anchored image selects the image itself rather than resolving to the parent thread.
-
 **Context region layering:** Context regions are background containers, not foreground nodes. Their visible cloud surface is drawn by `.workspace-pixi-context-region-layer` below the DOM viewport. The transparent DOM proxy still uses the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while empty-region clicks are handled by PIXI cloud hit-testing on the pane background path. Region proxy nodes do not create DOM resize handles; hovering the cloud silhouette edge shows a resize cursor and starts resize from the matching edge sector. Sizing changes also come from persisted node dimensions and automatic expansion to fit children.
 
-**Context region image frame:** Image nodes whose `parentId` points to a context region receive `.workspace-image-node--context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.contextRegionImageFrameColor` and defaults to the slightly off-white `#FCFCFA`. Images outside a context region keep the base transparent image styling.
+**Context region image frame:** Image nodes whose `parentId` points to a context region receive `.workspace-image-node--context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.imageNode.contextRegionChildImageFrameColor` and defaults to the slightly off-white `#FCFCFA`. Images outside a context region keep the base transparent image styling.
 
 #### Marquee Selection
 
-Empty-space drag draws a marquee rectangle and selects all overlapping nodes. During marquee hit-testing, anchored AI images resolve to their parent thread via `getSelectionTargetNodeId()`. Context regions use the CO2 cloud silhouette for marquee intersection, not the transparent rectangular DOM proxy.
+Empty-space drag draws a marquee rectangle and selects all overlapping nodes. Context regions use the CO2 cloud silhouette for marquee intersection, not the transparent rectangular DOM proxy.
 
 **Empty AI chat threads** (no messages yet) are included in marquee selection. Although the thread node itself is hidden, its floating input is visible and the selection bounds for hidden threads use only the floating input's dimensions — not the invisible thread area. This prevents phantom selection over areas the user cannot see.
 
@@ -302,7 +297,7 @@ Region-only selections suppress the rectangular group overlay and use PIXI cloud
 
 `handleDragStart` does **not** select nodes immediately on mousedown. Instead it records `wasAlreadySelected` and defers selection:
 
-- **On drag movement** — selects `resolvedNodeId` (parent thread for anchored images) for group drag.
+- **On drag movement** — selects `resolvedNodeId` for group drag.
 - **On mouseup without movement (click)** — selects the original `nodeId` (the image itself).
 
 This prevents the selection overlay from appearing between mousedown and mouseup, which would intercept the mouseup event and break the image click flow.
@@ -313,7 +308,7 @@ The drag overlay passes `node.nodeId` (not pre-resolved) to `handleDragStart` so
 
 Dragging any selected draggable node moves the entire selection together. During group drag:
 
-- AI chat thread companion UI (vertical rail, floating input, anchored images) stays attached to its thread
+- AI chat thread companion UI (vertical rail and floating input) stays attached to its thread
 - Collision resolution is skipped for multi-node moves to preserve rigid spacing
 - The follow-up click event is suppressed so multi-selection is not collapsed to a single node after drag
 
@@ -423,8 +418,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, the `workspace-image-node--pixi-owned` opacity rule, and the transparent context-region proxy |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
-| `imagePositioning.ts` | Computes image placement positions (next-to-thread and overlapping-thread modes) |
-| `anchoredImageManager.ts` | Tracks which images are anchored to which threads; manages anchor lifecycle |
+| `imagePositioning.ts` | Computes generated image placement positions next to source threads |
+| `workspaceImageNodePlan.ts` | Pure helpers for generated image node adoption rules |
 | `nodeLayering.ts` | Z-index management for bringing nodes to front |
 
 ## CSS Classes
@@ -447,7 +442,6 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
 | `.image-node-img` | The DOM `<img>` element used for partial-streaming during AI image generation; stored image nodes keep it source-less so PIXI is the only stored-image pixel renderer |
 | `.workspace-image-node--pixi-owned` | Class added by `pixiMediaLayer` while PIXI is rendering this image. Sets `opacity: 0` on `.image-node-img` so the PIXI sprite is the only visible surface |
-| `.workspace-image-node--anchored` | Image node overlapping its AI chat thread (anchored mode) |
 | `.workspace-image-node--context-region-child` | Image node contained by a context region, with the region-only off-white frame |
 | `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
 | `.workspace-thread-rail__line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |

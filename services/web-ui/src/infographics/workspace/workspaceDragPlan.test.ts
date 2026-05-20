@@ -1,8 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import type { CanvasNode, ContextRegionCanvasNode, ImageCanvasNode, DocumentCanvasNode } from '@lixpi/constants'
 
 import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceDragPlan.ts'
-import type { AnchoredImageEntry } from '$src/infographics/workspace/anchoredImageManager.ts'
 
 // =============================================================================
 // HELPERS
@@ -44,33 +43,15 @@ function makeDocument(overrides: Partial<DocumentCanvasNode> & { nodeId: string 
     }
 }
 
-function makeAnchor(imageNodeId: string, threadNodeId: string): AnchoredImageEntry {
-    return {
-        imageNodeId,
-        threadNodeId,
-        threadReferenceId: `thread-${threadNodeId}`,
-        responseMessageId: `response-${imageNodeId}`,
-        imageHeight: 120,
-    }
-}
-
 function plan(overrides: {
     nodes: CanvasNode[]
     primaryNodeId: string
     selectedNodeIds?: Set<string>
-    anchoredNodeIds?: Set<string>
-    anchorsByThreadId?: Map<string, AnchoredImageEntry[]>
 }) {
-    const anchoredNodeIds = overrides.anchoredNodeIds ?? new Set<string>()
-    const anchorsByThreadId = overrides.anchorsByThreadId ?? new Map<string, AnchoredImageEntry[]>()
-
     return computeWorkspaceDragPlan({
         nodes: overrides.nodes,
         primaryNodeId: overrides.primaryNodeId,
         selectedNodeIds: overrides.selectedNodeIds ?? new Set<string>(),
-        resolveSelectionTargetNodeId: (nodeId) => nodeId,
-        isAnchoredImageNode: (nodeId) => anchoredNodeIds.has(nodeId),
-        getAnchorsForThread: (threadNodeId) => anchorsByThreadId.get(threadNodeId) ?? [],
     })
 }
 
@@ -107,20 +88,24 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         expect(result.draggedNodeIds).not.toContain('connected-image')
     })
 
-    it('does not move anchored/generated output images with context regions', () => {
+    it('does not move generated output images with context regions', () => {
         const region = makeRegion({ nodeId: 'region-1' })
-        const outputImage = makeImage({ nodeId: 'output-image', position: { x: 640, y: 100 } })
-        const anchorsByThreadId = new Map([
-            ['region-1', [makeAnchor('output-image', 'region-1')]],
-        ])
+        const outputImage = makeImage({
+            nodeId: 'output-image',
+            position: { x: 640, y: 100 },
+            generatedBy: {
+                aiChatThreadId: 'thread-region-1',
+                responseId: 'response-1',
+                aiModel: 'openai:gpt-4o' as any,
+                responseMessageId: 'message-1',
+            },
+        })
 
         const result = plan({
             nodes: [region, outputImage],
             primaryNodeId: 'region-1',
-            anchorsByThreadId,
         })
 
-        expect(result.moveAnchoredImageIds).toEqual([])
         expect(result.draggedNodeIds).toEqual(['region-1'])
     })
 
@@ -167,7 +152,6 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         })
 
         expect(result.draggedNodeIds).toEqual(['active-region'])
-        expect(result.moveAnchoredImageIds).toEqual([])
         expect(result.allowCollisionResolution).toBe(false)
     })
 
@@ -183,7 +167,6 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
 
         expect(result.resolvedNodeId).toBe('region-b')
         expect(result.draggedNodeIds).toEqual(['region-a', 'region-b'])
-        expect(result.moveAnchoredImageIds).toEqual([])
         expect(result.allowProximityConnection).toBe(false)
         expect(result.allowCollisionResolution).toBe(false)
     })
@@ -203,7 +186,6 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
 
         expect(result.draggedNodeIds).toEqual(['region-a', 'region-b', 'child-b', 'child-a'])
         expect(result.draggedNodeIds).not.toContain('unrelated-leaf')
-        expect(result.moveAnchoredImageIds).toEqual([])
     })
 
     it('moves mixed selected groups that include a context region without pulling generated outputs', () => {
@@ -228,7 +210,6 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
 
         expect(result.draggedNodeIds).toEqual(['region-1', 'doc-1'])
         expect(result.draggedNodeIds).not.toContain('generated-output')
-        expect(result.moveAnchoredImageIds).toEqual([])
         expect(result.allowCollisionResolution).toBe(false)
     })
 
@@ -249,55 +230,30 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
 // =============================================================================
 
 describe('computeWorkspaceDragPlan — non-region drags', () => {
-    it('keeps legacy anchored images coupled to non-region selected nodes', () => {
+    it('moves only the selected non-region node by default', () => {
         const doc = makeDocument({ nodeId: 'doc-1' })
-        const image = makeImage({ nodeId: 'anchored-image' })
-        const anchorsByThreadId = new Map([
-            ['doc-1', [makeAnchor('anchored-image', 'doc-1')]],
-        ])
+        const image = makeImage({ nodeId: 'image-1' })
 
         const result = plan({
             nodes: [doc, image],
             primaryNodeId: 'doc-1',
-            anchorsByThreadId,
         })
 
         expect(result.draggedNodeIds).toEqual(['doc-1'])
-        expect(result.moveAnchoredImageIds).toEqual(['anchored-image'])
         expect(result.allowProximityConnection).toBe(true)
         expect(result.allowCollisionResolution).toBe(true)
     })
 
-    it('filters anchored images out of selected drag sets', () => {
+    it('keeps ordinary selected images in selected drag sets', () => {
         const doc = makeDocument({ nodeId: 'doc-1' })
-        const anchoredImage = makeImage({ nodeId: 'anchored-image' })
+        const image = makeImage({ nodeId: 'image-1' })
 
         const result = plan({
-            nodes: [doc, anchoredImage],
+            nodes: [doc, image],
             primaryNodeId: 'doc-1',
-            selectedNodeIds: new Set(['doc-1', 'anchored-image']),
-            anchoredNodeIds: new Set(['anchored-image']),
+            selectedNodeIds: new Set(['doc-1', 'image-1']),
         })
 
-        expect(result.draggedNodeIds).toEqual(['doc-1'])
-    })
-
-    it('uses the injected selection target resolver for anchored-image drag starts', () => {
-        const doc = makeDocument({ nodeId: 'doc-1' })
-        const anchoredImage = makeImage({ nodeId: 'anchored-image' })
-        const resolveSelectionTargetNodeId = vi.fn((nodeId: string) => nodeId === 'anchored-image' ? 'doc-1' : nodeId)
-
-        const result = computeWorkspaceDragPlan({
-            nodes: [doc, anchoredImage],
-            primaryNodeId: 'anchored-image',
-            selectedNodeIds: new Set<string>(),
-            resolveSelectionTargetNodeId,
-            isAnchoredImageNode: (nodeId) => nodeId === 'anchored-image',
-            getAnchorsForThread: () => [],
-        })
-
-        expect(resolveSelectionTargetNodeId).toHaveBeenCalledWith('anchored-image')
-        expect(result.resolvedNodeId).toBe('doc-1')
-        expect(result.draggedNodeIds).toEqual(['doc-1'])
+        expect(result.draggedNodeIds).toEqual(['doc-1', 'image-1'])
     })
 })
