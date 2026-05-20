@@ -1056,10 +1056,7 @@ When nodes are connected TO an AI chat thread (incoming edges), the AI chat auto
 
 ## AI Image Generation
 
-This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears as a canvas node. Two placement modes are available, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
-
-- **Anchored mode** (default, setting = `false`): The image visually overlaps the AI chat thread node, positioned side-by-side to the right of the AI response message text. The image takes approximately 48% of the thread width and is vertically aligned with the top of the response message. The image moves with the thread during drag, and can be detached by dragging its center outside the thread bounds. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image/thread pairs. Resize constraints prevent the image from exceeding ~48% of the thread width.
-- **Connector line mode** (setting = `true`): The image appears to the right of the thread, connected by an edge whose `sourceMessageId` links it to the specific `aiResponseMessage` that produced it. Multiple images stack vertically with 30px gaps.
+This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears as a separate canvas image node connected by an edge whose `sourceMessageId` links it to the specific `aiResponseMessage` that produced it. Multiple generated images stack vertically to the right of the source thread with 30px gaps.
 
 In both modes, the revised prompt text is inserted as text inside the AI response message to keep the conversation readable.
 
@@ -1072,9 +1069,9 @@ Multi-turn editing is supported: users can continue refining an image within the
 3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
 4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with an animated gradient border and a three-dot bounce spinner
 5. OpenAI streams back partial images (up to 3) as the generation progresses. The first real partial removes the spinner; subsequent partials update the image progressively
-6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, and finalizes the canvas node with full metadata. In connector line mode, an edge (including `sourceMessageId`) connects the AI response to the image. In anchored mode, the image is positioned at the right side of the thread, aligned with the response message top.
+6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, finalizes the canvas node with full metadata, and updates the edge with `sourceMessageId` so the connector points back to the producing AI response.
 7. The revised prompt text appears inside the AI response message in the chat thread
-8. In connector line mode, multiple images stack vertically to the right with 30px gaps. In anchored mode, images overlap the right half of the thread alongside their source response text.
+8. Multiple generated images stack vertically to the right with 30px gaps.
 
 ### Data Flow
 

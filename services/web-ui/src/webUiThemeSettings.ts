@@ -25,6 +25,13 @@ export type ContextRegionCloudThemeStyle = {
     seed: number
 }
 
+export type WebUiImageNodeThemeSettings = {
+    selectedBoxShadow: string
+    contextRegionChildImageFrameColor: string
+    contextRegionChildImageDropShadow: string
+    modelBadgeBoxShadow: string
+}
+
 export type WebUiThemeSettings = {
     aiResponseMessageBubbleColor: string
     aiChatThreadNodeBoxShadow: string
@@ -49,6 +56,7 @@ export type WebUiThemeSettings = {
     // context selection).
     // Hex strings. The shifting gradient renderer converts these to RGB internally.
     shiftingGradientColors: [string, string, string, string]
+    imageNode: WebUiImageNodeThemeSettings
 
 
     // Context region cloud visual settings.
@@ -78,7 +86,6 @@ export type WebUiThemeSettings = {
     contextRegionCloudTitlePaddingX: number
     contextRegionCloudTitleMinX: number
     contextRegionCloudTitleGap: number
-    contextRegionImageFrameColor: string
 }
 
 const brandColors = {
@@ -148,6 +155,14 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     // Dreamy sky pastel palette — whisper pink, lavender, periwinkle, orchid.
     shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
 
+    // Canvas image node styles
+    imageNode: {
+        selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+        contextRegionChildImageFrameColor: '#FCFCFA',
+        contextRegionChildImageDropShadow: '0 10px 24px rgba(31, 49, 42, 0.16), 0 1px 2px rgba(31, 49, 42, 0.08)',
+        modelBadgeBoxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+    },
+
 
     // Context region cloud visual settings.
     // Pale seafoam palette fit to the region backdrop in gradient-sample.png.
@@ -190,5 +205,4 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     contextRegionCloudTitlePaddingX: 20,
     contextRegionCloudTitleMinX: 22,
     contextRegionCloudTitleGap: 10,
-    contextRegionImageFrameColor: '#FCFCFA',
 }

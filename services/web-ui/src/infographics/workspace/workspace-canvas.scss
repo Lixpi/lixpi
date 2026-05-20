@@ -616,21 +616,10 @@
         cursor: move;
     }
 
-    // Anchored mode: image overlaps the AI chat thread node
-    &.workspace-image-node--anchored {
-        pointer-events: auto;
-        border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-
-        .image-node-img {
-            border-radius: 6px;
-        }
-    }
-
     &.workspace-image-node--context-region-child {
-        background: var(--context-region-image-frame-color);
+        background: var(--workspace-image-context-region-child-image-frame-color);
         border-radius: 8px;
-        box-shadow: 0 0 0 8px var(--context-region-image-frame-color), 0 10px 24px rgba(31, 49, 42, 0.16), 0 1px 2px rgba(31, 49, 42, 0.08);
+        box-shadow: 0 0 0 8px var(--workspace-image-context-region-child-image-frame-color), var(--workspace-image-context-region-child-image-drop-shadow);
 
         .image-node-img {
             border-radius: 6px;
@@ -655,6 +644,12 @@
         }
     }
 
+    &.is-selected,
+    &.workspace-image-node--pixi-owned.is-selected,
+    &.workspace-image-node--context-region-child.is-selected {
+        box-shadow: var(--workspace-image-selected-box-shadow);
+    }
+
     .image-node-img {
         display: block;
         width: 100%;
@@ -677,7 +672,7 @@
         justify-content: center;
         pointer-events: none;
         z-index: 4;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--workspace-image-model-badge-box-shadow);
 
         svg {
             width: 14px;
