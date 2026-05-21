@@ -165,11 +165,9 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expect(docNodeBlock).not.toContain('transition:box-shadow')
 	})
 
-	it('.workspace-image-node base has no top-level box-shadow', () => {
-		// The base .workspace-image-node container itself must not set a root box-shadow.
-		// Nested children such as provider badges may still have their own shadows.
+	it('.workspace-image-node base uses the theme-configured default box-shadow', () => {
 		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--context-region-child')[0]
-		expect(topLevelSection).not.toMatch(/^\s*box-shadow:/m)
+		expect(topLevelSection).toMatch(/^\s*box-shadow:\s*var\(--workspace-image-default-box-shadow\);/m)
 
 		// Nested provider badge shadow remains allowed.
 		const badgeBlock = extractBlock(imageNodeBlock, '.image-model-badge')
@@ -218,9 +216,19 @@ describe('PIXI media layer — first sync geometry', () => {
 		expect(fnBody).toContain('entry.sprite.width = w')
 		expect(fnBody).toContain('entry.sprite.height = h')
 		expect(fnBody).toContain('entry.colorRect.position.set(x, y)')
+		expect(fnBody).toContain('syncSpriteMask(entry, x, y, w, h)')
 		expect(fnBody).toContain('drawColorRect(entry.colorRect, w, h)')
 		expect(fnBody).toContain('entry.colorRectW = w')
 		expect(fnBody).toContain('entry.colorRectH = h')
+	})
+
+	it('clips PIXI image sprites with the configured image border radius', () => {
+		expectSourceToContain(ts, "import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'")
+		expectSourceToContain(ts, 'webUiThemeSettings.imageNode.borderRadius')
+		expectSourceToContain(ts, 'sprite.mask = spriteMask')
+		expectSourceToContain(ts, 'function syncSpriteMask(entry: PixiImageEntry')
+		expectSourceToContain(ts, 'entry.spriteMask.roundRect(0, 0, width, height, radius)')
+		expectSourceToContain(ts, 'rect.roundRect(0, 0, width, height, getImageBorderRadius(width, height))')
 	})
 
 	it('supports optional fill for selection overlays', () => {
@@ -1299,10 +1307,13 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('wires image theme settings from webUiThemeSettings to CSS custom properties', () => {
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', webUiThemeSettings.imageNode.defaultBoxShadow)")
 		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', webUiThemeSettings.imageNode.selectedBoxShadow)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${webUiThemeSettings.imageNode.borderRadius}px`)")
 		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', webUiThemeSettings.imageNode.contextRegionChildImageFrameColor)")
 		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', webUiThemeSettings.imageNode.contextRegionChildImageDropShadow)")
 		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', webUiThemeSettings.imageNode.modelBadgeBoxShadow)")
+		expect(scss).toMatch(/border-radius:\s*var\(--workspace-image-border-radius\)/)
 	})
 
 	// -------------------------------------------------------------------------
@@ -1560,6 +1571,14 @@ describe('Workspace canvas — collision resolution ownership', () => {
 		expectSourceToContain(ts, 'nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, positionedNode]),')
 		expectSourceToContain(ts, 'onCanvasStateChange?.(newCanvasState)')
 		expectSourceNotToContain(ts, 'screenDimensionsToWorldDimensions(node.dimensions')
+	})
+
+	it('uses the image-node theme width for toolbar image insertion sizing', () => {
+		expectSourceToContain(svelte, 'const width = webUiThemeSettings.imageNode.defaultInsertionWidth')
+		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(aspectRatio)')
+		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(1)')
+		expectSourceNotToContain(svelte, 'const maxWidth = 400')
+		expectSourceNotToContain(svelte, 'FALLBACK_IMAGE_DIMENSIONS')
 	})
 
 	it('builds shape-aware collision boxes around context-region cloud bounds', () => {
