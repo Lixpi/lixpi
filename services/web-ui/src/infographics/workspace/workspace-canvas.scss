@@ -604,7 +604,8 @@
 
 .workspace-image-node {
     background: transparent;
-    border-radius: 4px;
+    border-radius: var(--workspace-image-border-radius);
+    box-shadow: var(--workspace-image-default-box-shadow);
     overflow: visible;
     padding: 0;
 
@@ -628,15 +629,16 @@
 
     // The PIXI media layer owns image pixels. The DOM node still owns all
     // interaction chrome: drag overlay, resize handles, generation border,
-    // spinner, and provider badge. All visible frame/background styling is
-    // stripped so PIXI pixels are the only visible surface.
+    // spinner, and provider badge. Frame/background styling is stripped so
+    // PIXI pixels are the only visible image surface; the node shadow remains
+    // DOM-owned so it can sit behind the PIXI sprite.
     &.workspace-image-node--pixi-owned {
         background: transparent;
-        box-shadow: none;
+        box-shadow: var(--workspace-image-default-box-shadow);
 
         &.workspace-image-node--context-region-child {
             background: transparent;
-            box-shadow: none;
+            box-shadow: var(--workspace-image-default-box-shadow);
         }
 
         .image-node-img {
@@ -655,7 +657,7 @@
         width: 100%;
         height: auto;
         max-width: none;
-        border-radius: 4px;
+        border-radius: var(--workspace-image-border-radius);
         pointer-events: none;
     }
 
