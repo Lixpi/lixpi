@@ -46,6 +46,7 @@ export type WebUiContextRegionThemeSettings = {
 export type WebUiImageBranchLineageThemeSettings = {
     generatedImageSize: number
     contextRegionOutputGap: number
+    branchToBranchGap: number
     imageToImageGap: number
 }
 
@@ -283,6 +284,8 @@ export const webUiThemeSettings: WebUiThemeSettings = {
         generatedImageSize: 800,
         // Canvas-unit horizontal gap between a context-region cloud's visual bounds and the first generated image in that branch. Increasing it moves first outputs farther right.
         contextRegionOutputGap: 384,
+        // Canvas-unit vertical gap between separate branch rows spawned from the same context region. Increasing it moves new branches farther below the previous branch.
+        branchToBranchGap: 160,
         // Canvas-unit horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches image-to-image branch spacing.
         imageToImageGap: 192,
     },

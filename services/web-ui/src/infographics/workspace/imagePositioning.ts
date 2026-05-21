@@ -93,6 +93,21 @@ export function computeStackedPositionToRightOfRect(
     }
 }
 
+export function computeNextBranchRowPositionToRightOfRect(
+    rect: RectLike,
+    previousBranchRect: RectLike | undefined,
+    itemHeight: number,
+    horizontalGap: number,
+    verticalGap: number
+): Point {
+    return {
+        x: rect.x + rect.width + horizontalGap,
+        y: previousBranchRect
+            ? previousBranchRect.y + Math.max(previousBranchRect.height, itemHeight) + verticalGap
+            : rect.y,
+    }
+}
+
 export function computeImagePositionNextToThread(
     threadNode: AiChatThreadCanvasNode,
     existingImageCount: number,
