@@ -36,7 +36,7 @@ import { getCanvasChromeZoomMultiplier, getResizeHandleScaledSizes } from '$src/
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import {
-    computeStackedPositionToRightOfRect,
+    computeNextBranchRowPositionToRightOfRect,
     computeViewportCenterInsertionPosition,
 } from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
@@ -756,13 +756,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
         const regionDatum = getContextRegionCloudDatum(region, threadMap.get(region.referenceId), nodesById)
         const cloudBounds = getContextRegionCloudBounds(regionDatum)
-        const gap = webUiThemeSettings.imageBranchLineage.contextRegionOutputGap
-        const existingOutputs = nodes.filter((node: CanvasNode) => {
-            if (node.type !== 'image' || node.parentId) return false
-            return (node as ImageCanvasNode).generatedBy?.aiChatThreadId === region.referenceId
-        })
+        const horizontalGap = webUiThemeSettings.imageBranchLineage.contextRegionOutputGap
+        const verticalGap = webUiThemeSettings.imageBranchLineage.branchToBranchGap
+        const existingBranchRoots = getGeneratedChildOutputs(region, nodes, currentCanvasState?.edges ?? [])
+            .filter((node: ImageCanvasNode) => node.generatedBy?.aiChatThreadId === region.referenceId)
+        const previousBranchRoot = getMostRecentGeneratedChildOutput(existingBranchRoots)
+        const previousBranchRect = previousBranchRoot ? getNodeWorldRect(previousBranchRoot, nodesById) : undefined
 
-        return computeStackedPositionToRightOfRect(cloudBounds, existingOutputs.length, childHeight, gap)
+        return computeNextBranchRowPositionToRightOfRect(cloudBounds, previousBranchRect, childHeight, horizontalGap, verticalGap)
     }
 
     function getInsertionPaneSize(): { width: number; height: number } {
@@ -2432,6 +2433,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function getGeneratedChildOutputs(sourceNode: CanvasNode, nodes: CanvasNode[], edges: WorkspaceEdge[]): ImageCanvasNode[] {
         return nodes.filter((node: CanvasNode): node is ImageCanvasNode => {
             if (node.type !== 'image' || node.parentId) return false
+            if (!node.generatedBy) return false
             return edges.some((edge: WorkspaceEdge) => edge.sourceNodeId === sourceNode.nodeId && edge.targetNodeId === node.nodeId)
         })
     }
