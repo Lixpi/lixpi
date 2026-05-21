@@ -68,7 +68,7 @@ export function computeWorkspaceDragPlan(input: WorkspaceDragPlanInput): Workspa
         draggedNodeIds,
         isContextRegionDrag,
         allowProximityConnection: !isContextRegionDrag,
-        allowCollisionResolution: draggedNodeIds.length === 1 && !isContextRegionDrag,
+        allowCollisionResolution: draggedNodeIds.length === 1 || isContextRegionDrag,
     }
 }
 

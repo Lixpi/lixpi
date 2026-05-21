@@ -6,8 +6,11 @@ This module renders the main workspace view—a zoomable, pannable canvas where 
 >
 > - For the rendering architecture (DOM interaction layer + PIXI v8 media/edge layers), the LoD-tier loader, the texture cache, the 6-worker decode pool, and the list of remaining performance issues, read [`documentation/features/CANVAS-ENGINE.md`](../../../../../documentation/features/CANVAS-ENGINE.md). That document is the source of truth for any rendering or perf work.
 > - For context-region cloud rendering, CO2-mask hit testing, adoption scoring, theme toggles, and gotchas, read [`documentation/features/CONTEXT-REGION-CLOUDS.md`](../../../../../documentation/features/CONTEXT-REGION-CLOUDS.md).
+> - For collision resolution, viewport-centered insertion cleanup, drag-release collision rules, and context-region shape-aware collision planning, read [`documentation/features/CANVAS-COLLISION-RESOLUTION.md`](../../../../../documentation/features/CANVAS-COLLISION-RESOLUTION.md).
 > - For workspace data flow (stores, services, NATS subjects, AI chat context extraction, image generation), read [`documentation/features/WORKSPACE-FEATURE.md`](../../../../../documentation/features/WORKSPACE-FEATURE.md).
 > - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
+
+> **Configuration rule.** Workspace-canvas values that are meant to be tuned — colors, shadows, dimensions, gaps, hit radii, resize cursor activation areas, animation timing, and generated-image placement spacing — belong in [`webUiThemeSettings.ts`](../../webUiThemeSettings.ts). Keep them in logical top-level subsections such as `imageNode`, `contextRegion`, and `imageBranchLineage`; use nested subsections for child domains such as `contextRegion.cloud`; separate every group with a blank line before and after; and document every key with what changing it does. Use getters only when a setting needs to self-reference sibling settings through `this`; keep ordinary static values as plain properties.
 
 ## What It Does
 
@@ -31,7 +34,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
-All of this happens without the Svelte component knowing the details. It just passes DOM refs and gets callbacks when things change.
+All of this happens without the Svelte component knowing the details. It just passes DOM refs, performs app/service integration, and gets callbacks when things change. Canvas behavior such as placement, collision resolution, shape-aware context-region geometry, drag/resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities, not in `services/web-ui/src/components/WorkspaceCanvas.svelte`.
 
 ## Node Types
 
@@ -66,7 +69,7 @@ All of this happens without the Svelte component knowing the details. It just pa
     - **Menu-driven connect snap** — the image-node “Connect to node” action snaps against that same full rail geometry, including the floating input area for empty threads, and only commits the edge on mouse release so the snap preview is visible before creation. The snap distance is configurable via `webUiSettings.menuConnectionSnapRadius`
     - **Floating panel resize** — the canvas-owned AI chat panel reuses the same full-height outer rail on its left edge as the horizontal resize target. Dragging that rail changes `--workspace-ai-chat-sidebar-width`, keeping the panel right edge fixed and preserving the zoom indicator offset
     - The horizontal offset from the node edge is configurable via `aiChatThreadRailOffset` in `webUiThemeSettings.ts` (default -2px). Negative values move the rail inside the node boundary; the rail is rendered at z-index 9990 (above all nodes, below floating inputs) to ensure it stays visible regardless of node layering
-- **AI-generated images** appear as independent canvas nodes positioned to the right of the source thread, connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image. Generated output images stay freely draggable and are not adopted into context regions during drag release.
+- **AI-generated images** appear as independent canvas nodes positioned to the right of the source thread, source context-region cloud bounds, or previous image in the branch lineage, with generous canvas-space breathing room. Their insertion dimensions are fixed canvas units regardless of the current zoom, so generated outputs arrive at the same logical size as a 100% zoom insertion. Generated outputs are connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image, stay freely draggable, and are not adopted into context regions during drag release.
         - Progressive partial previews update the canvas node in real-time during generation, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
     - Drag membership is planned by `workspaceDragPlan.ts`, so context-region drags move only the region and real `parentId` descendants. Generated-image adoption rules live in `workspaceImageNodePlan.ts`, which keeps generated outputs independent unless a future interaction model explicitly makes them real region children.
         - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active AI chat panel emits a stale metadata render while a local drag commit is still waiting for store acknowledgement, the canvas preserves the locally committed node and edge positions until the store acknowledges the visual state.
@@ -76,7 +79,7 @@ All of this happens without the Svelte component knowing the details. It just pa
     - Keep a transparent DOM node with `data-node-id` as a geometry proxy for existing drag, selection, connection-manager, and parent-child state paths.
     - Route empty-region clicks and drags through `contextRegionLayer.hitTest()` from the pane background handler; transparent cloud corners are not treated as region body hits.
     - Use `rendering/contextRegionClouds.ts` for shared style selection, CO2 SVG-mask hit geometry, title hit zones, and adoption scoring. The drag-release adoption path uses the same cloud mask as click hit-testing.
-    - Read all context-region cloud visual options from the separated `contextRegionCloud*` section in `webUiThemeSettings.ts`.
+    - Read all context-region cloud visual and hit-target options from `webUiThemeSettings.contextRegion.cloud`.
     - Pulse subtly on selection, panel activation, and AI submit. PIXI's ticker remains off; the pulse is a bounded requestAnimationFrame animation.
     - Open the singleton canvas-owned floating chat panel when clicked. The region itself is context grouping chrome, not an embedded ProseMirror editor.
     - See [`documentation/features/CONTEXT-REGION-CLOUDS.md`](../../../../../documentation/features/CONTEXT-REGION-CLOUDS.md) for the deeper architecture, research context, and implementation constraints.
@@ -418,7 +421,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, the `workspace-image-node--pixi-owned` opacity rule, and the transparent context-region proxy |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
-| `imagePositioning.ts` | Computes generated image placement positions next to source threads |
+| `imagePositioning.ts` | Computes viewport-normalized insertion dimensions and generated image placement positions next to source threads |
 | `workspaceImageNodePlan.ts` | Pure helpers for generated image node adoption rules |
 | `nodeLayering.ts` | Z-index management for bringing nodes to front |
 

@@ -19,6 +19,8 @@ For the workspace feature itself — node types, stores, services, data flow, ar
 
 For context-region cloud rendering, shape-based hit testing, adoption scoring, and performance constraints, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
+For workspace collision resolution, placement cleanup, drag-release collision rules, and context-region shape-aware collision planning, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md).
+
 ### Canvas implementation code
 
 The active canvas implementation lives in `services/web-ui/src/infographics/`. Key files:
@@ -26,6 +28,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | File | Purpose |
 |------|---------|
 | `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media/context-region sync points |
+| `utils/resolveCollisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
 | `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
 | `workspace/pixiMediaLayerLogic.ts` | Pure helpers: tier ranking, world-position math, src URL building, LoD-size param injection, world-rect math |
 | `workspace/pixiImageDecoder.ts` | Six-worker decode pool: round-robin dispatch with per-worker request tracking |
@@ -42,6 +45,16 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `utils/zoomScaling.ts` | Zoom-compensated handle scaling |
 
 Use the incremental canvas architecture documented here as the implementation recipe: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.
+
+### Canvas Configuration Ownership
+
+All configurable workspace-canvas UI settings belong in [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts). This includes colors, shadows, dimensions, gaps, hit radii, animation timing, title sizing, generated-image placement spacing, and other values that product/design tuning may reasonably adjust without changing the interaction algorithm.
+
+Do not add new configurable magic-number constants directly to [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), Svelte wrappers, PIXI rendering layers, or helper modules. If a value controls visible styling, layout, spacing, hit target size, cursor activation area, or animation feel, add it to `webUiThemeSettings` first and read it from the consuming code.
+
+`webUiThemeSettings` must stay organized by logical groups. Each top-level group is its own subsection, and a group may contain nested subsections when a domain has a clear child domain, such as `contextRegion.cloud`. Every group and nested group must have a blank line before and after it in the object literal. Every key must have a short comment explaining what the value means and how changing it affects the application.
+
+Use object getters in `webUiThemeSettings` only when a setting must compute its value from sibling keys with `this`, such as a `styles` list referencing sibling `palettes`. Static values must remain plain properties; do not use getters just to organize or label settings.
 
 ### @xyflow/system reference
 
