@@ -62,6 +62,7 @@ type WatercolorTextureSize = { width: number; height: number }
 
 const VISIBILITY_MARGIN = 1600
 const CONTEXT_REGION_TEXTURE_VERSION = 4
+const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud
 const CO2_CLOUD_VIEWBOX_SIZE = 512
 const CO2_CLOUD_MAIN_PATH = 'm482.856 229.936c12.391-15.534 19.801-35.216 19.801-56.63 0-50.198-40.694-90.892-90.892-90.892-5.966 0-11.796.581-17.441 1.679-25.94-49.959-78.143-84.093-138.324-84.093s-112.384 34.134-138.324 84.093c-5.645-1.097-11.475-1.679-17.441-1.679-50.198 0-90.892 40.694-90.892 90.892 0 21.415 7.41 41.096 19.801 56.63-18.325 25.172-29.144 56.158-29.144 89.676 0 84.244 68.293 152.538 152.537 152.538 5.374 0 10.683-.282 15.914-.824 21.017 24.873 52.435 40.674 87.549 40.674s66.532-15.801 87.549-40.674c5.231.542 10.539.824 15.914.824 84.244 0 152.537-68.294 152.537-152.538 0-33.518-10.819-64.504-29.144-89.676z'
 const CO2_CLOUD_CIRCLES = [
@@ -158,7 +159,7 @@ function rgba(hex: string, alpha: number): string {
 }
 
 function getTemplateSize(): WatercolorTextureSize {
-    return webUiThemeSettings.contextRegionCloudTextureSize
+    return contextRegionCloudTheme.textureSize
 }
 
 function drawGradientEllipse(
@@ -360,8 +361,8 @@ function addExactCo2CloudBorder(ctx: CanvasRenderingContext2D, style: ContextReg
     const ringCtx = ringCanvas.getContext('2d')
     if (!ringCtx) return
 
-    fillCo2MainCloudShape(ringCtx, size, rgba(style.palette.edge, webUiThemeSettings.contextRegionCloudBorderMainAlpha))
-    fillCo2ThoughtCircles(ringCtx, size, rgba(style.palette.edge, webUiThemeSettings.contextRegionCloudBorderThoughtCircleAlpha))
+    fillCo2MainCloudShape(ringCtx, size, rgba(style.palette.edge, contextRegionCloudTheme.borderMainAlpha))
+    fillCo2ThoughtCircles(ringCtx, size, rgba(style.palette.edge, contextRegionCloudTheme.borderThoughtCircleAlpha))
 
     ringCtx.globalCompositeOperation = 'destination-out'
     fillCo2MainCloudShape(ringCtx, size, 'rgba(0, 0, 0, 1)', 0.965)
@@ -504,10 +505,10 @@ function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegi
     const pool = hexToRgb(style.palette.pool)
     const bloom = hexToRgb(style.palette.bloom)
     const edge = hexToRgb(style.palette.edge)
-    const gradientBaseColor = hexToRgb(webUiThemeSettings.contextRegionCloudGradientBaseColor)
-    const gradientColors = webUiThemeSettings.contextRegionCloudGradientColors.map(hexToRgb)
-    const gradientPositions = webUiThemeSettings.contextRegionCloudGradientPositions
-    const maskAlphaThreshold = webUiThemeSettings.contextRegionCloudMaskAlphaThreshold
+    const gradientBaseColor = hexToRgb(contextRegionCloudTheme.gradientBaseColor)
+    const gradientColors = contextRegionCloudTheme.gradientColors.map(hexToRgb)
+    const gradientPositions = contextRegionCloudTheme.gradientPositions
+    const maskAlphaThreshold = contextRegionCloudTheme.maskAlphaThreshold
     const seed = style.seed
     const minSize = Math.min(width, height)
 
@@ -637,7 +638,7 @@ function createWatercolorTexture(style: ContextRegionCloudStyle): Texture {
     addCo2CloudPaintPools(ctx, style, size, random)
     addWatercolorCutbacks(ctx, style, size, random)
     addWatercolorPigmentSpeckles(ctx, style, size, random)
-    if (webUiThemeSettings.contextRegionCloudBorderEnabled) addExactCo2CloudBorder(ctx, style, size)
+    if (contextRegionCloudTheme.borderEnabled) addExactCo2CloudBorder(ctx, style, size)
     applyCo2CloudMask(ctx, size)
 
     return Texture.from(canvas)
@@ -667,13 +668,13 @@ function drawTitle(text: Text, datum: ContextRegionCloudDatum, style: ContextReg
     text.text = datum.title
     text.style = {
         fill: colorNumber(style.palette.ink),
-        fontFamily: webUiThemeSettings.contextRegionCloudTitleFontFamily,
-        fontSize: scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleFontSize, zoom),
-        fontWeight: webUiThemeSettings.contextRegionCloudTitleFontWeight,
+        fontFamily: contextRegionCloudTheme.titleFontFamily,
+        fontSize: scaleCanvasChromeForZoom(contextRegionCloudTheme.titleFontSize, zoom),
+        fontWeight: contextRegionCloudTheme.titleFontWeight,
     }
     text.position.set(rect.x, rect.y)
     text.scale.set(1)
-    text.alpha = webUiThemeSettings.contextRegionCloudTitleAlpha
+    text.alpha = contextRegionCloudTheme.titleAlpha
 }
 
 function drawChrome(entry: PixiContextRegionEntry, viewport: ContextRegionViewport): void {
@@ -737,7 +738,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
     }
 
     function getTexture(style: ContextRegionCloudStyle): Texture {
-        const borderKey = webUiThemeSettings.contextRegionCloudBorderEnabled ? 'border' : 'no-border'
+        const borderKey = contextRegionCloudTheme.borderEnabled ? 'border' : 'no-border'
         const textureKey = `${CONTEXT_REGION_TEXTURE_VERSION}:${borderKey}:${style.key}`
         const existing = textureCache.get(textureKey)
         if (existing) return existing
@@ -795,7 +796,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         entry.backdrop.position.set(backdropRect.x, backdropRect.y)
         entry.backdrop.width = backdropRect.size
         entry.backdrop.height = backdropRect.size
-        entry.backdrop.alpha = datum.selected ? webUiThemeSettings.contextRegionCloudSelectedAlpha : webUiThemeSettings.contextRegionCloudIdleAlpha
+        entry.backdrop.alpha = datum.selected ? contextRegionCloudTheme.selectedAlpha : contextRegionCloudTheme.idleAlpha
 
         const geometryKey = getGeometryKey(datum, currentViewport)
         if (entry.geometryKey !== geometryKey) {
@@ -865,13 +866,13 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         for (const entry of entries.values()) {
             if (entry.pulseStartedAt === null) continue
             const elapsed = now - entry.pulseStartedAt
-            const progress = Math.min(1, elapsed / webUiThemeSettings.contextRegionCloudPulseDurationMs)
+            const progress = Math.min(1, elapsed / contextRegionCloudTheme.pulseDurationMs)
             const lift = Math.sin(progress * Math.PI)
             const style = getContextRegionCloudStyle(entry.datum.nodeId, entry.datum.width, entry.datum.height)
             const backdropRect = getBackdropRect(entry.datum, style)
-            const baseAlpha = entry.datum.selected ? webUiThemeSettings.contextRegionCloudSelectedAlpha : webUiThemeSettings.contextRegionCloudIdleAlpha
-            entry.backdrop.alpha = baseAlpha + lift * webUiThemeSettings.contextRegionCloudPulseAlphaLift
-            entry.backdrop.position.set(backdropRect.x, backdropRect.y)
+            const baseAlpha = entry.datum.selected ? contextRegionCloudTheme.selectedAlpha : contextRegionCloudTheme.idleAlpha
+            entry.backdrop.alpha = baseAlpha + lift * contextRegionCloudTheme.pulseAlphaLift
+            entry.backdrop.position.set(backdropRect.x, backdropRect.y - lift * contextRegionCloudTheme.pulseLiftPx)
             if (progress >= 1) {
                 entry.pulseStartedAt = null
                 entry.backdrop.alpha = baseAlpha
