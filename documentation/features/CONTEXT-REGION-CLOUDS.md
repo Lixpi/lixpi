@@ -12,7 +12,7 @@ Context region clouds are implemented in the web UI and run as part of the hybri
 - Pure geometry, style selection, hit testing, title bounds, and adoption scoring live in [contextRegionClouds.ts](../../services/web-ui/src/infographics/workspace/rendering/contextRegionClouds.ts).
 - [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) still owns canvas state, transparent DOM proxy nodes, drag, selection, activation, parent-child containment, and pane-level pointer routing.
 - [viewportBridge.ts](../../services/web-ui/src/infographics/workspace/rendering/viewportBridge.ts) applies the same viewport transform to DOM nodes, the PIXI media layer, and the PIXI context-region layer.
-- Theme-level cloud visual settings live together in [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts).
+- Theme-level context-region settings live in [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts), with cloud-specific settings nested under `contextRegion.cloud`.
 
 No backend schema, NATS subject, DynamoDB table, or persisted visual-style field is required. Context region clouds are a frontend rendering and interaction primitive over existing canvas nodes.
 
@@ -131,7 +131,7 @@ The texture stays square and preserves the CO2 cloud proportions. For non-square
 
 ## Visual Texture
 
-Each cloud style bakes a shared Canvas2D texture, then PIXI renders that texture as a `Sprite`. The texture size, mask threshold, gradient colors, gradient positions, cloud style variants, palette values, border, title, frame, and pulse values are configured in the separated context-region cloud section of [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts).
+Each cloud style bakes a shared Canvas2D texture, then PIXI renders that texture as a `Sprite`. The texture size, mask threshold, resize edge hit radius, gradient colors, gradient positions, cloud style variants, palette values, border, title, frame, and pulse values are configured in the `contextRegion.cloud` subsection of [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts).
 
 The current palette is seafoam, taken from `random-useful-things/image-color-analysis-tool/region-gradient-preview.html` and tuned to keep the patchy grain visible:
 
@@ -154,7 +154,7 @@ The texture pipeline is intentionally bake-heavy and runtime-light:
 4. Add translucent paint pools biased by aspect and seed.
 5. Add soft subtractive cutbacks so the cloud does not read as a solid blob.
 6. Add fine pigment speckles.
-7. Optionally add the exact vector border ring when `webUiThemeSettings.contextRegionCloudBorderEnabled` is `true`.
+7. Optionally add the exact vector border ring when `webUiThemeSettings.contextRegion.cloud.borderEnabled` is `true`.
 8. Apply the CO2 mask once at the end with `destination-in`.
 9. Convert the canvas to a PIXI `Texture` and cache it by texture version, border state, and style key.
 
@@ -162,37 +162,9 @@ The reference-like feel comes from the perimeter, uneven alpha, edge pooling, gr
 
 ## Theme Configuration
 
-All current context-region cloud visual knobs are centralized in [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts):
+Do not duplicate the context-region setting inventory or values in this document. The source of truth is [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts), specifically `webUiThemeSettings.contextRegion` and its nested `webUiThemeSettings.contextRegion.cloud` subsection.
 
-| Setting | Purpose |
-|---|---|
-| `contextRegionCloudTextureSize` | Shared baked Canvas2D texture resolution. |
-| `contextRegionCloudMaskAlphaThreshold` | Alpha cutoff used while painting cloud pixels into the CO2 mask. |
-| `contextRegionCloudMinBleed` | Minimum visual bleed around a logical region rectangle. |
-| `contextRegionCloudGradientBaseColor` | Base seafoam color mixed under the weighted gradient. |
-| `contextRegionCloudGradientColors` | Four seafoam gradient colors used by the baked texture. |
-| `contextRegionCloudGradientPositions` | Normalized positions for the four gradient color points. |
-| `contextRegionCloudStyles` | Deterministic style options: aspect, bleed ratio, title anchor, palette, and seed. |
-| `contextRegionCloudBorderEnabled` | Enables the baked exact vector border ring. |
-| `contextRegionCloudBorderMainAlpha` | Border alpha for the main CO2 cloud path. |
-| `contextRegionCloudBorderThoughtCircleAlpha` | Border alpha for the top-left thought circle. |
-| `contextRegionCloudIdleAlpha` | Default backdrop sprite alpha. |
-| `contextRegionCloudSelectedAlpha` | Backdrop sprite alpha while selected. |
-| `contextRegionCloudPulseDurationMs` | Duration for the bounded event pulse. |
-| `contextRegionCloudPulseAlphaLift` | Extra alpha applied at the peak of the pulse. |
-| `contextRegionCloudPulseLiftPx` | Screen-space lift applied at the peak of the pulse. |
-| `contextRegionCloudTitleFontFamily` | PIXI title text font family. |
-| `contextRegionCloudTitleFontSize` | PIXI title text base font size. |
-| `contextRegionCloudTitleFontWeight` | PIXI title text font weight. |
-| `contextRegionCloudTitleAlpha` | PIXI title text alpha. |
-| `contextRegionCloudTitleHeight` | Title hit/text rect height. |
-| `contextRegionCloudTitleCharWidth` | Approximate title character width for hit rect sizing. |
-| `contextRegionCloudTitleMinWidth` | Minimum title hit rect width. |
-| `contextRegionCloudTitleMaxWidth` | Maximum title hit rect width. |
-| `contextRegionCloudTitlePaddingX` | Extra horizontal title hit rect padding. |
-| `contextRegionCloudTitleMinX` | Minimum title x inset from the visual bounds. |
-| `contextRegionCloudTitleGap` | Gap between title rect and cloud visual bounds. |
-| `contextRegionImageFrameColor` | Frame color for image nodes contained by context regions. |
+Any new configurable context-region value must go through `webUiThemeSettings.ts` instead of becoming a local magic-number constant. Keep context-region settings under `contextRegion`; use nested subsections such as `contextRegion.cloud` for child domains; put a blank line before and after each logical group; and add a short comment beside every config key explaining what it means and how changing it affects the app. Use getters only when a setting needs to self-reference sibling settings through `this`, such as cloud styles referencing cloud palettes; keep ordinary static values as plain properties.
 
 CO2 path constants are still code-level geometry, not theme settings. If the cloud silhouette changes, update rendering and hit/adoption geometry together.
 
@@ -201,7 +173,7 @@ CO2 path constants are still code-level geometry, not theme settings. If the clo
 The cloud border is optional and controlled centrally:
 
 ```typescript
-webUiThemeSettings.contextRegionCloudBorderEnabled: boolean
+webUiThemeSettings.contextRegion.cloud.borderEnabled: boolean
 ```
 
 The default is `false`.
@@ -462,7 +434,7 @@ Do not treat persisted `canvasState.viewport` as authoritative during an active 
 | Long stray lines appear through arrowheads | PIXI `Graphics` path state leaked between edge path and arrowhead drawing | Check `beginPath()` / `closePath()` isolation in `pixiEdgeRenderer.ts`. |
 | A ghost cloud appears on selection | Separate selection silhouette was reintroduced | Keep selection chrome separate from a duplicate cloud sprite. |
 | Texture looks pale or flat | Gradient/overlay alpha washed out color and grain | Check seafoam gradient mix, bloom overlays, and final alpha. |
-| Border does not match the cloud | Border drawn as generic stroke or separate sprite | Use the baked exact vector ring path controlled by `contextRegionCloudBorderEnabled`. |
+| Border does not match the cloud | Border drawn as generic stroke or separate sprite | Use the baked exact vector ring path controlled by `contextRegion.cloud.borderEnabled`. |
 | Pan/zoom stutters with many regions | Runtime work moved into gestures | Look for per-region texture generation, live filters, or continuous ticker usage. |
 | Clouds or generated images jump after panning, with no node-position commit | Stale viewport-only store render replayed an older transform | Check whether the render changed only `viewport` while visual state stayed equivalent, then verify the stale viewport guard in `workspaceViewportStatePlan.ts` still preserves the live transform. |
 

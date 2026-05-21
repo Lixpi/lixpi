@@ -6,6 +6,7 @@
     } from '@xyflow/system'
     import {
         type CanvasState,
+        type DocumentCanvasNode,
         type ImageCanvasNode,
         type ContextRegionCanvasNode
     } from '@lixpi/constants'
@@ -19,6 +20,7 @@
     import { routerStore } from '$src/stores/routerStore.ts'
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
+    import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
     import { createNewFileIcon, imageIcon, aiChatBubbleIcon } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/feature-library-panel.scss'
@@ -47,6 +49,8 @@
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
     const documentService = new DocumentService()
     const aiChatThreadService = new AiChatThreadService()
+    const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
+    const FALLBACK_IMAGE_DIMENSIONS = { width: 300, height: 300 }
 
     function persistCanvasState(newCanvasState: CanvasState) {
         const stateToPersist = {
@@ -114,26 +118,15 @@
             })
 
             if (doc) {
-                const existingNodes = canvasState?.nodes || []
-                const newX = 50 + (existingNodes.length % 3) * 450
-                const newY = 50 + Math.floor(existingNodes.length / 3) * 400
-
-                const newCanvasState: CanvasState = {
-                    viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    edges: canvasState?.edges ?? [],
-                    nodes: [
-                        ...existingNodes,
-                        {
-                            nodeId: `node-${doc.documentId}`,
-                            type: 'document',
-                            referenceId: doc.documentId,
-                            position: { x: newX, y: newY },
-                            dimensions: { width: 400, height: 350 }
-                        }
-                    ]
+                const dimensions = { ...DEFAULT_DOCUMENT_NODE_DIMENSIONS }
+                const documentNode: Omit<DocumentCanvasNode, 'position'> = {
+                    nodeId: `node-${doc.documentId}`,
+                    type: 'document',
+                    referenceId: doc.documentId,
+                    dimensions,
                 }
 
-                persistCanvasState(newCanvasState)
+                renderer?.insertNodeAtViewportCenter(documentNode)
             }
         } catch (error) {
             console.error('Error creating document:', error)
@@ -212,53 +205,39 @@
             const maxWidth = 400
             const width = Math.min(maxWidth, img.naturalWidth)
             const height = width / aspectRatio
+            const dimensions = { width, height }
 
-            const existingNodes = canvasState?.nodes || []
-            const newX = 50 + (existingNodes.length % 3) * 450
-            const newY = 50 + Math.floor(existingNodes.length / 3) * 400
             const nodeUniqueId = fileId || uuidv4()
 
-            const imageNode: ImageCanvasNode = {
+            const imageNode: Omit<ImageCanvasNode, 'position'> = {
                 nodeId: `node-${nodeUniqueId}`,
                 type: 'image',
                 fileId: nodeUniqueId,
                 workspaceId,
                 src,
                 aspectRatio,
-                position: { x: newX, y: newY },
-                dimensions: { width, height }
+                dimensions,
             }
 
-            persistCanvasState({
-                viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                edges: canvasState?.edges ?? [],
-                nodes: [...existingNodes, imageNode]
-            })
+            renderer?.insertNodeAtViewportCenter(imageNode)
         }
 
         img.onerror = () => {
             console.error('Failed to load image for dimension calculation')
-            const existingNodes = canvasState?.nodes || []
-            const newX = 50 + (existingNodes.length % 3) * 450
-            const newY = 50 + Math.floor(existingNodes.length / 3) * 400
+            const dimensions = { ...FALLBACK_IMAGE_DIMENSIONS }
             const nodeUniqueId = fileId || uuidv4()
 
-            const imageNode: ImageCanvasNode = {
+            const imageNode: Omit<ImageCanvasNode, 'position'> = {
                 nodeId: `node-${nodeUniqueId}`,
                 type: 'image',
                 fileId: nodeUniqueId,
                 workspaceId,
                 src,
                 aspectRatio: 1,
-                position: { x: newX, y: newY },
-                dimensions: { width: 300, height: 300 }
+                dimensions,
             }
 
-            persistCanvasState({
-                viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                edges: canvasState?.edges ?? [],
-                nodes: [...existingNodes, imageNode]
-            })
+            renderer?.insertNodeAtViewportCenter(imageNode)
         }
 
         img.src = src
@@ -298,26 +277,16 @@
             })
 
             if (thread) {
-                const existingNodes = canvasState?.nodes || []
-                const newX = 50 + (existingNodes.length % 3) * 450
-                const newY = 50 + Math.floor(existingNodes.length / 3) * 400
+                const dimensions = { ...webUiThemeSettings.contextRegion.defaultDimensions }
 
-                const contextRegionNode: ContextRegionCanvasNode = {
+                const contextRegionNode: Omit<ContextRegionCanvasNode, 'position'> = {
                     nodeId: `node-${thread.threadId}`,
                     type: 'contextRegion',
                     referenceId: thread.threadId,
-                    position: { x: newX, y: newY },
-                    dimensions: { width: 400, height: 500 }
+                    dimensions,
                 }
 
-                const newCanvasState: CanvasState = {
-                    viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    edges: canvasState?.edges ?? [],
-                    nodes: [...existingNodes, contextRegionNode],
-                    lastActiveAiChatThreadId: thread.threadId
-                }
-
-                persistCanvasState(newCanvasState)
+                renderer?.insertNodeAtViewportCenter(contextRegionNode, { lastActiveAiChatThreadId: thread.threadId })
             }
         } catch (error) {
             console.error('Error creating AI chat thread:', error)

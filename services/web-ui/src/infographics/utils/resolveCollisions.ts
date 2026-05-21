@@ -14,6 +14,7 @@ type CollisionOptions = {
     overlapThreshold?: number  // Minimum overlap to trigger resolution (default: 0.5)
     margin?: number            // Extra spacing around nodes (default: 20)
     excludePairs?: Set<string> // Set of "nodeIdA-nodeIdB" pairs to skip collision resolution for
+    shouldResolvePair?: (a: NodeBox, b: NodeBox) => boolean
 }
 
 type CollisionResult = {
@@ -30,7 +31,8 @@ export function resolveCollisions(
         iterations = 50,
         overlapThreshold = 0.5,
         margin = 20,
-        excludePairs
+        excludePairs,
+        shouldResolvePair,
     } = options
 
     // Create mutable boxes with margin applied
@@ -76,6 +78,22 @@ export function resolveCollisions(
 
                 // Check if there's significant overlap on BOTH axes
                 if (px > overlapThreshold && py > overlapThreshold) {
+                    const originalA = {
+                        id: A.id,
+                        x: A.x + margin,
+                        y: A.y + margin,
+                        width: A.width - margin * 2,
+                        height: A.height - margin * 2,
+                    }
+                    const originalB = {
+                        id: B.id,
+                        x: B.x + margin,
+                        y: B.y + margin,
+                        width: B.width - margin * 2,
+                        height: B.height - margin * 2,
+                    }
+                    if (shouldResolvePair && !shouldResolvePair(originalA, originalB)) continue
+
                     A.moved = B.moved = moved = true
 
                     // Resolve along the SMALLEST overlap axis (minimum translation)

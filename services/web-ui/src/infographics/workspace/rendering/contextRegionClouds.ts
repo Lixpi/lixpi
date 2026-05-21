@@ -50,10 +50,10 @@ const CO2_CLOUD_MAIN_PATH = 'm482.856 229.936c12.391-15.534 19.801-35.216 19.801
 const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
-const EDGE_HIT_SCREEN_RADIUS_PX = 24
 const EDGE_ANCHOR_SAMPLE_STEPS = 128
 const EDGE_ANCHOR_BINARY_SEARCH_STEPS = 12
 const EDGE_ANCHOR_CROSS_AXIS_STEPS = 96
+const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud
 const EDGE_SAMPLE_DIRECTIONS = [
     { x: 1, y: 0 },
     { x: -1, y: 0 },
@@ -65,7 +65,7 @@ const EDGE_SAMPLE_DIRECTIONS = [
     { x: -Math.SQRT1_2, y: -Math.SQRT1_2 },
 ]
 
-export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = webUiThemeSettings.contextRegionCloudStyles
+export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = contextRegionCloudTheme.styles
 
 function isSvgPathCommand(token: string): boolean {
     return /^[a-z]$/i.test(token)
@@ -237,7 +237,7 @@ export function getContextRegionCloudStyle(nodeId: string, width: number, height
 }
 
 export function getContextRegionCloudBleed(style: ContextRegionCloudStyle, rect: Pick<ContextRegionCloudDatum, 'width' | 'height'>): number {
-    return Math.max(webUiThemeSettings.contextRegionCloudMinBleed, Math.min(rect.width, rect.height) * style.bleedRatio)
+    return Math.max(contextRegionCloudTheme.minBleed, Math.min(rect.width, rect.height) * style.bleedRatio)
 }
 
 function getContextRegionCloudVisualBounds(datum: ContextRegionCloudDatum, style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)): ContextRegionCloudRect {
@@ -452,7 +452,7 @@ function isPointNearCo2CloudEdge(
     style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
 ): boolean {
     const safeZoom = Math.max(zoom, 0.01)
-    const radius = EDGE_HIT_SCREEN_RADIUS_PX / safeZoom
+    const radius = contextRegionCloudTheme.resizeEdgeHitRadiusPx / safeZoom
     const inside = isPointInCo2CloudShape(datum, point, style)
 
     for (const direction of EDGE_SAMPLE_DIRECTIONS) {
@@ -506,19 +506,19 @@ export function getContextRegionCloudResizeCursor(handle: ContextRegionCloudResi
 export function getContextRegionCloudTitleRect(datum: ContextRegionCloudDatum, zoom: number): ContextRegionCloudRect {
     const style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
     const bounds = getContextRegionCloudVisualBounds(datum, style)
-    const height = scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleHeight, zoom)
-    const charWidth = scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleCharWidth, zoom)
-    const paddingX = scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitlePaddingX, zoom)
+    const height = scaleCanvasChromeForZoom(contextRegionCloudTheme.titleHeight, zoom)
+    const charWidth = scaleCanvasChromeForZoom(contextRegionCloudTheme.titleCharWidth, zoom)
+    const paddingX = scaleCanvasChromeForZoom(contextRegionCloudTheme.titlePaddingX, zoom)
     const width = Math.min(
-        scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleMaxWidth, zoom),
+        scaleCanvasChromeForZoom(contextRegionCloudTheme.titleMaxWidth, zoom),
         Math.max(
-            scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleMinWidth, zoom),
+            scaleCanvasChromeForZoom(contextRegionCloudTheme.titleMinWidth, zoom),
             datum.title.length * charWidth + paddingX
         )
     )
     return {
-        x: bounds.x + Math.max(scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleMinX, zoom), bounds.width * style.titleAnchor.x),
-        y: bounds.y - height - scaleCanvasChromeForZoom(webUiThemeSettings.contextRegionCloudTitleGap, zoom),
+        x: bounds.x + Math.max(scaleCanvasChromeForZoom(contextRegionCloudTheme.titleMinX, zoom), bounds.width * style.titleAnchor.x),
+        y: bounds.y - height - scaleCanvasChromeForZoom(contextRegionCloudTheme.titleGap, zoom),
         width,
         height,
     }
@@ -608,6 +608,61 @@ function circleIntersectsRect(circle: ContextRegionCloudCircle, rect: ContextReg
     return dx * dx + dy * dy <= circle.radius * circle.radius
 }
 
+function distancePointToSegmentSquared(point: ContextRegionCloudPoint, a: ContextRegionCloudPoint, b: ContextRegionCloudPoint): number {
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const lengthSquared = dx * dx + dy * dy
+    if (lengthSquared === 0) {
+        const pointDx = point.x - a.x
+        const pointDy = point.y - a.y
+        return pointDx * pointDx + pointDy * pointDy
+    }
+
+    const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared, 0, 1)
+    const closest = { x: a.x + t * dx, y: a.y + t * dy }
+    const closestDx = point.x - closest.x
+    const closestDy = point.y - closest.y
+    return closestDx * closestDx + closestDy * closestDy
+}
+
+function circlesIntersect(a: ContextRegionCloudCircle, b: ContextRegionCloudCircle): boolean {
+    const dx = a.x - b.x
+    const dy = a.y - b.y
+    const radius = a.radius + b.radius
+    return dx * dx + dy * dy <= radius * radius
+}
+
+function circleIntersectsPolygon(circle: ContextRegionCloudCircle, polygon: ContextRegionCloudPoint[]): boolean {
+    const center = { x: circle.x, y: circle.y }
+    if (isPointInPolygon(center, polygon)) return true
+
+    const radiusSquared = circle.radius * circle.radius
+    for (let i = 0; i < polygon.length; i++) {
+        const current = polygon[i]
+        const next = polygon[(i + 1) % polygon.length]
+        if (distancePointToSegmentSquared(center, current, next) <= radiusSquared) return true
+    }
+
+    return false
+}
+
+function polygonsIntersect(a: ContextRegionCloudPoint[], b: ContextRegionCloudPoint[]): boolean {
+    if (a.some((point) => isPointInPolygon(point, b))) return true
+    if (b.some((point) => isPointInPolygon(point, a))) return true
+
+    for (let i = 0; i < a.length; i++) {
+        const aCurrent = a[i]
+        const aNext = a[(i + 1) % a.length]
+        for (let j = 0; j < b.length; j++) {
+            const bCurrent = b[j]
+            const bNext = b[(j + 1) % b.length]
+            if (segmentsIntersect(aCurrent, aNext, bCurrent, bNext)) return true
+        }
+    }
+
+    return false
+}
+
 export function rectIntersectsContextRegionCloud(datum: ContextRegionCloudDatum, rect: ContextRegionCloudRect): boolean {
     const style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
     const bounds = getContextRegionCloudBounds(datum, style)
@@ -616,6 +671,20 @@ export function rectIntersectsContextRegionCloud(datum: ContextRegionCloudDatum,
     const outline = getContextRegionCloudOutline(datum, style)
     return outline.circles.some((circle) => circleIntersectsRect(circle, rect)) ||
         outline.polygons.some((polygon) => polygonIntersectsRect(polygon, rect))
+}
+
+export function contextRegionCloudsIntersect(a: ContextRegionCloudDatum, b: ContextRegionCloudDatum): boolean {
+    const aBounds = getContextRegionCloudBounds(a)
+    const bBounds = getContextRegionCloudBounds(b)
+    if (!rectsIntersect(aBounds, bBounds)) return false
+
+    const aOutline = getContextRegionCloudOutline(a)
+    const bOutline = getContextRegionCloudOutline(b)
+
+    return aOutline.circles.some((aCircle) => bOutline.circles.some((bCircle) => circlesIntersect(aCircle, bCircle))) ||
+        aOutline.circles.some((circle) => bOutline.polygons.some((polygon) => circleIntersectsPolygon(circle, polygon))) ||
+        bOutline.circles.some((circle) => aOutline.polygons.some((polygon) => circleIntersectsPolygon(circle, polygon))) ||
+        aOutline.polygons.some((aPolygon) => bOutline.polygons.some((bPolygon) => polygonsIntersect(aPolygon, bPolygon)))
 }
 
 function getRectSamplePoints(rect: ContextRegionCloudRect): ContextRegionCloudPoint[] {
