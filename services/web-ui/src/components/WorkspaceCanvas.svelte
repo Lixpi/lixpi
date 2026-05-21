@@ -50,7 +50,12 @@
     const documentService = new DocumentService()
     const aiChatThreadService = new AiChatThreadService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
-    const FALLBACK_IMAGE_DIMENSIONS = { width: 300, height: 300 }
+
+    function getImageInsertionDimensions(aspectRatio: number): { width: number; height: number } {
+        const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
+        const width = webUiThemeSettings.imageNode.defaultInsertionWidth
+        return { width, height: width / safeAspectRatio }
+    }
 
     function persistCanvasState(newCanvasState: CanvasState) {
         const stateToPersist = {
@@ -201,11 +206,10 @@
 
         const img = new Image()
         img.onload = () => {
-            const aspectRatio = img.naturalWidth / img.naturalHeight
-            const maxWidth = 400
-            const width = Math.min(maxWidth, img.naturalWidth)
-            const height = width / aspectRatio
-            const dimensions = { width, height }
+            const aspectRatio = img.naturalWidth > 0 && img.naturalHeight > 0
+                ? img.naturalWidth / img.naturalHeight
+                : 1
+            const dimensions = getImageInsertionDimensions(aspectRatio)
 
             const nodeUniqueId = fileId || uuidv4()
 
@@ -224,7 +228,7 @@
 
         img.onerror = () => {
             console.error('Failed to load image for dimension calculation')
-            const dimensions = { ...FALLBACK_IMAGE_DIMENSIONS }
+            const dimensions = getImageInsertionDimensions(1)
             const nodeUniqueId = fileId || uuidv4()
 
             const imageNode: Omit<ImageCanvasNode, 'position'> = {

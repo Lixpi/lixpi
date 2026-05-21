@@ -31,7 +31,10 @@ export type ContextRegionCloudThemeStyle = {
 }
 
 export type WebUiImageNodeThemeSettings = {
+    defaultBoxShadow: string
     selectedBoxShadow: string
+    defaultInsertionWidth: number
+    borderRadius: number
     contextRegionChildImageFrameColor: string
     contextRegionChildImageDropShadow: string
     modelBadgeBoxShadow: string
@@ -167,8 +170,14 @@ export const webUiThemeSettings: WebUiThemeSettings = {
 
     // Canvas image node settings. These values style image-node chrome and selection states.
     imageNode: {
+        // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
+        defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
         // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
         selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+        // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
+        defaultInsertionWidth: 600,
+        // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds both PIXI-rendered stored images and DOM partial previews more strongly.
+        borderRadius: 8,
         // Frame color used for image nodes parented inside a context region. Changing it updates the card-like surface around adopted images.
         contextRegionChildImageFrameColor: '#FCFCFA',
         // Drop shadow used by image nodes parented inside a context region. Larger shadows make child images feel more lifted from the cloud.
@@ -212,7 +221,7 @@ export const webUiThemeSettings: WebUiThemeSettings = {
             // Minimum canvas-unit bleed beyond the logical context-region rectangle. Increasing it expands the visible cloud and its placement/collision bounds.
             minBleed: 28,
             // Screen-pixel radius around the visible cloud edge that activates resize handles and resize cursors. Increasing it makes edge resize easier to trigger; lowering it requires more precise pointer placement.
-            resizeEdgeHitRadiusPx: 24,
+            resizeEdgeHitRadiusPx: 16,
             // Base underpaint color for the cloud texture. Changing it shifts the overall tint before watercolor colors are blended in.
             gradientBaseColor: '#E5F2EE',
             // Watercolor colors mixed across the cloud surface. Changing these alters the main visible cloud palette.
