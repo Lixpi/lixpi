@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest'
 import type { CanvasNode, AiChatThreadCanvasNode, ImageCanvasNode } from '@lixpi/constants'
 import {
 	computeImagePositionNextToThread,
+	computeNextBranchRowPositionToRightOfRect,
 	computeStackedPositionToRightOfRect,
 	computeViewportCenterInsertionPosition,
 	computeViewportGridInsertionPosition,
@@ -110,6 +111,32 @@ describe('computeStackedPositionToRightOfRect', () => {
 		)
 
 		expect(position).toEqual({ x: 716, y: 696 })
+	})
+})
+
+describe('computeNextBranchRowPositionToRightOfRect', () => {
+	it('places the first branch row beside the supplied visual bounds', () => {
+		const position = computeNextBranchRowPositionToRightOfRect(
+			{ x: 100, y: 200, width: 520, height: 500 },
+			undefined,
+			400,
+			96,
+			160
+		)
+
+		expect(position).toEqual({ x: 716, y: 200 })
+	})
+
+	it('places the next branch row below the previous branch root only', () => {
+		const position = computeNextBranchRowPositionToRightOfRect(
+			{ x: 100, y: 200, width: 520, height: 500 },
+			{ x: 716, y: 200, width: 400, height: 400 },
+			400,
+			96,
+			160
+		)
+
+		expect(position).toEqual({ x: 716, y: 760 })
 	})
 })
 
