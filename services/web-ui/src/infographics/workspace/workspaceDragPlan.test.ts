@@ -152,7 +152,7 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         })
 
         expect(result.draggedNodeIds).toEqual(['active-region'])
-        expect(result.allowCollisionResolution).toBe(false)
+        expect(result.allowCollisionResolution).toBe(true)
     })
 
     it('moves every selected context region as one group', () => {
@@ -168,7 +168,7 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         expect(result.resolvedNodeId).toBe('region-b')
         expect(result.draggedNodeIds).toEqual(['region-a', 'region-b'])
         expect(result.allowProximityConnection).toBe(false)
-        expect(result.allowCollisionResolution).toBe(false)
+        expect(result.allowCollisionResolution).toBe(true)
     })
 
     it('moves selected regions with their real children but not unrelated leaves', () => {
@@ -210,10 +210,10 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
 
         expect(result.draggedNodeIds).toEqual(['region-1', 'doc-1'])
         expect(result.draggedNodeIds).not.toContain('generated-output')
-        expect(result.allowCollisionResolution).toBe(false)
+        expect(result.allowCollisionResolution).toBe(true)
     })
 
-    it('disables global collision resolution for context region release', () => {
+    it('enables top-level collision resolution for context region release', () => {
         const result = plan({
             nodes: [makeRegion({ nodeId: 'region-1' })],
             primaryNodeId: 'region-1',
@@ -221,7 +221,7 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
 
         expect(result.isContextRegionDrag).toBe(true)
         expect(result.allowProximityConnection).toBe(false)
-        expect(result.allowCollisionResolution).toBe(false)
+        expect(result.allowCollisionResolution).toBe(true)
     })
 })
 

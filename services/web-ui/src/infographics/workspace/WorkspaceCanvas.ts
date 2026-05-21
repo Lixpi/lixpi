@@ -35,7 +35,10 @@ import { WorkspaceConnectionManager } from '$src/infographics/workspace/Workspac
 import { getCanvasChromeZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
-import { computeImagePositionNextToThread, countExistingImagesForThread } from '$src/infographics/workspace/imagePositioning.ts'
+import {
+    computeStackedPositionToRightOfRect,
+    computeViewportCenterInsertionPosition,
+} from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
 import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceDragPlan.ts'
 import {
@@ -83,6 +86,13 @@ import { select } from 'd3-selection'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner | ContextRegionCloudResizeHandle
+type CollisionBox = { id: string; x: number; y: number; width: number; height: number }
+type CollisionEntry = { node: CanvasNode; offset: { x: number; y: number } }
+type CollisionPlan = {
+    nodeBoxes: CollisionBox[]
+    entries: Map<string, CollisionEntry>
+    shouldResolvePair: (a: CollisionBox, b: CollisionBox) => boolean
+}
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'
@@ -122,6 +132,14 @@ type WorkspaceCanvasCallbacks = {
     onDocumentTitleChange?: (params: { documentId: string; title: string }) => void
     onAiChatThreadContentChange?: (params: { workspaceId: string; threadId: string; content: any }) => void
 }
+
+type WorkspaceCanvasNodeInsertion =
+    | Omit<DocumentCanvasNode, 'position'>
+    | Omit<ImageCanvasNode, 'position'>
+    | Omit<AiChatThreadCanvasNode, 'position'>
+    | Omit<ContextRegionCanvasNode, 'position'>
+
+type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nodes' | 'edges' | 'viewport'>
 
 type WorkspaceCanvasOptions = {
     paneEl: HTMLDivElement
@@ -715,9 +733,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getRegionGeneratedImageSize(region: CanvasNode): number {
-        const availableWidth = Math.max(120, region.dimensions.width - 48)
-        return Math.min(220, availableWidth)
+    function getGeneratedImageInsertionSize(): number {
+        return webUiThemeSettings.imageBranchLineage.generatedImageSize
     }
 
     function getNextRegionChildPosition(region: CanvasNode, childWidth: number, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
@@ -734,20 +751,132 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function getNextRegionOutputPosition(region: ContextRegionNode, childWidth: number, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
+    function getNextRegionOutputPosition(region: ContextRegionNode, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
         const nodesById = getCanvasNodesById(nodes)
-        const regionPosition = getNodeWorldPosition(region, nodesById)
-        const gap = 72
+        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
+        const regionDatum = getContextRegionCloudDatum(region, threadMap.get(region.referenceId), nodesById)
+        const cloudBounds = getContextRegionCloudBounds(regionDatum)
+        const gap = webUiThemeSettings.imageBranchLineage.contextRegionOutputGap
         const existingOutputs = nodes.filter((node: CanvasNode) => {
             if (node.type !== 'image' || node.parentId) return false
             return (node as ImageCanvasNode).generatedBy?.aiChatThreadId === region.referenceId
         })
-        const index = existingOutputs.length
 
+        return computeStackedPositionToRightOfRect(cloudBounds, existingOutputs.length, childHeight, gap)
+    }
+
+    function getInsertionPaneSize(): { width: number; height: number } {
+        const rect = paneRect ?? paneEl.getBoundingClientRect()
+        return { width: rect.width, height: rect.height }
+    }
+
+    function getCenteredInsertionPosition(dimensions: { width: number; height: number }): { x: number; y: number } {
+        return computeViewportCenterInsertionPosition(dimensions, getLiveViewport(), getInsertionPaneSize())
+    }
+
+    function getContextRegionCollisionDatum(
+        node: ContextRegionNode,
+        position: { x: number; y: number },
+        threadMap: Map<string, AiChatThread>
+    ): ContextRegionCloudDatum {
         return {
-            x: regionPosition.x + region.dimensions.width + gap,
-            y: regionPosition.y + index * (childHeight + gap),
+            nodeId: node.nodeId,
+            referenceId: node.referenceId,
+            x: position.x,
+            y: position.y,
+            width: node.dimensions.width,
+            height: node.dimensions.height,
+            title: getAiChatThreadTitle(threadMap.get(node.referenceId)),
+            selected: selectedNodeIds.has(node.nodeId),
         }
+    }
+
+    function getContextRegionCollisionDatumFromBox(
+        entry: CollisionEntry,
+        box: CollisionBox,
+        threadMap: Map<string, AiChatThread>
+    ): ContextRegionCloudDatum | null {
+        if (!isContextRegionCanvasNode(entry.node)) return null
+        return getContextRegionCollisionDatum(entry.node, {
+            x: box.x + entry.offset.x,
+            y: box.y + entry.offset.y,
+        }, threadMap)
+    }
+
+    function getResolvedNodePositionFromCollisionBox(node: CanvasNode, box: { x: number; y: number }, entries: Map<string, CollisionEntry>): { x: number; y: number } {
+        const entry = entries.get(node.nodeId)
+        if (!entry) return box
+        return {
+            x: box.x + entry.offset.x,
+            y: box.y + entry.offset.y,
+        }
+    }
+
+    function createShapeAwareCollisionPlan(nodes: CanvasNode[], topLevelOnly = false): CollisionPlan {
+        const collisionNodes = topLevelOnly
+            ? nodes.filter((node: CanvasNode) => !node.parentId)
+            : nodes
+        const nodesById = getCanvasNodesById(nodes)
+        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
+        const entries = new Map<string, CollisionEntry>()
+
+        const nodeBoxes = collisionNodes.map((node: CanvasNode) => {
+            const worldPosition = getNodeWorldPosition(node, nodesById)
+            if (isContextRegionCanvasNode(node)) {
+                const datum = getContextRegionCollisionDatum(node, worldPosition, threadMap)
+                const cloudBounds = getContextRegionCloudBounds(datum)
+                entries.set(node.nodeId, {
+                    node,
+                    offset: {
+                        x: worldPosition.x - cloudBounds.x,
+                        y: worldPosition.y - cloudBounds.y,
+                    },
+                })
+                return { id: node.nodeId, ...cloudBounds }
+            }
+
+            entries.set(node.nodeId, { node, offset: { x: 0, y: 0 } })
+            return {
+                id: node.nodeId,
+                x: worldPosition.x,
+                y: worldPosition.y,
+                width: node.dimensions.width,
+                height: node.dimensions.height,
+            }
+        })
+
+        const shouldResolvePair = (a: CollisionBox, b: CollisionBox): boolean => {
+            const entryA = entries.get(a.id)
+            const entryB = entries.get(b.id)
+            if (!entryA || !entryB) return true
+
+            const datumA = getContextRegionCollisionDatumFromBox(entryA, a, threadMap)
+            const datumB = getContextRegionCollisionDatumFromBox(entryB, b, threadMap)
+            if (datumA && datumB) return contextRegionCloudGeometry.contextRegionCloudsIntersect(datumA, datumB)
+            if (datumA) return contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datumA, b)
+            if (datumB) return contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datumB, a)
+            return true
+        }
+
+        return { nodeBoxes, entries, shouldResolvePair }
+    }
+
+    function resolveTopLevelNodeCollisions(nodes: CanvasNode[]): CanvasNode[] {
+        const collisionPlan = createShapeAwareCollisionPlan(nodes, true)
+        const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
+            iterations: 50,
+            overlapThreshold: 0.5,
+            margin: 32,
+            shouldResolvePair: collisionPlan.shouldResolvePair,
+        })
+
+        if (!collisionResult.hasChanges) return nodes
+
+        return nodes.map((node: CanvasNode) => {
+            if (node.parentId) return node
+            const movedPosition = collisionResult.nodes.get(node.nodeId)
+            return movedPosition ? { ...node, position: getResolvedNodePositionFromCollisionBox(node, movedPosition, collisionPlan.entries) } : node
+        })
     }
 
     function getNodesForConnectionManager(nodes: CanvasNode[]): CanvasNode[] {
@@ -2300,24 +2429,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
-    function getNextGeneratedImagePosition(sourceNode: CanvasNode, sourceThread: ContextRegionNode, imageWidth: number, imageHeight: number): { x: number; y: number } {
+    function getGeneratedChildOutputs(sourceNode: CanvasNode, nodes: CanvasNode[], edges: WorkspaceEdge[]): ImageCanvasNode[] {
+        return nodes.filter((node: CanvasNode): node is ImageCanvasNode => {
+            if (node.type !== 'image' || node.parentId) return false
+            return edges.some((edge: WorkspaceEdge) => edge.sourceNodeId === sourceNode.nodeId && edge.targetNodeId === node.nodeId)
+        })
+    }
+
+    function getMostRecentGeneratedChildOutput(outputs: ImageCanvasNode[]): ImageCanvasNode | undefined {
+        return [...outputs].sort((a: ImageCanvasNode, b: ImageCanvasNode) => {
+            const createdAtDelta = (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
+            if (createdAtDelta !== 0) return createdAtDelta
+            return a.position.x - b.position.x
+        }).at(-1)
+    }
+
+    function getNextGeneratedImagePosition(sourceNode: CanvasNode, imageHeight: number): { x: number; y: number } {
         const nodes = currentCanvasState?.nodes || []
         if (isContextRegionCanvasNode(sourceNode)) {
-            return getNextRegionOutputPosition(sourceThread, imageWidth, imageHeight, nodes)
+            return getNextRegionOutputPosition(sourceNode, imageHeight, nodes)
         }
 
-        const sourceRect = getNodeWorldRect(sourceNode)
-        const gap = 72
-        const existingChildOutputs = nodes.filter((node: CanvasNode) => {
-            if (node.type !== 'image' || node.parentId) return false
-            return currentCanvasState?.edges.some((edge: WorkspaceEdge) =>
-                edge.sourceNodeId === sourceNode.nodeId && edge.targetNodeId === node.nodeId
-            ) ?? false
-        })
+        const edges = currentCanvasState?.edges ?? []
+        const existingChildOutputs = getGeneratedChildOutputs(sourceNode, nodes, edges)
+        const previousOutput = getMostRecentGeneratedChildOutput(existingChildOutputs)
+        const anchorRect = previousOutput ? getNodeWorldRect(previousOutput) : getNodeWorldRect(sourceNode)
 
         return {
-            x: sourceRect.x + sourceRect.width + gap,
-            y: sourceRect.y + existingChildOutputs.length * (imageHeight + gap),
+            x: anchorRect.x + anchorRect.width + webUiThemeSettings.imageBranchLineage.imageToImageGap,
+            y: anchorRect.y,
         }
     }
 
@@ -2476,11 +2616,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
 
-            const width = sourceThreadNode ? getRegionGeneratedImageSize(sourceThreadNode) : 400
+            const width = getGeneratedImageInsertionSize()
             const height = width
             const position = sourceThreadNode
-                ? getNextRegionOutputPosition(sourceThreadNode, width, height, existingNodes)
-                : { x: 50 + (existingNodes.length % 3) * 450, y: 50 + Math.floor(existingNodes.length / 3) * 400 }
+                ? getNextRegionOutputPosition(sourceThreadNode, height, existingNodes)
+                : getCenteredInsertionPosition({ width, height })
 
             const imageNode: ImageCanvasNode = {
                 nodeId: `node-${fileId}`,
@@ -2618,9 +2758,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const API_BASE_URL = import.meta.env.VITE_API_URL || ''
             const imageSrc = buildImageSrc(imageUrl, API_BASE_URL, token)
 
-            const imageWidth = getRegionGeneratedImageSize(sourceThread)
+            const imageWidth = getGeneratedImageInsertionSize()
             const imageHeight = imageWidth
-            const position = getNextGeneratedImagePosition(sourceNode, sourceThread, imageWidth, imageHeight)
+            const position = getNextGeneratedImagePosition(sourceNode, imageHeight)
 
             const imageNode: ImageCanvasNode = {
                 nodeId,
@@ -2713,26 +2853,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 for (const child of nodes) {
                     if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
                 }
-                const nodesById = getCanvasNodesById(nodes)
-                const nodeBoxes = nodes.map((n: CanvasNode) => {
-                    const worldPosition = getNodeWorldPosition(n, nodesById)
-                    return {
-                        id: n.nodeId,
-                        x: worldPosition.x,
-                        y: worldPosition.y,
-                        width: n.dimensions.width,
-                        height: n.dimensions.height,
-                    }
+                const collisionPlan = createShapeAwareCollisionPlan(nodes)
+                const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
+                    excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
+                    shouldResolvePair: collisionPlan.shouldResolvePair,
                 })
-                const collisionResult = resolveCollisions(nodeBoxes, { excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined })
 
                 const resolvedNodes = collisionResult.hasChanges
                     ? nodes.map((n: CanvasNode) => {
                         const resolved = collisionResult.nodes.get(n.nodeId)
                         if (!resolved) return n
+                        const resolvedPosition = getResolvedNodePositionFromCollisionBox(n, resolved, collisionPlan.entries)
                         const position = n.parentId
-                            ? toParentRelativePosition({ x: resolved.x, y: resolved.y }, n.parentId, getCanvasNodesById(nodes))
-                            : { x: resolved.x, y: resolved.y }
+                            ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(nodes))
+                            : resolvedPosition
                         return { ...n, position }
                     })
                     : nodes
@@ -2777,9 +2911,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const nodeId = `node-${fileId || uuidv4()}`
 
-                const imageWidth = getRegionGeneratedImageSize(sourceThread)
+                const imageWidth = getGeneratedImageInsertionSize()
                 const imageHeight = imageWidth
-                const position = getNextGeneratedImagePosition(sourceNode, sourceThread, imageWidth, imageHeight)
+                const position = getNextGeneratedImagePosition(sourceNode, imageHeight)
 
                 const imageNode: ImageCanvasNode = {
                     nodeId,
@@ -2815,26 +2949,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 for (const child of allNodes) {
                     if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
                 }
-                const allNodesById = getCanvasNodesById(allNodes)
-                const nodeBoxes = allNodes.map((n: CanvasNode) => {
-                    const worldPosition = getNodeWorldPosition(n, allNodesById)
-                    return {
-                        id: n.nodeId,
-                        x: worldPosition.x,
-                        y: worldPosition.y,
-                        width: n.dimensions.width,
-                        height: n.dimensions.height,
-                    }
+                const collisionPlan = createShapeAwareCollisionPlan(allNodes)
+                const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
+                    excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
+                    shouldResolvePair: collisionPlan.shouldResolvePair,
                 })
-                const collisionResult = resolveCollisions(nodeBoxes, { excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined })
 
                 const resolvedNodes = collisionResult.hasChanges
                     ? allNodes.map((n: CanvasNode) => {
                         const resolved = collisionResult.nodes.get(n.nodeId)
                         if (!resolved) return n
+                        const resolvedPosition = getResolvedNodePositionFromCollisionBox(n, resolved, collisionPlan.entries)
                         const position = n.parentId
-                            ? toParentRelativePosition({ x: resolved.x, y: resolved.y }, n.parentId, getCanvasNodesById(allNodes))
-                            : { x: resolved.x, y: resolved.y }
+                            ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(allNodes))
+                            : resolvedPosition
                         return { ...n, position }
                     })
                     : allNodes
@@ -2916,26 +3044,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                     }
 
-                    // Calculate position to the right of the source image
-                    const newX = sourceImageNode
-                        ? sourceImageNode.position.x + sourceImageNode.dimensions.width + 50
-                        : 50 + (existingNodes.length % 3) * 450
-                    const newY = sourceImageNode
-                        ? sourceImageNode.position.y
-                        : 50 + Math.floor(existingNodes.length / 3) * 400
+                    const threadDimensions = { ...webUiThemeSettings.contextRegion.defaultDimensions }
+                    const fallbackPosition = getCenteredInsertionPosition(threadDimensions)
+                    const sourceImageRect = sourceImageNode ? getNodeWorldRect(sourceImageNode) : null
+                    const threadPosition = sourceImageRect
+                        ? { x: sourceImageRect.x + sourceImageRect.width + webUiThemeSettings.contextRegion.adjacentNodeGap, y: sourceImageRect.y }
+                        : fallbackPosition
 
                     const threadNode: ContextRegionCanvasNode = {
                         nodeId: `node-${thread.threadId}`,
                         type: 'contextRegion',
                         referenceId: thread.threadId,
-                        position: { x: newX, y: newY },
-                        dimensions: { width: 400, height: 500 }
+                        position: threadPosition,
+                        dimensions: threadDimensions,
                     }
 
                     const newCanvasState: CanvasState = {
                         viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
                         edges: currentCanvasState?.edges ?? [],
-                        nodes: [...existingNodes, threadNode]
+                        nodes: resolveTopLevelNodeCollisions([...existingNodes, threadNode])
                     }
 
                     // Create edge from source image to edit thread if we found the source
@@ -3683,37 +3810,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     }
                 }
 
-                const updatedNodesById = getCanvasNodesById(updatedNodes)
-                const nodeBoxes = updatedNodes.map((n: CanvasNode) => {
-                    const worldPosition = getNodeWorldPosition(n, updatedNodesById)
-                    return {
-                        id: n.nodeId,
-                        x: worldPosition.x,
-                        y: worldPosition.y,
-                        width: n.dimensions.width,
-                        height: n.dimensions.height,
-                    }
-                })
+                const collisionPlan = createShapeAwareCollisionPlan(updatedNodes, dragPlan.isContextRegionDrag)
 
-                const { nodes: movedNodes, hasChanges } = resolveCollisions(nodeBoxes, {
+                const { nodes: movedNodes, hasChanges } = resolveCollisions(collisionPlan.nodeBoxes, {
                     iterations: 50,
                     overlapThreshold: 0.5,
                     margin: 20,
                     excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
+                    shouldResolvePair: collisionPlan.shouldResolvePair,
                 })
 
                 if (hasChanges) {
                     updatedNodes = updatedNodes.map((n: CanvasNode) => {
                         const newPos = movedNodes.get(n.nodeId)
                         if (newPos) {
+                            const resolvedPosition = getResolvedNodePositionFromCollisionBox(n, newPos, collisionPlan.entries)
                             const movedNodeEl = viewportEl?.querySelector(`[data-node-id="${n.nodeId}"]`) as HTMLElement
                             if (movedNodeEl) {
-                                applyStyle(movedNodeEl, { left: `${newPos.x}px`, top: `${newPos.y}px` })
+                                applyStyle(movedNodeEl, { left: `${resolvedPosition.x}px`, top: `${resolvedPosition.y}px` })
                             }
-                            pixiMediaLayer?.setNodeLiveTransform(n.nodeId, newPos, n.dimensions)
+                            pixiMediaLayer?.setNodeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
                             const nextPosition = n.parentId
-                                ? toParentRelativePosition(newPos, n.parentId, getCanvasNodesById(updatedNodes))
-                                : newPos
+                                ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(updatedNodes))
+                                : resolvedPosition
                             return { ...n, position: nextPosition }
                         }
                         return n
@@ -4632,6 +4751,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     renderNodes()
 
     return {
+        insertNodeAtViewportCenter(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
+            const baseCanvasState: CanvasState = currentCanvasState ?? {
+                viewport: getLiveViewport(),
+                edges: [],
+                nodes: [],
+            }
+            const positionedNode = {
+                ...node,
+                position: getCenteredInsertionPosition(node.dimensions),
+            } as CanvasNode
+            const newCanvasState: CanvasState = {
+                ...baseCanvasState,
+                ...statePatch,
+                viewport: baseCanvasState.viewport,
+                edges: baseCanvasState.edges ?? [],
+                nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, positionedNode]),
+            }
+
+            onCanvasStateChange?.(newCanvasState)
+            return newCanvasState
+        },
         render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
             const workspaceChanged = Boolean(newWorkspaceId && newWorkspaceId !== workspaceId)
             if (newWorkspaceId) workspaceId = newWorkspaceId

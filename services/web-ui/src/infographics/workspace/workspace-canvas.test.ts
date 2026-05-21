@@ -780,10 +780,16 @@ describe('AI chat region PIXI cloud layer', () => {
 	it('keeps context region DOM nodes as non-visual PIXI-owned proxies', () => {
 		expectSourceToContain(ts, 'workspace-context-region-node--pixi-owned')
 		expectSourceNotToContain(themeSettings, 'contextRegionAreaShiftingGradientColors')
-		expectSourceToContain(themeSettings, 'contextRegionCloudGradientColors')
-		expectSourceToContain(themeSettings, 'contextRegionCloudStyles')
-		expectSourceToContain(cloudTs, 'webUiThemeSettings.contextRegionCloudStyles')
-		expectSourceToContain(cloudLayerTs, 'webUiThemeSettings.contextRegionCloudGradientColors')
+		expectSourceToContain(themeSettings, 'contextRegion: WebUiContextRegionThemeSettings')
+		expectSourceToContain(themeSettings, 'cloud: WebUiContextRegionCloudThemeSettings')
+		expectSourceToContain(themeSettings, 'palettes: ContextRegionCloudThemePalettes')
+		expectSourceToContain(cloudTs, 'const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud')
+		expectSourceToContain(cloudLayerTs, 'const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud')
+		expectSourceNotToContain(themeSettings, 'contextRegionCloudStyles')
+		expectSourceNotToContain(themeSettings, 'contextRegionCloudGradientColors')
+		expectSourceNotToContain(themeSettings, 'contextRegionCloudPalettes')
+		expectSourceNotToContain(cloudTs, 'webUiThemeSettings.contextRegionCloud')
+		expectSourceNotToContain(cloudLayerTs, 'webUiThemeSettings.contextRegionCloud')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-thread-region__title-bar')
 		expectSourceToContain(scss, 'pointer-events: none')
 		expectSourceToContain(scss, 'background: transparent')
@@ -810,7 +816,8 @@ describe('AI chat region PIXI cloud layer', () => {
 	})
 
 	it('uses shared cloud styles for hit testing and adoption scoring', () => {
-		expectSourceToContain(cloudTs, 'export const CONTEXT_REGION_CLOUD_STYLES')
+		expectSourceToContain(cloudTs, 'const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud')
+		expectSourceToContain(cloudTs, 'export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = contextRegionCloudTheme.styles')
 		expectSourceToContain(cloudTs, 'hitTestContextRegionCloud')
 		expectSourceToContain(cloudTs, 'rectIntersectsContextRegionCloud')
 		expectSourceToContain(cloudTs, 'scoreRectAgainstContextRegionCloud')
@@ -1514,7 +1521,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 	it('group drag skips collision resolution for multi-node moves to preserve rigid spacing', () => {
 		expectSourceToContain(ts, 'if (dragPlan.allowCollisionResolution) {')
-		expectSourceToContain(ts, 'resolveCollisions(nodeBoxes')
+		expectSourceToContain(ts, 'resolveCollisions(collisionPlan.nodeBoxes')
 	})
 
 	it('context-region drag skips proximity checks during movement', () => {
@@ -1524,6 +1531,63 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 		expect(fnBody).toContain('if (dragPlan.allowProximityConnection) {')
 		expect(fnBody).toContain('connectionManager?.checkProximity(resolvedNodeId, currentPos, currentDims)')
+	})
+})
+
+// =============================================================================
+// Collision resolution ownership
+// =============================================================================
+
+describe('Workspace canvas — collision resolution ownership', () => {
+	const ts = loadTs()
+	const svelte = loadWorkspaceCanvasSvelte()
+	const collisionTs = readSourceFile('../utils/resolveCollisions.ts', 'utils/resolveCollisions.ts')
+
+	it('keeps toolbar insertion collision logic out of the Svelte wrapper', () => {
+		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(documentNode)')
+		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(imageNode)')
+		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(contextRegionNode, { lastActiveAiChatThreadId: thread.threadId })')
+		expectSourceNotToContain(svelte, "from '$src/infographics/utils/resolveCollisions.ts'")
+		expectSourceNotToContain(svelte, 'resolveInsertionCollisions')
+		expectSourceNotToContain(svelte, 'computeViewportCenterInsertionPosition')
+		expectSourceNotToContain(svelte, 'contextRegionCloudsIntersect')
+		expectSourceNotToContain(svelte, 'rectIntersectsContextRegionCloud')
+	})
+
+	it('routes toolbar insertion through the workspace renderer collision path', () => {
+		expectSourceToContain(ts, 'insertNodeAtViewportCenter(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {})')
+		expectSourceToContain(ts, 'position: getCenteredInsertionPosition(node.dimensions),')
+		expectSourceToContain(ts, 'nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, positionedNode]),')
+		expectSourceToContain(ts, 'onCanvasStateChange?.(newCanvasState)')
+		expectSourceNotToContain(ts, 'screenDimensionsToWorldDimensions(node.dimensions')
+	})
+
+	it('builds shape-aware collision boxes around context-region cloud bounds', () => {
+		expectSourceToContain(ts, 'function createShapeAwareCollisionPlan(nodes: CanvasNode[], topLevelOnly = false): CollisionPlan')
+		expectSourceToContain(ts, 'const worldPosition = getNodeWorldPosition(node, nodesById)')
+		expectSourceToContain(ts, 'const cloudBounds = getContextRegionCloudBounds(datum)')
+		expectSourceToContain(ts, 'x: worldPosition.x - cloudBounds.x')
+		expectSourceToContain(ts, 'return { id: node.nodeId, ...cloudBounds }')
+	})
+
+	it('filters broad-phase overlaps through context-region cloud geometry', () => {
+		expectSourceToContain(ts, 'const shouldResolvePair = (a: CollisionBox, b: CollisionBox): boolean => {')
+		expectSourceToContain(ts, 'contextRegionCloudGeometry.contextRegionCloudsIntersect(datumA, datumB)')
+		expectSourceToContain(ts, 'contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datumA, b)')
+		expectSourceToContain(ts, 'contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datumB, a)')
+	})
+
+	it('uses the shared generic resolver rather than a workspace-specific duplicate', () => {
+		expectSourceToContain(collisionTs, 'export function resolveCollisions(')
+		expectSourceToContain(collisionTs, 'shouldResolvePair?: (a: NodeBox, b: NodeBox) => boolean')
+		expectSourceToContain(ts, "import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'")
+		expectSourceToContain(ts, 'resolveCollisions(collisionPlan.nodeBoxes')
+	})
+
+	it('keeps parent-child containment out of collision pushes', () => {
+		expectSourceToContain(ts, 'if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)')
+		expectSourceToContain(ts, 'excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined')
+		expectSourceToContain(ts, 'toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(updatedNodes))')
 	})
 })
 
