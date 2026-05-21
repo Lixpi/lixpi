@@ -32,9 +32,11 @@ import {
     type WorldPosition,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
+import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 type PixiImageEntry = {
     sprite: Sprite
+    spriteMask: Graphics
     colorRect: Graphics
     nodeRef: ImageCanvasNode
     // Identity of the SOURCE image (workspace + fileId + src). When this
@@ -56,6 +58,9 @@ type PixiImageEntry = {
     // the node hasn't moved or resized.
     colorRectW: number
     colorRectH: number
+    spriteMaskW: number
+    spriteMaskH: number
+    spriteMaskRadius: number
 }
 
 type TextureEntry = {
@@ -349,8 +354,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 // Remove from spatial index before destroying the entry.
                 spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
                 world.removeChild(entry.sprite)
+                world.removeChild(entry.spriteMask)
                 world.removeChild(entry.colorRect)
+                entry.sprite.mask = null
                 entry.sprite.destroy()
+                entry.spriteMask.destroy()
                 entry.colorRect.destroy()
                 entries.delete(nodeId)
             }
@@ -423,6 +431,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         entry.sprite.position.set(x, y)
         entry.sprite.width = w
         entry.sprite.height = h
+        syncSpriteMask(entry, x, y, w, h)
         entry.colorRect.position.set(x, y)
         if (w !== entry.colorRectW || h !== entry.colorRectH) {
             drawColorRect(entry.colorRect, w, h)
@@ -476,6 +485,25 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return `${getWorkspaceId()}|${node.fileId}|${node.src}`
     }
 
+    function getImageBorderRadius(width: number, height: number): number {
+        const borderRadius = webUiThemeSettings.imageNode.borderRadius
+        if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
+        return Math.min(borderRadius, width / 2, height / 2)
+    }
+
+    function syncSpriteMask(entry: PixiImageEntry, x: number, y: number, width: number, height: number): void {
+        const radius = getImageBorderRadius(width, height)
+        entry.spriteMask.position.set(x, y)
+        if (width === entry.spriteMaskW && height === entry.spriteMaskH && radius === entry.spriteMaskRadius) return
+
+        entry.spriteMask.clear()
+        entry.spriteMask.roundRect(0, 0, width, height, radius)
+        entry.spriteMask.fill({ color: 0xffffff, alpha: 1 })
+        entry.spriteMaskW = width
+        entry.spriteMaskH = height
+        entry.spriteMaskRadius = radius
+    }
+
     function upsertEntry(node: ImageCanvasNode, worldPosition: WorldPosition): void {
         const newSourceKey = makeSourceKey(node)
         let entry = entries.get(node.nodeId)
@@ -485,14 +513,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             sprite.label = `pixi-image-${node.nodeId}`
             sprite.eventMode = 'none'
             sprite.visible = false
+            const spriteMask = new Graphics()
+            spriteMask.label = `pixi-image-mask-${node.nodeId}`
+            spriteMask.eventMode = 'none'
+            sprite.mask = spriteMask
             const colorRect = new Graphics()
             colorRect.label = `pixi-image-color-${node.nodeId}`
             colorRect.eventMode = 'none'
             world.addChild(sprite)
+            world.addChild(spriteMask)
             world.addChild(colorRect)
             const rect = makeIndexedImage(node, worldPosition)
             entry = {
                 sprite,
+                spriteMask,
                 colorRect,
                 nodeRef: node,
                 sourceKey: newSourceKey,
@@ -504,6 +538,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 isVisible: false,
                 colorRectW: -1,
                 colorRectH: -1,
+                spriteMaskW: -1,
+                spriteMaskH: -1,
+                spriteMaskRadius: -1,
             }
             entries.set(node.nodeId, entry)
             spatialIndex.insert(rect)
@@ -531,6 +568,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         entry.sprite.position.set(x, y)
         entry.sprite.width = w
         entry.sprite.height = h
+        syncSpriteMask(entry, x, y, w, h)
 
         // Color-rect geometry — only rebuild GPU path when size actually changed.
         // Position is a transform update; width/height require path re-upload.
@@ -560,7 +598,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function drawColorRect(rect: Graphics, width: number, height: number): void {
         rect.clear()
-        rect.roundRect(0, 0, width, height, 4)
+        rect.roundRect(0, 0, width, height, getImageBorderRadius(width, height))
         rect.fill({ color: 0xe7eaee, alpha: 0.85 })
     }
 
@@ -587,6 +625,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         // is exactly what made zoom-out feel sluggish.
         if (entry.loadedTier !== null && tierRank(entry.loadedTier) >= tierRank(desiredTier)) {
             entry.sprite.visible = true
+                            syncSpriteMask(entry, entry.worldRect.minX, entry.worldRect.minY, entry.nodeRef.dimensions.width, entry.nodeRef.dimensions.height)
             entry.colorRect.visible = false
             return
         }
@@ -652,6 +691,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 entry.sprite.position.set(entry.worldRect.minX, entry.worldRect.minY)
                 entry.sprite.width = entry.nodeRef.dimensions.width
                 entry.sprite.height = entry.nodeRef.dimensions.height
+                syncSpriteMask(entry, entry.worldRect.minX, entry.worldRect.minY, entry.nodeRef.dimensions.width, entry.nodeRef.dimensions.height)
                 entry.sprite.visible = true
                 entry.colorRect.visible = false
                 if (oldKey && oldKey !== resolved) releaseTexture(oldKey)
@@ -950,7 +990,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         for (const [nodeId, entry] of entries) {
             setDomOwnership(nodeId, false)
             releaseTexture(entry.textureKey)
+            entry.sprite.mask = null
             entry.sprite.destroy()
+            entry.spriteMask.destroy()
             entry.colorRect.destroy()
         }
         releaseAllDomOwnership()
