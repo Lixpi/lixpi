@@ -57,6 +57,7 @@ describe('webUiThemeSettings — context region configuration', () => {
 		expect(webUiThemeSettings.contextRegion.adjacentNodeGap).toBeGreaterThanOrEqual(0)
 		expect(webUiThemeSettings.imageBranchLineage.generatedImageSize).toBeGreaterThan(0)
 		expect(webUiThemeSettings.imageBranchLineage.contextRegionOutputGap).toBeGreaterThanOrEqual(0)
+		expect(webUiThemeSettings.imageBranchLineage.branchToBranchGap).toBeGreaterThanOrEqual(0)
 		expect(webUiThemeSettings.imageBranchLineage.imageToImageGap).toBeGreaterThanOrEqual(0)
 		expect(Object.hasOwn(webUiThemeSettings.contextRegion, 'cloud')).toBe(true)
 		expect(Object.hasOwn(webUiThemeSettings, 'imageBranchLineage')).toBe(true)
