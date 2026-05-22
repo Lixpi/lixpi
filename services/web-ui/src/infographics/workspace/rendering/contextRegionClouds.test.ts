@@ -23,6 +23,7 @@ function makeDatum(overrides: Partial<ContextRegionCloudDatum> = {}): ContextReg
         height: 260,
         title: 'AI Chat',
         selected: false,
+        active: false,
         ...overrides,
     }
 }

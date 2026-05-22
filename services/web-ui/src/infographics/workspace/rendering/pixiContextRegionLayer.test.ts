@@ -21,6 +21,24 @@ function extractTopLevelFunction(source: string, functionName: string): string {
 describe('pixiContextRegionLayer — selected chrome regression guards', () => {
     const source = loadSource()
 
+    it('renders active context-region feedback only on the thought circle', () => {
+        expect(source).toContain('function createActiveThoughtCircleTexture')
+        expect(source).toContain('const gradientColors = contextRegionCloudTheme.activeThoughtCircleGradientColors.map(hexToRgb)')
+        expect(source).toContain('const bitmapWidth = 60')
+        expect(source).toContain('const bitmapHeight = 80')
+        expect(source).toContain('const color = getRegionGradientColor(')
+        expect(source).toContain("ctx.imageSmoothingQuality = 'high'")
+        expect(source).toContain('function getActiveThoughtCircleGradientPositions')
+        expect(source).toContain('function animateActiveThoughtCircle')
+        expect(source).toContain('function updateActiveThoughtCircleFrame')
+        expect(source).toContain('function easeActiveThoughtCircleTransition')
+        expect(source).toContain('cubicBezierAtTime(0.19, 1, 0.22, 1, progress)')
+        expect(source).toContain('const progress = easeActiveThoughtCircleTransition(rawProgress)')
+        expect(source).toContain('entry.activeThoughtCircleFromOverlay.alpha = alpha * (1 - gradientShift)')
+        expect(source).toContain('entry.activeThoughtCircleOverlay.renderable = true')
+        expect(source).toContain('container.addChild(activeThoughtCircleOverlay)')
+    })
+
     it('does not draw cloud-shaped selection chrome', () => {
         expect(source.includes('function drawSelectedCloudChrome'), 'cloud-shaped selection chrome must stay removed').toBe(false)
 

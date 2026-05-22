@@ -586,6 +586,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             height: dimensions.height,
             title: getAiChatThreadTitle(thread),
             selected: selectedNodeIds.has(node.nodeId),
+            active: activeAiChatRegionNodeId === node.nodeId,
         }
     }
 
@@ -947,6 +948,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             height: node.dimensions.height,
             title: getAiChatThreadTitle(threadMap.get(node.referenceId)),
             selected: selectedNodeIds.has(node.nodeId),
+            active: activeAiChatRegionNodeId === node.nodeId,
         }
     }
 
@@ -1582,6 +1584,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         onAiChatThreadCreated: ({ threadId, nodeId }) => {
             activeAiChatThreadId = threadId
             activeAiChatRegionNodeId = nodeId
+            syncContextRegionLayer(currentCanvasState)
             requestAnimationFrame(() => {
                 renderActiveAiChatPanel()
             })
@@ -1724,12 +1727,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeAiChatSidebarTabId = null
             aiChatSidebarTabs = []
             promptInputController.setTarget(null)
+            syncContextRegionLayer(currentCanvasState)
         }
     }
 
     function activateAiChatPanel(regionNode: ContextRegionNode, thread: AiChatThread | undefined): void {
         activeAiChatRegionNodeId = regionNode.nodeId
         activeAiChatThreadId = regionNode.referenceId
+        syncContextRegionLayer(currentCanvasState)
         contextRegionLayer?.pulseRegion(regionNode.nodeId)
         ensureAiChatSidebarThreadTab(regionNode.referenceId)
         persistAiChatSidebarState()
@@ -1831,6 +1836,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatThreadId = activeRegion.referenceId
         activeAiChatRegionNodeId = activeRegion.nodeId
+        syncContextRegionLayer(currentCanvasState)
         hydrateAiChatSidebarTabsFromCanvasState(activeRegion.referenceId)
     }
 

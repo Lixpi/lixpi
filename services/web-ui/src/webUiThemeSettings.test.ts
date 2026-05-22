@@ -35,26 +35,51 @@ describe('webUiThemeSettings — context region configuration', () => {
 			ink: '#1F2937',
 		})
 		expect(webUiThemeSettings.contextRegion.cloud.palettes.seafoam.edge).toBe('#8FB5AB')
+		expect(webUiThemeSettings.contextRegion.cloud.palettes.surfaceGradient).toEqual({
+			color1: '#DDECE7',
+			color2: '#C7DAD4',
+			color3: '#EEF8F5',
+			color4: '#D6E7E1',
+		})
+		expect(webUiThemeSettings.contextRegion.cloud.palettes.activeThoughtCircle).toEqual({
+			color1: '#A7C39A',
+			color2: '#9CBB91',
+			color3: '#91AD86',
+			color4: '#AFCB9E',
+		})
 		expect(Object.hasOwn(webUiThemeSettings, 'contextRegionCloudPalettes')).toBe(false)
 	})
 
-	it('uses a getter only where cloud styles need sibling palettes', () => {
+	it('uses getters only where cloud settings need sibling palettes', () => {
 		const cloudSettings = webUiThemeSettings.contextRegion.cloud
-		const descriptor = Object.getOwnPropertyDescriptor(cloudSettings, 'styles')
+		const surfaceGradientDescriptor = Object.getOwnPropertyDescriptor(cloudSettings, 'gradientColors')
+		const activeThoughtCircleGradientDescriptor = Object.getOwnPropertyDescriptor(cloudSettings, 'activeThoughtCircleGradientColors')
+		const stylesDescriptor = Object.getOwnPropertyDescriptor(cloudSettings, 'styles')
 
-		expect(typeof descriptor?.get).toBe('function')
+		expect(typeof surfaceGradientDescriptor?.get).toBe('function')
+		expect(typeof activeThoughtCircleGradientDescriptor?.get).toBe('function')
+		expect(typeof stylesDescriptor?.get).toBe('function')
+		expect(cloudSettings.gradientColors).toEqual(['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'])
+		expect(cloudSettings.activeThoughtCircleGradientColors).toEqual(['#A7C39A', '#9CBB91', '#91AD86', '#AFCB9E'])
 		expect(cloudSettings.styles[0].palette).toBe(cloudSettings.palettes.mist)
 		expect(cloudSettings.styles.some((style) => style.palette === cloudSettings.palettes.seafoam)).toBe(true)
 	})
 
 	it('does not use getters for ordinary static settings', () => {
-		expect(collectGetterPaths(webUiThemeSettings)).toEqual(['contextRegion.cloud.styles'])
+		expect(collectGetterPaths(webUiThemeSettings)).toEqual([
+			'contextRegion.cloud.gradientColors',
+			'contextRegion.cloud.activeThoughtCircleGradientColors',
+			'contextRegion.cloud.styles',
+		])
 	})
 
 	it('keeps branch lineage and context-region layout knobs in grouped subsections', () => {
 		expect(webUiThemeSettings.contextRegion.defaultDimensions.width).toBeGreaterThan(0)
 		expect(webUiThemeSettings.contextRegion.defaultDimensions.height).toBeGreaterThan(0)
 		expect(webUiThemeSettings.contextRegion.adjacentNodeGap).toBeGreaterThanOrEqual(0)
+		expect(webUiThemeSettings.contextRegion.cloud.activeThoughtCircleAlpha).toBeLessThan(1)
+		expect(webUiThemeSettings.contextRegion.cloud.activeThoughtCircleAnimationDurationMs).toBeGreaterThan(0)
+		expect(webUiThemeSettings.contextRegion.cloud.activeThoughtCircleBloomAlphaLift).toBeGreaterThan(0)
 		expect(webUiThemeSettings.imageNode.defaultBoxShadow).not.toBe('none')
 		expect(webUiThemeSettings.imageNode.defaultInsertionWidth).toBeGreaterThan(0)
 		expect(webUiThemeSettings.imageNode.borderRadius).toBeGreaterThanOrEqual(0)

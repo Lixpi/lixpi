@@ -81,6 +81,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Route empty-region clicks and drags through `contextRegionLayer.hitTest()` from the pane background handler; transparent cloud corners are not treated as region body hits.
 - Use `rendering/contextRegionClouds.ts` for shared style selection, CO2 SVG-mask hit geometry, title hit zones, and adoption scoring. The drag-release adoption path uses the same cloud mask as click hit-testing.
 - Read all context-region cloud visual and hit-target options from `webUiThemeSettings.contextRegion.cloud`.
+- Paint only the detached thought-circle portion with a soft sage cloud-adjacent gradient when its linked AI chat panel is active, then animate a bounded gradient bloom when that active region changes.
 - Pulse subtly on selection, panel activation, and AI submit. PIXI's ticker remains off; the pulse is a bounded requestAnimationFrame animation.
 - Open the singleton canvas-owned floating chat panel when clicked. The region itself is context grouping chrome, not an embedded ProseMirror editor.
 - See [`documentation/features/CONTEXT-REGION-CLOUDS.md`](../../../../../documentation/features/CONTEXT-REGION-CLOUDS.md) for the deeper architecture, research context, and implementation constraints.
