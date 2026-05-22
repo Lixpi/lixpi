@@ -460,6 +460,15 @@ Users see:
   - Collapsed by default — user can expand to see the full prompt
   - Streamed content inserts inside the collapsible block via `PositionFinder.findCollapsibleNode()`
   - Backend detects `<image_prompt>` XML tags in the LLM stream and publishes `COLLAPSIBLE_START` / `COLLAPSIBLE_END` events
+- `imageGenerationTraceDetails.ts` - Shared renderer for image-generation trace metadata:
+  - Used by `aiCollapsibleBlockNode.ts` in chat history and by `WorkspaceCanvas.ts` for generated-image info blocks
+  - Shows the chat-model prompt, final image-model prompt, reference-image tiles, resolver audit summary, and excluded references from the same `ImageGenerationTrace` payload
+  - Canvas callers override the chat-history scroll caps so generated-image provenance panels show the full prompt and metadata content
+- `aiChatMessageShells.ts` - Shared user/assistant chat message DOM shells:
+  - Used by ProseMirror node views and canvas generated-image info blocks so message chrome, provider avatars, and bubble structure stay consistent
+- `aiChatThreadContentUtils.ts` - ProseMirror JSON helpers for generated-image provenance:
+  - Finds the user message and AI response that produced a canvas image by `responseMessageId`
+  - Extracts prompt text, response text, provider, collapsible prompt text, and inline `ImageGenerationTrace` metadata for reusable canvas rendering
 
 - `aiChatThreadPlugin.ts` - Main orchestration logic:
   - Plugin state and lifecycle management

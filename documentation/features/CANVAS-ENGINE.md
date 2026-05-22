@@ -102,6 +102,9 @@ flowchart TB
             IMG_SPR[image sprites + colorRect placeholders]
             FG[fgLayer: selection outlines, marquee, group overlay]
         end
+        subgraph ImageChrome[".workspace-image-chrome-viewport (z-index 3, CSS-transformed)"]
+            IMG_CHROME[Generated-image provider badge<br/>info button + provenance panel]
+        end
     end
 
     RegionPixi --> Viewport
@@ -110,11 +113,12 @@ flowchart TB
     WORLD --> EDGE_PIXI
     WORLD --> IMG_SPR
     WORLD --> FG
+    PixiCanvas --> ImageChrome
 ```
 
-The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Image-node DOM elements are kept (`<div data-node-id>` plus `<img class="image-node-img">`) for two reasons:
+The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Generated-image provider badges, info buttons, and full-width provenance panels sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas, because stored image DOM shells are deliberately hidden while PIXI owns their pixels. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Image-node DOM elements are kept (`<div data-node-id>` plus `<img class="image-node-img">`) for two reasons:
 
-1. They host all interaction chrome — drag overlay, resize handles, badges, generation spinner, partial-streaming `<img>` for AI image generation.
+1. They host core interaction chrome — drag overlay, resize handles, generation spinner, and partial-streaming `<img>` for AI image generation.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 
 The DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node--pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
@@ -131,6 +135,7 @@ flowchart LR
     XY[XYPanZoom<br/>onTransformChange] --> CB[onTransformChange callback<br/>WorkspaceCanvas.ts]
     CB --> VB[viewportBridge.applyViewport]
     VB --> CSS[viewport CSS transform<br/>translate + scale]
+    VB --> CHROME[image chrome overlay CSS transform<br/>translate + scale]
     VB --> PIXI[pixiMediaLayer.setViewport]
     VB --> REGION[contextRegionLayer.setViewport]
     PIXI --> WORLD[world.position / world.scale]
