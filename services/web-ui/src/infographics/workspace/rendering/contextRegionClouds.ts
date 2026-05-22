@@ -27,6 +27,7 @@ export type ContextRegionCloudDatum = {
     height: number
     title: string
     selected: boolean
+    active: boolean
 }
 
 export type ContextRegionCloudHit =
