@@ -10,6 +10,11 @@ import type {
     ImageCanvasNode,
     WorkspaceEdge,
 } from '@lixpi/constants'
+import {
+    collectProseMirrorText,
+    collectResponseTextById,
+    parseProseMirrorJsonContent,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 
 const RESOLVER_VERSION = 'image-branch-vlm-v1'
 
@@ -28,13 +33,6 @@ type BuildImageBranchCandidateSnapshotParams = {
 type ChatMessageLike = {
     role?: string
     content?: unknown
-}
-
-type ProseMirrorJsonNode = {
-    type?: string
-    text?: string
-    attrs?: Record<string, unknown>
-    content?: ProseMirrorJsonNode[]
 }
 
 function isGeneratedImageForThread(node: CanvasNode, threadId: string): node is ImageCanvasNode {
@@ -216,66 +214,12 @@ function getBranchPromptText(
         .join('\n---\n')
 }
 
-function parseThreadContent(content: unknown): ProseMirrorJsonNode | null {
-    if (!content) return null
-    if (typeof content === 'string') {
-        try {
-            return JSON.parse(content) as ProseMirrorJsonNode
-        } catch {
-            return null
-        }
-    }
-    if (typeof content === 'object') return content as ProseMirrorJsonNode
-    return null
-}
-
-function collectProseMirrorText(node: ProseMirrorJsonNode | undefined): string {
-    if (!node) return ''
-    if (node.type === 'text') return node.text ?? ''
-    if (node.type === 'hard_break') return '\n'
-    if (node.type === 'aiGeneratedImage') {
-        return typeof node.attrs?.revisedPrompt === 'string' ? node.attrs.revisedPrompt : ''
-    }
-    return node.content?.map(collectProseMirrorText).join('') ?? ''
-}
-
-function collectResponseTextById(root: ProseMirrorJsonNode): Record<string, string> {
-    const responseTextById: Record<string, string> = {}
-
-    function visitContainer(node: ProseMirrorJsonNode): void {
-        const children = node.content ?? []
-        let previousUserText = ''
-
-        for (const child of children) {
-            if (child.type === 'aiUserMessage') {
-                previousUserText = collectProseMirrorText(child).trim()
-                continue
-            }
-
-            if (child.type === 'aiResponseMessage') {
-                const responseId = typeof child.attrs?.id === 'string' ? child.attrs.id : ''
-                if (responseId) {
-                    responseTextById[responseId] = [previousUserText, collectProseMirrorText(child).trim()]
-                        .filter(Boolean)
-                        .join('\n')
-                }
-                continue
-            }
-
-            visitContainer(child)
-        }
-    }
-
-    visitContainer(root)
-    return responseTextById
-}
-
 export function getGeneratedImageTextByNodeIdFromThreadContent(
     threadContent: unknown,
     nodes: CanvasNode[],
     threadId: string
 ): Record<string, string> {
-    const root = parseThreadContent(threadContent)
+    const root = parseProseMirrorJsonContent(threadContent)
     if (!root) return {}
 
     const responseTextById = collectResponseTextById(root)

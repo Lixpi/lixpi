@@ -1,6 +1,6 @@
-import { html } from '$src/utils/domTemplates.ts'
 import type { EditorView, NodeView } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import { createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 
 export const aiUserMessageNodeType = 'aiUserMessage'
 
@@ -52,19 +52,11 @@ export const aiUserMessageNodeView = (
     _view: EditorView,
     _getPos: () => number | undefined
 ): NodeView => {
-    const wrapper = html`
-        <div className="ai-user-message-wrapper">
-            <div className="ai-user-message">
-                <div className="ai-user-message-content"></div>
-            </div>
-        </div>
-    `
-
-    const contentDOM = wrapper.querySelector('.ai-user-message-content') as HTMLElement
+    const shell = createAiUserMessageShell()
 
     return {
-        dom: wrapper,
-        contentDOM,
+        dom: shell.wrapper,
+        contentDOM: shell.contentEl,
         ignoreMutation: (mutation: MutationRecord) => {
             // Ignore style attribute changes on the wrapper so ProseMirror
             // does not trigger DOM reconciliation for externally-set styles.

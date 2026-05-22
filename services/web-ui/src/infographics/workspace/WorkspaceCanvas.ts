@@ -26,8 +26,12 @@ import {
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
+import { getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
+import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
+import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
+import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, claudeIcon, gptAvatarIcon, geminiIcon, stabilityIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
@@ -218,6 +222,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let pixiMediaLayer: PixiMediaLayer | null = null
     let contextRegionLayer: PixiContextRegionLayer | null = null
     let viewportBridge: ViewportBridge | null = null
+    let imageChromeViewportEl: HTMLDivElement | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
@@ -226,6 +231,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let autoGrowRaf: number | null = null
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
+    const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     let selectionRectEl: HTMLDivElement | null = null
@@ -279,8 +285,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         paneEl,
         viewportEl,
     })
+    imageChromeViewportEl = createImageChromeViewport()
     viewportBridge = createViewportBridge({
         viewportEl,
+        viewportOverlayEls: [imageChromeViewportEl],
         getPixiLayer: () => pixiMediaLayer,
         getContextRegionLayer: () => contextRegionLayer,
     })
@@ -590,6 +598,153 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .map((node: ContextRegionNode) => getContextRegionCloudDatum(node, threadMap.get(node.referenceId), nodesById))
     }
 
+    function createImageChromeViewport(): HTMLDivElement {
+        const chromeViewportStyle = {
+            position: 'absolute' as const,
+            top: '0',
+            left: '0',
+            transformOrigin: '0 0',
+            willChange: 'transform',
+            pointerEvents: 'none' as const,
+            zIndex: '3',
+        }
+        const chromeViewport = html`<div className="workspace-image-chrome-viewport" style=${chromeViewportStyle}></div>` as HTMLDivElement
+        paneEl.appendChild(chromeViewport)
+        return chromeViewport
+    }
+
+    function applyGeneratedImageChromeGeometry(
+        chromeEl: HTMLElement,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number }
+    ): void {
+        applyStyle(chromeEl, {
+            left: `${position.x}px`,
+            top: `${position.y + dimensions.height + 10}px`,
+            width: `${dimensions.width}px`,
+        })
+    }
+
+    function updateGeneratedImageChromeLiveTransform(
+        nodeId: string,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number }
+    ): void {
+        const chromeEl = imageChromeViewportEl?.querySelector(`[data-image-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        if (!chromeEl) return
+        applyGeneratedImageChromeGeometry(chromeEl, position, dimensions)
+    }
+
+    function appendTextParagraph(host: HTMLElement, text: string, fallbackText: string): void {
+        const value = text.trim()
+        const className = value ? 'canvas-generated-image-info-text' : 'canvas-generated-image-info-empty'
+        host.replaceChildren(html`<p className=${className}>${value || fallbackText}</p>`)
+    }
+
+    function createGeneratedImageInfoPanel(node: ImageCanvasNode): HTMLElement {
+        const generatedBy = node.generatedBy
+        const thread = generatedBy
+            ? currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === generatedBy.aiChatThreadId)
+            : undefined
+        const turnInfo = getGeneratedImageTurnInfoFromThreadContent(thread?.content, generatedBy?.responseMessageId)
+        const userPromptText = turnInfo?.userPromptText || generatedBy?.promptText || ''
+        const responseText = turnInfo?.responseText || generatedBy?.revisedPrompt || ''
+        const responseProvider = turnInfo?.responseProvider || String(generatedBy?.aiModel || '')
+        const userShell = createAiUserMessageShell({ wrapperClassName: 'canvas-generated-image-user' })
+        const responseShell = createAiResponseMessageShell({
+            provider: responseProvider,
+            wrapperClassName: 'canvas-generated-image-response',
+            includeSpinner: false,
+        })
+        const panel = html`
+            <div className="canvas-generated-image-info-panel nopan">
+                ${userShell.wrapper}
+                ${responseShell.wrapper}
+            </div>
+        ` as HTMLElement
+
+        appendTextParagraph(userShell.contentEl, userPromptText, 'Original prompt unavailable.')
+        appendTextParagraph(responseShell.contentEl, responseText, 'AI response details unavailable.')
+
+        if (turnInfo?.imageGenerationTrace) {
+            const traceDetails = createImageGenerationTraceDetails({
+                className: 'canvas-generated-image-trace-details',
+                renderReferencesWhenClosed: true,
+            })
+            traceDetails.dom.open = true
+            traceDetails.render({
+                attrs: {
+                    title: 'Image generation details',
+                    isOpen: true,
+                    isStreaming: false,
+                    imageGenerationTrace: turnInfo.imageGenerationTrace,
+                    imageGenerationTraceId: null,
+                },
+                childCount: turnInfo.imageGenerationPromptText ? 1 : 0,
+                forceToolPromptFallback: true,
+                toolPromptFallbackText: turnInfo.imageGenerationPromptText || turnInfo.imageGenerationTrace.toolPrompt,
+            })
+            responseShell.contentEl.appendChild(traceDetails.dom)
+        }
+
+        return panel
+    }
+
+    function toggleGeneratedImageInfo(nodeId: string): void {
+        if (expandedGeneratedImageInfoNodeIds.has(nodeId)) {
+            expandedGeneratedImageInfoNodeIds.delete(nodeId)
+        } else {
+            expandedGeneratedImageInfoNodeIds.add(nodeId)
+        }
+        syncGeneratedImageChrome(currentCanvasState)
+    }
+
+    function createGeneratedImageChrome(node: ImageCanvasNode): HTMLElement {
+        const generatedBy = node.generatedBy
+        const imageModelProvider = generatedBy?.imageModelProvider || ''
+        const providerIcon = getAiProviderIcon(imageModelProvider)
+        const isExpanded = expandedGeneratedImageInfoNodeIds.has(node.nodeId)
+        const handleInfoClick = (event: MouseEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            toggleGeneratedImageInfo(node.nodeId)
+        }
+        const chromeEl = html`
+            <div className="workspace-generated-image-chrome" data=${{ imageChromeNodeId: node.nodeId }}>
+                <div className="workspace-generated-image-actions">
+                    ${providerIcon ? html`<div className="image-model-badge" innerHTML=${providerIcon} title=${imageModelProvider}></div>` : null}
+                    <button
+                        className=${`image-info-button nopan${isExpanded ? ' is-active' : ''}`}
+                        type="button"
+                        aria-label="Image generation details"
+                        aria-expanded=${String(isExpanded)}
+                        title="Image generation details"
+                        onclick=${handleInfoClick}
+                    >
+                        <span innerHTML=${infoCircleIcon}></span>
+                    </button>
+                </div>
+                ${isExpanded ? createGeneratedImageInfoPanel(node) : null}
+            </div>
+        ` as HTMLElement
+
+        applyGeneratedImageChromeGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions)
+        return chromeEl
+    }
+
+    function syncGeneratedImageChrome(canvasState: CanvasState | null = currentCanvasState): void {
+        if (!imageChromeViewportEl) return
+        const generatedImageNodes = (canvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is ImageCanvasNode => node.type === 'image' && Boolean((node as ImageCanvasNode).generatedBy))
+        const generatedNodeIds = new Set(generatedImageNodes.map((node: ImageCanvasNode) => node.nodeId))
+
+        for (const expandedNodeId of Array.from(expandedGeneratedImageInfoNodeIds)) {
+            if (!generatedNodeIds.has(expandedNodeId)) expandedGeneratedImageInfoNodeIds.delete(expandedNodeId)
+        }
+
+        imageChromeViewportEl.replaceChildren(...generatedImageNodes.map(createGeneratedImageChrome))
+    }
+
     function syncContextRegionLayer(canvasState: CanvasState | null = currentCanvasState): void {
         const datums = getContextRegionCloudDatums(canvasState)
         contextRegionLayer?.sync(datums)
@@ -597,6 +752,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function syncPixiMediaLayer(canvasState: CanvasState | null = currentCanvasState): void {
         pixiMediaLayer?.sync(canvasState)
+        syncGeneratedImageChrome(canvasState)
     }
 
     function fitImageDimensionsToAspectRatio(
@@ -1311,6 +1467,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             '.document-resize-handle',
             '.node-drag-overlay',
             '.bubble-menu',
+            '.workspace-generated-image-chrome',
         ].join(', '))
     }
 
@@ -2885,22 +3042,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const imgEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] img.image-node-img`) as HTMLImageElement | null
                 if (imgEl) imgEl.src = imageSrc
 
-                // Add provider icon badge to the existing DOM node
-                const nodeEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"]`) as HTMLElement | null
-                if (nodeEl && imageModelProvider) {
-                    const providerIcons: Record<string, string> = {
-                        'OpenAI': gptAvatarIcon,
-                        'Anthropic': claudeIcon,
-                        'Google': geminiIcon,
-                        'Stability': stabilityIcon,
-                    }
-                    const iconSvg = providerIcons[imageModelProvider]
-                    if (iconSvg) {
-                        const badge = html`<div className="image-model-badge" innerHTML=${iconSvg} title=${imageModelProvider}></div>` as HTMLDivElement
-                        nodeEl.appendChild(badge)
-                    }
-                }
-
             } else {
                 // No partial existed — IMAGE_COMPLETE without prior IMAGE_PARTIAL.
                 // Guard against duplicates: skip if this fileId is already on canvas
@@ -3621,6 +3762,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
                 contextRegionLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
+                updateGeneratedImageChromeLiveTransform(draggedNodeId, currentPos, currentDims)
 
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
                     applyStyle(floatingInputEl, {
@@ -3782,6 +3924,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)
                     }
                     pixiMediaLayer?.setNodeLiveTransform(node.nodeId, snappedWorld, node.dimensions)
+                    updateGeneratedImageChromeLiveTransform(node.nodeId, snappedWorld, node.dimensions)
 
                     return {
                         ...node,
@@ -3834,6 +3977,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 applyStyle(movedNodeEl, { left: `${resolvedPosition.x}px`, top: `${resolvedPosition.y}px` })
                             }
                             pixiMediaLayer?.setNodeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
+                            updateGeneratedImageChromeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
                             const nextPosition = n.parentId
                                 ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(updatedNodes))
                                 : resolvedPosition
@@ -3981,6 +4125,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             contextRegionLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
+            updateGeneratedImageChromeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
             pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds(), { fill: shouldFillSelectionOverlayBounds() })
 
@@ -4239,21 +4384,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         nodeEl.appendChild(imgEl)
-
-        // Add image model provider icon badge
-        const imageModelProvider = node.generatedBy?.imageModelProvider
-        if (imageModelProvider) {
-            const providerIcons: Record<string, string> = {
-                'OpenAI': gptAvatarIcon,
-                'Anthropic': claudeIcon,
-                'Google': geminiIcon,
-            }
-            const iconSvg = providerIcons[imageModelProvider]
-            if (iconSvg) {
-                const badge = html`<div className="image-model-badge" innerHTML=${iconSvg} title=${imageModelProvider}></div>` as HTMLDivElement
-                nodeEl.appendChild(badge)
-            }
-        }
 
         // Check if this image is currently generating
         const isGenerating = Array.from(partialImageTracker.values()).some(p => p.nodeId === node.nodeId)
@@ -4827,6 +4957,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentDocuments = newDocuments
             currentAiChatThreads = newAiChatThreads
             syncActiveAiChatPanelFromState()
+            syncGeneratedImageChrome(currentCanvasState)
 
             // 1. Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
             if (needsRerender) {
@@ -4913,6 +5044,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager?.destroy()
             connectionManager = null
             viewportBridge = null
+            imageChromeViewportEl?.remove()
+            imageChromeViewportEl = null
+            expandedGeneratedImageInfoNodeIds.clear()
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
             contextRegionLayer?.destroy()

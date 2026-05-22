@@ -9,6 +9,7 @@ export type ViewportBridge = {
 
 type ViewportBridgeOptions = {
     viewportEl: HTMLDivElement
+    viewportOverlayEls?: HTMLElement[]
     getPixiLayer: () => PixiMediaLayer | null
     getContextRegionLayer?: () => PixiContextRegionLayer | null
 }
@@ -16,10 +17,14 @@ type ViewportBridgeOptions = {
 // Applies a viewport change to both the DOM CSS transform and the PIXI world
 // in a single call so they can never fall out of sync between call sites.
 export function createViewportBridge(options: ViewportBridgeOptions): ViewportBridge {
-    const { viewportEl, getPixiLayer, getContextRegionLayer } = options
+    const { viewportEl, viewportOverlayEls = [], getPixiLayer, getContextRegionLayer } = options
 
     function applyViewport(viewport: CanvasViewport): void {
-        applyStyle(viewportEl, { transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})` })
+        const transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`
+        applyStyle(viewportEl, { transform })
+        for (const overlayEl of viewportOverlayEls) {
+            applyStyle(overlayEl, { transform })
+        }
         getPixiLayer()?.setViewport(viewport)
         getContextRegionLayer?.()?.setViewport(viewport)
     }

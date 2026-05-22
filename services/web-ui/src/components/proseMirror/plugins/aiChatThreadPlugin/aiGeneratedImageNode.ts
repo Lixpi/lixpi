@@ -1,4 +1,4 @@
-import { gptAvatarIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
+import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'

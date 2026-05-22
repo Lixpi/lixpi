@@ -406,6 +406,8 @@ When `IMAGE_COMPLETE` arrives:
 3. Resolver metadata is persisted onto `generatedBy`.
 4. Pending placement is cleared.
 
+The finalized generated-image node also gets canvas provenance chrome: the provider badge and info button render in the image chrome overlay, and the full-width info panel uses `generatedBy.responseMessageId` plus the persisted chat thread to show the original user prompt, producing AI response, and the same image-generation trace metadata shown in chat history without cropping long prompts or reference metadata.
+
 When `IMAGE_BRANCH_RESOLUTION_ERROR` or a later image error arrives, the pending placement is cleared. If a partial image already exists, the canvas shows an image error placeholder briefly and removes the failed node from canvas state.
 
 ## Provider And Image Router Interaction
