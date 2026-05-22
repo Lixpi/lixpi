@@ -71,6 +71,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - The horizontal offset from the node edge is configurable via `aiChatThreadRailOffset` in `webUiThemeSettings.ts` (default -2px). Negative values move the rail inside the node boundary; the rail is rendered at z-index 9990 (above all nodes, below floating inputs) to ensure it stays visible regardless of node layering
 - **AI-generated images** appear as independent canvas nodes positioned to the right of the source thread, source context-region cloud bounds, or previous image in the branch lineage, with generous canvas-space breathing room. New region-rooted branch rows are placed below the previous region-rooted branch using `webUiThemeSettings.imageBranchLineage.branchToBranchGap`, while descendants in the same lineage continue horizontally using `imageToImageGap`. Their insertion dimensions are fixed canvas units regardless of the current zoom, so generated outputs arrive at the same logical size as a 100% zoom insertion. Generated outputs are connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image, stay freely draggable, and are not adopted into context regions during drag release.
 - Progressive partial previews update the canvas node in real-time during generation, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
+- Generated image provider badges and the image-generation info button render in a transformed chrome layer above PIXI. The info button opens a full-image-width block below the image that reconstructs the original user prompt plus the producing AI response's image-generation details from the persisted chat thread, using the same chat message shells and trace details renderer as chat history. The canvas provenance block expands to its full content height; it does not crop long prompts or reference metadata.
 - Drag membership is planned by `workspaceDragPlan.ts`, so context-region drags move only the region and real `parentId` descendants. Generated-image adoption rules live in `workspaceImageNodePlan.ts`, which keeps generated outputs independent unless a future interaction model explicitly makes them real region children.
 - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active AI chat panel emits a stale metadata render while a local drag commit is still waiting for store acknowledgement, the canvas preserves the locally committed node and edge positions until the store acknowledges the visual state.
 
@@ -197,7 +198,6 @@ Image nodes have a simpler structure:
 │   ─ opacity:0 via .pixi-owned class     │
 │  .image-drag-overlay                    │
 │   (covers entire image for dragging)    │
-│  .image-model-badge (when generated)    │
 │  .image-generating-spinner (during gen) │
 │  .image-generating-border (during gen)  │
 └─────────────────────────────────────────┘
@@ -207,6 +207,8 @@ Image nodes have a simpler structure:
   ↙ resize     resize ↘
   handle       handle
 ```
+
+Generated-image provider badges, info buttons, and expanded provenance panels do not live inside the image node shell. They render in `.workspace-image-chrome-viewport`, above the PIXI media layer, so stored image sprites cannot cover them.
 
 The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is the partial-streaming surface during AI image generation; once the image is committed to canvas state, PIXI owns the stored image pixels and the DOM `<img>` remains hidden via the `workspace-image-node--pixi-owned` class. Image corner rounding is configured through `webUiThemeSettings.imageNode.borderRadius` and applied to both DOM partial previews and the PIXI sprite mask for stored images.
 
@@ -434,6 +436,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-canvas` | Root container |
 | `.workspace-pane` | Pan/zoom target |
 | `.workspace-viewport` | Transformed container for nodes |
+| `.workspace-image-chrome-viewport` | Transformed overlay layer for generated-image provider badges, info buttons, and expanded info blocks above PIXI image sprites |
 | `.workspace-pixi-context-region-layer` | PIXI canvas host for context-region CO2-shaped cloud textures below the DOM viewport |
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
@@ -452,7 +455,10 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-thread-rail__line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
 | `.image-generating-border` | SVG animated gradient border shown during image generation |
 | `.image-generating-spinner` | Three-dot bounce spinner shown before first partial image arrives |
-| `.image-model-badge` | Small circular provider icon badge on generated images (bottom-left) |
+| `.workspace-generated-image-chrome` | Per-generated-image chrome container positioned below the image node at the exact image-node width |
+| `.image-model-badge` | Large circular image-provider icon badge for generated images |
+| `.image-info-button` | Large circular icon button that expands the generated-image metadata block and uses `$steelBlue` when active |
+| `.canvas-generated-image-info-panel` | Full-width expanded generated-image metadata block containing the originating prompt and shared image-generation details renderer without internal cropping |
 
 | `.document-resize-handle` | Invisible corner hitbox that reveals only its own resize control on hover or active drag |
 | `.nopan` | Prevents panning when interacting |

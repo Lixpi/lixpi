@@ -169,8 +169,8 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--context-region-child')[0]
 		expect(topLevelSection).toMatch(/^\s*box-shadow:\s*var\(--workspace-image-default-box-shadow\);/m)
 
-		// Nested provider badge shadow remains allowed.
-		const badgeBlock = extractBlock(imageNodeBlock, '.image-model-badge')
+		// Generated-image chrome provider badge shadow remains allowed.
+		const badgeBlock = extractBlock(scss, '.image-model-badge')
 		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(1)
 	})
 
@@ -178,6 +178,33 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const selectedBlock = extractBlockContainingSelector(imageNodeBlock, '&.is-selected')
 		expectExcerptToContain(selectedBlock, 'box-shadow: var(--workspace-image-selected-box-shadow)', 'selected image selector block')
 		expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
+	})
+
+	it('sizes generated-image chrome to the full image width with large active controls', () => {
+		const ts = loadTs()
+		const actionsBlock = extractBlock(scss, '.workspace-generated-image-actions')
+		const badgeBlock = extractBlock(scss, '.image-model-badge')
+		const infoButtonBlock = extractBlock(scss, '.image-info-button')
+		const panelBlock = extractBlock(scss, '.canvas-generated-image-info-panel')
+		const traceDetailsBlock = extractBlock(panelBlock, '.canvas-generated-image-trace-details')
+		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
+
+		expectSourceToContain(ts, 'width: `${dimensions.width}px`,')
+		expectSourceNotToContain(ts, 'function getGeneratedImageInfoWidth')
+		expectExcerptToContain(actionsBlock, 'width: 100%', 'generated image actions block')
+		expectExcerptToContain(badgeBlock, 'width: 52px', 'image model badge block')
+		expectExcerptToContain(badgeBlock, 'height: 52px', 'image model badge block')
+		expectExcerptToContain(badgeBlock, 'width: 30px', 'image model badge icon block')
+		expectExcerptToContain(infoButtonBlock, 'width: 52px', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'height: 52px', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'width: 30px', 'image info icon block')
+		expectExcerptToContain(activeBlock, 'background: $steelBlue', 'active image info button block')
+		expectExcerptToContain(activeBlock, 'border-color: $steelBlue', 'active image info button block')
+		expectExcerptToContain(panelBlock, 'overflow: visible', 'generated image info panel block')
+		expectExcerptNotToContain(panelBlock, 'max-height: 440px', 'generated image info panel block')
+		expectExcerptNotToContain(panelBlock, 'overflow: auto', 'generated image info panel block')
+		expectExcerptToContain(traceDetailsBlock, 'max-height: none', 'canvas trace details block')
+		expectExcerptToContain(traceDetailsBlock, 'overflow: visible', 'canvas trace details block')
 	})
 
 	it('scopes the context-region off-white frame to region child image nodes', () => {
