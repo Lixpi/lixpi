@@ -153,6 +153,7 @@ When an AI thread generates images, the workspace manages their placement automa
 - **Scale**: Generated image nodes use the configured canvas-unit size regardless of the current zoom level.
 - **Stacking and alignment**: Multiple first-generation outputs stack next to the source region using the configured branch-lineage spacing. Image-to-image continuations stay vertically aligned with the previous image in the branch lineage.
 - **Race Condition Handling**: The layout engine tracks synchronous "partial" image states to ensure that simultaneous updates (e.g., partial stream + final completion) do not cause images to overlap or skip positional slots.
+- **Generated-image provenance chrome**: AI-generated image nodes render provider badges and an info button in a dedicated DOM overlay above the PIXI media canvas. The info panel opens at the exact image-node width, expands to its full content height without cropping long prompts or metadata, and uses the image node's `generatedBy.responseMessageId` to reconstruct the originating user prompt and AI response from the chat thread. It reuses the same chat message shells and `ImageGenerationTrace` detail renderer used by the AI chat history.
 
 ### CanvasNode
 
