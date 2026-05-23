@@ -104,10 +104,11 @@ type ContextRegionCloudDatum = {
     height: number
     title: string
     selected: boolean
+    active: boolean
 }
 ```
 
-`WorkspaceCanvas` resolves parent-chain world positions and live drag/resize overrides before creating these datums. The PIXI layer therefore receives world-space geometry even when persisted child nodes remain parent-relative.
+`WorkspaceCanvas` resolves parent-chain world positions and live drag/resize overrides before creating these datums. The PIXI layer therefore receives world-space geometry even when persisted child nodes remain parent-relative. `active` marks the context region whose linked AI chat panel is currently active; it is runtime UI state, not persisted visual style.
 
 Visual style is not persisted. `getContextRegionCloudStyle(nodeId, width, height)` chooses a deterministic seafoam style from the node id and aspect class (`wide`, `square`, or `tall`). This keeps reloads stable without turning current visual tuning into a data contract.
 
@@ -131,7 +132,7 @@ The texture stays square and preserves the CO2 cloud proportions. For non-square
 
 ## Visual Texture
 
-Each cloud style bakes a shared Canvas2D texture, then PIXI renders that texture as a `Sprite`. The texture size, mask threshold, resize edge hit radius, gradient colors, gradient positions, cloud style variants, palette values, border, title, frame, and pulse values are configured in the `contextRegion.cloud` subsection of [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts).
+Each cloud style bakes a shared Canvas2D texture, then PIXI renders that texture as a `Sprite`. The texture size, mask threshold, resize edge hit radius, gradient colors, gradient positions, active thought-circle gradient, opacity, and animation values, cloud style variants, palette values, border, title, frame, and pulse values are configured in the `contextRegion.cloud` subsection of [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts).
 
 The current palette is seafoam, taken from `random-useful-things/image-color-analysis-tool/region-gradient-preview.html` and tuned to keep the patchy grain visible:
 
@@ -160,11 +161,13 @@ The texture pipeline is intentionally bake-heavy and runtime-light:
 
 The reference-like feel comes from the perimeter, uneven alpha, edge pooling, grain, translucent wash, and color variation. The implementation reaches that through the CO2 silhouette plus patchy seafoam texture.
 
+The active context region keeps the shared seafoam cloud texture and adds small PIXI sprites over only the detached thought circle. Surface and dot gradient colors live in `webUiThemeSettings.contextRegion.cloud.palettes`, and the cloud renderer settings reference those palette entries. Its texture bake uses `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`; its transition uses `Easing` in `services/web-ui/src/utils/animations/easing.ts`. When active context changes, the sprites crossfade between two trigger-driven gradient phases with a brief opacity bloom configured under `webUiThemeSettings.contextRegion.cloud`; the result marks active context without reintroducing a full selected cloud outline. See [GRADIENTS.md](GRADIENTS.md) for shared gradient ownership and extension rules.
+
 ## Theme Configuration
 
 Do not duplicate the context-region setting inventory or values in this document. The source of truth is [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts), specifically `webUiThemeSettings.contextRegion` and its nested `webUiThemeSettings.contextRegion.cloud` subsection.
 
-Any new configurable context-region value must go through `webUiThemeSettings.ts` instead of becoming a local magic-number constant. Keep context-region settings under `contextRegion`; use nested subsections such as `contextRegion.cloud` for child domains; put a blank line before and after each logical group; and add a short comment beside every config key explaining what it means and how changing it affects the app. Use getters only when a setting needs to self-reference sibling settings through `this`, such as cloud styles referencing cloud palettes; keep ordinary static values as plain properties.
+Any new configurable context-region value must go through `webUiThemeSettings.ts` instead of becoming a local magic-number constant. Keep context-region settings under `contextRegion`; use nested subsections such as `contextRegion.cloud` for child domains; put a blank line before and after each logical group; and add a short comment beside every config key explaining what it means and how changing it affects the app. Use getters only when a setting needs to self-reference sibling settings through `this`, such as cloud styles or surface and active thought-circle gradients referencing cloud palettes; keep ordinary static values as plain properties.
 
 CO2 path constants are still code-level geometry, not theme settings. If the cloud silhouette changes, update rendering and hit/adoption geometry together.
 
@@ -453,7 +456,7 @@ These ideas are intentionally not part of the current implementation, but the re
 
 - [CANVAS-ENGINE.md](CANVAS-ENGINE.md) documents the full DOM/SVG/PIXI canvas rendering architecture.
 - [WORKSPACE-FEATURE.md](WORKSPACE-FEATURE.md) documents the workspace feature, data flow, and user-facing canvas concepts.
-- [SHIFTING-GRADIENT.md](SHIFTING-GRADIENT.md) documents the shared gradient renderer used by AI chat thread backgrounds.
+- [GRADIENTS.md](GRADIENTS.md) documents the shared gradient/easing ecosystem used by context-region textures, active thought circles, AI chat backgrounds, and SVG gradient borders.
 
 ## Research Sources
 

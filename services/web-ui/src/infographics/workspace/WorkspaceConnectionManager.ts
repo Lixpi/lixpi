@@ -102,6 +102,7 @@ function toContextRegionCloudDatum(node: CanvasNode): ContextRegionCloudDatum {
 		height: node.dimensions.height,
 		title: '',
 		selected: false,
+		active: false,
 	}
 }
 

@@ -9,6 +9,15 @@ export type ContextRegionCloudThemeGradientPositions = [
     ContextRegionCloudThemePoint,
 ]
 
+export type ContextRegionCloudThemeGradientColors = [string, string, string, string]
+
+export type ContextRegionCloudThemeGradientPalette = {
+    color1: string
+    color2: string
+    color3: string
+    color4: string
+}
+
 export type ContextRegionCloudThemePalette = {
     pool: string
     bloom: string
@@ -19,6 +28,8 @@ export type ContextRegionCloudThemePalette = {
 export type ContextRegionCloudThemePalettes = {
     mist: ContextRegionCloudThemePalette
     seafoam: ContextRegionCloudThemePalette
+    surfaceGradient: ContextRegionCloudThemeGradientPalette
+    activeThoughtCircle: ContextRegionCloudThemeGradientPalette
 }
 
 export type ContextRegionCloudThemeStyle = {
@@ -60,8 +71,12 @@ export type WebUiContextRegionCloudThemeSettings = {
     minBleed: number
     resizeEdgeHitRadiusPx: number
     gradientBaseColor: string
-    gradientColors: [string, string, string, string]
+    gradientColors: ContextRegionCloudThemeGradientColors
     gradientPositions: ContextRegionCloudThemeGradientPositions
+    activeThoughtCircleGradientColors: ContextRegionCloudThemeGradientColors
+    activeThoughtCircleAlpha: number
+    activeThoughtCircleAnimationDurationMs: number
+    activeThoughtCircleBloomAlphaLift: number
     styles: ContextRegionCloudThemeStyle[]
     borderEnabled: boolean
     borderMainAlpha: number
@@ -118,6 +133,10 @@ export type WebUiThemeSettings = {
 
 const brandColors = {
     steelBlue: '#5d656d'
+}
+
+function getContextRegionCloudGradientColors(palette: ContextRegionCloudThemeGradientPalette): ContextRegionCloudThemeGradientColors {
+    return [palette.color1, palette.color2, palette.color3, palette.color4]
 }
 
 export const webUiThemeSettings: WebUiThemeSettings = {
@@ -196,7 +215,7 @@ export const webUiThemeSettings: WebUiThemeSettings = {
 
         // Context region cloud visual settings. These values control the PIXI-rendered CO2 cloud surface, hit geometry padding, title placement, and pulse behavior.
         cloud: {
-            // Reusable color palettes referenced by cloud style variants. Add new palettes here before assigning them to styles.
+            // Reusable color palettes referenced by cloud surface and marker settings. Add new palettes here before assigning them to render settings.
             palettes: {
                 // Softer mist palette for lighter, lower-contrast cloud variants.
                 mist: {
@@ -212,6 +231,20 @@ export const webUiThemeSettings: WebUiThemeSettings = {
                     edge: '#8FB5AB',
                     ink: '#1F2937',
                 },
+                // Watercolor colors mixed across the cloud surface.
+                surfaceGradient: {
+                    color1: '#DDECE7',
+                    color2: '#C7DAD4',
+                    color3: '#EEF8F5',
+                    color4: '#D6E7E1',
+                },
+                // Soft sage colors for the active thought-circle overlay.
+                activeThoughtCircle: {
+                    color1: '#A7C39A',
+                    color2: '#9CBB91',
+                    color3: '#91AD86',
+                    color4: '#AFCB9E',
+                },
             },
 
             // Pixel size of the offscreen watercolor texture template. Larger values can look crisper but use more memory and texture upload time.
@@ -224,8 +257,10 @@ export const webUiThemeSettings: WebUiThemeSettings = {
             resizeEdgeHitRadiusPx: 16,
             // Base underpaint color for the cloud texture. Changing it shifts the overall tint before watercolor colors are blended in.
             gradientBaseColor: '#E5F2EE',
-            // Watercolor colors mixed across the cloud surface. Changing these alters the main visible cloud palette.
-            gradientColors: ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1'],
+            // Watercolor colors mixed across the cloud surface. This getter keeps the renderer knob mapped to the matching cloud palette entry.
+            get gradientColors(): ContextRegionCloudThemeGradientColors {
+                return getContextRegionCloudGradientColors(this.palettes.surfaceGradient)
+            },
             // Normalized color anchor positions for the cloud gradient. Moving a point changes where its matching gradient color blooms on the cloud.
             gradientPositions: [
                 { x: 0.2, y: 0.9 },
@@ -233,6 +268,16 @@ export const webUiThemeSettings: WebUiThemeSettings = {
                 { x: 0.8, y: 0.1 },
                 { x: 0.35, y: 0.25 },
             ],
+            // Gradient colors for the active thought-circle overlay. This getter keeps the renderer knob mapped to the matching cloud palette entry.
+            get activeThoughtCircleGradientColors(): ContextRegionCloudThemeGradientColors {
+                return getContextRegionCloudGradientColors(this.palettes.activeThoughtCircle)
+            },
+            // Opacity for the active thought-circle overlay. Lower values keep the active marker closer to the cloud's translucent watercolor surface.
+            activeThoughtCircleAlpha: 0.68,
+            // Duration of the active thought-circle gradient bloom. Increasing it makes active-region changes linger longer.
+            activeThoughtCircleAnimationDurationMs: 760,
+            // Extra opacity added at the center of the active thought-circle bloom. Increasing it makes activation feel brighter before it settles.
+            activeThoughtCircleBloomAlphaLift: 0.18,
             // Shape variants chosen by aspect ratio and node id. This is a getter only because styles self-reference sibling palettes through `this`; do not use getters for static settings.
             get styles(): ContextRegionCloudThemeStyle[] {
                 return [
