@@ -5,6 +5,7 @@ import {
 	getShiftingGradientRenderer,
 	createShiftingGradientBackground,
 } from './shiftingGradientRenderer.ts'
+import { Easing } from '../easing.ts'
 
 // The 8 phase positions (mirrored from source to verify against)
 const EXPECTED_PHASE_POSITIONS = [
@@ -376,19 +377,17 @@ describe('ShiftingGradientRenderer — easing', () => {
 		}
 	})
 
-	it('cubicBezierAtTime with linear control points returns identity', () => {
-		const r = getRenderer()
+	it('shared cubicBezierAtTime with linear control points returns identity', () => {
 		// bezier(0, 0, 1, 1) should approximate identity
 		for (const t of [0, 0.25, 0.5, 0.75, 1]) {
-			expect(r.cubicBezierAtTime(0, 0, 1, 1, t)).toBeCloseTo(t, 2)
+			expect(Easing.cubicBezierAtTime(0, 0, 1, 1, t)).toBeCloseTo(t, 2)
 		}
 	})
 
-	it('cubicBezierAtTime(0.33, 0, 0, 1) matches the ease-out curve', () => {
-		const r = getRenderer()
+	it('shared cubicBezierAtTime(0.33, 0, 0, 1) matches the ease-out curve', () => {
 		// The curve (0.33, 0, 0, 1) produces fast-start ease-out
 		// At t=0.5 the output should be > 0.5 (ease-out property)
-		const mid = r.cubicBezierAtTime(0.33, 0, 0, 1, 0.5)
+		const mid = Easing.cubicBezierAtTime(0.33, 0, 0, 1, 0.5)
 		expect(mid).toBeGreaterThan(0.5)
 	})
 })

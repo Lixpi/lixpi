@@ -8,55 +8,21 @@
 //
 // See documentation/features/SHIFTING-GRADIENT.md for full technical details
 
+import { Easing } from '$src/utils/animations/easing.ts'
 import { html } from '$src/utils/domTemplates.ts'
+import {
+    FreeformGradientRenderer,
+    type FreeformGradientColor,
+    type FreeformGradientHexColorSet,
+    type FreeformGradientPoint,
+} from '$src/utils/animations/gradients/freeformGradient.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
-type Color = { r: number; g: number; b: number }
-export type ShiftingGradientColorSet = [string, string, string, string]
+export type ShiftingGradientColorSet = FreeformGradientHexColorSet
 
 type ShiftingGradientBackgroundOptions = {
     colors?: ShiftingGradientColorSet
 }
-
-function hexToRgb(hex: string): Color {
-    const h = hex.replace('#', '')
-    return {
-        r: parseInt(h.substring(0, 2), 16),
-        g: parseInt(h.substring(2, 4), 16),
-        b: parseInt(h.substring(4, 6), 16),
-    }
-}
-
-function getColorSetKey(colors: ShiftingGradientColorSet): string {
-    return colors.join('|')
-}
-
-function parseGradientColors(colors: ShiftingGradientColorSet): Color[] {
-    return colors.map(hexToRgb)
-}
-
-// 8 phase positions for the 4 color points
-const PHASE_POSITIONS: Array<{ x: number; y: number }> = [
-    { x: 0.8, y: 0.1 },
-    { x: 0.6, y: 0.2 },
-    { x: 0.35, y: 0.25 },
-    { x: 0.25, y: 0.6 },
-    { x: 0.2, y: 0.9 },
-    { x: 0.4, y: 0.8 },
-    { x: 0.65, y: 0.75 },
-    { x: 0.75, y: 0.4 },
-]
-
-// Bitmap dimensions for the small offscreen canvas
-const BITMAP_WIDTH = 60
-const BITMAP_HEIGHT = 80
-
-// Animation parameters
-const ANIMATION_DURATION_MS = 500
-const SWIRL_FACTOR = 0.35
-const INITIAL_PHASE = 4
-
-type Position = { x: number; y: number }
 
 type PatternOptions = {
     url: string
@@ -72,7 +38,11 @@ type SubscribedCanvas = {
     visible: boolean
 }
 
-class ShiftingGradientRenderer {
+const BITMAP_WIDTH = FreeformGradientRenderer.bitmapSize.width
+const BITMAP_HEIGHT = FreeformGradientRenderer.bitmapSize.height
+const ANIMATION_DURATION_MS = 500
+
+export class ShiftingGradientRenderer {
     private static instances: Map<string, ShiftingGradientRenderer> = new Map()
 
     private instanceKey: string
@@ -80,47 +50,31 @@ class ShiftingGradientRenderer {
     private offscreenCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
     private imageData: ImageData
     private subscribedCanvases: Map<HTMLCanvasElement, SubscribedCanvas> = new Map()
-
-    private colors: Color[]
-    private currentPhase: number = INITIAL_PHASE
-    private animationProgress: number = 1 // 0 = animating, 1 = idle
+    private colors: FreeformGradientColor[]
+    private currentPhase: number = FreeformGradientRenderer.initialPhase
+    private animationProgress: number = 1
     private animationStartTime: number = 0
     private animationFrameId: number | null = null
     private isAnimating: boolean = false
-
     private pattern: { image: HTMLImageElement; options: Required<PatternOptions> } | null = null
-
-    // Start/end phases for interpolation
-    private phaseFrom: number = INITIAL_PHASE
-    private phaseTo: number = INITIAL_PHASE
+    private phaseFrom: number = FreeformGradientRenderer.initialPhase
+    private phaseTo: number = FreeformGradientRenderer.initialPhase
 
     private constructor(colors: ShiftingGradientColorSet, instanceKey: string) {
         this.instanceKey = instanceKey
-        this.colors = parseGradientColors(colors)
-
-        // Initialize phase interpolation state
+        this.colors = FreeformGradientRenderer.parseHexColors(colors)
         this.phaseTo = this.currentPhase
-        this.phaseFrom = (this.phaseTo + 1) % 8
+        this.phaseFrom = (this.phaseTo + 1) % FreeformGradientRenderer.phasePositions.length
 
-        // Create offscreen canvas for rendering
-        if (typeof OffscreenCanvas !== 'undefined') {
-            this.offscreenCanvas = new OffscreenCanvas(BITMAP_WIDTH, BITMAP_HEIGHT)
-            this.offscreenCtx = this.offscreenCanvas.getContext('2d')!
-        } else {
-            // Fallback for older browsers
-            const fallbackCanvas = html`<canvas width=${BITMAP_WIDTH} height=${BITMAP_HEIGHT}></canvas>` as HTMLCanvasElement
-            this.offscreenCanvas = fallbackCanvas
-            this.offscreenCtx = fallbackCanvas.getContext('2d')!
-        }
-
+        const { canvas, ctx } = ShiftingGradientRenderer.createOffscreenGradientCanvas()
+        this.offscreenCanvas = canvas
+        this.offscreenCtx = ctx
         this.imageData = this.offscreenCtx.createImageData(BITMAP_WIDTH, BITMAP_HEIGHT)
-
-        // Initial render
         this.renderGradient()
     }
 
     static getInstance(colors: ShiftingGradientColorSet = webUiThemeSettings.shiftingGradientColors): ShiftingGradientRenderer {
-        const instanceKey = getColorSetKey(colors)
+        const instanceKey = ShiftingGradientRenderer.getColorSetKey(colors)
         let renderer = ShiftingGradientRenderer.instances.get(instanceKey)
 
         if (!renderer) {
@@ -131,7 +85,23 @@ class ShiftingGradientRenderer {
         return renderer
     }
 
-    // Subscribe a canvas element to receive gradient updates
+    private static getColorSetKey(colors: ShiftingGradientColorSet): string {
+        return colors.join('|')
+    }
+
+    private static createOffscreenGradientCanvas(): {
+        canvas: OffscreenCanvas | HTMLCanvasElement
+        ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
+    } {
+        if (typeof OffscreenCanvas !== 'undefined') {
+            const canvas = new OffscreenCanvas(BITMAP_WIDTH, BITMAP_HEIGHT)
+            return { canvas, ctx: canvas.getContext('2d')! }
+        }
+
+        const canvas = html`<canvas width=${BITMAP_WIDTH} height=${BITMAP_HEIGHT}></canvas>` as HTMLCanvasElement
+        return { canvas, ctx: canvas.getContext('2d')! }
+    }
+
     subscribe(canvas: HTMLCanvasElement): void {
         if (this.subscribedCanvases.has(canvas)) return
 
@@ -141,30 +111,25 @@ class ShiftingGradientRenderer {
             return
         }
 
-        // Enable image smoothing for bilinear filtering when scaling up
         ctx.imageSmoothingEnabled = true
         ctx.imageSmoothingQuality = 'high'
 
         this.subscribedCanvases.set(canvas, {
             canvas,
             ctx,
-            visible: true
+            visible: true,
         })
 
-        // Immediately draw current state to new canvas
         this.drawToCanvas(canvas, ctx)
 
-        // Start animation loop if not already running
         if (!this.isAnimating && this.subscribedCanvases.size === 1) {
             this.startAnimationLoop()
         }
     }
 
-    // Unsubscribe a canvas element from gradient updates
     unsubscribe(canvas: HTMLCanvasElement): void {
         this.subscribedCanvases.delete(canvas)
 
-        // Stop animation loop if no subscribers
         if (this.subscribedCanvases.size === 0 && this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId)
             this.animationFrameId = null
@@ -172,17 +137,11 @@ class ShiftingGradientRenderer {
         }
     }
 
-    // Set visibility of a subscribed canvas (for IntersectionObserver)
     setVisibility(canvas: HTMLCanvasElement, visible: boolean): void {
         const entry = this.subscribedCanvases.get(canvas)
-        if (entry) {
-            entry.visible = visible
-        }
+        if (entry) entry.visible = visible
     }
 
-    // Redraw immediately after a backing-store resize. Setting canvas.width or
-    // canvas.height clears the bitmap, so waiting for the next animation frame
-    // can flash a blank gradient while a region is being resized.
     redrawCanvas(canvas: HTMLCanvasElement): void {
         const entry = this.subscribedCanvases.get(canvas)
         if (!entry || !entry.visible) return
@@ -192,43 +151,16 @@ class ShiftingGradientRenderer {
         this.drawToCanvas(canvas, entry.ctx)
     }
 
-    // Trigger transition to next phase (called on message send)
     nextPhase(): void {
-        // Decrement phase and interpolate between phases
-        const next = (this.currentPhase - 1 + 8) % 8
-        this.phaseTo = next
-        this.phaseFrom = (this.phaseTo + 1) % 8
+        this.phaseTo = FreeformGradientRenderer.getPreviousPhase(this.currentPhase)
+        this.phaseFrom = (this.phaseTo + 1) % FreeformGradientRenderer.phasePositions.length
         this.currentPhase = this.phaseTo
         this.animationProgress = 0
         this.animationStartTime = performance.now()
     }
 
-    private cubicBezierAtTime(x1: number, y1: number, x2: number, y2: number, t: number): number {
-        const cx = 3 * x1
-        const bx = 3 * (x2 - x1) - cx
-        const ax = 1 - cx - bx
-        const cy = 3 * y1
-        const by = 3 * (y2 - y1) - cy
-        const ay = 1 - cy - by
-
-        const sampleCurveX = (u: number) => ((ax * u + bx) * u + cx) * u
-        const sampleCurveY = (u: number) => ((ay * u + by) * u + cy) * u
-        const sampleCurveDerivativeX = (u: number) => (3 * ax * u + 2 * bx) * u + cx
-
-        let u = t
-        for (let i = 0; i < 8; i++) {
-            const x = sampleCurveX(u) - t
-            const d = sampleCurveDerivativeX(u)
-            if (Math.abs(x) < 1e-6) break
-            if (Math.abs(d) < 1e-6) break
-            u = u - x / d
-        }
-        u = Math.max(0, Math.min(1, u))
-        return sampleCurveY(u)
-    }
-
-    private easingInterpolator(t: number): number {
-        return this.cubicBezierAtTime(0.33, 0.0, 0.0, 1.0, t)
+    private easingInterpolator(progress: number): number {
+        return Easing.shiftingGradientTransition(progress)
     }
 
     private startAnimationLoop(): void {
@@ -238,133 +170,49 @@ class ShiftingGradientRenderer {
         const animate = () => {
             if (!this.isAnimating) return
 
-            // Update animation progress if animating between phases
             if (this.animationProgress < 1) {
                 const elapsed = performance.now() - this.animationStartTime
                 const rawProgress = Math.min(elapsed / ANIMATION_DURATION_MS, 1)
                 this.animationProgress = this.easingInterpolator(rawProgress)
-
-                // Render with interpolated positions
                 this.renderGradient()
             }
 
-            // Copy to all visible subscribed canvases
             this.updateSubscribedCanvases()
-
             this.animationFrameId = requestAnimationFrame(animate)
         }
 
         animate()
     }
 
-    private getInterpolatedPositions(): Position[] {
-        // Gather positions for a given phase
-        const gather = (phase: number): Position[] => {
-            const result: Position[] = []
-            for (let i = 0; i < 4; i++) {
-                let pos = phase + i * 2
-                while (pos >= 8) pos -= 8
-                const p = PHASE_POSITIONS[pos]
-                result.push({ x: p.x, y: p.y })
-            }
-            return result
-        }
+    private getInterpolatedPositions(): FreeformGradientPoint[] {
+        const previous = FreeformGradientRenderer.getPhasePositions(this.phaseFrom)
+        const current = FreeformGradientRenderer.getPhasePositions(this.currentPhase)
 
-        const previous = gather(this.phaseFrom)
-        const current = gather(this.currentPhase)
-
-        const p = this.animationProgress
-        return previous.map((start, i) => ({
-            x: start.x + (current[i].x - start.x) * p,
-            y: start.y + (current[i].y - start.y) * p,
+        return previous.map((start, index) => ({
+            x: start.x + (current[index].x - start.x) * this.animationProgress,
+            y: start.y + (current[index].y - start.y) * this.animationProgress,
         }))
     }
 
-    // Render the gradient to the offscreen canvas
     private renderGradient(): void {
-        const positions = this.getInterpolatedPositions()
-        const data = this.imageData.data
-
-        for (let y = 0; y < BITMAP_HEIGHT; y++) {
-            for (let x = 0; x < BITMAP_WIDTH; x++) {
-                let pixelX: number
-                let pixelY: number
-
-                const directPixelX = x / BITMAP_WIDTH
-                const directPixelY = y / BITMAP_HEIGHT
-
-                // Apply swirl distortion
-                const centerDistanceX = directPixelX - 0.5
-                const centerDistanceY = directPixelY - 0.5
-                const centerDistance = Math.sqrt(centerDistanceX * centerDistanceX + centerDistanceY * centerDistanceY)
-
-                const swirlFactor = SWIRL_FACTOR * centerDistance
-                const theta = swirlFactor * swirlFactor * 0.8 * 8.0
-                const sinTheta = Math.sin(theta)
-                const cosTheta = Math.cos(theta)
-
-                // Apply swirl transformation + clamp
-                pixelX = Math.max(0, Math.min(1, 0.5 + centerDistanceX * cosTheta - centerDistanceY * sinTheta))
-                pixelY = Math.max(0, Math.min(1, 0.5 + centerDistanceX * sinTheta + centerDistanceY * cosTheta))
-
-                // Calculate color using inverse distance weighting with distance^4 falloff
-                let r = 0, g = 0, b = 0, distanceSum = 0
-
-                for (let i = 0; i < 4; i++) {
-                    const colorPos = positions[i]
-                    const dx = pixelX - colorPos.x
-                    const dy = pixelY - colorPos.y
-                    const dist = Math.sqrt(dx * dx + dy * dy)
-
-                    // Distance falloff: max(0, 0.9 - dist)^4
-                    let weight = Math.max(0, 0.9 - dist)
-                    weight = weight * weight * weight * weight // distance^4
-
-                    distanceSum += weight
-                    r += weight * this.colors[i].r
-                    g += weight * this.colors[i].g
-                    b += weight * this.colors[i].b
-                }
-
-                // Normalize by total weight
-                if (distanceSum > 0) {
-                    r /= distanceSum
-                    g /= distanceSum
-                    b /= distanceSum
-                }
-
-                // Write to image data
-                const idx = (y * BITMAP_WIDTH + x) * 4
-                data[idx] = Math.round(r)
-                data[idx + 1] = Math.round(g)
-                data[idx + 2] = Math.round(b)
-                data[idx + 3] = 255 // Alpha
-            }
-        }
-
-        // Put image data to offscreen canvas
+        FreeformGradientRenderer.paintImageData(this.imageData, this.colors, this.getInterpolatedPositions())
         this.offscreenCtx.putImageData(this.imageData, 0, 0)
     }
 
     private updateSubscribedCanvases(): void {
         for (const [canvas, entry] of this.subscribedCanvases) {
-            if (entry.visible) {
-                this.drawToCanvas(canvas, entry.ctx)
-            }
+            if (entry.visible) this.drawToCanvas(canvas, entry.ctx)
         }
     }
 
     private drawToCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): void {
-        // Scale the small offscreen canvas to fill the target canvas
         ctx.drawImage(
             this.offscreenCanvas as CanvasImageSource,
             0, 0, BITMAP_WIDTH, BITMAP_HEIGHT,
             0, 0, canvas.width, canvas.height
         )
 
-        if (this.pattern) {
-            this.drawPatternOverlay(ctx, canvas.width, canvas.height)
-        }
+        if (this.pattern) this.drawPatternOverlay(ctx, canvas.width, canvas.height)
     }
 
     private drawPatternOverlay(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -375,19 +223,16 @@ class ShiftingGradientRenderer {
 
         ctx.save()
 
-        const blend = options.blendMode
         try {
-            ctx.globalCompositeOperation = blend
+            ctx.globalCompositeOperation = options.blendMode
         } catch {
             ctx.globalCompositeOperation = 'overlay'
         }
         ctx.globalAlpha = options.alpha
 
-        // Tile the pattern to cover the whole node.
         const tileW = image.naturalWidth
         const tileH = image.naturalHeight
         if (tileW > 0 && tileH > 0) {
-            // Optional tint: render tinted tile via an in-memory canvas.
             let tileSource: CanvasImageSource = image
             if (options.tintColor) {
                 const tintCanvas = html`<canvas width=${tileW} height=${tileH}></canvas>` as HTMLCanvasElement
@@ -443,7 +288,6 @@ class ShiftingGradientRenderer {
         this.pattern = { image: img, options: resolved }
     }
 
-    // Clean up resources
     destroy(): void {
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId)
@@ -455,7 +299,6 @@ class ShiftingGradientRenderer {
     }
 }
 
-// Creates and attaches a shifting gradient background canvas to a container element
 export function createShiftingGradientBackground(container: HTMLElement, options: ShiftingGradientBackgroundOptions = {}): {
     canvas: HTMLCanvasElement
     destroy: () => void
@@ -473,10 +316,8 @@ export function createShiftingGradientBackground(container: HTMLElement, options
     }
     const canvas = html`<canvas className="shifting-gradient-canvas" style=${canvasStyle}></canvas>` as HTMLCanvasElement
 
-    // Set canvas dimensions based on container size
     const updateCanvasSize = () => {
         const rect = container.getBoundingClientRect()
-        // Use device pixel ratio for crisp rendering, but cap at 2x for performance
         const dpr = Math.min(window.devicePixelRatio || 1, 2)
         const nextWidth = Math.max(1, Math.floor(rect.width * dpr))
         const nextHeight = Math.max(1, Math.floor(rect.height * dpr))
@@ -491,16 +332,9 @@ export function createShiftingGradientBackground(container: HTMLElement, options
     updateCanvasSize()
     container.insertBefore(canvas, container.firstChild)
 
-    const renderer = ShiftingGradientRenderer.getInstance(options.colors)
+    const renderer = getShiftingGradientRenderer(options.colors)
     renderer.subscribe(canvas)
 
-    // Optional: pattern overlay configured via CSS variables on the container.
-    // Example:
-    //   .workspace-ai-chat-thread-node {
-    //     --gradient-pattern-url: url('/patterns/my-pattern.png');
-    //     --gradient-pattern-alpha: 0.22;
-    //     --gradient-pattern-tint: rgba(18, 62, 112, 0.85);
-    //   }
     try {
         const style = getComputedStyle(container)
         const patternUrlRaw = style.getPropertyValue('--gradient-pattern-url').trim()
@@ -526,25 +360,19 @@ export function createShiftingGradientBackground(container: HTMLElement, options
             })()
         }
     } catch {
-        // ignore
+        // CSS pattern variables are optional.
     }
 
-    // Set up IntersectionObserver for visibility tracking
     const observer = new IntersectionObserver(
         (entries) => {
-            for (const entry of entries) {
-                renderer.setVisibility(canvas, entry.isIntersecting)
-            }
+            for (const entry of entries) renderer.setVisibility(canvas, entry.isIntersecting)
         },
         { threshold: 0 }
     )
     observer.observe(canvas)
 
-    // Set up ResizeObserver for canvas size updates
     const resizeObserver = new ResizeObserver(() => {
-        if (updateCanvasSize()) {
-            renderer.redrawCanvas(canvas)
-        }
+        if (updateCanvasSize()) renderer.redrawCanvas(canvas)
     })
     resizeObserver.observe(container)
 
@@ -558,11 +386,10 @@ export function createShiftingGradientBackground(container: HTMLElement, options
         },
         triggerAnimation: () => {
             renderer.nextPhase()
-        }
+        },
     }
 }
 
-// Get a renderer instance for manual control.
 export function getShiftingGradientRenderer(colors?: ShiftingGradientColorSet): ShiftingGradientRenderer {
     return ShiftingGradientRenderer.getInstance(colors)
 }

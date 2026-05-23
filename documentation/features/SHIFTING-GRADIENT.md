@@ -92,9 +92,9 @@ The renderer is a singleton. There's only ever one instance, and it maintains a 
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `ShiftingGradientRenderer` | `services/web-ui/src/utils/shiftingGradientRenderer.ts` | Core gradient rendering engine |
-| `GRADIENT_COLORS` | Same file, top | The 4 colors used for the gradient (derived from `webUiThemeSettings.shiftingGradientColors` via `hexToRgb()`) |
-| `PHASE_POSITIONS` | Same file | The 8 position coordinates for each phase |
+| Shifting gradient controller | `services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts` | `ShiftingGradientRenderer` singleton class for subscriber and canvas lifecycle control |
+| Freeform gradient renderer | `services/web-ui/src/utils/animations/gradients/freeformGradient.ts` | `FreeformGradientRenderer` class for shared color parsing, phase positions, swirl sampling, and bitmap painting |
+| Easing utilities | `services/web-ui/src/utils/animations/easing.ts` | `Easing` class for shared cubic-bezier easing used by Canvas, PIXI, and SVG transitions |
 
 ### Swirl Distortion
 
@@ -121,7 +121,7 @@ The current colors are ultra-light pastels inspired by a desert sunset sky palet
 shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-The renderer converts these hex values to RGB via the `hexToRgb()` helper at startup:
+`FreeformGradientRenderer` converts these hex values to RGB at startup:
 
 ```typescript
 const GRADIENT_COLORS = {
@@ -351,7 +351,7 @@ Edit the `shiftingGradientColors` array in `webUiThemeSettings.ts`:
 shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-These hex values are converted to RGB at startup by `hexToRgb()` in `shiftingGradientRenderer.ts`. The same colors are also used by the image generation animated border in `WorkspaceCanvas.ts` and the document shape borders in `documentThreadShape.ts` / `documentContextSelection.ts`.
+These hex values are converted to RGB at startup by the freeform-gradient helpers in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. The same colors are also used by the image generation animated border in `WorkspaceCanvas.ts` and the document shape borders in `documentThreadShape.ts` / `documentContextSelection.ts`.
 
 ### Changing Animation Speed
 
@@ -363,7 +363,7 @@ const ANIMATION_DURATION_MS = 500  // milliseconds
 
 ### Changing Swirl Intensity
 
-Edit `SWIRL_FACTOR`:
+Edit `SWIRL_FACTOR` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`:
 
 ```typescript
 const SWIRL_FACTOR = 0.35  // 0 = no swirl, 1 = extreme swirl
@@ -404,7 +404,7 @@ The gradient canvas is positioned behind the AI chat thread content using CSS. T
 The renderer supports an optional pattern overlay (decorative icons/doodles on top of the gradient). This isn't currently used but the infrastructure exists:
 
 ```typescript
-// In shiftingGradientRenderer.ts
+// In services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts
 private pattern: {
     image: HTMLImageElement
     options: Required<PatternOptions>
