@@ -1,20 +1,13 @@
 // Document context selection - animated gradient background
 
 import { select } from 'd3-selection'
+import { Easing } from '$src/utils/animations/easing.ts'
+import { SvgGradientRenderer } from '$src/utils/animations/gradients/svgGradient.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 type ContextSelectionConfig = {
     gradientId: string
     colors?: string[]
-}
-
-// Custom easing matching cubic-bezier(0.19, 1, 0.22, 1)
-function customEase(t: number): number {
-    const t2 = t * t
-    const t3 = t2 * t
-    const mt = 1 - t
-    const mt2 = mt * mt
-    return 3 * mt2 * t + 3 * mt * t2 + t3
 }
 
 // Sets up the gradient definition in SVG defs
@@ -26,12 +19,7 @@ export function setupContextGradient(defs: any, config: ContextSelectionConfig) 
         .attr('x1', '0%').attr('y1', '0%')
         .attr('x2', '100%').attr('y2', '100%')
 
-    colors.forEach((color, i) => {
-        gradient.append('stop')
-            .attr('offset', `${i * 50}%`)
-            .attr('id', `${config.gradientId}-stop-${i}`)
-            .style('stop-color', color)
-    })
+    SvgGradientRenderer.appendLinearGradientStops(gradient, colors, { idPrefix: `${config.gradientId}-stop` })
 }
 
 // Draws the gradient-filled background rectangle for context selection
@@ -61,9 +49,9 @@ export function startContextSelectionAnimation(
         if (!running || !gradient) return
 
         gradient
-            .transition().duration(duration).ease(customEase)
+            .transition().duration(duration).ease(Easing.hoverTransition)
             .attr('x1', '-50%').attr('x2', '50%')
-            .transition().duration(duration).ease(customEase)
+            .transition().duration(duration).ease(Easing.hoverTransition)
             .attr('x1', '0%').attr('x2', '100%')
             .on('end', () => running && loop())
     }

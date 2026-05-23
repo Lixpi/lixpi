@@ -9,6 +9,8 @@ import {
 
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { Easing } from '$src/utils/animations/easing.ts'
+import { FreeformGradientRenderer } from '$src/utils/animations/gradients/freeformGradient.ts'
 import { scaleCanvasChromeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { getVisibleWorldRect, type PixiRendererHealth, type WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import {
@@ -71,18 +73,6 @@ const CO2_CLOUD_MAIN_PATH = 'm482.856 229.936c12.391-15.534 19.801-35.216 19.801
 const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
-const ACTIVE_THOUGHT_CIRCLE_PHASE_POSITIONS = [
-    { x: 0.8, y: 0.1 },
-    { x: 0.6, y: 0.2 },
-    { x: 0.35, y: 0.25 },
-    { x: 0.25, y: 0.6 },
-    { x: 0.2, y: 0.9 },
-    { x: 0.4, y: 0.8 },
-    { x: 0.65, y: 0.75 },
-    { x: 0.75, y: 0.4 },
-]
-const ACTIVE_THOUGHT_CIRCLE_INITIAL_PHASE = 4
-
 function makeRandom(seed: number): () => number {
     let value = seed >>> 0
     return () => {
@@ -107,33 +97,6 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
     return amount * amount * (3 - 2 * amount)
 }
 
-function cubicBezierAtTime(x1: number, y1: number, x2: number, y2: number, time: number): number {
-    const cx = 3 * x1
-    const bx = 3 * (x2 - x1) - cx
-    const ax = 1 - cx - bx
-    const cy = 3 * y1
-    const by = 3 * (y2 - y1) - cy
-    const ay = 1 - cy - by
-
-    const sampleCurveX = (value: number) => ((ax * value + bx) * value + cx) * value
-    const sampleCurveY = (value: number) => ((ay * value + by) * value + cy) * value
-    const sampleCurveDerivativeX = (value: number) => (3 * ax * value + 2 * bx) * value + cx
-
-    let progress = clamp(time)
-    for (let i = 0; i < 8; i++) {
-        const x = sampleCurveX(progress) - time
-        const derivative = sampleCurveDerivativeX(progress)
-        if (Math.abs(x) < 1e-6 || Math.abs(derivative) < 1e-6) break
-        progress -= x / derivative
-    }
-
-    return sampleCurveY(clamp(progress))
-}
-
-function easeActiveThoughtCircleTransition(progress: number): number {
-    return cubicBezierAtTime(0.19, 1, 0.22, 1, progress)
-}
-
 function hexToRgb(hex: string): RgbColor {
     const normalized = hex.replace('#', '')
     const value = parseInt(normalized.length === 3
@@ -149,42 +112,6 @@ function mixRgb(from: RgbColor, to: RgbColor, amount: number): RgbColor {
         g: lerp(from.g, to.g, clamped),
         b: lerp(from.b, to.b, clamped),
     }
-}
-
-function getRegionGradientColor(
-    directPixelX: number,
-    directPixelY: number,
-    gradientColors: RgbColor[],
-    gradientPositions: Array<{ x: number; y: number }>
-): RgbColor {
-    const centerDistanceX = directPixelX - 0.5
-    const centerDistanceY = directPixelY - 0.5
-    const centerDistance = Math.sqrt(centerDistanceX * centerDistanceX + centerDistanceY * centerDistanceY)
-    const swirlFactor = 0.35 * centerDistance
-    const theta = swirlFactor * swirlFactor * 0.8 * 8.0
-    const sinTheta = Math.sin(theta)
-    const cosTheta = Math.cos(theta)
-    const pixelX = clamp(0.5 + centerDistanceX * cosTheta - centerDistanceY * sinTheta)
-    const pixelY = clamp(0.5 + centerDistanceX * sinTheta + centerDistanceY * cosTheta)
-    let r = 0
-    let g = 0
-    let b = 0
-    let distanceSum = 0
-
-    for (let i = 0; i < gradientColors.length; i++) {
-        const dx = pixelX - gradientPositions[i].x
-        const dy = pixelY - gradientPositions[i].y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-        let weight = Math.max(0, 0.9 - dist)
-        weight = weight * weight * weight * weight
-        distanceSum += weight
-        r += weight * gradientColors[i].r
-        g += weight * gradientColors[i].g
-        b += weight * gradientColors[i].b
-    }
-
-    if (distanceSum === 0) return gradientColors[0]
-    return { r: r / distanceSum, g: g / distanceSum, b: b / distanceSum }
 }
 
 function setPixel(data: Uint8ClampedArray, index: number, color: RgbColor, alpha: number): void {
@@ -572,7 +499,7 @@ function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegi
             const poolWeight = clamp(edgeStrength * 0.10 + smoothstep(0.62, 0.92, pigmentNoise) * 0.18)
             const bloomWeight = clamp(interior * smoothstep(0.55, 0.94, washNoise) * 0.50)
             const paperLift = (paperNoise - 0.5) * 0.18 + (fiberNoise - 0.5) * 0.065
-            const previewGradientColor = getRegionGradientColor(x / width, y / height, gradientColors, gradientPositions)
+            const previewGradientColor = FreeformGradientRenderer.sampleColor(x / width, y / height, gradientColors, gradientPositions)
             const baseGradientColor = mixRgb(gradientBaseColor, previewGradientColor, 0.86)
             let color = mixRgb(baseGradientColor, pool, poolWeight * 0.22)
             color = mixRgb(color, edge, edgeStrength * 0.045)
@@ -660,11 +587,7 @@ function addWatercolorPigmentSpeckles(ctx: CanvasRenderingContext2D, style: Cont
 }
 
 function getActiveThoughtCircleGradientPositions(phase: number): Array<{ x: number; y: number }> {
-    const positions: Array<{ x: number; y: number }> = []
-    for (let i = 0; i < 4; i++) {
-        positions.push(ACTIVE_THOUGHT_CIRCLE_PHASE_POSITIONS[(phase + i * 2) % ACTIVE_THOUGHT_CIRCLE_PHASE_POSITIONS.length])
-    }
-    return positions
+    return FreeformGradientRenderer.getPhasePositions(phase)
 }
 
 function createActiveThoughtCircleTexture(gradientPositions: Array<{ x: number; y: number }>): Texture {
@@ -673,29 +596,19 @@ function createActiveThoughtCircleTexture(gradientPositions: Array<{ x: number; 
     const ctx = canvas.getContext('2d')
     if (!ctx) return Texture.from(canvas)
 
-    const bitmapWidth = 60
-    const bitmapHeight = 80
+    const bitmapWidth = FreeformGradientRenderer.bitmapSize.width
+    const bitmapHeight = FreeformGradientRenderer.bitmapSize.height
     const gradientCanvas = createWatercolorCanvas({ width: bitmapWidth, height: bitmapHeight })
     const gradientCtx = gradientCanvas.getContext('2d')
     if (!gradientCtx) return Texture.from(canvas)
 
     const gradientColors = contextRegionCloudTheme.activeThoughtCircleGradientColors.map(hexToRgb)
-    const imageData = gradientCtx.createImageData(bitmapWidth, bitmapHeight)
-
-    for (let y = 0; y < bitmapHeight; y++) {
-        for (let x = 0; x < bitmapWidth; x++) {
-            const index = (y * bitmapWidth + x) * 4
-            const color = getRegionGradientColor(
-                x / bitmapWidth,
-                y / bitmapHeight,
-                gradientColors,
-                gradientPositions
-            )
-            setPixel(imageData.data, index, color, 1)
-        }
-    }
-
-    gradientCtx.putImageData(imageData, 0, 0)
+    FreeformGradientRenderer.drawBitmap(
+        gradientCtx,
+        { width: bitmapWidth, height: bitmapHeight },
+        gradientColors,
+        gradientPositions
+    )
 
     withCo2CloudShape(ctx, size, () => {
         for (const circle of CO2_CLOUD_CIRCLES) {
@@ -828,7 +741,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
     let renderRaf: number | null = null
     let pulseRaf: number | null = null
     let activeThoughtCircleRaf: number | null = null
-    let activeThoughtCirclePhase = ACTIVE_THOUGHT_CIRCLE_INITIAL_PHASE
+    let activeThoughtCirclePhase = FreeformGradientRenderer.initialPhase
 
     function setHealth(next: PixiRendererHealth): void {
         if (health === next) return
@@ -854,7 +767,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         return texture
     }
 
-    function getActiveThoughtCircleTexture(phase = ACTIVE_THOUGHT_CIRCLE_INITIAL_PHASE): Texture {
+    function getActiveThoughtCircleTexture(phase = FreeformGradientRenderer.initialPhase): Texture {
         const textureKey = `${CONTEXT_REGION_TEXTURE_VERSION}:active-thought-circle:${phase}:${contextRegionCloudTheme.activeThoughtCircleGradientColors.join('-')}`
         const existing = textureCache.get(textureKey)
         if (existing) return existing
@@ -901,7 +814,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
 
             const elapsed = now - entry.activeThoughtCircleStartedAt
             const rawProgress = Math.min(1, elapsed / contextRegionCloudTheme.activeThoughtCircleAnimationDurationMs)
-            const progress = easeActiveThoughtCircleTransition(rawProgress)
+            const progress = Easing.hoverTransition(rawProgress)
             const reveal = smoothstep(0, 0.20, progress)
             const gradientShift = smoothstep(0.08, 0.92, progress)
             const bloomAlpha = Math.sin(progress * Math.PI) * contextRegionCloudTheme.activeThoughtCircleBloomAlphaLift
@@ -930,7 +843,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
 
     function animateActiveThoughtCircle(entry: PixiContextRegionEntry): void {
         const fromPhase = activeThoughtCirclePhase
-        const toPhase = (fromPhase - 1 + ACTIVE_THOUGHT_CIRCLE_PHASE_POSITIONS.length) % ACTIVE_THOUGHT_CIRCLE_PHASE_POSITIONS.length
+        const toPhase = FreeformGradientRenderer.getPreviousPhase(fromPhase)
         activeThoughtCirclePhase = toPhase
         entry.activeThoughtCircleFromOverlay.texture = getActiveThoughtCircleTexture(fromPhase)
         entry.activeThoughtCircleOverlay.texture = getActiveThoughtCircleTexture(toPhase)

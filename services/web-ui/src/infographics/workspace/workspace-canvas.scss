@@ -465,7 +465,7 @@
     }
 }
 
-/* Animated gradient background is rendered via Canvas (see shiftingGradientRenderer.ts) */
+/* Animated gradient background is rendered via Canvas (see utils/animations/gradients/shiftingGradientRenderer.ts) */
 .workspace-ai-chat-thread-node {
     position: relative;
     padding: 0;
