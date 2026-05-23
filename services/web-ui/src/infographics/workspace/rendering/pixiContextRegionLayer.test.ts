@@ -21,6 +21,24 @@ function extractTopLevelFunction(source: string, functionName: string): string {
 describe('pixiContextRegionLayer — selected chrome regression guards', () => {
     const source = loadSource()
 
+    it('renders active context-region feedback only on the thought circle', () => {
+        expect(source).toContain('function createActiveThoughtCircleTexture')
+        expect(source).toContain('const gradientColors = contextRegionCloudTheme.activeThoughtCircleGradientColors.map(hexToRgb)')
+        expect(source).toContain('const bitmapWidth = FreeformGradientRenderer.bitmapSize.width')
+        expect(source).toContain('const bitmapHeight = FreeformGradientRenderer.bitmapSize.height')
+        expect(source).toContain('FreeformGradientRenderer.drawBitmap(')
+        expect(source).toContain("ctx.imageSmoothingQuality = 'high'")
+        expect(source).toContain('function getActiveThoughtCircleGradientPositions')
+        expect(source).toContain('function animateActiveThoughtCircle')
+        expect(source).toContain('function updateActiveThoughtCircleFrame')
+        expect(source).toContain("import { Easing } from '$src/utils/animations/easing.ts'")
+        expect(source).toContain("import { FreeformGradientRenderer } from '$src/utils/animations/gradients/freeformGradient.ts'")
+        expect(source).toContain('const progress = Easing.hoverTransition(rawProgress)')
+        expect(source).toContain('entry.activeThoughtCircleFromOverlay.alpha = alpha * (1 - gradientShift)')
+        expect(source).toContain('entry.activeThoughtCircleOverlay.renderable = true')
+        expect(source).toContain('container.addChild(activeThoughtCircleOverlay)')
+    })
+
     it('does not draw cloud-shaped selection chrome', () => {
         expect(source.includes('function drawSelectedCloudChrome'), 'cloud-shaped selection chrome must stay removed').toBe(false)
 

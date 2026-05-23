@@ -625,6 +625,7 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 			height: regionNode.dimensions.height,
 			title: '',
 			selected: false,
+			active: false,
 		}, 'right', 0.5)
 		const rectangularStartX = regionNode.position.x + regionNode.dimensions.width + sourceMarkerOffset
 
@@ -649,6 +650,7 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 			height: resizedRegionNode.dimensions.height,
 			title: '',
 			selected: false,
+			active: false,
 		}, 'right', 0.5)
 
 		expect(resizedStart.x).toBeCloseTo(resizedAnchor.x + sourceMarkerOffset, 2)

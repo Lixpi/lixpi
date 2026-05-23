@@ -9,6 +9,8 @@ import {
 
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { Easing } from '$src/utils/animations/easing.ts'
+import { FreeformGradientRenderer } from '$src/utils/animations/gradients/freeformGradient.ts'
 import { scaleCanvasChromeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { getVisibleWorldRect, type PixiRendererHealth, type WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import {
@@ -26,12 +28,15 @@ import {
 type PixiContextRegionEntry = {
     container: Container
     backdrop: Sprite
+    activeThoughtCircleFromOverlay: Sprite
+    activeThoughtCircleOverlay: Sprite
     chrome: Graphics
     titleText: Text
     datum: ContextRegionCloudDatum
     styleKey: string
     geometryKey: string
     pulseStartedAt: number | null
+    activeThoughtCircleStartedAt: number | null
 }
 
 type ContextRegionViewport = { x: number; y: number; zoom: number }
@@ -68,7 +73,6 @@ const CO2_CLOUD_MAIN_PATH = 'm482.856 229.936c12.391-15.534 19.801-35.216 19.801
 const CO2_CLOUD_CIRCLES = [
     { x: 74.302, y: 30.905, radius: 30.905 },
 ]
-
 function makeRandom(seed: number): () => number {
     let value = seed >>> 0
     return () => {
@@ -108,42 +112,6 @@ function mixRgb(from: RgbColor, to: RgbColor, amount: number): RgbColor {
         g: lerp(from.g, to.g, clamped),
         b: lerp(from.b, to.b, clamped),
     }
-}
-
-function getRegionGradientColor(
-    directPixelX: number,
-    directPixelY: number,
-    gradientColors: RgbColor[],
-    gradientPositions: Array<{ x: number; y: number }>
-): RgbColor {
-    const centerDistanceX = directPixelX - 0.5
-    const centerDistanceY = directPixelY - 0.5
-    const centerDistance = Math.sqrt(centerDistanceX * centerDistanceX + centerDistanceY * centerDistanceY)
-    const swirlFactor = 0.35 * centerDistance
-    const theta = swirlFactor * swirlFactor * 0.8 * 8.0
-    const sinTheta = Math.sin(theta)
-    const cosTheta = Math.cos(theta)
-    const pixelX = clamp(0.5 + centerDistanceX * cosTheta - centerDistanceY * sinTheta)
-    const pixelY = clamp(0.5 + centerDistanceX * sinTheta + centerDistanceY * cosTheta)
-    let r = 0
-    let g = 0
-    let b = 0
-    let distanceSum = 0
-
-    for (let i = 0; i < gradientColors.length; i++) {
-        const dx = pixelX - gradientPositions[i].x
-        const dy = pixelY - gradientPositions[i].y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-        let weight = Math.max(0, 0.9 - dist)
-        weight = weight * weight * weight * weight
-        distanceSum += weight
-        r += weight * gradientColors[i].r
-        g += weight * gradientColors[i].g
-        b += weight * gradientColors[i].b
-    }
-
-    if (distanceSum === 0) return gradientColors[0]
-    return { r: r / distanceSum, g: g / distanceSum, b: b / distanceSum }
 }
 
 function setPixel(data: Uint8ClampedArray, index: number, color: RgbColor, alpha: number): void {
@@ -531,7 +499,7 @@ function paintWatercolorPixels(ctx: CanvasRenderingContext2D, style: ContextRegi
             const poolWeight = clamp(edgeStrength * 0.10 + smoothstep(0.62, 0.92, pigmentNoise) * 0.18)
             const bloomWeight = clamp(interior * smoothstep(0.55, 0.94, washNoise) * 0.50)
             const paperLift = (paperNoise - 0.5) * 0.18 + (fiberNoise - 0.5) * 0.065
-            const previewGradientColor = getRegionGradientColor(x / width, y / height, gradientColors, gradientPositions)
+            const previewGradientColor = FreeformGradientRenderer.sampleColor(x / width, y / height, gradientColors, gradientPositions)
             const baseGradientColor = mixRgb(gradientBaseColor, previewGradientColor, 0.86)
             let color = mixRgb(baseGradientColor, pool, poolWeight * 0.22)
             color = mixRgb(color, edge, edgeStrength * 0.045)
@@ -616,6 +584,56 @@ function addWatercolorPigmentSpeckles(ctx: CanvasRenderingContext2D, style: Cont
         ctx.fillRect(random() * width, random() * height, dotSize, dotSize)
     }
     ctx.globalCompositeOperation = 'source-over'
+}
+
+function getActiveThoughtCircleGradientPositions(phase: number): Array<{ x: number; y: number }> {
+    return FreeformGradientRenderer.getPhasePositions(phase)
+}
+
+function createActiveThoughtCircleTexture(gradientPositions: Array<{ x: number; y: number }>): Texture {
+    const size = getTemplateSize()
+    const canvas = createWatercolorCanvas(size)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return Texture.from(canvas)
+
+    const bitmapWidth = FreeformGradientRenderer.bitmapSize.width
+    const bitmapHeight = FreeformGradientRenderer.bitmapSize.height
+    const gradientCanvas = createWatercolorCanvas({ width: bitmapWidth, height: bitmapHeight })
+    const gradientCtx = gradientCanvas.getContext('2d')
+    if (!gradientCtx) return Texture.from(canvas)
+
+    const gradientColors = contextRegionCloudTheme.activeThoughtCircleGradientColors.map(hexToRgb)
+    FreeformGradientRenderer.drawBitmap(
+        gradientCtx,
+        { width: bitmapWidth, height: bitmapHeight },
+        gradientColors,
+        gradientPositions
+    )
+
+    withCo2CloudShape(ctx, size, () => {
+        for (const circle of CO2_CLOUD_CIRCLES) {
+            ctx.save()
+            ctx.beginPath()
+            ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2)
+            ctx.clip()
+            ctx.imageSmoothingEnabled = true
+            ctx.imageSmoothingQuality = 'high'
+            ctx.drawImage(
+                gradientCanvas,
+                0,
+                0,
+                bitmapWidth,
+                bitmapHeight,
+                circle.x - circle.radius,
+                circle.y - circle.radius,
+                circle.radius * 2,
+                circle.radius * 2
+            )
+            ctx.restore()
+        }
+    })
+
+    return Texture.from(canvas)
 }
 
 function createWatercolorTexture(style: ContextRegionCloudStyle): Texture {
@@ -722,6 +740,8 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
     let currentViewport: ContextRegionViewport = { x: 0, y: 0, zoom: 1 }
     let renderRaf: number | null = null
     let pulseRaf: number | null = null
+    let activeThoughtCircleRaf: number | null = null
+    let activeThoughtCirclePhase = FreeformGradientRenderer.initialPhase
 
     function setHealth(next: PixiRendererHealth): void {
         if (health === next) return
@@ -743,6 +763,15 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         const existing = textureCache.get(textureKey)
         if (existing) return existing
         const texture = createWatercolorTexture(style)
+        textureCache.set(textureKey, texture)
+        return texture
+    }
+
+    function getActiveThoughtCircleTexture(phase = FreeformGradientRenderer.initialPhase): Texture {
+        const textureKey = `${CONTEXT_REGION_TEXTURE_VERSION}:active-thought-circle:${phase}:${contextRegionCloudTheme.activeThoughtCircleGradientColors.join('-')}`
+        const existing = textureCache.get(textureKey)
+        if (existing) return existing
+        const texture = createActiveThoughtCircleTexture(getActiveThoughtCircleGradientPositions(phase))
         textureCache.set(textureKey, texture)
         return texture
     }
@@ -770,19 +799,94 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         }
     }
 
+    function updateActiveThoughtCircleFrame(): void {
+        activeThoughtCircleRaf = null
+        const now = performance.now()
+        let hasActiveAnimation = false
+
+        for (const entry of entries.values()) {
+            if (entry.activeThoughtCircleStartedAt === null) continue
+            if (!entry.datum.active) {
+                entry.activeThoughtCircleStartedAt = null
+                entry.activeThoughtCircleFromOverlay.renderable = false
+                continue
+            }
+
+            const elapsed = now - entry.activeThoughtCircleStartedAt
+            const rawProgress = Math.min(1, elapsed / contextRegionCloudTheme.activeThoughtCircleAnimationDurationMs)
+            const progress = Easing.hoverTransition(rawProgress)
+            const reveal = smoothstep(0, 0.20, progress)
+            const gradientShift = smoothstep(0.08, 0.92, progress)
+            const bloomAlpha = Math.sin(progress * Math.PI) * contextRegionCloudTheme.activeThoughtCircleBloomAlphaLift
+            const alpha = clamp((contextRegionCloudTheme.activeThoughtCircleAlpha + bloomAlpha) * reveal)
+
+            entry.activeThoughtCircleFromOverlay.alpha = alpha * (1 - gradientShift)
+            entry.activeThoughtCircleOverlay.alpha = alpha * gradientShift
+            entry.activeThoughtCircleFromOverlay.renderable = entry.activeThoughtCircleFromOverlay.alpha > 0
+            entry.activeThoughtCircleOverlay.renderable = true
+
+            if (rawProgress >= 1) {
+                entry.activeThoughtCircleStartedAt = null
+                entry.activeThoughtCircleFromOverlay.renderable = false
+                entry.activeThoughtCircleFromOverlay.alpha = 0
+                entry.activeThoughtCircleOverlay.alpha = contextRegionCloudTheme.activeThoughtCircleAlpha
+            } else {
+                hasActiveAnimation = true
+            }
+        }
+
+        scheduleRender()
+        if (hasActiveAnimation && !destroyed) {
+            activeThoughtCircleRaf = requestAnimationFrame(updateActiveThoughtCircleFrame)
+        }
+    }
+
+    function animateActiveThoughtCircle(entry: PixiContextRegionEntry): void {
+        const fromPhase = activeThoughtCirclePhase
+        const toPhase = FreeformGradientRenderer.getPreviousPhase(fromPhase)
+        activeThoughtCirclePhase = toPhase
+        entry.activeThoughtCircleFromOverlay.texture = getActiveThoughtCircleTexture(fromPhase)
+        entry.activeThoughtCircleOverlay.texture = getActiveThoughtCircleTexture(toPhase)
+        entry.activeThoughtCircleFromOverlay.alpha = 0
+        entry.activeThoughtCircleOverlay.alpha = 0
+        entry.activeThoughtCircleFromOverlay.renderable = true
+        entry.activeThoughtCircleOverlay.renderable = true
+        entry.activeThoughtCircleStartedAt = performance.now()
+        if (activeThoughtCircleRaf === null) {
+            activeThoughtCircleRaf = requestAnimationFrame(updateActiveThoughtCircleFrame)
+        }
+    }
+
     function syncEntry(datum: ContextRegionCloudDatum): void {
         const style = getContextRegionCloudStyle(datum.nodeId, datum.width, datum.height)
         let entry = entries.get(datum.nodeId)
+        const wasActive = entry?.datum.active ?? false
         if (!entry) {
             const container = new Container({ label: `workspace-context-region-${datum.nodeId}` })
             const backdrop = new Sprite(getTexture(style))
+            const activeThoughtCircleFromOverlay = new Sprite(getActiveThoughtCircleTexture())
+            const activeThoughtCircleOverlay = new Sprite(getActiveThoughtCircleTexture())
             const chrome = new Graphics()
             const titleText = new Text({ text: datum.title })
             container.addChild(backdrop)
             container.addChild(chrome)
+            container.addChild(activeThoughtCircleFromOverlay)
+            container.addChild(activeThoughtCircleOverlay)
             container.addChild(titleText)
             world.addChild(container)
-            entry = { container, backdrop, chrome, titleText, datum, styleKey: style.key, geometryKey: '', pulseStartedAt: null }
+            entry = {
+                container,
+                backdrop,
+                activeThoughtCircleFromOverlay,
+                activeThoughtCircleOverlay,
+                chrome,
+                titleText,
+                datum,
+                styleKey: style.key,
+                geometryKey: '',
+                pulseStartedAt: null,
+                activeThoughtCircleStartedAt: null,
+            }
             entries.set(datum.nodeId, entry)
         }
 
@@ -797,6 +901,23 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
         entry.backdrop.width = backdropRect.size
         entry.backdrop.height = backdropRect.size
         entry.backdrop.alpha = datum.selected ? contextRegionCloudTheme.selectedAlpha : contextRegionCloudTheme.idleAlpha
+        entry.activeThoughtCircleOverlay.position.set(backdropRect.x, backdropRect.y)
+        entry.activeThoughtCircleOverlay.width = backdropRect.size
+        entry.activeThoughtCircleOverlay.height = backdropRect.size
+        entry.activeThoughtCircleFromOverlay.position.set(backdropRect.x, backdropRect.y)
+        entry.activeThoughtCircleFromOverlay.width = backdropRect.size
+        entry.activeThoughtCircleFromOverlay.height = backdropRect.size
+        if (!datum.active) {
+            entry.activeThoughtCircleStartedAt = null
+            entry.activeThoughtCircleFromOverlay.renderable = false
+            entry.activeThoughtCircleOverlay.renderable = false
+        } else if (!wasActive) {
+            animateActiveThoughtCircle(entry)
+        } else if (entry.activeThoughtCircleStartedAt === null) {
+            entry.activeThoughtCircleFromOverlay.renderable = false
+            entry.activeThoughtCircleOverlay.alpha = contextRegionCloudTheme.activeThoughtCircleAlpha
+            entry.activeThoughtCircleOverlay.renderable = true
+        }
 
         const geometryKey = getGeometryKey(datum, currentViewport)
         if (entry.geometryKey !== geometryKey) {
@@ -873,10 +994,14 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
             const baseAlpha = entry.datum.selected ? contextRegionCloudTheme.selectedAlpha : contextRegionCloudTheme.idleAlpha
             entry.backdrop.alpha = baseAlpha + lift * contextRegionCloudTheme.pulseAlphaLift
             entry.backdrop.position.set(backdropRect.x, backdropRect.y - lift * contextRegionCloudTheme.pulseLiftPx)
+            entry.activeThoughtCircleFromOverlay.position.set(backdropRect.x, backdropRect.y - lift * contextRegionCloudTheme.pulseLiftPx)
+            entry.activeThoughtCircleOverlay.position.set(backdropRect.x, backdropRect.y - lift * contextRegionCloudTheme.pulseLiftPx)
             if (progress >= 1) {
                 entry.pulseStartedAt = null
                 entry.backdrop.alpha = baseAlpha
                 entry.backdrop.position.set(backdropRect.x, backdropRect.y)
+                entry.activeThoughtCircleFromOverlay.position.set(backdropRect.x, backdropRect.y)
+                entry.activeThoughtCircleOverlay.position.set(backdropRect.x, backdropRect.y)
             } else {
                 hasActivePulse = true
             }
@@ -935,6 +1060,7 @@ export function createPixiContextRegionLayer(options: PixiContextRegionLayerOpti
             destroyed = true
             if (renderRaf !== null) cancelAnimationFrame(renderRaf)
             if (pulseRaf !== null) cancelAnimationFrame(pulseRaf)
+            if (activeThoughtCircleRaf !== null) cancelAnimationFrame(activeThoughtCircleRaf)
             for (const texture of textureCache.values()) texture.destroy(true)
             textureCache.clear()
             entries.clear()

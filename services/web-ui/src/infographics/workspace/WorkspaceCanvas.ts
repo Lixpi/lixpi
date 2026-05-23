@@ -59,7 +59,8 @@ import {
 import { shouldPreserveLiveViewportForViewportOnlyRender } from '$src/infographics/workspace/workspaceViewportStatePlan.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
-import { createShiftingGradientBackground } from '$src/utils/shiftingGradientRenderer.ts'
+import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
+import { SvgGradientRenderer } from '$src/utils/animations/gradients/svgGradient.ts'
 import { webUiSettings } from '$src/webUiSettings.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
@@ -586,6 +587,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             height: dimensions.height,
             title: getAiChatThreadTitle(thread),
             selected: selectedNodeIds.has(node.nodeId),
+            active: activeAiChatRegionNodeId === node.nodeId,
         }
     }
 
@@ -947,6 +949,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             height: node.dimensions.height,
             title: getAiChatThreadTitle(threadMap.get(node.referenceId)),
             selected: selectedNodeIds.has(node.nodeId),
+            active: activeAiChatRegionNodeId === node.nodeId,
         }
     }
 
@@ -1582,6 +1585,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         onAiChatThreadCreated: ({ threadId, nodeId }) => {
             activeAiChatThreadId = threadId
             activeAiChatRegionNodeId = nodeId
+            syncContextRegionLayer(currentCanvasState)
             requestAnimationFrame(() => {
                 renderActiveAiChatPanel()
             })
@@ -1724,12 +1728,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeAiChatSidebarTabId = null
             aiChatSidebarTabs = []
             promptInputController.setTarget(null)
+            syncContextRegionLayer(currentCanvasState)
         }
     }
 
     function activateAiChatPanel(regionNode: ContextRegionNode, thread: AiChatThread | undefined): void {
         activeAiChatRegionNodeId = regionNode.nodeId
         activeAiChatThreadId = regionNode.referenceId
+        syncContextRegionLayer(currentCanvasState)
         contextRegionLayer?.pulseRegion(regionNode.nodeId)
         ensureAiChatSidebarThreadTab(regionNode.referenceId)
         persistAiChatSidebarState()
@@ -1831,6 +1837,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatThreadId = activeRegion.referenceId
         activeAiChatRegionNodeId = activeRegion.nodeId
+        syncContextRegionLayer(currentCanvasState)
         hydrateAiChatSidebarTabsFromCanvasState(activeRegion.referenceId)
     }
 
@@ -4443,24 +4450,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 .attr('x1', '0').attr('y1', '0.5')
                 .attr('x2', '1').attr('y2', '0.5')
 
-            // Use the shifting gradient palette from theme settings
-            const themeColors = webUiThemeSettings.shiftingGradientColors
-            const extendedColors = [
-                themeColors[0],
-                themeColors[1],
-                themeColors[2],
-                themeColors[3],
-                themeColors[0],
-            ]
-
-            const numRepeats = 2
-            for (let i = 0; i <= numRepeats * extendedColors.length; i++) {
-                const colorIndex = i % extendedColors.length
-                const offset = (i / (numRepeats * extendedColors.length)) * 100
-                gradient.append('stop')
-                    .attr('offset', `${offset}%`)
-                    .style('stop-color', extendedColors[colorIndex])
-            }
+            SvgGradientRenderer.appendRepeatingLinearGradientStops(gradient, webUiThemeSettings.shiftingGradientColors)
 
             // Draw the border rectangle
             svg.append('rect')
@@ -4472,53 +4462,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 .attr('stroke', `url(#${gradientId})`)
                 .attr('stroke-width', 4)
 
-            // Custom easing matching cubic-bezier(0.19, 1, 0.22, 1)
-            const customEase = (t: number): number => {
-                const t2 = t * t, t3 = t2 * t, mt = 1 - t, mt2 = mt * mt
-                return 3 * mt2 * t + 3 * mt * t2 + t3
-            }
-
-            // Animation loop
-            let running = true
-            const duration = 50
-
-            const loop = () => {
-                if (!running) return
-
-                // Get current angle and calculate new position for rotation effect
-                const centerX = 0.5
-                const centerY = 0.5
-                const radius = 0.707 // sqrt(0.5^2 + 0.5^2) to cover corners
-
-                let angle = 0
-
-                const animate = () => {
-                    if (!running) return
-
-                    // Calculate gradient endpoints based on rotating angle
-                    const x1 = centerX + radius * Math.cos(angle)
-                    const y1 = centerY + radius * Math.sin(angle)
-                    const x2 = centerX + radius * Math.cos(angle + Math.PI)
-                    const y2 = centerY + radius * Math.sin(angle + Math.PI)
-
-                    gradient
-                        .transition()
-                        .duration(duration)  // Small steps for smooth rotation
-                        .ease(customEase)
-                        .attr('x1', x1)
-                        .attr('y1', y1)
-                        .attr('x2', x2)
-                        .attr('y2', y2)
-                        .on('end', () => {
-                            angle -= 0.1  // Negative for counterclockwise
-                            if (running) animate()
-                        })
-                }
-
-                animate()
-            }
-
-            loop()
+            SvgGradientRenderer.startRotatingLinearGradient(gradient, {
+                center: { x: 0.5, y: 0.5 },
+                radius: 0.707, // sqrt(0.5^2 + 0.5^2) to cover corners
+                duration: 50,
+            })
         }
 
         return nodeEl
