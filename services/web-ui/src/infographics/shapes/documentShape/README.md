@@ -48,7 +48,7 @@ drawDocumentContentBlock(svgGroup, { variant: 'bottom' })
 
 ### `documentThreadShape.ts`
 
-Draws white rounded border rectangle with centered text label. **Owns its gradient setup and animation logic.**
+Draws a white rounded border rectangle with centered text label. It creates its document-shape gradient definitions and delegates reusable stop construction and rotating-gradient animation to `SvgGradientRenderer`; see [GRADIENTS.md](../../../../../../documentation/features/GRADIENTS.md).
 
 **API:**
 ```typescript
@@ -79,6 +79,7 @@ startThreadGradientAnimation(
 - Gradient rotates counterclockwise around the border creating a flowing snake effect
 - Uses blue-dominant color palette with purple accents
 - Gradient colors sourced from `webUiThemeSettings.shiftingGradientColors`
+- Gradient stop and rotation mechanics are shared through `SvgGradientRenderer`
 
 **Usage:**
 ```typescript

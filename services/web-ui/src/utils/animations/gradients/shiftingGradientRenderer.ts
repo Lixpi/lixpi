@@ -6,7 +6,7 @@
 // - Swirl distortion effect for organic feel
 // - 8 phase positions, animation triggered on message send
 //
-// See documentation/features/SHIFTING-GRADIENT.md for full technical details
+// See documentation/features/GRADIENTS.md for full technical details
 
 import { Easing } from '$src/utils/animations/easing.ts'
 import { html } from '$src/utils/domTemplates.ts'

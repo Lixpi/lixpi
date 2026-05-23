@@ -478,4 +478,4 @@ Both the thread node gradient and the floating user-input gradient are controlle
 - `useShiftingGradientBackgroundOnAiChatThreadNode` (default `false`) — gradient on the AI chat thread canvas node itself.
 - `useShiftingGradientBackgroundOnAiUserInputNode` (default `true`) — gradient on the floating AI prompt input nodes.
 
-For full technical details, color customization, and the color analysis tool, see [Shifting Gradient Background](../../../documentation/features/SHIFTING-GRADIENT.md).
+For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Gradient Rendering and Animation System](../../../documentation/features/GRADIENTS.md).
