@@ -6,6 +6,11 @@ import NATS_Service from '@lixpi/nats-service'
 import Workspace from '../../models/workspace.ts'
 import Document from '../../models/document.ts'
 import Feature from '../../models/feature.ts'
+import MediaLibraryItem from '../../models/media-library-item.ts'
+import {
+    deleteLibraryImageObject,
+    deleteMediaLibraryWorkspaceBucket,
+} from '../../services/media-library-storage.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -159,6 +164,16 @@ export const workspaceSubjects = [
                 for (const f of featureResult.items) { await Feature.deleteFeature({ featureId: f.featureId }).catch(() => {}) }
                 info(`Deleted ${featureResult.items.length} workspace features for ${workspaceId}`)
             } catch (e: any) { warn(`Could not clean up features for workspace ${workspaceId}:`, e.message) }
+
+            try {
+                const mediaItems = await MediaLibraryItem.listWorkspaceItemsForCleanup(workspaceId)
+                for (const item of mediaItems) {
+                    await MediaLibraryItem.deleteImageItem({ item })
+                    await deleteLibraryImageObject(item).catch(() => {})
+                }
+                await deleteMediaLibraryWorkspaceBucket(workspaceId).catch(() => {})
+                info(`Deleted ${mediaItems.length} workspace Media Library images for ${workspaceId}`)
+            } catch (e: any) { warn(`Could not clean up Media Library images for workspace ${workspaceId}:`, e.message) }
 
             try {
                 const natsService = NATS_Service.getInstance()

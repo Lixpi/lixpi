@@ -64,6 +64,11 @@ export type WebUiImageBranchLineageThemeSettings = {
     imageToImageGap: number
 }
 
+export type WebUiMediaLibraryThemeSettings = {
+    panelWidthFraction: number
+    edgeGap: number
+}
+
 export type WebUiContextRegionCloudThemeSettings = {
     palettes: ContextRegionCloudThemePalettes
     textureSize: ContextRegionCloudThemeSize
@@ -129,6 +134,8 @@ export type WebUiThemeSettings = {
     contextRegion: WebUiContextRegionThemeSettings
 
     imageBranchLineage: WebUiImageBranchLineageThemeSettings
+
+    mediaLibrary: WebUiMediaLibraryThemeSettings
 }
 
 const brandColors = {
@@ -203,6 +210,13 @@ export const webUiThemeSettings: WebUiThemeSettings = {
         contextRegionChildImageDropShadow: '0 10px 24px rgba(31, 49, 42, 0.16), 0 1px 2px rgba(31, 49, 42, 0.08)',
         // Shadow behind the generated-image model badge. Increasing it improves badge separation on busy image pixels.
         modelBadgeBoxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+    },
+
+    mediaLibrary: {
+        // Fraction of the canvas space remaining after any open AI chat panel is reserved.
+        panelWidthFraction: 2 / 3,
+        // Screen-space gap from the right edge or from the left side of an open AI chat panel.
+        edgeGap: 15,
     },
 
 

@@ -5,6 +5,7 @@
         type Viewport
     } from '@xyflow/system'
     import {
+        MAX_IMAGE_FILE_SIZE,
         type CanvasState,
         type DocumentCanvasNode,
         type ImageCanvasNode,
@@ -23,16 +24,16 @@
     import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
     import { createNewFileIcon, imageIcon, aiChatBubbleIcon } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
-    import '$src/infographics/workspace/feature-library-panel.scss'
+    import '$src/infographics/workspace/media-library-panel.scss'
 
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
 
-    const featureLibraryIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>'
+    const mediaLibraryIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>'
 
-    function handleToggleFeatureLibrary() {
-        renderer?.toggleFeatureLibrary?.()
+    function handleToggleMediaLibrary() {
+        renderer?.toggleMediaLibrary?.()
     }
 
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
@@ -165,16 +166,36 @@
         }
     }
 
-    function handleImageUrlInsert() {
+    async function handleImageUrlInsert() {
         const url = imageUrlValue.trim()
-        if (!url) return
-        closeImageSubmenu()
-        addImageToCanvas({ src: url })
+        if (!url || !workspaceId) return
+
+        try {
+            const token = await AuthService.getTokenSilently()
+            if (!token) return
+
+            const response = await fetch(`${API_BASE_URL}/api/images/${workspaceId}/import-url`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url }),
+            })
+            if (!response.ok) throw new Error('Image URL import failed')
+
+            const data = await response.json()
+            const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            closeImageSubmenu()
+            addImageToCanvas({ fileId: data.fileId, src: imageUrl })
+        } catch (error) {
+            console.error('Image URL import failed:', error)
+        }
     }
 
     async function uploadAndAddImage(file: File) {
         if (!file.type.startsWith('image/')) return
-        if (file.size > 1024 * 1024 * 1024) return
+        if (file.size > MAX_IMAGE_FILE_SIZE) return
         if (!workspaceId) return
 
         try {
@@ -201,7 +222,7 @@
         }
     }
 
-    function addImageToCanvas({ fileId, src }: { fileId?: string, src: string }) {
+    function addImageToCanvas({ fileId, src }: { fileId: string, src: string }) {
         if (!workspaceId) return
 
         const img = new Image()
@@ -211,12 +232,10 @@
                 : 1
             const dimensions = getImageInsertionDimensions(aspectRatio)
 
-            const nodeUniqueId = fileId || uuidv4()
-
             const imageNode: Omit<ImageCanvasNode, 'position'> = {
-                nodeId: `node-${nodeUniqueId}`,
+                nodeId: `node-${fileId}`,
                 type: 'image',
-                fileId: nodeUniqueId,
+                fileId,
                 workspaceId,
                 src,
                 aspectRatio,
@@ -229,12 +248,10 @@
         img.onerror = () => {
             console.error('Failed to load image for dimension calculation')
             const dimensions = getImageInsertionDimensions(1)
-            const nodeUniqueId = fileId || uuidv4()
-
             const imageNode: Omit<ImageCanvasNode, 'position'> = {
-                nodeId: `node-${nodeUniqueId}`,
+                nodeId: `node-${fileId}`,
                 type: 'image',
-                fileId: nodeUniqueId,
+                fileId,
                 workspaceId,
                 src,
                 aspectRatio: 1,
@@ -371,52 +388,52 @@
 
 <div
     class="workspace-canvas"
-    class:workspace-canvas--chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
+    class:workspace-canvas-chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
 >
     <div class="workspace-floating-toolbar">
-        <button class="workspace-floating-toolbar__button" onclick={handleToggleFeatureLibrary} aria-label="Feature Library">
-            {@html featureLibraryIcon}
-            <span class="workspace-floating-toolbar__tooltip">Feature Library</span>
+        <button class="workspace-floating-toolbar-button" onclick={handleToggleMediaLibrary} aria-label="Media Library">
+            {@html mediaLibraryIcon}
+            <span class="workspace-floating-toolbar-tooltip">Media Library</span>
         </button>
-        <div class="workspace-floating-toolbar__divider"></div>
-        <button class="workspace-floating-toolbar__button" onclick={handleCreateDocument}>
+        <div class="workspace-floating-toolbar-divider"></div>
+        <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument}>
             {@html createNewFileIcon}
-            <span class="workspace-floating-toolbar__tooltip">New Document</span>
+            <span class="workspace-floating-toolbar-tooltip">New Document</span>
         </button>
-        <div class="workspace-floating-toolbar__image-wrapper" bind:this={imageWrapperEl}>
+        <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
             <button
-                class="workspace-floating-toolbar__button"
+                class="workspace-floating-toolbar-button"
                 class:active={imageSubmenuOpen}
                 onclick={toggleImageSubmenu}
             >
                 {@html imageIcon}
                 {#if !imageSubmenuOpen}
-                    <span class="workspace-floating-toolbar__tooltip">Add Image</span>
+                    <span class="workspace-floating-toolbar-tooltip">Add Image</span>
                 {/if}
             </button>
             {#if imageSubmenuOpen}
                 <div class="workspace-image-submenu">
                     {#if imageSubmenuMode === 'menu'}
-                        <button class="workspace-image-submenu__option" onclick={handleUploadFromDevice}>
+                        <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
                             Upload from Device
                         </button>
-                        <button class="workspace-image-submenu__option" onclick={() => { imageSubmenuMode = 'url' }}>
+                        <button class="workspace-image-submenu-option" onclick={() => { imageSubmenuMode = 'url' }}>
                             Paste Image URL
                         </button>
                     {:else}
-                        <div class="workspace-image-submenu__url-form">
+                        <div class="workspace-image-submenu-url-form">
                             <input
                                 type="url"
-                                class="workspace-image-submenu__url-input"
+                                class="workspace-image-submenu-url-input"
                                 placeholder="https://example.com/image.jpg"
                                 bind:value={imageUrlValue}
                                 onkeydown={(e) => { if (e.key === 'Enter') handleImageUrlInsert() }}
                             />
-                            <div class="workspace-image-submenu__url-actions">
-                                <button class="workspace-image-submenu__url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
+                            <div class="workspace-image-submenu-url-actions">
+                                <button class="workspace-image-submenu-url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
                                     Back
                                 </button>
-                                <button class="workspace-image-submenu__url-insert" onclick={handleImageUrlInsert}>
+                                <button class="workspace-image-submenu-url-insert" onclick={handleImageUrlInsert}>
                                     Add
                                 </button>
                             </div>
@@ -432,10 +449,10 @@
             bind:this={fileInputEl}
             onchange={handleFileInputChange}
         />
-        <div class="workspace-floating-toolbar__divider"></div>
-        <button class="workspace-floating-toolbar__button" onclick={handleAddAiChatThread}>
+        <div class="workspace-floating-toolbar-divider"></div>
+        <button class="workspace-floating-toolbar-button" onclick={handleAddAiChatThread}>
             {@html aiChatBubbleIcon}
-            <span class="workspace-floating-toolbar__tooltip">AI Chat</span>
+            <span class="workspace-floating-toolbar-tooltip">AI Chat</span>
         </button>
     </div>
     <span class="workspace-zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>
