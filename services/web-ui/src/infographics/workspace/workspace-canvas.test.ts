@@ -166,7 +166,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 	})
 
 	it('.workspace-image-node base uses the theme-configured default box-shadow', () => {
-		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--context-region-child')[0]
+		const topLevelSection = imageNodeBlock.split('&.workspace-image-node-context-region-child')[0]
 		expect(topLevelSection).toMatch(/^\s*box-shadow:\s*var\(--workspace-image-default-box-shadow\);/m)
 
 		// Generated-image chrome provider badge shadow remains allowed.
@@ -208,14 +208,14 @@ describe('workspace node CSS — box-shadow consistency', () => {
 	})
 
 	it('scopes the context-region off-white frame to region child image nodes', () => {
-		const contextRegionBlock = extractBlock(imageNodeBlock, '&.workspace-image-node--context-region-child')
+		const contextRegionBlock = extractBlock(imageNodeBlock, '&.workspace-image-node-context-region-child')
 		expect(contextRegionBlock).toMatch(/background:\s*var\(--workspace-image-context-region-child-image-frame-color\)/)
 		expect(contextRegionBlock).toContain('box-shadow: 0 0 0 8px var(--workspace-image-context-region-child-image-frame-color), var(--workspace-image-context-region-child-image-drop-shadow)')
 		expect(contextRegionBlock).not.toContain('#fff')
 		expect(contextRegionBlock).toContain('.image-node-img')
 
-		const topLevelSection = imageNodeBlock.split('&.workspace-image-node--context-region-child')[0]
-		expect(topLevelSection).not.toContain('workspace-image-node--context-region-child')
+		const topLevelSection = imageNodeBlock.split('&.workspace-image-node-context-region-child')[0]
+		expect(topLevelSection).not.toContain('workspace-image-node-context-region-child')
 	})
 })
 
@@ -634,13 +634,13 @@ describe('AI chat thread — document title hidden in workspace', () => {
 	const scss = loadScss()
 	const ts = loadTs()
 
-	it('hides .document-title via --hide-title modifier class', () => {
-		expect(scss).toMatch(/\.workspace-ai-chat-thread-node--hide-title\s+\.document-title\s*\{[^}]*display:\s*none/)
+	it('hides .document-title via the hide-title modifier class', () => {
+		expect(scss).toMatch(/\.workspace-ai-chat-thread-node-hide-title\s+\.document-title\s*\{[^}]*display:\s*none/)
 	})
 
 	it('applies document title visibility to the canvas-owned chat panel', () => {
 		expectSourceToContain(ts, 'showHeaderOnAiChatThreadNodes')
-		expectSourceToContain(ts, 'workspace-ai-chat-thread-node--hide-title')
+		expectSourceToContain(ts, 'workspace-ai-chat-thread-node-hide-title')
 	})
 })
 
@@ -768,7 +768,7 @@ describe('AI chat region image frame', () => {
 	const themeSettings = loadThemeSettings()
 
 	it('marks images with the frame only when their parent is a context region', () => {
-		expectSourceToContain(ts, "const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'")
+		expectSourceToContain(ts, "const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node-context-region-child'")
 		expectSourceToContain(ts, 'function isImageInsideContextRegion(node: ImageCanvasNode')
 		expectSourceToContain(ts, 'candidate.nodeId === node.parentId && isContextRegionCanvasNode(candidate)')
 		expectSourceToContain(ts, "node.type === 'image' && isImageInsideContextRegion(node as ImageCanvasNode, nodes)")
@@ -813,7 +813,7 @@ describe('AI chat region PIXI cloud layer', () => {
 	})
 
 	it('keeps context region DOM nodes as non-visual PIXI-owned proxies', () => {
-		expectSourceToContain(ts, 'workspace-context-region-node--pixi-owned')
+		expectSourceToContain(ts, 'workspace-context-region-node-pixi-owned')
 		expectSourceNotToContain(themeSettings, 'contextRegionAreaShiftingGradientColors')
 		expectSourceToContain(themeSettings, 'contextRegion: WebUiContextRegionThemeSettings')
 		expectSourceToContain(themeSettings, 'cloud: WebUiContextRegionCloudThemeSettings')
@@ -825,7 +825,7 @@ describe('AI chat region PIXI cloud layer', () => {
 		expectSourceNotToContain(themeSettings, 'contextRegionCloudPalettes')
 		expectSourceNotToContain(cloudTs, 'webUiThemeSettings.contextRegionCloud')
 		expectSourceNotToContain(cloudLayerTs, 'webUiThemeSettings.contextRegionCloud')
-		expectSourceNotToContain(ts, 'workspace-ai-chat-thread-region__title-bar')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-thread-region-title-bar')
 		expectSourceToContain(scss, 'pointer-events: none')
 		expectSourceToContain(scss, 'background: transparent')
 	})
@@ -878,20 +878,20 @@ describe('Vertical rail — CSS styling', () => {
 		expect(block).toMatch(/cursor:\s*move/)
 	})
 
-	it('has __line child with ::before pseudo-element for the visible line', () => {
-		expect(scss).toMatch(/&__line/)
+	it('has line child with ::before pseudo-element for the visible line', () => {
+		expect(scss).toMatch(/\.workspace-thread-rail-line\s*\{/)
 		expect(scss).toMatch(/&::before/)
 		expect(scss).toMatch(/--rail-width/)
 		expect(scss).toMatch(/--rail-gradient/)
 		expect(scss).toMatch(/--rail-thread-height/)
 	})
 
-	it('has no .is-selected visual change on __line::before (rail always looks the same)', () => {
-		expect(scss).not.toMatch(/\.is-selected\s+\.workspace-thread-rail__line::before/)
+	it('has no .is-selected visual change on line::before (rail always looks the same)', () => {
+		expect(scss).not.toMatch(/\.is-selected\s+\.workspace-thread-rail-line::before/)
 	})
 
-	it('defines __boundary-circle positioned at bottom of __line', () => {
-		expect(scss).toMatch(/&__boundary-circle/)
+	it('defines boundary-circle positioned at bottom of line', () => {
+		expect(scss).toMatch(/\.workspace-thread-rail-boundary-circle\s*\{/)
 		expect(scss).toMatch(/bottom:\s*-6px/)
 	})
 })
@@ -980,10 +980,10 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(ts).toMatch(/railOffset:\s*RAIL_OFFSET/)
 	})
 
-	it('createThreadRail creates __line child element', () => {
+	it('createThreadRail creates line child element', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('workspace-thread-rail__line')
+		expect(fnMatch![0]).toContain('workspace-thread-rail-line')
 	})
 
 	it('createThreadRail sets z-index above all nodes to prevent overlap', () => {
@@ -992,10 +992,10 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain("zIndex: '9990'")
 	})
 
-	it('createThreadRail appends boundary circle to __line', () => {
+	it('createThreadRail appends boundary circle to line', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('workspace-thread-rail__boundary-circle')
+		expect(fnMatch![0]).toContain('workspace-thread-rail-boundary-circle')
 		expect(fnMatch![0]).toContain('aiChatThreadRailBoundaryCircle')
 	})
 
@@ -1017,7 +1017,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('workspace-thread-rail__boundary-circle')
+		expect(fnBody).toContain('workspace-thread-rail-boundary-circle')
 		expect(fnBody).toContain("isHidden ? 'none' : ''")
 	})
 
@@ -1081,7 +1081,7 @@ describe('Vertical rail — TS infrastructure', () => {
 
 		expect(fnBody).toContain('workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
 		expect(fnBody).toContain('new ProseMirrorEditor')
-		expect(fnBody).toContain('workspace-thread-rail workspace-ai-chat-floating-panel__rail')
+		expect(fnBody).toContain('workspace-thread-rail workspace-ai-chat-floating-panel-rail')
 		expect(fnBody).toContain('handleActiveAiChatPanelResizeStart')
 		expect(fnBody).toContain('aiChatThreadRailBoundaryCircle')
 		expect(fnBody).toContain("'--dropdown-popover-box-shadow'")
@@ -1094,7 +1094,7 @@ describe('Vertical rail — TS infrastructure', () => {
 
 		expectSourceToContain(ts, 'function handleActiveAiChatPanelResizeStart(')
 		expectSourceToContain(ts, "applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })")
-		expectSourceToContain(scss, '.workspace-thread-rail.workspace-ai-chat-floating-panel__rail')
+		expectSourceToContain(scss, '.workspace-thread-rail.workspace-ai-chat-floating-panel-rail')
 		expectSourceToContain(scss, 'cursor: ew-resize')
 	})
 
@@ -1106,7 +1106,7 @@ describe('Vertical rail — TS infrastructure', () => {
 
 		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-width')
 		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-edge-gap: 15px')
-		expectSourceToContain(svelte, 'class:workspace-canvas--chat-panel-open')
+		expectSourceToContain(svelte, 'class:workspace-canvas-chat-panel-open')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap))')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline))')
 		expectSourceToContain(scss, 'bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
@@ -1115,7 +1115,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(layout, 'workspace-sidebar-footer')
 		expectSourceToContain(layout, '<Separator />')
 		expectSourceToContain(layout, 'sidebar-user-menu')
-		expectSourceNotToContain(layout, 'user-menu--workspace-chat-panel')
+		expectSourceNotToContain(layout, 'user-menu-workspace-chat-panel')
 		expectSourceToContain(sidebar, 'height: auto !important')
 		expectSourceToContain(sidebar, 'flex: 1 1 auto')
 		expectSourceToContain(sidebar, 'max-height: none !important')

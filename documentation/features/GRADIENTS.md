@@ -73,7 +73,7 @@ Some UI surfaces use CSS gradients without participating in freeform bitmap rend
 | Model/dropdown highlights | `components/dropdown/_dropdown-mixins.scss` | Uses the same simple lavender/periwinkle two-color accent as the rail |
 | AI user message bubbles and canvas provenance prompt bubbles | `components/proseMirror/plugins/aiChatThreadPlugin/ai-chat-thread.scss`, `infographics/workspace/workspace-canvas.scss` | Local dark bubble treatment; not part of the animated palette system |
 | Generated-image action readability fade | `components/proseMirror/plugins/aiChatThreadPlugin/ai-chat-thread.scss` | Local media overlay fade; not a reusable gradient asset |
-| Feature library thumbnail placeholder | `infographics/workspace/feature-library-panel.scss` | Local placeholder treatment; not part of animated gradient rendering |
+| Media Library feature thumbnail placeholder | `infographics/workspace/media-library-panel.scss` | Local placeholder treatment; not part of animated gradient rendering |
 | Theme/sidebar and editor-theme backgrounds | `sass/_variables.scss`, `sass/themes/_minimalist-chic.scss`, `components/proseMirror/themes/cm6-themes/packages/gruvbox-light/src/index.ts` | General theme styling; outside the workspace gradient renderer contract |
 
 Do not route ordinary CSS background treatments through `FreeformGradientRenderer` or `SvgGradientRenderer`. Those classes own generated texture and animated SVG behavior; simple component backgrounds should stay with their component/theme styling unless they become a shared product token.

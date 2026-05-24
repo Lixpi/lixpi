@@ -118,20 +118,20 @@ function renderTimelineGuide(listEl: HTMLOListElement, currentStatus: string) {
 
     const svg = select(listEl)
         .append('svg')
-        .attr('class', 'extraction-timeline__guide')
+        .attr('class', 'extraction-timeline-guide')
         .attr('width', TIMELINE_GUIDE_WIDTH)
         .attr('height', svgHeight)
         .attr('viewBox', `0 0 ${TIMELINE_GUIDE_WIDTH} ${svgHeight}`)
         .attr('preserveAspectRatio', 'xMinYMin meet')
 
     svg.append('line')
-        .attr('class', 'extraction-timeline__path extraction-timeline__path--muted')
+        .attr('class', 'extraction-timeline-path extraction-timeline-path-muted')
         .attr('x1', TIMELINE_ROOT_X).attr('y1', firstY)
         .attr('x2', TIMELINE_ROOT_X).attr('y2', lastY)
 
     if (activeIndex > 0 || currentStatus === 'completed') {
         svg.append('line')
-            .attr('class', 'extraction-timeline__path extraction-timeline__path--active')
+            .attr('class', 'extraction-timeline-path extraction-timeline-path-active')
             .attr('x1', TIMELINE_ROOT_X).attr('y1', firstY)
             .attr('x2', TIMELINE_ROOT_X).attr('y2', activeY)
     }
@@ -141,14 +141,14 @@ function renderTimelineGuide(listEl: HTMLOListElement, currentStatus: string) {
         const isDone = isCompleted || stepIndex < activeIndex
         const isActive = !isCompleted && stepIndex === activeIndex
         svg.append('circle')
-            .attr('class', `extraction-timeline__dot${isDone ? ' extraction-timeline__dot--done' : ''}${isActive ? ' extraction-timeline__dot--active' : ''}`)
+            .attr('class', `extraction-timeline-dot${isDone ? ' extraction-timeline-dot-done' : ''}${isActive ? ' extraction-timeline-dot-active' : ''}`)
             .attr('cx', TIMELINE_ROOT_X)
             .attr('cy', getTimelineStepY(stepIndex))
             .attr('r', 7)
 
         if (isActive) {
             svg.append('circle')
-                .attr('class', 'extraction-timeline__dot-core')
+                .attr('class', 'extraction-timeline-dot-core')
                 .attr('cx', TIMELINE_ROOT_X)
                 .attr('cy', getTimelineStepY(stepIndex))
                 .attr('r', 3.5)
@@ -187,33 +187,33 @@ function buildStageTimeline(
 
     if (traceEvents.length === 0) {
         const statusLabel = currentStatus === 'failed' ? 'Extraction failed' : 'Waiting for the pipeline to start…'
-        containerEl.appendChild(html`<p className="extraction-stage-timeline__empty">${statusLabel}</p>` as HTMLElement)
+        containerEl.appendChild(html`<p className="extraction-stage-timeline-empty">${statusLabel}</p>` as HTMLElement)
         return
     }
 
     const listEl = html`<ol className="extraction-stage-timeline"></ol>` as HTMLOListElement
     for (const event of traceEvents) {
         const statusClass = event.status === 'ok'
-            ? 'extraction-stage-timeline__row--ok'
+            ? 'extraction-stage-timeline-row-ok'
             : event.status === 'error'
-                ? 'extraction-stage-timeline__row--error'
-                : 'extraction-stage-timeline__row--skipped'
-        const itemEl = html`<li className=${`extraction-stage-timeline__row ${statusClass}`}>
-            <div className="extraction-stage-timeline__header">
-                <span className="extraction-stage-timeline__stage">${formatStageLabel(event.stage)}</span>
-                <span className="extraction-stage-timeline__model">${event.modelName ?? '—'}</span>
-                <span className="extraction-stage-timeline__duration">${formatStageDuration(event.durationMs)}</span>
-                <span className=${`extraction-stage-timeline__status extraction-stage-timeline__status--${event.status}`}>${event.status}</span>
+                ? 'extraction-stage-timeline-row-error'
+                : 'extraction-stage-timeline-row-skipped'
+        const itemEl = html`<li className=${`extraction-stage-timeline-row ${statusClass}`}>
+            <div className="extraction-stage-timeline-header">
+                <span className="extraction-stage-timeline-stage">${formatStageLabel(event.stage)}</span>
+                <span className="extraction-stage-timeline-model">${event.modelName ?? '—'}</span>
+                <span className="extraction-stage-timeline-duration">${formatStageDuration(event.durationMs)}</span>
+                <span className=${`extraction-stage-timeline-status extraction-stage-timeline-status-${event.status}`}>${event.status}</span>
             </div>
-            <div className="extraction-stage-timeline__summary">${event.outputSummary ?? event.inputSummary ?? ''}</div>
+            <div className="extraction-stage-timeline-summary">${event.outputSummary ?? event.inputSummary ?? ''}</div>
         </li>` as HTMLLIElement
         if (event.errorMessage) {
-            itemEl.appendChild(html`<div className="extraction-stage-timeline__error">${event.errorMessage}</div>` as HTMLElement)
+            itemEl.appendChild(html`<div className="extraction-stage-timeline-error">${event.errorMessage}</div>` as HTMLElement)
         }
         if (event.promptPreview) {
-            const detailsEl = html`<details className="extraction-stage-timeline__details">
+            const detailsEl = html`<details className="extraction-stage-timeline-details">
                 <summary>Prompt preview</summary>
-                <pre className="extraction-stage-timeline__preview">${event.promptPreview}</pre>
+                <pre className="extraction-stage-timeline-preview">${event.promptPreview}</pre>
             </details>` as HTMLElement
             itemEl.appendChild(detailsEl)
         }
@@ -236,11 +236,11 @@ function buildStepTimeline(
         const isDone = currentStatus === 'completed' || normalizedCurrentIndex > stepIndex
         const isActive = step.key === currentStatus && currentStatus !== 'completed'
         const detailText = stepDetails.get(step.key)?.trim() ?? ''
-        const itemEl = html`<li className=${`extraction-timeline__item${isDone ? ' extraction-timeline__item--done' : ''}${isActive ? ' extraction-timeline__item--active' : ''}`}>
-            <span className="extraction-timeline__content">
-                <span className="extraction-timeline__label">${step.label}</span>
-                <span className="extraction-timeline__detail">${step.detail}</span>
-                <span className="extraction-timeline__live-details">${detailText || 'Waiting for live details.'}</span>
+        const itemEl = html`<li className=${`extraction-timeline-item${isDone ? ' extraction-timeline-item-done' : ''}${isActive ? ' extraction-timeline-item-active' : ''}`}>
+            <span className="extraction-timeline-content">
+                <span className="extraction-timeline-label">${step.label}</span>
+                <span className="extraction-timeline-detail">${step.detail}</span>
+                <span className="extraction-timeline-live-details">${detailText || 'Waiting for live details.'}</span>
             </span>
         </li>` as HTMLLIElement
         listEl.appendChild(itemEl)
@@ -264,24 +264,24 @@ function getFeatureSampleUrl(feature: any, sample: any, accessToken = '', worksp
 function buildFeatureCard(feature: any, containerEl: HTMLElement, accessToken = '', workspaceId = '') {
     containerEl.replaceChildren()
     const cardEl = html`<div className="extraction-feature-card">
-        <div className="extraction-feature-card__eyebrow">Saved Feature</div>
-        <div className="extraction-feature-card__header">
-            <span className="extraction-feature-card__category-badge">${feature.category}</span>
-            <strong className="extraction-feature-card__name">@${feature.name}</strong>
-            <span className="extraction-feature-card__scope-chip">${feature.scope ?? 'workspace'}</span>
+        <div className="extraction-feature-card-eyebrow">Saved Feature</div>
+        <div className="extraction-feature-card-header">
+            <span className="extraction-feature-card-category-badge">${feature.category}</span>
+            <strong className="extraction-feature-card-name">@${feature.name}</strong>
+            <span className="extraction-feature-card-scope-chip">${feature.scope ?? 'workspace'}</span>
         </div>
-        <p className="extraction-feature-card__summary">${feature.summary}</p>
-        <div className="extraction-feature-card__tags"></div>
-        <div className="extraction-feature-card__samples"></div>
+        <p className="extraction-feature-card-summary">${feature.summary}</p>
+        <div className="extraction-feature-card-tags"></div>
+        <div className="extraction-feature-card-samples"></div>
     </div>` as HTMLElement
-    const tagsEl = cardEl.querySelector('.extraction-feature-card__tags') as HTMLElement
+    const tagsEl = cardEl.querySelector('.extraction-feature-card-tags') as HTMLElement
     for (const tag of (feature.tags ?? [])) {
-        tagsEl.appendChild(html`<span className="extraction-feature-card__tag">${tag}</span>` as HTMLElement)
+        tagsEl.appendChild(html`<span className="extraction-feature-card-tag">${tag}</span>` as HTMLElement)
     }
-    const samplesEl = cardEl.querySelector('.extraction-feature-card__samples') as HTMLElement
+    const samplesEl = cardEl.querySelector('.extraction-feature-card-samples') as HTMLElement
     for (const sample of (feature.sampleImages ?? [])) {
         const thumbStyle = { width: '100%', aspectRatio: '3 / 2', objectFit: 'contain' as const, borderRadius: '6px' }
-        samplesEl.appendChild(html`<img className="extraction-feature-card__sample-thumb" style=${thumbStyle} src=${getFeatureSampleUrl(feature, sample, accessToken, workspaceId)} alt=${sample.subject} />` as HTMLElement)
+        samplesEl.appendChild(html`<img className="extraction-feature-card-sample-thumb" style=${thumbStyle} src=${getFeatureSampleUrl(feature, sample, accessToken, workspaceId)} alt=${sample.subject} />` as HTMLElement)
     }
     containerEl.appendChild(cardEl)
 }

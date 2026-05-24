@@ -38,79 +38,79 @@
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05);
     user-select: none;
     -webkit-user-select: none;
+}
 
-    &__button {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        padding: 0;
-        border: none;
-        border-radius: 6px;
-        background: transparent;
-        cursor: pointer;
-        transition: background 0.15s ease;
-        -webkit-tap-highlight-color: transparent;
+.workspace-floating-toolbar-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+
+    svg {
+        width: 18px;
+        height: 18px;
+        fill: $steelBlue;
+    }
+
+    &:hover {
+        background: #f0f0f0;
 
         svg {
-            width: 18px;
-            height: 18px;
-            fill: $steelBlue;
-        }
-
-        &:hover {
-            background: #f0f0f0;
-
-            svg {
-                fill: $nightBlue;
-            }
-        }
-
-        &:active,
-        &.active {
-            background: #e4e4e4;
-        }
-
-        // Tooltip — appears to the right on hover
-        &:hover .workspace-floating-toolbar__tooltip {
-            opacity: 1;
-            visibility: visible;
-            transform: translateX(0);
+            fill: $nightBlue;
         }
     }
 
-    &__tooltip {
-        position: absolute;
-        left: calc(100% + 10px);
-        top: 50%;
-        transform: translateY(-50%) translateX(-4px);
-        white-space: nowrap;
-        padding: 5px 10px;
-        border-radius: 6px;
-        background: $nightBlue;
-        color: $offWhite;
-        font-size: 12px;
-        font-weight: 500;
-        line-height: 1;
-        pointer-events: none;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    &:active,
+    &.active {
+        background: #e4e4e4;
     }
 
-    &__divider {
-        width: 20px;
-        height: 1px;
-        background: #e0e0e0;
-        margin: 1px 0;
+    // Tooltip — appears to the right on hover
+    &:hover .workspace-floating-toolbar-tooltip {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(0);
     }
+}
 
-    &__image-wrapper {
-        position: relative;
-    }
+.workspace-floating-toolbar-tooltip {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    white-space: nowrap;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: $nightBlue;
+    color: $offWhite;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.workspace-floating-toolbar-divider {
+    width: 20px;
+    height: 1px;
+    background: #e0e0e0;
+    margin: 1px 0;
+}
+
+.workspace-floating-toolbar-image-wrapper {
+    position: relative;
 }
 
 // Image submenu — appears to the right of the image button
@@ -126,76 +126,76 @@
     padding: 4px;
     min-width: 180px;
     white-space: nowrap;
+}
 
-    &__option {
-        display: block;
-        width: 100%;
-        padding: 8px 12px;
-        border: none;
-        border-radius: 6px;
-        background: transparent;
-        cursor: pointer;
-        font-size: 13px;
-        color: $nightBlue;
-        text-align: left;
-        transition: background 0.12s ease;
+.workspace-image-submenu-option {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    color: $nightBlue;
+    text-align: left;
+    transition: background 0.12s ease;
 
-        &:hover {
-            background: #f0f0f0;
-        }
+    &:hover {
+        background: #f0f0f0;
     }
+}
 
-    &__url-form {
-        padding: 8px;
+.workspace-image-submenu-url-form {
+    padding: 8px;
+}
+
+.workspace-image-submenu-url-input {
+    width: 220px;
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    box-sizing: border-box;
+
+    &:focus {
+        border-color: $steelBlue;
     }
+}
 
-    &__url-input {
-        width: 220px;
-        padding: 6px 10px;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        font-size: 13px;
-        outline: none;
-        box-sizing: border-box;
+.workspace-image-submenu-url-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 8px;
+}
 
-        &:focus {
-            border-color: $steelBlue;
-        }
+.workspace-image-submenu-url-back,
+.workspace-image-submenu-url-insert {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.workspace-image-submenu-url-back {
+    background: transparent;
+    color: $steelBlue;
+
+    &:hover {
+        background: #f0f0f0;
     }
+}
 
-    &__url-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 6px;
-        margin-top: 8px;
-    }
+.workspace-image-submenu-url-insert {
+    background: $nightBlue;
+    color: $offWhite;
 
-    &__url-back,
-    &__url-insert {
-        padding: 5px 12px;
-        border: none;
-        border-radius: 6px;
-        font-size: 12px;
-        cursor: pointer;
-        transition: background 0.12s ease;
-    }
-
-    &__url-back {
-        background: transparent;
-        color: $steelBlue;
-
-        &:hover {
-            background: #f0f0f0;
-        }
-    }
-
-    &__url-insert {
-        background: $nightBlue;
-        color: $offWhite;
-
-        &:hover {
-            background: darken($nightBlue, 5%);
-        }
+    &:hover {
+        background: darken($nightBlue, 5%);
     }
 }
 
@@ -215,7 +215,7 @@
     pointer-events: none;
 }
 
-.workspace-canvas--chat-panel-open .workspace-zoom-indicator {
+.workspace-canvas-chat-panel-open .workspace-zoom-indicator {
     right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap));
 }
 
@@ -507,7 +507,7 @@
 
 /* Context regions are rendered by PIXI; the DOM node remains as a geometry proxy. */
 .workspace-context-region-node,
-.workspace-ai-chat-thread-node--region {
+.workspace-ai-chat-thread-node-region {
     background: transparent;
     border: none;
     border-radius: 0;
@@ -621,23 +621,23 @@
     font-size: 12px;
     font-weight: 600;
     opacity: 0.68;
-
-    &:hover,
-    &--active {
-        opacity: 1;
-        background: rgba(255, 255, 255, 0.94);
-        border-color: rgba(85, 150, 124, 0.38);
-    }
 }
 
-.workspace-ai-chat-panel-tab__title {
+.workspace-ai-chat-panel-tab:hover,
+.workspace-ai-chat-panel-tab-active {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.94);
+    border-color: rgba(85, 150, 124, 0.38);
+}
+
+.workspace-ai-chat-panel-tab-title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.workspace-ai-chat-panel-tab__close {
+.workspace-ai-chat-panel-tab-close {
     flex: 0 0 auto;
     width: 14px;
     height: 14px;
@@ -661,14 +661,14 @@
     overflow: hidden;
 }
 
-.workspace-ai-chat-panel-body__pane {
+.workspace-ai-chat-panel-body-pane {
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
 }
 
-.workspace-ai-chat-panel-body__pane--hidden {
+.workspace-ai-chat-panel-body-pane-hidden {
     display: none !important;
 }
 
@@ -677,7 +677,7 @@
     color: #1a2744;
 }
 
-.workspace-ai-chat-floating-panel__prompt {
+.workspace-ai-chat-floating-panel-prompt {
     position: relative !important;
     display: block !important;
     left: auto !important;
@@ -697,67 +697,66 @@
     }
 }
 
-.workspace-ai-chat-floating-panel__rail {
+.workspace-ai-chat-floating-panel-rail {
     cursor: default;
 }
 
 /* Hide the document title (h1) inside AI chat thread nodes on the canvas (controlled by showHeaderOnAiChatThreadNodes) */
-.workspace-ai-chat-thread-node--hide-title .document-title {
+.workspace-ai-chat-thread-node-hide-title .document-title {
     display: none;
 }
 
 /* Vertical rail — drag handle + connection proxy running along AI chat thread + floating input */
 /* The outer .workspace-thread-rail spans the full functional height (thread + gap + floating input) */
-/* The inner __line child spans only the thread node height for visual display */
+/* The inner line child spans only the thread node height for visual display */
 .workspace-thread-rail {
     position: absolute;
     z-index: 10;
     pointer-events: auto;
     cursor: move;
-
-    &__line {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: var(--rail-thread-height, 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        &::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: var(--rail-width, 3px);
-            background-image: var(--rail-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
-            border-radius: 2px;
-        }
-    }
-
-    &__boundary-circle {
-        position: absolute;
-        bottom: -6px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 14px;
-        height: 14px;
-        line-height: 0;
-        pointer-events: none;
-
-        svg {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-    }
-
 }
 
-.workspace-thread-rail.workspace-ai-chat-floating-panel__rail {
+.workspace-thread-rail-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--rail-thread-height, 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: var(--rail-width, 3px);
+        background-image: var(--rail-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
+        border-radius: 2px;
+    }
+}
+
+.workspace-thread-rail-boundary-circle {
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 14px;
+    line-height: 0;
+    pointer-events: none;
+
+    svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+}
+
+.workspace-thread-rail.workspace-ai-chat-floating-panel-rail {
     cursor: ew-resize;
     touch-action: none;
     height: 100%;
@@ -783,7 +782,7 @@
         cursor: move;
     }
 
-    &.workspace-image-node--context-region-child {
+    &.workspace-image-node-context-region-child {
         background: var(--workspace-image-context-region-child-image-frame-color);
         border-radius: 8px;
         box-shadow: 0 0 0 8px var(--workspace-image-context-region-child-image-frame-color), var(--workspace-image-context-region-child-image-drop-shadow);
@@ -798,11 +797,11 @@
     // spinner, and provider badge. Frame/background styling is stripped so
     // PIXI pixels are the only visible image surface; the node shadow remains
     // DOM-owned so it can sit behind the PIXI sprite.
-    &.workspace-image-node--pixi-owned {
+    &.workspace-image-node-pixi-owned {
         background: transparent;
         box-shadow: var(--workspace-image-default-box-shadow);
 
-        &.workspace-image-node--context-region-child {
+        &.workspace-image-node-context-region-child {
             background: transparent;
             box-shadow: var(--workspace-image-default-box-shadow);
         }
@@ -813,8 +812,8 @@
     }
 
     &.is-selected,
-    &.workspace-image-node--pixi-owned.is-selected,
-    &.workspace-image-node--context-region-child.is-selected {
+    &.workspace-image-node-pixi-owned.is-selected,
+    &.workspace-image-node-context-region-child.is-selected {
         box-shadow: var(--workspace-image-selected-box-shadow);
     }
 

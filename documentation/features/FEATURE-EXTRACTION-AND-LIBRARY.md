@@ -6,7 +6,7 @@ Extraction runs through a six-stage modular pipeline implemented under [`service
 
 Features are applied later via `/use loose-watercolor` in any prompt; the server resolves the reference at send time and injects the feature's instructions, samples, and **deterministically-extracted content-free source crops** as system context. The downstream model sees pixel evidence of the medium — but never the full source frame, so subject layout cannot leak. The architecture is the FIBO-schema axis decomposition + FaceScanPaliGemma parallel per-axis-extractor pattern + Art-Historians dominance-weighting, lifted to VLM orchestration against closed-API image models. See ["Research foundations"](#research-foundations) for the prior-art mapping.
 
-The image bubble's "Ask AI" handler (in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) `initCanvasBubbleMenu`) is wired to feature extraction rather than the older `contextRegion` thread-node flow. The Feature Library opens as a slide-down panel, `/use` and `/extract` are first-class slash commands, the AI chat panel is tabbed (so extraction never displaces a user's current thread), and the chat graph carries a `resolveFeatures` pre-stage that resolves `/use` chips at send time.
+The image bubble's "Ask AI" handler (in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) `initCanvasBubbleMenu`) is wired to feature extraction rather than the older `contextRegion` thread-node flow. Extracted Features are now displayed in the `Features` category of the canvas-owned Media Library panel; their persistence, subjects, extraction stages, and `/use` resolution remain unchanged. `/use` and `/extract` are first-class slash commands, the AI chat panel is tabbed (so extraction never displaces a user's current thread), and the chat graph carries a `resolveFeatures` pre-stage that resolves `/use` chips at send time.
 
 ## Why this exists
 
@@ -416,27 +416,21 @@ This is **server-resolved by ID**, not client-injected text. Three reasons (per 
 - Editing a feature retroactively improves all future invocations — the user's growing taste applies to all past chips automatically.
 - ACL is enforced server-side every time, so demoting a feature from `public` to `workspace` immediately revokes access for non-members.
 
-## The Feature Library panel (top-left slide-down)
+## The Media Library panel
 
-Per the user's brief: *"By default in closed state it's just an icon at the top left but when clicked it opens a panel that slides from the [top]."*
-
-**Closed state**: a single icon (stacked-cards / book glyph) added to `.workspace-floating-toolbar` in [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) (~lines 384–443). This is the **only Svelte change** the implementation requires — the rule "don't touch svelte" applies elsewhere, but the toolbar is Svelte-rendered.
+**Closed state**: a single Media Library icon in `.workspace-floating-toolbar` in [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte). Svelte invokes the canvas API and imports the stylesheet; panel behavior remains in the vanilla TypeScript canvas layer.
 
 **Open state**:
 
-- Panel slides down from the top of the canvas viewport, occupying ~50% of the canvas vertical height, full canvas width, with a translucent backdrop.
-- Canvas pan/zoom is disabled while open. Clicking the backdrop closes.
-- **Header**: title "Features", search input (filters by name + tags + category + summary), scope tabs (`Workspace` / `Mine` / `Organization` / `Public`), close X.
-- **Body**: features grouped by category in collapsible sections. Each row is a feature card with the first sample's thumbnail, name, summary, scope chip, and inline action buttons:
-  - `Use` — copies a `/use {name}` snippet to the focused prompt input.
-  - `Edit` — opens an extraction tab seeded with the existing feature for re-extraction.
-  - `Change scope` — dropdown with the 4 levels; promoting to `public` confirms via a small modal.
-  - `Delete`.
-  - `Report` — only visible on `public` features owned by other users.
-- **Floating footer-right button**: `+ Extract new` opens an empty extraction tab (no seeded context).
-- **Live updates**: subscribes to `FEATURE_SUBJECTS.CREATE` / `UPDATE` / `DELETE` NATS broadcast events and re-renders incrementally without a full reload.
+- The canvas-owned panel opens on the right and uses two-thirds of the workspace pane space available after any AI chat panel and configured gaps. When chat is visible it remains rightmost and the Media Library sits immediately to its left.
+- The top-level categories are `Features` and `Images`. Documents and videos are not represented in this implementation.
+- Scope filters preserve `Workspace`, `Mine`, `Organization`, and `Public`, with a one-click `All available` aggregate view; the initial scope is the current workspace.
+- Feature cards continue to use `FEATURE_SUBJECTS` and the dedicated Feature data model. The panel is a UI adapter only; it does not migrate feature records or alter extraction and `/use` behavior.
+- Image cards represent explicit saved copies: `Add to Media Library` on a completed canvas image creates an independent JetStream Object Store object; adding that library item back to the canvas creates a fresh workspace image object and node.
+- Names, summaries, instructions, tags, metadata, and feedback wrap in the browse surface; the panel does not use ellipsis or line clamping.
+- The `+ Extract new` action remains available within the `Features` category, and Feature event subscriptions continue to update the Feature view.
 
-**Tech stack**: vanilla TypeScript module attached to `paneEl`, mirroring the existing AI chat floating panel pattern in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts). New file: `services/web-ui/src/infographics/workspace/featureLibraryPanel.ts`. No new Svelte components.
+**Tech stack**: vanilla TypeScript module attached to `paneEl`, mirroring the existing AI chat floating panel pattern in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts). The active module is [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts), with [`media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss). No new Svelte panel component is introduced.
 
 ## The tabbed AI chat panel
 
@@ -738,7 +732,7 @@ graph LR
         SlashUse["/use slash"]
         Tabs[Panel tab strip]
         ExtractTab[Extraction tab<br/>stage-aware timeline + card]
-        Library[Feature Library<br/>top-left slide-down]
+        Library[Media Library<br/>right-side panel<br/>Features + Images]
         Chip[Feature ref chip<br/>hover info bubble]
     end
     subgraph "API services"
@@ -972,10 +966,10 @@ The implementation maps onto the following paths. Use this section as an index w
 
 **Web UI:**
 - [`services/web-ui/src/infographics/workspace/extractionTab.ts`](../../services/web-ui/src/infographics/workspace/extractionTab.ts) — stage-aware timeline rendering one row per streamed `StageTraceEvent`; reasoning panel auto-opens on first chunk; feature card rendering; persisted state restoration.
-- [`services/web-ui/src/infographics/workspace/featureLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/featureLibraryPanel.ts) — top-left slide-down library panel with scope filters, search, action buttons.
+- [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) — right-side Media Library panel; adapts existing Features and manages explicitly saved Images.
 - [`services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) — bubble-menu Ask-AI handler wired to extraction; panel-tabs controller; library-panel toggle wiring.
 - [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) — adds the library-toggle icon to `.workspace-floating-toolbar` (the only Svelte change).
-- [`services/web-ui/src/infographics/workspace/feature-library-panel.scss`](../../services/web-ui/src/infographics/workspace/feature-library-panel.scss) — library panel + stage timeline styles.
+- [`services/web-ui/src/infographics/workspace/media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss) — Media Library panel + stage timeline styles with full-content wrapping.
 - [`services/web-ui/src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts`](../../services/web-ui/src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts) — `/use` and `/extract` slash commands.
 
 ---
@@ -1137,18 +1131,18 @@ The existing slash menu plugin already supports filtering, arrow keys, Esc, clic
 
 **Tests**: slash menu trigger + command execution + feature insertion.
 
-### Phase 10 — Feature Library panel (top-left slide-down)
+### Phase 10 — Feature Library panel (historical design; replaced by Media Library)
 
 **Files**:
 
-- New `services/web-ui/src/infographics/workspace/featureLibraryPanel.ts` (vanilla TS, attached to `paneEl`, mirrors existing chat panel styling pattern):
-  - Top-left toggle icon added to the workspace toolbar in [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) `.workspace-floating-toolbar` (~lines 384–443). Icon: stacked-cards / book glyph. ARIA label: "Feature Library."
-  - Slide-down animation, ~50% canvas vertical height, full canvas width, translucent backdrop (canvas pan/zoom disabled while open).
+- Superseded by `services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts` (vanilla TS, attached to `paneEl`, mirrors existing chat panel styling pattern):
+  - Media Library toggle icon in [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) `.workspace-floating-toolbar`. ARIA label: "Media Library."
+  - Right-side two-thirds layout that shifts left of the AI chat panel.
   - Header: title, search input, scope tabs, close X.
   - Body: features grouped by category, each row a feature card with thumbnail, name, summary, scope chip, action buttons.
   - Footer-right floating button: `+ Extract new`.
   - Live updates via `FEATURE_SUBJECTS.CREATE`/`UPDATE`/`DELETE` NATS broadcasts.
-- New SCSS: `services/web-ui/src/infographics/workspace/feature-library-panel.scss` for slide-down animation + responsive layout.
+- SCSS: `services/web-ui/src/infographics/workspace/media-library-panel.scss` for right-side layout, responsive positioning, and non-truncating content.
 
 **Tests**: visual QA + scope-tab filter unit tests.
 

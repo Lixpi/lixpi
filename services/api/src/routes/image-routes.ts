@@ -4,41 +4,35 @@ import { Router } from 'express'
 import multer from 'multer'
 
 import NATS_Service from '@lixpi/nats-service'
-import { type DocumentFile } from '@lixpi/constants'
+import {
+    ALLOWED_IMAGE_MIME_TYPES,
+    MAX_IMAGE_FILE_SIZE,
+    type DocumentFile,
+} from '@lixpi/constants'
 import { err } from '@lixpi/debug-tools'
 
 import { jwtVerifier } from '../helpers/auth.ts'
 import Workspace from '../models/workspace.ts'
-import { storeWorkspaceImage } from '../services/image-storage.ts'
+import {
+    storeWorkspaceImage,
+} from '../services/image-storage.ts'
+import { importRemoteImageToWorkspace } from '../services/remote-image-import.ts'
 
 const router = Router()
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
 
-// Maximum file size: 1GB
-const MAX_FILE_SIZE = 1024 * 1024 * 1024
-
-// Allowed image MIME types
-const ALLOWED_MIME_TYPES = [
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-    'image/svg+xml',
-    'image/avif'
-]
-
 // Configure multer for memory storage
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: MAX_FILE_SIZE
+        fileSize: MAX_IMAGE_FILE_SIZE
     },
     fileFilter: (req, file, cb) => {
-        if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+        if (ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
             cb(null, true)
         } else {
-            cb(new Error(`Invalid content type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`))
+            cb(new Error(`Invalid content type. Allowed: ${ALLOWED_IMAGE_MIME_TYPES.join(', ')}`))
         }
     }
 })
@@ -136,6 +130,27 @@ router.post(
                 return res.status(503).json({ error: 'Storage service unavailable' })
             }
             return res.status(500).json({ error: 'Failed to upload image' })
+        }
+    }
+)
+
+// POST /api/images/:workspaceId/import-url - Import a public image URL into storage.
+router.post(
+    '/:workspaceId/import-url',
+    authenticateRequest,
+    validateWorkspaceAccess,
+    async (req: any, res: any) => {
+        const { workspaceId } = req.params
+        const imageUrl = req.body?.url
+        if (typeof imageUrl !== 'string' || !imageUrl.trim()) {
+            return res.status(400).json({ error: 'Image URL is required' })
+        }
+        try {
+            return res.json(await importRemoteImageToWorkspace({ workspaceId, imageUrl }))
+        } catch (e: any) {
+            err(`Image URL import failed for workspace ${workspaceId}:`, e)
+            const unsafeOrInvalid = /Invalid|Only public|credentials|Private network|supported image|valid image|too large|redirected/i.test(e?.message ?? '')
+            return res.status(unsafeOrInvalid ? 400 : 502).json({ error: e.message || 'Failed to import image URL' })
         }
     }
 )

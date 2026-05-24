@@ -180,7 +180,7 @@ export const nodes = {
         'data-feature-id': node.attrs.featureId,
         'data-feature-name': node.attrs.featureName,
         'data-feature-category': node.attrs.category,
-        class: `feature-reference-chip feature-reference-chip--${node.attrs.category || 'default'}`,
+        class: `feature-reference-chip feature-reference-chip-${node.attrs.category || 'default'}`,
       }, `@${node.attrs.featureName}`]
     },
   } as NodeSpec
