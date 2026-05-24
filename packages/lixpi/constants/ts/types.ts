@@ -5,6 +5,18 @@ import type { Merge, Except } from 'type-fest'
 export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
 
+// Shared image upload/import validation limits (API routes, remote URL import, web-ui uploader).
+export const MAX_IMAGE_FILE_SIZE = 1024 * 1024 * 1024
+
+export const ALLOWED_IMAGE_MIME_TYPES: readonly string[] = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/avif',
+]
+
 // NOTE: User type restored exactly as originally defined per instruction (commas retained intentionally)
 export type User = {
     userId: string,
@@ -23,7 +35,12 @@ export type User = {
     updatedAt: number,
 }
 
-export type AccessLevel = 'owner' | 'editor' | 'viewer'
+export const ACCESS_LEVEL = {
+    OWNER: 'owner',
+    EDITOR: 'editor',
+    VIEWER: 'viewer',
+} as const
+export type AccessLevel = typeof ACCESS_LEVEL[keyof typeof ACCESS_LEVEL]
 
 export type Organization = {
     organizationId: string
@@ -492,6 +509,99 @@ export type FeatureReferenceMessageBlock = {
     instructions: string
     parameters: Record<string, any>
     sampleImages: Array<{ idx: number; subject: string; base64: string }>
+}
+
+export const MEDIA_LIBRARY_SCOPE = {
+    WORKSPACE: 'workspace',
+    USER: 'user',
+    ORGANIZATION: 'organization',
+    PUBLIC: 'public',
+} as const
+export type MediaLibraryScope = typeof MEDIA_LIBRARY_SCOPE[keyof typeof MEDIA_LIBRARY_SCOPE]
+
+// Sentinel scopeOwnerId for public-scoped items (no workspace/user/org owner).
+export const MEDIA_LIBRARY_PUBLIC_OWNER_ID = 'public'
+
+// Features retain their existing persistence path and are adapted into the library UI.
+export const MEDIA_LIBRARY_ITEM_KIND = {
+    IMAGE: 'image',
+} as const
+export type MediaLibraryItemKind = typeof MEDIA_LIBRARY_ITEM_KIND[keyof typeof MEDIA_LIBRARY_ITEM_KIND]
+
+export const MEDIA_LIBRARY_ITEM_STATUS = {
+    ACTIVE: 'active',
+    DELETED: 'deleted',
+} as const
+export type MediaLibraryItemStatus = typeof MEDIA_LIBRARY_ITEM_STATUS[keyof typeof MEDIA_LIBRARY_ITEM_STATUS]
+
+// Top-level browsing categories in the Media Library panel.
+export const MEDIA_LIBRARY_CATEGORY = {
+    FEATURES: 'features',
+    IMAGES: 'images',
+} as const
+export type MediaLibraryCategory = typeof MEDIA_LIBRARY_CATEGORY[keyof typeof MEDIA_LIBRARY_CATEGORY]
+
+// Browse-filter sentinel meaning "all readable scopes" rather than a single scope.
+export const MEDIA_LIBRARY_BROWSE_ALL = 'all'
+
+export type MediaLibraryAssetRef = {
+    bucketName: string
+    objectKey: string
+    mimeType: string
+    byteSize: number
+    originalName: string
+}
+
+export type MediaLibraryImageData = {
+    width: number
+    height: number
+    aspectRatio: number
+}
+
+export type MediaLibraryImageItem = {
+    itemId: string
+    version: 1
+    kind: 'image'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    sourceFileId: string
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    asset: MediaLibraryAssetRef
+    image: MediaLibraryImageData
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaLibraryImageMeta = {
+    itemId: string
+    kind: 'image'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    mimeType: string
+    byteSize: number
+    width: number
+    height: number
+    aspectRatio: number
+    previewUrl: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaLibraryAccessList = {
+    itemId: string
+    principalId: string
+    accessLevel: AccessLevel
+    createdAt: number
+    updatedAt: number
 }
 
 export type ExtractionRunStatus =

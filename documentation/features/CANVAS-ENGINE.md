@@ -1,6 +1,6 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. PIXI v8 owns image pixel rendering, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; it owns context-region CO2-shaped cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
+The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. PIXI v8 owns image pixel rendering, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; it owns context-region CO2-shaped cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
 
 The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. The current path is renderer ownership by workload: DOM owns text-rich controls and interaction structure; PIXI owns high-volume pixels, connector strokes, context-region clouds, and canvas chrome.
 
@@ -28,6 +28,8 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | File | Purpose |
 |------|---------|
 | `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media/context-region sync points |
+| `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved Image browsing, scope filters, and insertion actions |
+| `workspace/media-library-panel.scss` | Right-side Media Library layout and full-content wrapping rules |
 | `utils/resolveCollisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
 | `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
 | `workspace/pixiMediaLayerLogic.ts` | Pure helpers: tier ranking, world-position math, src URL building, LoD-size param injection, world-rect math |
@@ -50,7 +52,7 @@ Use the incremental canvas architecture documented here as the implementation re
 
 All configurable workspace-canvas UI settings belong in [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts). This includes colors, shadows, dimensions, gaps, hit radii, animation timing, title sizing, generated-image placement spacing, and other values that product/design tuning may reasonably adjust without changing the interaction algorithm.
 
-Do not add new configurable magic-number constants directly to [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), Svelte wrappers, PIXI rendering layers, or helper modules. If a value controls visible styling, layout, spacing, hit target size, cursor activation area, or animation feel, add it to `webUiThemeSettings` first and read it from the consuming code.
+Do not add new configurable magic-number constants directly to [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), Svelte wrappers, PIXI rendering layers, or helper modules. If a value controls visible styling, layout, spacing, hit target size, cursor activation area, or animation feel, add it to `webUiThemeSettings` first and read it from the consuming code. The Media Library follows this rule through `webUiThemeSettings.mediaLibrary`: it opens from the right at two-thirds of available pane width and moves left of an open AI chat panel.
 
 `webUiThemeSettings` must stay organized by logical groups. Each top-level group is its own subsection, and a group may contain nested subsections when a domain has a clear child domain, such as `contextRegion.cloud`. Every group and nested group must have a blank line before and after it in the object literal. Every key must have a short comment explaining what the value means and how changing it affects the application.
 
@@ -121,7 +123,7 @@ The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region c
 1. They host core interaction chrome — drag overlay, resize handles, generation spinner, and partial-streaming `<img>` for AI image generation.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 
-The DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node--pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
+The DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node-pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
 
 Context-region DOM elements are also kept, but only as transparent geometry proxies for existing drag, selection, connection-manager, and parent-child state paths. Their visible CO2-shaped cloud and title text are drawn by `pixiContextRegionLayer`. Empty-region pointer behavior starts in the pane background handler, calls `contextRegionLayer.hitTest(worldPoint)`, and then reuses the existing drag handler for the matched node.
 
@@ -177,7 +179,7 @@ Regression coverage lives in [workspaceViewportStatePlan.test.ts](../../services
 `pixiMediaLayer.sync(canvasState)` is called from the canvas orchestration points that actually need visual layer reconciliation: initial create, full DOM node rerenders, local `commitCanvasState`, and incoming store renders whose node/edge visual sync key changed. Viewport-only renders do not resync image entries; they go through the viewport bridge or the stale viewport guard. Each media sync:
 
 1. Refreshes the per-sync DOM element cache (`viewportEl.querySelectorAll('[data-node-id]')`) so subsequent ownership-class toggles are O(1) lookups instead of repeated DOM queries.
-2. Toggles `workspace-image-node--pixi-owned` on/off only for nodes whose ownership changed (uses `pixiOwnedNodeIds` Set as the source of truth).
+2. Toggles `workspace-image-node-pixi-owned` on/off only for nodes whose ownership changed (uses `pixiOwnedNodeIds` Set as the source of truth).
 3. Removes deleted entries: `releaseTexture` → `spatialIndex.remove` → destroys sprite + colorRect.
 4. Calls `upsertAllEntries` → for each image node, `upsertEntry` updates only what actually changed:
    - **Sprite transform** (position + width/height): always updated; cheap matrix update.

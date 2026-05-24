@@ -16,7 +16,7 @@ A workspace is the primary container where users organize and edit their documen
 
 **AI Chat Thread** — An independent AI conversation canvas node with its own persistence and lifecycle. Stored in the AI-Chat-Threads DynamoDB table. Each thread has its own `AiInteractionService` instance for streaming AI responses. Uses `documentType: 'aiChatThread'` for its ProseMirror editor.
 
-**Image** — An uploaded image file stored in NATS Object Store. Referenced by canvas nodes and automatically deleted when removed from the canvas.
+**Image** — An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas. A user can explicitly save a separate Media Library copy that is not deleted with the source node.
 
 **Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off. While a workspace is open, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform.
 
@@ -338,7 +338,15 @@ sequenceDiagram
     end
 ```
 
-Note: after an image is uploaded the client loads it to determine the natural aspect ratio. On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing and the UI computes resize handle size/offsets dynamically so handles remain visually consistent regardless of canvas zoom.
+Note: after an image is uploaded or imported from a public URL, the client loads the persisted workspace object to determine the natural aspect ratio. URL insertion uses `POST /api/images/:workspaceId/import-url`, which validates and stores the fetched image in the workspace Object Store before creating a canvas node; a canvas image node is therefore never backed only by an external URL. On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing and the UI computes resize handle size/offsets dynamically so handles remain visually consistent regardless of canvas zoom.
+
+### Saving an Image to the Media Library
+
+Completed image nodes expose `Add to Media Library` in their canvas bubble menu. Partially streaming AI-generated image nodes do not expose the action until a stored final object exists. Saving is explicit: it copies the image bytes from `workspace-{workspaceId}-files/{fileId}` into a Media Library scope-owned Object Store bucket and writes a generic media metadata record. New saves start in `Workspace` scope; users can view or move items through `Workspace`, `Mine`, `Organization`, and `Public` scopes, or browse `All available`. Saving confirms in place with a transient message on the canvas; it does not open or switch the panel. Re-saving the same source image is deduplicated — the server returns the existing library item instead of writing a second independent copy.
+
+The Media Library panel is implemented by the canvas module rather than a Svelte component. It opens on the right at two-thirds of the workspace pane space remaining after any active AI chat panel, presents `Features` (the default category) and `Images` as top-level categories, and renders content without ellipsizing or clamping. The `Features` category is an adapter over the existing Feature subjects and storage model; extraction persistence and `/use` resolution are deliberately unchanged.
+
+Selecting `Add to canvas` on a saved image reads its library object, calls the existing workspace image storage path to create a new workspace-owned object, and inserts a fresh `ImageCanvasNode` through the canvas insertion helper. Removing the original canvas image therefore does not remove its explicitly saved Media Library copy. Deleting a workspace removes only Media Library images still scoped to that workspace; images moved to a broader scope are separate retained objects.
 
 ### Deleting an Image
 
@@ -550,13 +558,20 @@ AI chat threads belonging to the current workspace.
 | `AI_INTERACTION.CHAT_SEND_MESSAGE` | Send message to AI for processing |
 | `AI_INTERACTION.CHAT_STOP_MESSAGE` | Stop active AI streaming |
 | `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image from Object Store |
+| `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_IMAGE` | Copy a stored canvas image into the Media Library |
+| `WORKSPACE.MEDIA_LIBRARY.LIST_AVAILABLE` | List saved media visible in selected scopes |
+| `WORKSPACE.MEDIA_LIBRARY.MATERIALIZE_IMAGE_TO_WORKSPACE` | Copy a saved image into workspace storage for canvas insertion |
+| `WORKSPACE.MEDIA_LIBRARY.CHANGE_SCOPE` | Copy a library object to a new scope and update metadata |
+| `WORKSPACE.MEDIA_LIBRARY.DELETE` | Delete a saved library image and its stored object |
 
 ### Image HTTP Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/images/:workspaceId` | POST | Upload image (multipart/form-data) |
+| `/api/images/:workspaceId/import-url` | POST | Fetch a public image URL into workspace Object Store before canvas insertion |
 | `/api/images/:workspaceId/:fileId` | GET | Serve image with auth token |
+| `/api/media-library/items/:itemId/content` | GET | Serve an ACL-checked saved Media Library image preview |
 | `/api/workspaces/:workspaceId/export` | GET | Download workspace as ZIP archive (see [WORKSPACE-EXPORT.md](WORKSPACE-EXPORT.md)) |
 
 ## Rendering Pipeline
@@ -655,7 +670,7 @@ Images on the canvas are tracked by `canvasImageLifecycle.ts`. When an image nod
 3. Calls `deleteImage()` from `imageUtils.ts` to delete from storage
 4. The same `deleteImage()` utility is shared with ProseMirror's `imageLifecyclePlugin`
 
-This ensures orphaned images don't accumulate in storage.
+This ensures orphaned workspace-node images don't accumulate in storage. It does not delete Media Library images, which are intentionally independent saved copies with their own scope and deletion lifecycle.
 
 ## Lazy Content Loading
 

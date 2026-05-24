@@ -16,7 +16,7 @@ import type {
     BubbleMenuPositionRequest,
 } from '$src/components/bubbleMenu/types.ts'
 
-const noEntranceMotionClass = 'bubble-menu--no-entrance-motion'
+const noEntranceMotionClass = 'bubble-menu-no-entrance-motion'
 
 const isTouchDevice = (): boolean => 'ontouchstart' in window || navigator.maxTouchPoints > 0
 

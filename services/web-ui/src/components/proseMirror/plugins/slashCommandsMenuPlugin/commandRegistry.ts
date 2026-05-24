@@ -135,12 +135,12 @@ const createUseFeatureCommand = (): SlashCommand['execute'] => (view: EditorView
             event.stopPropagation()
         }}
     >
-        <input className="feature-picker-dropdown__search" placeholder="Search features..." />
-        <div className="feature-picker-dropdown__list"></div>
+        <input className="feature-picker-dropdown-search" placeholder="Search features..." />
+        <div className="feature-picker-dropdown-list"></div>
     </div>` as HTMLDivElement
 
-    const searchInput = picker.querySelector('.feature-picker-dropdown__search') as HTMLInputElement
-    const listEl = picker.querySelector('.feature-picker-dropdown__list') as HTMLDivElement
+    const searchInput = picker.querySelector('.feature-picker-dropdown-search') as HTMLInputElement
+    const listEl = picker.querySelector('.feature-picker-dropdown-list') as HTMLDivElement
     document.body.appendChild(picker)
     console.log('[featurePicker] picker appended. rect=', picker.getBoundingClientRect(), 'isConnected=', picker.isConnected, 'computedDisplay=', window.getComputedStyle(picker).display, 'computedVisibility=', window.getComputedStyle(picker).visibility)
 
@@ -156,8 +156,8 @@ const createUseFeatureCommand = (): SlashCommand['execute'] => (view: EditorView
     }
 
     function updateSelectedRow() {
-        listEl.querySelectorAll('.feature-picker-dropdown__row').forEach((row, index) => {
-            row.classList.toggle('feature-picker-dropdown__row--selected', index === selectedIndex)
+        listEl.querySelectorAll('.feature-picker-dropdown-row').forEach((row, index) => {
+            row.classList.toggle('feature-picker-dropdown-row-selected', index === selectedIndex)
         })
     }
 
@@ -195,15 +195,15 @@ const createUseFeatureCommand = (): SlashCommand['execute'] => (view: EditorView
         listEl.replaceChildren()
         const filtered = getFilteredFeatures()
         if (filtered.length === 0) {
-            listEl.appendChild(html`<div className="feature-picker-dropdown__empty">No features found</div>` as HTMLElement)
+            listEl.appendChild(html`<div className="feature-picker-dropdown-empty">No features found</div>` as HTMLElement)
             return
         }
         clampSelectedIndex(filtered.length)
         filtered.forEach((feature, index) => {
-            const row = html`<div className=${`feature-picker-dropdown__row${index === selectedIndex ? ' feature-picker-dropdown__row--selected' : ''}`}>
-                <span className="feature-picker-dropdown__category">${feature.category}</span>
-                <span className="feature-picker-dropdown__name">@${feature.name}</span>
-                <span className="feature-picker-dropdown__summary">${feature.summary ?? ''}</span>
+            const row = html`<div className=${`feature-picker-dropdown-row${index === selectedIndex ? ' feature-picker-dropdown-row-selected' : ''}`}>
+                <span className="feature-picker-dropdown-category">${feature.category}</span>
+                <span className="feature-picker-dropdown-name">@${feature.name}</span>
+                <span className="feature-picker-dropdown-summary">${feature.summary ?? ''}</span>
             </div>` as HTMLElement
             row.addEventListener('mousedown', (event) => {
                 event.preventDefault()

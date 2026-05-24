@@ -320,7 +320,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function setPixiOwnedClass(nodeId: string, owned: boolean): void {
         const el = getNodeEl(nodeId)
         if (!el) return
-        el.classList.toggle('workspace-image-node--pixi-owned', owned)
+        el.classList.toggle('workspace-image-node-pixi-owned', owned)
     }
 
     function sync(canvasState: CanvasState | null): void {

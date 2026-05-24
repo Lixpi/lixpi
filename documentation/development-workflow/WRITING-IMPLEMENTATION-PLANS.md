@@ -295,7 +295,7 @@ gh issue edit <number> --repo <owner>/<repo> --body-file documentation/memory/<N
 
 Both must always be in sync. If you edit the file, push the issue update. If you edit the issue (rare — usually the file leads), pull the changes back into the file.
 
-For branch and commit naming when implementation begins, follow `.github/skills/github-workflow/SKILL.md`.
+For branch and commit naming when implementation begins, follow `documentation/development-workflow/GITHUB-WORKFLOW.md`.
 
 ### Cleanup
 

@@ -58,6 +58,19 @@
 				"UPDATED": "workspace.feature.events.updated",
 				"DELETED": "workspace.feature.events.deleted"
 			}
+		},
+		"MEDIA_LIBRARY_SUBJECTS": {
+			"CREATE_FROM_IMAGE": "workspace.mediaLibrary.image.createFromCanvas",
+			"GET": "workspace.mediaLibrary.get",
+			"LIST_AVAILABLE": "workspace.mediaLibrary.listAvailable",
+			"MATERIALIZE_IMAGE_TO_WORKSPACE": "workspace.mediaLibrary.image.materializeToWorkspace",
+			"CHANGE_SCOPE": "workspace.mediaLibrary.changeScope",
+			"DELETE": "workspace.mediaLibrary.delete",
+			"EVENTS": {
+				"CREATED": "workspace.mediaLibrary.events.created",
+				"UPDATED": "workspace.mediaLibrary.events.updated",
+				"DELETED": "workspace.mediaLibrary.events.deleted"
+			}
 		}
 	},
 	"FEATURE_LIBRARY_SUBJECTS": {

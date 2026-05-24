@@ -1,3 +1,5 @@
+import { MAX_IMAGE_FILE_SIZE } from '@lixpi/constants'
+
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import type { EditorView } from 'prosemirror-view'
 import AuthService from '$src/services/auth-service.ts'
@@ -382,8 +384,7 @@ export class ImageUploadModal {
             return
         }
 
-        const maxSize = 1024 * 1024 * 1024 // 1GB
-        if (file.size > maxSize) {
+        if (file.size > MAX_IMAGE_FILE_SIZE) {
             alert('File size exceeds 1GB limit')
             return
         }

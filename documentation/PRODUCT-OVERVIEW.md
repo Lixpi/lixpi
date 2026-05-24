@@ -57,6 +57,8 @@ graph TB
 
 **Floating Prompt Input** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) that appears below each AI thread node. It provides rich-text composition, an AI model selector dropdown, an image generation size picker, and Cmd/Ctrl+Enter to submit. The input is decoupled from threads — it only handles composition; an `AiPromptInputController` routes messages to the correct target.
 
+**Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save any completed canvas image as an independent JetStream Object Store copy. Inserting a saved image creates a fresh workspace image object and a fresh canvas node, so library media survives deletion of its source node.
+
 ---
 
 ## 3. Artifact Piping & Character Consistency

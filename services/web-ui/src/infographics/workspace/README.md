@@ -26,6 +26,8 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
+- **Open the Media Library** from the toolbar to browse Features or explicitly saved Images; the canvas-owned panel opens on the right and shifts left when AI chat is open
+- **Save an image for reuse** from its bubble menu; the saved Media Library image is an independent Object Store copy that survives removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same image reuses the existing item instead of duplicating it
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
 - **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
 - **Provide AI context** by connecting documents/images to an AI chat thread—connected content is automatically sent to the AI
@@ -48,7 +50,16 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Display uploaded images from workspace storage
 - Have a full-area drag overlay
 - Resize preserves aspect ratio (stored when image is uploaded)
-- Automatically deleted from storage when removed from canvas
+- Automatically delete their workspace object when removed from canvas; explicitly saved Media Library copies are separate objects and remain available
+- Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
+
+### Media Library Panel
+- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies only the toolbar invocation and style import.
+- Renders `Features` through the established Feature subjects and persistence path, without migrating extraction records.
+- Renders `Images` through generic media-library records whose Object Store bytes are copied on save and copied again when inserted back onto the canvas.
+- Supports `Workspace`, `Mine`, `Organization`, `Public`, and `All available` filtering; new image saves start in the current workspace scope.
+- Uses `webUiThemeSettings.mediaLibrary` for its initial two-thirds width and right edge gap. With AI chat visible it occupies the space immediately to the left of that panel.
+- Wraps names, summaries, tags, instructions, and image metadata rather than clipping or ellipsizing library content.
 
 ### AI Chat Thread Nodes
 - Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
@@ -63,7 +74,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 - A **vertical rail** element spans the full height of the thread node, the gap, and the floating input. It is a sibling element in the viewport (not nested inside the thread node) tracked via the `threadRails` Map. The rail uses a two-layer architecture:
 - **Outer container** (`.workspace-thread-rail`) — spans the full functional height (thread + gap + floating input). Handles drag interactions and connection proxy hit areas. Invisible by itself
-- **Inner visual line** (`.workspace-thread-rail__line`) — a child div whose height is limited to the thread node height via the `--rail-thread-height` CSS variable. Hosts the `::before` pseudo-element that renders the visible gradient line, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `aiChatThreadRailGradient` and `aiChatThreadRailWidth` in `webUiThemeSettings.ts`
+- **Inner visual line** (`.workspace-thread-rail-line`) — a child div whose height is limited to the thread node height via the `--rail-thread-height` CSS variable. Hosts the `::before` pseudo-element that renders the visible gradient line, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `aiChatThreadRailGradient` and `aiChatThreadRailWidth` in `webUiThemeSettings.ts`
 - **Drag handle** — clicking and dragging anywhere on the full-height outer container moves both the thread node and its floating input (reuses `handleDragStart`)
 - **Connection proxy** — all connector line left-side anchors are shifted to the rail position via `railOffset` in `WorkspaceConnectionManager`, so edges visually connect to the rail rather than the node edge. The anchor Y range spans the full rail height (thread + gap + floating input) via `railHeights`, so connectors slide from the very top to the very bottom of the rail. The top/bottom edge margin is configurable via `aiChatThreadRailEdgeMargin` (fractional, default 0.025). When the rail height is below `aiChatThreadRailMinSlideHeight` (default 120px) all connectors snap to the vertical center instead of sliding
 - **Menu-driven connect snap** — the image-node “Connect to node” action snaps against that same full rail geometry, including the floating input area for empty threads, and only commits the edge on mouse release so the snap preview is visible before creation. The snap distance is configurable via `webUiSettings.menuConnectionSnapRadius`
@@ -211,7 +222,7 @@ Image nodes have a simpler structure:
 
 Generated-image provider badges, info buttons, and expanded provenance panels do not live inside the image node shell. They render in `.workspace-image-chrome-viewport`, above the PIXI media layer, so stored image sprites cannot cover them.
 
-The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is the partial-streaming surface during AI image generation; once the image is committed to canvas state, PIXI owns the stored image pixels and the DOM `<img>` remains hidden via the `workspace-image-node--pixi-owned` class. Image corner rounding is configured through `webUiThemeSettings.imageNode.borderRadius` and applied to both DOM partial previews and the PIXI sprite mask for stored images.
+The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is the partial-streaming surface during AI image generation; once the image is committed to canvas state, PIXI owns the stored image pixels and the DOM `<img>` remains hidden via the `workspace-image-node-pixi-owned` class. Image corner rounding is configured through `webUiThemeSettings.imageNode.borderRadius` and applied to both DOM partial previews and the PIXI sprite mask for stored images.
 
 New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 
@@ -278,7 +289,7 @@ Node selection is runtime-only UI state and is not persisted into `canvasState`.
 
 **Context region layering:** Context regions are background containers, not foreground nodes. Their visible cloud surface is drawn by `.workspace-pixi-context-region-layer` below the DOM viewport. The transparent DOM proxy still uses the layer manager's background z-index on creation, and selection/group-drag paths send region elements back to that background layer instead of calling bring-to-front. This keeps images and other content visually above the region while empty-region clicks are handled by PIXI cloud hit-testing on the pane background path. Region proxy nodes do not create DOM resize handles; hovering the cloud silhouette edge shows a resize cursor and starts resize from the matching edge sector. Sizing changes also come from persisted node dimensions and automatic expansion to fit children.
 
-**Image node shadows and frames:** Image nodes use `webUiThemeSettings.imageNode.defaultBoxShadow` in their default state and `selectedBoxShadow` when selected. The default shadow should stay subtler than the selected shadow so selection remains legible. Image nodes whose `parentId` points to a context region receive `.workspace-image-node--context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.imageNode.contextRegionChildImageFrameColor` and defaults to the slightly off-white `#FCFCFA`.
+**Image node shadows and frames:** Image nodes use `webUiThemeSettings.imageNode.defaultBoxShadow` in their default state and `selectedBoxShadow` when selected. The default shadow should stay subtler than the selected shadow so selection remains legible. Image nodes whose `parentId` points to a context region receive `.workspace-image-node-context-region-child`, which adds the framed-card treatment used in region mocks. The frame color comes from `webUiThemeSettings.imageNode.contextRegionChildImageFrameColor` and defaults to the slightly off-white `#FCFCFA`.
 
 #### Marquee Selection
 
@@ -423,7 +434,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `rendering/pixiEdgeRenderer.ts` | Diffed PIXI edge renderer: reuses `Graphics` objects across renders; only repaints when an edge's path/colour/arrow fingerprint changes |
 | `rendering/viewportBridge.ts` | Single call site that applies a viewport change to the DOM CSS transform, PIXI media world, and PIXI context-region world |
 | `rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio). Image nodes are handled directly by `pixiMediaLayer`; the registry exists so video/audio handlers can plug in without touching the core |
-| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, the `workspace-image-node--pixi-owned` opacity rule, and the transparent context-region proxy |
+| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, the `workspace-image-node-pixi-owned` opacity rule, and the transparent context-region proxy |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
 | `imagePositioning.ts` | Computes viewport-normalized insertion dimensions and generated image placement positions next to source threads |
@@ -442,7 +453,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
 | `.workspace-context-region-node` | Transparent context-region geometry proxy linked to an AI chat thread |
-| `.workspace-context-region-node--pixi-owned` | Context-region proxy marker; the visible cloud and title are owned by PIXI hit/render code |
+| `.workspace-context-region-node-pixi-owned` | Context-region proxy marker; the visible cloud and title are owned by PIXI hit/render code |
 | `.workspace-ai-chat-thread-node` | Canvas-owned floating AI chat panel styling |
 | `.document-drag-overlay` | Top bar for dragging documents |
 | `.ai-chat-thread-drag-overlay` | Top bar for dragging AI chat threads |
@@ -450,10 +461,10 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.document-node-editor` | ProseMirror container for documents |
 | `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
 | `.image-node-img` | The DOM `<img>` element used for partial-streaming during AI image generation; stored image nodes keep it source-less so PIXI is the only stored-image pixel renderer |
-| `.workspace-image-node--pixi-owned` | Class added by `pixiMediaLayer` while PIXI is rendering this image. Sets `opacity: 0` on `.image-node-img` so the PIXI sprite is the only visible surface |
-| `.workspace-image-node--context-region-child` | Image node contained by a context region, with the region-only off-white frame |
+| `.workspace-image-node-pixi-owned` | Class added by `pixiMediaLayer` while PIXI is rendering this image. Sets `opacity: 0` on `.image-node-img` so the PIXI sprite is the only visible surface |
+| `.workspace-image-node-context-region-child` | Image node contained by a context region, with the region-only off-white frame |
 | `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
-| `.workspace-thread-rail__line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
+| `.workspace-thread-rail-line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
 | `.image-generating-border` | SVG animated gradient border shown during image generation |
 | `.image-generating-spinner` | Three-dot bounce spinner shown before first partial image arrives |
 | `.workspace-generated-image-chrome` | Per-generated-image chrome container positioned below the image node at the exact image-node width |
