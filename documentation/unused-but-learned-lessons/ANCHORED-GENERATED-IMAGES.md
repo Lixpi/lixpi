@@ -97,7 +97,7 @@ This deferred-selection pattern is still useful for any future canvas feature wh
 Anchored images used a CSS class on the normal image DOM node:
 
 ```scss
-.workspace-image-node.workspace-image-node--anchored {
+.workspace-image-node.workspace-image-node-anchored {
     pointer-events: auto;
     border-radius: 6px;
     box-shadow: var(--workspace-image-anchored-box-shadow);

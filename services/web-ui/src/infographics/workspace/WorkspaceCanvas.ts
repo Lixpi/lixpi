@@ -21,6 +21,7 @@ import {
     type CanvasAiChatSidebarTab,
     type CanvasFeatureExtractionState,
     type FeatureMeta,
+    type MediaLibraryImageMeta,
     type ImageBranchCandidateSnapshot,
     type ImageBranchVlmResolution,
 } from '@lixpi/constants'
@@ -67,6 +68,7 @@ import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubb
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
+import MediaLibraryService from '$src/services/media-library-service.ts'
 import {
     buildImageBranchCandidateSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
@@ -84,7 +86,7 @@ import {
     type ContextRegionCloudDatum,
     type ContextRegionCloudResizeHandle,
 } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
-import { createFeatureLibraryPanel } from '$src/infographics/workspace/featureLibraryPanel.ts'
+import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 
 import { select } from 'd3-selection'
@@ -100,7 +102,7 @@ type CollisionPlan = {
 }
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node--context-region-child'
+const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node-context-region-child'
 const NODE_DRAG_START_THRESHOLD_PX = 6
 type DocumentEditorEntry = {
     editor: any
@@ -253,7 +255,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
-    let featureLibraryPanelInstance: ReturnType<typeof createFeatureLibraryPanel> | null = null
+    let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
+    const mediaLibraryService = new MediaLibraryService()
     let activeAiChatSidebarThreadId: string | null = null
     let activeAiChatSidebarTabId: string | null = null
     let aiChatSidebarTabs: CanvasAiChatSidebarTab[] = []
@@ -302,6 +305,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
     let canvasBubbleMenuItems: ReturnType<typeof buildCanvasBubbleMenuItems> | null = null
+
+    // In-place confirmation for canvas actions (e.g. saving an image to the Media Library).
+    // Auto-dismisses via a single CSS animation, removed on animationend.
+    let canvasToastEl: HTMLElement | null = null
+    function showCanvasToast(message: string, variant: 'success' | 'error') {
+        canvasToastEl?.remove()
+        const toastEl = html`<div className=${`media-library-toast media-library-toast-${variant}`} role="status" aria-live="polite">${message}</div>` as HTMLElement
+        toastEl.addEventListener('animationend', () => {
+            toastEl.remove()
+            if (canvasToastEl === toastEl) canvasToastEl = null
+        })
+        paneEl.appendChild(toastEl)
+        canvasToastEl = toastEl
+    }
 
     function initCanvasBubbleMenu() {
         canvasBubbleMenuItems = buildCanvasBubbleMenuItems({
@@ -393,6 +410,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 document.body.appendChild(input)
                 input.click()
             },
+            canAddToMediaLibrary: (nodeId) => {
+                if (!nodeId || !currentCanvasState) return false
+                const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+                if (!node || node.type !== 'image' || !node.fileId) return false
+                return !Array.from(partialImageTracker.values()).some((partial) => partial.nodeId === nodeId)
+            },
+            onAddToMediaLibrary: async (nodeId) => {
+                const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+                if (!node || node.type !== 'image' || !node.fileId) return
+                if (Array.from(partialImageTracker.values()).some((partial) => partial.nodeId === nodeId)) return
+                try {
+                    const response = await mediaLibraryService.addCanvasImage({ workspaceId, fileId: node.fileId })
+                    if (response.error || !response.itemId) {
+                        console.error('Failed to add image to Media Library:', response.error ?? 'No saved item was returned.')
+                        showCanvasToast('Could not save image to Media Library.', 'error')
+                        return
+                    }
+                    const savedName = response.displayName ? `"${response.displayName}"` : 'Image'
+                    showCanvasToast(
+                        response.deduplicated
+                            ? `${savedName} is already in your Media Library.`
+                            : `${savedName} saved to Media Library.`,
+                        'success',
+                    )
+                } catch (error) {
+                    console.error('Failed to add image to Media Library:', error)
+                    showCanvasToast('Could not save image to Media Library.', 'error')
+                }
+            },
             onAskAi: async (nodeId) => {
                 const imageNode = currentCanvasState?.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
                 if (!imageNode || imageNode.type !== 'image') return
@@ -451,7 +497,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function isContextRegionNodeElement(nodeEl: HTMLElement): boolean {
         return nodeEl.classList.contains('workspace-context-region-node')
-            || nodeEl.classList.contains('workspace-ai-chat-thread-node--region')
+            || nodeEl.classList.contains('workspace-ai-chat-thread-node-region')
     }
 
     function isContextRegionCanvasNode(node: CanvasNode): node is ContextRegionNode {
@@ -1497,6 +1543,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             animateOnShow: false,
         }
         canvasBubbleMenu.show(CANVAS_IMAGE_CONTEXT, position)
+        canvasBubbleMenu.refreshState()
     }
 
     function getCanvasImageBubbleMenuTargetRect(nodeEl: HTMLElement): DOMRect {
@@ -1642,7 +1689,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function measureActiveAiChatPanelRailThreadHeight(panelEl: HTMLElement): number {
-        const promptEl = panelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel__prompt')
+        const promptEl = panelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-prompt')
         if (promptEl) return Math.max(0, promptEl.offsetTop - AI_CHAT_PANEL_RAIL_PROMPT_GAP)
 
         const bodyHost = panelEl.querySelector<HTMLElement>('.workspace-ai-chat-panel-body')
@@ -1953,7 +2000,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         panelEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
 
         if (!webUiSettings.showHeaderOnAiChatThreadNodes) {
-            panelEl.classList.add('workspace-ai-chat-thread-node--hide-title')
+            panelEl.classList.add('workspace-ai-chat-thread-node-hide-title')
         }
 
         const gradient = webUiSettings.useShiftingGradientBackgroundOnAiChatThreadNode
@@ -1965,17 +2012,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const isActive = tab.tabId === activeSidebarTab?.tabId
             const tabEl = html`<button
                 type="button"
-                className=${`workspace-ai-chat-panel-tab${isActive ? ' workspace-ai-chat-panel-tab--active' : ''}`}
+                className=${`workspace-ai-chat-panel-tab${isActive ? ' workspace-ai-chat-panel-tab-active' : ''}`}
                 data=${{ tabId: tab.tabId }}
                 role="tab"
                 aria-selected=${String(isActive)}
             >
-                <span className="workspace-ai-chat-panel-tab__title">${tab.title}</span>
-                ${tab.type === 'extraction' ? html`<span className="workspace-ai-chat-panel-tab__close" aria-hidden="true">x</span>` : null}
+                <span className="workspace-ai-chat-panel-tab-title">${tab.title}</span>
+                ${tab.type === 'extraction' ? html`<span className="workspace-ai-chat-panel-tab-close" aria-hidden="true">x</span>` : null}
             </button>` as HTMLButtonElement
             tabEl.addEventListener('click', (event) => {
                 const target = event.target as HTMLElement
-                if (target.classList.contains('workspace-ai-chat-panel-tab__close')) {
+                if (target.classList.contains('workspace-ai-chat-panel-tab-close')) {
                     aiChatSidebarTabs = aiChatSidebarTabs.filter((candidate) => candidate.tabId !== tab.tabId)
                     activeAiChatSidebarTabId = aiChatSidebarTabs[0]?.tabId ?? null
                 } else {
@@ -1989,8 +2036,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         panelEl.appendChild(tabsEl)
 
         const bodyHost = html`<div className="workspace-ai-chat-panel-body"></div>` as HTMLDivElement
-        const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body__pane nopan${activeSidebarTab?.type === 'extraction' ? ' workspace-ai-chat-panel-body__pane--hidden' : ''}`}></div>` as HTMLDivElement
-        const extractionBodyEl = html`<div className=${`workspace-ai-chat-panel-extraction workspace-ai-chat-panel-body__pane nopan${activeSidebarTab?.type === 'extraction' ? '' : ' workspace-ai-chat-panel-body__pane--hidden'}`}></div>` as HTMLDivElement
+        const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body-pane nopan${activeSidebarTab?.type === 'extraction' ? ' workspace-ai-chat-panel-body-pane-hidden' : ''}`}></div>` as HTMLDivElement
+        const extractionBodyEl = html`<div className=${`workspace-ai-chat-panel-extraction workspace-ai-chat-panel-body-pane nopan${activeSidebarTab?.type === 'extraction' ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         bodyHost.appendChild(editorContainer)
         bodyHost.appendChild(extractionBodyEl)
         panelEl.appendChild(bodyHost)
@@ -2094,7 +2141,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
         })
 
-        const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel__prompt nopan"></div>` as HTMLDivElement
+        const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel-prompt nopan"></div>` as HTMLDivElement
         promptEl.style.setProperty('--dropdown-popover-box-shadow', webUiThemeSettings.dropdownPopoverBoxShadow)
         if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
             activeAiChatPromptGradient = createShiftingGradientBackground(promptEl)
@@ -2164,7 +2211,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             zIndex: '9990',
         }
         const rail = html`<div
-            className="workspace-thread-rail workspace-ai-chat-floating-panel__rail nopan"
+            className="workspace-thread-rail workspace-ai-chat-floating-panel-rail nopan"
             style=${railStyle}
             data=${{ threadNodeId: regionNode.nodeId }}
         ></div>` as HTMLDivElement
@@ -2174,8 +2221,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             handleActiveAiChatPanelResizeStart(event, panelEl)
         })
 
-        const line = html`<div className="workspace-thread-rail__line"></div>` as HTMLDivElement
-        const bottomCircle = html`<div className="workspace-thread-rail__boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
+        const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
+        const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
         const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
@@ -2433,8 +2480,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
         rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
 
-        const line = html`<div className="workspace-thread-rail__line"></div>` as HTMLDivElement
-        const bottomCircle = html`<div className="workspace-thread-rail__boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
+        const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
+        const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
         const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
@@ -2474,7 +2521,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         rail.style.setProperty('--rail-thread-height', `${threadHeight}px`)
 
-        const boundaryCircle = rail.querySelector('.workspace-thread-rail__boundary-circle') as HTMLElement | null
+        const boundaryCircle = rail.querySelector('.workspace-thread-rail-boundary-circle') as HTMLElement | null
         if (boundaryCircle) {
             applyStyle(boundaryCircle, { display: isHidden ? 'none' : '' })
         }
@@ -3293,7 +3340,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             applyActiveAiChatPanelWidth(activeAiChatPanelWidth)
         }
         if (activeAiChatPanelEl) {
-            const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel__rail')
+            const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-rail')
             if (panelRail) {
                 panelRail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(activeAiChatPanelEl)}px`)
             }
@@ -4311,7 +4358,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createContextRegionNode(node: ContextRegionNode, thread: AiChatThread | undefined): HTMLElement {
         const { nodeEl } = createBaseNodeElement(
             node,
-            'workspace-context-region-node workspace-context-region-node--pixi-owned workspace-ai-chat-thread-node workspace-ai-chat-thread-node--region',
+            'workspace-context-region-node workspace-context-region-node-pixi-owned workspace-ai-chat-thread-node workspace-ai-chat-thread-node-region',
             { threadId: node.referenceId }
         )
 
@@ -4832,27 +4879,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     syncActiveAiChatPanelFromState()
     renderNodes()
 
+    function insertNodeAtViewportCenterInternal(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
+        const baseCanvasState: CanvasState = currentCanvasState ?? {
+            viewport: getLiveViewport(),
+            edges: [],
+            nodes: [],
+        }
+        const positionedNode = {
+            ...node,
+            position: getCenteredInsertionPosition(node.dimensions),
+        } as CanvasNode
+        const newCanvasState: CanvasState = {
+            ...baseCanvasState,
+            ...statePatch,
+            viewport: baseCanvasState.viewport,
+            edges: baseCanvasState.edges ?? [],
+            nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, positionedNode]),
+        }
+
+        onCanvasStateChange?.(newCanvasState)
+        return newCanvasState
+    }
+
     return {
         insertNodeAtViewportCenter(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
-            const baseCanvasState: CanvasState = currentCanvasState ?? {
-                viewport: getLiveViewport(),
-                edges: [],
-                nodes: [],
-            }
-            const positionedNode = {
-                ...node,
-                position: getCenteredInsertionPosition(node.dimensions),
-            } as CanvasNode
-            const newCanvasState: CanvasState = {
-                ...baseCanvasState,
-                ...statePatch,
-                viewport: baseCanvasState.viewport,
-                edges: baseCanvasState.edges ?? [],
-                nodes: resolveTopLevelNodeCollisions([...baseCanvasState.nodes, positionedNode]),
-            }
-
-            onCanvasStateChange?.(newCanvasState)
-            return newCanvasState
+            return insertNodeAtViewportCenterInternal(node, statePatch)
         },
         render(newCanvasState: CanvasState | null, newDocuments: Document[], newAiChatThreads: AiChatThread[] = [], newWorkspaceId?: string) {
             const workspaceChanged = Boolean(newWorkspaceId && newWorkspaceId !== workspaceId)
@@ -4952,21 +5003,45 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
         },
-        toggleFeatureLibrary() {
-            if (!featureLibraryPanelInstance) {
-                featureLibraryPanelInstance = createFeatureLibraryPanel({
+        toggleMediaLibrary() {
+            if (!mediaLibraryPanelInstance) {
+                mediaLibraryPanelInstance = createMediaLibraryPanel({
                     workspaceId,
                     paneEl,
                     onUseFeature: insertFeatureIntoActivePrompt,
+                    onInsertImage: async (item: MediaLibraryImageMeta) => {
+                        try {
+                            const materialized = await mediaLibraryService.materializeImage({
+                                workspaceId,
+                                itemId: item.itemId,
+                            })
+                            if (!materialized.fileId || !materialized.url) return false
+                            const width = webUiThemeSettings.imageNode.defaultInsertionWidth
+                            const imageNode: Omit<ImageCanvasNode, 'position'> = {
+                                nodeId: `node-${materialized.fileId}`,
+                                type: 'image',
+                                fileId: materialized.fileId,
+                                workspaceId,
+                                src: materialized.url,
+                                aspectRatio: item.aspectRatio,
+                                dimensions: { width, height: width / item.aspectRatio },
+                            }
+                            insertNodeAtViewportCenterInternal(imageNode)
+                            return true
+                        } catch (error) {
+                            console.error('Failed to add Media Library image to canvas:', error)
+                            return false
+                        }
+                    },
                     onOpenExtractionTab: (extractionRunId) => {
                         openFeatureExtractionTab(extractionRunId)
                     },
                 })
             }
-            featureLibraryPanelInstance.toggle()
+            mediaLibraryPanelInstance.toggle()
         },
         destroy() {
-            featureLibraryPanelInstance?.close()
+            mediaLibraryPanelInstance?.close()
             resizeObserver.disconnect()
             window.removeEventListener('keydown', onKeyDown)
             window.removeEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)

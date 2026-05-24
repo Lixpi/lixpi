@@ -139,20 +139,21 @@ button {
    border-radius: 3rem;
    transition: all 0.3s ease;
 
-   &-gradient {
-      color: var(--background-color);
-      background: linear-gradient(
-         45deg,
-         var(--gradient-color-3),
-         var(--gradient-color-1)
-      );
-      box-shadow: 0 5px 20px hsla(270, 75%, 45%, 0.35);
+}
 
-      &:hover,
-      &:focus {
-         transform: translateY(-0.25rem);
-         box-shadow: 0 10px 30px hsla(270, 75%, 45%, 0.55);
-      }
+.btn-gradient {
+   color: var(--background-color);
+   background: linear-gradient(
+      45deg,
+      var(--gradient-color-3),
+      var(--gradient-color-1)
+   );
+   box-shadow: 0 5px 20px hsla(270, 75%, 45%, 0.35);
+
+   &:hover,
+   &:focus {
+      transform: translateY(-0.25rem);
+      box-shadow: 0 10px 30px hsla(270, 75%, 45%, 0.55);
    }
 }
 
@@ -161,44 +162,45 @@ button {
    position: absolute;
    border-radius: 50%;
 
-   &-gradient-1 {
-      top: 10%;
-      left: 15%;
-      width: 20rem;
-      height: 20rem;
-      background-color: var(--gradient-color-1);
-      animation: pulseGradient 16s infinite alternate ease-in-out;
-   }
+}
 
-   &-gradient-2 {
-      right: 20%;
-      bottom: 15%;
-      width: 25rem;
-      height: 25rem;
-      background-color: var(--gradient-color-2);
-      animation-delay: -5s;
-      animation: pulseGradient 20s infinite alternate ease-in-out;
-   }
+.blob-gradient-1 {
+   top: 10%;
+   left: 15%;
+   width: 20rem;
+   height: 20rem;
+   background-color: var(--gradient-color-1);
+   animation: pulseGradient 16s infinite alternate ease-in-out;
+}
 
-   &-gradient-3 {
-      top: 20%;
-      right: 10%;
-      width: 20rem;
-      height: 20rem;
-      background-color: var(--gradient-color-3);
-      animation-delay: -8s;
-      animation: pulseGradient 18s infinite alternate ease-in-out;
-   }
+.blob-gradient-2 {
+   right: 20%;
+   bottom: 15%;
+   width: 25rem;
+   height: 25rem;
+   background-color: var(--gradient-color-2);
+   animation-delay: -5s;
+   animation: pulseGradient 20s infinite alternate ease-in-out;
+}
 
-   &-gradient-4 {
-      left: 10%;
-      bottom: 25%;
-      width: 15rem;
-      height: 15rem;
-      background-color: var(--gradient-color-4);
-      animation-delay: -2s;
-      animation: pulseGradient 14s infinite alternate ease-in-out;
-   }
+.blob-gradient-3 {
+   top: 20%;
+   right: 10%;
+   width: 20rem;
+   height: 20rem;
+   background-color: var(--gradient-color-3);
+   animation-delay: -8s;
+   animation: pulseGradient 18s infinite alternate ease-in-out;
+}
+
+.blob-gradient-4 {
+   left: 10%;
+   bottom: 25%;
+   width: 15rem;
+   height: 15rem;
+   background-color: var(--gradient-color-4);
+   animation-delay: -2s;
+   animation: pulseGradient 14s infinite alternate ease-in-out;
 }
 
 // Banner section
@@ -225,24 +227,25 @@ button {
       background: var(--background-color);
    }
 
-   &-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
-      width: 100%;
-      height: 100%;
-      filter: blur(10rem);
-   }
+}
 
-   &-content {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      row-gap: 2rem;
-      z-index: 5;
-   }
+.banner-overlay {
+   position: absolute;
+   top: 0;
+   left: 0;
+   z-index: 1;
+   width: 100%;
+   height: 100%;
+   filter: blur(10rem);
+}
+
+.banner-content {
+   position: relative;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   row-gap: 2rem;
+   z-index: 5;
 }
 
 </style>
