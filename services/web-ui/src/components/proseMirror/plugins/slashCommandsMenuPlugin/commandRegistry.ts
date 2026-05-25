@@ -7,6 +7,7 @@ import {
 } from '$src/svgIcons/index.ts'
 import { ImageUploadModal } from '$src/components/proseMirror/plugins/slashCommandsMenuPlugin/ImageUploadModal.ts'
 import RouterService from '$src/services/router-service.ts'
+import { v4 as uuidv4 } from 'uuid'
 
 type SlashCommand = {
     name: string
@@ -83,8 +84,23 @@ const createFileCommand = (): SlashCommand['execute'] => {
     }
 }
 
-// Table icon - inline SVG since not in icons file
 const tableIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 3h18v18H3V3zm16 2H5v4h14V5zm0 6H5v4h14v-4zm0 6H5v2h14v-2zM9 9V5H5v4h4zm0 6v-4H5v4h4zm0 4v-2H5v2h4z"/></svg>'
+const featureIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="m12 1 0 4m0 14 0 4m-11-11 4 0m14 0 4 0"/></svg>'
+
+// `/use` opens the existing Media Library on its Features tab; the user picks a feature there
+// and the panel's "Use Feature" action inserts the reference chip into the active prompt.
+const createUseFeatureCommand = (): SlashCommand['execute'] => () => {
+    const workspaceId = RouterService.getRouteParams().workspaceId as string
+    window.dispatchEvent(new CustomEvent('lixpi:open-media-library-features', { detail: { workspaceId } }))
+    return true
+}
+
+const createExtractFeatureCommand = (): SlashCommand['execute'] => (_view: EditorView) => {
+    const workspaceId = RouterService.getRouteParams().workspaceId as string
+    const extractionRunId = uuidv4()
+    window.dispatchEvent(new CustomEvent('lixpi:open-extraction-tab', { detail: { extractionRunId, workspaceId } }))
+    return true
+}
 
 export const SLASH_COMMANDS: SlashCommand[] = [
     {
@@ -114,6 +130,20 @@ export const SLASH_COMMANDS: SlashCommand[] = [
         icon: documentIcon,
         description: 'Attach a file',
         execute: createFileCommand(),
+    },
+    {
+        name: 'Use Feature',
+        aliases: ['use', 'feature', 'f'],
+        icon: featureIcon,
+        description: 'Open the Media Library to use a feature',
+        execute: createUseFeatureCommand(),
+    },
+    {
+        name: 'Extract Feature',
+        aliases: ['extract', 'extract-feature', 'ext'],
+        icon: featureIcon,
+        description: 'Extract a feature from this context',
+        execute: createExtractFeatureCommand(),
     },
 ]
 

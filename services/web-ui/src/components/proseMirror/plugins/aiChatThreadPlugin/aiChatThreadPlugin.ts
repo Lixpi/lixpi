@@ -22,8 +22,16 @@ import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/com
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
-import type { AiModelId } from '@lixpi/constants'
+import type {
+    AiInteractionChatSendMessagePayload,
+    AiInteractionChatStopMessagePayload,
+    AiModelId,
+    ImageBranchVlmResolution,
+    ImageGenerationTrace,
+    ImageGenerationSize,
+    MarkdownParsedSegment,
+    StreamStatus,
+} from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
@@ -34,8 +42,6 @@ const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
 // ========== TYPE DEFINITIONS ==========
 
-import type { AiInteractionChatSendMessagePayload, AiInteractionChatStopMessagePayload, ImageGenerationSize } from '@lixpi/constants'
-
 type ImageOptions = {
     aiImageModel: string
     imageGenerationSize: ImageGenerationSize
@@ -44,8 +50,7 @@ type ImageOptions = {
 type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
-type StreamStatus = 'START_STREAM' | 'STREAMING' | 'END_STREAM'
-type ImageSegmentType = 'image_partial' | 'image_complete'
+type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type SegmentEvent = {
     status?: StreamStatus
@@ -55,25 +60,26 @@ type SegmentEvent = {
     threadId?: string
     aiChatThreadId?: string
     collapsibleTitle?: string
-    segment?: {
-        segment: string
-        styles: string[]
-        type: string
-        level?: number
-        isBlockDefining: boolean
-    }
+    // Markdown segment shape from @lixpi/constants (mirrors what @lixpi/markdown-stream-parser
+    // emits). TODO: import from @lixpi/markdown-stream-parser once its in-development version
+    // exports proper segment types.
+    segment?: MarkdownParsedSegment
     imageUrl?: string
     fileId?: string
     workspaceId?: string
     partialIndex?: number
     responseId?: string
     revisedPrompt?: string
+    imageBranchResolution?: ImageBranchVlmResolution
+    imageGenerationTrace?: ImageGenerationTrace
+    error?: string
 }
 type ImageReference = { fileId: string; workspaceId: string }
 type ThreadContent = {
     nodeType: string
     textContent: string
     images?: ImageReference[]
+    featureIds?: string[]
 }
 type AiGeneratedImageAlignment = 'left' | 'center' | 'right'
 type AiGeneratedImageTextWrap = 'none' | 'left' | 'right'
@@ -178,9 +184,10 @@ class ContentExtractor {
     }
 
     // Extract text and images from a message block
-    static collectContentWithImages(node: ProseMirrorNode): { text: string; images: ImageReference[] } {
+    static collectContentWithImages(node: ProseMirrorNode): { text: string; images: ImageReference[]; featureIds: string[] } {
         let text = ''
         const images: ImageReference[] = []
+        const featureIds: string[] = []
 
         node.forEach((child: ProseMirrorNode) => {
             if (child.type.name === 'text') {
@@ -196,15 +203,22 @@ class ContentExtractor {
                 if (fileId && workspaceId) {
                     images.push({ fileId, workspaceId })
                 }
+            } else if (child.type.name === 'feature_reference') {
+                const { featureId, featureName } = child.attrs
+                // Cosmetic label only; resolution is driven by featureIds (see resolveFeatures).
+                // Kept in sync with the chip's visual `feature:<name>` format.
+                if (featureName) text += `feature:${featureName}`
+                if (featureId) featureIds.push(featureId)
             } else {
                 // Recurse into other nodes
                 const nested = ContentExtractor.collectContentWithImages(child)
                 text += nested.text
                 images.push(...nested.images)
+                featureIds.push(...nested.featureIds)
             }
         })
 
-        return { text, images }
+        return { text, images, featureIds }
     }
 
     // Simple text extraction without formatting (for backwards compatibility)
@@ -253,10 +267,10 @@ class ContentExtractor {
                 return
             }
 
-            const { text: textContent, images } = ContentExtractor.collectContentWithImages(block)
-            if (!textContent && images.length === 0) return
+            const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
+            if (!textContent && images.length === 0 && featureIds.length === 0) return
 
-            content.push({ nodeType: block.type.name, textContent, images: images.length > 0 ? images : undefined })
+            content.push({ nodeType: block.type.name, textContent, images: images.length > 0 ? images : undefined, featureIds: featureIds.length > 0 ? featureIds : undefined })
         })
 
         return content
@@ -283,13 +297,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0) {
+                    if (textContent || images.length > 0 || featureIds.length > 0) {
                         allThreadsContent.push({
                             nodeType: block.type.name,
                             textContent,
-                            images: images.length > 0 ? images : undefined
+                            images: images.length > 0 ? images : undefined,
+                            featureIds: featureIds.length > 0 ? featureIds : undefined,
                         })
                     }
                 })
@@ -334,13 +349,14 @@ class ContentExtractor {
                         return
                     }
 
-                    const { text: textContent, images } = ContentExtractor.collectContentWithImages(block)
+                    const { text: textContent, images, featureIds } = ContentExtractor.collectContentWithImages(block)
 
-                    if (textContent || images.length > 0) {
+                    if (textContent || images.length > 0 || featureIds.length > 0) {
                         selectedContent.push({
                             nodeType: block.type.name,
                             textContent,
-                            images: images.length > 0 ? images : undefined
+                            images: images.length > 0 ? images : undefined,
+                            featureIds: featureIds.length > 0 ? featureIds : undefined,
                         })
                     }
                 })
@@ -401,6 +417,10 @@ class ContentExtractor {
         })
 
         return messages
+    }
+
+    static collectReferencedFeatureIds(items: ThreadContent[]): string[] {
+        return Array.from(new Set(items.flatMap((item) => item.featureIds ?? [])))
     }
 }
 
@@ -748,7 +768,31 @@ class AiChatThreadPluginClass {
         }
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
+        }
+    }
+
+    private removePartialImagesInChat(view: EditorView, threadId: string): void {
+        const responseContext = this.getCurrentResponseContext(view.state, threadId)
+        if (!responseContext) return
+
+        const ranges: Array<{ from: number; to: number }> = []
+        responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
+            if (child.type.name !== aiGeneratedImageNodeType || !child.attrs.isPartial) return
+            const from = responseContext.responseStartPos + 1 + offset
+            ranges.push({ from, to: from + child.nodeSize })
+        })
+
+        if (ranges.length === 0) return
+
+        const tr = view.state.tr
+        for (const range of ranges.reverse()) {
+            tr.delete(range.from, range.to)
+        }
+
+        if (tr.docChanged) {
+            view.dispatch(tr)
         }
     }
 
@@ -818,6 +862,11 @@ class AiChatThreadPluginClass {
             const { state, dispatch } = view
 
             // Handle image generation events
+            if (type === 'image_generation_trace') {
+                this.handleImageGenerationTrace(view, event)
+                return
+            }
+
             if (type === 'image_partial') {
                 this.handleImagePartial(view, event)
                 return
@@ -825,6 +874,33 @@ class AiChatThreadPluginClass {
 
             if (type === 'image_complete') {
                 this.handleImageComplete(view, event)
+                return
+            }
+
+            if (type === 'image_branch_resolved') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId && event.imageBranchResolution) {
+                    callbacks.onImageBranchResolvedToCanvas?.({
+                        threadId: effectiveThreadId,
+                        resolution: event.imageBranchResolution,
+                    })
+                }
+                return
+            }
+
+            if (type === 'image_branch_resolution_error') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId) {
+                    callbacks.onImageBranchResolutionErrorToCanvas?.({
+                        threadId: effectiveThreadId,
+                        error: event.error || 'Image branch resolution failed',
+                    })
+                    callbacks.onImageErrorToCanvas?.({
+                        threadId: effectiveThreadId,
+                        error: event.error || 'Image branch resolution failed',
+                    })
+                }
+                this.handleStreamError(view, effectiveThreadId)
                 return
             }
 
@@ -836,6 +912,18 @@ class AiChatThreadPluginClass {
 
             if (type === 'collapsible_end') {
                 this.handleCollapsibleEnd(view, event)
+                return
+            }
+
+            if (status === 'ERROR') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId) {
+                    callbacks.onImageErrorToCanvas?.({
+                        threadId: effectiveThreadId,
+                        error: event.error || 'AI generation failed',
+                    })
+                }
+                this.handleStreamError(view, effectiveThreadId)
                 return
             }
 
@@ -856,6 +944,13 @@ class AiChatThreadPluginClass {
         })
     }
 
+    private handleStreamError(view: EditorView, threadId?: string): void {
+        if (threadId) {
+            this.removePartialImagesInChat(view, threadId)
+        }
+        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), threadId)
+    }
+
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {
         try {
             const { imageUrl, fileId, workspaceId, partialIndex, aiChatThreadId, aiProvider } = event
@@ -873,7 +968,7 @@ class AiChatThreadPluginClass {
             const callbacks = getAiGeneratedImageCallbacks()
             callbacks.onImagePartialToCanvas?.({
                 threadId: aiChatThreadId,
-                imageUrl,
+                imageUrl: imageUrl || '',
                 fileId: fileId || '',
                 workspaceId: workspaceId || '',
                 partialIndex: partialIndex || 0,
@@ -909,6 +1004,47 @@ class AiChatThreadPluginClass {
             imageModelProvider: imageModelProvider || '',
             responseMessageId,
         })
+    }
+
+    private handleImageGenerationTrace(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId: threadId, imageGenerationTrace } = event
+        if (!threadId || !imageGenerationTrace) return
+
+        const { state, dispatch } = view
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
+        if (!threadInfo) return
+
+        const tr = state.tr
+        const attrs = {
+            title: 'Image generation details',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTrace,
+            imageGenerationTraceId: null,
+        }
+        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId)
+
+        if (collapsibleInfo.found && collapsibleInfo.nodePos !== undefined) {
+            const collapsibleNode = state.doc.nodeAt(collapsibleInfo.nodePos)
+            if (collapsibleNode?.type.name === aiCollapsibleBlockNodeType) {
+                tr.setNodeMarkup(collapsibleInfo.nodePos, undefined, {
+                    ...collapsibleNode.attrs,
+                    ...attrs,
+                })
+            }
+        } else {
+            const responseInfo = PositionFinder.findResponseNode(state, threadId)
+            if (!responseInfo.found || !responseInfo.endOfNodePos) return
+            const collapsibleNode = state.schema.nodes[aiCollapsibleBlockNodeType].create(attrs)
+            tr.insert(responseInfo.endOfNodePos - 1, collapsibleNode)
+        }
+
+        tr.setMeta('setCollapsible', { threadId, active: false })
+
+        if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
+            dispatch(tr)
+        }
     }
 
     private handleCreateVariantRequest(view: EditorView, node: ProseMirrorNode, pos: number): void {
@@ -984,6 +1120,7 @@ class AiChatThreadPluginClass {
                 tr.setMeta('setReceiving', { threadId, receiving: true })
                 console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos, responseMessageId })
             }
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
             console.log('🔴 [PLUGIN] handleStreamStart dispatch done', { threadId, docSizeAfter: tr.doc.content.size })
         } catch (error) {
@@ -1062,6 +1199,7 @@ class AiChatThreadPluginClass {
         }
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
     }
@@ -1137,6 +1275,7 @@ class AiChatThreadPluginClass {
         tr.setMeta('setCollapsible', { threadId, active: true })
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
     }
@@ -1166,6 +1305,7 @@ class AiChatThreadPluginClass {
         tr.setMeta('setCollapsible', { threadId, active: false })
 
         if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
     }
@@ -1181,7 +1321,7 @@ class AiChatThreadPluginClass {
             aiProvider: aiProvider || 'Anthropic'
         })
 
-        dispatch(state.tr.insert(insertPos, responseNode))
+        dispatch(state.tr.insert(insertPos, responseNode).setMeta('skipDispatch', true))
     }
 
     private createMark(schema: ProseMirrorSchema, style: string): any {
@@ -1318,6 +1458,7 @@ class AiChatThreadPluginClass {
         // Pass threadId for Workspace mode to ensure current thread is always included
         const threadContent = ContentExtractor.getActiveThreadContent(newState, threadContext, nodePos, threadId)
         const messages = ContentExtractor.toMessages(threadContent)
+        const referencedFeatureIds = ContentExtractor.collectReferencedFeatureIds(threadContent)
 
         // Build image generation options if an image model is selected
         const imageOptions = aiImageModel ? {
@@ -1325,7 +1466,7 @@ class AiChatThreadPluginClass {
             imageGenerationSize
         } : undefined
 
-        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions })
+        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions, referencedFeatureIds })
     }
 
     private handleStopRequest(transaction: Transaction): void {

@@ -40,8 +40,7 @@ flowchart TB
         end
 
         subgraph Private["Private Subnets"]
-            API["api service<br/>Fargate"]
-            LLM["llm-api service<br/>Fargate"]
+            API["api service + LLM workflow<br/>Fargate"]
             CertLambda["cert-manager<br/>Lambda (Caddy)"]
             Sidecar["nats-sidecar<br/>Lambda"]
         end
@@ -81,10 +80,10 @@ flowchart TB
     NATS3 -.->|register| CM
 
     API -->|auth callout| NATS1
-    LLM -->|pub/sub| NATS1
+    API -->|pub/sub| NATS1
     API --> DDB
     API -->|verify JWT| Auth0
-    LLM --> AIProv
+    API --> AIProv
 
     CertLambda --> SM
     NATS1 -.->|read cert| SM
@@ -100,8 +99,7 @@ flowchart TB
 | Component | AWS Resource | Purpose |
 |-----------|--------------|---------|
 | `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
-| `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access |
-| `llm-api` | ECS/Fargate (private subnets) | AI orchestration, talks only to NATS |
+| `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (token streaming, image generation, vendor SDK egress) |
 | `nats` | ECS/Fargate (public subnets, 3 tasks) | Message bus — clients connect directly |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
 | `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |
@@ -129,8 +127,7 @@ infrastructure/pulumi/src/
     network.ts            # VPC, subnets, IGW, NAT, route tables
     ECS-cluster.ts        # Shared Fargate cluster
     NATS-cluster/         # 3-node NATS cluster + service discovery sidecar
-    main-api-service.ts   # api service (ECS task)
-    llm-api-service.ts    # llm-api service (ECS task)
+    main-api-service.ts   # api service (ECS task) — also hosts the LLM workflow in-process
     web-ui.ts             # S3 + CloudFront distribution
     db/DynamoDB-tables.ts # 14 DynamoDB tables (shared definitions)
     dns-records.ts        # Route53 records + hosted zone
@@ -179,8 +176,7 @@ flowchart TB
     PLACE[NATS DNS placeholder 8.8.8.8]
     CERTMGR[Lambda cert-manager<br/>issues NATS TLS cert]
     NATS[NATS cluster 3x Fargate]
-    API[api service]
-    LLM[llm-api service]
+    API[api service + LLM workflow]
     WEB[Web UI — S3 + CloudFront]
     DNS[Web + www A records]
 
@@ -195,17 +191,14 @@ flowchart TB
     CM --> NATS
     ECS --> NATS
     ECS --> API
-    ECS --> LLM
-    NATS -->|dependsOn| LLM
     DDB --> API
     CERT --> WEB
     WEB --> DNS
 ```
 
-The two explicit `dependsOn` relationships are worth highlighting:
+The explicit `dependsOn` relationship worth highlighting:
 
 - **NATS depends on cert-manager** — NATS must not start until Caddy has written a valid TLS cert to Secrets Manager, otherwise the cluster boots with self-signed certs and browsers reject the WebSocket handshake.
-- **llm-api depends on NATS** — llm-api has no HTTP endpoint at all; if NATS isn't up when it boots, it has nothing to connect to.
 
 ## Network Layout
 
@@ -239,12 +232,12 @@ flowchart LR
 |--------|------|-----------------|
 | Public AZ1 | `10.0.0.0/24` | NATS task, NAT Gateway |
 | Public AZ2 | `10.0.1.0/24` | NATS task |
-| Private AZ1 | `10.0.2.0/24` | api, llm-api, Lambdas |
-| Private AZ2 | `10.0.3.0/24` | api, llm-api, Lambdas |
+| Private AZ1 | `10.0.2.0/24` | api, Lambdas |
+| Private AZ2 | `10.0.3.0/24` | api, Lambdas |
 
 **Why NATS sits in public subnets.** Browsers connect directly to NATS over WebSocket-Secure. Putting NATS tasks in public subnets means each Fargate task gets a routable public IP, and the Lambda sidecar can publish those IPs to Route53.
 
-**Why api/llm-api sit in private subnets.** They don't accept inbound traffic from the internet at all — the only inbound channel is NATS. Outbound traffic (Auth0, OpenAI, Anthropic) goes through the single NAT Gateway.
+**Why api sits in private subnets.** It doesn't accept inbound traffic from the internet at all — the only inbound channel is NATS. Outbound traffic (Auth0, OpenAI, Anthropic, Google, Stability) goes through the single NAT Gateway.
 
 ## NATS Cluster: The Most Interesting Piece
 
@@ -371,22 +364,23 @@ sequenceDiagram
 
 A critical detail buried in the code: the API service **must** connect to NATS with `tls://`, not `nats://`. The auth callout reply path uses an internal NATS subject that only trusted (TLS) clients are allowed to publish to. Without TLS, subscriptions work but responses silently fail and browsers time out on connect.
 
-## ECS Services: api and llm-api
+## ECS Services: api
 
-Both services share the same pattern: a Docker image pushed to ECR, a Fargate task definition, an IAM role scoped to the exact resources it needs, CloudWatch logs, and a security group with zero ingress (they only receive work through NATS).
+The `api` service follows the standard pattern: a Docker image pushed to ECR, a Fargate task definition, an IAM role scoped to the exact resources it needs, CloudWatch logs, and a security group with zero ingress (it only receives work through NATS).
 
 | Service | CPU | Memory | Subnets | Public IP | Inbound | Scale |
 |---------|-----|--------|---------|-----------|---------|-------|
-| `api` | 256 | 512 MB | Private | no | none | 1 task (configurable) |
-| `llm-api` | 256 | 512 MB | Private | no | none | 1 task (configurable) |
+| `api` | 512 | 1024 MB | Private | no | none | 1 task (configurable) |
+
+The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM workflow (token streaming + image generation + vendor SDK egress) that previously ran in the separate `llm-api` Fargate task.
 
 ### Why No Load Balancer?
 
-Because there is nothing to route *to*. Both services pull work off NATS subjects using **queue groups**. When you add a second `llm-api` task, it joins the same queue group, NATS starts distributing messages round-robin across both tasks, and no configuration anywhere else needs to change. This is the "NATS as the backbone" design from [ARCHITECTURE.md](ARCHITECTURE.md) taken to its logical conclusion: the load balancer is the message bus.
+Because there is nothing to route *to*. The service pulls work off NATS subjects using **queue groups**. When you add a second `api` task, it joins the same queue group, NATS starts distributing messages round-robin across both tasks, and no configuration anywhere else needs to change. This is the "NATS as the backbone" design from [ARCHITECTURE.md](ARCHITECTURE.md) taken to its logical conclusion: the load balancer is the message bus.
 
 ### Deployment Strategy
 
-Both services use the same rolling deploy settings:
+The service uses standard rolling deploy settings:
 
 - `deploymentMinimumHealthyPercent: 50` — at least half the desired tasks stay up during a deploy.
 - `deploymentMaximumPercent: 200` — ECS may double the task count briefly to swap in new images.
@@ -397,11 +391,10 @@ Both services use the same rolling deploy settings:
 
 Each service gets a `taskRole` with only the permissions it actually needs:
 
-- `api` — DynamoDB R/W on its bound tables, SSM read, CloudWatch Logs write. That's it. No direct AI provider access.
-- `llm-api` — SSM read, CloudWatch Logs write. **No DynamoDB, no IAM roles for Bedrock, nothing.** It reaches AI providers (OpenAI, Anthropic, Google) via egress through the NAT Gateway using API keys from environment variables.
+- `api` — DynamoDB R/W on its bound tables, SSM read, CloudWatch Logs write. AI provider keys (OpenAI, Anthropic, Google, Stability) are passed via env vars; egress to vendor APIs flows through the NAT Gateway.
 - `nats` — CloudWatch Logs + Secrets Manager read (for the TLS cert). Nothing else.
 
-This isolation means a compromised `llm-api` container can't touch user data, and a compromised `api` container can't call the AI providers.
+> **Historical note.** The previous architecture split AI orchestration into a separate `llm-api` Fargate task with its own narrower IAM role (no DynamoDB) so a compromise of the LLM container couldn't touch user data. After the migration to in-process LangGraph TS, the API container is the trust boundary for both. If that trade-off becomes a concern, the LLM module's `getSubscriptions()` surface lets it be hosted by a separate `llm-workers` ECS service running the same image with a narrower IAM role; the in-process auth callout would register `svc:llm-workers` as a NATS internal service.
 
 ## Web UI Deployment
 
@@ -480,8 +473,7 @@ sequenceDiagram
     participant CF as CloudFront
     participant R53 as Route53
     participant NATS as NATS (Fargate)
-    participant API as api (Fargate)
-    participant LLM as llm-api (Fargate)
+    participant API as api + LLM workflow (Fargate)
     participant DDB as DynamoDB
     participant AI as AI Provider
 
@@ -513,39 +505,36 @@ sequenceDiagram
         Browser->>NATS: publish ai.interaction.chat.sendMessage
         NATS->>API: route to api queue group
         activate API
-        API->>DDB: Load thread + workspace context
+        API->>DDB: Load AI model metadata + workspace context
         activate DDB
         DDB-->>API: records
         deactivate DDB
-        API->>NATS: publish ai.interaction.chat.process
+        API->>API: llmModule.process() — invoke LangGraph workflow in-process
     end
 
     rect rgb(246, 199, 179)
         Note over Browser, AI: PHASE 4 - LLM WORK
-        NATS->>LLM: route to llm-workers queue group
-        activate LLM
-        LLM->>AI: Streamed completion request
+        API->>AI: Streamed completion request via vendor SDK
         activate AI
-        deactivate API
     end
 
     rect rgb(200, 220, 228)
         Note over Browser, AI: PHASE 5 - STREAM BACK
         loop Token Streaming
-            AI-->>LLM: chunk
-            LLM->>NATS: publish receiveMessage.{workspaceId}.{threadId}
+            AI-->>API: chunk
+            API->>NATS: publish receiveMessage.{workspaceId}.{threadId}
             NATS-->>Browser: chunk
         end
         deactivate AI
-        deactivate LLM
+        deactivate API
         deactivate NATS
     end
 ```
 
 Two things to note:
 
-1. **Stream tokens skip the API entirely.** The `api` service does the setup work (DynamoDB lookup, context enrichment, auth), then `llm-api` publishes tokens to a subject the browser is already subscribed to. There's no extra proxy hop — that's why the streaming latency is dominated by the AI provider, not by Lixpi's infrastructure.
-2. **Scale-out is drop-in.** Add a second `llm-api` task and NATS starts splitting `ai.interaction.chat.process` messages between the two workers automatically. No load balancer config to update.
+1. **Stream tokens flow directly from API to NATS.** The API does the setup work (DynamoDB lookup, context enrichment, auth) then runs the LangGraph workflow in-process and publishes tokens to a subject the browser is already subscribed to. Streaming latency is dominated by the AI provider, not by Lixpi's infrastructure.
+2. **Scale-out is drop-in.** Add a second `api` task and NATS starts splitting `ai.interaction.chat.sendMessage` messages between the two workers automatically. No load balancer config to update.
 
 ## Scaling and Capacity
 
@@ -554,8 +543,7 @@ Two things to note:
 | Service | Scaling mechanism | Notes |
 |---------|-------------------|-------|
 | `web-ui` | CloudFront edge cache | No origin scaling needed; global CDN |
-| `api` | ECS desired count + NATS queue group `api` | Stateless — add tasks freely |
-| `llm-api` | ECS desired count + NATS queue group `llm-workers` | CPU-bound on token streaming; add tasks when inflight requests climb |
+| `api` | ECS desired count + NATS queue group `aiInteraction` | Stateless — add tasks freely. Hosts both the gateway logic and the in-process LangGraph LLM workflow. CPU-bound on token streaming. |
 | `nats` | App Auto Scaling target (CPU 70%, memory 80%) + ECS desired count | The program provisions `minCount=3, maxCount=3` by default — see "NATS cluster sizing" below |
 | `DynamoDB` | On-demand capacity mode (default) | No manual scaling; pay per request |
 | `Lambda` (cert-manager, sidecar) | AWS-managed | Short-lived, invoked rarely |
@@ -579,19 +567,19 @@ Using published NATS performance characteristics and the default Fargate sizing,
 | Concurrent WebSocket clients | 3 nodes × 0.5 vCPU | **10,000–30,000 idle connections** per cluster (connections are cheap in NATS) |
 | Messages/sec, cluster total | 3 nodes × 0.5 vCPU | **~500k–1M msgs/sec** for small payloads — far more than any chat workload needs |
 | Latency (p50) | Same-region, intra-VPC | **< 1 ms** for NATS itself; end-to-end latency is dominated by the AI provider (seconds) |
-| Concurrent in-flight AI streams | 1 × `llm-api` @ 0.25 vCPU | ~25–50 concurrent streams per task; add tasks for more |
+| Concurrent in-flight AI streams | 1 × `api` @ 0.5 vCPU | ~25–50 concurrent streams per task; add tasks for more |
 | DynamoDB throughput | On-demand | Scales automatically to table-level limits (40k RCU/WCU per table by default) |
 
-In practice the **first bottleneck is `llm-api` CPU** (token streaming parsing), not NATS. The second is **AI provider rate limits**, not AWS. NATS itself won't be the limiting factor until the cluster is pushed into the hundreds of thousands of simultaneous active users per region.
+In practice the **first bottleneck is `api` CPU** (token streaming parsing in the LangGraph workflow), not NATS. The second is **AI provider rate limits**, not AWS. NATS itself won't be the limiting factor until the cluster is pushed into the hundreds of thousands of simultaneous active users per region.
 
 ### Scaling Up for Real Load
 
 If a stack needs to handle higher real-world load, the steps in order of impact are:
 
-1. **Increase `llm-api` desiredCount.** Each new task joins the NATS queue group and picks up work immediately.
-2. **Increase `api` desiredCount.** Same pattern. DynamoDB on-demand absorbs the extra read/write.
-3. **Bump NATS task size or count.** Raise `cpu: 256 → 1024`, `memory: 512 → 2048`, and/or set `maxCount > minCount` to turn on auto-scaling. Three nodes is the sweet spot for HA; going beyond five starts to produce diminishing returns for core pub/sub because gossip traffic grows quadratically.
-4. **Turn on JetStream replication for critical streams.** JetStream is enabled on the `AUTH` account and already backs the Object Store used for image storage. For higher durability, raise the replica count on streams that matter (R3 across the three cluster nodes) so that a single node failure doesn't drop data.
+1. **Increase `api` desiredCount.** Each new task joins the NATS queue group and picks up work immediately. DynamoDB on-demand absorbs the extra read/write.
+2. **Bump NATS task size or count.** Raise `cpu: 256 → 1024`, `memory: 512 → 2048`, and/or set `maxCount > minCount` to turn on auto-scaling. Three nodes is the sweet spot for HA; going beyond five starts to produce diminishing returns for core pub/sub because gossip traffic grows quadratically.
+3. **Turn on JetStream replication for critical streams.** JetStream is enabled on the `AUTH` account and already backs the Object Store used for image storage. For higher durability, raise the replica count on streams that matter (R3 across the three cluster nodes) so that a single node failure doesn't drop data.
+4. **Split the LLM workflow into a separate `llm-workers` ECS service.** Once `api` task density becomes the deployment bottleneck (an API deploy interrupts long-running streams), use the LLM module's `getSubscriptions()` surface to host the workflow in a dedicated service with separate scaling. See [`services/api/src/llm/README.md`](../services/api/src/llm/README.md).
 5. **Add a second region** only when global latency becomes the dominant cost. NATS supports super-clusters and leaf nodes natively, but this is rarely worth the operational overhead before the 100k-MAU mark.
 
 ### Failure Modes and Recovery
@@ -599,10 +587,9 @@ If a stack needs to handle higher real-world load, the steps in order of impact 
 | Failure | What happens |
 |---------|--------------|
 | One NATS task dies | ECS replaces it; Lambda sidecar removes the dead IP from Route53; surviving nodes carry traffic via gossip with no client disruption for existing connections in the other two nodes. Browsers reconnect transparently using the remaining A records. |
-| AZ2 fails | NATS tasks in AZ1 keep serving traffic. `api` and `llm-api` tasks in AZ1 keep running. |
-| AZ1 fails | NATS tasks in AZ2 keep serving clients. Private-subnet tasks (`api`, `llm-api`, Lambdas) in AZ2 remain healthy but **lose outbound internet egress** because there is only one NAT Gateway and it lives in AZ1. Full multi-AZ egress would require a second NAT Gateway (one per AZ). |
-| `api` task dies | NATS queue group re-routes new messages to the surviving task. ECS replaces the dead task within ~60 seconds. |
-| `llm-api` task dies mid-stream | That specific stream drops; the browser sees a circuit-breaker timeout (20 min by default) and the user can retry. Other streams are unaffected. |
+| AZ2 fails | NATS tasks in AZ1 keep serving traffic. `api` tasks in AZ1 keep running. |
+| AZ1 fails | NATS tasks in AZ2 keep serving clients. Private-subnet tasks (`api`, Lambdas) in AZ2 remain healthy but **lose outbound internet egress** because there is only one NAT Gateway and it lives in AZ1. Full multi-AZ egress would require a second NAT Gateway (one per AZ). |
+| `api` task dies | NATS queue group re-routes new messages to the surviving task. ECS replaces the dead task within ~60 seconds. Any in-flight LLM streams on the dead task are terminated; the browser sees a circuit-breaker timeout (20 min by default) and the user can retry. |
 | Cert-manager Lambda fails | Existing certs keep working until they expire. Alarming on Lambda errors is the remediation path. |
 | CloudFront origin S3 unavailable | Edge cache continues serving existing assets. New users hit stale cache until restored. |
 | DynamoDB throttle | Retryable errors; `api` handles retries. On-demand mode makes this rare. |

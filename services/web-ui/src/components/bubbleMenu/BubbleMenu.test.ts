@@ -377,11 +377,11 @@ describe('BubbleMenu — reposition', () => {
             animateOnShow: false,
         })
 
-        expect(menu.element.classList.contains('bubble-menu--no-entrance-motion')).toBe(true)
+        expect(menu.element.classList.contains('bubble-menu-no-entrance-motion')).toBe(true)
 
         menu.show('image', createMockPosition())
 
-        expect(menu.element.classList.contains('bubble-menu--no-entrance-motion')).toBe(false)
+        expect(menu.element.classList.contains('bubble-menu-no-entrance-motion')).toBe(false)
     })
 })
 

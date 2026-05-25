@@ -2,15 +2,16 @@
 
 ## Architecture
 
-Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm monorepo with TypeScript services, a Python LLM API, and NATS messaging. See [documentation/PRODUCT-OVERVIEW.md](documentation/PRODUCT-OVERVIEW.md) for full architecture details.
+Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm monorepo with TypeScript services and NATS messaging. See [documentation/PRODUCT-OVERVIEW.md](documentation/PRODUCT-OVERVIEW.md) for full architecture details.
 
 | Service | Language | Path | Purpose |
 |---------|----------|------|---------|
 | **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas, ProseMirror editors, AI chat UI |
-| **api** | Node.js / TypeScript | `services/api/` | Gateway — JWT auth, CRUD, DynamoDB, NATS bridge |
-| **llm-api** | Python (LangGraph) | `services/llm-api/` | AI orchestration — validate → stream → usage → cleanup |
+| **api** | Node.js / TypeScript | `services/api/` | Gateway + in-process LLM orchestration (LangGraph), JWT auth, CRUD, DynamoDB |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, JetStream Object Store |
 | **localauth0** | Node.js | `services/localauth0/` | Mock Auth0 for local dev |
+
+The LLM orchestration workflow (validate → stream → image gen → usage → cleanup) lives at `services/api/src/llm/` and uses [`@langchain/langgraph`](https://github.com/langchain-ai/langgraphjs). It used to be a separate Python `services/llm-api/` Fargate task; for the internal-service NATS auth pattern that Python service used, see [`documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`](documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
 
 Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in `infrastructure/pulumi/`.
 

@@ -1,4 +1,6 @@
-import { createEl } from '$src/utils/domTemplates.ts'
+import { MAX_IMAGE_FILE_SIZE } from '@lixpi/constants'
+
+import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
 import type { EditorView } from 'prosemirror-view'
 import AuthService from '$src/services/auth-service.ts'
 import RouterService from '$src/services/router-service.ts'
@@ -192,19 +194,16 @@ export class ImageUploadModal {
             },
             onDragover: (e: Event) => {
                 e.preventDefault()
-                ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--primary, #3b82f6)'
-                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--accent, #f3f4f6)'
+                applyStyle(e.currentTarget as HTMLElement, { borderColor: 'var(--primary, #3b82f6)', backgroundColor: 'var(--accent, #f3f4f6)' })
             },
             onDragleave: (e: Event) => {
                 e.preventDefault()
-                ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #e5e7eb)'
-                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+                applyStyle(e.currentTarget as HTMLElement, { borderColor: 'var(--border, #e5e7eb)', backgroundColor: 'transparent' })
             },
             onDrop: (e: Event) => {
                 e.preventDefault()
                 const dropEvent = e as DragEvent
-                ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #e5e7eb)'
-                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+                applyStyle(e.currentTarget as HTMLElement, { borderColor: 'var(--border, #e5e7eb)', backgroundColor: 'transparent' })
 
                 const files = dropEvent.dataTransfer?.files
                 if (files && files.length > 0) {
@@ -385,8 +384,7 @@ export class ImageUploadModal {
             return
         }
 
-        const maxSize = 1024 * 1024 * 1024 // 1GB
-        if (file.size > maxSize) {
+        if (file.size > MAX_IMAGE_FILE_SIZE) {
             alert('File size exceeds 1GB limit')
             return
         }
@@ -471,14 +469,14 @@ export class ImageUploadModal {
     private showProgress(): void {
         const progressContainer = this.modal.querySelector('[data-progress-container]') as HTMLElement
         if (progressContainer) {
-            progressContainer.style.display = 'block'
+            applyStyle(progressContainer, { display: 'block' })
         }
     }
 
     private hideProgress(): void {
         const progressContainer = this.modal.querySelector('[data-progress-container]') as HTMLElement
         if (progressContainer) {
-            progressContainer.style.display = 'none'
+            applyStyle(progressContainer, { display: 'none' })
         }
     }
 
@@ -488,7 +486,7 @@ export class ImageUploadModal {
         const progressLabel = this.modal.querySelector('[data-progress-label]') as HTMLElement
 
         if (progressBar) {
-            progressBar.style.width = `${percent}%`
+            applyStyle(progressBar, { width: `${percent}%` })
         }
         if (progressLabel) {
             progressLabel.textContent = `Uploading... ${percent}%`

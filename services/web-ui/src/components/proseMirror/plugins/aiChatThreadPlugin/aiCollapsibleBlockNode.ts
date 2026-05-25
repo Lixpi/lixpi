@@ -1,4 +1,10 @@
-import { html } from '$src/utils/domTemplates.ts'
+import {
+    createImageGenerationTraceDetails,
+    getImageGenerationSummaryTitle,
+    type ImageGenerationTraceDetailsAttrs,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
+
+export { cacheImageGenerationTrace } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 
 export const aiCollapsibleBlockNodeType = 'aiCollapsibleBlock'
 
@@ -7,6 +13,8 @@ export const aiCollapsibleBlockNodeSpec = {
         title: { default: 'Image generation prompt' },
         isOpen: { default: false },
         isStreaming: { default: true },
+        imageGenerationTrace: { default: null },
+        imageGenerationTraceId: { default: null },
     },
     content: '(paragraph | block)*',
     group: 'block',
@@ -20,6 +28,8 @@ export const aiCollapsibleBlockNodeSpec = {
                     title: summary?.textContent || 'Image generation prompt',
                     isOpen: dom.open,
                     isStreaming: false,
+                    imageGenerationTrace: null,
+                    imageGenerationTraceId: null,
                 }
             },
         },
@@ -31,22 +41,21 @@ export const aiCollapsibleBlockNodeSpec = {
                 class: `ai-collapsible-block${node.attrs.isStreaming ? ' is-streaming' : ''}`,
                 ...(node.attrs.isOpen ? { open: 'true' } : {}),
             },
-            ['summary', {}, node.attrs.isStreaming ? 'Preparing image generation prompt' : node.attrs.title],
-            ['div', { class: 'ai-collapsible-block-content' }, 0],
+            ['summary', {}, getSummaryTitle(node.attrs)],
+            ['div', { class: 'ai-collapsible-block-body' }, ['div', { class: 'ai-collapsible-block-content' }, 0]],
         ]
     },
 }
 
-export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => number | undefined) => {
-    const wrapper = html`
-        <details className="ai-collapsible-block${node.attrs.isStreaming ? ' is-streaming' : ''}">
-            <summary></summary>
-            <div className="ai-collapsible-block-content"></div>
-        </details>
-    ` as HTMLDetailsElement
+const getSummaryTitle = (attrs: ImageGenerationTraceDetailsAttrs): string => {
+    return getImageGenerationSummaryTitle(attrs)
+}
 
-    const summary = wrapper.querySelector('summary')!
-    const contentDom = wrapper.querySelector('.ai-collapsible-block-content')!
+export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => number | undefined) => {
+    const traceDetails = createImageGenerationTraceDetails()
+    const wrapper = traceDetails.dom
+    const summary = traceDetails.summary
+    const contentDom = traceDetails.contentDom
 
     const handleSummaryMouseDown = (event: MouseEvent) => {
         // Prevent the parent thread's mousedown focus handler from stealing the interaction.
@@ -63,6 +72,7 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
 
         const newOpen = !wrapper.open
         wrapper.open = newOpen
+        if (newOpen) renderTrace(node)
 
         const tr = view.state.tr.setNodeMarkup(pos, undefined, {
             ...view.state.doc.nodeAt(pos)?.attrs,
@@ -71,13 +81,18 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
         view.dispatch(tr)
     }
 
-    summary.textContent = node.attrs.isStreaming
-        ? 'Preparing image generation prompt'
-        : node.attrs.title
+    const renderTrace = (currentNode: any) => {
+        traceDetails.render({
+            attrs: currentNode.attrs as ImageGenerationTraceDetailsAttrs,
+            childCount: currentNode.childCount,
+        })
+    }
 
     if (node.attrs.isOpen) {
         wrapper.open = true
     }
+
+    renderTrace(node)
 
     summary.addEventListener('mousedown', handleSummaryMouseDown)
     summary.addEventListener('click', handleSummaryClick)
@@ -89,24 +104,25 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
             return event.target === summary || summary.contains(event.target as Node)
         },
         ignoreMutation(mutation: MutationRecord) {
-            return mutation.type === 'attributes'
+            if (mutation.type === 'attributes'
                 && mutation.attributeName === 'open'
-                && mutation.target === wrapper
+                && mutation.target === wrapper) return true
+
+            const target = mutation.target as Node
+            return target !== contentDom && !contentDom.contains(target)
         },
         update(updatedNode: any) {
             if (updatedNode.type.name !== aiCollapsibleBlockNodeType) return false
 
-            summary.textContent = updatedNode.attrs.isStreaming
-                ? 'Preparing image generation prompt'
-                : updatedNode.attrs.title
+            node = updatedNode
+            wrapper.open = !!updatedNode.attrs.isOpen
+            renderTrace(updatedNode)
 
             if (updatedNode.attrs.isStreaming) {
                 wrapper.classList.add('is-streaming')
             } else {
                 wrapper.classList.remove('is-streaming')
             }
-
-            wrapper.open = !!updatedNode.attrs.isOpen
 
             return true
         },

@@ -67,7 +67,7 @@ describe('aiGeneratedImageNodeView — error placeholder', () => {
 		expect(onerrorMatch).not.toBeNull()
 		const block = onerrorMatch![0]
 
-		expect(block).toContain("display = 'none'")
+		expect(block).toContain("applyStyle(imageElement, { display: 'none' })")
 	})
 
 	it('no inline SVG markup', () => {

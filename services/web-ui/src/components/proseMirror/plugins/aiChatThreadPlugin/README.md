@@ -215,11 +215,12 @@ sequenceDiagram
 
 **`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
 - Content: `(paragraph | block)*`
-- Attributes: `title, isOpen, isStreaming`
+- Attributes: `title, isOpen, isStreaming, imageGenerationTrace, imageGenerationTraceId`
 - DOM: `details.ai-collapsible-block > summary + div.ai-collapsible-block-content`
-- Shows "Preparing image generation prompt" while streaming, "Image generation prompt" when done
+- Shows "Preparing image generation prompt" while the text-model prompt is streaming, then upgrades to "Image generation details" when the backend publishes `IMAGE_GENERATION_TRACE`
 - Collapsed by default; spinner indicator while streaming
 - The NodeView handles summary `mousedown` and `click` directly so the thread-level focus handler does not swallow the toggle interaction
+- The upgraded details view shows the streamed chat-model prompt, the final prompt sent to the image model when it differs, thumbnails for every reference image actually sent to the image model when the backend can provide a preview-safe URL, and structured resolver audit notes for excluded branch candidates. Trace events never embed inline image data; they persist NATS-backed workspace image URLs or authenticated feature sample URLs, so compact trace metadata can be stored in the ProseMirror document and rehydrated after page reload without making image bytes part of editor or NATS payload state.
 - Content: Empty (atom node)
 - Attributes:
   - `imageData: string` - Image URL or base64 data
@@ -234,11 +235,9 @@ sequenceDiagram
   - `textWrap: 'none' | 'left' | 'right'` - Text wrap mode
 - DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
 - **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
-- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements and mirrored in chat history as compact `aiGeneratedImage` references. The plugin delegates image events to `WorkspaceCanvas.ts` via `onImagePartialToCanvas` / `onImageCompleteToCanvas` callbacks. `handleImagePartial` only guards on `!aiChatThreadId` (not `!imageUrl`), allowing early empty-URL `IMAGE_PARTIAL` events through so the canvas and chat history can create placeholder nodes before any pixel data arrives. Repeated partial events update the same chat placeholder, and completion converts it into the final thumbnail. Two placement modes are supported, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
-  - **Anchored mode** (default): Images overlap the AI chat thread node, positioned side-by-side to the right of the AI response message text. The image canvas node is placed at approximately the right half of the thread width, vertically aligned with the top of the `aiResponseMessage` that generated it. The `anchoredImageManager` tracks the image-to-thread relationship. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image-thread pairs.
-  - **Connector line mode**: A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it. The image appears to the right of the thread.
-  - In both modes, the revised prompt text and a right-aligned thumbnail reference are inserted in the AI response message. The thumbnail uses the `aiGeneratedImage.alignment` attribute handled by `imageSelectionPlugin`, so the bubble menu can change it through the same alignment controls as other editor images.
-- **MULTI-MODAL CONTEXT:** Connected canvas images are included in AI requests via the workspace edge system (`ai-chat-thread-service.ts` → `extractConnectedContext()`). Legacy inline `aiGeneratedImage` nodes in older threads are still extracted via `ContentExtractor.collectContentWithImages()` for backwards compatibility.
+- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements and mirrored in chat history as compact `aiGeneratedImage` references. The plugin delegates branch-resolution and image events to `WorkspaceCanvas.ts` via `onImageBranchResolvedToCanvas`, `onImageBranchResolutionErrorToCanvas`, `onImagePartialToCanvas`, and `onImageCompleteToCanvas` callbacks. `handleImagePartial` only guards on `!aiChatThreadId` (not `!imageUrl`), allowing early empty-URL `IMAGE_PARTIAL` events through so the canvas and chat history can create placeholder nodes before any pixel data arrives. Repeated partial events update the same chat placeholder, and completion converts it into the final thumbnail. A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it, and the image appears to the right of the thread. The revised prompt text and a right-aligned thumbnail reference are inserted in the AI response message. The thumbnail uses the `aiGeneratedImage.alignment` attribute handled by `imageSelectionPlugin`, so the bubble menu can change it through the same alignment controls as other editor images.
+- **IMAGE GENERATION TRACE:** `AiInteractionService` bypasses markdown parsing for `IMAGE_GENERATION_TRACE` and forwards an `image_generation_trace` segment to the plugin. The plugin updates the current `aiCollapsibleBlock` in the receiving `aiResponseMessage` instead of adding a second disclosure, preserving the streamed prompt content and adding the backend-confirmed final prompt/reference audit metadata.
+- **MULTI-MODAL CONTEXT:** Connected canvas images are included in AI requests via the workspace edge system (`ai-chat-thread-service.ts` → `extractConnectedContext()`). Generated branch candidates are sent separately as an `ImageBranchCandidateSnapshot`; the API-side structured VLM resolver decides which candidate images become image-model references. Legacy inline `aiGeneratedImage` nodes in older threads are still extracted via `ContentExtractor.collectContentWithImages()` for backwards compatibility.
 
 ## DOM Template System
 
@@ -419,7 +418,7 @@ Users see:
   - Content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`
   - Uses `html` template literals for clean UI creation
   - Handles hover events and focus management
-  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set `height` (grown by `applyAnchoredImageSpacing` in `WorkspaceCanvas.ts`)
+  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set canvas layout height
 
 - `aiUserInputNode.ts` - Sticky composer node (self-contained):
   - Exports node schema AND its NodeView implementation
@@ -427,7 +426,7 @@ Users see:
   - Content: `(paragraph | block)+` for rich-text input
   - NodeView renders controls (model selector, image toggle, submit/stop) alongside `contentDOM`
   - `createAiModelSelectorDropdown()` uses `createPureDropdown()` primitive
-  - `webUiSettings.useModalityFilterOnModelSelectorDropdown` toggles the modality filter chips in the model selector dropdown (currently disabled)
+  - `settings.modelSelectorDropdown.useModalityFilter` toggles the modality filter chips in the model selector dropdown (currently disabled)
   - Dropdowns appended directly to controlsContainer (not inserted via transactions)
   - `ignoreMutation()` prevents NodeView recreation when controls are manipulated
 
@@ -445,7 +444,7 @@ Users see:
   - Provider-specific avatars (Claude, GPT) with animations
   - Streaming animation states (receiving/idle)
   - Boundary strip decoration
-  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set `marginBottom` (set by `applyAnchoredImageSpacing` in `WorkspaceCanvas.ts` to push subsequent messages below overlapping anchored images)
+  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set canvas layout margins
 
 - `aiGeneratedImageNode.ts` - AI-generated image node and canvas callback system:
   - Exports ProseMirror node spec for `aiGeneratedImage` (atom node)
@@ -461,6 +460,15 @@ Users see:
   - Collapsed by default — user can expand to see the full prompt
   - Streamed content inserts inside the collapsible block via `PositionFinder.findCollapsibleNode()`
   - Backend detects `<image_prompt>` XML tags in the LLM stream and publishes `COLLAPSIBLE_START` / `COLLAPSIBLE_END` events
+- `imageGenerationTraceDetails.ts` - Shared renderer for image-generation trace metadata:
+  - Used by `aiCollapsibleBlockNode.ts` in chat history and by `WorkspaceCanvas.ts` for generated-image info blocks
+  - Shows the chat-model prompt, final image-model prompt, reference-image tiles, resolver audit summary, and excluded references from the same `ImageGenerationTrace` payload
+  - Canvas callers override the chat-history scroll caps so generated-image provenance panels show the full prompt and metadata content
+- `aiChatMessageShells.ts` - Shared user/assistant chat message DOM shells:
+  - Used by ProseMirror node views and canvas generated-image info blocks so message chrome, provider avatars, and bubble structure stay consistent
+- `aiChatThreadContentUtils.ts` - ProseMirror JSON helpers for generated-image provenance:
+  - Finds the user message and AI response that produced a canvas image by `responseMessageId`
+  - Extracts prompt text, response text, provider, collapsible prompt text, and inline `ImageGenerationTrace` metadata for reusable canvas rendering
 
 - `aiChatThreadPlugin.ts` - Main orchestration logic:
   - Plugin state and lifecycle management

@@ -5,7 +5,9 @@
         type Viewport
     } from '@xyflow/system'
     import {
+        MAX_IMAGE_FILE_SIZE,
         type CanvasState,
+        type DocumentCanvasNode,
         type ImageCanvasNode,
         type ContextRegionCanvasNode
     } from '@lixpi/constants'
@@ -19,12 +21,18 @@
     import { routerStore } from '$src/stores/routerStore.ts'
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
-    import { createNewFileIcon, imageIcon, aiChatBubbleIcon } from '$src/svgIcons/index.ts'
+    import { settings } from '$src/settings.ts'
+    import { createNewFileIcon, imageIcon, aiChatBubbleIcon, mediaLibraryIconFilled } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
+    import '$src/infographics/workspace/media-library-panel.scss'
 
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
+
+    function handleToggleMediaLibrary() {
+        renderer?.toggleMediaLibrary?.()
+    }
 
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
     let canvasState = $derived($workspaceStore.data.canvasState)
@@ -40,13 +48,25 @@
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
     const documentService = new DocumentService()
     const aiChatThreadService = new AiChatThreadService()
+    const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
+
+    function getImageInsertionDimensions(aspectRatio: number): { width: number; height: number } {
+        const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
+        const width = settings.imageNode.defaultInsertionWidth
+        return { width, height: width / safeAspectRatio }
+    }
 
     function persistCanvasState(newCanvasState: CanvasState) {
-        workspaceStore.updateCanvasState(newCanvasState)
+        const stateToPersist = {
+            ...newCanvasState,
+            viewport,
+        }
+
+        workspaceStore.updateCanvasState(stateToPersist)
         if (workspaceId) {
             servicesStore.getData('workspaceService').updateCanvasState({
                 workspaceId,
-                canvasState: newCanvasState
+                canvasState: stateToPersist
             })
         }
     }
@@ -55,11 +75,18 @@
         viewport = newViewport
 
         if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
+        const scheduledViewport = newViewport
         saveDebounceTimer = setTimeout(() => {
+            if (
+                viewport.x !== scheduledViewport.x ||
+                viewport.y !== scheduledViewport.y ||
+                viewport.zoom !== scheduledViewport.zoom
+            ) return
+
             if (workspaceId && canvasState) {
                 const newCanvasState: CanvasState = {
                     ...canvasState,
-                    viewport: newViewport
+                    viewport: scheduledViewport
                 }
                 persistCanvasState(newCanvasState)
             }
@@ -95,26 +122,15 @@
             })
 
             if (doc) {
-                const existingNodes = canvasState?.nodes || []
-                const newX = 50 + (existingNodes.length % 3) * 450
-                const newY = 50 + Math.floor(existingNodes.length / 3) * 400
-
-                const newCanvasState: CanvasState = {
-                    viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    edges: canvasState?.edges ?? [],
-                    nodes: [
-                        ...existingNodes,
-                        {
-                            nodeId: `node-${doc.documentId}`,
-                            type: 'document',
-                            referenceId: doc.documentId,
-                            position: { x: newX, y: newY },
-                            dimensions: { width: 400, height: 350 }
-                        }
-                    ]
+                const dimensions = { ...DEFAULT_DOCUMENT_NODE_DIMENSIONS }
+                const documentNode: Omit<DocumentCanvasNode, 'position'> = {
+                    nodeId: `node-${doc.documentId}`,
+                    type: 'document',
+                    referenceId: doc.documentId,
+                    dimensions,
                 }
 
-                persistCanvasState(newCanvasState)
+                renderer?.insertNodeAtViewportCenter(documentNode)
             }
         } catch (error) {
             console.error('Error creating document:', error)
@@ -148,16 +164,36 @@
         }
     }
 
-    function handleImageUrlInsert() {
+    async function handleImageUrlInsert() {
         const url = imageUrlValue.trim()
-        if (!url) return
-        closeImageSubmenu()
-        addImageToCanvas({ src: url })
+        if (!url || !workspaceId) return
+
+        try {
+            const token = await AuthService.getTokenSilently()
+            if (!token) return
+
+            const response = await fetch(`${API_BASE_URL}/api/images/${workspaceId}/import-url`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url }),
+            })
+            if (!response.ok) throw new Error('Image URL import failed')
+
+            const data = await response.json()
+            const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            closeImageSubmenu()
+            addImageToCanvas({ fileId: data.fileId, src: imageUrl })
+        } catch (error) {
+            console.error('Image URL import failed:', error)
+        }
     }
 
     async function uploadAndAddImage(file: File) {
         if (!file.type.startsWith('image/')) return
-        if (file.size > 1024 * 1024 * 1024) return
+        if (file.size > MAX_IMAGE_FILE_SIZE) return
         if (!workspaceId) return
 
         try {
@@ -184,62 +220,43 @@
         }
     }
 
-    function addImageToCanvas({ fileId, src }: { fileId?: string, src: string }) {
+    function addImageToCanvas({ fileId, src }: { fileId: string, src: string }) {
         if (!workspaceId) return
 
         const img = new Image()
         img.onload = () => {
-            const aspectRatio = img.naturalWidth / img.naturalHeight
-            const maxWidth = 400
-            const width = Math.min(maxWidth, img.naturalWidth)
-            const height = width / aspectRatio
+            const aspectRatio = img.naturalWidth > 0 && img.naturalHeight > 0
+                ? img.naturalWidth / img.naturalHeight
+                : 1
+            const dimensions = getImageInsertionDimensions(aspectRatio)
 
-            const existingNodes = canvasState?.nodes || []
-            const newX = 50 + (existingNodes.length % 3) * 450
-            const newY = 50 + Math.floor(existingNodes.length / 3) * 400
-            const nodeUniqueId = fileId || uuidv4()
-
-            const imageNode: ImageCanvasNode = {
-                nodeId: `node-${nodeUniqueId}`,
+            const imageNode: Omit<ImageCanvasNode, 'position'> = {
+                nodeId: `node-${fileId}`,
                 type: 'image',
-                fileId: nodeUniqueId,
+                fileId,
                 workspaceId,
                 src,
                 aspectRatio,
-                position: { x: newX, y: newY },
-                dimensions: { width, height }
+                dimensions,
             }
 
-            persistCanvasState({
-                viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                edges: canvasState?.edges ?? [],
-                nodes: [...existingNodes, imageNode]
-            })
+            renderer?.insertNodeAtViewportCenter(imageNode)
         }
 
         img.onerror = () => {
             console.error('Failed to load image for dimension calculation')
-            const existingNodes = canvasState?.nodes || []
-            const newX = 50 + (existingNodes.length % 3) * 450
-            const newY = 50 + Math.floor(existingNodes.length / 3) * 400
-            const nodeUniqueId = fileId || uuidv4()
-
-            const imageNode: ImageCanvasNode = {
-                nodeId: `node-${nodeUniqueId}`,
+            const dimensions = getImageInsertionDimensions(1)
+            const imageNode: Omit<ImageCanvasNode, 'position'> = {
+                nodeId: `node-${fileId}`,
                 type: 'image',
-                fileId: nodeUniqueId,
+                fileId,
                 workspaceId,
                 src,
                 aspectRatio: 1,
-                position: { x: newX, y: newY },
-                dimensions: { width: 300, height: 300 }
+                dimensions,
             }
 
-            persistCanvasState({
-                viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                edges: canvasState?.edges ?? [],
-                nodes: [...existingNodes, imageNode]
-            })
+            renderer?.insertNodeAtViewportCenter(imageNode)
         }
 
         img.src = src
@@ -275,30 +292,20 @@
                 workspaceId,
                 threadId,
                 content: initialContent,
-                aiModel: 'anthropic:claude-sonnet-4-20250514'
+                aiModel: ''
             })
 
             if (thread) {
-                const existingNodes = canvasState?.nodes || []
-                const newX = 50 + (existingNodes.length % 3) * 450
-                const newY = 50 + Math.floor(existingNodes.length / 3) * 400
+                const dimensions = { ...settings.contextRegion.defaultDimensions }
 
-                const contextRegionNode: ContextRegionCanvasNode = {
+                const contextRegionNode: Omit<ContextRegionCanvasNode, 'position'> = {
                     nodeId: `node-${thread.threadId}`,
                     type: 'contextRegion',
                     referenceId: thread.threadId,
-                    position: { x: newX, y: newY },
-                    dimensions: { width: 400, height: 500 }
+                    dimensions,
                 }
 
-                const newCanvasState: CanvasState = {
-                    viewport: canvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    edges: canvasState?.edges ?? [],
-                    nodes: [...existingNodes, contextRegionNode],
-                    lastActiveAiChatThreadId: thread.threadId
-                }
-
-                persistCanvasState(newCanvasState)
+                renderer?.insertNodeAtViewportCenter(contextRegionNode, { lastActiveAiChatThreadId: thread.threadId })
             }
         } catch (error) {
             console.error('Error creating AI chat thread:', error)
@@ -379,47 +386,47 @@
 
 <div
     class="workspace-canvas"
-    class:workspace-canvas--chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
+    class:workspace-canvas-chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
 >
     <div class="workspace-floating-toolbar">
-        <button class="workspace-floating-toolbar__button" onclick={handleCreateDocument}>
+        <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument}>
             {@html createNewFileIcon}
-            <span class="workspace-floating-toolbar__tooltip">New Document</span>
+            <span class="workspace-floating-toolbar-tooltip">New Document</span>
         </button>
-        <div class="workspace-floating-toolbar__image-wrapper" bind:this={imageWrapperEl}>
+        <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
             <button
-                class="workspace-floating-toolbar__button"
+                class="workspace-floating-toolbar-button"
                 class:active={imageSubmenuOpen}
                 onclick={toggleImageSubmenu}
             >
                 {@html imageIcon}
                 {#if !imageSubmenuOpen}
-                    <span class="workspace-floating-toolbar__tooltip">Add Image</span>
+                    <span class="workspace-floating-toolbar-tooltip">Add Image</span>
                 {/if}
             </button>
             {#if imageSubmenuOpen}
                 <div class="workspace-image-submenu">
                     {#if imageSubmenuMode === 'menu'}
-                        <button class="workspace-image-submenu__option" onclick={handleUploadFromDevice}>
+                        <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
                             Upload from Device
                         </button>
-                        <button class="workspace-image-submenu__option" onclick={() => { imageSubmenuMode = 'url' }}>
+                        <button class="workspace-image-submenu-option" onclick={() => { imageSubmenuMode = 'url' }}>
                             Paste Image URL
                         </button>
                     {:else}
-                        <div class="workspace-image-submenu__url-form">
+                        <div class="workspace-image-submenu-url-form">
                             <input
                                 type="url"
-                                class="workspace-image-submenu__url-input"
+                                class="workspace-image-submenu-url-input"
                                 placeholder="https://example.com/image.jpg"
                                 bind:value={imageUrlValue}
                                 onkeydown={(e) => { if (e.key === 'Enter') handleImageUrlInsert() }}
                             />
-                            <div class="workspace-image-submenu__url-actions">
-                                <button class="workspace-image-submenu__url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
+                            <div class="workspace-image-submenu-url-actions">
+                                <button class="workspace-image-submenu-url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
                                     Back
                                 </button>
-                                <button class="workspace-image-submenu__url-insert" onclick={handleImageUrlInsert}>
+                                <button class="workspace-image-submenu-url-insert" onclick={handleImageUrlInsert}>
                                     Add
                                 </button>
                             </div>
@@ -435,12 +442,16 @@
             bind:this={fileInputEl}
             onchange={handleFileInputChange}
         />
-        <div class="workspace-floating-toolbar__divider"></div>
-        <button class="workspace-floating-toolbar__button" onclick={handleAddAiChatThread}>
+        <div class="workspace-floating-toolbar-divider"></div>
+        <button class="workspace-floating-toolbar-button" onclick={handleAddAiChatThread}>
             {@html aiChatBubbleIcon}
-            <span class="workspace-floating-toolbar__tooltip">AI Chat</span>
+            <span class="workspace-floating-toolbar-tooltip">AI Chat</span>
         </button>
     </div>
+    <button class="workspace-media-library-launcher" onclick={handleToggleMediaLibrary} aria-label="Media Library">
+        {@html mediaLibraryIconFilled}
+        <span class="workspace-media-library-launcher-tooltip">Media Library</span>
+    </button>
     <span class="workspace-zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>
     <div class="workspace-pane" bind:this={paneEl}>
         <div class="workspace-viewport" bind:this={viewportEl}></div>

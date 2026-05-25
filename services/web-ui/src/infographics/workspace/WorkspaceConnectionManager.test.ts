@@ -8,8 +8,8 @@ import {
 	getEdgeAnchorPositions,
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { getContextRegionCloudAnchorPoint } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
+import { settings } from '$src/settings.ts'
 
 // =============================================================================
 // HELPERS
@@ -52,12 +52,10 @@ function makeEdge(overrides: Partial<WorkspaceEdge> & { edgeId: string; sourceNo
 function createMockConfig() {
 	const paneEl = document.createElement('div')
 	const viewportEl = document.createElement('div')
-	const edgesLayerEl = document.createElement('div')
 
 	return {
 		paneEl,
 		viewportEl,
-		edgesLayerEl,
 		getTransform: () => [0, 0, 1] as [number, number, number],
 		panBy: vi.fn().mockResolvedValue(true),
 		onEdgesChange: vi.fn(),
@@ -81,6 +79,21 @@ function mockPaneBounds(paneEl: HTMLDivElement) {
 		y: 0,
 		toJSON: () => ({})
 	})
+}
+
+function getRenderedPixiEdgeStart(onPixiEdgesReady: ReturnType<typeof vi.fn>, edgeId: string): { x: number; y: number } {
+	const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ id: string; svgPath: string }> | undefined
+	const edge = pixiEdges?.find((candidate) => candidate.id === edgeId)
+	expect(edge).toBeDefined()
+
+	const pathData = edge?.svgPath ?? ''
+	const match = pathData.match(/^M\s*([-\d.]+)[,\s]+([-\d.]+)/)
+	expect(match).not.toBeNull()
+
+	return {
+		x: Number(match?.[1] ?? 0),
+		y: Number(match?.[2] ?? 0),
+	}
 }
 
 // =============================================================================
@@ -278,11 +291,11 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 		expect(config.onEdgesChange).not.toHaveBeenCalled()
 	})
 
-	it('uses webUiSettings.proximityConnectThreshold as the distance limit', () => {
-		const original = webUiSettings.proximityConnectThreshold
+	it('uses settings.connector.proximityConnectThreshold as the distance limit', () => {
+		const original = settings.connector.proximityConnectThreshold
 		try {
 			// Set a very small threshold so nodes that are normally in range are rejected
-			webUiSettings.proximityConnectThreshold = 10
+			settings.connector.proximityConnectThreshold = 10
 
 			const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
 			const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 300, y: 50 }, dimensions: { width: 200, height: 100 } })
@@ -296,15 +309,15 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 
 			expect(config.onEdgesChange).not.toHaveBeenCalled()
 		} finally {
-			webUiSettings.proximityConnectThreshold = original
+			settings.connector.proximityConnectThreshold = original
 		}
 	})
 
 	it('triggers proximity when distance is within a custom threshold', () => {
-		const original = webUiSettings.proximityConnectThreshold
+		const original = settings.connector.proximityConnectThreshold
 		try {
 			// Set threshold large enough to include both nodes
-			webUiSettings.proximityConnectThreshold = 200
+			settings.connector.proximityConnectThreshold = 200
 
 			const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
 			const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 300, y: 50 }, dimensions: { width: 200, height: 100 } })
@@ -318,7 +331,7 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 
 			expect(config.onEdgesChange).toHaveBeenCalledTimes(1)
 		} finally {
-			webUiSettings.proximityConnectThreshold = original
+			settings.connector.proximityConnectThreshold = original
 		}
 	})
 
@@ -534,6 +547,118 @@ describe('WorkspaceConnectionManager — menu connections', () => {
 })
 
 // =============================================================================
+// RENDERING — context region cloud anchors
+// =============================================================================
+
+describe('WorkspaceConnectionManager — context region edge anchors', () => {
+	it('renders workspace connector data through PIXI only at screenshot zoom levels', () => {
+		let zoom = 1
+		const onPixiEdgesReady = vi.fn()
+		const config = {
+			...createMockConfig(),
+			getTransform: () => [0, 0, zoom] as [number, number, number],
+			onPixiEdgesReady,
+		}
+		const manager = new WorkspaceConnectionManager(config)
+		const sourceNode = makeNode({ nodeId: 'source-1', type: 'image', position: { x: 0, y: 0 }, dimensions: { width: 120, height: 120 } })
+		const targetNode = makeNode({ nodeId: 'target-1', type: 'image', position: { x: 500, y: 0 }, dimensions: { width: 120, height: 120 } })
+		const edge = makeEdge({ edgeId: 'edge-pixi-only', sourceNodeId: sourceNode.nodeId, targetNodeId: targetNode.nodeId })
+
+		manager.syncNodes([sourceNode, targetNode])
+		manager.syncEdges([edge])
+
+		for (const nextZoom of [0.41, 0.48, 0.52, 0.84, 1.04, 1.93, 2.0]) {
+			zoom = nextZoom
+			manager.render()
+
+			const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ id: string; strokeWidth: number; arrowEnd: { size: number } | null; svgPath: string }>
+			expect(pixiEdges).toHaveLength(1)
+			expect(pixiEdges[0].id).toBe(edge.edgeId)
+			expect(pixiEdges[0].svgPath).toMatch(/^M\s/)
+			expect(pixiEdges[0].strokeWidth).toBe(2)
+			expect(pixiEdges[0].arrowEnd?.size ?? 0).toBe(16)
+			expect(config.viewportEl.querySelector('svg.connector-svg')).toBeNull()
+		}
+	})
+
+	it('renders context-region edge endpoints from the cloud outline and recomputes them after resize', () => {
+		const onPixiEdgesReady = vi.fn()
+		const config = {
+			...createMockConfig(),
+			isContextRegionNode: (node: CanvasNode) => node.type === 'contextRegion',
+			onPixiEdgesReady,
+		}
+		const manager = new WorkspaceConnectionManager(config)
+		const regionNode = makeNode({
+			nodeId: 'region-1',
+			type: 'contextRegion',
+			position: { x: 100, y: 80 },
+			dimensions: { width: 400, height: 260 },
+		})
+		const imageNode = makeNode({
+			nodeId: 'img-1',
+			type: 'image',
+			position: { x: 780, y: 120 },
+			dimensions: { width: 260, height: 260 },
+		})
+		const edge = makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: regionNode.nodeId,
+			targetNodeId: imageNode.nodeId,
+			sourceT: 0.5,
+			targetT: 0.5,
+		})
+
+		manager.syncNodes([regionNode, imageNode])
+		manager.syncEdges([edge])
+		manager.render()
+
+		const sourceMarkerOffset = 6
+		const start = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
+		const anchor = getContextRegionCloudAnchorPoint({
+			nodeId: regionNode.nodeId,
+			referenceId: regionNode.referenceId,
+			x: regionNode.position.x,
+			y: regionNode.position.y,
+			width: regionNode.dimensions.width,
+			height: regionNode.dimensions.height,
+			title: '',
+			selected: false,
+			active: false,
+		}, 'right', 0.5)
+		const rectangularStartX = regionNode.position.x + regionNode.dimensions.width + sourceMarkerOffset
+
+		expect(start.x).toBeCloseTo(anchor.x + sourceMarkerOffset, 2)
+		expect(start.y).toBeCloseTo(anchor.y, 2)
+		expect(start.x).toBeGreaterThan(rectangularStartX + 1)
+
+		const resizedRegionNode = {
+			...regionNode,
+			dimensions: { width: 620, height: 360 },
+		}
+		manager.syncNodes([resizedRegionNode, imageNode])
+		manager.render()
+
+		const resizedStart = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
+		const resizedAnchor = getContextRegionCloudAnchorPoint({
+			nodeId: resizedRegionNode.nodeId,
+			referenceId: resizedRegionNode.referenceId,
+			x: resizedRegionNode.position.x,
+			y: resizedRegionNode.position.y,
+			width: resizedRegionNode.dimensions.width,
+			height: resizedRegionNode.dimensions.height,
+			title: '',
+			selected: false,
+			active: false,
+		}, 'right', 0.5)
+
+		expect(resizedStart.x).toBeCloseTo(resizedAnchor.x + sourceMarkerOffset, 2)
+		expect(resizedStart.y).toBeCloseTo(resizedAnchor.y, 2)
+		expect(resizedAnchor.x).toBeGreaterThan(anchor.x)
+	})
+})
+
+// =============================================================================
 // getEdgeAnchorPositions
 // =============================================================================
 
@@ -572,7 +697,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		// Source center at y=50 (0 + 100/2), target at y=0..100
 		// idealT = (50 - 0) / 100 = 0.5 → straight line through center
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
-		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'document', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
 
 		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 		const result = computeSpreadTValues([edge], [source, target])
@@ -585,7 +710,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		// Source center at y=50, target at y=200..400
 		// idealT = (50 - 200) / 200 = -0.75 → clamp to 0.065
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
-		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'document', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
 
 		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 		const result = computeSpreadTValues([edge], [source, target])
@@ -598,7 +723,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		// Source center at y=550, target at y=0..200
 		// idealT = (550 - 0) / 200 = 2.75 → clamp to 0.935
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 500 }, dimensions: { width: 200, height: 100 } })
-		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 200 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'document', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 200 } })
 
 		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 		const result = computeSpreadTValues([edge], [source, target])
@@ -611,7 +736,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		// Source center at y=150 (100 + 100/2), target at y=200..400 (height=200)
 		// idealT = (150 - 200) / 200 = -0.25 → clamp to 0.065
 		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 100 }, dimensions: { width: 200, height: 100 } })
-		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'document', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 200 } })
 
 		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 		const result = computeSpreadTValues([edge], [source, target])
@@ -628,16 +753,16 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		expect(spread.targetT).toBe(0.75) // falls back to stored value
 	})
 
-	it('clamps using webUiThemeSettings.aiChatThreadRailEdgeMargin', () => {
-		const original = webUiThemeSettings.aiChatThreadRailEdgeMargin
+	it('clamps using settings.aiChatThread.rail.edgeMargin', () => {
+		const original = settings.aiChatThread.rail.edgeMargin
 
 		// Temporarily set a larger margin
-		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailEdgeMargin = 0.1
+		settings.aiChatThread.rail.edgeMargin = 0.1
 
 		try {
 			// Source far above target → should clamp to 0.1 (not 0.025)
 			const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
-			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 500 }, dimensions: { width: 200, height: 200 } })
+			const target = makeNode({ nodeId: 'tgt', type: 'document', position: { x: 300, y: 500 }, dimensions: { width: 200, height: 200 } })
 			const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 			const result = computeSpreadTValues([edge], [source, target])
 
@@ -652,35 +777,35 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 			const spread2 = result2.get('e-2')!
 			expect(spread2.targetT).toBe(0.9)
 		} finally {
-			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailEdgeMargin = original
+			settings.aiChatThread.rail.edgeMargin = original
 		}
 	})
 
 	it('snaps targetT to 0.5 when target height is below aiChatThreadRailMinSlideHeight', () => {
-		const original = webUiThemeSettings.aiChatThreadRailMinSlideHeight
-		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = 200
+		const original = settings.aiChatThread.rail.minSlideHeight
+		settings.aiChatThread.rail.minSlideHeight = 200
 
 		try {
 			// Target height (100) is below threshold (200) → snap to center
 			const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
-			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+			const target = makeNode({ nodeId: 'tgt', type: 'document', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
 			const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 			const result = computeSpreadTValues([edge], [source, target])
 
 			expect(result.get('e-1')!.targetT).toBe(0.5)
 		} finally {
-			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = original
+			settings.aiChatThread.rail.minSlideHeight = original
 		}
 	})
 
 	it('slides freely when target height meets aiChatThreadRailMinSlideHeight threshold', () => {
-		const original = webUiThemeSettings.aiChatThreadRailMinSlideHeight
-		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = 200
+		const original = settings.aiChatThread.rail.minSlideHeight
+		settings.aiChatThread.rail.minSlideHeight = 200
 
 		try {
 			// Target height (300) exceeds threshold (200) → slide freely
 			const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
-			const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 300 } })
+			const target = makeNode({ nodeId: 'tgt', type: 'document', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 300 } })
 			const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt' })
 			const result = computeSpreadTValues([edge], [source, target])
 
@@ -690,8 +815,18 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 			expect(spread.targetT).toBeGreaterThan(0)
 			expect(spread.targetT).toBeLessThan(1)
 		} finally {
-			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = original
+			settings.aiChatThread.rail.minSlideHeight = original
 		}
+	})
+
+	it('keeps targetT at 0.5 when the target is an image node', () => {
+		const source = makeNode({ nodeId: 'src', type: 'aiChatThread', position: { x: 0, y: 500 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: 'image', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 300 } })
+
+		const edge = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt', targetT: 0.9 })
+		const result = computeSpreadTValues([edge], [source, target])
+
+		expect(result.get('e-1')!.targetT).toBe(0.5)
 	})
 })
 
@@ -729,6 +864,19 @@ describe('computeSpreadTValues — sourceT spreading', () => {
 		// Both within 0.35–0.65 range
 		expect(t1).toBeGreaterThanOrEqual(0.35)
 		expect(t2).toBeLessThanOrEqual(0.65)
+	})
+
+	it('keeps sourceT at 0.5 when the source is an image node', () => {
+		const source = makeNode({ nodeId: 'src', type: 'image', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 600 } })
+		const target1 = makeNode({ nodeId: 'tgt-1', type: 'aiChatThread', position: { x: 300, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target2 = makeNode({ nodeId: 'tgt-2', type: 'aiChatThread', position: { x: 300, y: 200 }, dimensions: { width: 200, height: 100 } })
+
+		const edge1 = makeEdge({ edgeId: 'e-1', sourceNodeId: 'src', targetNodeId: 'tgt-1', sourceT: 0.2 })
+		const edge2 = makeEdge({ edgeId: 'e-2', sourceNodeId: 'src', targetNodeId: 'tgt-2', sourceT: 0.8 })
+		const result = computeSpreadTValues([edge1, edge2], [source, target1, target2])
+
+		expect(result.get('e-1')!.sourceT).toBe(0.5)
+		expect(result.get('e-2')!.sourceT).toBe(0.5)
 	})
 })
 
@@ -833,6 +981,70 @@ describe('WorkspaceConnectionManager — computeMessageSourceT', () => {
 		manager.registerNodeElement('chat-1', nodeEl as HTMLDivElement)
 
 		// render() should succeed — the message element will be found
+		expect(() => manager.render()).not.toThrow()
+	})
+
+	it('keeps image target midpoint when sourceMessageId adjusts source anchor', () => {
+		const onPixiEdgesReady = vi.fn()
+		const messageConfig = { ...createMockConfig(), onPixiEdgesReady }
+		const messageManager = new WorkspaceConnectionManager(messageConfig)
+		const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 300, height: 600 } })
+		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 400, y: 0 }, dimensions: { width: 400, height: 400 } })
+
+		const nodeEl = document.createElement('div')
+		const messageEl = document.createElement('div')
+		messageEl.setAttribute('data-message-id', 'msg-abc')
+		nodeEl.appendChild(messageEl)
+
+		vi.spyOn(nodeEl, 'getBoundingClientRect').mockReturnValue({
+			top: 0, bottom: 600, left: 0, right: 300, width: 300, height: 600, x: 0, y: 0, toJSON: () => ({})
+		})
+		vi.spyOn(messageEl, 'getBoundingClientRect').mockReturnValue({
+			top: 500, bottom: 550, left: 0, right: 300, width: 300, height: 50, x: 0, y: 500, toJSON: () => ({})
+		})
+
+		messageManager.syncNodes([chatNode, imgNode])
+		messageManager.syncEdges([makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'chat-1',
+			targetNodeId: 'img-1',
+			sourceMessageId: 'msg-abc',
+		})])
+		messageManager.registerNodeElement('chat-1', nodeEl as HTMLDivElement)
+		messageManager.render()
+
+		const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ id: string; arrowEnd: { y: number } | null }>
+		const renderedEdge = pixiEdges.find((edge) => edge.id === 'e-1')
+
+		expect(renderedEdge?.arrowEnd?.y).toBeCloseTo(imgNode.position.y + imgNode.dimensions.height / 2, 5)
+	})
+
+	it('ignores message elements whose viewport rect is outside the registered node rect', () => {
+		const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 0, y: 0 }, dimensions: { width: 300, height: 600 } })
+		const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 400, y: 0 }, dimensions: { width: 400, height: 400 } })
+
+		const nodeEl = document.createElement('div')
+		const messageEl = document.createElement('div')
+		messageEl.setAttribute('data-message-id', 'msg-abc')
+		nodeEl.appendChild(messageEl)
+
+		vi.spyOn(nodeEl, 'getBoundingClientRect').mockReturnValue({
+			top: 1000, bottom: 1600, left: 0, right: 300, width: 300, height: 600, x: 0, y: 1000, toJSON: () => ({})
+		})
+		vi.spyOn(messageEl, 'getBoundingClientRect').mockReturnValue({
+			top: 120, bottom: 170, left: 0, right: 300, width: 300, height: 50, x: 0, y: 120, toJSON: () => ({})
+		})
+
+		manager.syncNodes([chatNode, imgNode])
+		manager.syncEdges([makeEdge({
+			edgeId: 'e-1',
+			sourceNodeId: 'chat-1',
+			targetNodeId: 'img-1',
+			sourceMessageId: 'msg-abc',
+		})])
+		manager.registerNodeElement('chat-1', nodeEl as HTMLDivElement)
+
+		expect((manager as any).computeMessageSourceT('chat-1', 'msg-abc')).toBeNull()
 		expect(() => manager.render()).not.toThrow()
 	})
 

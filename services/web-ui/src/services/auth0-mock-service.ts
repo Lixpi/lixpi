@@ -1,6 +1,7 @@
 'use strict'
 
 import { authStore } from '$src/stores/authStore.ts'
+import { applyStyle } from '$src/utils/domTemplates.ts'
 
 const AUTH0_DOMAIN = import.meta.env.VITE_MOCK_AUTH0_DOMAIN
 const AUTH0_CLIENT_ID = 'mock-client-id'
@@ -112,7 +113,7 @@ class Auth0MockService {
     private refreshTokenViaIframe(): Promise<string> {
         return new Promise((resolve, reject) => {
             const iframe = document.createElement('iframe')
-            iframe.style.display = 'none'
+            applyStyle(iframe, { display: 'none' })
 
             const callbackPath = new URL(AUTH0_REDIRECT_URI).pathname
             let loadCount = 0

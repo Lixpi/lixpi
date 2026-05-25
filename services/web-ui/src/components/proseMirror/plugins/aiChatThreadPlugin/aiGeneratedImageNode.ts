@@ -1,7 +1,8 @@
-import { gptAvatarIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { brokenImageIcon } from '$src/svgIcons/index.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
+import type { ImageBranchVlmResolution } from '@lixpi/constants'
 
 export const aiGeneratedImageNodeType = 'aiGeneratedImage'
 
@@ -88,6 +89,18 @@ export type AiGeneratedImageCallbacks = {
         aiModel: string
         imageModelProvider: string
         responseMessageId: string
+    }) => void
+    onImageBranchResolvedToCanvas?: (data: {
+        threadId: string
+        resolution: ImageBranchVlmResolution
+    }) => void
+    onImageBranchResolutionErrorToCanvas?: (data: {
+        threadId: string
+        error: string
+    }) => void
+    onImageErrorToCanvas?: (data: {
+        threadId: string
+        error: string
     }) => void
 }
 
@@ -184,7 +197,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     }
 
     imageElement.onerror = () => {
-        imageElement.style.display = 'none'
+        applyStyle(imageElement, { display: 'none' })
         if (!container.querySelector('.image-error-placeholder')) {
             container.appendChild(html`
                 <div className="image-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Image unavailable</span></div>

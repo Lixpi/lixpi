@@ -90,6 +90,6 @@ export const createEl = templateBuilder.getCreateElementFunction()
 //
 // Example:
 //   applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` })
-export function applyStyle(element: HTMLElement, styles: StyleObject): void {
+export function applyStyle(element: HTMLElement | SVGElement, styles: StyleObject): void {
     Object.assign(element.style, styles)
 }

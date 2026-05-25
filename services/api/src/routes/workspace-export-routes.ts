@@ -1,7 +1,7 @@
 'use strict'
 
 import { Router } from 'express'
-import archiver from 'archiver'
+import { ZipArchive } from 'archiver'
 import AdmZip from 'adm-zip'
 import multer from 'multer'
 
@@ -145,7 +145,7 @@ router.get(
             res.setHeader('Content-Type', 'application/zip')
             res.setHeader('Content-Disposition', `attachment; filename="${safeName}-export.zip"`)
 
-            const archive = archiver('zip', { zlib: { level: 5 } })
+            const archive = new ZipArchive({ zlib: { level: 5 } })
 
             archive.on('error', (archiveErr: Error) => {
                 err('Archive error during workspace export:', archiveErr)

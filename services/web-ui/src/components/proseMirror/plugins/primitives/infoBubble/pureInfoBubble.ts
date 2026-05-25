@@ -40,6 +40,8 @@ export function createInfoBubble(config: InfoBubbleConfig) {
     } = config
 
     let isVisible = visible
+    const STATIC_POSITION_GAP = 15
+    const VIEWPORT_MARGIN = 8
 
     // Create the info bubble DOM structure
     const dom = html`
@@ -103,6 +105,37 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         return { crossOffset, outerSize }
     }
 
+    const applyStaticPosition = () => {
+        if (!disableAutoPositioning) return
+
+        const anchorRect = posAnchorEl.getBoundingClientRect()
+
+        const wasVisible = bubbleWrapper.classList.contains('visible')
+        if (!wasVisible) {
+            bubbleWrapper.classList.add('visible')
+            applyStyle(bubbleWrapper, { visibility: 'hidden' })
+        }
+
+        const bubbleRect = bubbleWrapper.getBoundingClientRect()
+        const bubbleHeight = bubbleRect.height || 200
+
+        if (!wasVisible) {
+            bubbleWrapper.classList.remove('visible')
+            applyStyle(bubbleWrapper, { visibility: '' })
+        }
+
+        const spaceBelow = window.innerHeight - anchorRect.bottom - VIEWPORT_MARGIN
+        const spaceAbove = anchorRect.top - VIEWPORT_MARGIN
+        const placement = spaceBelow < bubbleHeight + STATIC_POSITION_GAP && spaceAbove > spaceBelow
+            ? 'top'
+            : 'bottom'
+        const availableSpace = placement === 'top' ? spaceAbove : spaceBelow
+        const maxHeight = Math.max(0, availableSpace - STATIC_POSITION_GAP)
+
+        dom.setAttribute('data-static-placement', placement)
+        dom.style.setProperty('--static-bubble-max-height', `${Math.floor(maxHeight)}px`)
+    }
+
     // Compute and apply viewport-relative position using the anchor rect
     const applyPosition = () => {
         if (!bubbleWrapper) return
@@ -114,7 +147,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         const wasVisible = bubbleWrapper.classList.contains('visible')
         if (!wasVisible) {
             bubbleWrapper.classList.add('visible')
-            bubbleWrapper.style.visibility = 'hidden'
+            applyStyle(bubbleWrapper, { visibility: 'hidden' })
         }
 
         const bubbleRect = bubbleWrapper.getBoundingClientRect()
@@ -183,7 +216,7 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         // Restore visibility state
         if (!wasVisible) {
             bubbleWrapper.classList.remove('visible')
-            bubbleWrapper.style.visibility = ''
+            applyStyle(bubbleWrapper, { visibility: '' })
         }
     }
 
@@ -205,6 +238,9 @@ export function createInfoBubble(config: InfoBubbleConfig) {
         if (isVisible) return
 
         isVisible = true
+
+        applyStaticPosition()
+
         if (bubbleWrapper) {
             bubbleWrapper.classList.add('visible')
         }
@@ -253,7 +289,13 @@ export function createInfoBubble(config: InfoBubbleConfig) {
 
     // Reposition on viewport changes
     const handleViewportChange = () => {
-        if (isVisible) applyPosition()
+        if (isVisible) {
+            if (disableAutoPositioning) {
+                applyStaticPosition()
+            } else {
+                applyPosition()
+            }
+        }
     }
 
     // Attach anchor click handler
@@ -269,7 +311,12 @@ export function createInfoBubble(config: InfoBubbleConfig) {
 
     // Watch for content changes and reposition
     const contentObserver = new MutationObserver(() => {
-        if (isVisible) applyPosition()
+        if (!isVisible) return
+        if (disableAutoPositioning) {
+            applyStaticPosition()
+        } else {
+            applyPosition()
+        }
     })
 
     contentObserver.observe(bubbleWrapper, {

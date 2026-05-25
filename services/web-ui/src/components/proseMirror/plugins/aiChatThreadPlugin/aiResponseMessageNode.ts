@@ -1,17 +1,7 @@
 // @ts-nocheck
 // Import SVG icons for various UI elements
-import {
-    gptAvatarIcon,
-    microphoneIcon,
-    trashBinIcon,
-    checkMarkIcon,
-    claudeIcon,
-    claudeAnimatedFrameIcon,
-    geminiIcon,
-    stabilityIcon,
-} from '$src/svgIcons/index.ts'
-import { html } from '$src/utils/domTemplates.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { claudeAnimatedFrameIcon, claudeIcon } from '$src/svgIcons/index.ts'
+import { createAiResponseMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 
 // Define the unique type name for this custom node
 export const aiResponseMessageNodeType = 'aiResponseMessage'
@@ -65,29 +55,18 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     let animationInterval
     const totalFrames = 8    // Total frames in Claude's animation
 
-    // Create the main wrapper structure using htm
-    const parentWrapper = html`
-        <div className="ai-response-message-wrapper">
-            <div className="ai-response-message">
-                <div className="ai-response-message-bubble">
-                    <div className="ai-response-message-spinner" aria-hidden="true"></div>
-                    <div className="ai-response-message-content"></div>
-                </div>
-            </div>
-            <div className="ai-response-message-meta">
-                <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
-            </div>
-        </div>
-    `
+    const responseShell = createAiResponseMessageShell({
+        provider: node.attrs.aiProvider,
+        messageId: node.attrs.id,
+    })
 
     // Get references to the nested elements for manipulation
-    const aiResponseMessageContainer = parentWrapper.querySelector('.ai-response-message')
-    parentWrapper.setAttribute('data-message-id', node.attrs.id)
-    const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
-    const spinnerElement = parentWrapper.querySelector('.ai-response-message-spinner')
-    const bubbleElement = parentWrapper.querySelector('.ai-response-message-bubble')
-    bubbleElement.style.setProperty('--ai-response-bubble-color', webUiThemeSettings.aiResponseMessageBubbleColor)
-    const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
+    const parentWrapper = responseShell.wrapper
+    const aiResponseMessageContainer = responseShell.messageEl
+    const userAvatarContainer = responseShell.avatarEl
+    const spinnerElement = responseShell.spinnerEl
+    const bubbleElement = responseShell.bubbleEl
+    const responseMessageContent = responseShell.contentEl
 
     // // Create an accept button
     // const acceptButton = document.createElement('button')
@@ -100,24 +79,6 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     // deleteButton.className = 'delete-button'
     // deleteButton.innerHTML = trashBinIcon
     // aiResponseMessageContainer.appendChild(deleteButton)
-
-    // Set the appropriate avatar based on the AI provider
-    switch (node.attrs.aiProvider) {
-        case 'Anthropic':
-            userAvatarContainer.innerHTML = claudeIcon
-            break
-        case 'OpenAI':
-            userAvatarContainer.innerHTML = gptAvatarIcon
-            break
-        case 'Google':
-            userAvatarContainer.innerHTML = geminiIcon
-            break
-        case 'Stability':
-            userAvatarContainer.innerHTML = stabilityIcon
-            break
-        default:
-            break
-    }
 
     // Function to update the animation state
     const updateAnimation = () => {
@@ -147,6 +108,8 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
                 animationInterval = null
                 userAvatarContainer.innerHTML = claudeIcon    // Reset to the static avatar
             }
+        } else {
+            responseShell.setProvider(node.attrs.aiProvider)
         }
 
         // Toggle classes for animations
@@ -173,10 +136,9 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         dom: parentWrapper, // The outer DOM node of the node view
         contentDOM: responseMessageContent, // The DOM node that holds the node's content
         ignoreMutation: (mutation) => {
-            // Ignore style attribute changes on the wrapper (e.g. marginBottom set
-            // by applyAnchoredImageSpacing in WorkspaceCanvas). Without this,
-            // ProseMirror's internal MutationObserver would detect the style change
-            // and trigger a DOM reconciliation that wipes the externally-set margin.
+            // Ignore style attribute changes on the wrapper. Without this,
+            // ProseMirror's internal MutationObserver can detect a canvas-driven
+            // style change and reconcile away the externally-set margin.
             if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                 return true
             }
@@ -189,7 +151,8 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             }
 
             node = updatedNode    // Update the node reference and refresh the animation
-            parentWrapper.setAttribute('data-message-id', node.attrs.id)
+            responseShell.setMessageId(node.attrs.id)
+            responseShell.setProvider(node.attrs.aiProvider)
             updateAnimation()    // Update the animation state
             updateSpinnerState()
 

@@ -97,6 +97,30 @@ describe('getEdgeScaledSizes', () => {
 
 Always prefer testing pure, exported functions. If a class has complex logic buried in a method that uses only `this.nodes` and `this.edges` (no DOM), you can still construct the class with minimal mock DOM elements to get at the logic.
 
+## Source-Shape Tests
+
+Some regression tests inspect source text directly when a behavior depends on code structure that is hard to exercise through a small unit test. Keep these assertions terse on failure.
+
+Avoid direct `.toContain(...)` or `.not.toContain(...)` assertions on whole files or large extracted function/block strings. Vitest prints the entire received source when these fail, which makes failures noisy and hard to read. Use an `includes` assertion with a custom message instead:
+
+```typescript
+function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
+    expect(
+        source.includes(snippet),
+        `${label} should contain:\n${snippet}`
+    ).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string, label = 'source excerpt'): void {
+    expect(
+        source.includes(snippet),
+        `${label} should not contain:\n${snippet}`
+    ).toBe(false)
+}
+```
+
+Use these helpers for extracted handlers, function bodies, SCSS blocks, and full-file source strings. This keeps failures focused on the missing or unexpected snippet instead of dumping the entire source excerpt.
+
 ## Testing Classes with DOM Dependencies
 
 Some classes like `WorkspaceConnectionManager` need DOM elements in their constructor but their interesting methods don't actually touch the DOM. Create minimal mock configs:
