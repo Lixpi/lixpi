@@ -55,7 +55,12 @@ export default {
                 origin: 'ExtractionRun.appendTrace:read',
             })
             const trace: StageTraceEvent[] = Array.isArray((existing as any)?.trace) ? (existing as any).trace : []
-            trace.push(event)
+            // DynamoDB's marshaller rejects undefined values, and StageTraceEvent has many
+            // optional fields. Drop undefined keys so the trace list persists cleanly.
+            const cleanEvent = Object.fromEntries(
+                Object.entries(event).filter(([, value]) => value !== undefined),
+            ) as StageTraceEvent
+            trace.push(cleanEvent)
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
                 key: { extractionRunId, workspaceId },

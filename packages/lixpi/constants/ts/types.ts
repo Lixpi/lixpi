@@ -440,7 +440,10 @@ export type StageTraceEvent = {
     startedAt: number
     finishedAt: number
     durationMs: number
-    status: 'ok' | 'error' | 'skipped'
+    // 'running' is a publish-only, in-flight marker streamed when a stage starts so
+    // the UI can show a live spinner. Only the terminal event ('ok' | 'error' | 'skipped')
+    // is persisted to ExtractionRun.trace.
+    status: 'running' | 'ok' | 'error' | 'skipped'
     errorMessage?: string
     inputSummary?: string
     outputSummary?: string
@@ -645,6 +648,9 @@ export type CanvasFeatureExtractionState = {
     aiProvider?: string
     stepDetails?: Record<string, string>
     reasoningText?: string
+    // Streamed model output (thinking/reasoning) keyed by the stage that produced it,
+    // so the extraction tab can show live output under each in-progress substep.
+    stageReasoning?: Record<string, string>
     featureCard?: Record<string, any>
     traceEvents?: StageTraceEvent[]
     error?: string

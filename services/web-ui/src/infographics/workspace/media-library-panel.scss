@@ -571,7 +571,6 @@
     color: rgba(26, 39, 68, 0.68);
     font-size: 11px;
     line-height: 1.48;
-    white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 
@@ -793,243 +792,278 @@
     padding: 12px 2px 6px;
 }
 
-.extraction-timeline {
+// ----- Phase timeline (4 phases, each with backend-stage substeps) -----
+// The vertical connector is a per-phase ::before line; consecutive phase <li>s are
+// flush, so the segments read as one continuous progress rail. Completed phases
+// colour their segment, the active phase dot spins, substeps branch to the right.
+@keyframes extraction-spin {
+    to { transform: rotate(360deg); }
+}
+
+.extraction-phase-timeline {
     position: relative;
-    display: grid;
-    gap: 0;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.extraction-timeline-item {
+.extraction-phase {
     position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 76px;
-    padding: 0 0 16px 54px;
-    color: rgba(26, 39, 68, 0.46);
+    padding: 0 0 16px 30px;
 }
 
-.extraction-timeline-item-active {
-    color: #1a2744;
-}
-
-.extraction-timeline-item-done {
-    color: #1a2744;
-}
-
-.extraction-timeline-guide {
+.extraction-phase::before {
+    content: '';
     position: absolute;
+    left: 9px;
     top: 0;
-    left: 0;
-    width: 40px;
-    height: auto;
-    overflow: visible;
-    pointer-events: none;
+    bottom: 0;
+    width: 2px;
+    background: rgba(26, 39, 68, 0.12);
 }
 
-.extraction-timeline-path {
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 2;
-    vector-effect: non-scaling-stroke;
+.extraction-phase:first-child::before {
+    top: 10px;
 }
 
-.extraction-timeline-path-muted {
-    stroke: rgba(26, 39, 68, 0.12);
+.extraction-phase:last-child::before {
+    bottom: auto;
+    height: 10px;
 }
 
-.extraction-timeline-path-active {
-    stroke: #7357b8;
-    stroke-width: 2.1;
-    vector-effect: non-scaling-stroke;
+.extraction-phase-done::before {
+    background: rgba(115, 87, 184, 0.5);
 }
 
-.extraction-timeline-dot {
-    fill: #fff;
-    stroke: rgba(26, 39, 68, 0.42);
-    stroke-width: 2.2;
-    vector-effect: non-scaling-stroke;
+.extraction-phase-dot {
+    position: absolute;
+    left: 1px;
+    top: 1px;
+    width: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(26, 39, 68, 0.3);
+    border-radius: 50%;
+    background: #fff;
 }
 
-.extraction-timeline-dot-done {
-    fill: #7357b8;
-    stroke: #7357b8;
+.extraction-phase-done .extraction-phase-dot {
+    border-color: #7357b8;
+    background: #7357b8;
 }
 
-.extraction-timeline-dot-active {
-    fill: #fff;
-    stroke: #7357b8;
-    stroke-width: 3;
-}
-
-.extraction-timeline-dot-core {
-    fill: #7357b8;
-}
-
-.extraction-timeline-content {
-    display: grid;
-    gap: 5px;
-    min-width: 0;
-}
-
-.extraction-timeline-label {
-    font-size: 15px;
-    font-weight: 500;
-    line-height: 1.25;
-    color: currentColor;
-}
-
-.extraction-timeline-detail {
-    font-size: 12px;
-    line-height: 1.4;
-    color: rgba(26, 39, 68, 0.48);
-}
-
-.extraction-timeline-item-active .extraction-timeline-detail,
-.extraction-timeline-item-done .extraction-timeline-detail {
-    color: rgba(26, 39, 68, 0.58);
-}
-
-.extraction-timeline-details-toggle {
-    justify-self: start;
-    margin-top: 2px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: rgba(26, 39, 68, 0.52);
-    cursor: pointer;
+.extraction-phase-done .extraction-phase-dot::after {
+    content: '✓';
+    color: #fff;
     font-size: 11px;
-    font-weight: 600;
-
-    &:hover:not(:disabled) {
-        color: #1a2744;
-    }
-
-    &:disabled {
-        cursor: default;
-        opacity: 0.42;
-    }
+    font-weight: 700;
+    line-height: 1;
 }
 
-.extraction-timeline-live-details {
-    max-width: 100%;
-    margin-top: 2px;
-    padding: 8px 10px;
-    border-left: 2px solid rgba(115, 87, 184, 0.34);
-    border-radius: 0 6px 6px 0;
-    background: rgba(115, 87, 184, 0.06);
-    color: rgba(26, 39, 68, 0.72);
-    font-size: 11px;
-    line-height: 1.45;
-    white-space: pre-wrap;
+.extraction-phase-error .extraction-phase-dot {
+    border-color: #b84d4d;
+    background: #b84d4d;
 }
 
-.extraction-stage-timeline {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 6px;
-}
-
-.extraction-stage-timeline-empty {
-    margin: 12px 4px;
-    color: rgba(26, 39, 68, 0.5);
-    font-size: 12px;
-}
-
-.extraction-stage-timeline-row {
-    padding: 8px 10px;
-    border-radius: 6px;
-    border-left: 3px solid rgba(115, 87, 184, 0.34);
-    background: rgba(115, 87, 184, 0.05);
-    font-size: 12px;
-    line-height: 1.45;
-}
-
-.extraction-stage-timeline-row-ok {
-    border-left-color: rgba(63, 135, 109, 0.55);
-    background: rgba(63, 135, 109, 0.05);
-}
-
-.extraction-stage-timeline-row-error {
-    border-left-color: rgba(220, 80, 80, 0.55);
-    background: rgba(220, 80, 80, 0.05);
-}
-
-.extraction-stage-timeline-row-skipped {
-    opacity: 0.6;
-    border-left-color: rgba(26, 39, 68, 0.16);
-    background: rgba(26, 39, 68, 0.03);
-}
-
-.extraction-stage-timeline-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    gap: 8px;
-    align-items: baseline;
-}
-
-.extraction-stage-timeline-stage {
-    font-weight: 600;
-    color: #1a2744;
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.extraction-stage-timeline-model {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    color: rgba(26, 39, 68, 0.66);
-}
-
-.extraction-stage-timeline-duration {
-    font-variant-numeric: tabular-nums;
-    font-size: 11px;
-    color: rgba(26, 39, 68, 0.66);
-}
-
-.extraction-stage-timeline-status {
+.extraction-phase-error .extraction-phase-dot::after {
+    content: '✕';
+    color: #fff;
     font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 10px;
-    text-transform: uppercase;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.extraction-phase-active .extraction-phase-dot {
+    border-color: rgba(115, 87, 184, 0.25);
+    border-top-color: #7357b8;
+}
+
+.extraction-phase-timeline-live .extraction-phase-active .extraction-phase-dot {
+    animation: extraction-spin 0.8s linear infinite;
+}
+
+.extraction-phase-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.extraction-phase-label {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: rgba(26, 39, 68, 0.5);
+}
+
+.extraction-phase-active .extraction-phase-label,
+.extraction-phase-done .extraction-phase-label {
+    color: #1a2744;
+}
+
+.extraction-phase-error .extraction-phase-label {
+    color: #b84d4d;
+}
+
+.extraction-phase-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: rgba(115, 87, 184, 0.14);
+    color: #7357b8;
+    font-size: 11px;
     font-weight: 700;
 }
 
-.extraction-stage-timeline-status-ok {
-    background: rgba(63, 135, 109, 0.16);
-    color: #3f876d;
-}
-
-.extraction-stage-timeline-status-error {
-    background: rgba(220, 80, 80, 0.16);
-    color: #b84d4d;
-}
-
-.extraction-stage-timeline-status-skipped {
-    background: rgba(26, 39, 68, 0.08);
-    color: rgba(26, 39, 68, 0.58);
-}
-
-.extraction-stage-timeline-summary {
-    margin-top: 4px;
-    color: rgba(26, 39, 68, 0.72);
-}
-
-.extraction-stage-timeline-error {
-    margin-top: 4px;
-    color: #b84d4d;
+.extraction-phase-duration {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
     font-size: 11px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    white-space: pre-wrap;
+    color: rgba(26, 39, 68, 0.55);
 }
 
-.extraction-stage-timeline-details {
-    margin-top: 4px;
+.extraction-phase-meta {
+    margin: 3px 0 0;
+    font-size: 11px;
+    color: rgba(26, 39, 68, 0.5);
+    overflow-wrap: anywhere;
+}
+
+.extraction-phase-waiting {
+    margin: 4px 0 0;
+    font-size: 11px;
+    font-style: italic;
+    color: rgba(26, 39, 68, 0.45);
+}
+
+.extraction-phase-substeps {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+}
+
+.extraction-substep {
+    padding: 5px 9px;
+    border-radius: 6px;
+    background: rgba(115, 87, 184, 0.04);
+}
+
+.extraction-substep-ok {
+    background: rgba(63, 135, 109, 0.05);
+}
+
+.extraction-substep-error {
+    background: rgba(220, 80, 80, 0.06);
+}
+
+.extraction-substep-skipped {
+    opacity: 0.7;
+    background: rgba(26, 39, 68, 0.03);
+}
+
+.extraction-substep-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.extraction-substep-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    font-weight: 500;
+    color: #1a2744;
+}
+
+.extraction-substep-aside {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.extraction-substep-model {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    color: rgba(26, 39, 68, 0.6);
+}
+
+.extraction-substep-duration {
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    color: rgba(26, 39, 68, 0.6);
+}
+
+.extraction-substep-status {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.extraction-substep-ok .extraction-substep-status::after {
+    content: '✓';
+    color: #3f876d;
+    font-weight: 700;
+}
+
+.extraction-substep-error .extraction-substep-status::after {
+    content: '✕';
+    color: #b84d4d;
+    font-weight: 700;
+}
+
+.extraction-substep-skipped .extraction-substep-status::after {
+    content: '–';
+    color: rgba(26, 39, 68, 0.5);
+}
+
+.extraction-substep-running .extraction-substep-status {
+    border: 2px solid rgba(115, 87, 184, 0.25);
+    border-top-color: #7357b8;
+    border-radius: 50%;
+}
+
+.extraction-phase-timeline-live .extraction-substep-running .extraction-substep-status {
+    animation: extraction-spin 0.7s linear infinite;
+}
+
+.extraction-substep-summary {
+    margin: 3px 0 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: rgba(26, 39, 68, 0.7);
+    overflow-wrap: anywhere;
+}
+
+.extraction-substep-error-text {
+    margin: 3px 0 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #b84d4d;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.extraction-substep-details {
+    margin: 3px 0 0;
     font-size: 11px;
     color: rgba(26, 39, 68, 0.58);
 
@@ -1039,17 +1073,46 @@
     }
 }
 
-.extraction-stage-timeline-preview {
-    margin: 4px 0 0;
+.extraction-substep-preview {
+    margin: 3px 0 0;
     padding: 6px 8px;
     background: rgba(26, 39, 68, 0.04);
     border-radius: 4px;
-    max-height: 220px;
+    max-height: 240px;
     overflow-y: auto;
-    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     font-size: 11px;
-    line-height: 1.4;
+    line-height: 1.5;
+    color: rgba(26, 39, 68, 0.78);
 }
+
+.extraction-substep-output-details {
+    margin: 4px 0 0;
+    font-size: 11px;
+
+    summary {
+        cursor: pointer;
+        user-select: none;
+        color: rgba(26, 39, 68, 0.58);
+    }
+}
+
+.extraction-substep-output {
+    margin: 4px 0 0;
+    padding: 6px 9px;
+    max-height: 260px;
+    overflow-y: auto;
+    border-left: 2px solid rgba(115, 87, 184, 0.34);
+    border-radius: 0 4px 4px 0;
+    background: rgba(115, 87, 184, 0.06);
+    color: rgba(26, 39, 68, 0.82);
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+// Markdown element styles (.lixpi-markdown / .lixpi-md-*) are global — see
+// src/sass/_markdown.scss and documentation/coding-style-guides/MARKDOWN-RENDERING.md.
 
 .extraction-tab-reasoning-toggle {
     margin: 6px 0 0;

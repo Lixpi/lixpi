@@ -1,6 +1,7 @@
 'use strict'
 
 import { html } from '$src/utils/domTemplates.ts'
+import { renderMarkdownStatic } from '$src/utils/markdownStreamRenderer.ts'
 import {
     NATS_SUBJECTS,
     MEDIA_LIBRARY_BROWSE_ALL,
@@ -420,10 +421,12 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
 
     function buildInstructionsPreview(feature: Feature): HTMLElement | null {
         if (!feature.instructions?.trim()) return null
-        return html`<div className="feature-library-instructions">
+        // Render instructions through the unified markdown renderer, not as raw text.
+        const wrapEl = html`<div className="feature-library-instructions">
             <div className="feature-library-instructions-title">Application notes</div>
-            <div className="feature-library-instructions-body">${feature.instructions}</div>
         </div>` as HTMLElement
+        wrapEl.appendChild(renderMarkdownStatic(feature.instructions, `feature:${feature.featureId}`, 'feature-library-instructions-body lixpi-markdown'))
+        return wrapEl
     }
 
     function buildSampleGallery(feature: FeatureMeta, details: FeatureDetailsState | undefined): HTMLElement {

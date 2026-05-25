@@ -54,6 +54,8 @@ export type StageLogger = {
     // extraction-tab UI as streaming reasoning text. Use only from sequential
     // stages (router, synthesis); parallel stages would interleave.
     chunk: (text: string) => void
+    // Publishes the finished feature as structured content for the extraction tab.
+    featureCard: (payload: Record<string, any>) => void
     span: <T>(stage: string, modelName: string | undefined, body: () => Promise<T>, opts?: {
         inputSummary?: string
         outputSummarizer?: (result: T) => string | undefined
