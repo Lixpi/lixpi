@@ -4,13 +4,14 @@ This document defines how Lixpi exposes project guidance to coding agents withou
 
 ## Design
 
-Authoritative guidance lives under `documentation/`. A harness skill is a short discovery alias: its frontmatter states when the guidance applies, and its body points to a specific authoritative documentation file.
+Authoritative guidance lives under `documentation/`. A harness skill is a short discovery alias: its frontmatter states when the guidance applies, and its body points to a specific authoritative documentation file. A prohibition that must be known before tool selection may be named in the skill description so discovery cannot hide it.
 
-The project maintains matching aliases in these native harness locations:
+The project maintains matching aliases in these native harness locations as needed:
 
 - `.github/skills/<name>/SKILL.md` for GitHub Copilot.
 - `.claude/skills/<name>/SKILL.md` for Claude Code.
 - `.cursor/skills/<name>/SKILL.md` for Cursor.
+- `.agents/skills/<name>/SKILL.md` for Codex.
 
 Some harnesses also recognize compatibility directories. Matching aliases intentionally have identical names, descriptions, and pointer bodies, so discovery order is not behaviorally significant when a tool scans more than one location.
 
@@ -30,6 +31,8 @@ For guidance that should be available in GitHub Copilot, Claude Code, and Cursor
 3. Use identical YAML `name` and `description` values in all three aliases. The description must say both what the skill covers and the task signals that should load it.
 4. Keep each `SKILL.md` body to a direct instruction to read and follow the documentation source of truth.
 5. Do not add the skill to a manually maintained "available skills" table. The harness discovers new skill directories and uses their descriptions.
+
+When the guidance must also be discovered by Codex, add the same alias under `.agents/skills/`. State repository-wide non-negotiable tool restrictions in `AGENTS.md` as well as the authoritative documentation.
 
 For harness-specific behavior, keep the alias and its source of truth in the location appropriate to that harness unless the guidance is deliberately promoted to shared project documentation.
 
