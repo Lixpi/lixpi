@@ -740,11 +740,14 @@
 .media-library-header-close {
     width: 32px;
     height: 32px;
+    // Top-align so the icon sits in the corner, mirroring the title's top-left inset,
+    // instead of being vertically centered across the full (taller) header.
+    align-self: start;
+    border: 0;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.48);
+    background: transparent;
 
     &:hover {
-        border-color: rgba(255, 77, 106, 0.38);
         background: rgba(255, 77, 106, 0.08);
 
         .media-library-header-close-icon svg {
@@ -1764,119 +1767,43 @@
     background: rgba(255, 255, 255, 0.72);
 }
 
-// ********** Feature picker dropdown **********
-.feature-picker-dropdown {
-    min-width: 300px;
-    max-width: min(420px, calc(100vw - 24px));
-    overflow: hidden;
-    border: 1px solid rgba(120, 132, 150, 0.18);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.95);
-    color: #1a2744;
-    box-shadow: 0 10px 28px rgba(21, 32, 48, 0.16);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-}
-
-.feature-picker-dropdown-search {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 9px 12px;
-    border: 0;
-    border-bottom: 1px solid rgba(26, 39, 68, 0.08);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: 13px;
-    outline: none;
-
-    &::placeholder {
-        color: rgba(26, 39, 68, 0.42);
-    }
-}
-
-.feature-picker-dropdown-list {
-    max-height: 220px;
-    overflow-y: auto;
-}
-
-.feature-picker-dropdown-empty {
-    padding: 12px;
-    text-align: center;
-    font-size: 12px;
-    color: rgba(26, 39, 68, 0.5);
-}
-
-.feature-picker-dropdown-row {
-    display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr);
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
-    font-size: 13px;
-}
-
-.feature-picker-dropdown-row:hover,
-.feature-picker-dropdown-row-selected {
-    background: rgba(85, 150, 124, 0.12);
-}
-
-.feature-picker-dropdown-category {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: rgba(26, 39, 68, 0.07);
-    color: rgba(26, 39, 68, 0.72);
-    font-size: 10px;
-}
-
-.feature-picker-dropdown-name {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    font-weight: 700;
-}
-
-.feature-picker-dropdown-summary {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    color: rgba(26, 39, 68, 0.55);
-    font-size: 11px;
-}
-
 // ********** Feature reference chip **********
+// Compact filled pill that sits inline in the AI chat prompt. Renders as
+// `feature:<name>` with the prefix dimmed and the feature name emphasized.
 .feature-reference-chip {
     display: inline-flex;
-    align-items: center;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.85em;
-    font-weight: 500;
+    align-items: baseline;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.78em;
+    line-height: 1.45;
     cursor: default;
     user-select: none;
     white-space: nowrap;
-    background: rgba(85, 150, 124, 0.25);
-    border: 1px solid rgba(85, 150, 124, 0.5);
-    color: #55967c;
-    margin: 0 2px;
-    vertical-align: middle;
+    background: #6c5fc7;
+    color: #ffffff;
+    margin: 0 1px;
+    vertical-align: baseline;
+}
+
+.feature-reference-chip-prefix {
+    margin-right: 3px;
+    font-weight: 500;
+    opacity: 0.6;
+}
+
+.feature-reference-chip-name {
+    font-weight: 600;
 }
 
 .feature-reference-chip-painting-style {
-    background: rgba(180, 120, 80, 0.2);
-    border-color: rgba(180, 120, 80, 0.5);
-    color: #b47850;
+    background: #b47850;
 }
 
 .feature-reference-chip-color-palette {
-    background: rgba(80, 120, 180, 0.2);
-    border-color: rgba(80, 120, 180, 0.5);
-    color: #5078b4;
+    background: #5078b4;
 }
 
 .feature-reference-chip-mood {
-    background: rgba(120, 80, 180, 0.2);
-    border-color: rgba(120, 80, 180, 0.5);
-    color: #7850b4;
+    background: #7850b4;
 }

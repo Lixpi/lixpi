@@ -1110,7 +1110,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-edge-gap: 15px')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-backdrop')
 		expectSourceToContain(scss, 'z-index: 90')
-		expectSourceToContain(scss, 'width: calc(var(--workspace-ai-chat-sidebar-width) + 116px)')
+		expectSourceToContain(scss, 'width: calc(var(--workspace-ai-chat-sidebar-width) + 116px + var(--workspace-ai-chat-sidebar-edge-gap))')
 		expectSourceToContain(scss, 'backdrop-filter: blur(28px) saturate(145%)')
 		expectSourceToContain(scss, 'mask-image: linear-gradient')
 		expectSourceToContain(scss, '@media (prefers-reduced-transparency: reduce)')

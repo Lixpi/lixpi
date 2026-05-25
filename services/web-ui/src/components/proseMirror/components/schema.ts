@@ -181,7 +181,10 @@ export const nodes = {
         'data-feature-name': node.attrs.featureName,
         'data-feature-category': node.attrs.category,
         class: `feature-reference-chip feature-reference-chip-${node.attrs.category || 'default'}`,
-      }, `@${node.attrs.featureName}`]
+      },
+        ['span', { class: 'feature-reference-chip-prefix' }, 'feature:'],
+        ['span', { class: 'feature-reference-chip-name' }, node.attrs.featureName],
+      ]
     },
   } as NodeSpec
 }
