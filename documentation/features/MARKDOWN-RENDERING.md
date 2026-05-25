@@ -70,6 +70,10 @@ Both consume the same parser and the same segment shape. If a new surface needs 
 
 Instance lifecycle: `MarkdownStreamParser.getInstance(id)` → `subscribeToTokenParse(cb)` → `startParsing()` → `parseToken(chunk)` per chunk → `stopParsing()` (flushes the last block and emits `END_STREAM`) → `removeInstance(id)`.
 
+The segment/token TypeScript shapes (`MarkdownParsedSegment`, `MarkdownStreamToken`) currently live in [`@lixpi/constants`](../../packages/lixpi/constants/ts/types.ts) because the published parser version defines its segment internally but does not export it (`subscribeToTokenParse` is typed `any`).
+
+> **Note:** a newer version of `@lixpi/markdown-stream-parser` is in development that **exports proper segment types**. Once it is released, drop the `@lixpi/constants` copies and import the types directly from the package.
+
 ## Non-editable rendering: `MarkdownStreamRenderer`
 
 [`src/utils/markdownStreamRenderer.ts`](../../services/web-ui/src/utils/markdownStreamRenderer.ts) is the **only** approved way to render markdown outside ProseMirror. It owns its `contentEl`, drives the parser, and applies styles to each segment as plain DOM (built with the `html` helper from `domTemplates.ts`).

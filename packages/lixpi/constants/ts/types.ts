@@ -455,6 +455,11 @@ export type StageTraceEvent = {
 // emits from subscribeToTokenParse — the package defines the segment internally but does
 // not export it (the callback is typed `any`), so the shape is centralized here and shared
 // by every consumer (the ProseMirror aiChatThreadPlugin and the unified MarkdownStreamRenderer).
+//
+// TODO: a newer version of @lixpi/markdown-stream-parser is in development that EXPORTS proper
+// segment types. Once that version is released, delete these definitions and import the types
+// directly from @lixpi/markdown-stream-parser instead.
+//
 // See documentation/features/MARKDOWN-RENDERING.md.
 export type MarkdownParsedSegment = {
     segment: string
