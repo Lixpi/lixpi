@@ -35,4 +35,12 @@ export class Easing {
     static shiftingGradientTransition(progress: number): number {
         return Easing.cubicBezierAtTime(0.33, 0, 0, 1, progress)
     }
+
+    // A repeating outline needs character without pausing at the lap boundary.
+    // This varies speed smoothly between 60% and 140% of linear motion.
+    static travelingOutlineTransition(progress: number): number {
+        const bounded = Easing.clampProgress(progress)
+        const paceVariation = 0.4
+        return bounded - paceVariation * Math.sin(2 * Math.PI * bounded) / (2 * Math.PI)
+    }
 }

@@ -30,6 +30,7 @@ describe('Easing', () => {
     it('keeps shared transition curves within valid monotonic progress bounds', () => {
         expectMonotonic(Easing.hoverTransition)
         expectMonotonic(Easing.shiftingGradientTransition)
+        expectMonotonic(Easing.travelingOutlineTransition)
     })
 
     it('uses the hover transition curve as a fast ease-out', () => {
@@ -42,5 +43,20 @@ describe('Easing', () => {
         expect(Easing.shiftingGradientTransition(0)).toBeCloseTo(0, 5)
         expect(Easing.shiftingGradientTransition(1)).toBeCloseTo(1, 5)
         expect(Easing.shiftingGradientTransition(0.5)).toBeGreaterThan(0.5)
+    })
+
+    it('uses a gentle non-stalling pace pulse for traveling outlines', () => {
+        expect(Easing.travelingOutlineTransition(0)).toBeCloseTo(0, 5)
+        expect(Easing.travelingOutlineTransition(0.25)).toBeLessThan(0.25)
+        expect(Easing.travelingOutlineTransition(0.5)).toBeCloseTo(0.5, 5)
+        expect(Easing.travelingOutlineTransition(0.75)).toBeGreaterThan(0.75)
+        expect(Easing.travelingOutlineTransition(1)).toBeCloseTo(1, 5)
+
+        const increments = Array.from(
+            { length: 100 },
+            (_, index) => Easing.travelingOutlineTransition((index + 1) / 100) - Easing.travelingOutlineTransition(index / 100)
+        )
+        expect(Math.min(...increments)).toBeGreaterThan(0.005)
+        expect(Math.max(...increments)).toBeLessThan(0.015)
     })
 })

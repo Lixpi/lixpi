@@ -63,6 +63,10 @@ function loadPixiMediaLayer(): string {
 	return readSourceFile('pixiMediaLayer.ts')
 }
 
+function loadPixiTravelingOutlineRenderer(): string {
+	return readSourceFile('../../utils/animations/gradients/pixiTravelingOutlineRenderer.ts', 'utils/animations/gradients/pixiTravelingOutlineRenderer.ts')
+}
+
 function loadWorkspaceCanvasSvelte(): string {
 	return readSourceFile('../../components/WorkspaceCanvas.svelte', 'components/WorkspaceCanvas.svelte')
 }
@@ -212,7 +216,6 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expect(contextRegionBlock).toMatch(/background:\s*var\(--workspace-image-context-region-child-image-frame-color\)/)
 		expect(contextRegionBlock).toContain('box-shadow: 0 0 0 8px var(--workspace-image-context-region-child-image-frame-color), var(--workspace-image-context-region-child-image-drop-shadow)')
 		expect(contextRegionBlock).not.toContain('#fff')
-		expect(contextRegionBlock).toContain('.image-node-img')
 
 		const topLevelSection = imageNodeBlock.split('&.workspace-image-node-context-region-child')[0]
 		expect(topLevelSection).not.toContain('workspace-image-node-context-region-child')
@@ -264,6 +267,75 @@ describe('PIXI media layer — first sync geometry', () => {
 		expectSourceToContain(ts, 'options: SelectionOverlayOptions = {}')
 		expectSourceToContain(ts, 'if (options.fill !== false) groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })')
 		expectSourceToContain(ts, 'groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke')
+	})
+})
+
+// =============================================================================
+// Generated image previews — PIXI-backed state and progress rendering
+// =============================================================================
+
+describe('Workspace canvas — generated image preview rendering', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+
+	it('commits progressive preview pixels through canvas state instead of a DOM image', () => {
+		const partialStart = ts.indexOf('onImagePartialToCanvas:')
+		const completeStart = ts.indexOf('onImageCompleteToCanvas:', partialStart)
+		expect(partialStart).toBeGreaterThan(-1)
+		expect(completeStart).toBeGreaterThan(partialStart)
+
+		const partialHandler = ts.slice(partialStart, completeStart)
+		expectExcerptToContain(partialHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
+		expectExcerptToContain(partialHandler, 'commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: updatedNodes })')
+		expectExcerptNotToContain(partialHandler, 'imgEl.src', 'partial image handler')
+	})
+
+	it('renders the generating-image snake border through PIXI until the image leaves partial state', () => {
+		const pixiLayerTs = loadPixiMediaLayer()
+		const outlineRendererTs = loadPixiTravelingOutlineRenderer()
+		const settingsTs = loadSettings()
+		const partialStart = ts.indexOf('onImagePartialToCanvas:')
+		const completeStart = ts.indexOf('onImageCompleteToCanvas:', partialStart)
+		const partialHandler = ts.slice(partialStart, completeStart)
+		const completeEnd = ts.indexOf('onEditInNewThread:', completeStart)
+		const completeHandler = ts.slice(completeStart, completeEnd)
+
+		expectSourceToContain(ts, 'pixiMediaLayer?.setGeneratingImageNodes(')
+		expectSourceToContain(pixiLayerTs, "const generatingBorderLayer = new Container({ label: 'workspace-pixi-generating-borders' })")
+		expectSourceToContain(pixiLayerTs, 'world.addChild(generatingBorderLayer)')
+		expectSourceToContain(outlineRendererTs, 'export class PixiTravelingOutlineRenderer {')
+		expectSourceToContain(pixiLayerTs, 'new PixiTravelingOutlineRenderer({')
+		expectSourceToContain(pixiLayerTs, 'generatingBorderRenderer.sync(datums)')
+		expectSourceToContain(outlineRendererTs, "graphics.label = 'pixi-traveling-outline'")
+		expectSourceToContain(outlineRendererTs, 'private paint(entry: OutlineEntry, elapsed: number)')
+		expectSourceToContain(outlineRendererTs, 'getTravelingOutlineHeadDistance(elapsed, this.style.durationMs, perimeter, this.ease)')
+		expectSourceToContain(outlineRendererTs, 'graphics.roundRect(0, 0, width, height, this.style.radius)')
+		expectSourceToContain(outlineRendererTs, 'interpolateTravelingOutlineColor(this.style.segmentColors, headProgress)')
+		expectSourceToContain(outlineRendererTs, 'this.ease = options.ease ?? Easing.travelingOutlineTransition')
+		expectSourceToContain(pixiLayerTs, 'function setGeneratingImageNodes(nodeIds: Set<string>)')
+		expectSourceToContain(settingsTs, 'trackWidth: 3')
+		expectSourceToContain(settingsTs, 'snakeWidth: 4')
+		expectSourceToContain(settingsTs, 'snakeLengthFraction: 0.24')
+		expectSourceToContain(settingsTs, "snakeColors: ['#1D57CB', '#2474FF', '#7C4DFF', '#D63FF0', '#FF9933']")
+		expectSourceToContain(settingsTs, 'animationDurationMs: 3200')
+		expectSourceNotToContain(ts, 'SvgGradientRenderer')
+		expectSourceNotToContain(ts, 'image-generating-border')
+		expectSourceNotToContain(scss, '.workspace-image-progress-viewport')
+		expectExcerptNotToContain(partialHandler, 'partialImageTracker.delete', 'partial image handler')
+		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(threadId)')
+		expectExcerptToContain(completeHandler, 'commitCanvasState({')
+	})
+
+	it('finalizes the same PIXI-backed image node without updating a legacy DOM image', () => {
+		const completeStart = ts.indexOf('onImageCompleteToCanvas:')
+		const callbackEnd = ts.indexOf('onEditInNewThread:', completeStart)
+		expect(completeStart).toBeGreaterThan(-1)
+		expect(callbackEnd).toBeGreaterThan(completeStart)
+
+		const completeHandler = ts.slice(completeStart, callbackEnd)
+		expectExcerptToContain(completeHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
+		expectExcerptToContain(completeHandler, 'commitCanvasState({')
+		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
 	})
 })
 
@@ -1781,46 +1853,37 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 })
 
 // =============================================================================
-// Image loading — canonical URL from workspaceId + fileId
+// Image loading — PIXI is the only canvas image renderer
 // =============================================================================
 
-describe('Image loading — URL resolution strategy', () => {
+describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 	const ts = loadTs()
+	const pixiLayerTs = loadPixiMediaLayer()
+	const pixiLogicTs = readSourceFile('pixiMediaLayerLogic.ts')
 
-	it('createImageNode uses canonical workspaceId path for stored API images', () => {
+	it('createImageNode contains no hidden DOM image loader or pixel fallback', () => {
 		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('`/api/images/${workspaceId}/${node.fileId}`')
+		expectExcerptNotToContain(fnBody, 'image-node-img', 'createImageNode')
+		expectExcerptNotToContain(fnBody, '<img', 'createImageNode')
+		expectExcerptNotToContain(fnBody, 'imgEl', 'createImageNode')
+		expectSourceNotToContain(pixiLayerTs, 'workspace-image-node-pixi-owned')
 	})
 
-	it('createImageNode detects stored images via isStoredImage check', () => {
-		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expect(fnBody).toContain('isStoredImage')
-		expect(fnBody).toContain("strippedSrc.startsWith('/api/')")
-		expect(fnBody).toContain("strippedSrc.includes('/api/images/')")
+	it('PIXI uses canonical workspaceId path for stored API images', () => {
+		expectSourceToContain(pixiLogicTs, '`/api/images/${workspaceId}/${node.fileId}`')
+		expectSourceToContain(pixiLogicTs, 'isStoredImageSrc(strippedSrc)')
 	})
 
-	it('createImageNode strips stale tokens from node.src before classifying', () => {
-		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expect(fnBody).toMatch(/node\.src\.replace\([^)]*token[^)]*\)/)
+	it('PIXI strips stale tokens from node sources before resolving them', () => {
+		expect(pixiLogicTs).toMatch(/node\.src\.replace\([^)]*token[^)]*\)/)
 	})
 
-	it('createImageNode passes through data: and external URLs via resolvedSrc', () => {
-		const fnMatch = ts.match(/function\s+createImageNode[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expect(fnBody).toContain('resolvedSrc')
-		const resolvedRefs = (fnBody.match(/resolvedSrc/g) || []).length
-		expect(resolvedRefs).toBeGreaterThanOrEqual(3)
+	it('PIXI passes through data and external sources without DOM loading', () => {
+		expectSourceToContain(pixiLogicTs, "if (imageUrl.startsWith('data:')) return imageUrl")
+		expectSourceToContain(pixiLayerTs, 'const resolvedSrc = resolveStoredImagePath(node, workspaceId)')
 	})
 
 	it('workspaceId is declared as let (mutable) so render() can update it', () => {
