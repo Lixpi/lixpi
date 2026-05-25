@@ -11,6 +11,7 @@ import {
     deleteLibraryImageObject,
     deleteMediaLibraryWorkspaceBucket,
 } from '../../services/media-library-storage.ts'
+import { ensureFeatureSamplesForScope } from '../../services/feature-sample-storage.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -157,6 +158,23 @@ export const workspaceSubjects = [
         handler: async (data: any, msg: any) => {
             const { workspaceId } = data
             const userId = data.user.userId
+            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+            if ('error' in workspace) return workspace
+
+            try {
+                const promotedFeatures = await Feature.listPromotedByOriginWorkspaceForCleanup(workspaceId)
+                for (const feature of promotedFeatures) {
+                    await ensureFeatureSamplesForScope({
+                        feature,
+                        newScope: feature.scope,
+                        newScopeOwnerId: feature.scopeOwnerId,
+                    })
+                }
+                info(`Preserved ${promotedFeatures.length} promoted feature sample sets for ${workspaceId}`)
+            } catch (e: any) {
+                warn(`Could not preserve promoted feature samples for workspace ${workspaceId}:`, e.message)
+                return { error: 'FEATURE_SAMPLE_MIGRATION_FAILED' }
+            }
 
             try {
                 // Delete workspace-scoped features

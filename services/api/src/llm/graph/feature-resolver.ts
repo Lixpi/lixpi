@@ -1,9 +1,9 @@
 'use strict'
 
 import { info, err } from '@lixpi/debug-tools'
-import NATS_Service from '@lixpi/nats-service'
 import type { ProviderState, ChatMessage } from './state.ts'
 import Feature from '../../models/feature.ts'
+import { readFeatureSampleObject } from '../../services/feature-sample-storage.ts'
 
 const CACHE_TTL_MS = 60_000
 const MAX_REFERENCE_SAMPLES_PER_FEATURE = 3
@@ -94,7 +94,6 @@ export const resolveFeatures = async (state: ProviderState): Promise<Partial<Pro
     if (!ids || ids.length === 0) return {}
     pruneCache()
 
-    const natsService = NATS_Service.getInstance()
     const featureMessages: ChatMessage[] = []
     const featureReferenceImages: string[] = []
     const featureReferenceImageTraceUrls: string[] = []
@@ -118,24 +117,23 @@ export const resolveFeatures = async (state: ProviderState): Promise<Partial<Pro
             const feature = featureOrError
             const samples: FeatureSampleReference[] = []
 
-            if (natsService) {
-                const bucketName = `workspace-${feature.workspaceId}-files`
-                for (const sampleRef of feature.sampleImages.slice(0, MAX_REFERENCE_SAMPLES_PER_FEATURE)) {
-                    const objectKey = sampleRef.fileId ?? `features/${featureId}/sample-${sampleRef.idx}.${sampleRef.ext}`
-                    try {
-                        const data = await natsService.getObject(bucketName, objectKey)
-                        if (data) {
-                            const mimeType = getSampleMimeType(sampleRef.ext)
-                            samples.push({
-                                idx: sampleRef.idx,
-                                subject: sampleRef.subject,
-                                imageUrl: `data:${mimeType};base64,${Buffer.from(data).toString('base64')}`,
-                                traceImageUrl: `/api/features/${encodeURIComponent(featureId)}/samples/${sampleRef.idx}?workspaceId=${encodeURIComponent(feature.workspaceId)}`,
-                                kind: 'sample',
-                            })
-                        }
-                    } catch {}
-                }
+            for (const sampleRef of feature.sampleImages.slice(0, MAX_REFERENCE_SAMPLES_PER_FEATURE)) {
+                try {
+                    const data = await readFeatureSampleObject({ feature, sample: sampleRef })
+                    if (data) {
+                        const mimeType = getSampleMimeType(sampleRef.ext)
+                        const organizationParam = feature.scope === 'organization' && state.eventMeta.organizationId
+                            ? `&organizationId=${encodeURIComponent(String(state.eventMeta.organizationId))}`
+                            : ''
+                        samples.push({
+                            idx: sampleRef.idx,
+                            subject: sampleRef.subject,
+                            imageUrl: `data:${mimeType};base64,${Buffer.from(data).toString('base64')}`,
+                            traceImageUrl: `/api/features/${encodeURIComponent(featureId)}/samples/${sampleRef.idx}?workspaceId=${encodeURIComponent(feature.workspaceId)}${organizationParam}`,
+                            kind: 'sample',
+                        })
+                    }
+                } catch {}
             }
 
             const references = samples
