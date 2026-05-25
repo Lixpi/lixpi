@@ -19,7 +19,8 @@ describe('Media Library panel contract', () => {
     })
 
     it('does not truncate feature instructions or tags', () => {
-        expect(panelSource).toContain('${feature.instructions}')
+        // Instructions render through the unified markdown stream renderer, untruncated.
+        expect(panelSource).toContain('renderMarkdownStatic(feature.instructions')
         expect(panelSource).toContain('for (const tag of feature.tags ?? [])')
         expect(panelSource).not.toContain('feature.instructions.slice')
         expect(panelSource).not.toContain('feature.tags?.slice')

@@ -1,5 +1,7 @@
 'use strict'
 
+import * as process from 'process'
+
 import { warn } from '@lixpi/debug-tools'
 import type { AxisExtraction } from '@lixpi/constants'
 
@@ -7,6 +9,33 @@ import { getExtractors } from './extractors/registry.ts'
 import type { ExtractionDeps, ExtractionState, StageLogger } from './types.ts'
 
 const DEFAULT_DOMINANCE_FLOOR = 0.3
+
+// Cap on simultaneous extractor VLM calls. Firing all ~10 axes at once opened too many
+// concurrent streaming connections to the provider and several were dropped mid-stream
+// ("Connection error."). Batching keeps the connection count sane; tune via env.
+const EXTRACTOR_CONCURRENCY = Math.max(1, Number(process.env.FEATURE_EXTRACTOR_CONCURRENCY) || 4)
+
+// Runs `worker` over `items` with at most `limit` in flight, preserving input order and
+// isolating failures (same result shape as Promise.allSettled).
+const runWithConcurrency = async <T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> => {
+    const results: PromiseSettledResult<R>[] = new Array(items.length)
+    let cursor = 0
+    const runner = async (): Promise<void> => {
+        for (let index = cursor++; index < items.length; index = cursor++) {
+            try {
+                results[index] = { status: 'fulfilled', value: await worker(items[index]!, index) }
+            } catch (reason) {
+                results[index] = { status: 'rejected', reason }
+            }
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runner))
+    return results
+}
 
 // Stage 2 — Parallel modular extractors.
 // Selects every registered extractor whose dominance score from the router
@@ -30,14 +59,14 @@ export const runExtractors = async (state: ExtractionState, logger: StageLogger,
             return { axisExtractions: {}, failedAxes: [] }
         }
 
-        const results = await Promise.allSettled(selected.map((ext) =>
+        const results = await runWithConcurrency(selected, EXTRACTOR_CONCURRENCY, (ext) =>
             logger.span(`extractor:${ext.axis}`, state.input.analysisModel.modelVersion, () =>
                 ext.extract({ scene, state, logger, deps })
             , {
                 inputSummary: `axis=${ext.axis} dominance=${scene.axisDominance[ext.axis] ?? 0}`,
                 outputSummarizer: (axis: AxisExtraction) => `axis=${axis.axis} fieldKeys=[${Object.keys(axis.fields ?? {}).slice(0, 6).join(',')}]`,
             }),
-        ))
+        )
 
         const axisExtractions: Record<string, AxisExtraction> = {}
         const failedAxes: Array<{ axis: string; error: string }> = []

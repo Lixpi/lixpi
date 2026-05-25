@@ -7,7 +7,6 @@ import { info, err } from '@lixpi/debug-tools'
 
 import Feature from '../../models/feature.ts'
 import ExtractionRun from '../../models/extraction-run.ts'
-import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { ExtractionDeps, ExtractionState, StageLogger } from './types.ts'
 
 export const persistFeature = async (state: ExtractionState, logger: StageLogger, _deps: ExtractionDeps): Promise<Partial<ExtractionState>> => {
@@ -65,29 +64,18 @@ export const persistFeature = async (state: ExtractionState, logger: StageLogger
             err(`Failed to publish FEATURE_SUBJECTS.CREATE: ${e instanceof Error ? e.message : String(e)}`)
         }
 
-        // Stream a feature_card block so the extraction tab can render the result.
-        try {
-            const publisher = new StreamPublisher(
-                NATS_Service.getInstance()!,
-                state.input.workspaceId,
-                state.input.extractionRunId,
-                state.input.analysisProvider,
-            )
-            publisher.chunk(JSON.stringify({
-                type: 'feature_card',
-                feature: {
-                    featureId: feature.featureId,
-                    name: feature.name,
-                    category: feature.category,
-                    scope: feature.scope,
-                    summary: feature.summary,
-                    tags: feature.tags,
-                    sampleImages: feature.sampleImages,
-                },
-            }))
-        } catch (e) {
-            err(`Failed to stream feature_card: ${e instanceof Error ? e.message : String(e)}`)
-        }
+        // Stream the feature as structured content so the extraction tab can render it.
+        // Goes through logger.featureCard (not the token text stream) so it can't be
+        // truncated by TagAwareStream's tail buffering.
+        logger.featureCard({
+            featureId: feature.featureId,
+            name: feature.name,
+            category: feature.category,
+            scope: feature.scope,
+            summary: feature.summary,
+            tags: feature.tags,
+            sampleImages: feature.sampleImages,
+        })
 
         info(`Feature extraction complete: ${featureId} (${feature.name}) — ${orderedSamples.length} sample refs`)
         return { featureId, feature }

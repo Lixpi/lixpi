@@ -21,9 +21,12 @@ export const createStageLogger = (args: {
 }): StageLogger => {
     const { extractionRunId, workspaceId, publisher } = args
 
-    const emit = (event: StageTraceEvent): void => {
+    // persist defaults to true. The publish-only 'running' marker passes persist:false
+    // so the durable trace keeps just one terminal event per stage (no running/ok pairs).
+    const emit = (event: StageTraceEvent, persist = true): void => {
         info(`[extraction:${extractionRunId}] stage=${event.stage} model=${event.modelName ?? '-'} status=${event.status} duration=${event.durationMs}ms ${event.outputSummary ?? ''}`)
         try { publisher.stageTrace(event) } catch (e) { err('stageTrace publish failed:', e) }
+        if (!persist) return
         // Persist async without blocking. The model is best-effort: trace is observability,
         // not the primary persistence path. Errors are logged inside appendTrace.
         void ExtractionRun.appendTrace({ extractionRunId, workspaceId, event })
@@ -34,8 +37,26 @@ export const createStageLogger = (args: {
         try { publisher.chunk(text) } catch (e) { err('chunk publish failed:', e) }
     }
 
+    const featureCard = (payload: Record<string, any>): void => {
+        try { publisher.featureCard(payload) } catch (e) { err('featureCard publish failed:', e) }
+    }
+
     const span: StageLogger['span'] = async (stage, modelName, body, opts) => {
         const startedAt = Date.now()
+        // Stream an in-flight marker so the extraction tab can light up the stage
+        // (spinner) the moment it begins, not only when it finishes.
+        emit({
+            extractionRunId,
+            stage,
+            modelName,
+            promptHash: opts?.promptPreview ? hashPrompt(opts.promptPreview) : undefined,
+            promptPreview: opts?.promptPreview ? previewPrompt(opts.promptPreview) : undefined,
+            startedAt,
+            finishedAt: 0,
+            durationMs: 0,
+            status: 'running',
+            inputSummary: opts?.inputSummary,
+        }, false)
         try {
             const result = await body()
             const finishedAt = Date.now()
@@ -73,5 +94,5 @@ export const createStageLogger = (args: {
         }
     }
 
-    return { extractionRunId, emit, chunk, span }
+    return { extractionRunId, emit, chunk, featureCard, span }
 }
