@@ -2,8 +2,7 @@
 import { html } from '$src/utils/domTemplates.ts'
 import { chevronDownIcon } from '$src/svgIcons/index.ts'
 import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/pureInfoBubble.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 // Inject fill color utility (same as original dropdown)
 function injectFillColor(svg: string, color: string): string {
@@ -67,7 +66,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
     const modalityFilterEnabled = Boolean(
         enableTagFilter
-        && webUiSettings.useModalityFilterOnModelSelectorDropdown
+        && settings.modelSelectorDropdown.useModalityFilter
     )
 
     // Prevent ProseMirror from handling mousedown on dropdown
@@ -262,7 +261,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
     })
 
     // Apply theme shadow
-    infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', webUiThemeSettings.dropdownPopoverBoxShadow)
+    infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
 
     // Append info bubble to dropdown or body
     if (mountToBody) {

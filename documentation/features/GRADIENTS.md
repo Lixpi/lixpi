@@ -27,7 +27,7 @@ Animation curves are centralized in `Easing`, while surface-specific lifecycle r
 - New Canvas or PIXI freeform gradient surfaces should call `FreeformGradientRenderer`; they should not copy the pixel sampling, phase, or swirl algorithm into consumer files.
 - New SVG animated gradient borders should call `SvgGradientRenderer` for stop construction and rotation.
 - Runtime JavaScript animations that match existing interaction motion should use `Easing`, not reimplement cubic-bezier calculations.
-- Visual color choices belong in `webUiThemeSettings.ts`; renderer classes consume configured colors rather than owning product palettes.
+- Visual color choices belong in `settings.ts`; renderer classes consume configured colors rather than owning product palettes.
 
 ## Palette Ownership
 
@@ -35,9 +35,9 @@ The system intentionally has separate palettes for different visual roles:
 
 | Setting | Purpose | Consumers |
 |---|---|---|
-| `webUiThemeSettings.shiftingGradientColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, generated-image animated border, document thread border, document context selection |
-| `webUiThemeSettings.contextRegion.cloud.palettes.surfaceGradient` through `contextRegion.cloud.gradientColors` | Translucent seafoam watercolor surface palette | PIXI context-region cloud surface sampling |
-| `webUiThemeSettings.contextRegion.cloud.palettes.activeThoughtCircle` through `contextRegion.cloud.activeThoughtCircleGradientColors` | Soft sage active marker palette | PIXI active context-region detached thought circle |
+| `settings.gradient.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, generated-image animated border, document thread border, document context selection |
+| `settings.contextRegion.cloud.palettes.surfaceGradient` through `contextRegion.cloud.gradientColors` | Translucent seafoam watercolor surface palette | PIXI context-region cloud surface sampling |
+| `settings.contextRegion.cloud.palettes.activeThoughtCircle` through `contextRegion.cloud.activeThoughtCircleGradientColors` | Soft sage active marker palette | PIXI active context-region detached thought circle |
 
 The context-region renderer uses the palette getters rather than hard-coded arrays so cloud surface tuning and active-indicator tuning remain explicit theme configuration. `gradientPositions` controls the cloud surface anchor placement; active thought-circle textures use the shared phase positions from `FreeformGradientRenderer`.
 
@@ -61,7 +61,7 @@ When active chat context changes, the layer crossfades between adjacent freeform
 - `appendRepeatingLinearGradientStops()` creates looping stops for animated borders.
 - `startRotatingLinearGradient()` rotates gradient endpoints for document thread and generated-image borders, defaulting to `Easing.hoverTransition()`.
 
-These SVG consumers use `shiftingGradientColors`; they reuse the palette but do not run the freeform pixel sampler.
+These SVG consumers use `settings.gradient.shiftingColors`; they reuse the palette but do not run the freeform pixel sampler.
 
 ### Static CSS Gradient Surfaces
 
@@ -69,7 +69,7 @@ Some UI surfaces use CSS gradients without participating in freeform bitmap rend
 
 | Surface | Definition | Relationship |
 |---|---|---|
-| AI chat thread vertical rail | `webUiThemeSettings.aiChatThreadRailGradient`, applied by `WorkspaceCanvas.ts` and rendered in `workspace-canvas.scss` | A static two-color accent related to the pastel shifting palette |
+| AI chat thread vertical rail | `settings.aiChatThread.rail.gradient`, applied by `WorkspaceCanvas.ts` and rendered in `workspace-canvas.scss` | A static two-color accent related to the pastel shifting palette |
 | Model/dropdown highlights | `components/dropdown/_dropdown-mixins.scss` | Uses the same simple lavender/periwinkle two-color accent as the rail |
 | AI user message bubbles and canvas provenance prompt bubbles | `components/proseMirror/plugins/aiChatThreadPlugin/ai-chat-thread.scss`, `infographics/workspace/workspace-canvas.scss` | Local dark bubble treatment; not part of the animated palette system |
 | Generated-image action readability fade | `components/proseMirror/plugins/aiChatThreadPlugin/ai-chat-thread.scss` | Local media overlay fade; not a reusable gradient asset |
@@ -222,11 +222,11 @@ The gradient uses 4 colors that blend together. Choosing good colors is importan
 2. Have appropriate contrast (not too similar, not too jarring)
 3. Match the overall design aesthetic
 
-The current colors are ultra-light pastels inspired by a desert sunset sky palette. They are defined centrally in `webUiThemeSettings.ts` as the `shiftingGradientColors` property and shared across the shifting gradient background, image generation animated border (`WorkspaceCanvas.ts`), and document shape borders (`documentThreadShape.ts`, `documentContextSelection.ts`):
+The current colors are ultra-light pastels inspired by a desert sunset sky palette. They are defined centrally in `settings.ts` as the `gradient.shiftingColors` property and shared across the shifting gradient background, image generation animated border (`WorkspaceCanvas.ts`), and document shape borders (`documentThreadShape.ts`, `documentContextSelection.ts`):
 
 ```typescript
-// webUiThemeSettings.ts
-shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
+// settings.ts
+shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
 `FreeformGradientRenderer` converts these hex values to RGB at startup:
@@ -445,10 +445,10 @@ The design is intentionally simple. No WebGL, no shaders, just plain Canvas 2D. 
 
 #### Changing Colors
 
-Edit the `shiftingGradientColors` array in `webUiThemeSettings.ts`:
+Edit the `gradient.shiftingColors` array in `settings.ts`:
 
 ```typescript
-shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
+shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
 These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. The same colors are also used by the image generation animated border in `WorkspaceCanvas.ts` and the document shape borders in `documentThreadShape.ts` / `documentContextSelection.ts`.

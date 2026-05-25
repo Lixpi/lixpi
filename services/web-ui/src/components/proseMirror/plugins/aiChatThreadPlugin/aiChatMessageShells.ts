@@ -1,6 +1,6 @@
 import { getAiProviderClassSuffix, getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 import { html } from '$src/utils/domTemplates.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 export type AiUserMessageShell = {
     wrapper: HTMLElement
@@ -72,7 +72,7 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
     ` as HTMLElement
 
     const bubbleEl = wrapper.querySelector('.ai-response-message-bubble') as HTMLElement
-    bubbleEl.style.setProperty('--ai-response-bubble-color', webUiThemeSettings.aiResponseMessageBubbleColor)
+    bubbleEl.style.setProperty('--ai-response-bubble-color', settings.aiChatThread.responseMessageBubbleColor)
 
     const setProvider = (nextProvider: string | null | undefined, iconOverride?: string | null): void => {
         const avatarEl = wrapper.querySelector('.user-avatar') as HTMLElement

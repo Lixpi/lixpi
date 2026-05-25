@@ -3,7 +3,7 @@
 import { select } from 'd3-selection'
 import { Easing } from '$src/utils/animations/easing.ts'
 import { SvgGradientRenderer } from '$src/utils/animations/gradients/svgGradient.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 type ContextSelectionConfig = {
     gradientId: string
@@ -12,7 +12,7 @@ type ContextSelectionConfig = {
 
 // Sets up the gradient definition in SVG defs
 export function setupContextGradient(defs: any, config: ContextSelectionConfig) {
-    const colors = config.colors || webUiThemeSettings.shiftingGradientColors.slice(0, 3)
+    const colors = config.colors || settings.gradient.shiftingColors.slice(0, 3)
 
     const gradient = defs.append('linearGradient')
         .attr('id', config.gradientId)
