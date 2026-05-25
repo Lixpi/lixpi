@@ -451,6 +451,28 @@ export type StageTraceEvent = {
     metricTags?: Record<string, string | number>
 }
 
+// Markdown stream parser segment shapes. These mirror what @lixpi/markdown-stream-parser
+// emits from subscribeToTokenParse — the package defines the segment internally but does
+// not export it (the callback is typed `any`), so the shape is centralized here and shared
+// by every consumer (the ProseMirror aiChatThreadPlugin and the unified MarkdownStreamRenderer).
+// See documentation/features/MARKDOWN-RENDERING.md.
+export type MarkdownParsedSegment = {
+    segment: string
+    styles: string[]
+    type: string
+    level?: number
+    isBlockDefining: boolean
+    isProcessingNewLine?: boolean
+    content?: string
+    language?: string
+    origin?: string
+}
+
+export type MarkdownStreamToken = {
+    status: 'STREAMING' | 'END_STREAM'
+    segment?: MarkdownParsedSegment
+}
+
 export type FeatureSourceContext = {
     extractionRunId: string
     sourceWorkspaceId: string

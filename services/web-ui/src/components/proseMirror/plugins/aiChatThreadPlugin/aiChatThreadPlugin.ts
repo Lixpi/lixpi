@@ -30,6 +30,7 @@ import type {
     ImageBranchVlmResolution,
     ImageGenerationTrace,
     ImageGenerationSize,
+    MarkdownParsedSegment,
     StreamStatus,
 } from '@lixpi/constants'
 
@@ -60,13 +61,7 @@ type SegmentEvent = {
     threadId?: string
     aiChatThreadId?: string
     collapsibleTitle?: string
-    segment?: {
-        segment: string
-        styles: string[]
-        type: string
-        level?: number
-        isBlockDefining: boolean
-    }
+    segment?: MarkdownParsedSegment
     imageUrl?: string
     fileId?: string
     workspaceId?: string
