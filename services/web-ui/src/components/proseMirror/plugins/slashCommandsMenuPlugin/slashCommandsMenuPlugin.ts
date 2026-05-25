@@ -120,7 +120,6 @@ class SlashCommandsMenuView {
     }
 
     private buildMenuItems(commands: SlashCommand[], selectedIndex: number): void {
-        console.log('[slashMenu] buildMenuItems with', commands.length, 'commands:', commands.map(c => c.name))
         this.menuList.innerHTML = ''
         this.filteredCommands = commands
 
@@ -152,24 +151,17 @@ class SlashCommandsMenuView {
             item.appendChild(nameEl)
 
             item.addEventListener('mouseenter', () => {
-                console.log('[slashMenu] item mouseenter idx=', index, 'name=', cmd.name)
                 this.updateSelectedIndex(index)
             })
 
             item.addEventListener('mousedown', (e) => {
-                console.log('[slashMenu] item mousedown idx=', index, 'name=', cmd.name, 'target=', e.target, 'currentTarget=', e.currentTarget)
                 e.preventDefault()
                 e.stopPropagation()
                 this.executeCommand(index)
             })
 
-            item.addEventListener('click', (e) => {
-                console.log('[slashMenu] item click idx=', index, 'name=', cmd.name)
-            })
-
             this.menuList.appendChild(item)
         })
-        console.log('[slashMenu] buildMenuItems done. menuList children=', this.menuList.children.length)
     }
 
     private updateSelectedIndex(index: number): void {
@@ -185,14 +177,10 @@ class SlashCommandsMenuView {
 
     private executeCommand(index: number): void {
         const command = this.filteredCommands[index]
-        console.log('[slashMenu] executeCommand index=', index, 'command=', command?.name)
         if (!command) return
 
         const pluginState = slashCommandsMenuPluginKey.getState(this.view.state) as SlashCommandsPluginState | undefined
-        if (!pluginState?.active) {
-            console.warn('[slashMenu] executeCommand: plugin not active, aborting')
-            return
-        }
+        if (!pluginState?.active) return
 
         // Delete the slash and query text
         const { triggerPos, query } = pluginState
@@ -200,13 +188,10 @@ class SlashCommandsMenuView {
         const tr = this.view.state.tr.delete(triggerPos, deleteEnd)
         tr.setMeta(slashCommandsMenuPluginKey, { type: 'close' })
         this.view.dispatch(tr)
-        console.log('[slashMenu] slash text deleted and close meta dispatched, calling command.execute')
 
         // Execute the command
-        const result = command.execute(this.view)
-        console.log('[slashMenu] command.execute returned', result, '— now calling view.focus()')
+        command.execute(this.view)
         this.view.focus()
-        console.log('[slashMenu] executeCommand finished')
     }
 
     private show(): void {
@@ -307,27 +292,7 @@ class SlashCommandsMenuView {
 
 let menuViewInstance: SlashCommandsMenuView | null = null
 
-let globalSpyInstalled = false
-function installGlobalMouseSpy() {
-    if (globalSpyInstalled) return
-    globalSpyInstalled = true
-    const spy = (phase: string) => (e: MouseEvent) => {
-        const t = e.target as HTMLElement | null
-        const path = (e.composedPath?.() ?? []).map((n: any) => {
-            if (!n || !n.tagName) return n?.constructor?.name ?? '?'
-            const cls = n.className && typeof n.className === 'string' ? `.${n.className.split(' ').filter(Boolean).join('.')}` : ''
-            return `${n.tagName.toLowerCase()}${cls}`
-        }).slice(0, 6).join(' < ')
-        console.log(`[globalSpy ${phase}] type=${e.type} target=`, t?.tagName, t?.className, 'path:', path, 'defaultPrevented=', e.defaultPrevented)
-    }
-    document.addEventListener('mousedown', spy('CAPTURE'), true)
-    document.addEventListener('mousedown', spy('BUBBLE'), false)
-    document.addEventListener('click', spy('CLICK-CAPTURE'), true)
-    console.log('[globalSpy] installed')
-}
-
 export function slashCommandsMenuPlugin(): Plugin<SlashCommandsPluginState> {
-    installGlobalMouseSpy()
     return new Plugin<SlashCommandsPluginState>({
         key: slashCommandsMenuPluginKey,
 

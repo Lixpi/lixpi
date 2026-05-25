@@ -493,7 +493,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 console.warn('Failed to copy feature use command:', clipboardError)
             }
         }
-        setFeedback(inserted ? `Added @${feature.name} to the prompt.` : `Copied /use ${feature.name}.`)
+        setFeedback(inserted ? `Added feature:${feature.name} to the prompt.` : `Copied /use ${feature.name}.`)
     }
 
     async function deleteFeature(feature: FeatureMeta) {
@@ -779,5 +779,15 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
 
     function toggle() { isOpen ? close() : open() }
 
-    return { open, close, toggle }
+    // Open (or re-open) the panel forced onto the Features tab, regardless of the last-used
+    // category. Used by the `/use` slash command in the AI chat prompt.
+    function openToFeatures() {
+        activeCategory = MEDIA_LIBRARY_CATEGORY.FEATURES
+        selectedFeatureId = null
+        searchQuery = ''
+        if (isOpen) close()
+        open()
+    }
+
+    return { open, close, toggle, openToFeatures }
 }

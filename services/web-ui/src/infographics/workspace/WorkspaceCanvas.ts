@@ -1920,10 +1920,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 featureName: feature.name,
                 category: feature.category,
             })
+            // The `/use` slash text is deleted when the Media Library opens, so re-insert "use" as
+            // plain text before the chip. The prompt then reads "use feature:<name>" and is no
+            // longer empty, so the placeholder stops showing over an already-filled input.
+            const usePrefix = 'use '
+            const insertAt = view.state.selection.from
             let tr = view.state.tr.replaceSelectionWith(node)
-            const cursorPos = Math.min(tr.selection.from, tr.doc.content.size)
-            tr = tr.insertText(' ', cursorPos)
-            tr = tr.setSelection(TextSelection.create(tr.doc, Math.min(cursorPos + 1, tr.doc.content.size))).scrollIntoView()
+            tr = tr.insertText(usePrefix, insertAt)
+            const afterChip = insertAt + usePrefix.length + node.nodeSize
+            tr = tr.insertText(' ', afterChip)
+            tr = tr.setSelection(TextSelection.create(tr.doc, Math.min(afterChip + 1, tr.doc.content.size))).scrollIntoView()
             view.dispatch(tr)
             view.focus()
             activeAiChatPromptGradient?.triggerAnimation()
@@ -4869,6 +4875,44 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function ensureMediaLibraryPanel() {
+        if (!mediaLibraryPanelInstance) {
+            mediaLibraryPanelInstance = createMediaLibraryPanel({
+                workspaceId,
+                paneEl,
+                onUseFeature: insertFeatureIntoActivePrompt,
+                onInsertImage: async (item: MediaLibraryImageMeta) => {
+                    try {
+                        const materialized = await mediaLibraryService.materializeImage({
+                            workspaceId,
+                            itemId: item.itemId,
+                        })
+                        if (!materialized.fileId || !materialized.url) return false
+                        const width = settings.imageNode.defaultInsertionWidth
+                        const imageNode: Omit<ImageCanvasNode, 'position'> = {
+                            nodeId: `node-${materialized.fileId}`,
+                            type: 'image',
+                            fileId: materialized.fileId,
+                            workspaceId,
+                            src: materialized.url,
+                            aspectRatio: item.aspectRatio,
+                            dimensions: { width, height: width / item.aspectRatio },
+                        }
+                        insertNodeAtViewportCenterInternal(imageNode)
+                        return true
+                    } catch (error) {
+                        console.error('Failed to add Media Library image to canvas:', error)
+                        return false
+                    }
+                },
+                onOpenExtractionTab: (extractionRunId) => {
+                    openFeatureExtractionTab(extractionRunId)
+                },
+            })
+        }
+        return mediaLibraryPanelInstance
+    }
+
     const onOpenExtractionPanel = (event: Event) => {
         const detail = (event as CustomEvent<{ extractionRunId?: string; workspaceId?: string }>).detail
         if (!detail?.extractionRunId) return
@@ -4876,8 +4920,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         openFeatureExtractionTab(detail.extractionRunId)
     }
 
+    const onOpenMediaLibraryFeatures = (event: Event) => {
+        const detail = (event as CustomEvent<{ workspaceId?: string }>).detail
+        if (detail?.workspaceId && detail.workspaceId !== workspaceId) return
+        ensureMediaLibraryPanel().openToFeatures()
+    }
+
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)
+    window.addEventListener('lixpi:open-media-library-features', onOpenMediaLibraryFeatures)
 
     initializePanZoom()
     initCanvasBubbleMenu()
@@ -5009,47 +5060,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         },
         toggleMediaLibrary() {
-            if (!mediaLibraryPanelInstance) {
-                mediaLibraryPanelInstance = createMediaLibraryPanel({
-                    workspaceId,
-                    paneEl,
-                    onUseFeature: insertFeatureIntoActivePrompt,
-                    onInsertImage: async (item: MediaLibraryImageMeta) => {
-                        try {
-                            const materialized = await mediaLibraryService.materializeImage({
-                                workspaceId,
-                                itemId: item.itemId,
-                            })
-                            if (!materialized.fileId || !materialized.url) return false
-                            const width = settings.imageNode.defaultInsertionWidth
-                            const imageNode: Omit<ImageCanvasNode, 'position'> = {
-                                nodeId: `node-${materialized.fileId}`,
-                                type: 'image',
-                                fileId: materialized.fileId,
-                                workspaceId,
-                                src: materialized.url,
-                                aspectRatio: item.aspectRatio,
-                                dimensions: { width, height: width / item.aspectRatio },
-                            }
-                            insertNodeAtViewportCenterInternal(imageNode)
-                            return true
-                        } catch (error) {
-                            console.error('Failed to add Media Library image to canvas:', error)
-                            return false
-                        }
-                    },
-                    onOpenExtractionTab: (extractionRunId) => {
-                        openFeatureExtractionTab(extractionRunId)
-                    },
-                })
-            }
-            mediaLibraryPanelInstance.toggle()
+            ensureMediaLibraryPanel().toggle()
         },
         destroy() {
             mediaLibraryPanelInstance?.close()
             resizeObserver.disconnect()
             window.removeEventListener('keydown', onKeyDown)
             window.removeEventListener('lixpi:open-extraction-tab', onOpenExtractionPanel)
+            window.removeEventListener('lixpi:open-media-library-features', onOpenMediaLibraryFeatures)
             paneEl.removeEventListener('pointerdown', handlePanePointerDown, true)
             paneEl.removeEventListener('mousemove', handlePaneMouseMove, true)
             paneEl.removeEventListener('mouseleave', handlePaneMouseLeave)

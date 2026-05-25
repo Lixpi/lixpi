@@ -205,7 +205,9 @@ class ContentExtractor {
                 }
             } else if (child.type.name === 'feature_reference') {
                 const { featureId, featureName } = child.attrs
-                if (featureName) text += `@${featureName}`
+                // Cosmetic label only; resolution is driven by featureIds (see resolveFeatures).
+                // Kept in sync with the chip's visual `feature:<name>` format.
+                if (featureName) text += `feature:${featureName}`
                 if (featureId) featureIds.push(featureId)
             } else {
                 // Recurse into other nodes
