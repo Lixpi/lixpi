@@ -5,7 +5,7 @@ import {
     SvgGradientRenderer,
     type SvgGradientAnimation,
 } from '$src/utils/animations/gradients/svgGradient.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 type ThreadShapeConfig = {
     text: string
@@ -56,7 +56,7 @@ export function setupThreadGradient(defs: any, config: { gradientId: string }) {
         .attr('x1', '0').attr('y1', '256')  // Center of the shape
         .attr('x2', '512').attr('y2', '256')
 
-    SvgGradientRenderer.appendRepeatingLinearGradientStops(threadGradient, webUiThemeSettings.shiftingGradientColors)
+    SvgGradientRenderer.appendRepeatingLinearGradientStops(threadGradient, settings.gradient.shiftingColors)
 }
 
 // Animation controller for thread gradient

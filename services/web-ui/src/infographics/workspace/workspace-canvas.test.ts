@@ -75,8 +75,8 @@ function loadSidebar(): string {
 	return readSourceFile('../../components/Sidebar.svelte', 'components/Sidebar.svelte')
 }
 
-function loadThemeSettings(): string {
-	return readSourceFile('../../webUiThemeSettings.ts', 'webUiThemeSettings.ts')
+function loadSettings(): string {
+	return readSourceFile('../../settings.ts', 'settings.ts')
 }
 
 function extractBlock(scss: string, selector: string): string {
@@ -250,8 +250,8 @@ describe('PIXI media layer — first sync geometry', () => {
 	})
 
 	it('clips PIXI image sprites with the configured image border radius', () => {
-		expectSourceToContain(ts, "import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'")
-		expectSourceToContain(ts, 'webUiThemeSettings.imageNode.borderRadius')
+		expectSourceToContain(ts, "import { settings } from '$src/settings.ts'")
+		expectSourceToContain(ts, 'settings.imageNode.borderRadius')
 		expectSourceToContain(ts, 'sprite.mask = spriteMask')
 		expectSourceToContain(ts, 'function syncSpriteMask(entry: PixiImageEntry')
 		expectSourceToContain(ts, 'entry.spriteMask.roundRect(0, 0, width, height, radius)')
@@ -639,7 +639,7 @@ describe('AI chat thread — document title hidden in workspace', () => {
 	})
 
 	it('applies document title visibility to the canvas-owned chat panel', () => {
-		expectSourceToContain(ts, 'showHeaderOnAiChatThreadNodes')
+		expectSourceToContain(ts, 'settings.aiChatThread.showHeader')
 		expectSourceToContain(ts, 'workspace-ai-chat-thread-node-hide-title')
 	})
 })
@@ -765,7 +765,7 @@ describe('AI chat region proximity connect', () => {
 
 describe('AI chat region image frame', () => {
 	const ts = loadTs()
-	const themeSettings = loadThemeSettings()
+	const configuredSettings = loadSettings()
 
 	it('marks images with the frame only when their parent is a context region', () => {
 		expectSourceToContain(ts, "const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node-context-region-child'")
@@ -777,12 +777,12 @@ describe('AI chat region image frame', () => {
 	})
 
 	it('uses the theme-configured off-white frame color', () => {
-		expectSourceToContain(themeSettings, 'type WebUiImageNodeThemeSettings = {')
-		expectSourceToContain(themeSettings, 'contextRegionChildImageFrameColor: string')
-		expectSourceToContain(themeSettings, "contextRegionChildImageFrameColor: '#FCFCFA'")
-		expectSourceNotToContain(themeSettings, "contextRegionChildImageFrameColor: '#fff'")
-		expectSourceNotToContain(themeSettings, 'contextRegionImageFrameColor')
-		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', webUiThemeSettings.imageNode.contextRegionChildImageFrameColor)")
+		expectSourceToContain(configuredSettings, 'type ImageNodeSettings = {')
+		expectSourceToContain(configuredSettings, 'contextRegionChildImageFrameColor: string')
+		expectSourceToContain(configuredSettings, "contextRegionChildImageFrameColor: '#FCFCFA'")
+		expectSourceNotToContain(configuredSettings, "contextRegionChildImageFrameColor: '#fff'")
+		expectSourceNotToContain(configuredSettings, 'contextRegionImageFrameColor')
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', settings.imageNode.contextRegionChildImageFrameColor)")
 	})
 
 	it('updates the frame immediately when an image is adopted into or released from a region', () => {
@@ -798,7 +798,7 @@ describe('AI chat region image frame', () => {
 describe('AI chat region PIXI cloud layer', () => {
 	const ts = loadTs()
 	const scss = loadScss()
-	const themeSettings = loadThemeSettings()
+	const configuredSettings = loadSettings()
 	const cloudTs = readSourceFile('rendering/contextRegionClouds.ts')
 	const cloudLayerTs = readSourceFile('rendering/pixiContextRegionLayer.ts')
 	const viewportBridgeTs = readSourceFile('rendering/viewportBridge.ts')
@@ -814,17 +814,17 @@ describe('AI chat region PIXI cloud layer', () => {
 
 	it('keeps context region DOM nodes as non-visual PIXI-owned proxies', () => {
 		expectSourceToContain(ts, 'workspace-context-region-node-pixi-owned')
-		expectSourceNotToContain(themeSettings, 'contextRegionAreaShiftingGradientColors')
-		expectSourceToContain(themeSettings, 'contextRegion: WebUiContextRegionThemeSettings')
-		expectSourceToContain(themeSettings, 'cloud: WebUiContextRegionCloudThemeSettings')
-		expectSourceToContain(themeSettings, 'palettes: ContextRegionCloudThemePalettes')
-		expectSourceToContain(cloudTs, 'const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud')
-		expectSourceToContain(cloudLayerTs, 'const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud')
-		expectSourceNotToContain(themeSettings, 'contextRegionCloudStyles')
-		expectSourceNotToContain(themeSettings, 'contextRegionCloudGradientColors')
-		expectSourceNotToContain(themeSettings, 'contextRegionCloudPalettes')
-		expectSourceNotToContain(cloudTs, 'webUiThemeSettings.contextRegionCloud')
-		expectSourceNotToContain(cloudLayerTs, 'webUiThemeSettings.contextRegionCloud')
+		expectSourceNotToContain(configuredSettings, 'contextRegionAreaShiftingGradientColors')
+		expectSourceToContain(configuredSettings, 'contextRegion: ContextRegionSettings')
+		expectSourceToContain(configuredSettings, 'cloud: WebUiContextRegionCloudThemeSettings')
+		expectSourceToContain(configuredSettings, 'palettes: ContextRegionCloudThemePalettes')
+		expectSourceToContain(cloudTs, 'const contextRegionCloudTheme = settings.contextRegion.cloud')
+		expectSourceToContain(cloudLayerTs, 'const contextRegionCloudTheme = settings.contextRegion.cloud')
+		expectSourceNotToContain(configuredSettings, 'contextRegionCloudStyles')
+		expectSourceNotToContain(configuredSettings, 'contextRegionCloudGradientColors')
+		expectSourceNotToContain(configuredSettings, 'contextRegionCloudPalettes')
+		expectSourceNotToContain(cloudTs, 'settings.contextRegionCloud')
+		expectSourceNotToContain(cloudLayerTs, 'settings.contextRegionCloud')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-thread-region-title-bar')
 		expectSourceToContain(scss, 'pointer-events: none')
 		expectSourceToContain(scss, 'background: transparent')
@@ -851,7 +851,7 @@ describe('AI chat region PIXI cloud layer', () => {
 	})
 
 	it('uses shared cloud styles for hit testing and adoption scoring', () => {
-		expectSourceToContain(cloudTs, 'const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud')
+		expectSourceToContain(cloudTs, 'const contextRegionCloudTheme = settings.contextRegion.cloud')
 		expectSourceToContain(cloudTs, 'export const CONTEXT_REGION_CLOUD_STYLES: ContextRegionCloudStyle[] = contextRegionCloudTheme.styles')
 		expectSourceToContain(cloudTs, 'hitTestContextRegionCloud')
 		expectSourceToContain(cloudTs, 'rectIntersectsContextRegionCloud')
@@ -903,12 +903,12 @@ describe('Vertical rail — CSS styling', () => {
 describe('Vertical rail — TS infrastructure', () => {
 	const ts = loadTs()
 
-	it('defines RAIL_OFFSET from theme settings', () => {
-		expect(ts).toMatch(/const\s+RAIL_OFFSET\s*=\s*webUiThemeSettings\.aiChatThreadRailOffset/)
+	it('defines RAIL_OFFSET from settings', () => {
+		expect(ts).toMatch(/const\s+RAIL_OFFSET\s*=\s*settings\.aiChatThread\.rail\.offset/)
 	})
 
-	it('defines RAIL_GRAB_WIDTH from webUiSettings', () => {
-		expect(ts).toMatch(/const\s+RAIL_GRAB_WIDTH\s*=\s*webUiSettings\.aiChatThreadRailDragGrabWidth/)
+	it('defines RAIL_GRAB_WIDTH from settings', () => {
+		expect(ts).toMatch(/const\s+RAIL_GRAB_WIDTH\s*=\s*settings\.aiChatThread\.rail\.dragGrabWidth/)
 	})
 
 	it('defines threadRails Map', () => {
@@ -999,11 +999,11 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain('aiChatThreadRailBoundaryCircle')
 	})
 
-	it('createThreadRail applies theme colors to boundary circle SVG paths', () => {
+	it('createThreadRail applies configured colors to boundary circle SVG paths', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('aiChatThreadRailBoundaryCircleColors')
+		expect(fnBody).toContain('settings.aiChatThread.rail.boundaryCircleColors')
 		expect(fnBody).toContain("setAttribute('fill'")
 	})
 
@@ -1087,7 +1087,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnBody).toContain('handleActiveAiChatPanelResizeStart')
 		expect(fnBody).toContain('aiChatThreadRailBoundaryCircle')
 		expect(fnBody).toContain("'--dropdown-popover-box-shadow'")
-		expect(fnBody).toContain('webUiThemeSettings.dropdownPopoverBoxShadow')
+		expect(fnBody).toContain('settings.dropdown.popoverBoxShadow')
 		expectSourceNotToContain(ts, `AiChat${'Panel.svelte'}`)
 	})
 
@@ -1336,22 +1336,22 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnBody).toContain('return false')
 	})
 
-	it('wires selection colors from webUiThemeSettings to CSS custom properties', () => {
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)")
+	it('wires selection colors from settings to CSS custom properties', () => {
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-border-color', settings.selection.marqueeBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-background-color', settings.selection.marqueeBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-border-color', settings.selection.overlayBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-background-color', settings.selection.overlayBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-outline-color', settings.selection.outlineColor)")
 		expect(scss).toMatch(/var\(--selection-outline-color/)
 	})
 
-	it('wires image theme settings from webUiThemeSettings to CSS custom properties', () => {
-		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', webUiThemeSettings.imageNode.defaultBoxShadow)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', webUiThemeSettings.imageNode.selectedBoxShadow)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${webUiThemeSettings.imageNode.borderRadius}px`)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', webUiThemeSettings.imageNode.contextRegionChildImageFrameColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', webUiThemeSettings.imageNode.contextRegionChildImageDropShadow)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', webUiThemeSettings.imageNode.modelBadgeBoxShadow)")
+	it('wires image settings to CSS custom properties', () => {
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', settings.imageNode.defaultBoxShadow)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', settings.imageNode.selectedBoxShadow)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', settings.imageNode.contextRegionChildImageFrameColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', settings.imageNode.contextRegionChildImageDropShadow)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)")
 		expect(scss).toMatch(/border-radius:\s*var\(--workspace-image-border-radius\)/)
 	})
 
@@ -1613,7 +1613,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	})
 
 	it('uses the image-node theme width for toolbar image insertion sizing', () => {
-		expectSourceToContain(svelte, 'const width = webUiThemeSettings.imageNode.defaultInsertionWidth')
+		expectSourceToContain(svelte, 'const width = settings.imageNode.defaultInsertionWidth')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(aspectRatio)')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(1)')
 		expectSourceNotToContain(svelte, 'const maxWidth = 400')

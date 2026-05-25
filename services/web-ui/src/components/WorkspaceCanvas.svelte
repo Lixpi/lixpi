@@ -21,7 +21,7 @@
     import { routerStore } from '$src/stores/routerStore.ts'
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
-    import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+    import { settings } from '$src/settings.ts'
     import { createNewFileIcon, imageIcon, aiChatBubbleIcon, mediaLibraryIcon } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
@@ -52,7 +52,7 @@
 
     function getImageInsertionDimensions(aspectRatio: number): { width: number; height: number } {
         const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
-        const width = webUiThemeSettings.imageNode.defaultInsertionWidth
+        const width = settings.imageNode.defaultInsertionWidth
         return { width, height: width / safeAspectRatio }
     }
 
@@ -296,7 +296,7 @@
             })
 
             if (thread) {
-                const dimensions = { ...webUiThemeSettings.contextRegion.defaultDimensions }
+                const dimensions = { ...settings.contextRegion.defaultDimensions }
 
                 const contextRegionNode: Omit<ContextRegionCanvasNode, 'position'> = {
                     nodeId: `node-${thread.threadId}`,

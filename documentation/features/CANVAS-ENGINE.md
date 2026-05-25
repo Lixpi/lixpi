@@ -50,13 +50,13 @@ Use the incremental canvas architecture documented here as the implementation re
 
 ### Canvas Configuration Ownership
 
-All configurable workspace-canvas UI settings belong in [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts). This includes colors, shadows, dimensions, gaps, hit radii, animation timing, title sizing, generated-image placement spacing, and other values that product/design tuning may reasonably adjust without changing the interaction algorithm.
+All configurable web UI settings belong in [settings.ts](../../services/web-ui/src/settings.ts). This includes feature flags, colors, shadows, dimensions, gaps, hit radii, animation timing, title sizing, generated-image placement spacing, and other values that product/design tuning may reasonably adjust without changing the interaction algorithm.
 
-Do not add new configurable magic-number constants directly to [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), Svelte wrappers, PIXI rendering layers, or helper modules. If a value controls visible styling, layout, spacing, hit target size, cursor activation area, or animation feel, add it to `webUiThemeSettings` first and read it from the consuming code. The Media Library follows this rule through `webUiThemeSettings.mediaLibrary`: it opens from the right at two-thirds of available pane width and moves left of an open AI chat panel.
+Do not add new configurable magic-number constants or UI behavior flags directly to [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), Svelte wrappers, PIXI rendering layers, or helper modules. Add them to `settings` first and read them from the consuming code. For example, the AI chat resize/drag rail hit target lives at `settings.aiChatThread.rail.dragGrabWidth`, and the Media Library uses `settings.mediaLibrary.panelWidthFraction`.
 
-`webUiThemeSettings` must stay organized by logical groups. Each top-level group is its own subsection, and a group may contain nested subsections when a domain has a clear child domain, such as `contextRegion.cloud`. Every group and nested group must have a blank line before and after it in the object literal. Every key must have a short comment explaining what the value means and how changing it affects the application.
+`settings` must stay organized by logical groups. Each top-level group is its own subsection, such as `aiChatThread`, `connector`, `selection`, or `imageNode`; a group may contain nested subsections when a domain has a clear child domain, such as `aiChatThread.rail` or `contextRegion.cloud`. Every group and nested group must have a blank line before and after it in the object literal. Every key must have a short comment explaining what the value means and how changing it affects the application. Do not create a second global web UI settings module.
 
-Use object getters in `webUiThemeSettings` only when a setting must compute its value from sibling keys with `this`, such as a `styles` list referencing sibling `palettes`. Static values must remain plain properties; do not use getters just to organize or label settings.
+Use object getters in `settings` only when a setting must compute its value from sibling keys with `this`, such as a `styles` list referencing sibling `palettes`. Static values must remain plain properties; do not use getters just to organize or label settings.
 
 ### @xyflow/system reference
 

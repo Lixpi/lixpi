@@ -19,7 +19,7 @@ import MediaLibraryService from '$src/services/media-library-service.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 import { xIcon } from '$src/svgIcons/index.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 const SCOPES: Array<{ key: MediaLibraryScope; label: string }> = [
     { key: MEDIA_LIBRARY_SCOPE.WORKSPACE, label: 'Workspace' },
@@ -694,7 +694,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 <button type="button" className="media-library-footer-new-btn">+ Extract new</button>
             </div>
         </div>` as HTMLElement
-        panelEl.style.setProperty('--media-library-panel-fraction', String(webUiThemeSettings.mediaLibrary.panelWidthFraction))
+        panelEl.style.setProperty('--media-library-panel-fraction', String(settings.mediaLibrary.panelWidthFraction))
 
         const searchInput = panelEl.querySelector('.media-library-header-search') as HTMLInputElement
         searchInput.addEventListener('input', () => {

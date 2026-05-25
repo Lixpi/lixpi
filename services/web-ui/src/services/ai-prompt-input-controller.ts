@@ -11,7 +11,7 @@ import type {
 } from '@lixpi/constants'
 
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 type ThreadEditorEntry = {
     editorView: EditorView
@@ -306,11 +306,11 @@ export class AiPromptInputController {
             const targetCanvasNode = canvasState.nodes.find((n: CanvasNode) => n.nodeId === targetNodeId)
             if (!targetCanvasNode) return
 
-            const threadDimensions = { ...webUiThemeSettings.contextRegion.defaultDimensions }
+            const threadDimensions = { ...settings.contextRegion.defaultDimensions }
 
             // Position the new thread to the right of the target node
             const threadPosition = {
-                x: targetCanvasNode.position.x + (targetCanvasNode.dimensions?.width ?? 400) + webUiThemeSettings.contextRegion.adjacentNodeGap,
+                x: targetCanvasNode.position.x + (targetCanvasNode.dimensions?.width ?? 400) + settings.contextRegion.adjacentNodeGap,
                 y: targetCanvasNode.position.y
             }
 
