@@ -6,7 +6,77 @@ import {
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import {
     aiCollapsibleBlockNodeView,
+    cacheImageGenerationTrace,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
+import type { ImageGenerationTrace } from '@lixpi/constants'
+
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: vi.fn(async () => 'token-1'),
+    },
+}))
+
+function createTrace(overrides: Partial<ImageGenerationTrace> = {}): ImageGenerationTrace {
+    return {
+        traceVersion: 'image-generation-trace-v1',
+        chatModelProvider: 'Anthropic',
+        chatModelId: 'claude-sonnet-4-6',
+        imageModelProvider: 'Google',
+        imageModelId: 'gemini-2.5-flash-image',
+        imageSize: '1:1',
+        toolPrompt: 'Paint the same man in orange monochrome.',
+        finalPrompt: 'MANDATORY /use FEATURE TRANSFER\nPaint the same man in orange monochrome.',
+        promptWasChanged: true,
+        referenceImages: [
+            {
+                id: 'branch:person-generated',
+                source: 'branch-candidate',
+                imageUrl: 'nats-obj://workspace-workspace-1-files/person-file',
+                label: 'painted portrait of the man',
+                role: 'target',
+                nodeId: 'person-generated',
+                fileId: 'person-file',
+                workspaceId: 'workspace-1',
+                branchId: 'branch-person',
+                reason: 'selected generated portrait branch',
+            },
+            {
+                id: 'branch:landscape-source',
+                source: 'branch-candidate',
+                imageUrl: '/api/images/workspace-1/landscape-file',
+                label: 'landscape painting',
+                role: 'style-reference',
+                nodeId: 'landscape-source',
+                fileId: 'landscape-file',
+                workspaceId: 'workspace-1',
+                reason: 'style source',
+            },
+        ],
+        excludedReferences: [
+            {
+                nodeId: 'goat-generated',
+                label: 'painted goat',
+                role: 'excluded',
+                reason: 'different subject branch',
+                branchId: 'branch-goat',
+            },
+        ],
+        resolver: {
+            resolverKind: 'structured-vlm',
+            resolverVersion: 'image-branch-vlm-v1',
+            resolverModelProvider: 'Anthropic',
+            resolverModelId: 'claude-sonnet-4-6',
+            mode: 'edit-active-branch',
+            operationKind: 'style_transfer',
+            confidence: 0.91,
+            rationale: 'Continue the generated portrait branch and exclude the goat branch.',
+            targetImageNodeId: 'person-generated',
+            parentImageNodeId: 'person-generated',
+            branchId: 'branch-person',
+        },
+        ...overrides,
+    }
+}
 
 function createCollapsibleNodeView(attrs: Record<string, unknown> = {}) {
     const node = schema.nodes.aiCollapsibleBlock.create(
@@ -111,4 +181,54 @@ describe('aiCollapsibleBlockNodeView', () => {
 
         expect(nodeView.update!(wrongNode)).toBe(false)
     })
+
+    it('renders trace summary, final prompt, resolver audit, and exclusions while collapsed', () => {
+        const { nodeView } = createCollapsibleNodeView({ imageGenerationTrace: createTrace() })
+
+        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-title')?.textContent).toBe('Image generation details')
+        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-meta')?.textContent).toBe('2 references')
+        expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt-section')?.hasAttribute('hidden')).toBe(false)
+        expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt')?.textContent).toContain('MANDATORY /use FEATURE TRANSFER')
+        expect(nodeView.dom.querySelector('.ai-image-generation-resolver-summary')?.textContent).toBe('Style Transfer | Edit Active Branch | confidence 91%')
+        expect(nodeView.dom.querySelector('.ai-image-generation-resolver-rationale')?.textContent).toContain('exclude the goat branch')
+        expect(nodeView.dom.querySelector('.ai-image-generation-excluded-label')?.textContent).toBe('painted goat')
+        expect(nodeView.dom.querySelector('.ai-image-generation-excluded-node')?.textContent).toBe('goat-generated')
+        expect(nodeView.dom.querySelector('.ai-image-generation-reference-grid')?.childElementCount).toBe(0)
+    })
+
+    it('renders reference image tiles only after the details block is opened', () => {
+        const { nodeView } = createCollapsibleNodeView({ imageGenerationTrace: createTrace() })
+        const summary = nodeView.dom.querySelector('summary') as HTMLElement
+
+        summary.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        summary.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        const tiles = Array.from(nodeView.dom.querySelectorAll('.ai-image-generation-reference'))
+        expect(tiles).toHaveLength(2)
+        expect(tiles[0].getAttribute('data-source')).toBe('branch-candidate')
+        expect(tiles[0].getAttribute('data-role')).toBe('target')
+        expect(tiles[0].querySelector('.ai-image-generation-reference-label')?.textContent).toBe('painted portrait of the man')
+        expect(tiles[0].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Target')
+        expect(tiles[1].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Style Reference')
+    })
+
+    it('keeps the final prompt section hidden when the image prompt was not changed', () => {
+        const trace = createTrace({
+            finalPrompt: 'Paint the same man in orange monochrome.',
+            promptWasChanged: false,
+        })
+        const { nodeView } = createCollapsibleNodeView({ imageGenerationTrace: trace })
+
+        expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt-section')?.hasAttribute('hidden')).toBe(true)
+        expect(nodeView.dom.querySelector('.ai-image-generation-final-prompt')?.textContent).toBe('')
+    })
+
+    it('can render a cached trace by id without needing inline trace attrs', () => {
+        cacheImageGenerationTrace('trace-1', createTrace({ referenceImages: [] }))
+        const { nodeView } = createCollapsibleNodeView({ imageGenerationTraceId: 'trace-1' })
+
+        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-title')?.textContent).toBe('Image generation details')
+        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-meta')?.textContent).toBe('0 references')
+    })
+
 })

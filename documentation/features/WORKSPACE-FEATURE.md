@@ -2,6 +2,10 @@
 
 A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
+> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Image-node DOM `<img>` elements are interaction chrome and the partial-streaming surface during AI image generation. Stored image nodes leave their DOM `<img>` without `src` so the browser does not double-fetch pixels already owned by PIXI. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
+>
+> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For collision resolution, placement cleanup, drag-release collision rules, and context-region shape-aware collision planning, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md). For the CO2-shaped seafoam context-region cloud system specifically, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
+
 ## Core Concepts
 
 **Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents, AI chat threads, and uploaded files.
@@ -12,9 +16,9 @@ A workspace is the primary container where users organize and edit their documen
 
 **AI Chat Thread** — An independent AI conversation canvas node with its own persistence and lifecycle. Stored in the AI-Chat-Threads DynamoDB table. Each thread has its own `AiInteractionService` instance for streaming AI responses. Uses `documentType: 'aiChatThread'` for its ProseMirror editor.
 
-**Image** — An uploaded image file stored in NATS Object Store. Referenced by canvas nodes and automatically deleted when removed from the canvas.
+**Image** — An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas. A user can explicitly save a separate Media Library copy that is not deleted with the source node.
 
-**Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off.
+**Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off. While a workspace is open, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform.
 
 ## System Architecture
 
@@ -38,7 +42,7 @@ flowchart TB
             WC[WorkspaceCanvas.ts]
             WCM[WorkspaceConnectionManager]
             XY[XYPanZoom]
-            CR[ConnectorRenderer]
+            PER[PIXI Edge Renderer]
         end
 
         subgraph Services["Frontend Services"]
@@ -64,7 +68,7 @@ flowchart TB
     WCS --> WC
     WC --> XY
     WC --> WCM
-    WCM --> CR
+    WCM --> PER
 
     WCS --> WSvc
     WCS --> DSvc
@@ -145,9 +149,11 @@ The `WorkspaceConnectionManager` handles the visual rendering logic for edges.
 
 When an AI thread generates images, the workspace manages their placement automatically to maintain a clean layout:
 
-- **Positioning**: Images are placed 50px to the right of their source thread.
-- **Stacking**: Multiple images from the same thread are stacked vertically. The first image aligns with the top of the thread, and subsequent images are placed below the previous one with a 30px gap.
+- **Positioning**: First outputs are placed to the right of the context-region cloud's visual bounds using the spacing configured in `settings.imageBranchLineage`. Image-to-image continuations use the latest image in the branch as the anchor.
+- **Scale**: Generated image nodes use the configured canvas-unit size regardless of the current zoom level.
+- **Stacking and alignment**: Multiple first-generation outputs stack next to the source region using the configured branch-lineage spacing. Image-to-image continuations stay vertically aligned with the previous image in the branch lineage.
 - **Race Condition Handling**: The layout engine tracks synchronous "partial" image states to ensure that simultaneous updates (e.g., partial stream + final completion) do not cause images to overlap or skip positional slots.
+- **Generated-image provenance chrome**: AI-generated image nodes render provider badges and an info button in a dedicated DOM overlay above the PIXI media canvas. The info panel opens at the exact image-node width, expands to its full content height without cropping long prompts or metadata, and uses the image node's `generatedBy.responseMessageId` to reconstruct the originating user prompt and AI response from the chat thread. It reuses the same chat message shells and `ImageGenerationTrace` detail renderer used by the AI chat history.
 
 ### CanvasNode
 
@@ -332,7 +338,15 @@ sequenceDiagram
     end
 ```
 
-Note: after an image is uploaded the client loads it to determine the natural aspect ratio. On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing and the UI computes resize handle size/offsets dynamically so handles remain visually consistent regardless of canvas zoom.
+Note: after an image is uploaded or imported from a public URL, the client loads the persisted workspace object to determine the natural aspect ratio. URL insertion uses `POST /api/images/:workspaceId/import-url`, which validates and stores the fetched image in the workspace Object Store before creating a canvas node; a canvas image node is therefore never backed only by an external URL. On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing and the UI computes resize handle size/offsets dynamically so handles remain visually consistent regardless of canvas zoom.
+
+### Saving an Image to the Media Library
+
+Completed image nodes expose `Add to Media Library` in their canvas bubble menu. Partially streaming AI-generated image nodes do not expose the action until a stored final object exists. Saving is explicit: it copies the image bytes from `workspace-{workspaceId}-files/{fileId}` into a Media Library scope-owned Object Store bucket and writes a generic media metadata record. New saves start in `Workspace` scope; users can view or move items through `Workspace`, `Mine`, `Organization`, and `Public` scopes, or browse `All available`. Saving confirms in place with a transient message on the canvas; it does not open or switch the panel. Re-saving the same source image is deduplicated — the server returns the existing library item instead of writing a second independent copy.
+
+The Media Library panel is implemented by the canvas module rather than a Svelte component. Its independent launcher sits above the existing bottom-right zoom indicator, and both shift left with any active AI chat panel. The open drawer covers that launcher, is flush to the pane's top and bottom, and occupies two-thirds of the remaining workspace width. A segmented `Features` / `Images` control and compact `Scope` selector replace stacked filter rows. `Features` (the default category) uses concise visual browse cards and a separate inspector that exposes full summaries, instructions, tags, samples, palette details, and owner sharing controls; at narrow widths selection becomes a focused detail view with Back. Feature cards clamp only the browsing summary preview; complete stored details remain available in the inspector.
+
+Selecting `Add to canvas` on a saved image reads its library object, calls the existing workspace image storage path to create a new workspace-owned object, and inserts a fresh `ImageCanvasNode` through the canvas insertion helper. Removing the original canvas image therefore does not remove its explicitly saved Media Library copy. Deleting a workspace removes only Media Library images still scoped to that workspace; images moved to a broader scope are separate retained objects. Promoted Features are different records: their sample bytes are copied into durable user-owned Feature storage before promotion, and deletion of an origin workspace migrates legacy promoted samples before deleting the workspace bucket.
 
 ### Deleting an Image
 
@@ -544,13 +558,20 @@ AI chat threads belonging to the current workspace.
 | `AI_INTERACTION.CHAT_SEND_MESSAGE` | Send message to AI for processing |
 | `AI_INTERACTION.CHAT_STOP_MESSAGE` | Stop active AI streaming |
 | `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image from Object Store |
+| `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_IMAGE` | Copy a stored canvas image into the Media Library |
+| `WORKSPACE.MEDIA_LIBRARY.LIST_AVAILABLE` | List saved media visible in selected scopes |
+| `WORKSPACE.MEDIA_LIBRARY.MATERIALIZE_IMAGE_TO_WORKSPACE` | Copy a saved image into workspace storage for canvas insertion |
+| `WORKSPACE.MEDIA_LIBRARY.CHANGE_SCOPE` | Copy a library object to a new scope and update metadata |
+| `WORKSPACE.MEDIA_LIBRARY.DELETE` | Delete a saved library image and its stored object |
 
 ### Image HTTP Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/images/:workspaceId` | POST | Upload image (multipart/form-data) |
+| `/api/images/:workspaceId/import-url` | POST | Fetch a public image URL into workspace Object Store before canvas insertion |
 | `/api/images/:workspaceId/:fileId` | GET | Serve image with auth token |
+| `/api/media-library/items/:itemId/content` | GET | Serve an ACL-checked saved Media Library image preview |
 | `/api/workspaces/:workspaceId/export` | GET | Download workspace as ZIP archive (see [WORKSPACE-EXPORT.md](WORKSPACE-EXPORT.md)) |
 
 ## Rendering Pipeline
@@ -576,23 +597,29 @@ flowchart LR
     subgraph ConnectionManager["WorkspaceConnectionManager"]
         WCM[syncNodes/syncEdges]
         XYH[XYHandle API]
-        CR[ConnectorRenderer]
+        PXD[PIXI edge datum cache]
     end
 
-    subgraph DOM
+    subgraph DOM["DOM (z-index 1)"]
         VP[.workspace-viewport]
-        EDGES[.workspace-edges-layer SVG]
         DOCNODES[.workspace-document-node]
-        IMGNODES[.workspace-image-node]
+        IMGNODES[.workspace-image-node<br/>img.src empty when PIXI healthy]
         THREADNODES[.workspace-ai-chat-thread-node]
         HANDLES[.workspace-handle]
         ED[.document-node-editor]
         TED[.ai-chat-thread-node-editor]
-        IMG[img element]
+    end
+
+    subgraph PIXI["PIXI v8 (z-index 2)"]
+        PML[pixiMediaLayer.sync]
+        SPR[Image sprites + colorRect placeholders]
+        PEDG[Pixi edge Graphics — diffed]
+        FG[Selection outlines, marquee, group overlay]
     end
 
     CS --> RN
     CS --> WCM
+    CS --> PML
     DOCS --> RN
     THREADS --> RN
     RN --> CDN
@@ -609,13 +636,18 @@ flowchart LR
     IMGNODES --> VP
     THREADNODES --> VP
     WCM --> XYH
-    WCM --> CR
-    CR --> EDGES
-    EDGES --> VP
+    WCM --> PXD
+    WCM --> PEDG
+    PXD --> PEDG
     PM --> ED
     PM --> TED
-    CIN --> IMG
+    PML --> SPR
+    PML --> FG
 ```
+
+The DOM viewport hosts every interactive element. PIXI uses two visual layers: the context-region layer below the DOM viewport owns CO2-shaped region cloud surfaces, while the media layer above the DOM viewport owns image pixels, image-node selection outlines, marquee rectangles, group-overlay highlights, and edge stroke geometry. All layers are kept aligned by `viewportBridge.applyViewport()`, which is the single call site that updates the DOM CSS transform and both PIXI world containers in the same tick.
+
+For the texture cache, LoD-tier loader, decode worker pool, eviction strategy, and the list of remaining performance issues (notably: the API does not actually serve resized thumbnails today), see [CANVAS-ENGINE.md](CANVAS-ENGINE.md).
 
 ## Persistence Strategy
 
@@ -634,11 +666,11 @@ Edge changes are persisted immediately when edges are created, deleted, or recon
 Images on the canvas are tracked by `canvasImageLifecycle.ts`. When an image node is removed from the canvas state:
 
 1. The tracker compares previous and current canvas states
-2. Detects which fileIds are no longer present
+2. Detects which fileIds are missing from the current canvas state
 3. Calls `deleteImage()` from `imageUtils.ts` to delete from storage
 4. The same `deleteImage()` utility is shared with ProseMirror's `imageLifecyclePlugin`
 
-This ensures orphaned images don't accumulate in storage.
+This ensures orphaned workspace-node images don't accumulate in storage. It does not delete Media Library images, which are intentionally independent saved copies with their own scope and deletion lifecycle.
 
 ## Lazy Content Loading
 
@@ -748,7 +780,7 @@ Visual connections (edges/arrows) between canvas nodes allow users to show relat
 
 - **Connection handles** on each node (visible on hover)
 - **Drag-to-connect** interaction using `XYHandle.onPointerDown` from `@xyflow/system`
-- **Edge rendering** using ConnectorRenderer from `src/infographics/connectors/`
+- **Edge rendering** through PIXI edge data produced by `WorkspaceConnectionManager.ts` and drawn by `pixiEdgeRenderer.ts`
 - **Edge selection and deletion** (click to select, Delete/Backspace to remove)
 - **Persistence** of edges in `CanvasState`
 
@@ -772,10 +804,10 @@ flowchart TB
     end
 
     subgraph "Rendering"
-        CR[createConnectorRenderer]
-        SVG[SVG Edge Layer]
+        PXD[PIXI edge data]
+        PER[pixiEdgeRenderer Graphics]
         HANDLES[Handle DOM Elements]
-        CR --> SVG
+        PXD --> PER
     end
 
     subgraph "Canvas"
@@ -785,12 +817,12 @@ flowchart TB
     end
 
     WC --> WCM
-    WC --> CR
     WC --> HANDLES
     NODES --> HANDLES
     WCM -->|onConnect| WE
-    WE -->|render| CR
-    XYH -->|in-progress line| SVG
+    WE -->|syncEdges| WCM
+    WCM -->|setPixiEdges| PXD
+    XYH -->|in-progress state| WCM
 ```
 
 ### Connection Flow
@@ -802,7 +834,7 @@ sequenceDiagram
     participant Handle as Source Handle DOM
     participant XYH as XYHandle.onPointerDown
     participant WCM as WorkspaceConnectionManager
-    participant SVG as Edge SVG Layer
+    participant PIXI as PIXI Edge Layer
     participant Target as Target Handle DOM
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 1: START DRAG
@@ -815,7 +847,7 @@ sequenceDiagram
         activate XYH
         XYH->>WCM: updateConnection(inProgress)
         activate WCM
-        WCM->>SVG: Render temp line from source
+        WCM->>PIXI: Emit temp edge datum
         deactivate Handle
     end
 
@@ -828,7 +860,7 @@ sequenceDiagram
             User->>XYH: pointermove
             XYH->>XYH: Find closest valid handle
             XYH->>WCM: updateConnection(newPosition)
-            WCM->>SVG: Update temp line endpoint
+            WCM->>PIXI: Update temp edge datum
         end
     end
 
@@ -842,7 +874,7 @@ sequenceDiagram
         XYH->>WCM: onConnect({ source, target })
         deactivate XYH
         WCM->>WCM: Add edge to state
-        WCM->>SVG: Render permanent edge
+        WCM->>PIXI: Emit permanent edge datum
         deactivate WCM
     end
 ```
@@ -859,11 +891,14 @@ classDiagram
         -edges: WorkspaceEdge[]
         -selectedEdgeId: string | null
         -connectionInProgress: ConnectionState | null
-        -connectorRenderer: ConnectorRenderer
+        -cachedPixiEdgeData: PixiEdgeRenderDatum[]
+        -cachedFlattenedEdgePaths: Map
 
         +syncNodes(canvasNodes: CanvasNode[])
         +syncEdges(edges: WorkspaceEdge[])
         +onHandlePointerDown(event, handleMeta)
+        +recomputePixiEdgesOnly(zoom: number)
+        +getEdgeMidpointRect(edgeId: string)
         +selectEdge(edgeId: string)
         +deleteSelectedEdge()
         +render()
@@ -890,6 +925,8 @@ Responsibilities:
 - Tracks in-progress connection state for rendering the temporary line
 - Validates connections (no duplicates, no self-loops)
 - Delegates to `XYHandle.onPointerDown` for the actual drag interaction
+- Builds PIXI edge render data from shared connector path math
+- Uses cached flattened PIXI path data for edge hit testing and bubble-menu anchoring
 - Manages edge selection state
 
 ### Handle DOM Elements
@@ -914,14 +951,14 @@ Handles are:
 
 ### Edge Rendering
 
-Edges are rendered as SVG paths using `createConnectorRenderer` from `src/infographics/connectors/`. The edge layer sits below node cards but above the canvas background.
+Edges are rendered as PIXI `Graphics` by `services/web-ui/src/infographics/workspace/rendering/pixiEdgeRenderer.ts`. `WorkspaceConnectionManager.ts` builds edge render data with shared path helpers from `src/infographics/connectors/paths.ts`, then sends it to the PIXI media layer for drawing, hit testing, and bubble-menu anchoring.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
     subgraph "Z-Order (bottom to top)"
         BG[Canvas Background]
-        EDGES[Edge SVG Layer]
+        EDGES[PIXI Edge Layer]
         NODES[Node Cards]
         HANDLES[Handle Overlays]
     end
@@ -931,9 +968,10 @@ flowchart LR
 
 Edge styling:
 - Path type: `horizontal-bezier`
-- Stroke width: `2px` (3px when selected)
-- Marker (arrowhead) size: `12px`
-- Color: `rgba(190, 190, 200, 0.95)` (primary color when selected)
+- Stroke width: `2px` from the zoom compensation floor upward
+- Marker (arrowhead) size: `16px` from the zoom compensation floor upward
+- Color: CSS connector custom properties from the workspace pane, using the focus color when selected
+- Temporary and proximity edges render dashed
 
 ### Edge Selection and Deletion
 
@@ -1035,10 +1073,7 @@ When nodes are connected TO an AI chat thread (incoming edges), the AI chat auto
 
 ## AI Image Generation
 
-This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears as a canvas node. Two placement modes are available, controlled by `renderNodeConnectorLineFromAiResponseMessageToTheGeneratedMediaItem` in `webUiSettings.ts`:
-
-- **Anchored mode** (default, setting = `false`): The image visually overlaps the AI chat thread node, positioned side-by-side to the right of the AI response message text. The image takes approximately 48% of the thread width and is vertically aligned with the top of the response message. The image moves with the thread during drag, and can be detached by dragging its center outside the thread bounds. Thread height grows only when the image extends below the thread bottom. Collision detection excludes anchored image/thread pairs. Resize constraints prevent the image from exceeding ~48% of the thread width.
-- **Connector line mode** (setting = `true`): The image appears to the right of the thread, connected by an edge whose `sourceMessageId` links it to the specific `aiResponseMessage` that produced it. Multiple images stack vertically with 30px gaps.
+This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears as a separate canvas image node connected by an edge whose `sourceMessageId` links it to the specific `aiResponseMessage` that produced it. Generated-image size and branch spacing are controlled by `settings.imageBranchLineage`.
 
 In both modes, the revised prompt text is inserted as text inside the AI response message to keep the conversation readable.
 
@@ -1051,9 +1086,9 @@ Multi-turn editing is supported: users can continue refining an image within the
 3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
 4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with an animated gradient border and a three-dot bounce spinner
 5. OpenAI streams back partial images (up to 3) as the generation progresses. The first real partial removes the spinner; subsequent partials update the image progressively
-6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, and finalizes the canvas node with full metadata. In connector line mode, an edge (including `sourceMessageId`) connects the AI response to the image. In anchored mode, the image is positioned at the right side of the thread, aligned with the response message top.
+6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, finalizes the canvas node with full metadata, and updates the edge with `sourceMessageId` so the connector points back to the producing AI response.
 7. The revised prompt text appears inside the AI response message in the chat thread
-8. In connector line mode, multiple images stack vertically to the right with 30px gaps. In anchored mode, images overlap the right half of the thread alongside their source response text.
+8. Multiple generated images stack using the spacing configured in `settings.imageBranchLineage`.
 
 ### Data Flow
 
@@ -1166,7 +1201,7 @@ When the AI generates an image:
 3. Progressive partial previews update the canvas node's image in real-time via direct DOM updates. The first real partial removes the bounce spinner.
 4. `IMAGE_COMPLETE` removes the animated border and spinner, then finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
 5. A `WorkspaceEdge` connects the thread to the image with `sourceMessageId` identifying the specific `aiResponseMessage` (the response node gets a unique `id` when created by `handleStreamStart`)
-6. Multiple images from the same thread stack vertically with 30px gaps
+6. Multiple images from the same thread stack vertically using spacing from `settings.imageBranchLineage`
 7. Collision resolution runs after finalization to push apart any overlapping nodes
 8. The revised prompt text is inserted as a paragraph inside the AI response message in the editor
 
@@ -1174,50 +1209,7 @@ When the AI generates an image:
 
 When "Edit in New Thread" is clicked on a canvas image node:
 
-1. A new AI chat thread is created and positioned at `(imageNode.x + imageNode.width + 50, imageNode.y)`
+1. A new AI chat thread context region is created to the right of the source image using `settings.contextRegion.defaultDimensions` and `settings.contextRegion.adjacentNodeGap`; shape-aware collision resolution then pushes conflicting top-level nodes apart
 2. An edge connects the image (right) to the new thread (left)
 3. The connected image is automatically included in the new thread's context via `extractConnectedContext()`
 4. This forms a horizontal chain: `[Original Thread] → [Image] → [Edit Thread]`
-
----
-
-## Follow-up Tasks
-
-The following items are pending implementation:
-
-### Handle Styling Polish
-
-- [ ] Show handles on AI chat thread node hover (CSS selector missing `.workspace-ai-chat-thread-node:hover .workspace-handle`)
-- [ ] Add hover effect on handle itself (`:hover` style)
-- [ ] Add transition for smooth fade in/out
-
-### Context Icon for AI Chat Thread Nodes
-
-The "branch" icon at the bottom-right corner of AI chat thread cards currently uses the old `contextSelector` plugin. It needs to be refactored to work with the workspace edge system:
-
-- [ ] Refactor icon click handler to work with workspace connection system
-- [ ] Show popover listing nodes connected TO this thread (incoming edges)
-- [ ] Allow quick disconnect (remove edge) from the popover
-- [ ] Optionally highlight connected edges on canvas when popover is open
-
-### Cleanup Old Code
-
-Once the context icon is refactored:
-
-- [ ] Delete `src/components/proseMirror/plugins/primitives/contextSelector/` folder
-- [ ] Remove import from `aiChatThreadNode.ts`
-- [ ] Remove SCSS import from `ai-chat-thread.scss`
-
-### Edge Cases
-
-- [ ] When a node with edges is deleted, connected edges should be removed too
-- [ ] Verify edges update correctly during node drag
-
-### Testing
-
-- [ ] Create edges between different node types (document ↔ document, document ↔ AI thread, etc.)
-- [ ] Test edge selection and deletion
-- [ ] Test edge reconnection
-- [ ] Test with pan/zoom (edges should transform correctly)
-- [ ] Test persistence (reload page, edges should still be there)
-- [ ] Test with many nodes and edges (performance)

@@ -1,45 +1,38 @@
 'use strict'
 
 import { Router } from 'express'
-import { v4 as uuid } from 'uuid'
-import { createHash } from 'crypto'
 import multer from 'multer'
 
 import NATS_Service from '@lixpi/nats-service'
-import { type DocumentFile } from '@lixpi/constants'
-import { info, err } from '@lixpi/debug-tools'
+import {
+    ALLOWED_IMAGE_MIME_TYPES,
+    MAX_IMAGE_FILE_SIZE,
+    type DocumentFile,
+} from '@lixpi/constants'
+import { err } from '@lixpi/debug-tools'
 
 import { jwtVerifier } from '../helpers/auth.ts'
 import Workspace from '../models/workspace.ts'
+import {
+    storeWorkspaceImage,
+} from '../services/image-storage.ts'
+import { importRemoteImageToWorkspace } from '../services/remote-image-import.ts'
 
 const router = Router()
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
 
-// Maximum file size: 1GB
-const MAX_FILE_SIZE = 1024 * 1024 * 1024
-
-// Allowed image MIME types
-const ALLOWED_MIME_TYPES = [
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-    'image/svg+xml',
-    'image/avif'
-]
-
 // Configure multer for memory storage
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: MAX_FILE_SIZE
+        fileSize: MAX_IMAGE_FILE_SIZE
     },
     fileFilter: (req, file, cb) => {
-        if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+        if (ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
             cb(null, true)
         } else {
-            cb(new Error(`Invalid content type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`))
+            cb(new Error(`Invalid content type. Allowed: ${ALLOWED_IMAGE_MIME_TYPES.join(', ')}`))
         }
     }
 })
@@ -114,79 +107,50 @@ router.post(
     async (req: any, res: any) => {
         const { workspaceId } = req.params
         const file = req.file
-        const useContentHash = req.body?.useContentHash === 'true'
 
         if (!file) {
             return res.status(400).json({ error: 'No file provided' })
         }
 
-        // Generate fileId: content-hash for AI images, UUID for regular uploads
-        let fileId: string
-        let isDuplicate = false
-
-        if (useContentHash) {
-            // Use SHA-256 hash of content as fileId for deduplication
-            const hash = createHash('sha256').update(file.buffer).digest('hex')
-            fileId = `hash-${hash}`
-
-            // Check if this hash already exists in workspace files
-            const workspace = req.workspace
-            const existingFile = workspace.files?.find((f: DocumentFile) => f.id === fileId)
-
-            if (existingFile) {
-                // File already exists, return existing info without re-uploading
-                isDuplicate = true
-                info(`Duplicate image detected: ${fileId} (skipping upload)`)
-
-                return res.json({
-                    fileId,
-                    url: `/api/images/${workspaceId}/${fileId}`,
-                    size: existingFile.size,
-                    mimeType: existingFile.mimeType,
-                    isDuplicate: true
-                })
-            }
-        } else {
-            fileId = uuid()
-        }
-
-        const bucketName = getWorkspaceBucketName(workspaceId)
-
         try {
-            const natsService = NATS_Service.getInstance()
-            if (!natsService) {
-                return res.status(503).json({ error: 'Storage service unavailable' })
-            }
-
-            // Store in Object Store
-            await natsService.putObject(bucketName, fileId, file.buffer, {
-                name: fileId,
-                description: file.originalname
-            })
-
-            // Update workspace's files array
-            const fileMetadata: DocumentFile = {
-                id: fileId,
-                name: file.originalname,
+            const result = await storeWorkspaceImage({
+                workspaceId,
+                buffer: file.buffer,
+                originalName: file.originalname,
                 mimeType: file.mimetype,
-                size: file.size,
-                uploadedAt: Date.now()
-            }
-
-            await Workspace.addFile({ workspaceId, file: fileMetadata })
-
-            info(`Image uploaded: ${bucketName}/${fileId} (${file.size} bytes)${useContentHash ? ' [hash-based]' : ''}`)
-
-            res.json({
-                fileId,
-                url: `/api/images/${workspaceId}/${fileId}`,
-                size: file.size,
-                mimeType: file.mimetype,
-                isDuplicate: false
+                useContentHash: req.body?.useContentHash === 'true',
             })
+            return res.json(result)
         } catch (e: any) {
             err(`Image upload failed for workspace ${workspaceId}:`, e)
+            if (e?.message?.startsWith('Workspace not found')) {
+                return res.status(404).json({ error: 'Workspace not found' })
+            }
+            if (e?.message?.includes('NATS service unavailable')) {
+                return res.status(503).json({ error: 'Storage service unavailable' })
+            }
             return res.status(500).json({ error: 'Failed to upload image' })
+        }
+    }
+)
+
+// POST /api/images/:workspaceId/import-url - Import a public image URL into storage.
+router.post(
+    '/:workspaceId/import-url',
+    authenticateRequest,
+    validateWorkspaceAccess,
+    async (req: any, res: any) => {
+        const { workspaceId } = req.params
+        const imageUrl = req.body?.url
+        if (typeof imageUrl !== 'string' || !imageUrl.trim()) {
+            return res.status(400).json({ error: 'Image URL is required' })
+        }
+        try {
+            return res.json(await importRemoteImageToWorkspace({ workspaceId, imageUrl }))
+        } catch (e: any) {
+            err(`Image URL import failed for workspace ${workspaceId}:`, e)
+            const unsafeOrInvalid = /Invalid|Only public|credentials|Private network|supported image|valid image|too large|redirected/i.test(e?.message ?? '')
+            return res.status(unsafeOrInvalid ? 400 : 502).json({ error: e.message || 'Failed to import image URL' })
         }
     }
 )
@@ -245,97 +209,6 @@ router.get(
         } catch (e: any) {
             err(`Image retrieval failed for ${workspaceId}/${fileId}:`, e)
             return res.status(500).json({ error: 'Failed to retrieve image' })
-        }
-    }
-)
-
-// POST /api/images/internal/:workspaceId - Internal upload endpoint for service-to-service calls
-// No authentication required - only accessible from internal network (e.g., llm-api)
-router.post(
-    '/internal/:workspaceId',
-    upload.single('file'),
-    async (req: any, res: any) => {
-        const { workspaceId } = req.params
-        const file = req.file
-        const useContentHash = req.body?.useContentHash === 'true'
-
-        if (!file) {
-            return res.status(400).json({ error: 'No file provided' })
-        }
-
-        // Verify workspace exists (internal call, no user access check)
-        const workspace = await Workspace.getWorkspaceInternal({ workspaceId })
-
-        if (!workspace) {
-            return res.status(404).json({ error: 'Workspace not found' })
-        }
-
-        // Generate fileId: content-hash for AI images, UUID for regular uploads
-        let fileId: string
-        let isDuplicate = false
-
-        if (useContentHash) {
-            // Use SHA-256 hash of content as fileId for deduplication
-            const hash = createHash('sha256').update(file.buffer).digest('hex')
-            fileId = `hash-${hash}`
-
-            // Check if this hash already exists in workspace files
-            const existingFile = workspace.files?.find((f: DocumentFile) => f.id === fileId)
-
-            if (existingFile) {
-                // File already exists, return existing info without re-uploading
-                isDuplicate = true
-                info(`Duplicate image detected: ${fileId} (skipping upload)`)
-
-                return res.json({
-                    fileId,
-                    url: `/api/images/${workspaceId}/${fileId}`,
-                    size: existingFile.size,
-                    mimeType: existingFile.mimeType,
-                    isDuplicate: true
-                })
-            }
-        } else {
-            fileId = uuid()
-        }
-
-        const bucketName = getWorkspaceBucketName(workspaceId)
-
-        try {
-            const natsService = NATS_Service.getInstance()
-            if (!natsService) {
-                return res.status(503).json({ error: 'Storage service unavailable' })
-            }
-
-            // Store in Object Store
-            await natsService.putObject(bucketName, fileId, file.buffer, {
-                name: fileId,
-                description: file.originalname || 'ai-generated-image.png'
-            })
-
-            // Update workspace's files array
-            const fileMetadata: DocumentFile = {
-                id: fileId,
-                name: file.originalname || 'ai-generated-image.png',
-                mimeType: file.mimetype,
-                size: file.size,
-                uploadedAt: Date.now()
-            }
-
-            await Workspace.addFile({ workspaceId, file: fileMetadata })
-
-            info(`Image uploaded (internal): ${bucketName}/${fileId} (${file.size} bytes)${useContentHash ? ' [hash-based]' : ''}`)
-
-            res.json({
-                fileId,
-                url: `/api/images/${workspaceId}/${fileId}`,
-                size: file.size,
-                mimeType: file.mimetype,
-                isDuplicate: false
-            })
-        } catch (e: any) {
-            err(`Internal image upload failed for workspace ${workspaceId}:`, e)
-            return res.status(500).json({ error: 'Failed to upload image' })
         }
     }
 )

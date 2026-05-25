@@ -2,6 +2,21 @@
 
 import type { Merge, Except } from 'type-fest'
 
+export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability'] as const
+export type ProviderName = typeof PROVIDER_NAMES[number]
+
+// Shared image upload/import validation limits (API routes, remote URL import, web-ui uploader).
+export const MAX_IMAGE_FILE_SIZE = 1024 * 1024 * 1024
+
+export const ALLOWED_IMAGE_MIME_TYPES: readonly string[] = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/avif',
+]
+
 // NOTE: User type restored exactly as originally defined per instruction (commas retained intentionally)
 export type User = {
     userId: string,
@@ -20,7 +35,12 @@ export type User = {
     updatedAt: number,
 }
 
-export type AccessLevel = 'owner' | 'editor' | 'viewer'
+export const ACCESS_LEVEL = {
+    OWNER: 'owner',
+    EDITOR: 'editor',
+    VIEWER: 'viewer',
+} as const
+export type AccessLevel = typeof ACCESS_LEVEL[keyof typeof ACCESS_LEVEL]
 
 export type Organization = {
     organizationId: string
@@ -88,6 +108,155 @@ export type ImageSizeOption = {
     label: string
 }
 
+export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
+
+export type ImageBranchSelectionMode = 'context-only' | 'edit-active-branch' | 'all-branches' | 'fresh-branch' | 'ambiguous'
+
+export type ImageBranchCandidateRoleHint =
+    | 'base-context'
+    | 'generated-variant'
+    | 'branch-leaf'
+    | 'branch-ancestor'
+    | 'embedded-thread-image'
+    | 'active-target'
+
+export type ImageBranchCandidateImage = {
+    nodeId: string
+    fileId?: string
+    workspaceId?: string
+    imageUrl: string
+    roleHints: ImageBranchCandidateRoleHint[]
+    branchId?: string
+    parentImageNodeId?: string
+    ancestorNodeIds: string[]
+    sourceContextNodeIds: string[]
+    sourceMessageId?: string
+    promptText?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    createdAt?: number
+}
+
+export type ImageBranchCandidateSnapshot = {
+    resolverVersion: string
+    threadId: string
+    regionNodeId: string
+    activeTargetNodeId?: string
+    promptText: string
+    promptFingerprint: string
+    candidates: ImageBranchCandidateImage[]
+    transcriptContext: string
+}
+
+export type ImageBranchReferenceRole =
+    | 'target'
+    | 'base-context'
+    | 'style-reference'
+    | 'comparison-target'
+    | 'excluded'
+
+export type ImageBranchVlmReferenceDecision = {
+    nodeId: string
+    role: ImageBranchReferenceRole
+    reason: string
+}
+
+export type ImageBranchVlmResolution = {
+    resolverKind: 'structured-vlm'
+    resolverVersion: string
+    resolverModelProvider: string
+    resolverModelId: string
+    mode: ImageBranchSelectionMode
+    operationKind: ImageGenerationOperationKind
+    targetImageNodeId: string | null
+    parentImageNodeId?: string
+    branchId: string | null
+    includeGeneratedNodeIds: string[]
+    referenceImageNodeIds: string[]
+    sourceContextNodeIds: string[]
+    styleReferenceNodeIds: string[]
+    excludedNodeIds: string[]
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags: string[]
+    styleTags: string[]
+    confidence: number
+    rationale: string
+    decisions: ImageBranchVlmReferenceDecision[]
+}
+
+export type ImageBranchResolvedStreamPayload = {
+    status: 'IMAGE_BRANCH_RESOLVED'
+    aiProvider: string
+    resolution: ImageBranchVlmResolution
+}
+
+export type ImageBranchResolutionErrorStreamPayload = {
+    status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
+    aiProvider: string
+    error: string
+}
+
+export type ImageGenerationTraceReferenceRole = ImageBranchReferenceRole | 'feature-reference' | 'message-reference'
+
+export type ImageGenerationTraceReference = {
+    id: string
+    imageUrl: string
+    source: 'branch-candidate' | 'feature-reference' | 'message-reference'
+    label: string
+    role: ImageGenerationTraceReferenceRole
+    nodeId?: string
+    fileId?: string
+    workspaceId?: string
+    branchId?: string
+    reason?: string
+}
+
+export type ImageGenerationTraceExcludedReference = {
+    nodeId: string
+    label: string
+    role: 'excluded'
+    reason: string
+    fileId?: string
+    workspaceId?: string
+    branchId?: string
+}
+
+export type ImageGenerationTrace = {
+    traceVersion: 'image-generation-trace-v1'
+    chatModelProvider: string
+    chatModelId: string
+    imageModelProvider: string
+    imageModelId: string
+    imageSize: string
+    toolPrompt: string
+    finalPrompt: string
+    promptWasChanged: boolean
+    referenceImages: ImageGenerationTraceReference[]
+    excludedReferences: ImageGenerationTraceExcludedReference[]
+    resolver?: {
+        resolverKind: 'structured-vlm'
+        resolverVersion: string
+        resolverModelProvider: string
+        resolverModelId: string
+        mode: ImageBranchSelectionMode
+        operationKind: ImageGenerationOperationKind
+        confidence: number
+        rationale: string
+        targetImageNodeId: string | null
+        parentImageNodeId?: string
+        branchId: string | null
+    }
+}
+
+export type ImageGenerationTraceStreamPayload = {
+    status: 'IMAGE_GENERATION_TRACE'
+    aiProvider: string
+    imageGenerationTrace: ImageGenerationTrace
+}
+
 export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
@@ -95,6 +264,28 @@ export type ImageGeneratedByMetadata = {
     imageModelProvider?: string
     revisedPrompt: string
     responseMessageId?: string
+    branchId?: string
+    parentImageNodeId?: string
+    sourceContextNodeIds?: string[]
+    referenceImageNodeIds?: string[]
+    operationKind?: ImageGenerationOperationKind
+    promptText?: string
+    promptFingerprint?: string
+    entitySummary?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    targetImageNodeId?: string
+    styleReferenceNodeIds?: string[]
+    excludedNodeIds?: string[]
+    resolverKind?: 'structured-vlm'
+    resolverModelProvider?: string
+    resolverModelId?: string
+    resolverRationale?: string
+    resolverConfidence?: number
+    resolverVersion?: string
+    createdAt?: number
 }
 
 export type ImageCanvasNode = CanvasNodeParentingFields & {
@@ -147,13 +338,360 @@ export type WorkspaceEdge = {
     pathType?: WorkspaceEdgePathType
 }
 
+export type FeatureScope = 'workspace' | 'user' | 'organization' | 'public'
+export type FeatureStatus = 'active' | 'reported' | 'removed'
+
+export type FeatureSampleKind = 'source-crop' | 'texture-specimen' | 'applied-medium-probe' | 'palette-board'
+
+export type FeatureSampleCropRegion = {
+    imageRef: string
+    x: number
+    y: number
+    width: number
+    height: number
+    label: string
+    purpose: 'texture-evidence' | 'applied-medium-evidence' | 'subject-detail-evidence' | 'composition-evidence'
+}
+
+export type FeatureSampleRef = {
+    idx: number
+    subject: string
+    rationale?: string
+    aspectRatio?: string
+    ext: string
+    fileId?: string
+    imageUrl?: string
+    kind?: FeatureSampleKind
+    cropRegion?: FeatureSampleCropRegion
+}
+
+export type FeatureSourceImageCrop = {
+    imageRef: string
+    x: number
+    y: number
+    width: number
+    height: number
+    label: string
+    purpose: 'texture-evidence' | 'applied-medium-evidence' | 'subject-detail-evidence' | 'composition-evidence'
+    rationale: string
+}
+
+export type SceneSubject = {
+    label: string
+    bbox: [number, number, number, number]
+    salience: number
+    description: string
+}
+
+export type SceneRegion = {
+    label: string
+    bbox: [number, number, number, number]
+    description: string
+}
+
+export type SceneReference = {
+    imageRef: string
+    subjects: SceneSubject[]
+    regions: SceneRegion[]
+}
+
+export type SceneAssessment = {
+    references: SceneReference[]
+    medium: string
+    axisDominance: Record<string, number>
+    intentResolution: {
+        forcedCategory?: string | null
+        forcedAxes?: string[] | null
+        proposedCategory: string
+    }
+    notes: string
+}
+
+export type AxisExtraction = {
+    axis: string
+    dominance: number
+    fields: Record<string, any>
+    rationale: string
+}
+
+export type FeatureRecommendedSampleSubject = {
+    kind: FeatureSampleKind
+    prompt: string
+    aspectRatio: string
+    rationale: string
+}
+
+export type FeatureDraft = {
+    category: string
+    name: string
+    summary: string
+    tags: string[]
+    instructions: string
+    parameters: Record<string, any>
+    recommendedSampleSubjects: FeatureRecommendedSampleSubject[]
+}
+
+export type StageTraceEvent = {
+    extractionRunId: string
+    stage: string
+    modelName?: string
+    promptHash?: string
+    promptPreview?: string
+    startedAt: number
+    finishedAt: number
+    durationMs: number
+    // 'running' is a publish-only, in-flight marker streamed when a stage starts so
+    // the UI can show a live spinner. Only the terminal event ('ok' | 'error' | 'skipped')
+    // is persisted to ExtractionRun.trace.
+    status: 'running' | 'ok' | 'error' | 'skipped'
+    errorMessage?: string
+    inputSummary?: string
+    outputSummary?: string
+    outputBytes?: number
+    metricTags?: Record<string, string | number>
+}
+
+// Markdown stream parser segment shapes. These mirror what @lixpi/markdown-stream-parser
+// emits from subscribeToTokenParse — the package defines the segment internally but does
+// not export it (the callback is typed `any`), so the shape is centralized here and shared
+// by every consumer (the ProseMirror aiChatThreadPlugin and the unified MarkdownStreamRenderer).
+//
+// TODO: a newer version of @lixpi/markdown-stream-parser is in development that EXPORTS proper
+// segment types. Once that version is released, delete these definitions and import the types
+// directly from @lixpi/markdown-stream-parser instead.
+//
+// See documentation/features/MARKDOWN-RENDERING.md.
+export type MarkdownParsedSegment = {
+    segment: string
+    styles: string[]
+    type: string
+    level?: number
+    isBlockDefining: boolean
+    isProcessingNewLine?: boolean
+    content?: string
+    language?: string
+    origin?: string
+}
+
+export type MarkdownStreamToken = {
+    status: 'STREAMING' | 'END_STREAM'
+    segment?: MarkdownParsedSegment
+}
+
+export type FeatureSourceContext = {
+    extractionRunId: string
+    sourceWorkspaceId: string
+    sourceImages?: Array<{
+        idx: number
+        imageUrl: string
+        role: 'source-reference'
+    }>
+}
+
+export type Feature = {
+    featureId: string
+    version: number
+    category: string
+    name: string
+    summary: string
+    tags: string[]
+    instructions: string
+    parameters: Record<string, any>
+    sampleImages: FeatureSampleRef[]
+    scope: FeatureScope
+    scopeOwnerId: string
+    status: FeatureStatus
+    ownerUserId: string
+    workspaceId: string
+    sourceContext: FeatureSourceContext
+    reportCount: number
+    createdAt: number
+    updatedAt: number
+}
+
+export type FeatureMeta = {
+    featureId: string
+    category: string
+    name: string
+    summary: string
+    tags: string[]
+    scope: FeatureScope
+    scopeOwnerId: string
+    status: FeatureStatus
+    ownerUserId: string
+    sampleZeroKey?: string
+    sampleZeroUrl?: string
+    updatedAt: number
+}
+
+export type FeatureAccessList = {
+    userId: string
+    featureId: string
+    createdAt: number
+}
+
+export type FeatureReferenceMessageBlock = {
+    featureId: string
+    name: string
+    category: string
+    scope: FeatureScope
+    summary: string
+    instructions: string
+    parameters: Record<string, any>
+    sampleImages: Array<{ idx: number; subject: string; base64: string }>
+}
+
+export const MEDIA_LIBRARY_SCOPE = {
+    WORKSPACE: 'workspace',
+    USER: 'user',
+    ORGANIZATION: 'organization',
+    PUBLIC: 'public',
+} as const
+export type MediaLibraryScope = typeof MEDIA_LIBRARY_SCOPE[keyof typeof MEDIA_LIBRARY_SCOPE]
+
+// Sentinel scopeOwnerId for public-scoped items (no workspace/user/org owner).
+export const MEDIA_LIBRARY_PUBLIC_OWNER_ID = 'public'
+
+// Features retain their existing persistence path and are adapted into the library UI.
+export const MEDIA_LIBRARY_ITEM_KIND = {
+    IMAGE: 'image',
+} as const
+export type MediaLibraryItemKind = typeof MEDIA_LIBRARY_ITEM_KIND[keyof typeof MEDIA_LIBRARY_ITEM_KIND]
+
+export const MEDIA_LIBRARY_ITEM_STATUS = {
+    ACTIVE: 'active',
+    DELETED: 'deleted',
+} as const
+export type MediaLibraryItemStatus = typeof MEDIA_LIBRARY_ITEM_STATUS[keyof typeof MEDIA_LIBRARY_ITEM_STATUS]
+
+// Top-level browsing categories in the Media Library panel.
+export const MEDIA_LIBRARY_CATEGORY = {
+    FEATURES: 'features',
+    IMAGES: 'images',
+} as const
+export type MediaLibraryCategory = typeof MEDIA_LIBRARY_CATEGORY[keyof typeof MEDIA_LIBRARY_CATEGORY]
+
+// Browse-filter sentinel meaning "all readable scopes" rather than a single scope.
+export const MEDIA_LIBRARY_BROWSE_ALL = 'all'
+
+export type MediaLibraryAssetRef = {
+    bucketName: string
+    objectKey: string
+    mimeType: string
+    byteSize: number
+    originalName: string
+}
+
+export type MediaLibraryImageData = {
+    width: number
+    height: number
+    aspectRatio: number
+}
+
+export type MediaLibraryImageItem = {
+    itemId: string
+    version: 1
+    kind: 'image'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    sourceFileId: string
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    asset: MediaLibraryAssetRef
+    image: MediaLibraryImageData
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaLibraryImageMeta = {
+    itemId: string
+    kind: 'image'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    mimeType: string
+    byteSize: number
+    width: number
+    height: number
+    aspectRatio: number
+    previewUrl: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaLibraryAccessList = {
+    itemId: string
+    principalId: string
+    accessLevel: AccessLevel
+    createdAt: number
+    updatedAt: number
+}
+
+export type ExtractionRunStatus =
+    | 'pending'
+    | 'analyzing'
+    | 'routing'
+    | 'extracting'
+    | 'extracting_axes'
+    | 'materializing_crops'
+    | 'synthesizing'
+    | 'generating_samples'
+    | 'saving'
+    | 'completed'
+    | 'failed'
+
+export type ExtractionRun = {
+    extractionRunId: string
+    workspaceId: string
+    userId: string
+    status: ExtractionRunStatus
+    featureId?: string
+    transcriptJson?: object
+    sourceContextSnapshot?: object
+    trace?: StageTraceEvent[]
+    error?: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type CanvasAiChatSidebarTab = {
+    tabId: string
+    type: 'thread' | 'extraction'
+    refId: string
+    title: string
+}
+
+export type CanvasFeatureExtractionState = {
+    extractionRunId: string
+    status: ExtractionRunStatus
+    userText?: string
+    aiProvider?: string
+    stepDetails?: Record<string, string>
+    reasoningText?: string
+    // Streamed model output (thinking/reasoning) keyed by the stage that produced it,
+    // so the extraction tab can show live output under each in-progress substep.
+    stageReasoning?: Record<string, string>
+    featureCard?: Record<string, any>
+    traceEvents?: StageTraceEvent[]
+    error?: string
+    updatedAt: number
+}
+
 export type CanvasState = {
-    viewport: CanvasViewport
+    sourceContext: FeatureSourceContext
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
-    // Workspace-scoped UI state: which AI chat thread is currently active in
-    // the canvas-owned floating chat panel.
     lastActiveAiChatThreadId?: string
+    aiChatSidebarTabs?: CanvasAiChatSidebarTab[]
+    activeAiChatSidebarTabId?: string
+    featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 
 export type Workspace = {
@@ -230,6 +768,8 @@ export type AiInteractionChatSendMessagePayload = {
     messages: Array<{ role: string; content: MessageContent }>
     aiModel: AiModelId
     threadId: string
+    referencedFeatureIds?: string[]
+    imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {

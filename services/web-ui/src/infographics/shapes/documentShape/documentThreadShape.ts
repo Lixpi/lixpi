@@ -1,21 +1,16 @@
 // Document thread shape - white rounded border with centered text
 
 import { select } from 'd3-selection'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import {
+    SvgGradientRenderer,
+    type SvgGradientAnimation,
+} from '$src/utils/animations/gradients/svgGradient.ts'
+import { settings } from '$src/settings.ts'
 
 type ThreadShapeConfig = {
     text: string
     gradientId?: string
     colors?: string[]
-}
-
-// Custom easing matching cubic-bezier(0.19, 1, 0.22, 1)
-function customEase(t: number): number {
-    const t2 = t * t
-    const t3 = t2 * t
-    const mt = 1 - t
-    const mt2 = mt * mt
-    return 3 * mt2 * t + 3 * mt * t2 + t3
 }
 
 // Draws the white rounded border rectangle with centered text
@@ -61,24 +56,7 @@ export function setupThreadGradient(defs: any, config: { gradientId: string }) {
         .attr('x1', '0').attr('y1', '256')  // Center of the shape
         .attr('x2', '512').attr('y2', '256')
 
-    // Use the shifting gradient palette from theme settings
-    const themeColors = webUiThemeSettings.shiftingGradientColors
-    const extendedColors = [
-        themeColors[0],
-        themeColors[1],
-        themeColors[2],
-        themeColors[3],
-        themeColors[0],
-    ]
-
-    const numRepeats = 2
-    for (let i = 0; i <= numRepeats * extendedColors.length; i++) {
-        const colorIndex = i % extendedColors.length
-        const offset = (i / (numRepeats * extendedColors.length)) * 100
-        threadGradient.append('stop')
-            .attr('offset', `${offset}%`)
-            .style('stop-color', extendedColors[colorIndex])
-    }
+    SvgGradientRenderer.appendRepeatingLinearGradientStops(threadGradient, settings.gradient.shiftingColors)
 }
 
 // Animation controller for thread gradient
@@ -91,41 +69,16 @@ export function startThreadGradientAnimation(
 ): { stop: () => void } {
     let running = true
     let threadGradient: any = null
+    let gradientAnimation: SvgGradientAnimation | null = null
 
     const threadLoop = () => {
         if (!running || !threadGradient) return
 
-        // Get current angle and calculate new position for rotation effect
-        const centerX = 256
-        const centerY = 256
-        const radius = 300
-
-        let angle = 0
-
-        const animate = () => {
-            if (!running) return
-
-            // Calculate gradient endpoints based on rotating angle
-            const x1 = centerX + radius * Math.cos(angle)
-            const y1 = centerY + radius * Math.sin(angle)
-            const x2 = centerX + radius * Math.cos(angle + Math.PI)
-            const y2 = centerY + radius * Math.sin(angle + Math.PI)
-
-            threadGradient
-                .transition()
-                .duration(duration)  // Small steps for smooth rotation
-                .ease(customEase)
-                .attr('x1', x1)
-                .attr('y1', y1)
-                .attr('x2', x2)
-                .attr('y2', y2)
-                .on('end', () => {
-                    angle -= 0.1  // Negative for counterclockwise
-                    if (running) animate()
-                })
-        }
-
-        animate()
+        gradientAnimation = SvgGradientRenderer.startRotatingLinearGradient(threadGradient, {
+            center: { x: 256, y: 256 },
+            radius: 300,
+            duration,
+        })
     }
 
     const foreignObj = select(container)
@@ -142,6 +95,7 @@ export function startThreadGradientAnimation(
                 return {
                     stop: () => {
                         running = false
+                        gradientAnimation?.stop()
                         threadGradient?.interrupt()
                     }
                 }
@@ -168,6 +122,7 @@ export function startThreadGradientAnimation(
     return {
         stop: () => {
             running = false
+            gradientAnimation?.stop()
             threadGradient?.interrupt()
         }
     }

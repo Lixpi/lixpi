@@ -27,7 +27,7 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
         transform: translateY(0) scale(var(--bubble-menu-visual-scale));
     }
 
-    &.bubble-menu--no-entrance-motion {
+    &.bubble-menu-no-entrance-motion {
         transform: scale(var(--bubble-menu-visual-scale));
         transition: none;
 

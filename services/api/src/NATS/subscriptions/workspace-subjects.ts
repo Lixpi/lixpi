@@ -5,6 +5,13 @@ import { info, err, warn } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 import Workspace from '../../models/workspace.ts'
 import Document from '../../models/document.ts'
+import Feature from '../../models/feature.ts'
+import MediaLibraryItem from '../../models/media-library-item.ts'
+import {
+    deleteLibraryImageObject,
+    deleteMediaLibraryWorkspaceBucket,
+} from '../../services/media-library-storage.ts'
+import { ensureFeatureSamplesForScope } from '../../services/feature-sample-storage.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -151,6 +158,40 @@ export const workspaceSubjects = [
         handler: async (data: any, msg: any) => {
             const { workspaceId } = data
             const userId = data.user.userId
+            const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+            if ('error' in workspace) return workspace
+
+            try {
+                const promotedFeatures = await Feature.listPromotedByOriginWorkspaceForCleanup(workspaceId)
+                for (const feature of promotedFeatures) {
+                    await ensureFeatureSamplesForScope({
+                        feature,
+                        newScope: feature.scope,
+                        newScopeOwnerId: feature.scopeOwnerId,
+                    })
+                }
+                info(`Preserved ${promotedFeatures.length} promoted feature sample sets for ${workspaceId}`)
+            } catch (e: any) {
+                warn(`Could not preserve promoted feature samples for workspace ${workspaceId}:`, e.message)
+                return { error: 'FEATURE_SAMPLE_MIGRATION_FAILED' }
+            }
+
+            try {
+                // Delete workspace-scoped features
+                const featureResult = await Feature.listByScope({ scope: 'workspace', scopeOwnerId: workspaceId, requesterContext: { userId, workspaceId } })
+                for (const f of featureResult.items) { await Feature.deleteFeature({ featureId: f.featureId }).catch(() => {}) }
+                info(`Deleted ${featureResult.items.length} workspace features for ${workspaceId}`)
+            } catch (e: any) { warn(`Could not clean up features for workspace ${workspaceId}:`, e.message) }
+
+            try {
+                const mediaItems = await MediaLibraryItem.listWorkspaceItemsForCleanup(workspaceId)
+                for (const item of mediaItems) {
+                    await MediaLibraryItem.deleteImageItem({ item })
+                    await deleteLibraryImageObject(item).catch(() => {})
+                }
+                await deleteMediaLibraryWorkspaceBucket(workspaceId).catch(() => {})
+                info(`Deleted ${mediaItems.length} workspace Media Library images for ${workspaceId}`)
+            } catch (e: any) { warn(`Could not clean up Media Library images for workspace ${workspaceId}:`, e.message) }
 
             try {
                 const natsService = NATS_Service.getInstance()

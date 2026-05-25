@@ -13,6 +13,8 @@ function createCallbacks() {
         onAskAi: vi.fn(),
         onDownloadImage: vi.fn(),
         onReplaceImage: vi.fn(),
+        onAddToMediaLibrary: vi.fn(),
+        canAddToMediaLibrary: vi.fn(() => true),
         onTriggerConnection: vi.fn(),
         onHide: vi.fn(),
     }
@@ -35,22 +37,22 @@ describe('CANVAS_IMAGE_CONTEXT', () => {
 describe('buildCanvasBubbleMenuItems — structure', () => {
     const callbacks = createCallbacks()
 
-    it('returns 7 items total (5 image + 2 edge)', () => {
+    it('returns 8 items total (6 image + 2 edge)', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items).toHaveLength(7)
+        expect(items).toHaveLength(8)
     })
 
-    it('first 5 items have canvasImage context', () => {
+    it('first 6 items have canvasImage context', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 6; i++) {
             expect(items[i].context).toEqual([CANVAS_IMAGE_CONTEXT])
         }
     })
 
     it('last 2 items have canvasEdge context', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[5].context).toEqual([CANVAS_EDGE_CONTEXT])
         expect(items[6].context).toEqual([CANVAS_EDGE_CONTEXT])
+        expect(items[7].context).toEqual([CANVAS_EDGE_CONTEXT])
     })
 
     it('first item is Ask AI button', () => {
@@ -68,24 +70,29 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[2].element.getAttribute('title')).toBe('Download image')
     })
 
-    it('fourth item is Connect button', () => {
+    it('fourth item is Add to Media Library button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[3].element.getAttribute('title')).toBe('Connect to node')
+        expect(items[3].element.getAttribute('title')).toBe('Add to Media Library')
     })
 
-    it('fifth item is Delete button', () => {
+    it('fifth item is Connect button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[4].element.getAttribute('title')).toBe('Delete image')
+        expect(items[4].element.getAttribute('title')).toBe('Connect to node')
     })
 
-    it('sixth item is Change connector curve button', () => {
+    it('sixth item is Delete button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[5].element.getAttribute('title')).toBe('Change connector curve')
+        expect(items[5].element.getAttribute('title')).toBe('Delete image')
     })
 
-    it('seventh item is Delete connection button', () => {
+    it('seventh item is Change connector curve button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[6].element.getAttribute('title')).toBe('Delete connection')
+        expect(items[6].element.getAttribute('title')).toBe('Change connector curve')
+    })
+
+    it('eighth item is Delete connection button', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[7].element.getAttribute('title')).toBe('Delete connection')
     })
 
     it('items are HTMLButtonElement instances with bubble-menu-button class', () => {
@@ -177,7 +184,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
         setActiveNodeId('img-5')
 
-        items[3].element.click()
+        items[4].element.click()
 
         expect(callbacks.onHide).toHaveBeenCalledOnce()
         expect(callbacks.onTriggerConnection).toHaveBeenCalledWith('img-5')
@@ -193,7 +200,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
         setActiveNodeId('img-5')
 
-        items[3].element.click()
+        items[4].element.click()
 
         expect(callOrder).toEqual(['hide', 'triggerConnection'])
     })
@@ -202,7 +209,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const callbacks = createCallbacks()
         const { items } = buildCanvasBubbleMenuItems(callbacks)
 
-        items[3].element.click()
+        items[4].element.click()
 
         expect(callbacks.onTriggerConnection).not.toHaveBeenCalled()
         expect(callbacks.onHide).not.toHaveBeenCalled()
@@ -213,7 +220,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
         setActiveNodeId('img-2')
 
-        items[4].element.click()
+        items[5].element.click()
 
         expect(callbacks.onDeleteNode).toHaveBeenCalledWith('img-2')
         expect(callbacks.onHide).toHaveBeenCalledOnce()
@@ -223,9 +230,31 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const callbacks = createCallbacks()
         const { items } = buildCanvasBubbleMenuItems(callbacks)
 
-        items[4].element.click()
+        items[5].element.click()
 
         expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
         expect(callbacks.onHide).not.toHaveBeenCalled()
+    })
+
+    it('Add to Media Library fires save callback and hides with an active node', () => {
+        const callbacks = createCallbacks()
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+        setActiveNodeId('img-library')
+
+        items[3].element.click()
+
+        expect(callbacks.onAddToMediaLibrary).toHaveBeenCalledWith('img-library')
+        expect(callbacks.onHide).toHaveBeenCalledOnce()
+    })
+
+    it('Add to Media Library update hides unsaveable images', () => {
+        const callbacks = createCallbacks()
+        callbacks.canAddToMediaLibrary = vi.fn(() => false)
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+        setActiveNodeId('img-streaming')
+
+        items[3].update?.()
+
+        expect(items[3].element.style.display).toBe('none')
     })
 })

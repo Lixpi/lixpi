@@ -2,18 +2,25 @@
 // CANVAS BUBBLE MENU ITEMS
 //
 // Menu items for the workspace canvas bubble menu. Supports image nodes
-// (Delete, Download, Ask AI, Connect) and edge connections (Delete).
+// (Delete, Download, Ask AI, save, Connect) and edge connections (Delete).
 // Framework-agnostic — uses only DOM and callbacks. No ProseMirror imports.
 // =============================================================================
 
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
-import { trashBinIcon, downloadIcon, triggerNodesConnectionIcon, changeNodesConnectorLineCurve } from '$src/svgIcons/index.ts'
+import {
+    trashBinIcon,
+    downloadIcon,
+    triggerNodesConnectionIcon,
+    changeNodesConnectorLineCurve,
+    mediaLibraryIcon
+} from '$src/svgIcons/index.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'
 export const CANVAS_EDGE_CONTEXT = 'canvasEdge'
 
 const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>'
+// const libraryIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v4H4z"/><path d="M4 11h16v8H4z"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>'
 
 type CanvasBubbleMenuCallbacks = {
     onDeleteNode: (nodeId: string) => void
@@ -22,6 +29,8 @@ type CanvasBubbleMenuCallbacks = {
     onAskAi: (nodeId: string) => void
     onDownloadImage: (nodeId: string) => void
     onReplaceImage: (nodeId: string) => void
+    onAddToMediaLibrary: (nodeId: string) => void
+    canAddToMediaLibrary: (nodeId: string | null) => boolean
     onTriggerConnection: (nodeId: string) => void
     onHide: () => void
 }
@@ -99,7 +108,19 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
     const replaceSvg = replaceButton.querySelector('svg')
-    if (replaceSvg) replaceSvg.style.transform = 'rotate(180deg)'
+    if (replaceSvg) applyStyle(replaceSvg, { transform: 'rotate(180deg)' })
+
+    const addToLibraryButton = createCanvasButton({
+        icon: mediaLibraryIcon,
+        title: 'Add to Media Library',
+        iconSize: 16,
+        onClick: () => {
+            if (activeNodeId) {
+                callbacks.onAddToMediaLibrary(activeNodeId)
+                callbacks.onHide()
+            }
+        },
+    })
 
     const connectButton = createEl('button', {
         className: 'bubble-menu-button',
@@ -109,8 +130,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     })
     const connectSvg = connectButton.querySelector('svg')
     if (connectSvg) {
-        connectSvg.style.width = '16px'
-        connectSvg.style.height = '16px'
+        applyStyle(connectSvg, { width: '16px', height: '16px' })
     }
     connectButton.addEventListener('click', (e) => {
         e.preventDefault()
@@ -161,6 +181,13 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: replaceButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
+        {
+            element: addToLibraryButton,
+            context: [CANVAS_IMAGE_CONTEXT],
+            update: () => applyStyle(addToLibraryButton, {
+                display: callbacks.canAddToMediaLibrary(activeNodeId) ? '' : 'none',
+            }),
+        },
         { element: connectButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
         { element: changeCurveButton, context: [CANVAS_EDGE_CONTEXT] },

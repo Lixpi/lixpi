@@ -6,10 +6,107 @@ import type {
 
 const IMAGE_GAP_X = 50
 const IMAGE_GAP_Y = 30
-const OVERLAP_PADDING_X = 16
-const OVERLAP_GAP_Y = 8
-const OVERLAP_WIDTH_RATIO = 0.68
-const OVERLAP_INTERSECTION_RATIO = -0.06
+const MIN_INSERTION_ZOOM = 0.01
+
+type ViewportLike = { x: number; y: number; zoom: number }
+type Dimensions = { width: number; height: number }
+type RectLike = { x: number; y: number; width: number; height: number }
+type Point = { x: number; y: number }
+type PaneSize = { width: number; height: number }
+type GridInsertionOptions = {
+    columns?: number
+    startX?: number
+    startY?: number
+    columnGap?: number
+    rowGap?: number
+}
+
+export function getSafeInsertionZoom(zoom: number | undefined): number {
+    if (!Number.isFinite(zoom) || !zoom || zoom <= 0) return 1
+    return Math.max(zoom, MIN_INSERTION_ZOOM)
+}
+
+export function screenSizeToWorldSize(size: number, zoom: number | undefined): number {
+    return size / getSafeInsertionZoom(zoom)
+}
+
+export function screenDimensionsToWorldDimensions(dimensions: Dimensions, zoom: number | undefined): Dimensions {
+    const safeZoom = getSafeInsertionZoom(zoom)
+    return {
+        width: dimensions.width / safeZoom,
+        height: dimensions.height / safeZoom,
+    }
+}
+
+export function screenPointToWorldPoint(point: Point, viewport: ViewportLike): Point {
+    const safeZoom = getSafeInsertionZoom(viewport.zoom)
+    return {
+        x: (point.x - viewport.x) / safeZoom,
+        y: (point.y - viewport.y) / safeZoom,
+    }
+}
+
+export function computeViewportGridInsertionPosition(
+    existingNodeCount: number,
+    viewport: ViewportLike,
+    options: GridInsertionOptions = {}
+): Point {
+    const columns = options.columns ?? 3
+    const startX = options.startX ?? 50
+    const startY = options.startY ?? 50
+    const columnGap = options.columnGap ?? 450
+    const rowGap = options.rowGap ?? 400
+    const column = existingNodeCount % columns
+    const row = Math.floor(existingNodeCount / columns)
+
+    return screenPointToWorldPoint({
+        x: startX + column * columnGap,
+        y: startY + row * rowGap,
+    }, viewport)
+}
+
+export function computeViewportCenterInsertionPosition(
+    dimensions: Dimensions,
+    viewport: ViewportLike,
+    paneSize: PaneSize
+): Point {
+    const center = screenPointToWorldPoint({
+        x: paneSize.width / 2,
+        y: paneSize.height / 2,
+    }, viewport)
+
+    return {
+        x: center.x - dimensions.width / 2,
+        y: center.y - dimensions.height / 2,
+    }
+}
+
+export function computeStackedPositionToRightOfRect(
+    rect: RectLike,
+    existingItemCount: number,
+    itemHeight: number,
+    gap: number
+): Point {
+    return {
+        x: rect.x + rect.width + gap,
+        y: rect.y + existingItemCount * (itemHeight + gap),
+    }
+}
+
+export function computeNextBranchRowPositionToRightOfRect(
+    rect: RectLike,
+    previousBranchRect: RectLike | undefined,
+    itemHeight: number,
+    horizontalGap: number,
+    verticalGap: number
+): Point {
+    return {
+        x: rect.x + rect.width + horizontalGap,
+        y: previousBranchRect
+            ? previousBranchRect.y + Math.max(previousBranchRect.height, itemHeight) + verticalGap
+            : rect.y,
+    }
+}
 
 export function computeImagePositionNextToThread(
     threadNode: AiChatThreadCanvasNode,
@@ -22,69 +119,6 @@ export function computeImagePositionNextToThread(
 
     return { x, y }
 }
-
-export function computeImagePositionOverlappingThread(
-    threadNode: AiChatThreadCanvasNode,
-    responseMessageId: string,
-    threadNodeEl: HTMLElement | null
-): { x: number; y: number; constrainedWidth: number } {
-    const constrainedWidth = Math.floor(threadNode.dimensions.width * OVERLAP_WIDTH_RATIO)
-    let x = threadNode.position.x + threadNode.dimensions.width - constrainedWidth + OVERLAP_PADDING_X
-
-    if (!threadNodeEl) {
-        const y = threadNode.position.y + 80
-        return { x, y, constrainedWidth }
-    }
-
-    // Find the target response message for vertical alignment
-    let messageEl: Element | null = null
-    if (responseMessageId) {
-        messageEl = threadNodeEl.querySelector(`[data-message-id="${responseMessageId}"]`)
-    }
-    // Fallback: find the last response message in the thread (critical during
-    // IMAGE_PARTIAL when responseMessageId is not yet available)
-    if (!messageEl) {
-        const allMessages = threadNodeEl.querySelectorAll('[data-message-id]')
-        if (allMessages.length > 0) {
-            messageEl = allMessages[allMessages.length - 1]
-        }
-    }
-
-    if (!messageEl) {
-        const y = threadNode.position.y + 80
-        return { x, y, constrainedWidth }
-    }
-
-    const nodeRect = threadNodeEl.getBoundingClientRect()
-    const msgRect = messageEl.getBoundingClientRect()
-    const zoom = nodeRect.width / threadNode.dimensions.width || 1
-
-    const bubbleEl = messageEl.querySelector('.ai-response-message-bubble') as HTMLElement | null
-    const contentEl = messageEl.querySelector('.ai-response-message-content') as HTMLElement | null
-    if (bubbleEl || contentEl) {
-        const bubbleRect = bubbleEl?.getBoundingClientRect()
-        const contentRect = contentEl?.getBoundingClientRect()
-
-        const anchorRight = contentRect?.right ?? bubbleRect?.right
-        if (anchorRight) {
-            const anchorRightRelative = (anchorRight - nodeRect.left) / zoom
-            const desiredX = threadNode.position.x + anchorRightRelative - Math.floor(constrainedWidth * OVERLAP_INTERSECTION_RATIO)
-
-            const minX = threadNode.position.x + Math.floor(threadNode.dimensions.width * 0.84)
-            const maxX = threadNode.position.x + threadNode.dimensions.width - Math.floor(constrainedWidth * 0.005)
-            x = Math.max(minX, Math.min(desiredX, maxX))
-        }
-    }
-
-    // Align with the TOP of the response bubble (not the message wrapper, which may have margin above)
-    const bubbleTop = bubbleEl?.getBoundingClientRect().top ?? msgRect.top
-    const bubbleTopRelative = (bubbleTop - nodeRect.top) / zoom
-    const y = threadNode.position.y + bubbleTopRelative
-
-    return { x, y, constrainedWidth }
-}
-
-export { OVERLAP_PADDING_X, OVERLAP_GAP_Y, OVERLAP_WIDTH_RATIO }
 
 export function countExistingImagesForThread(
     nodes: CanvasNode[],

@@ -11,7 +11,12 @@
 		"CHAT_STOP_MESSAGE": "ai.interaction.chat.stopMessage",
 		"CHAT_PROCESS": "ai.interaction.chat.process",
 		"CHAT_STOP": "ai.interaction.chat.stop",
-		"CHAT_ERROR": "ai.interaction.chat.error"
+		"CHAT_ERROR": "ai.interaction.chat.error",
+		"FEATURE_EXTRACT": {
+			"START": "ai.interaction.feature.extract.start",
+			"STOP": "ai.interaction.feature.extract.stop",
+			"STATUS": "ai.interaction.feature.extract.status"
+		}
 	},
 	"WORKSPACE_SUBJECTS": {
 		"CREATE_WORKSPACE": "workspace.create",
@@ -38,7 +43,38 @@
 			"UPDATE_AI_CHAT_THREAD": "workspace.aiChatThread.update",
 			"DELETE_AI_CHAT_THREAD": "workspace.aiChatThread.delete",
 			"GET_WORKSPACE_AI_CHAT_THREADS": "workspace.aiChatThread.getByWorkspace"
+		},
+		"FEATURE_SUBJECTS": {
+			"CREATE": "workspace.feature.create",
+			"GET": "workspace.feature.get",
+			"LIST_BY_SCOPE": "workspace.feature.listByScope",
+			"UPDATE": "workspace.feature.update",
+			"DELETE": "workspace.feature.delete",
+			"CHANGE_SCOPE": "workspace.feature.changeScope",
+			"REPORT_ABUSE": "workspace.feature.reportAbuse",
+			"GET_SAMPLE_URL": "workspace.feature.getSampleUrl",
+			"EVENTS": {
+				"CREATED": "workspace.feature.events.created",
+				"UPDATED": "workspace.feature.events.updated",
+				"DELETED": "workspace.feature.events.deleted"
+			}
+		},
+		"MEDIA_LIBRARY_SUBJECTS": {
+			"CREATE_FROM_IMAGE": "workspace.mediaLibrary.image.createFromCanvas",
+			"GET": "workspace.mediaLibrary.get",
+			"LIST_AVAILABLE": "workspace.mediaLibrary.listAvailable",
+			"MATERIALIZE_IMAGE_TO_WORKSPACE": "workspace.mediaLibrary.image.materializeToWorkspace",
+			"CHANGE_SCOPE": "workspace.mediaLibrary.changeScope",
+			"DELETE": "workspace.mediaLibrary.delete",
+			"EVENTS": {
+				"CREATED": "workspace.mediaLibrary.events.created",
+				"UPDATED": "workspace.mediaLibrary.events.updated",
+				"DELETED": "workspace.mediaLibrary.events.deleted"
+			}
 		}
+	},
+	"FEATURE_LIBRARY_SUBJECTS": {
+		"LIST_GLOBAL": "feature.listGlobal"
 	},
 	"ORGANIZATION_SUBJECTS": {
 		"GET_ORGANIZATION": "organization.get",

@@ -86,10 +86,9 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
         dom,
         contentDOM,
         ignoreMutation: (mutation) => {
-            // Ignore style attribute changes on the wrapper (e.g. height set
-            // by applyAnchoredImageSpacing in WorkspaceCanvas). Without this,
-            // ProseMirror's MutationObserver would detect the height change and
-            // trigger reconciliation that wipes the externally-grown thread height.
+            // Ignore style attribute changes on the wrapper. Without this,
+            // ProseMirror's MutationObserver can detect canvas-driven height
+            // changes and reconcile away the externally-grown thread height.
             if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                 return true
             }

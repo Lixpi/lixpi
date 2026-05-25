@@ -1,15 +1,14 @@
 'use strict'
 
-import { NATS_SUBJECTS, AI_INTERACTION_CONSTANTS } from '@lixpi/constants'
+import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
 import type {
-    AiModelId,
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
+    ImageGenerationTrace,
     ImageGenerationSize
 } from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
-const { STREAM_STATUS } = AI_INTERACTION_CONSTANTS
 
 import AuthService from '$src/services/auth-service.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
@@ -120,6 +119,22 @@ export default class AiInteractionService {
             }
 
             // Handle image generation events (bypass markdown parser)
+            if (content.status === STREAM_STATUS.IMAGE_GENERATION_TRACE) {
+                const imageGenerationTrace = content.imageGenerationTrace as ImageGenerationTrace
+                console.log('[AI_INTERACTION] IMAGE_GENERATION_TRACE received:', {
+                    imageModelId: imageGenerationTrace?.imageModelId,
+                    referenceCount: imageGenerationTrace?.referenceImages.length ?? 0,
+                    excludedReferenceCount: imageGenerationTrace?.excludedReferences.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_generation_trace',
+                    imageGenerationTrace,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.IMAGE_PARTIAL) {
                 console.log('[AI_INTERACTION] IMAGE_PARTIAL received:', content)
                 this.segmentsReceiver.receiveSegment({
@@ -128,6 +143,28 @@ export default class AiInteractionService {
                     fileId: content.fileId,
                     workspaceId: this.workspaceId,
                     partialIndex: content.partialIndex,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLVED) {
+                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLVED received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_branch_resolved',
+                    imageBranchResolution: content.resolution,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR) {
+                console.log('[AI_INTERACTION] IMAGE_BRANCH_RESOLUTION_ERROR received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_branch_resolution_error',
+                    error: content.error || 'Image branch resolution failed',
                     aiProvider: this.currentAiProvider,
                     aiChatThreadId: this.aiChatThreadId
                 })
@@ -146,6 +183,16 @@ export default class AiInteractionService {
                     revisedPrompt: content.revisedPrompt,
                     aiProvider: this.currentAiProvider,
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.ERROR) {
+                this.segmentsReceiver.receiveSegment({
+                    status: 'ERROR',
+                    error: content.text || content.error || 'AI generation failed',
+                    aiProvider: this.currentAiProvider,
                     aiChatThreadId: this.aiChatThreadId
                 })
                 return
@@ -192,7 +239,9 @@ export default class AiInteractionService {
         messages,
         aiModel,
         aiImageModel,
-        imageSize
+        imageSize,
+        referencedFeatureIds,
+        imageBranchCandidateSnapshot,
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
@@ -206,6 +255,14 @@ export default class AiInteractionService {
             organizationId
         }
 
+        if (referencedFeatureIds?.length) {
+            payload.referencedFeatureIds = referencedFeatureIds
+        }
+
+        if (imageBranchCandidateSnapshot) {
+            payload.imageBranchCandidateSnapshot = imageBranchCandidateSnapshot
+        }
+
         // Add image model routing options if an image model is selected
         if (aiImageModel) {
             payload.aiImageModel = aiImageModel
@@ -217,7 +274,9 @@ export default class AiInteractionService {
             aiChatThreadId: this.aiChatThreadId,
             aiModel,
             messageCount: messages.length,
-            hasImageModel: !!aiImageModel
+            hasImageModel: !!aiImageModel,
+            referencedFeatureCount: referencedFeatureIds?.length ?? 0,
+            imageBranchCandidateCount: imageBranchCandidateSnapshot?.candidates.length ?? 0,
         })
 
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)

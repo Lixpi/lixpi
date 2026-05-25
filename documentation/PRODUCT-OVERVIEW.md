@@ -57,6 +57,8 @@ graph TB
 
 **Floating Prompt Input** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) that appears below each AI thread node. It provides rich-text composition, an AI model selector dropdown, an image generation size picker, and Cmd/Ctrl+Enter to submit. The input is decoupled from threads — it only handles composition; an `AiPromptInputController` routes messages to the correct target.
 
+**Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save any completed canvas image as an independent JetStream Object Store copy. Inserting a saved image creates a fresh workspace image object and a fresh canvas node, so library media survives deletion of its source node.
+
 ---
 
 ## 3. Artifact Piping & Character Consistency
@@ -107,8 +109,7 @@ graph LR
     end
 
     subgraph "2. Place"
-        F --> Anch[Anchored to Thread]
-        F --> Det[Detached on Canvas]
+        F --> Det[Canvas Image Node]
     end
 
     subgraph "3. Reuse"
@@ -124,7 +125,7 @@ graph LR
 
 **Progressive streaming**: An animated placeholder appears immediately when generation starts (`IMAGE_PARTIAL` with empty data). Up to 3 progressively sharper partial previews update the canvas node in real-time. The final high-resolution image replaces them (`IMAGE_COMPLETE`). All images are stored in NATS JetStream Object Store with SHA-256 content-hash deduplication.
 
-**Placement modes**: Generated images can appear **anchored** (visually overlapping the thread, moving with it during drag) or as **separate canvas nodes** connected by an edge. Anchored images can be detached by dragging their center outside the thread bounds.
+**Placement**: Generated images appear as separate canvas nodes connected back to the source thread/response by an edge. The retired overlapping-thread placement prototype is archived in [ANCHORED-GENERATED-IMAGES.md](unused-but-learned-lessons/ANCHORED-GENERATED-IMAGES.md).
 
 **Multi-turn editing**: "Edit in New Thread" creates a fresh AI thread pre-linked to the image, carrying OpenAI's `previousResponseId` for fidelity continuity. The AI remembers the exact image it generated and can make targeted modifications without regenerating from scratch. Users can branch at any point — editing the same image in multiple directions simultaneously.
 

@@ -18,12 +18,19 @@ import {
 } from '@xyflow/system'
 
 import {
-	createConnectorRenderer,
-	type ConnectorRenderer,
+	computePath,
+	applyOffset,
 	type EdgeConfig,
+	type EdgeAnchor,
 	type NodeConfig,
-	type PathType,
+	type AnchorPosition,
 } from '$src/infographics/connectors/index.ts'
+import {
+	getContextRegionCloudAnchorPoint,
+	getContextRegionCloudBounds,
+	type ContextRegionCloudDatum,
+} from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
+import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { applyStyle } from '$src/utils/domTemplates.ts'
@@ -33,16 +40,15 @@ import type {
 	WorkspaceEdge,
 } from '@lixpi/constants'
 
-import { webUiSettings } from '$src/webUiSettings.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 type ProximityCandidate = {
 	sourceNodeId: string
 	sourceHandle: 'left' | 'right'
 	targetNodeId: string
 	targetHandle: 'left' | 'right'
-    sourceT?: number
-    targetT?: number
+	sourceT?: number
+	targetT?: number
 }
 
 type HandleMeta = {
@@ -57,18 +63,18 @@ type HandleMeta = {
 type ConnectionManagerConfig = {
 	paneEl: HTMLDivElement
 	viewportEl: HTMLDivElement
-	edgesLayerEl: HTMLDivElement
 	getTransform: () => Transform
 	panBy: ({ x, y }: { x: number; y: number }) => Promise<boolean>
 	onEdgesChange: (edges: WorkspaceEdge[]) => void
 	onSelectedEdgeChange?: (edgeId: string | null) => void
 	isContextRegionNode?: (node: CanvasNode) => boolean
 	railOffset?: number
+	onPixiEdgesReady?: (edges: PixiEdgeRenderDatum[]) => void
 }
 
-type RenderBounds = {
-	left: number
-	top: number
+type EdgeNodeGeometry = {
+	x: number
+	y: number
 	width: number
 	height: number
 }
@@ -82,6 +88,146 @@ function toRendererPoint(point: { x: number; y: number }, transform: Transform) 
 	return {
 		x: (point.x - transform[0]) / transform[2],
 		y: (point.y - transform[1]) / transform[2]
+	}
+}
+
+function toContextRegionCloudDatum(node: CanvasNode): ContextRegionCloudDatum {
+	return {
+		nodeId: node.nodeId,
+		referenceId: node.referenceId,
+		x: node.position.x,
+		y: node.position.y,
+		width: node.dimensions.width,
+		height: node.dimensions.height,
+		title: '',
+		selected: false,
+		active: false,
+	}
+}
+
+// =============================================================================
+// PIXI edge data helpers — compute world-coordinate edge paths for the GPU renderer
+// =============================================================================
+
+function computeWorldAnchorPoint(
+	position: AnchorPosition,
+	t: number,
+	node: NodeConfig
+): { x: number; y: number } {
+	const override = node.anchorOverrides?.[position]
+	if (override) return override
+
+	const { x, y, width, height } = node
+	switch (position) {
+		case 'left':   return { x, y: y + height * t }
+		case 'right':  return { x: x + width, y: y + height * t }
+		case 'top':    return { x: x + width * t, y }
+		case 'bottom': return { x: x + width * t, y: y + height }
+		default:       return { x: x + width / 2, y: y + height / 2 }
+	}
+}
+
+function anchorArrowAngle(position: AnchorPosition): number {
+	// Angle = direction the arrowhead tip points (into the node).
+	// left anchor  → edge arrives from the left going rightward  → tip points RIGHT (0)
+	// right anchor → edge arrives from the right going leftward  → tip points LEFT  (π)
+	// top anchor   → edge arrives from above going downward      → tip points DOWN  (π/2)
+	// bottom anchor→ edge arrives from below going upward        → tip points UP    (-π/2)
+	switch (position) {
+		case 'left':   return 0
+		case 'right':  return Math.PI
+		case 'top':    return Math.PI / 2
+		case 'bottom': return -Math.PI / 2
+		default:       return 0
+	}
+}
+
+function computePixiEdgeDatum(
+	edgeConfig: EdgeConfig,
+	worldNodeMap: Map<string, NodeConfig>,
+	isSelected: boolean,
+	defaultColor: string,
+	focusColor: string,
+	visibleStrokeWidth: number,
+	visibleMarkerSize: number,
+	markerOffset: { source: number; target: number }
+): PixiEdgeRenderDatum | null {
+	const {
+		id,
+		source,
+		target,
+		pathType = 'bezier',
+		marker = 'none',
+		markerStart,
+		curvature = 0.25,
+		borderRadius = 24,
+		laneIndex = 0,
+		laneCount = 1,
+		bendPoints,
+	} = edgeConfig
+
+	const sourceNode = worldNodeMap.get(source.nodeId)
+	const targetNode = worldNodeMap.get(target.nodeId)
+	if (!sourceNode || !targetNode) return null
+
+	const srcT = source.t ?? 0.5
+	const tgtT = target.t ?? 0.5
+
+	const rawSrcAnchor = computeWorldAnchorPoint(source.position, srcT, sourceNode)
+	const rawTgtAnchor = computeWorldAnchorPoint(target.position, tgtT, targetNode)
+
+	let srcCoords = applyOffset(rawSrcAnchor.x, rawSrcAnchor.y, source.offset)
+	let tgtCoords = applyOffset(rawTgtAnchor.x, rawTgtAnchor.y, target.offset)
+
+	const srcOff = markerOffset.source ?? 5
+	const tgtOff = markerOffset.target ?? 5
+
+	switch (source.position) {
+		case 'right':  srcCoords = { x: srcCoords.x + srcOff, y: srcCoords.y }; break
+		case 'left':   srcCoords = { x: srcCoords.x - srcOff, y: srcCoords.y }; break
+		case 'top':    srcCoords = { x: srcCoords.x, y: srcCoords.y - srcOff }; break
+		case 'bottom': srcCoords = { x: srcCoords.x, y: srcCoords.y + srcOff }; break
+	}
+	switch (target.position) {
+		case 'right':  tgtCoords = { x: tgtCoords.x + tgtOff, y: tgtCoords.y }; break
+		case 'left':   tgtCoords = { x: tgtCoords.x - tgtOff, y: tgtCoords.y }; break
+		case 'top':    tgtCoords = { x: tgtCoords.x, y: tgtCoords.y - tgtOff }; break
+		case 'bottom': tgtCoords = { x: tgtCoords.x, y: tgtCoords.y + tgtOff }; break
+	}
+
+	const { path: svgPath } = computePath(
+		pathType,
+		srcCoords.x, srcCoords.y,
+		tgtCoords.x, tgtCoords.y,
+		source.position, target.position,
+		curvature, borderRadius, bendPoints,
+		worldNodeMap, source.nodeId, target.nodeId,
+		laneIndex, laneCount
+	)
+
+	const strokeColor = isSelected ? focusColor : defaultColor
+	// Size matches SVG markerWidth so the PIXI polygon scales identically.
+	const arrowSize = visibleMarkerSize
+
+	// Place arrows at the path endpoints (tgtCoords / srcCoords), not at the
+	// raw node-edge anchors. The marker-offset gap is already built into those
+	// coordinates, matching the SVG marker's refX/refY positioning.
+	const arrowEnd: PixiEdgeArrow | null = marker !== 'none'
+		? { x: tgtCoords.x, y: tgtCoords.y, angle: anchorArrowAngle(target.position), size: arrowSize }
+		: null
+
+	const arrowStart: PixiEdgeArrow | null = markerStart && markerStart !== 'none'
+		? { x: srcCoords.x, y: srcCoords.y, angle: anchorArrowAngle(source.position), size: arrowSize }
+		: null
+
+	return {
+		id,
+		svgPath,
+		strokeColor,
+		strokeWidth: visibleStrokeWidth,
+		isDashed: edgeConfig.lineStyle === 'dashed',
+		arrowEnd,
+		arrowStart,
 	}
 }
 
@@ -103,6 +249,14 @@ function computeTFromPointerPosition(
 	return t
 }
 
+function resolveEdgeAnchorT(node: CanvasNode | undefined, t: number | undefined): number {
+	return node?.type === 'image' ? 0.5 : t ?? 0.5
+}
+
+function canAutoAlignTargetT(node: CanvasNode | undefined): boolean {
+	return Boolean(node && node.type !== 'image')
+}
+
 function isSameConnection(
 	a: WorkspaceEdge,
 	b: { sourceNodeId: string; targetNodeId: string; sourceHandle?: string | null; targetHandle?: string | null }
@@ -111,6 +265,190 @@ function isSameConnection(
 		a.targetNodeId === b.targetNodeId &&
 		(a.sourceHandle ?? null) === (b.sourceHandle ?? null) &&
 		(a.targetHandle ?? null) === (b.targetHandle ?? null)
+}
+
+type PathPoint = { x: number; y: number }
+
+type PathPointWithTangent = {
+	point: PathPoint
+	tangent: PathPoint
+}
+
+function parsePathNumbers(rawArgs: string): number[] {
+	return rawArgs
+		.trim()
+		.split(/[\s,]+/)
+		.filter(Boolean)
+		.map(Number)
+		.filter((value) => Number.isFinite(value))
+}
+
+function cubicAt(start: number, controlA: number, controlB: number, end: number, progress: number): number {
+	const inverse = 1 - progress
+	return inverse ** 3 * start + 3 * inverse ** 2 * progress * controlA + 3 * inverse * progress ** 2 * controlB + progress ** 3 * end
+}
+
+function quadraticAt(start: number, control: number, end: number, progress: number): number {
+	const inverse = 1 - progress
+	return inverse ** 2 * start + 2 * inverse * progress * control + progress ** 2 * end
+}
+
+function flattenSvgPath(svgPath: string): PathPoint[] {
+	const points: PathPoint[] = []
+	const commandRegex = /([MmLlHhVvCcQqZz])([^MmLlHhVvCcQqZz]*)/g
+	let current: PathPoint = { x: 0, y: 0 }
+	let subpathStart: PathPoint = { x: 0, y: 0 }
+	let match: RegExpExecArray | null
+
+	const pushPoint = (point: PathPoint): void => {
+		current = point
+		points.push(point)
+	}
+
+	while ((match = commandRegex.exec(svgPath)) !== null) {
+		const command = match[1]
+		const args = parsePathNumbers(match[2])
+		const isRelative = command === command.toLowerCase()
+		const absolutePoint = (x: number, y: number): PathPoint => isRelative
+			? { x: current.x + x, y: current.y + y }
+			: { x, y }
+
+		switch (command.toUpperCase()) {
+			case 'M': {
+				for (let argIndex = 0; argIndex < args.length; argIndex += 2) {
+					const point = absolutePoint(args[argIndex], args[argIndex + 1])
+					if (argIndex === 0) {
+						current = point
+						subpathStart = point
+						points.push(point)
+					} else {
+						pushPoint(point)
+					}
+				}
+				break
+			}
+			case 'L': {
+				for (let argIndex = 0; argIndex < args.length; argIndex += 2) {
+					pushPoint(absolutePoint(args[argIndex], args[argIndex + 1]))
+				}
+				break
+			}
+			case 'H': {
+				for (const rawX of args) {
+					pushPoint({ x: isRelative ? current.x + rawX : rawX, y: current.y })
+				}
+				break
+			}
+			case 'V': {
+				for (const rawY of args) {
+					pushPoint({ x: current.x, y: isRelative ? current.y + rawY : rawY })
+				}
+				break
+			}
+			case 'C': {
+				for (let argIndex = 0; argIndex < args.length; argIndex += 6) {
+					const segmentStart = current
+					const controlA = absolutePoint(args[argIndex], args[argIndex + 1])
+					const controlB = absolutePoint(args[argIndex + 2], args[argIndex + 3])
+					const segmentEnd = absolutePoint(args[argIndex + 4], args[argIndex + 5])
+					for (let step = 1; step <= 24; step++) {
+						const progress = step / 24
+						pushPoint({
+							x: cubicAt(segmentStart.x, controlA.x, controlB.x, segmentEnd.x, progress),
+							y: cubicAt(segmentStart.y, controlA.y, controlB.y, segmentEnd.y, progress),
+						})
+					}
+				}
+				break
+			}
+			case 'Q': {
+				for (let argIndex = 0; argIndex < args.length; argIndex += 4) {
+					const segmentStart = current
+					const control = absolutePoint(args[argIndex], args[argIndex + 1])
+					const segmentEnd = absolutePoint(args[argIndex + 2], args[argIndex + 3])
+					for (let step = 1; step <= 16; step++) {
+						const progress = step / 16
+						pushPoint({
+							x: quadraticAt(segmentStart.x, control.x, segmentEnd.x, progress),
+							y: quadraticAt(segmentStart.y, control.y, segmentEnd.y, progress),
+						})
+					}
+				}
+				break
+			}
+			case 'Z': {
+				pushPoint(subpathStart)
+				break
+			}
+		}
+	}
+
+	return points
+}
+
+function segmentLength(start: PathPoint, end: PathPoint): number {
+	return Math.hypot(end.x - start.x, end.y - start.y)
+}
+
+function getPathLength(points: PathPoint[]): number {
+	let total = 0
+	for (let pointIndex = 1; pointIndex < points.length; pointIndex++) {
+		total += segmentLength(points[pointIndex - 1], points[pointIndex])
+	}
+	return total
+}
+
+function getPointAtPathLength(points: PathPoint[], targetLength: number): PathPointWithTangent | null {
+	if (points.length === 0) return null
+	if (points.length === 1) return { point: points[0], tangent: { x: 1, y: 0 } }
+
+	let walked = 0
+	for (let pointIndex = 1; pointIndex < points.length; pointIndex++) {
+		const start = points[pointIndex - 1]
+		const end = points[pointIndex]
+		const length = segmentLength(start, end)
+		if (length <= 0) continue
+
+		if (walked + length >= targetLength) {
+			const progress = Math.max(0, Math.min(1, (targetLength - walked) / length))
+			return {
+				point: {
+					x: start.x + (end.x - start.x) * progress,
+					y: start.y + (end.y - start.y) * progress,
+				},
+				tangent: { x: end.x - start.x, y: end.y - start.y },
+			}
+		}
+
+		walked += length
+	}
+
+	const start = points[points.length - 2]
+	const end = points[points.length - 1]
+	return { point: end, tangent: { x: end.x - start.x, y: end.y - start.y } }
+}
+
+function getSquaredDistanceToSegment(point: PathPoint, start: PathPoint, end: PathPoint): number {
+	const deltaX = end.x - start.x
+	const deltaY = end.y - start.y
+	const lengthSquared = deltaX * deltaX + deltaY * deltaY
+	if (lengthSquared <= 0) return (point.x - start.x) ** 2 + (point.y - start.y) ** 2
+
+	const progress = Math.max(0, Math.min(1, ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) / lengthSquared))
+	const closest = {
+		x: start.x + progress * deltaX,
+		y: start.y + progress * deltaY,
+	}
+
+	return (point.x - closest.x) ** 2 + (point.y - closest.y) ** 2
+}
+
+function isPointNearPath(point: PathPoint, points: PathPoint[], radius: number): boolean {
+	const radiusSquared = radius * radius
+	for (let pointIndex = 1; pointIndex < points.length; pointIndex++) {
+		if (getSquaredDistanceToSegment(point, points[pointIndex - 1], points[pointIndex]) <= radiusSquared) return true
+	}
+	return false
 }
 
 // Compute spread-out t values for edges that share the same node+side
@@ -153,16 +491,17 @@ export function computeSpreadTValues(
 		const sourceY = sourceNode ? sourceNode.position.y + sourceNode.dimensions.height / 2 : 0
 
 		// Default to stored T or 0.5
-		let targetT = edge.targetT ?? 0.5
+		const sourceT = resolveEdgeAnchorT(sourceNode, edge.sourceT)
+		let targetT = resolveEdgeAnchorT(targetNode, edge.targetT)
 
 		// Dynamic auto-align: If source Y hits the target node, FORCE straight line alignment
 		// This ensures that even during dragging or node moving, the line attempts to stay straight
 		// For off-axis nodes, we clamp to the nearest corner (top/bottom) instead of snapping to center
-		if (sourceNode && targetNode) {
+		if (sourceNode && canAutoAlignTargetT(targetNode)) {
 			const targetHeight = targetNode.dimensions.height
 
 			// When the target is shorter than the minimum slide height, snap to center
-			if (targetHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+			if (targetHeight < settings.aiChatThread.rail.minSlideHeight) {
 				targetT = 0.5
 			} else {
 				const targetTop = targetNode.position.y
@@ -172,14 +511,14 @@ export function computeSpreadTValues(
 
 				// Clamp to be within the node side (0-1), leaving a configurable margin
 				// effectively snapping to the top or bottom corner if the source is outside vertical bounds
-				const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+				const m = settings.aiChatThread.rail.edgeMargin
 				targetT = Math.max(m, Math.min(1 - m, idealT))
 			}
 		}
 
 		// Initialize with values
 		result.set(edge.edgeId, {
-			sourceT: edge.sourceT ?? 0.5,
+			sourceT,
 			targetT,
 			laneIndex: 0,
 			laneCount: 1,
@@ -191,6 +530,7 @@ export function computeSpreadTValues(
 	// Sort by TARGET node's Y position so lines don't cross
 	for (const [, group] of sourceGroups) {
 		if (group.length <= 1) continue
+		if (nodeMap.get(group[0]?.sourceNodeId)?.type === 'image') continue
 
 		// Sort by target node Y position (smaller Y = higher on screen = smaller t)
 		group.sort((a, b) => {
@@ -285,19 +625,26 @@ export class WorkspaceConnectionManager {
 	private nodes: CanvasNode[] = []
 	private edges: WorkspaceEdge[] = []
 
-	private connector: ConnectorRenderer | null = null
-	private lastRenderBoundsKey: string | null = null
-
 	private selectedEdgeId: string | null = null
 	private connectionInProgress: ConnectionInProgress | null = null
 
 	private reconnectingEdge: { edgeId: string; edgeUpdaterType: HandleType } | null = null
 
 	private proximityCandidate: ProximityCandidate | null = null
+	private currentEdgeClickAreaWidth = settings.connector.lineClickAreaWidth
 
 	private menuConnectionCleanup: (() => void) | null = null
 
 	private railHeights: Map<string, number> = new Map()
+
+	// Cache for fast synchronous PIXI datum recomputation on zoom change.
+	// Avoids the full connectionManager.render() cost when only markerOffset changes.
+	private cachedPixiEdgeConfigs: Array<{ edgeConfig: EdgeConfig; isSelected: boolean }> | null = null
+	private cachedPixiWorldNodeMap: Map<string, NodeConfig> | null = null
+	private cachedPixiEdgeData: PixiEdgeRenderDatum[] = []
+	private cachedFlattenedEdgePaths = new Map<string, { svgPath: string; points: PathPoint[] }>()
+	private cachedPixiDefaultColor = '#000000'
+	private cachedPixiFocusColor = '#000000'
 
 	public setRailHeight(nodeId: string, height: number): void {
 		this.railHeights.set(nodeId, height)
@@ -321,17 +668,75 @@ export class WorkspaceConnectionManager {
 		})
 	}
 
+	private isContextRegionEdgeNode(node: CanvasNode | undefined): boolean {
+		return Boolean(node && this.config.isContextRegionNode?.(node))
+	}
+
+	private getEdgeNodeGeometry(node: CanvasNode): EdgeNodeGeometry {
+		if (this.isContextRegionEdgeNode(node)) {
+			const bounds = getContextRegionCloudBounds(toContextRegionCloudDatum(node))
+			return {
+				x: bounds.x,
+				y: bounds.y,
+				width: bounds.width,
+				height: bounds.height,
+			}
+		}
+
+		const railOffset = this.config.railOffset ?? 0
+		const xShift = node.type === 'aiChatThread' ? railOffset : 0
+		const railHeight = node.type === 'aiChatThread' ? this.railHeights.get(node.nodeId) : undefined
+
+		return {
+			x: node.position.x - xShift,
+			y: node.position.y,
+			width: node.dimensions.width + xShift,
+			height: railHeight ?? node.dimensions.height,
+		}
+	}
+
+	private getContextRegionAnchorOffset(
+		node: CanvasNode | undefined,
+		nodeConfig: NodeConfig | undefined,
+		position: AnchorPosition,
+		t: number
+	): { x: number; y: number } | undefined {
+		if (!this.isContextRegionEdgeNode(node) || !nodeConfig) return undefined
+
+		const rawAnchor = computeWorldAnchorPoint(position, t, nodeConfig)
+		const cloudAnchor = getContextRegionCloudAnchorPoint(toContextRegionCloudDatum(node), position, t)
+
+		return {
+			x: cloudAnchor.x - rawAnchor.x,
+			y: cloudAnchor.y - rawAnchor.y,
+		}
+	}
+
+	private buildEdgeAnchor(
+		nodeId: string,
+		position: AnchorPosition,
+		t: number | undefined,
+		nodeById: Map<string, CanvasNode>,
+		worldNodeMap: Map<string, NodeConfig>
+	): EdgeAnchor {
+		const node = nodeById.get(nodeId)
+		const resolvedT = resolveEdgeAnchorT(node, t)
+		const nodeConfig = worldNodeMap.get(nodeId)
+		const offset = this.getContextRegionAnchorOffset(node, nodeConfig, position, resolvedT)
+
+		return {
+			nodeId,
+			position,
+			t: resolvedT,
+			...(offset ? { offset } : {}),
+		}
+	}
+
 	public constructor(config: ConnectionManagerConfig) {
 		this.config = config
 
 		// Ensure XYFlow internals can measure zoom from viewport transform
 		this.config.viewportEl.classList.add('xyflow__viewport')
-
-		// Let the edges layer be positioned by bounds
-		this.config.edgesLayerEl.style.position = 'absolute'
-		this.config.edgesLayerEl.style.top = '0'
-		this.config.edgesLayerEl.style.left = '0'
-
 	}
 
 	public syncNodes(canvasNodes: CanvasNode[]) {
@@ -394,29 +799,38 @@ export class WorkspaceConnectionManager {
 		}
 	}
 
+	public cancelTransientConnection(): void {
+		const hadTransientConnection = Boolean(this.connectionInProgress || this.reconnectingEdge || this.proximityCandidate || this.menuConnectionCleanup)
+		const menuCleanup = this.menuConnectionCleanup
+
+		this.menuConnectionCleanup = null
+		this.connectionInProgress = null
+		this.reconnectingEdge = null
+		this.proximityCandidate = null
+
+		if (menuCleanup) {
+			menuCleanup()
+			return
+		}
+
+		if (hadTransientConnection) {
+			this.render()
+		}
+	}
+
 	public startConnectionFromMenu(nodeId: string) {
 		// Cancel any existing menu connection
 		this.menuConnectionCleanup?.()
 
 		const node = this.nodeLookup.get(nodeId)
 		if (!node) {
-			console.log('[CONNECT] startConnectionFromMenu: node not found in nodeLookup for', nodeId)
 			return
 		}
 
 		const sourceHandle: Handle | null = node.internals.handleBounds?.source?.[0] ?? null
 		if (!sourceHandle) {
-			console.log('[CONNECT] startConnectionFromMenu: no sourceHandle.', {
-				handleBounds: node.internals.handleBounds,
-				source: node.internals.handleBounds?.source,
-			})
 			return
 		}
-
-		console.log('[CONNECT] startConnectionFromMenu: initiating connection from', nodeId, {
-			sourceHandle,
-			positionAbsolute: node.internals.positionAbsolute,
-		})
 
 		const fromPosition = sourceHandle.position ?? Position.Right
 		const fromX = (sourceHandle.x ?? 0) + node.internals.positionAbsolute.x + (sourceHandle.width ?? 0) / 2
@@ -450,9 +864,8 @@ export class WorkspaceConnectionManager {
 		}
 
 		// Change cursor to crosshair on the pane
-		this.config.paneEl.style.cursor = 'crosshair'
+		applyStyle(this.config.paneEl, { cursor: 'crosshair' })
 
-		let moveLogCounter = 0
 		const onMouseMove = (e: MouseEvent) => {
 			const transform = this.config.getTransform()
 			const containerBounds = this.config.paneEl.getBoundingClientRect()
@@ -466,17 +879,8 @@ export class WorkspaceConnectionManager {
 				y: (screenRelY - transform[1]) / transform[2],
 			}
 
-			if (moveLogCounter++ % 30 === 0) {
-				console.log('[CONNECT] mousemove', {
-					clientX: e.clientX, clientY: e.clientY,
-					screenRel: { x: screenRelX, y: screenRelY },
-					transform,
-					rendererPos,
-				})
-			}
-
 			// Find closest target handle
-			const closestHandle = this.findClosestHandle(rendererPos, fromHandle, webUiSettings.menuConnectionSnapRadius)
+			const closestHandle = this.findClosestHandle(rendererPos, fromHandle, settings.connector.menuConnectionSnapRadius)
 
 			const isValid = closestHandle ? this.isMenuConnectionValid(nodeId, closestHandle) : null
 
@@ -495,11 +899,6 @@ export class WorkspaceConnectionManager {
 		}
 
 		const onMouseUp = (e: MouseEvent) => {
-			console.log('[CONNECT] onMouseUp in menu connection mode', {
-				toHandle: this.connectionInProgress?.toHandle,
-				isValid: this.connectionInProgress?.isValid,
-				target: e.target,
-			})
 			e.preventDefault()
 			e.stopPropagation()
 
@@ -520,7 +919,7 @@ export class WorkspaceConnectionManager {
 				const sourceNode = this.nodes.find(n => n.nodeId === nodeId)
 				const targetNode = this.nodes.find(n => n.nodeId === toNodeId)
 
-				if (sourceNode && targetNode) {
+				if (sourceNode && canAutoAlignTargetT(targetNode)) {
 					const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT
 					const targetTop = targetNode.position.y
 					const targetBottom = targetTop + targetNode.dimensions.height
@@ -565,7 +964,7 @@ export class WorkspaceConnectionManager {
 			document.removeEventListener('mouseup', onMouseUp, true)
 			document.removeEventListener('keydown', onKeyDown)
 			this.connectionInProgress = null
-			this.config.paneEl.style.cursor = ''
+			applyStyle(this.config.paneEl, { cursor: '' })
 			this.menuConnectionCleanup = null
 			this.render()
 		}
@@ -601,14 +1000,14 @@ export class WorkspaceConnectionManager {
 			: node.internals.positionAbsolute.x + canvasNode.dimensions.width
 
 		if (canvasNode.type === 'aiChatThread' && isLeftHandle) {
-			if (railHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+			if (railHeight < settings.aiChatThread.rail.minSlideHeight) {
 				return {
 					x,
 					y: node.internals.positionAbsolute.y + railHeight / 2,
 				}
 			}
 
-			const margin = railHeight * webUiThemeSettings.aiChatThreadRailEdgeMargin
+			const margin = railHeight * settings.aiChatThread.rail.edgeMargin
 			const minY = node.internals.positionAbsolute.y + margin
 			const maxY = node.internals.positionAbsolute.y + railHeight - margin
 
@@ -647,19 +1046,6 @@ export class WorkspaceConnectionManager {
 				const { x: hx, y: hy } = this.getMenuSnapPoint(nodeId, handle, position)
 
 				const dist = Math.sqrt((hx - position.x) ** 2 + (hy - position.y) ** 2)
-
-				console.log('[CONNECT] findClosestHandle candidate:', {
-					nodeId,
-					handleId: handle.id,
-					handleType: handle.type,
-					handleXY: { x: handle.x, y: handle.y },
-					posAbsolute: node.internals.positionAbsolute,
-					computedCenter: { hx, hy },
-					mousePos: position,
-					dist,
-					connectionRadius,
-					withinRadius: dist <= connectionRadius,
-				})
 
 				if (dist <= connectionRadius && dist < minDist) {
 					minDist = dist
@@ -729,9 +1115,11 @@ export class WorkspaceConnectionManager {
 			},
 
 			cancelConnection: () => {
-				this.connectionInProgress = null
-				this.reconnectingEdge = null
-				this.render()
+				this.cancelTransientConnection()
+			},
+
+			onConnectEnd: () => {
+				requestAnimationFrame(() => this.cancelTransientConnection())
 			},
 
 			isValidConnection: (connection: Connection) => {
@@ -785,7 +1173,7 @@ export class WorkspaceConnectionManager {
 				const sourceNode = this.nodes.find(n => n.nodeId === fromNodeId)
 				const targetNode = this.nodes.find(n => n.nodeId === toNodeId)
 
-				if (sourceNode && targetNode) {
+				if (sourceNode && canAutoAlignTargetT(targetNode)) {
 					const sourceY = sourceNode.position.y + sourceNode.dimensions.height * sourceT
 					const targetTop = targetNode.position.y
 					const targetBottom = targetTop + targetNode.dimensions.height
@@ -841,7 +1229,9 @@ export class WorkspaceConnectionManager {
 					updatedEdge.sourceNodeId = finalState.toNode.id
 					updatedEdge.sourceHandle = finalState.toHandle?.id ?? undefined
 					// Compute t from drop position
-					if (reconnectedNode && finalState.toHandle) {
+					if (reconnectedNode?.type === 'image') {
+						updatedEdge.sourceT = 0.5
+					} else if (reconnectedNode && finalState.toHandle) {
 						updatedEdge.sourceT = computeTFromPointerPosition(
 							finalState.toHandle.y,
 							reconnectedNode.position.y,
@@ -854,7 +1244,9 @@ export class WorkspaceConnectionManager {
 					updatedEdge.targetNodeId = finalState.toNode.id
 					updatedEdge.targetHandle = finalState.toHandle?.id ?? undefined
 					// Compute t from drop position
-					if (reconnectedNode && finalState.toHandle) {
+					if (reconnectedNode?.type === 'image') {
+						updatedEdge.targetT = 0.5
+					} else if (reconnectedNode && finalState.toHandle) {
 						updatedEdge.targetT = computeTFromPointerPosition(
 							finalState.toHandle.y,
 							reconnectedNode.position.y,
@@ -907,148 +1299,44 @@ export class WorkspaceConnectionManager {
 		const messageEl = nodeEl.querySelector(`[data-message-id="${messageId}"]`)
 		if (!messageEl) return null
 
-		// Calculate relative Y position
 		const nodeRect = nodeEl.getBoundingClientRect()
 		const msgRect = messageEl.getBoundingClientRect()
+		if (nodeRect.height <= 0 || msgRect.height <= 0) return null
 
-		// Center of the message element
 		const msgCenterY = msgRect.top + msgRect.height / 2
+		if (msgCenterY < nodeRect.top || msgCenterY > nodeRect.bottom) return null
 
-		// Relative to node top
 		const relativeY = msgCenterY - nodeRect.top
-
-		// Convert to T value (0-1)
 		const t = relativeY / nodeRect.height
 
 		return Math.max(0, Math.min(1, t))
 	}
 
-	private computeRenderBounds(): RenderBounds | null {
-		if (!this.edges.length && !this.connectionInProgress && !this.proximityCandidate) {
-			return null
-		}
-
-		const nodeById = new Map(this.nodes.map((n) => [n.nodeId, n]))
-		const padding = 200
-
-		let minX = Infinity
-		let minY = Infinity
-		let maxX = -Infinity
-		let maxY = -Infinity
-
-		const includeRect = (x: number, y: number, w: number, h: number) => {
-			minX = Math.min(minX, x)
-			minY = Math.min(minY, y)
-			maxX = Math.max(maxX, x + w)
-			maxY = Math.max(maxY, y + h)
-		}
-
-		for (const edge of this.edges) {
-			const source = nodeById.get(edge.sourceNodeId)
-			const target = nodeById.get(edge.targetNodeId)
-			if (source) includeRect(source.position.x, source.position.y, source.dimensions.width, source.dimensions.height)
-			if (target) includeRect(target.position.x, target.position.y, target.dimensions.width, target.dimensions.height)
-		}
-
-		if (this.connectionInProgress) {
-			const fromNode = this.nodes.find((node) => node.nodeId === this.connectionInProgress?.fromHandle?.nodeId)
-			if (fromNode) {
-				includeRect(fromNode.position.x, fromNode.position.y, fromNode.dimensions.width, fromNode.dimensions.height)
-			}
-
-			includeRect(this.connectionInProgress.from.x, this.connectionInProgress.from.y, 1, 1)
-
-			const transform = this.config.getTransform()
-			const to = this.connectionInProgress.toHandle
-				? { x: this.connectionInProgress.toHandle.x, y: this.connectionInProgress.toHandle.y }
-				: toRendererPoint({ x: this.connectionInProgress.to.x, y: this.connectionInProgress.to.y }, transform)
-
-			const toNodeId = this.connectionInProgress.toHandle?.nodeId ?? this.connectionInProgress.toNode?.id
-			const toNode = toNodeId ? this.nodes.find((node) => node.nodeId === toNodeId) : null
-			if (toNode) {
-				includeRect(toNode.position.x, toNode.position.y, toNode.dimensions.width, toNode.dimensions.height)
-			}
-
-			includeRect(to.x, to.y, 1, 1)
-		}
-
-		if (this.proximityCandidate) {
-			const proxSource = nodeById.get(this.proximityCandidate.sourceNodeId)
-			const proxTarget = nodeById.get(this.proximityCandidate.targetNodeId)
-			if (proxSource) includeRect(proxSource.position.x, proxSource.position.y, proxSource.dimensions.width, proxSource.dimensions.height)
-			if (proxTarget) includeRect(proxTarget.position.x, proxTarget.position.y, proxTarget.dimensions.width, proxTarget.dimensions.height)
-		}
-
-		if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
-			return null
-		}
-
-		const left = minX - padding
-		const top = minY - padding
-		const width = Math.max(1, (maxX - minX) + padding * 2)
-		const height = Math.max(1, (maxY - minY) + padding * 2)
-
-		return { left, top, width, height }
-	}
-
-	private ensureConnector(bounds: RenderBounds) {
-		const key = `${bounds.left}:${bounds.top}:${bounds.width}:${bounds.height}`
-
-		if (this.connector && this.lastRenderBoundsKey === key) {
-			return
-		}
-
-		this.lastRenderBoundsKey = key
-		this.connector?.destroy()
-
-		applyStyle(this.config.edgesLayerEl, { left: `${bounds.left}px`, top: `${bounds.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` })
-
-		this.connector = createConnectorRenderer({
-			container: this.config.edgesLayerEl,
-			width: bounds.width,
-			height: bounds.height,
-			instanceId: 'workspace-edges'
-		})
-	}
-
 	public render() {
-		const bounds = this.computeRenderBounds()
-
-		if (!bounds) {
-			this.connector?.clear()
-			this.config.edgesLayerEl.replaceChildren()
-			this.connector = null
-			this.lastRenderBoundsKey = null
+		if (!this.edges.length && !this.connectionInProgress && !this.proximityCandidate) {
+			this.cachedPixiEdgeConfigs = null
+			this.cachedPixiWorldNodeMap = null
+			this.cachedPixiEdgeData = []
+			this.cachedFlattenedEdgePaths.clear()
+			this.config.onPixiEdgesReady?.([])
 			return
 		}
 
-		this.ensureConnector(bounds)
+		const nodeById = new Map(this.nodes.map((node) => [node.nodeId, node]))
 
-		if (!this.connector) return
+		const worldNodeMap = new Map<string, NodeConfig>()
 
-		this.connector.clear()
-
-		const offsetX = bounds.left
-		const offsetY = bounds.top
-
-		// Add nodes for anchor computation (hidden by CSS)
-		const railOff = this.config.railOffset ?? 0
-		for (const n of this.nodes) {
-			// For aiChatThread nodes shift the left anchor by -railOffset
-			// so connector lines attach to the vertical rail, and extend
-			// height to full rail span (thread + gap + floating input)
-			const xShift = n.type === 'aiChatThread' ? railOff : 0
-			const railH = n.type === 'aiChatThread' ? this.railHeights.get(n.nodeId) : undefined
-			const nodeConfig: NodeConfig = {
-				id: n.nodeId,
+		for (const canvasNode of this.nodes) {
+			const geometry = this.getEdgeNodeGeometry(canvasNode)
+			worldNodeMap.set(canvasNode.nodeId, {
+				id: canvasNode.nodeId,
 				shape: 'rect',
-				x: n.position.x - offsetX - xShift,
-				y: n.position.y - offsetY,
-				width: n.dimensions.width + xShift,
-				height: railH ?? n.dimensions.height,
+				x: geometry.x,
+				y: geometry.y,
+				width: geometry.width,
+				height: geometry.height,
 				className: 'workspace-edge-node'
-			}
-			this.connector.addNode(nodeConfig)
+			})
 		}
 
 		// Get current zoom for proportional scaling
@@ -1056,10 +1344,34 @@ export class WorkspaceConnectionManager {
 		const zoom = transform[2]
 
 		// Calculate scaled sizes for edges
-		const { strokeWidth: scaledStrokeWidth, markerSize: scaledMarkerSize, markerOffset: scaledMarkerOffset } =
-			webUiSettings.useZoomCompensatedConnectorScaling
-				? getEdgeScaledSizes(zoom)
-				: { strokeWidth: 2, markerSize: 16, markerOffset: { source: 6, target: 19 } }
+		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } =
+			settings.connector.useZoomCompensatedScaling
+				? getEdgeScaledSizes(zoom, { baseClickAreaWidth: settings.connector.lineClickAreaWidth })
+				: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: settings.connector.lineClickAreaWidth }
+		const pixiStrokeWidth = 2
+		const pixiMarkerSize = 16
+		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
+
+		// Read CSS connector colors for PIXI rendering (set as CSS custom props on paneEl)
+		const paneStyle = getComputedStyle(this.config.paneEl)
+		const pixiDefaultColor = paneStyle.getPropertyValue('--connector-line-default-color').trim() || '#000000'
+		const pixiFocusColor = paneStyle.getPropertyValue('--connector-line-focus-color').trim() || '#000000'
+		this.cachedPixiDefaultColor = pixiDefaultColor
+		this.cachedPixiFocusColor = pixiFocusColor
+		const pixiEdgeData: PixiEdgeRenderDatum[] = []
+		const pixiEdgeConfigsForCache: Array<{ edgeConfig: EdgeConfig; isSelected: boolean }> = []
+		const addPixiEdgeDatum = (edgeConfig: EdgeConfig, isSelected: boolean): void => {
+			if (!this.config.onPixiEdgesReady) return
+			pixiEdgeConfigsForCache.push({ edgeConfig, isSelected })
+			const pixiDatum = computePixiEdgeDatum(
+				edgeConfig, worldNodeMap, isSelected,
+				pixiDefaultColor, pixiFocusColor,
+				pixiStrokeWidth, pixiMarkerSize, scaledMarkerOffset
+			)
+			if (pixiDatum) {
+				pixiEdgeData.push(pixiDatum)
+			}
+		}
 
 		// Compute spread-out t values for edges sharing the same node+side
 		// This prevents multiple edges from converging to the exact same point
@@ -1115,17 +1427,17 @@ export class WorkspaceConnectionManager {
 					// This prevents the arrow from pointing to the bottom of the target when the thread is long
 					const sourceNode = this.nodes.find(n => n.nodeId === e.sourceNodeId)
 					const targetNode = this.nodes.find(n => n.nodeId === e.targetNodeId)
-					if (sourceNode && targetNode) {
+					if (sourceNode && canAutoAlignTargetT(targetNode)) {
 						const targetHeight = targetNode.dimensions.height
 
-						if (targetHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+						if (targetHeight < settings.aiChatThread.rail.minSlideHeight) {
 							targetT = 0.5
 						} else {
 							const sourceY = sourceNode.position.y + (sourceNode.dimensions.height * sourceT)
 							const targetTop = targetNode.position.y
 
 							const idealT = (sourceY - targetTop) / targetHeight
-							const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+							const m = settings.aiChatThread.rail.edgeMargin
 							targetT = Math.max(m, Math.min(1 - m, idealT))
 						}
 					}
@@ -1134,19 +1446,15 @@ export class WorkspaceConnectionManager {
 
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
-				source: { nodeId: e.sourceNodeId, position: source, t: sourceT },
-				target: { nodeId: e.targetNodeId, position: target, t: targetT },
-				pathType: e.pathType ?? webUiSettings.nodesConnectorLineCurve,
+				source: this.buildEdgeAnchor(e.sourceNodeId, source, sourceT, nodeById, worldNodeMap),
+				target: this.buildEdgeAnchor(e.targetNodeId, target, targetT, nodeById, worldNodeMap),
+				pathType: e.pathType ?? settings.connector.lineCurve,
 				marker: isSelected ? 'arrowhead-selected' : 'arrowhead',
-				markerSize: scaledMarkerSize,
-				markerOffset: scaledMarkerOffset,
-				strokeWidth: scaledStrokeWidth,
-				className: `workspace-edge ${isSelected ? 'is-selected' : ''}`,
 				laneIndex: tValues?.laneIndex ?? 0,
 				laneCount: tValues?.laneCount ?? 1
 			}
 
-			this.connector.addEdge(edgeConfig)
+			addPixiEdgeDatum(edgeConfig, isSelected)
 		}
 
 		// Add in-progress edge (new connection or reconnecting existing edge)
@@ -1167,20 +1475,19 @@ export class WorkspaceConnectionManager {
 				const tempNode: NodeConfig = {
 					id: tempNodeId,
 					shape: 'rect',
-					x: to.x - offsetX,
-					y: to.y - offsetY,
-					width: 1,
-					height: 1,
-					className: 'workspace-edge-temp-node',
+					x: to.x,
+					y: to.y,
+					width: 0,
+					height: 0,
 					anchorOverrides: {
-						left: { x: to.x - offsetX, y: to.y - offsetY },
-						right: { x: to.x - offsetX, y: to.y - offsetY },
-						top: { x: to.x - offsetX, y: to.y - offsetY },
-						bottom: { x: to.x - offsetX, y: to.y - offsetY },
-						center: { x: to.x - offsetX, y: to.y - offsetY }
+						left: { x: to.x, y: to.y },
+						right: { x: to.x, y: to.y },
+						top: { x: to.x, y: to.y },
+						bottom: { x: to.x, y: to.y },
+						center: { x: to.x, y: to.y }
 					}
 				}
-				this.connector.addNode(tempNode)
+				worldNodeMap.set(tempNodeId, tempNode)
 			}
 
 			// When reconnecting, show the edge from the anchored end to the cursor
@@ -1210,69 +1517,157 @@ export class WorkspaceConnectionManager {
 				sourcePosition = this.connectionInProgress.fromHandle.position as 'left' | 'right'
 			}
 
+			const snappedTargetT = snappedTargetNode && snappedTargetPosition && this.connectionInProgress.toHandle
+				? computeTFromPointerPosition(
+					this.connectionInProgress.toHandle.y,
+					snappedTargetNode.position.y,
+					this.isContextRegionEdgeNode(snappedTargetNode)
+						? snappedTargetNode.dimensions.height
+						: snappedTargetNode.type === 'aiChatThread'
+						? (this.railHeights.get(snappedTargetNode.nodeId) ?? snappedTargetNode.dimensions.height)
+						: snappedTargetNode.dimensions.height,
+				)
+				: undefined
+
 			const tempEdge: EdgeConfig = {
 				id: '__workspace-temp-edge',
-				source: { nodeId: sourceNodeId, position: sourcePosition },
+				source: this.buildEdgeAnchor(sourceNodeId, sourcePosition, undefined, nodeById, worldNodeMap),
 				target: snappedTargetNode && snappedTargetPosition && this.connectionInProgress.toHandle
-					? {
-						nodeId: snappedTargetNode.nodeId,
-						position: snappedTargetPosition,
-						t: computeTFromPointerPosition(
-							this.connectionInProgress.toHandle.y,
-							snappedTargetNode.position.y,
-							snappedTargetNode.type === 'aiChatThread'
-								? (this.railHeights.get(snappedTargetNode.nodeId) ?? snappedTargetNode.dimensions.height)
-								: snappedTargetNode.dimensions.height,
-						),
-					}
+					? this.buildEdgeAnchor(snappedTargetNode.nodeId, snappedTargetPosition, snappedTargetT, nodeById, worldNodeMap)
 					: { nodeId: tempNodeId, position: 'center' },
-				pathType: webUiSettings.nodesConnectorLineCurve,
+				pathType: settings.connector.lineCurve,
 				marker: 'arrowhead',
-				markerSize: scaledMarkerSize,
-				markerOffset: scaledMarkerOffset,
-				strokeWidth: scaledStrokeWidth,
-				lineStyle: isReconnecting ? 'solid' : 'dashed',
-				className: `workspace-edge ${isReconnecting ? '' : 'workspace-edge-temp'}`
+				lineStyle: isReconnecting ? 'solid' : 'dashed'
 			}
-			this.connector.addEdge(tempEdge)
+			addPixiEdgeDatum(tempEdge, false)
 		}
 
 		// Draw potential proximity connection
 		if (this.proximityCandidate && !this.connectionInProgress) {
-            // Retrieve computed values or fall back to candidate/default
-            const computed = spreadTValues.get('__workspace-proximity-temp')
+			// Retrieve computed values or fall back to candidate/default
+			const computed = spreadTValues.get('__workspace-proximity-temp')
+			const sourceT = computed?.sourceT ?? this.proximityCandidate.sourceT
+			const targetT = computed?.targetT ?? this.proximityCandidate.targetT
 
 			const ghostEdge: EdgeConfig = {
 				id: '__workspace-proximity-edge',
-				source: {
-					nodeId: this.proximityCandidate.sourceNodeId,
-					position: this.proximityCandidate.sourceHandle,
-					t: computed?.sourceT ?? this.proximityCandidate.sourceT
-				},
-				target: {
-					nodeId: this.proximityCandidate.targetNodeId,
-					position: this.proximityCandidate.targetHandle,
-					t: computed?.targetT ?? this.proximityCandidate.targetT
-				},
-				pathType: webUiSettings.nodesConnectorLineCurve,
+				source: this.buildEdgeAnchor(this.proximityCandidate.sourceNodeId, this.proximityCandidate.sourceHandle, sourceT, nodeById, worldNodeMap),
+				target: this.buildEdgeAnchor(this.proximityCandidate.targetNodeId, this.proximityCandidate.targetHandle, targetT, nodeById, worldNodeMap),
+				pathType: settings.connector.lineCurve,
 				marker: 'arrowhead',
-				markerSize: scaledMarkerSize,
-				markerOffset: scaledMarkerOffset,
-				strokeWidth: Math.max(scaledStrokeWidth, 2), // Ensure visibility
-				lineStyle: 'dashed',
-				className: 'workspace-edge workspace-edge-temp'
+				lineStyle: 'dashed'
 			}
-			// console.log('[ConnectionManager] Adding proximity ghost edge', ghostEdge)
-			this.connector.addEdge(ghostEdge)
+			addPixiEdgeDatum(ghostEdge, false)
 		}
 
-		this.connector.render()
+		this.config.onPixiEdgesReady?.(pixiEdgeData)
+		this.cachedPixiEdgeConfigs = pixiEdgeConfigsForCache
+		this.cachedPixiWorldNodeMap = worldNodeMap
+		this.cachedPixiEdgeData = pixiEdgeData
+		this.cachedFlattenedEdgePaths.clear()
 
 		this.attachEdgeInteractionHandlers()
 	}
 
+	// Fast synchronous PIXI datum recomputation when only zoom changes.
+	// Called from the viewport zoom handler after the viewport is applied,
+	// then flushed synchronously by pixiMediaLayer.renderNow().
+	public recomputePixiEdgesOnly(zoom: number): boolean {
+		if (!this.cachedPixiEdgeConfigs || !this.cachedPixiWorldNodeMap || !this.config.onPixiEdgesReady) return false
+
+		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } = settings.connector.useZoomCompensatedScaling
+			? getEdgeScaledSizes(zoom)
+			: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: settings.connector.lineClickAreaWidth }
+		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
+
+		const pixiEdgeData: PixiEdgeRenderDatum[] = []
+		for (const { edgeConfig, isSelected } of this.cachedPixiEdgeConfigs) {
+			const pixiDatum = computePixiEdgeDatum(
+				edgeConfig, this.cachedPixiWorldNodeMap, isSelected,
+				this.cachedPixiDefaultColor, this.cachedPixiFocusColor,
+				2, 16, scaledMarkerOffset
+			)
+			if (pixiDatum) pixiEdgeData.push(pixiDatum)
+		}
+
+		this.cachedPixiEdgeData = pixiEdgeData
+		this.cachedFlattenedEdgePaths.clear()
+		this.config.onPixiEdgesReady(pixiEdgeData)
+		return true
+	}
+
 	private paneClickHandler: ((e: MouseEvent) => void) | null = null
 	private paneMouseMoveHandler: ((e: MouseEvent) => void) | null = null
+
+	private getFlattenedEdgePath(edge: PixiEdgeRenderDatum): PathPoint[] {
+		const cached = this.cachedFlattenedEdgePaths.get(edge.id)
+		if (cached?.svgPath === edge.svgPath) return cached.points
+
+		const points = flattenSvgPath(edge.svgPath)
+		this.cachedFlattenedEdgePaths.set(edge.id, { svgPath: edge.svgPath, points })
+		return points
+	}
+
+	private getWorldPointFromClient(clientX: number, clientY: number): PathPoint {
+		const paneBounds = this.config.paneEl.getBoundingClientRect()
+		const transform = this.config.getTransform()
+		return {
+			x: (clientX - paneBounds.left - transform[0]) / transform[2],
+			y: (clientY - paneBounds.top - transform[1]) / transform[2],
+		}
+	}
+
+	private worldPointToClientPoint(point: PathPoint): PathPoint {
+		const paneBounds = this.config.paneEl.getBoundingClientRect()
+		const transform = this.config.getTransform()
+		return {
+			x: paneBounds.left + point.x * transform[2] + transform[0],
+			y: paneBounds.top + point.y * transform[2] + transform[1],
+		}
+	}
+
+	private findEdgeIdAtClientPoint(clientX: number, clientY: number): string | null {
+		const worldPoint = this.getWorldPointFromClient(clientX, clientY)
+		const hitRadius = Math.max(1, this.currentEdgeClickAreaWidth / 2)
+		const committedEdgeIds = new Set(this.edges.map((edge) => edge.edgeId))
+
+		for (const edge of [...this.cachedPixiEdgeData].reverse()) {
+			if (!committedEdgeIds.has(edge.id)) continue
+			if (isPointNearPath(worldPoint, this.getFlattenedEdgePath(edge), hitRadius)) return edge.id
+		}
+
+		return null
+	}
+
+	public getEdgeMidpointRect(edgeId: string): DOMRect | null {
+		const edge = this.cachedPixiEdgeData.find((candidate) => candidate.id === edgeId)
+		if (!edge) return null
+
+		const points = this.getFlattenedEdgePath(edge)
+		const pathLength = getPathLength(points)
+		const midpoint = getPointAtPathLength(points, pathLength / 2)
+		if (!midpoint) return null
+
+		const screenMid = this.worldPointToClientPoint(midpoint.point)
+		const tangentLength = Math.hypot(midpoint.tangent.x, midpoint.tangent.y) || 1
+		let normalX = -midpoint.tangent.y / tangentLength
+		let normalY = midpoint.tangent.x / tangentLength
+
+		if (normalY < 0) {
+			normalX = -normalX
+			normalY = -normalY
+		}
+
+		const menuRadius = 18
+		const gap = 10
+		const distance = menuRadius + gap
+		const menuCenterX = screenMid.x + normalX * distance
+		const menuCenterY = screenMid.y + normalY * distance
+		const targetX = menuCenterX
+		const targetY = menuCenterY - menuRadius - 9
+
+		return new DOMRect(targetX, targetY, 1, 1)
+	}
 
 	private attachEdgeInteractionHandlers() {
 		if (this.paneClickHandler) return  // Already attached
@@ -1283,36 +1678,13 @@ export class WorkspaceConnectionManager {
 				return
 			}
 
-			const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg') as SVGSVGElement | null
-			if (!svg) return
 
-			const ctm = svg.getScreenCTM()
-			if (!ctm) return
+			const edgeId = this.findEdgeIdAtClientPoint(e.clientX, e.clientY)
+			if (!edgeId) return
 
-			const svgPoint = svg.createSVGPoint()
-			svgPoint.x = e.clientX
-			svgPoint.y = e.clientY
-			const point = svgPoint.matrixTransform(ctm.inverse())
-
-			const paths = svg.querySelectorAll('path.connector-edge') as NodeListOf<SVGPathElement>
-			for (const path of paths) {
-				const id = path.getAttribute('id')
-				if (!id?.startsWith('edge-')) continue
-				const edgeId = id.slice('edge-'.length)
-				if (edgeId.startsWith('__workspace-temp')) continue
-
-				const origWidth = path.style.strokeWidth
-				path.style.strokeWidth = `${webUiSettings.nodesConnectorLineClickAreaWidth}`
-				const hit = path.isPointInStroke(point)
-				path.style.strokeWidth = origWidth
-
-				if (hit) {
-					e.preventDefault()
-					e.stopPropagation()
-					this.selectEdge(edgeId)
-					return
-				}
-			}
+			e.preventDefault()
+			e.stopPropagation()
+			this.selectEdge(edgeId)
 		}
 
 		this.paneMouseMoveHandler = (e: MouseEvent) => {
@@ -1329,44 +1701,7 @@ export class WorkspaceConnectionManager {
 				return
 			}
 
-			const svg = this.config.edgesLayerEl.querySelector('svg.connector-svg') as SVGSVGElement | null
-			if (!svg) {
-				this.config.paneEl.classList.remove('is-hovering-edge')
-				return
-			}
-
-			const ctm = svg.getScreenCTM()
-			if (!ctm) {
-				this.config.paneEl.classList.remove('is-hovering-edge')
-				return
-			}
-
-			const svgPoint = svg.createSVGPoint()
-			svgPoint.x = e.clientX
-			svgPoint.y = e.clientY
-			const point = svgPoint.matrixTransform(ctm.inverse())
-
-			const paths = svg.querySelectorAll('path.connector-edge') as NodeListOf<SVGPathElement>
-			let isHoveringEdge = false
-
-			for (const path of paths) {
-				const id = path.getAttribute('id')
-				if (!id?.startsWith('edge-')) continue
-				const edgeId = id.slice('edge-'.length)
-				if (edgeId.startsWith('__workspace-temp')) continue
-
-				const origWidth = path.style.strokeWidth
-				path.style.strokeWidth = `${webUiSettings.nodesConnectorLineClickAreaWidth}`
-				const hit = path.isPointInStroke(point)
-				path.style.strokeWidth = origWidth
-
-				if (hit) {
-					isHoveringEdge = true
-					break
-				}
-			}
-
-			this.config.paneEl.classList.toggle('is-hovering-edge', isHoveringEdge)
+			this.config.paneEl.classList.toggle('is-hovering-edge', Boolean(this.findEdgeIdAtClientPoint(e.clientX, e.clientY)))
 		}
 
 		this.config.paneEl.addEventListener('click', this.paneClickHandler)
@@ -1388,7 +1723,7 @@ export class WorkspaceConnectionManager {
 		}
 
 		let closestCandidate: ProximityCandidate | null = null
-		let minDistance = webUiSettings.proximityConnectThreshold
+		let minDistance = settings.connector.proximityConnectThreshold
 
 		// Only trigger proximity connect if the dragged node has NO existing connections (either incoming or outgoing)
 		// This prevents "ghost" connections from appearing when dragging nodes that are already part of a graph (e.g. AI images).
@@ -1483,9 +1818,6 @@ export class WorkspaceConnectionManager {
 	}
 
 	public destroy() {
-		this.connector?.destroy()
-		this.connector = null
-		this.config.edgesLayerEl.replaceChildren()
 		// Remove click handler
 		if (this.paneClickHandler) {
 			this.config.paneEl.removeEventListener('click', this.paneClickHandler)
@@ -1495,6 +1827,10 @@ export class WorkspaceConnectionManager {
 		this.parentLookup.clear()
 		this.nodes = []
 		this.edges = []
+		this.cachedPixiEdgeConfigs = null
+		this.cachedPixiWorldNodeMap = null
+		this.cachedPixiEdgeData = []
+		this.cachedFlattenedEdgePaths.clear()
 		this.connectionInProgress = null
 		this.selectedEdgeId = null
 		this.reconnectingEdge = null

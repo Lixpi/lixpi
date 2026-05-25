@@ -45,6 +45,9 @@
         "openai": "*",
         "@anthropic-ai/sdk": "*",
         "@google/genai": "*",
+        "@langchain/langgraph": "*",
+        "@langchain/core": "*",
+        "sharp": "*",
         "type-fest": "*"
     },
     "devDependencies": {

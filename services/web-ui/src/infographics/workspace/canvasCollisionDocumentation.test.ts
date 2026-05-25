@@ -1,0 +1,46 @@
+'use strict'
+
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+function readWorkspaceReadme(): string {
+	return readFileSync(resolve(__dirname, 'README.md'), 'utf-8')
+}
+
+function expectSourceToContain(source: string, snippet: string, label: string): void {
+	expect(
+		source.includes(snippet),
+		`${label} should contain:\n${snippet}`
+	).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string, label: string): void {
+	expect(
+		source.includes(snippet),
+		`${label} should not contain:\n${snippet}`
+	).toBe(false)
+}
+
+// =============================================================================
+// WORKSPACE COLLISION DOCUMENTATION LINKS
+// =============================================================================
+
+describe('canvas collision documentation', () => {
+	const workspaceReadme = readWorkspaceReadme()
+
+	it('links to the repository-level collision feature documentation', () => {
+		expectSourceToContain(workspaceReadme, 'documentation/features/CANVAS-COLLISION-RESOLUTION.md', 'workspace README')
+		expectSourceToContain(workspaceReadme, 'collision resolution, viewport-centered insertion cleanup, drag-release collision rules, and context-region shape-aware collision planning', 'workspace README')
+	})
+
+	it('keeps collision ownership out of the Svelte wrapper in local documentation', () => {
+		expectSourceToContain(workspaceReadme, 'Canvas behavior such as placement, collision resolution, shape-aware context-region geometry, drag/resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities', 'workspace README')
+	})
+
+	it('keeps local docs free of stale flat context-region cloud config names', () => {
+		expectSourceNotToContain(workspaceReadme, 'contextRegionCloud*', 'workspace README')
+		expectSourceNotToContain(workspaceReadme, 'contextRegionCloudStyles', 'workspace README')
+		expectSourceNotToContain(workspaceReadme, 'contextRegionCloudGradientColors', 'workspace README')
+	})
+})
