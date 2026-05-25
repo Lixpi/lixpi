@@ -33,13 +33,13 @@ export type RequesterContext = {
 export const canRead = (userId: string, feature: Feature, workspaceId?: string, organizationId?: string): boolean => {
     if (feature.ownerUserId === userId) return true
     if (feature.scope === 'public' && feature.status === 'active') return true
-    if (feature.scope === 'workspace' && feature.workspaceId === workspaceId) return true
+    if (feature.scope === 'workspace' && feature.scopeOwnerId === workspaceId) return true
     if (feature.scope === 'user' && feature.ownerUserId === userId) return true
     if (feature.scope === 'organization' && feature.scopeOwnerId === organizationId) return true
     return false
 }
 
-export default {
+const FeatureModel = {
     createFeature: async (data: {
         featureId?: string
         category: string
@@ -107,6 +107,18 @@ export default {
         return feature
     },
 
+    getOwnedFeature: async ({ featureId, ownerUserId }: { featureId: string; ownerUserId: string }): Promise<Feature | { error: string }> => {
+        const item = await dynamoDBService.getItem({
+            tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+            key: { featureId, version: 1 },
+            origin: `Feature.getOwnedFeature(${featureId})`,
+        })
+        if (!item || Object.keys(item).length === 0) return { error: 'NOT_FOUND' }
+        const feature = item as Feature
+        if (feature.ownerUserId !== ownerUserId) return { error: 'PERMISSION_DENIED' }
+        return feature
+    },
+
     listByScope: async ({ scope, scopeOwnerId, requesterContext, paging }: {
         scope: FeatureScope; scopeOwnerId: string; requesterContext: RequesterContext
         paging?: { limit?: number; lastKey?: Record<string, any> }
@@ -134,10 +146,24 @@ export default {
         }
     },
 
+    listPromotedByOriginWorkspaceForCleanup: async (workspaceId: string): Promise<Feature[]> => {
+        const result = await dynamoDBService.scanItems({
+            tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+            limit: 1000,
+            fetchAllItems: true,
+            origin: `Feature.listPromotedByOriginWorkspaceForCleanup(${workspaceId})`,
+        })
+        return ((result?.items ?? []) as Feature[]).filter((feature) =>
+            feature.workspaceId === workspaceId && feature.scope !== 'workspace',
+        )
+    },
+
     updateFeature: async ({ featureId, ownerUserId, updates }: {
         featureId: string; ownerUserId: string
         updates: Partial<Pick<Feature, 'summary' | 'tags' | 'instructions' | 'parameters' | 'sampleImages'>>
-    }): Promise<void> => {
+    }): Promise<{ error: string } | undefined> => {
+        const feature = await FeatureModel.getOwnedFeature({ featureId, ownerUserId })
+        if ('error' in feature) return feature
         const now = Date.now()
         await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId, version: 1 }, updates: { ...updates, updatedAt: now }, origin: 'Feature.updateFeature' })
         const metaUp: any = { updatedAt: now }
@@ -151,11 +177,12 @@ export default {
         await dynamoDBService.deleteItems({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId }, origin: 'Feature.deleteFeature:meta' })
     },
 
-    changeScope: async ({ featureId, newScope, newScopeOwnerId }: { featureId: string; newScope: FeatureScope; newScopeOwnerId: string }): Promise<void> => {
+    changeScope: async ({ feature, newScope, newScopeOwnerId }: { feature: Feature; newScope: FeatureScope; newScopeOwnerId: string }): Promise<Feature> => {
         const now = Date.now()
         const gsiKey = buildScopeAndOwnerKey(newScope, newScopeOwnerId)
-        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId, version: 1 }, updates: { scope: newScope, scopeOwnerId: newScopeOwnerId, scopeAndOwner: gsiKey, updatedAt: now }, origin: 'Feature.changeScope' })
-        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId }, updates: { scope: newScope, scopeOwnerId: newScopeOwnerId, updatedAt: now }, origin: 'Feature.changeScope:meta' })
+        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE), key: { featureId: feature.featureId, version: 1 }, updates: { scope: newScope, scopeOwnerId: newScopeOwnerId, scopeAndOwner: gsiKey, updatedAt: now }, origin: 'Feature.changeScope' })
+        await dynamoDBService.updateItem({ tableName: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE), key: { featureId: feature.featureId }, updates: { scope: newScope, scopeOwnerId: newScopeOwnerId, updatedAt: now }, origin: 'Feature.changeScope:meta' })
+        return { ...feature, scope: newScope, scopeOwnerId: newScopeOwnerId, updatedAt: now }
     },
 
     incrementReportCount: async ({ featureId }: { featureId: string }): Promise<{ newStatus: FeatureStatus }> => {
@@ -169,3 +196,5 @@ export default {
         return { newStatus }
     },
 }
+
+export default FeatureModel

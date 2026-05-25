@@ -66,7 +66,6 @@ export type WebUiImageBranchLineageThemeSettings = {
 
 export type WebUiMediaLibraryThemeSettings = {
     panelWidthFraction: number
-    edgeGap: number
 }
 
 export type WebUiContextRegionCloudThemeSettings = {
@@ -215,8 +214,6 @@ export const webUiThemeSettings: WebUiThemeSettings = {
     mediaLibrary: {
         // Fraction of the canvas space remaining after any open AI chat panel is reserved.
         panelWidthFraction: 2 / 3,
-        // Screen-space gap from the right edge or from the left side of an open AI chat panel.
-        edgeGap: 15,
     },
 
 

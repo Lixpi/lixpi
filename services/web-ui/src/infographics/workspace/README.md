@@ -26,7 +26,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
 - **Add images** via the toolbar button which opens an upload modal
-- **Open the Media Library** from the toolbar to browse Features or explicitly saved Images; the canvas-owned panel opens on the right and shifts left when AI chat is open
+- **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features or explicitly saved Images; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save an image for reuse** from its bubble menu; the saved Media Library image is an independent Object Store copy that survives removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same image reuses the existing item instead of duplicating it
 - **Add AI Chats** via the toolbar button which creates a new AI chat thread
 - **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
@@ -54,12 +54,12 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
 
 ### Media Library Panel
-- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies only the toolbar invocation and style import.
-- Renders `Features` through the established Feature subjects and persistence path, without migrating extraction records.
+- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the unchanged zoom badge and the style import.
+- Renders `Features` through the established Feature subjects; promoted Feature samples copy to durable storage before scope changes and legacy promoted samples migrate before origin-workspace deletion.
 - Renders `Images` through generic media-library records whose Object Store bytes are copied on save and copied again when inserted back onto the canvas.
-- Supports `Workspace`, `Mine`, `Organization`, `Public`, and `All available` filtering; new image saves start in the current workspace scope.
-- Uses `webUiThemeSettings.mediaLibrary` for its initial two-thirds width and right edge gap. With AI chat visible it occupies the space immediately to the left of that panel.
-- Wraps names, summaries, tags, instructions, and image metadata rather than clipping or ellipsizing library content.
+- Supports `Workspace`, `Mine`, `Organization`, `Public`, and `All available` filtering in one compact scope selector; new image saves start in the current workspace scope.
+- Uses `webUiThemeSettings.mediaLibrary` for its two-thirds width, is flush to the canvas top and bottom, and occupies the space immediately to the left of visible AI chat.
+- Uses concise Feature browse cards with large previews and two-line summary previews; selection opens a full-detail inspector, or a focused detail view with Back at narrow widths.
 
 ### AI Chat Thread Nodes
 - Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
@@ -238,7 +238,7 @@ Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoot
 
 Empty context regions preserve their persisted dimensions. Region auto-expansion may still grow a region to fit children dropped inside it, but it must not reset an empty region back to the default `300x200` size after a commit. When a child image or document is dropped into a larger existing region, the region keeps its existing size unless the child bounds plus padding exceed it.
 
-AI chat is rendered by a singleton canvas-owned floating panel. Context regions remain separate canvas nodes that hold prompt context; clicking a region opens the linked AI chat thread in the floating panel without replacing the region surface. The panel is right-flush and full-height within the workspace shell. When it is open, the zoom indicator remains logically bottom-right but offsets left by the chat panel width, and the global user avatar moves to the panel's bottom-left corner.
+AI chat is rendered by a singleton canvas-owned floating panel. Context regions remain separate canvas nodes that hold prompt context; clicking a region opens the linked AI chat thread in the floating panel without replacing the region surface. The panel is right-flush and full-height within the workspace shell. A non-interactive decorative underlay extends left behind the rail and applies a masked glass blur so canvas imagery fades gradually beneath the panel instead of ending at a hard blur boundary. Reduced-transparency mode replaces that blur with a faded opaque surface. When it is open, the zoom indicator remains logically bottom-right but offsets left by the chat panel width, and the global user avatar moves to the panel's bottom-left corner.
 
 ### Image Generation Visual Feedback
 

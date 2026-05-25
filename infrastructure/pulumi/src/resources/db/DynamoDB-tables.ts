@@ -227,6 +227,47 @@ export const getTableDefinitions = () => [
             { name: 'updatedAt', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
         ],
     },
+    {
+        name: getDynamoDbTableStageName('FEATURES', ORG_NAME, STAGE),
+        attributes: [
+            { name: 'featureId', type: 'S' as const },
+            { name: 'version', type: 'N' as const },
+            { name: 'scopeAndOwner', type: 'S' as const },
+            { name: 'updatedAt', type: 'N' as const },
+        ],
+        hashKey: 'featureId',
+        rangeKey: 'version',
+        globalSecondaryIndexes: [
+            { name: 'byScopeAndOwner', hashKey: 'scopeAndOwner', rangeKey: 'updatedAt', projectionType: 'ALL' as const },
+        ],
+    },
+    {
+        name: getDynamoDbTableStageName('FEATURES_META', ORG_NAME, STAGE),
+        attributes: [{ name: 'featureId', type: 'S' as const }],
+        hashKey: 'featureId',
+    },
+    {
+        name: getDynamoDbTableStageName('FEATURES_ACCESS_LIST', ORG_NAME, STAGE),
+        attributes: [
+            { name: 'userId', type: 'S' as const },
+            { name: 'featureId', type: 'S' as const },
+            { name: 'createdAt', type: 'N' as const },
+        ],
+        hashKey: 'userId',
+        rangeKey: 'featureId',
+        localSecondaryIndexes: [
+            { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
+        ],
+    },
+    {
+        name: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+        attributes: [
+            { name: 'extractionRunId', type: 'S' as const },
+            { name: 'workspaceId', type: 'S' as const },
+        ],
+        hashKey: 'extractionRunId',
+        rangeKey: 'workspaceId',
+    },
 ]
 
 export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) => {
@@ -426,6 +467,49 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         }),
         tags: { Name: tableDefs[16].name },
     }, resourceOpts)
+    const featuresTable = new aws.dynamodb.Table(tableDefs[17].name, {
+        ...tableDefs[17],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[17].name },
+    }, resourceOpts)
+
+    const featuresMetaTable = new aws.dynamodb.Table(tableDefs[18].name, {
+        ...tableDefs[18],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[18].name },
+    }, resourceOpts)
+
+    const featuresAccessListTable = new aws.dynamodb.Table(tableDefs[19].name, {
+        ...tableDefs[19],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[19].name },
+    }, resourceOpts)
+
+    const extractionRunsTable = new aws.dynamodb.Table(tableDefs[20].name, {
+        ...tableDefs[20],
+        billingMode: 'PAY_PER_REQUEST',
+        ...(enableDeletionProtection && { deletionProtectionEnabled: true }),
+        ...(enableStreams && {
+            streamEnabled: true as const,
+            streamViewType: 'NEW_AND_OLD_IMAGES' as const,
+        }),
+        tags: { Name: tableDefs[20].name },
+    }, resourceOpts)
     // END Billing -------------------------------------------------------------------
 
     // Create parameter outputs
@@ -447,6 +531,10 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         mediaLibraryItemsTableName: mediaLibraryItemsTable.name,
         mediaLibraryItemsMetaTableName: mediaLibraryItemsMetaTable.name,
         mediaLibraryItemsAccessListTableName: mediaLibraryItemsAccessListTable.name,
+        featuresTableName: featuresTable.name,
+        featuresMetaTableName: featuresMetaTable.name,
+        featuresAccessListTableName: featuresAccessListTable.name,
+        extractionRunsTableName: extractionRunsTable.name,
 
         aiTokensUsageTransactionsTableName: aiTokensUsageTransactionsTable.name,
         aiTokensUsageReportsTableName: aiTokensUsageReportsTable.name,
@@ -473,6 +561,10 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
         mediaLibraryItemsTable,
         mediaLibraryItemsMetaTable,
         mediaLibraryItemsAccessListTable,
+        featuresTable,
+        featuresMetaTable,
+        featuresAccessListTable,
+        extractionRunsTable,
 
         aiTokensUsageTransactionsTable,
         aiTokensUsageReportsTable,
