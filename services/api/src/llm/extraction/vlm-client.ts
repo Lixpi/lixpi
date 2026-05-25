@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 import type NatsService from '@lixpi/nats-service'
-import { warn, info } from '@lixpi/debug-tools'
+import { warn, info, err } from '@lixpi/debug-tools'
 
 import type { ProviderName } from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
@@ -358,12 +358,100 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
 
 // ─── Public dispatcher ────────────────────────────────────────────────────────
 
+// Provider SDKs (Anthropic/OpenAI) throw APIConnectionError with a bland
+// "Connection error." message and stash the real cause (ECONNRESET, socket hang up,
+// fetch failed, timeout) on `.cause`; rate limits arrive as status=429 with a
+// retry-after header. This unwraps all of that into one readable line.
+const describeProviderError = (error: any): string => {
+    if (!error) return 'unknown error'
+    const parts: string[] = [error.name || 'Error']
+    if (error.status !== undefined) parts.push(`status=${error.status}`)
+    if (error.code !== undefined) parts.push(`code=${error.code}`)
+    const headers = error.headers
+    const getHeader = (key: string): string | undefined =>
+        typeof headers?.get === 'function' ? headers.get(key) : headers?.[key]
+    const retryAfter = getHeader('retry-after')
+    if (retryAfter) parts.push(`retry-after=${retryAfter}`)
+    const requestId = error.request_id ?? error.requestID ?? getHeader('request-id') ?? getHeader('x-request-id')
+    if (requestId) parts.push(`requestId=${requestId}`)
+    parts.push(`message="${error.message ?? String(error)}"`)
+    // Walk the cause chain — the connection error wraps the underlying network error.
+    const causes: string[] = []
+    let cause = error.cause
+    for (let depth = 0; cause && depth < 5; depth++) {
+        const code = cause.code ? ` (code=${cause.code})` : ''
+        causes.push(`${cause.name ?? 'cause'}: ${cause.message ?? String(cause)}${code}`)
+        cause = cause.cause
+    }
+    if (causes.length) parts.push(`cause=[${causes.join(' <- ')}]`)
+    return parts.join(' ')
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Transient = worth retrying: rate limits (429), server errors (5xx), and the
+// connection/timeout family the SDK surfaces as APIConnectionError + a network cause.
+const TRANSIENT_CAUSE_CODES = new Set([
+    'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EAI_AGAIN', 'ENOTFOUND',
+    'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+])
+
+const isTransientError = (error: any): boolean => {
+    const status = error?.status
+    if (status === 429 || (typeof status === 'number' && status >= 500)) return true
+    if (/APIConnection(Timeout)?Error|APITimeoutError|APIConnectionError/.test(error?.name ?? '')) return true
+    let cause = error?.cause
+    for (let depth = 0; cause && depth < 5; depth++) {
+        if (cause.code && TRANSIENT_CAUSE_CODES.has(cause.code)) return true
+        cause = cause.cause
+    }
+    // Anthropic's APIConnectionError carries no status and a bland message.
+    if (status === undefined && /connection error|socket hang up|fetch failed|terminated/i.test(error?.message ?? '')) return true
+    return false
+}
+
+// Honor a retry-after header (seconds or HTTP-date) when present, capped to 30s.
+const parseRetryAfterMs = (error: any): number | undefined => {
+    const headers = error?.headers
+    const raw = typeof headers?.get === 'function' ? headers.get('retry-after') : headers?.['retry-after']
+    if (!raw) return undefined
+    const seconds = Number(raw)
+    if (!Number.isNaN(seconds)) return Math.min(seconds * 1000, 30_000)
+    const dateMs = Date.parse(raw)
+    if (!Number.isNaN(dateMs)) return Math.max(0, Math.min(dateMs - Date.now(), 30_000))
+    return undefined
+}
+
+const MAX_VLM_RETRIES = 2 // up to 3 attempts total
+
 export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
     info(`[vlm] call provider=${args.provider} model=${args.modelVersion} thinkingMode=${caps.thinkingMode} requestThinking=${args.enableThinking === true}`)
 
-    if (args.provider === 'Anthropic') return callAnthropic<T>(args)
-    if (args.provider === 'OpenAI') return callOpenAi<T>(args)
-    if (args.provider === 'Google') return callGoogle<T>(args)
-    throw new Error(`Unsupported analysis provider for structured VLM call: ${args.provider}`)
+    const dispatch = (): Promise<VlmCallResult<T>> => {
+        if (args.provider === 'Anthropic') return callAnthropic<T>(args)
+        if (args.provider === 'OpenAI') return callOpenAi<T>(args)
+        if (args.provider === 'Google') return callGoogle<T>(args)
+        throw new Error(`Unsupported analysis provider for structured VLM call: ${args.provider}`)
+    }
+
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await dispatch()
+        } catch (error: any) {
+            const detail = describeProviderError(error)
+            const canRetry = attempt < MAX_VLM_RETRIES && isTransientError(error) && !args.abortSignal?.aborted
+            if (canRetry) {
+                // Jittered exponential backoff, or the server's retry-after when given.
+                const backoff = Math.min(1000 * 2 ** attempt, 8000) + Math.floor(Math.random() * 400)
+                const waitMs = parseRetryAfterMs(error) ?? backoff
+                warn(`[vlm] transient failure (attempt ${attempt + 1}/${MAX_VLM_RETRIES + 1}) provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name}; retrying in ${waitMs}ms :: ${detail}`)
+                await sleep(waitMs)
+                continue
+            }
+            err(`[vlm] FAILED provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name} after ${attempt + 1} attempt(s): ${detail}`)
+            // Re-throw with the enriched detail so the stage trace + UI substep show the real cause.
+            throw new Error(`${args.provider}/${args.modelVersion} (${args.schema.name}): ${detail}`, { cause: error })
+        }
+    }
 }

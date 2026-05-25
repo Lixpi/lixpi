@@ -440,12 +440,42 @@ export type StageTraceEvent = {
     startedAt: number
     finishedAt: number
     durationMs: number
-    status: 'ok' | 'error' | 'skipped'
+    // 'running' is a publish-only, in-flight marker streamed when a stage starts so
+    // the UI can show a live spinner. Only the terminal event ('ok' | 'error' | 'skipped')
+    // is persisted to ExtractionRun.trace.
+    status: 'running' | 'ok' | 'error' | 'skipped'
     errorMessage?: string
     inputSummary?: string
     outputSummary?: string
     outputBytes?: number
     metricTags?: Record<string, string | number>
+}
+
+// Markdown stream parser segment shapes. These mirror what @lixpi/markdown-stream-parser
+// emits from subscribeToTokenParse — the package defines the segment internally but does
+// not export it (the callback is typed `any`), so the shape is centralized here and shared
+// by every consumer (the ProseMirror aiChatThreadPlugin and the unified MarkdownStreamRenderer).
+//
+// TODO: a newer version of @lixpi/markdown-stream-parser is in development that EXPORTS proper
+// segment types. Once that version is released, delete these definitions and import the types
+// directly from @lixpi/markdown-stream-parser instead.
+//
+// See documentation/features/MARKDOWN-RENDERING.md.
+export type MarkdownParsedSegment = {
+    segment: string
+    styles: string[]
+    type: string
+    level?: number
+    isBlockDefining: boolean
+    isProcessingNewLine?: boolean
+    content?: string
+    language?: string
+    origin?: string
+}
+
+export type MarkdownStreamToken = {
+    status: 'STREAMING' | 'END_STREAM'
+    segment?: MarkdownParsedSegment
 }
 
 export type FeatureSourceContext = {
@@ -645,6 +675,9 @@ export type CanvasFeatureExtractionState = {
     aiProvider?: string
     stepDetails?: Record<string, string>
     reasoningText?: string
+    // Streamed model output (thinking/reasoning) keyed by the stage that produced it,
+    // so the extraction tab can show live output under each in-progress substep.
+    stageReasoning?: Record<string, string>
     featureCard?: Record<string, any>
     traceEvents?: StageTraceEvent[]
     error?: string
