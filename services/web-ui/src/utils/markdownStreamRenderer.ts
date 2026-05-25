@@ -1,6 +1,7 @@
 'use strict'
 
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
+import type { MarkdownStreamToken } from '@lixpi/constants'
 import { html } from './domTemplates.ts'
 
 // Unified, framework-agnostic renderer that turns a markdown token stream into plain DOM
@@ -12,19 +13,8 @@ import { html } from './domTemplates.ts'
 // use this class (or renderMarkdownStatic). Never hand-roll markdown→HTML and never render
 // raw markdown as plain text. See documentation/features/MARKDOWN-RENDERING.md.
 //
-// Each emitted segment is { status, segment: { segment, styles[], type, level, isBlockDefining } }
-// where type ∈ 'paragraph' | 'header' | 'code' and styles ⊆ 'bold' | 'italic' | 'strikethrough' | 'code'.
-
-type ParsedSegment = {
-    status: 'STREAMING' | 'END_STREAM'
-    segment?: {
-        segment?: string
-        styles?: string[]
-        type?: string
-        level?: number
-        isBlockDefining?: boolean
-    }
-}
+// The emitted token shape (MarkdownStreamToken) lives in @lixpi/constants — type ∈
+// 'paragraph' | 'header' | 'code' and styles ⊆ 'bold' | 'italic' | 'strikethrough' | 'code'.
 
 function wrapInline(child: Node, style: string): Node {
     if (style === 'bold') { const el = html`<strong></strong>` as HTMLElement; el.appendChild(child); return el }
@@ -66,7 +56,7 @@ export class MarkdownStreamRenderer {
         this.instanceId = instanceId
         this.contentEl = html`<div className=${className}></div>` as HTMLElement
         this.parser = MarkdownStreamParser.getInstance(instanceId)
-        this.unsubscribe = this.parser.subscribeToTokenParse((parsed: ParsedSegment) => this.handleSegment(parsed))
+        this.unsubscribe = this.parser.subscribeToTokenParse((parsed: MarkdownStreamToken) => this.handleSegment(parsed))
         this.parser.startParsing()
     }
 
@@ -88,7 +78,7 @@ export class MarkdownStreamRenderer {
         try { MarkdownStreamParser.removeInstance(this.instanceId) } catch {}
     }
 
-    private handleSegment(parsed: ParsedSegment): void {
+    private handleSegment(parsed: MarkdownStreamToken): void {
         if (!parsed) return
         if (parsed.status === 'END_STREAM') { this.cleanup(); return }
         const seg = parsed.segment
