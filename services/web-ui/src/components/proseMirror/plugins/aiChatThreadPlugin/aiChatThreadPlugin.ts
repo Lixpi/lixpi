@@ -757,6 +757,7 @@ class AiChatThreadPluginClass {
         const existingImage = this.findGeneratedImageInResponse(responseContext, {
             partialIndex,
             partialOnly: true,
+            fallbackToLastPartial: true,
         })
         const imageAttrs = this.buildGeneratedImageAttrs(event, true, partialIndex, existingImage?.node.attrs)
         const tr = state.tr
@@ -814,8 +815,23 @@ class AiChatThreadPluginClass {
         })
         const partialIndex = existingImage?.node.attrs.partialIndex ?? 0
         const tr = state.tr
-        let imageNodePos = existingImage?.nodePos
-        let insertionPos = responseContext.responseEndPos - 1
+        const stalePartialRanges: Array<{ from: number; to: number }> = []
+
+        responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
+            if (child.type.name !== aiGeneratedImageNodeType || !child.attrs.isPartial) return
+
+            const from = responseContext.responseStartPos + 1 + offset
+            if (existingImage?.nodePos === from) return
+
+            stalePartialRanges.push({ from, to: from + child.nodeSize })
+        })
+
+        for (const range of stalePartialRanges.reverse()) {
+            tr.delete(range.from, range.to)
+        }
+
+        let imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
+        let insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
 
         if (revisedPrompt) {
             const revisedPromptNode = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
