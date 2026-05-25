@@ -40,8 +40,7 @@ import type {
 	WorkspaceEdge,
 } from '@lixpi/constants'
 
-import { webUiSettings } from '$src/webUiSettings.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 type ProximityCandidate = {
 	sourceNodeId: string
@@ -502,7 +501,7 @@ export function computeSpreadTValues(
 			const targetHeight = targetNode.dimensions.height
 
 			// When the target is shorter than the minimum slide height, snap to center
-			if (targetHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+			if (targetHeight < settings.aiChatThread.rail.minSlideHeight) {
 				targetT = 0.5
 			} else {
 				const targetTop = targetNode.position.y
@@ -512,7 +511,7 @@ export function computeSpreadTValues(
 
 				// Clamp to be within the node side (0-1), leaving a configurable margin
 				// effectively snapping to the top or bottom corner if the source is outside vertical bounds
-				const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+				const m = settings.aiChatThread.rail.edgeMargin
 				targetT = Math.max(m, Math.min(1 - m, idealT))
 			}
 		}
@@ -632,7 +631,7 @@ export class WorkspaceConnectionManager {
 	private reconnectingEdge: { edgeId: string; edgeUpdaterType: HandleType } | null = null
 
 	private proximityCandidate: ProximityCandidate | null = null
-	private currentEdgeClickAreaWidth = webUiSettings.nodesConnectorLineClickAreaWidth
+	private currentEdgeClickAreaWidth = settings.connector.lineClickAreaWidth
 
 	private menuConnectionCleanup: (() => void) | null = null
 
@@ -881,7 +880,7 @@ export class WorkspaceConnectionManager {
 			}
 
 			// Find closest target handle
-			const closestHandle = this.findClosestHandle(rendererPos, fromHandle, webUiSettings.menuConnectionSnapRadius)
+			const closestHandle = this.findClosestHandle(rendererPos, fromHandle, settings.connector.menuConnectionSnapRadius)
 
 			const isValid = closestHandle ? this.isMenuConnectionValid(nodeId, closestHandle) : null
 
@@ -1001,14 +1000,14 @@ export class WorkspaceConnectionManager {
 			: node.internals.positionAbsolute.x + canvasNode.dimensions.width
 
 		if (canvasNode.type === 'aiChatThread' && isLeftHandle) {
-			if (railHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+			if (railHeight < settings.aiChatThread.rail.minSlideHeight) {
 				return {
 					x,
 					y: node.internals.positionAbsolute.y + railHeight / 2,
 				}
 			}
 
-			const margin = railHeight * webUiThemeSettings.aiChatThreadRailEdgeMargin
+			const margin = railHeight * settings.aiChatThread.rail.edgeMargin
 			const minY = node.internals.positionAbsolute.y + margin
 			const maxY = node.internals.positionAbsolute.y + railHeight - margin
 
@@ -1346,9 +1345,9 @@ export class WorkspaceConnectionManager {
 
 		// Calculate scaled sizes for edges
 		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } =
-			webUiSettings.useZoomCompensatedConnectorScaling
-				? getEdgeScaledSizes(zoom, { baseClickAreaWidth: webUiSettings.nodesConnectorLineClickAreaWidth })
-				: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: webUiSettings.nodesConnectorLineClickAreaWidth }
+			settings.connector.useZoomCompensatedScaling
+				? getEdgeScaledSizes(zoom, { baseClickAreaWidth: settings.connector.lineClickAreaWidth })
+				: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: settings.connector.lineClickAreaWidth }
 		const pixiStrokeWidth = 2
 		const pixiMarkerSize = 16
 		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
@@ -1431,14 +1430,14 @@ export class WorkspaceConnectionManager {
 					if (sourceNode && canAutoAlignTargetT(targetNode)) {
 						const targetHeight = targetNode.dimensions.height
 
-						if (targetHeight < webUiThemeSettings.aiChatThreadRailMinSlideHeight) {
+						if (targetHeight < settings.aiChatThread.rail.minSlideHeight) {
 							targetT = 0.5
 						} else {
 							const sourceY = sourceNode.position.y + (sourceNode.dimensions.height * sourceT)
 							const targetTop = targetNode.position.y
 
 							const idealT = (sourceY - targetTop) / targetHeight
-							const m = webUiThemeSettings.aiChatThreadRailEdgeMargin
+							const m = settings.aiChatThread.rail.edgeMargin
 							targetT = Math.max(m, Math.min(1 - m, idealT))
 						}
 					}
@@ -1449,7 +1448,7 @@ export class WorkspaceConnectionManager {
 				id: e.edgeId,
 				source: this.buildEdgeAnchor(e.sourceNodeId, source, sourceT, nodeById, worldNodeMap),
 				target: this.buildEdgeAnchor(e.targetNodeId, target, targetT, nodeById, worldNodeMap),
-				pathType: e.pathType ?? webUiSettings.nodesConnectorLineCurve,
+				pathType: e.pathType ?? settings.connector.lineCurve,
 				marker: isSelected ? 'arrowhead-selected' : 'arrowhead',
 				laneIndex: tValues?.laneIndex ?? 0,
 				laneCount: tValues?.laneCount ?? 1
@@ -1536,7 +1535,7 @@ export class WorkspaceConnectionManager {
 				target: snappedTargetNode && snappedTargetPosition && this.connectionInProgress.toHandle
 					? this.buildEdgeAnchor(snappedTargetNode.nodeId, snappedTargetPosition, snappedTargetT, nodeById, worldNodeMap)
 					: { nodeId: tempNodeId, position: 'center' },
-				pathType: webUiSettings.nodesConnectorLineCurve,
+				pathType: settings.connector.lineCurve,
 				marker: 'arrowhead',
 				lineStyle: isReconnecting ? 'solid' : 'dashed'
 			}
@@ -1554,7 +1553,7 @@ export class WorkspaceConnectionManager {
 				id: '__workspace-proximity-edge',
 				source: this.buildEdgeAnchor(this.proximityCandidate.sourceNodeId, this.proximityCandidate.sourceHandle, sourceT, nodeById, worldNodeMap),
 				target: this.buildEdgeAnchor(this.proximityCandidate.targetNodeId, this.proximityCandidate.targetHandle, targetT, nodeById, worldNodeMap),
-				pathType: webUiSettings.nodesConnectorLineCurve,
+				pathType: settings.connector.lineCurve,
 				marker: 'arrowhead',
 				lineStyle: 'dashed'
 			}
@@ -1576,9 +1575,9 @@ export class WorkspaceConnectionManager {
 	public recomputePixiEdgesOnly(zoom: number): boolean {
 		if (!this.cachedPixiEdgeConfigs || !this.cachedPixiWorldNodeMap || !this.config.onPixiEdgesReady) return false
 
-		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } = webUiSettings.useZoomCompensatedConnectorScaling
+		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } = settings.connector.useZoomCompensatedScaling
 			? getEdgeScaledSizes(zoom)
-			: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: webUiSettings.nodesConnectorLineClickAreaWidth }
+			: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: settings.connector.lineClickAreaWidth }
 		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
 
 		const pixiEdgeData: PixiEdgeRenderDatum[] = []
@@ -1724,7 +1723,7 @@ export class WorkspaceConnectionManager {
 		}
 
 		let closestCandidate: ProximityCandidate | null = null
-		let minDistance = webUiSettings.proximityConnectThreshold
+		let minDistance = settings.connector.proximityConnectThreshold
 
 		// Only trigger proximity connect if the dragged node has NO existing connections (either incoming or outgoing)
 		// This prevents "ghost" connections from appearing when dragging nodes that are already part of a graph (e.g. AI images).

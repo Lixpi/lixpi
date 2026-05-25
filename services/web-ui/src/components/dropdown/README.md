@@ -7,7 +7,7 @@ Dropdown menus for ProseMirror NodeViews. Lives outside the document schema – 
 A factory function that creates dropdown UI controls. Used by AI Chat Thread for model/context selection. **Built on top of the InfoBubble primitive** - dropdown provides the button and options, infoBubble handles all state management, positioning, and auto-flip logic.
 
 **Visual design inspired by Material Design 3 menus:**
-- Surface container with theme-driven shadow via `webUiThemeSettings.dropdownPopoverBoxShadow` (no border on popover)
+- Surface container with configured shadow via `settings.dropdown.popoverBoxShadow` (no border on popover)
 - 44dp item height with 12dp horizontal padding
 - State layer ripple on hover/press (8%/12% opacity via `::after` pseudo-element)
 - Staggered item fade-in animation on open (30ms delay per item)
@@ -271,4 +271,4 @@ The dropdown's `onwheel` handler uses smart boundary detection to avoid blocking
 - For simple info panels without selection, use InfoBubble directly
 - InfoBubble handles ALL interaction logic
 - Dropdown only provides specialized content (button + options list)
-- Shadow is configured via `webUiThemeSettings.dropdownPopoverBoxShadow` and applied as CSS variable `--dropdown-popover-box-shadow`
+- Shadow is configured via `settings.dropdown.popoverBoxShadow` and applied as CSS variable `--dropdown-popover-box-shadow`

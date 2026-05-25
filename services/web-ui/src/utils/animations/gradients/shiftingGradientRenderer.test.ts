@@ -1163,7 +1163,7 @@ describe('ShiftingGradientRenderer — constants stability', () => {
 // =============================================================================
 //
 // These tests mirror the pattern used in WorkspaceCanvas.ts where gradients are
-// conditionally created based on webUiSettings flags. The original bug was:
+// conditionally created based on settings flags. The original bug was:
 //
 //   triggerGradientAnimation: gradient?.triggerAnimation
 //
@@ -1317,7 +1317,7 @@ describe('Conditional gradient creation — aggregation pattern', () => {
 		expect(renderer.currentPhase).toBe(initialPhase)
 	})
 
-	// --- Conditional creation mirrors webUiSettings usage ---
+	// --- Conditional creation mirrors settings usage ---
 
 	it('conditional creation with true produces a gradient with callable triggerAnimation', () => {
 		const settingEnabled = true

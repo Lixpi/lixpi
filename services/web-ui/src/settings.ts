@@ -1,3 +1,5 @@
+import type { WorkspaceEdgePathType } from '@lixpi/constants'
+
 export type ContextRegionCloudThemePoint = { x: number; y: number }
 
 export type ContextRegionCloudThemeSize = { width: number; height: number }
@@ -41,7 +43,60 @@ export type ContextRegionCloudThemeStyle = {
     seed: number
 }
 
-export type WebUiImageNodeThemeSettings = {
+export type ModelSelectorDropdownSettings = {
+    useModalityFilter: boolean
+}
+
+export type DropdownSettings = {
+    popoverBoxShadow: string
+}
+
+export type GradientSettings = {
+    shiftingColors: [string, string, string, string]
+}
+
+export type AiChatThreadRailSettings = {
+    gradient: string
+    width: string
+    offset: number
+    edgeMargin: number
+    minSlideHeight: number
+    boundaryCircleColors: [string, string, string]
+    dragGrabWidth: number
+}
+
+export type AiChatThreadSettings = {
+    responseMessageBubbleColor: string
+    nodeBoxShadow: string
+    nodeBorder: string
+    showHeader: boolean
+    useShiftingGradientBackground: boolean
+    rail: AiChatThreadRailSettings
+}
+
+export type AiPromptInputSettings = {
+    useShiftingGradientBackground: boolean
+}
+
+export type ConnectorSettings = {
+    lineDefaultColor: string
+    lineFocusColor: string
+    lineCurve: WorkspaceEdgePathType
+    lineClickAreaWidth: number
+    useZoomCompensatedScaling: boolean
+    proximityConnectThreshold: number
+    menuConnectionSnapRadius: number
+}
+
+export type SelectionSettings = {
+    marqueeBorderColor: string
+    marqueeBackgroundColor: string
+    overlayBorderColor: string
+    overlayBackgroundColor: string
+    outlineColor: string
+}
+
+export type ImageNodeSettings = {
     defaultBoxShadow: string
     selectedBoxShadow: string
     defaultInsertionWidth: number
@@ -49,22 +104,23 @@ export type WebUiImageNodeThemeSettings = {
     contextRegionChildImageFrameColor: string
     contextRegionChildImageDropShadow: string
     modelBadgeBoxShadow: string
+    useZoomCompensatedResizeHandleScaling: boolean
 }
 
-export type WebUiContextRegionThemeSettings = {
+export type ContextRegionSettings = {
     defaultDimensions: ContextRegionCloudThemeSize
     adjacentNodeGap: number
     cloud: WebUiContextRegionCloudThemeSettings
 }
 
-export type WebUiImageBranchLineageThemeSettings = {
+export type ImageBranchLineageSettings = {
     generatedImageSize: number
     contextRegionOutputGap: number
     branchToBranchGap: number
     imageToImageGap: number
 }
 
-export type WebUiMediaLibraryThemeSettings = {
+export type MediaLibrarySettings = {
     panelWidthFraction: number
 }
 
@@ -103,38 +159,28 @@ export type WebUiContextRegionCloudThemeSettings = {
     titleGap: number
 }
 
-export type WebUiThemeSettings = {
-    aiResponseMessageBubbleColor: string
-    aiChatThreadNodeBoxShadow: string
-    aiChatThreadNodeBorder: string
-    aiChatThreadRailGradient: string
-    aiChatThreadRailWidth: string
-    aiChatThreadRailOffset: number
-    aiChatThreadRailEdgeMargin: number
-    aiChatThreadRailMinSlideHeight: number
-    aiChatThreadRailBoundaryCircleColors: [string, string, string]
-    nodesConnectorLineDefaultColor: string
-    nodesConnectorLineFocusColor: string
-    selectionMarqueeBorderColor: string
-    selectionMarqueeBackgroundColor: string
-    selectionOverlayBorderColor: string
-    selectionOverlayBackgroundColor: string
-    selectionOutlineColor: string
-    // Box shadow for the dropdown popover menus (model selectors etc.).
-    dropdownPopoverBoxShadow: string
-    // Four gradient colors used by the shared shifting gradient background and
-    // animated border overlays (image generation border, document thread shape,
-    // context selection).
-    // Hex strings. The shifting gradient renderer converts these to RGB internally.
-    shiftingGradientColors: [string, string, string, string]
+export type Settings = {
+    modelSelectorDropdown: ModelSelectorDropdownSettings
 
-    imageNode: WebUiImageNodeThemeSettings
+    dropdown: DropdownSettings
 
-    contextRegion: WebUiContextRegionThemeSettings
+    gradient: GradientSettings
 
-    imageBranchLineage: WebUiImageBranchLineageThemeSettings
+    aiChatThread: AiChatThreadSettings
 
-    mediaLibrary: WebUiMediaLibraryThemeSettings
+    aiPromptInput: AiPromptInputSettings
+
+    connector: ConnectorSettings
+
+    selection: SelectionSettings
+
+    imageNode: ImageNodeSettings
+
+    contextRegion: ContextRegionSettings
+
+    imageBranchLineage: ImageBranchLineageSettings
+
+    mediaLibrary: MediaLibrarySettings
 }
 
 const brandColors = {
@@ -145,53 +191,94 @@ function getContextRegionCloudGradientColors(palette: ContextRegionCloudThemeGra
     return [palette.color1, palette.color2, palette.color3, palette.color4]
 }
 
-export const webUiThemeSettings: WebUiThemeSettings = {
-    // Background color for AI response message bubbles and their pigtail (speech bubble tail).
-    // Previous value: '#fff'
-    aiResponseMessageBubbleColor: '#f7f7fd',
-    // Box shadow around the AI chat thread canvas node.
-    // Previous value: '0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08)'
-    aiChatThreadNodeBoxShadow: 'none',
-    // Border around the AI chat thread canvas node.
-    // Previous value: not set (inherited browser default)
-    aiChatThreadNodeBorder: 'none',
-    // Gradient for the vertical rail running along AI chat thread + floating input nodes.
-    // Matches the model selector dropdown item highlight gradient.
-    // Previous value (solid color): '#dcdaf5'
-    aiChatThreadRailGradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
-    // Width of the visible rail line.
-    aiChatThreadRailWidth: '3px',
-    // Horizontal offset (in pixels) of the rail from the node's left edge.
-    aiChatThreadRailOffset: -2,
-    // Fractional margin (0–0.5) from the top and bottom of the rail where connector
-    // anchor points stop sliding. E.g. 0.025 means connectors won't go closer than
-    // 2.5 % of the rail height from either end.
-    aiChatThreadRailEdgeMargin: 0.065,
-    // Minimum rail/node height (in pixels) required before connectors slide freely.
-    // Below this threshold all connectors snap to the vertical center (t = 0.5).
-    aiChatThreadRailMinSlideHeight: 120,
-    // Colors for the three concentric shapes in the rail boundary circle SVG.
-    // Order: [outer fill, ring/border, inner fill].
-    // Uses the shifting gradient hue family with increased contrast for small-size legibility.
-    aiChatThreadRailBoundaryCircleColors: ['#F3E4F2', '#C5C0EE', 'rgb(202, 180, 201)'],
-    // Default color for connector lines between nodes.
-    nodesConnectorLineDefaultColor: brandColors.steelBlue,
-    // Focus/selected color for connector lines between nodes.
-    nodesConnectorLineFocusColor: '#000',
-    // Marquee selection rectangle (drag-to-select).
-    selectionMarqueeBorderColor: 'rgba(176, 173, 224, 0.88)',
-    selectionMarqueeBackgroundColor: 'rgba(230, 233, 246, 0.38)',
-    // Persistent selection group overlay (multi-select / single AI chat thread).
-    selectionOverlayBorderColor: 'rgba(197, 192, 238, 0.62)',
-    selectionOverlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
-    // Outline on the per-thread floating input when selected.
-    selectionOutlineColor: 'rgba(197, 192, 238, 0.75)',
-    // Box shadow for dropdown popover menus (model selectors etc.).
-    dropdownPopoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
-    // Four gradient colors shared between the default shifting gradient background
-    // and the animated border overlays (image generation, document thread shape).
-    // Dreamy sky pastel palette — whisper pink, lavender, periwinkle, orchid.
-    shiftingGradientColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
+export const settings: Settings = {
+    // Model selector dropdown behavior settings.
+    modelSelectorDropdown: {
+        // Hide or reveal modality filter chips inside model selector dropdowns.
+        useModalityFilter: false,
+    },
+
+    // Shared dropdown surface settings.
+    dropdown: {
+        // Shadow for dropdown popover menus. Increasing it raises menus visually from their backdrop.
+        popoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
+    },
+
+    // Shared generated-gradient settings.
+    gradient: {
+        // Colors used by shifting backgrounds and animated border overlays. Editing them changes the shared pastel palette.
+        shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
+    },
+
+    // AI chat thread presentation and interaction settings.
+    aiChatThread: {
+        // Background color for AI response message bubbles and their pigtail.
+        responseMessageBubbleColor: '#f7f7fd',
+        // Box shadow around the AI chat thread canvas node. Use `none` for a flat panel surface.
+        nodeBoxShadow: 'none',
+        // Border around the AI chat thread canvas node. Use `none` to remove the browser-default border.
+        nodeBorder: 'none',
+        // Hide or show the document title inside AI chat thread nodes on the workspace canvas.
+        showHeader: false,
+        // Enable the shifting gradient background on AI chat thread canvas nodes.
+        useShiftingGradientBackground: false,
+
+        // Vertical rail presentation and hit-target settings for AI chat threads.
+        rail: {
+            // Background gradient painted on the visible rail line.
+            gradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
+            // Visible line width; this does not change the draggable hit target.
+            width: '3px',
+            // Horizontal offset in pixels from the thread node's left edge.
+            offset: -2,
+            // Fractional top and bottom margin where connector anchors stop sliding along the rail.
+            edgeMargin: 0.065,
+            // Minimum rail height in pixels before connectors can slide away from the center.
+            minSlideHeight: 120,
+            // Colors for the boundary circle's outer fill, ring, and inner fill.
+            boundaryCircleColors: ['#F3E4F2', '#C5C0EE', 'rgb(202, 180, 201)'],
+            // Screen-pixel width of the invisible rail drag hit target. Lower values require a more precise grab.
+            dragGrabWidth: 20,
+        },
+    },
+
+    // Floating AI prompt input settings.
+    aiPromptInput: {
+        // Enable the shifting gradient background on floating prompt input nodes.
+        useShiftingGradientBackground: true,
+    },
+
+    // Canvas edge and node-connection interaction settings.
+    connector: {
+        // Default color for connector lines between nodes.
+        lineDefaultColor: brandColors.steelBlue,
+        // Focus and selection color for connector lines.
+        lineFocusColor: '#000',
+        // Default curve used for connector lines between nodes.
+        lineCurve: 'horizontal-bezier',
+        // Screen-pixel width of the invisible selection hit area around connector lines.
+        lineClickAreaWidth: 24,
+        // Keep connector stroke, marker, and hit-area sizes usable as the canvas zoom changes.
+        useZoomCompensatedScaling: true,
+        // Renderer-coordinate distance at which dragging a node near a thread shows a proximity connection.
+        proximityConnectThreshold: 700,
+        // Renderer-coordinate distance at which menu-driven connection placement snaps to a target.
+        menuConnectionSnapRadius: 110,
+    },
+
+    // Canvas selection overlay settings.
+    selection: {
+        // Border color for the drag-to-select marquee rectangle.
+        marqueeBorderColor: 'rgba(176, 173, 224, 0.88)',
+        // Fill color for the drag-to-select marquee rectangle.
+        marqueeBackgroundColor: 'rgba(230, 233, 246, 0.38)',
+        // Border color for the persistent multi-selection overlay.
+        overlayBorderColor: 'rgba(197, 192, 238, 0.62)',
+        // Fill color for the persistent multi-selection overlay.
+        overlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
+        // Outline color for a selected thread's floating prompt input.
+        outlineColor: 'rgba(197, 192, 238, 0.75)',
+    },
 
     // Canvas image node settings. These values style image-node chrome and selection states.
     imageNode: {
@@ -209,13 +296,15 @@ export const webUiThemeSettings: WebUiThemeSettings = {
         contextRegionChildImageDropShadow: '0 10px 24px rgba(31, 49, 42, 0.16), 0 1px 2px rgba(31, 49, 42, 0.08)',
         // Shadow behind the generated-image model badge. Increasing it improves badge separation on busy image pixels.
         modelBadgeBoxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+        // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
+        useZoomCompensatedResizeHandleScaling: true,
     },
 
+    // Media Library panel layout settings.
     mediaLibrary: {
         // Fraction of the canvas space remaining after any open AI chat panel is reserved.
         panelWidthFraction: 2 / 3,
     },
-
 
     // Context region layout settings. These values affect newly created context-region nodes, not regions already persisted in canvas state.
     contextRegion: {
@@ -341,7 +430,6 @@ export const webUiThemeSettings: WebUiThemeSettings = {
         },
 
     },
-
 
     // Image branch lineage placement settings. These values control where newly generated image nodes appear in relation to regions and previous branch images.
     imageBranchLineage: {

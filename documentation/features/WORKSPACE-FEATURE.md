@@ -149,7 +149,7 @@ The `WorkspaceConnectionManager` handles the visual rendering logic for edges.
 
 When an AI thread generates images, the workspace manages their placement automatically to maintain a clean layout:
 
-- **Positioning**: First outputs are placed to the right of the context-region cloud's visual bounds using the spacing configured in `webUiThemeSettings.imageBranchLineage`. Image-to-image continuations use the latest image in the branch as the anchor.
+- **Positioning**: First outputs are placed to the right of the context-region cloud's visual bounds using the spacing configured in `settings.imageBranchLineage`. Image-to-image continuations use the latest image in the branch as the anchor.
 - **Scale**: Generated image nodes use the configured canvas-unit size regardless of the current zoom level.
 - **Stacking and alignment**: Multiple first-generation outputs stack next to the source region using the configured branch-lineage spacing. Image-to-image continuations stay vertically aligned with the previous image in the branch lineage.
 - **Race Condition Handling**: The layout engine tracks synchronous "partial" image states to ensure that simultaneous updates (e.g., partial stream + final completion) do not cause images to overlap or skip positional slots.
@@ -1073,7 +1073,7 @@ When nodes are connected TO an AI chat thread (incoming edges), the AI chat auto
 
 ## AI Image Generation
 
-This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears as a separate canvas image node connected by an edge whose `sourceMessageId` links it to the specific `aiResponseMessage` that produced it. Generated-image size and branch spacing are controlled by `webUiThemeSettings.imageBranchLineage`.
+This feature adds the ability to generate images directly from AI chat threads using OpenAI's `gpt-image-1` model via the Responses API. When a user asks the AI to create an image, the generated result appears as a separate canvas image node connected by an edge whose `sourceMessageId` links it to the specific `aiResponseMessage` that produced it. Generated-image size and branch spacing are controlled by `settings.imageBranchLineage`.
 
 In both modes, the revised prompt text is inserted as text inside the AI response message to keep the conversation readable.
 
@@ -1088,7 +1088,7 @@ Multi-turn editing is supported: users can continue refining an image within the
 5. OpenAI streams back partial images (up to 3) as the generation progresses. The first real partial removes the spinner; subsequent partials update the image progressively
 6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, finalizes the canvas node with full metadata, and updates the edge with `sourceMessageId` so the connector points back to the producing AI response.
 7. The revised prompt text appears inside the AI response message in the chat thread
-8. Multiple generated images stack using the spacing configured in `webUiThemeSettings.imageBranchLineage`.
+8. Multiple generated images stack using the spacing configured in `settings.imageBranchLineage`.
 
 ### Data Flow
 
@@ -1201,7 +1201,7 @@ When the AI generates an image:
 3. Progressive partial previews update the canvas node's image in real-time via direct DOM updates. The first real partial removes the bounce spinner.
 4. `IMAGE_COMPLETE` removes the animated border and spinner, then finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
 5. A `WorkspaceEdge` connects the thread to the image with `sourceMessageId` identifying the specific `aiResponseMessage` (the response node gets a unique `id` when created by `handleStreamStart`)
-6. Multiple images from the same thread stack vertically using spacing from `webUiThemeSettings.imageBranchLineage`
+6. Multiple images from the same thread stack vertically using spacing from `settings.imageBranchLineage`
 7. Collision resolution runs after finalization to push apart any overlapping nodes
 8. The revised prompt text is inserted as a paragraph inside the AI response message in the editor
 
@@ -1209,7 +1209,7 @@ When the AI generates an image:
 
 When "Edit in New Thread" is clicked on a canvas image node:
 
-1. A new AI chat thread context region is created to the right of the source image using `webUiThemeSettings.contextRegion.defaultDimensions` and `webUiThemeSettings.contextRegion.adjacentNodeGap`; shape-aware collision resolution then pushes conflicting top-level nodes apart
+1. A new AI chat thread context region is created to the right of the source image using `settings.contextRegion.defaultDimensions` and `settings.contextRegion.adjacentNodeGap`; shape-aware collision resolution then pushes conflicting top-level nodes apart
 2. An edge connects the image (right) to the new thread (left)
 3. The connected image is automatically included in the new thread's context via `extractConnectedContext()`
 4. This forms a horizontal chain: `[Original Thread] → [Image] → [Edit Thread]`

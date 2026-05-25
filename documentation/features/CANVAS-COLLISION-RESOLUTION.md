@@ -115,7 +115,7 @@ Context-region drag planning has additional constraints:
 
 The generic resolver accepts options for iteration count, overlap threshold, margin, excluded pairs, and pair filtering. Those options are call-site behavior, not user-facing theme settings by themselves.
 
-If a collision-related value becomes a product/design tuning knob, put it in [webUiThemeSettings.ts](../../services/web-ui/src/webUiThemeSettings.ts) following the canvas configuration ownership rules in [CANVAS-ENGINE.md](CANVAS-ENGINE.md). Do not add new configurable magic numbers directly to Svelte, PIXI layers, or ad hoc helper modules.
+If a collision-related value becomes a product/design tuning knob, put it in [settings.ts](../../services/web-ui/src/settings.ts) following the canvas configuration ownership rules in [CANVAS-ENGINE.md](CANVAS-ENGINE.md). Do not add new configurable magic numbers directly to Svelte, PIXI layers, or ad hoc helper modules.
 
 ## Invariants
 

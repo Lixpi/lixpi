@@ -5,7 +5,7 @@ This guide applies to `.scss` files, styles inside Svelte components, and TypeSc
 ## Style Ownership
 
 - Keep component styles next to the component or framework-agnostic UI module that owns them.
-- When styling the workspace canvas or related panels, keep user-tunable dimensions, colors, shadows, and timing values in `services/web-ui/src/webUiThemeSettings.ts`.
+- When styling the workspace canvas or related panels, keep user-tunable dimensions, colors, shadows, and timing values in `services/web-ui/src/settings.ts`.
 - Reuse existing variables, mixins, and shared component styles before introducing new equivalents.
 - Follow the local import pattern in the stylesheet you are editing. Migrating deprecated Sass imports is separate work and should not be mixed into an unrelated UI change.
 
