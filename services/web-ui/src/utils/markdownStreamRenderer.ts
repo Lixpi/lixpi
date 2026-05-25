@@ -15,6 +15,9 @@ import { html } from './domTemplates.ts'
 //
 // The emitted token shape (MarkdownStreamToken) lives in @lixpi/constants — type ∈
 // 'paragraph' | 'header' | 'code' and styles ⊆ 'bold' | 'italic' | 'strikethrough' | 'code'.
+// NOTE: it is centralized in @lixpi/constants only because the published parser version does
+// not export its segment types. A newer @lixpi/markdown-stream-parser that exports proper types
+// is in development — once it ships, import the token type from the package instead.
 
 function wrapInline(child: Node, style: string): Node {
     if (style === 'bold') { const el = html`<strong></strong>` as HTMLElement; el.appendChild(child); return el }

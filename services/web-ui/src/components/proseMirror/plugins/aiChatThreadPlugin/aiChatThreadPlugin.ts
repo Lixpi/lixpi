@@ -61,6 +61,9 @@ type SegmentEvent = {
     threadId?: string
     aiChatThreadId?: string
     collapsibleTitle?: string
+    // Markdown segment shape from @lixpi/constants (mirrors what @lixpi/markdown-stream-parser
+    // emits). TODO: import from @lixpi/markdown-stream-parser once its in-development version
+    // exports proper segment types.
     segment?: MarkdownParsedSegment
     imageUrl?: string
     fileId?: string
