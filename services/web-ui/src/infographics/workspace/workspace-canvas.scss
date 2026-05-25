@@ -653,11 +653,15 @@
     position: absolute;
     z-index: 90;
     top: 0;
-    right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline));
+    // Run the blur flush to the pane's right edge (no edge-gap inset) so canvas content can't
+    // peek through unfiltered at the right. The extra edge-gap is added to the width instead,
+    // so the soft left feather stays in exactly the same place.
+    right: calc(0px - var(--workspace-canvas-padding-inline));
     bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
-    width: calc(var(--workspace-ai-chat-sidebar-width) + 116px);
+    width: calc(var(--workspace-ai-chat-sidebar-width) + 116px + var(--workspace-ai-chat-sidebar-edge-gap));
     pointer-events: none;
-    border-radius: 18px 10px 10px 18px;
+    // Soft, rounded on the left; sharp and square on the right so the blur reaches the very edge.
+    border-radius: 18px 0 0 18px;
     background: linear-gradient(
         to right,
         rgba(248, 250, 253, 0) 0,
