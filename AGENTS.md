@@ -28,6 +28,8 @@ Documentation style guides are in `documentation/documentation-style-guides/`. F
 ## Conventions
 
 - When a question is related to SVG or D3, always refer to the available `D3` MCP server.
-- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`). Run tests with `docker exec lixpi-web-ui pnpm test:run`.
+- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`). Verify web-ui tests with `docker exec lixpi-web-ui pnpm test:run` or the targeted equivalent documented in `documentation/testing/TypeScript/web-ui/TESTING-GUIDE.md`.
+- Agents MUST NOT run `svelte-check` anywhere in this repository, directly or through a package script or wrapper. It is prohibited.
+- Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use the permitted automated test commands and static review instead.
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.
