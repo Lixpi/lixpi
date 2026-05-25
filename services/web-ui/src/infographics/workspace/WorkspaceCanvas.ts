@@ -253,6 +253,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelRegionNodeId: string | null = null
     let activeAiChatPanelHadContent = false
     let activeAiChatPanelEl: HTMLDivElement | null = null
+    let activeAiChatBackdropEl: HTMLDivElement | null = null
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
@@ -1761,10 +1762,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPromptEditor?.destroy?.()
         activeAiChatPromptGradient?.destroy()
         activeAiChatPanelEl?.remove()
+        activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
         activeAiChatPanelRegionNodeId = null
         activeAiChatPanelHadContent = false
         activeAiChatPanelEl = null
+        activeAiChatBackdropEl = null
         activeAiChatPromptEditor = null
         activeAiChatPromptGradient = null
 
@@ -1998,6 +2001,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
         panelEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
+        const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop" aria-hidden="true"></div>` as HTMLDivElement
 
         if (!webUiSettings.showHeaderOnAiChatThreadNodes) {
             panelEl.classList.add('workspace-ai-chat-thread-node-hide-title')
@@ -2236,6 +2240,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelThreadId = panelThreadId
         activeAiChatPanelRegionNodeId = regionNode.nodeId
         activeAiChatPanelHadContent = hasContent
+        activeAiChatBackdropEl = backdropEl
+        paneEl.appendChild(backdropEl)
         paneEl.appendChild(panelEl)
 
         if (activeAiChatPanelWidth !== null) {

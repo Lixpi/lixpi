@@ -22,25 +22,25 @@ For the larger canvas rendering and placement architecture, see [CANVAS-ENGINE.m
 
 ## What Users Can Do
 
-- Open **Media Library** from the workspace toolbar.
+- Open **Media Library** from the independent bottom-right icon above the existing zoom indicator.
 - Browse extracted `Features` or explicitly saved `Images`.
 - Search the active category and switch between `Workspace`, `Mine`, `Organization`, `Public`, and `All available`.
 - Select a completed stored image on the canvas and choose **Add to Media Library**.
 - Add a saved image back to the active canvas as a fresh image node.
 - Move an image they own into another available scope or delete it from the library.
-- Continue to use, delete, or report extracted Features through the same feature behavior that existed before the panel was renamed.
+- Inspect extracted Features, use them in a prompt, change sharing for Features they own, delete owned Features, or report public Features.
 
 The panel does not collect every image automatically. It contains images only after an explicit save action.
 
 ## Architecture
 
-The panel is part of the framework-agnostic canvas layer. Svelte owns the toolbar hook and image-upload/import integration, while `WorkspaceCanvas.ts` owns panel toggling, bubble-menu saving, and new-node insertion. The API keeps image media separate from the extraction domain.
+The panel is part of the framework-agnostic canvas layer. Svelte owns the independent bottom-right launcher above the unchanged zoom indicator and image-upload/import integration, while `WorkspaceCanvas.ts` owns panel toggling, bubble-menu saving, and new-node insertion. The API keeps image media separate from the extraction domain.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Browser["Browser Workspace"]
-        Toolbar[Toolbar<br/>Media Library button]
+        Toolbar[Bottom-right utilities<br/>Media Library button and zoom]
         Bubble[Image bubble menu<br/>Add to Media Library]
         Canvas[WorkspaceCanvas.ts<br/>panel and node insertion]
         Panel[mediaLibraryPanel.ts<br/>Features and Images]
@@ -111,10 +111,13 @@ The old feature-only drawer is replaced by [`mediaLibraryPanel.ts`](../../servic
 ### Position and Layout
 
 - The panel opens from the right side of the workspace pane.
-- Its width is two-thirds of the space available after panel gaps and any open AI chat panel are reserved.
+- It is flush to the top and bottom of the pane; there is no outer vertical whitespace.
+- Its width is two-thirds of the space available after any open AI chat panel is reserved.
 - If AI chat is open, AI chat remains rightmost and the Media Library moves immediately to its left.
-- `webUiThemeSettings.mediaLibrary.panelWidthFraction` and `edgeGap` own these layout values.
-- Body content scrolls vertically; names, feature summaries, tags, instructions, image metadata, and feedback wrap instead of being shortened with ellipses or line clamps.
+- The bottom-right Media Library icon and the existing zoom indicator independently move left with AI chat. While the panel is open, the drawer covers the launcher.
+- `webUiThemeSettings.mediaLibrary.panelWidthFraction` owns the drawer width.
+- Features use a browser and inspector layout: browse cards show a large preview, title, scope, and a two-line summary preview; the selected inspector preserves the full summary, tags, instructions, samples, palette data, and management controls.
+- When the remaining width is narrow, selecting a Feature replaces the browser with a focused detail view and an explicit **Back** action.
 
 ### Categories
 
@@ -122,19 +125,20 @@ The initial category is `Features`, preserving the path users already had from t
 
 | Category | Contents | Main actions |
 |----------|----------|--------------|
-| `Features` | Existing extracted feature metadata and full detail records | Expand details, view samples and palette data, `Use`, request deletion for non-public items, report public items, start extraction |
+| `Features` | Concise browse cards plus a selected Feature inspector | View full details and samples, `Use Feature`, change owned sharing, delete owned items, report public items, start extraction |
 | `Images` | Saved image metadata and authorized previews | `Add to canvas`, move scope, delete |
 
-Feature `created` and `deleted` events update the panel's cached Feature rows. Media Library `created`, `updated`, and `deleted` events reload image rows while the panel is open on `Images`. A successful image save on the canvas displays an in-place toast; it does not force the panel open or switch the current category.
+Feature `created`, `updated`, and `deleted` events update or reload the Feature browser while it is open. Media Library `created`, `updated`, and `deleted` events reload image rows while the panel is open on `Images`. A successful image save on the canvas displays an in-place toast; it does not force the panel open or switch the current category.
 
 ### Filters
 
-The panel exposes `Workspace`, `Mine`, `Organization`, `Public`, and `All available`.
+The compact **Scope** selector exposes `Workspace`, `Mine`, `Organization`, `Public`, and `All available`; a segmented `Features` / `Images` control makes the content type separate from permissions.
 
 - The panel's initial filter is `Workspace`; filter selection is retained in memory when the panel is closed and reopened on the same canvas instance.
 - `All available` asks the backend for readable images from all accessible workspaces, the current user's own scope, organizations the user belongs to, and public items.
 - Image search is applied by the image-list request against `displayName`.
 - Feature search stays in the Feature rendering path and matches feature name, summary, category, and tags.
+- A Feature owner changes that Feature's scope from its inspector only. Promotion to `Public` requires confirmation; moves to `Workspace`, `Mine`, or `Organization` apply immediately after server authorization.
 
 ## Saving and Reusing Images
 
@@ -325,6 +329,7 @@ The `Features` category continues to use `WORKSPACE_SUBJECTS.FEATURE_SUBJECTS`, 
 |-------|---------|
 | `POST /api/images/:workspaceId/import-url` | Fetch a public remote image safely and store it as a workspace image before node insertion |
 | `GET /api/media-library/items/:itemId/content` | Return authorized saved-image bytes for panel previews |
+| `GET /api/features/:featureId/samples/:sampleIndex` | Return authorized Feature sample bytes, preferring durable promoted storage with legacy origin-workspace fallback |
 
 ## Lifecycle and Failure Handling
 
@@ -336,19 +341,22 @@ Deleting a library image removes its records and then attempts to remove its cur
 
 The workspace deletion handler attempts to delete saved images still scoped to that workspace and remove its workspace-scoped Media Library bucket before deleting the workspace. Cleanup failures are logged and do not stop workspace deletion, so failed cleanup may leave orphaned media records or bytes. Images already moved to `Mine`, `Organization`, or `Public` are not included in this workspace-scoped cleanup.
 
+Feature sharing has a separate durability rule. Samples begin in their origin workspace bucket while the Feature is workspace-scoped. Before an owned Feature is promoted to `Mine`, `Organization`, or `Public`, its samples are copied into `user-{ownerUserId}-features`; only then is its scope metadata updated. Reads prefer that durable bucket and fall back to the origin workspace for legacy promoted records. Workspace deletion first migrates any such legacy promoted Feature samples and aborts deletion if preservation fails.
+
 ## Implementation Map
 
 | Area | File | Responsibility |
 |------|------|----------------|
-| Panel UI | [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) | Category tabs, scope filters, existing Feature rendering/actions, image rows, preview URLs and actions |
-| Panel layout | [`services/web-ui/src/infographics/workspace/media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss) | Right-side placement, AI-chat offset, wrapping and scrolling |
+| Panel UI | [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) | Segmented category control, compact scope selector, Feature browser/inspector, image rows, preview URLs and actions |
+| Panel layout | [`services/web-ui/src/infographics/workspace/media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss) | Full-height drawer, glass chrome, AI-chat offset, inspector and focused narrow view |
 | Canvas integration | [`services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) | Toggle panel, save selected images, show feedback, materialize and insert image nodes |
-| Toolbar and URL import | [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) | Media Library toolbar button and stored URL-image ingestion |
+| Canvas utilities and URL import | [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) | Independent bottom-right Media Library launcher, standalone zoom indicator and stored URL-image ingestion |
 | Browser service | [`services/web-ui/src/services/media-library-service.ts`](../../services/web-ui/src/services/media-library-service.ts) | NATS requests for image list/save/materialize/scope/delete actions |
 | Shared contracts | [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/ts/types.ts) | Scope, category, image item and metadata types |
 | NATS contract | [`packages/lixpi/constants/nats-subjects.json`](../../packages/lixpi/constants/nats-subjects.json) | Media Library subject names and events |
 | Item model | [`services/api/src/models/media-library-item.ts`](../../services/api/src/models/media-library-item.ts) | Records, browse metadata, access decisions and save deduplication |
 | Object copy service | [`services/api/src/services/media-library-storage.ts`](../../services/api/src/services/media-library-storage.ts) | Canvas-to-library copy, scope copy, materialization and object cleanup |
+| Feature sample storage | [`services/api/src/services/feature-sample-storage.ts`](../../services/api/src/services/feature-sample-storage.ts) | Copy-first promotion and durable/legacy Feature sample reads |
 | NATS handlers | [`services/api/src/NATS/subscriptions/media-library-subjects.ts`](../../services/api/src/NATS/subscriptions/media-library-subjects.ts) | Authorized lifecycle operations and events |
 | Preview route | [`services/api/src/routes/media-library-routes.ts`](../../services/api/src/routes/media-library-routes.ts) | Authorized image preview bytes |
 | URL ingestion | [`services/api/src/services/remote-image-import.ts`](../../services/api/src/services/remote-image-import.ts) | Public-URL validation, bounded download and stored import |
@@ -371,7 +379,9 @@ The implementation has focused coverage for the boundaries that make saving safe
 | [`services/api/src/models/media-library-item.test.ts`](../../services/api/src/models/media-library-item.test.ts) | Scope keys and item read authorization |
 | [`services/api/src/services/media-library-storage.test.ts`](../../services/api/src/services/media-library-storage.test.ts) | Independent save copy, materialization and scope storage ownership |
 | [`services/api/src/NATS/subscriptions/media-library-subjects.test.ts`](../../services/api/src/NATS/subscriptions/media-library-subjects.test.ts) | Save deduplication, materialization and scope-change failure behavior |
+| [`services/api/src/NATS/subscriptions/feature-subjects.test.ts`](../../services/api/src/NATS/subscriptions/feature-subjects.test.ts) | Feature ownership enforcement, validated scope movement and copy-before-promotion ordering |
+| [`services/api/src/services/feature-sample-storage.test.ts`](../../services/api/src/services/feature-sample-storage.test.ts) | Durable Feature sample copies and legacy source-workspace fallback |
 | [`services/api/src/routes/media-library-routes.test.ts`](../../services/api/src/routes/media-library-routes.test.ts) | Preview authorization across accessible workspaces and organizations |
 | [`services/api/src/services/remote-image-import.test.ts`](../../services/api/src/services/remote-image-import.test.ts) | Network destination rejection for URL imports |
-| [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.test.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.test.ts) | Panel categories, full-content rendering, layout and insertion integration |
+| [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.test.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.test.ts) | Compact controls, concise browser cards, full inspector, durable previews, full-height layout and insertion integration |
 | [`services/web-ui/src/infographics/workspace/canvasBubbleMenuItems.test.ts`](../../services/web-ui/src/infographics/workspace/canvasBubbleMenuItems.test.ts) | Image save action and eligibility hiding |

@@ -1,10 +1,12 @@
 'use strict'
 
 import { Router } from 'express'
-import NATS_Service from '@lixpi/nats-service'
 import { err } from '@lixpi/debug-tools'
 import { jwtVerifier } from '../helpers/auth.ts'
-import Feature, { canRead } from '../models/feature.ts'
+import Feature from '../models/feature.ts'
+import Organization from '../models/organization.ts'
+import Workspace from '../models/workspace.ts'
+import { findFeatureSampleRef, readFeatureSampleObject } from '../services/feature-sample-storage.ts'
 
 const router = Router()
 
@@ -26,24 +28,26 @@ router.get('/:featureId/samples/:sampleIndex', authenticateRequest, async (req: 
     const workspaceId = req.query.workspaceId as string | undefined
     const organizationId = req.query.organizationId as string | undefined
     const idx = parseInt(sampleIndex, 10)
-    if (isNaN(idx) || idx < 0 || idx > 2) return res.status(400).json({ error: 'Invalid sample index' })
+    if (!Number.isSafeInteger(idx) || idx < 0) return res.status(400).json({ error: 'Invalid sample index' })
 
     try {
-        const featureOrError = await Feature.getFeature({ featureId, requesterContext: { userId, workspaceId, organizationId } })
+        const workspace = workspaceId ? await Workspace.getWorkspace({ userId, workspaceId }) : undefined
+        const organization = organizationId ? await Organization.getOrganization({ userId, organizationId }) : undefined
+        const featureOrError = await Feature.getFeature({
+            featureId,
+            requesterContext: {
+                userId,
+                workspaceId: workspace && !('error' in workspace) ? workspaceId : undefined,
+                organizationId: organization && !('error' in organization) ? organizationId : undefined,
+            },
+        })
         if ('error' in featureOrError) return res.status(featureOrError.error === 'NOT_FOUND' ? 404 : 403).json({ error: featureOrError.error })
 
         const feature = featureOrError
-        const sampleRef = feature.sampleImages[idx]
+        const sampleRef = findFeatureSampleRef(feature, idx)
         if (!sampleRef) return res.status(404).json({ error: 'Sample not found' })
 
-        const natsService = NATS_Service.getInstance()
-        if (!natsService) return res.status(503).json({ error: 'Storage service unavailable' })
-
-        let data: Uint8Array | null = null
-        const objectKey = sampleRef.fileId ?? `features/${featureId}/sample-${sampleRef.idx}.${sampleRef.ext}`
-        try { data = await natsService.getObject(`workspace-${feature.workspaceId}-files`, objectKey) }
-        catch (objErr: any) { if (/no stream|not found|bucket/i.test(objErr?.message ?? '')) return res.status(404).json({ error: 'Sample not found in storage' }); throw objErr }
-
+        const data = await readFeatureSampleObject({ feature, sample: sampleRef })
         if (!data) return res.status(404).json({ error: 'Sample not found' })
         res.setHeader('Content-Type', sampleRef.ext === 'png' ? 'image/png' : 'image/jpeg')
         res.setHeader('Content-Length', data.length)
