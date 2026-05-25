@@ -1,6 +1,6 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. PIXI v8 owns image pixel rendering, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; it owns context-region CO2-shaped cloud visuals through `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts`.
+The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. PIXI v8 owns image pixel rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; the reusable `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` paints traveling progress outlines; `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts` owns context-region CO2-shaped cloud visuals.
 
 The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. The current path is renderer ownership by workload: DOM owns text-rich controls and interaction structure; PIXI owns high-volume pixels, connector strokes, context-region clouds, and canvas chrome.
 
@@ -31,8 +31,9 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved Image browsing, scope filters, and insertion actions |
 | `workspace/media-library-panel.scss` | Right-side Media Library layout and full-content wrapping rules |
 | `utils/resolveCollisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
-| `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
+| `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels and generated-image outline synchronization — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
 | `workspace/pixiMediaLayerLogic.ts` | Pure helpers: tier ranking, world-position math, src URL building, LoD-size param injection, world-rect math |
+| `utils/animations/gradients/pixiTravelingOutlineRenderer.ts` | Reusable PIXI traveling outline renderer — rounded-path math, track/segment painting, shared easing, active-only animation loop |
 | `workspace/pixiImageDecoder.ts` | Six-worker decode pool: round-robin dispatch with per-worker request tracking |
 | `workspace/pixiImageDecodeWorker.ts` | Worker body: `fetch` → `createImageBitmap` and post the bitmap back |
 | `workspace/rendering/contextRegionClouds.ts` | Pure context-region cloud geometry: style selection, CO2 SVG-mask hit zones, title hit zones, and adoption scoring |
@@ -102,6 +103,7 @@ flowchart TB
             WORLD[Pixi world Container<br/>scale = viewport.zoom<br/>position = viewport.x, y]
             EDGE_PIXI[edgeLayer: PIXI Graphics edges]
             IMG_SPR[image sprites + colorRect placeholders]
+            GEN_BORDER[generatingBorderLayer: traveling generation progress paths]
             FG[fgLayer: selection outlines, marquee, group overlay]
         end
         subgraph ImageChrome[".workspace-image-chrome-viewport (z-index 3, CSS-transformed)"]
@@ -114,16 +116,17 @@ flowchart TB
     Viewport --> PixiCanvas
     WORLD --> EDGE_PIXI
     WORLD --> IMG_SPR
+    WORLD --> GEN_BORDER
     WORLD --> FG
     PixiCanvas --> ImageChrome
 ```
 
-The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Generated-image provider badges, info buttons, and full-width provenance panels sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas, because stored image DOM shells are deliberately hidden while PIXI owns their pixels. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Image-node DOM elements are kept (`<div data-node-id>` plus `<img class="image-node-img">`) for two reasons:
+The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Generated-image provider badges, info buttons, and full-width provenance panels sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Image-node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
-1. They host core interaction chrome — drag overlay, resize handles, generation spinner, and partial-streaming `<img>` for AI image generation.
+1. They host core interaction chrome — drag overlay, resize handles, and generation spinner.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 
-The DOM `<img>` element has **no `src` attribute** for stored images, so the browser never makes a redundant network request for pixels that PIXI is already rendering. The `workspace-image-node-pixi-owned` class (added on every PIXI sync) sets `opacity: 0` on the DOM `<img>` so the PIXI sprite is the only visible surface.
+Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
 
 Context-region DOM elements are also kept, but only as transparent geometry proxies for existing drag, selection, connection-manager, and parent-child state paths. Their visible CO2-shaped cloud and title text are drawn by `pixiContextRegionLayer`. Empty-region pointer behavior starts in the pane background handler, calls `contextRegionLayer.hitTest(worldPoint)`, and then reuses the existing drag handler for the matched node.
 
@@ -178,17 +181,15 @@ Regression coverage lives in [workspaceViewportStatePlan.test.ts](../../services
 
 `pixiMediaLayer.sync(canvasState)` is called from the canvas orchestration points that actually need visual layer reconciliation: initial create, full DOM node rerenders, local `commitCanvasState`, and incoming store renders whose node/edge visual sync key changed. Viewport-only renders do not resync image entries; they go through the viewport bridge or the stale viewport guard. Each media sync:
 
-1. Refreshes the per-sync DOM element cache (`viewportEl.querySelectorAll('[data-node-id]')`) so subsequent ownership-class toggles are O(1) lookups instead of repeated DOM queries.
-2. Toggles `workspace-image-node-pixi-owned` on/off only for nodes whose ownership changed (uses `pixiOwnedNodeIds` Set as the source of truth).
-3. Removes deleted entries: `releaseTexture` → `spatialIndex.remove` → destroys sprite + colorRect.
-4. Calls `upsertAllEntries` → for each image node, `upsertEntry` updates only what actually changed:
+1. Removes deleted entries: `releaseTexture` → `spatialIndex.remove` → destroys sprite + colorRect.
+2. Calls `upsertAllEntries` → for each image node, `upsertEntry` updates only what actually changed:
    - **Sprite transform** (position + width/height): always updated; cheap matrix update.
    - **Color-rect geometry** (`Graphics.clear()` + `roundRect()` + `fill()`): rebuilt only when width or height changed since last upsert.
    - **Spatial index entry**: removed and re-inserted only when the world rect actually changed.
-   - **`pixi-owned` class**: toggled only when the node was not already in `pixiOwnedNodeIds`.
-5. Single `updateVisibleImages()` pass to mark renderable flags and fire texture loads for newly-visible entries.
-6. Schedules an idle prefetch tick.
-7. Schedules a render via rAF.
+3. Reconciles `generatingBorderLayer` from the transient generating-node set by synchronizing bounds into `PixiTravelingOutlineRenderer`; each active generated image gets its PIXI track and traveling segment until completion or failure clears it.
+4. Single `updateVisibleImages()` pass to mark renderable flags and fire texture loads for newly-visible entries.
+5. Schedules an idle prefetch tick.
+6. Schedules a render via rAF.
 
 `contextRegionLayer.sync(getContextRegionCloudDatums())` runs alongside media sync after state commits, full DOM rerenders, and selection changes. Each sync:
 
@@ -203,7 +204,7 @@ Cloud connector anchoring, resize-edge hit testing, body hit testing, and drag-a
 
 ### Render Scheduling
 
-PIXI's auto-ticker is **disabled** (`autoStart: false` + `app.ticker.stop()`). Every render goes through `scheduleRender()`, which coalesces multiple call sites into one `requestAnimationFrame(() => app.render())`. This gives the canvas zero GPU/CPU cost when idle.
+PIXI's auto-ticker is **disabled** (`autoStart: false` + `app.ticker.stop()`). Every render goes through `scheduleRender()`, which coalesces multiple call sites into one `requestAnimationFrame(() => app.render())`. `PixiTravelingOutlineRenderer` runs a bounded rAF loop only while an outline datum is active; when no generation is active, the media layer has no continuous render cost.
 
 `updateVisibleImages` is also rAF-coalesced (`scheduleVisibilityUpdate`), so a 60 Hz wheel-zoom that triggers `setViewport` on every tick performs the spatial-index scan + entry iteration **once per frame**, not 60 times.
 
@@ -307,7 +308,7 @@ The PIXI media layer has gone through several rounds of perf hardening. The curr
 | **Never-downgrade tier policy** | Once a higher-tier texture is on the GPU, zoom-out never re-fetches a lower tier — mipmaps handle downsampling for free. |
 | **Progressive `thumb-256`-first** | First-paint loads tiny thumbnails for visible sprites; full-tier upgrades happen in idle. |
 | **Idle prefetch (capped)** | Up to 20 unloaded entries per idle tick get pre-cached at `thumb-256`, sorted by viewport distance. Pan reveals already-loaded images. |
-| **DOM `<img>` double-fetch eliminated** | Stored-image `<img>` elements have no `src` attribute; PIXI is the only stored-image pixel renderer. |
+| **DOM `<img>` pixel surface eliminated** | Canvas image nodes contain no DOM image element; PIXI is the only image pixel renderer for stored, external, and generated-partial sources. |
 | **Visual-state-gated PIXI `sync()`** | Media entries resync on initial create, full DOM rerenders, local commits, and store renders with node/edge visual changes. Viewport-only renders do not upsert image entries. |
 | **Incremental RBush** | The spatial index is updated per-node (`remove` + `insert`) only when geometry actually changed, avoiding full rebuilds on every sync. |
 | **`drawColorRect` skip-when-unchanged** | Placeholder geometry is only rebuilt when the node's width or height actually changed; transform updates are matrix-only. |
@@ -402,9 +403,9 @@ When tuning, these are the knobs that exist today (all in `pixiMediaLayer.ts` un
 
 ## PIXI Initialization Contract
 
-`createPixiMediaLayer` accepts an `onHealthChange(health)` callback for `initializing → ready → destroyed`. PIXI initialization errors are fatal: the app logs the initialization error and rethrows it. Stored image nodes do not set DOM `<img>.src` as a recovery path.
+`createPixiMediaLayer` accepts an `onHealthChange(health)` callback for `initializing → ready → destroyed`. PIXI initialization errors are fatal: the app logs the initialization error and rethrows it. Canvas image nodes do not create a DOM pixel fallback.
 
-Stored image DOM `<img>` elements stay source-less by design. The only image-node code path that writes `imgEl.src` is the partial-streaming path for AI image generation or non-stored external/data URLs.
+Stored, external, and generated-image partial sources are resolved and rendered through PIXI only. `WorkspaceCanvas.ts` publishes active generating node IDs to `pixiMediaLayer`, which supplies bounds to `PixiTravelingOutlineRenderer` until completion or failure.
 
 ---
 

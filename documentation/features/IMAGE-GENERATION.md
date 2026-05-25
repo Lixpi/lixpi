@@ -188,13 +188,13 @@ sequenceDiagram
     rect rgb(246, 199, 179)
         Note over User, ImgModel: PHASE 4 - IMAGE GENERATION — Streams partial images to frontend
         ImgModel->>NATS: Publish IMAGE_PARTIAL (empty placeholder)
-        NATS->>Frontend: Show animated border placeholder
+        NATS->>Frontend: PIXI shows animated border placeholder
         loop Partial Images
             ImgModel->>NATS: Publish IMAGE_PARTIAL (progressive base64)
-            NATS->>Frontend: Render blurry preview
+            NATS->>Frontend: PIXI replaces the same preview sprite
         end
         ImgModel->>NATS: Publish IMAGE_COMPLETE (final base64)
-        NATS->>Frontend: Render final image on canvas
+        NATS->>Frontend: PIXI renders final image and clears border
         deactivate ImgModel
         deactivate Router
     end
@@ -338,10 +338,12 @@ Image generation publishes these event types through the standard `receiveMessag
 |-------|--------|---------|---------|
 | Stream start | `START_STREAM` | — | Begin streaming (text model only) |
 | Text chunk | `STREAMING` | `{ content }` | Streaming text delta |
-| Image placeholder | `IMAGE_PARTIAL` | `{ imageBase64: "", partialIndex: 0 }` | Trigger animated border in UI |
-| Partial image | `IMAGE_PARTIAL` | `{ imageBase64: "...", partialIndex: N }` | Progressive image preview |
+| Image placeholder | `IMAGE_PARTIAL` | `{ imageBase64: "", partialIndex: 0 }` | Trigger PIXI animated border |
+| Partial image | `IMAGE_PARTIAL` | `{ imageBase64: "...", partialIndex: N }` | Replace PIXI preview texture |
 | Final image | `IMAGE_COMPLETE` | `{ imageBase64: "...", revisedPrompt }` | Completed image |
 | Stream end | `END_STREAM` | `{ usage }` | End streaming (text model only) |
+
+On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks that node as generating. `pixiMediaLayer.ts` renders partial pixels and supplies active image bounds to the reusable PIXI `PixiTravelingOutlineRenderer`; `IMAGE_COMPLETE` is the event that clears that outline.
 
 ## Provider Comparison
 

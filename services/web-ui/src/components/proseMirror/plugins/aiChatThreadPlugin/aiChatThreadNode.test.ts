@@ -18,6 +18,7 @@ import {
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import type { ImageGenerationTrace } from '@lixpi/constants'
 
@@ -530,7 +531,11 @@ describe('aiChatThreadPlugin — image generation trace', () => {
 // =============================================================================
 
 describe('aiChatThreadPlugin — generated image completion', () => {
-    function createView(onImageCompleteToCanvas = vi.fn(), onImagePartialToCanvas = vi.fn()) {
+    function createView(
+        onImageCompleteToCanvas = vi.fn(),
+        onImagePartialToCanvas = vi.fn(),
+        additionalPlugins: any[] = []
+    ) {
         const plugin = createAiChatThreadPlugin({
             sendAiRequestHandler: vi.fn(),
             stopAiRequestHandler: vi.fn(),
@@ -547,13 +552,13 @@ describe('aiChatThreadPlugin — generated image completion', () => {
                     thread(
                         { threadId: 'thread-1' },
                         response(
-                            { id: 'resp-1', isReceivingAnimation: true, aiProvider: 'OpenAI' },
+                            { id: 'resp-1', isReceivingAnimation: true, isInitialRenderAnimation: true, aiProvider: 'OpenAI' },
                             p('Generating image')
                         )
                     )
                 ),
                 schema,
-                plugins: [plugin],
+                plugins: [...additionalPlugins, plugin],
             }),
         })
 
@@ -608,7 +613,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
         mount.remove()
     })
 
-    it('updates the existing chat placeholder when image partial pixels arrive', () => {
+    it('updates one chat placeholder across progressive image indices', () => {
         const { view, mount } = createView()
 
         SegmentsReceiver.receiveSegment({
@@ -626,7 +631,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             imageUrl: '/api/images/workspace-1/file-partial',
             fileId: 'file-partial',
             workspaceId: 'workspace-1',
-            partialIndex: 0,
+            partialIndex: 2,
             aiProvider: 'OpenAI',
         })
 
@@ -637,9 +642,66 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             imageData: '/api/images/workspace-1/file-partial',
             fileId: 'file-partial',
             isPartial: true,
-            partialIndex: 0,
+            partialIndex: 2,
             alignment: 'right',
         })
+
+        view.destroy()
+        mount.remove()
+    })
+
+    it('persists image trace details after progressive previews complete', () => {
+        const onPersist = vi.fn()
+        const { view, mount } = createView(vi.fn(), vi.fn(), [
+            statePlugin({}, onPersist, vi.fn()),
+        ])
+        const trace = createImageGenerationTrace()
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_generation_trace',
+            aiChatThreadId: 'thread-1',
+            imageGenerationTrace: trace,
+        })
+
+        for (const partialIndex of [0, 1, 2]) {
+            SegmentsReceiver.receiveSegment({
+                type: 'image_partial',
+                aiChatThreadId: 'thread-1',
+                imageUrl: `/api/images/workspace-1/file-partial-${partialIndex}`,
+                fileId: `file-partial-${partialIndex}`,
+                workspaceId: 'workspace-1',
+                partialIndex,
+                aiProvider: 'OpenAI',
+            })
+        }
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_complete',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '/api/images/workspace-1/file-final',
+            fileId: 'file-final',
+            workspaceId: 'workspace-1',
+            responseId: 'response-1',
+            revisedPrompt: 'A revised prompt',
+            aiProvider: 'OpenAI',
+            imageModelProvider: 'OpenAI',
+        })
+        SegmentsReceiver.receiveSegment({
+            status: 'END_STREAM',
+            threadId: 'thread-1',
+        })
+
+        const imageNodes = getGeneratedImageNodes(view)
+        const persistedContent = onPersist.mock.calls[onPersist.mock.calls.length - 1]?.[0]
+
+        expect(imageNodes).toHaveLength(1)
+        expect(imageNodes[0].attrs).toMatchObject({
+            fileId: 'file-final',
+            isPartial: false,
+            partialIndex: 2,
+        })
+        expect(onPersist).toHaveBeenCalledTimes(1)
+        expect(JSON.stringify(persistedContent)).toContain(trace.toolPrompt)
 
         view.destroy()
         mount.remove()
