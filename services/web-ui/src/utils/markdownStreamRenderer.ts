@@ -10,7 +10,7 @@ import { html } from './domTemplates.ts'
 // markdown in ProseMirror is handled by the aiChatThreadPlugin (StreamingInserter); every
 // other place that shows markdown — extraction tab, Media Library, future surfaces — MUST
 // use this class (or renderMarkdownStatic). Never hand-roll markdown→HTML and never render
-// raw markdown as plain text. See documentation/coding-style-guides/MARKDOWN-RENDERING.md.
+// raw markdown as plain text. See documentation/features/MARKDOWN-RENDERING.md.
 //
 // Each emitted segment is { status, segment: { segment, styles[], type, level, isBlockDefining } }
 // where type ∈ 'paragraph' | 'header' | 'code' and styles ⊆ 'bold' | 'italic' | 'strikethrough' | 'code'.
