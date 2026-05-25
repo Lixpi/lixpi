@@ -2,7 +2,9 @@
 
 Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`). Tests are no exception — always run them through Docker, never locally.
 
-## Running Tests
+## Agent Verification Commands
+
+For web-ui changes, agents verify test behavior only through Dockerized Vitest runs:
 
 ```bash
 # Run all tests
@@ -10,13 +12,13 @@ docker exec lixpi-web-ui pnpm test:run
 
 # Run a specific test file
 docker exec lixpi-web-ui pnpm test:run -- src/infographics/utils/zoomScaling.test.ts
-
-# Watch mode (interactive)
-docker exec lixpi-web-ui pnpm test
-
-# With UI
-docker exec lixpi-web-ui pnpm test:ui
 ```
+
+## Prohibited Verification
+
+- Never run `svelte-check`, including `pnpm svelte-check`, `pnpm run svelte-check`, or another script or wrapper that invokes it.
+- Never load the application in a browser or use browser automation, screenshots, or manual visual inspection to verify an agent's work.
+- Never replace a missing test with one of these prohibited checks. State the uncovered behavior in the completion report.
 
 ## Test Infrastructure
 
@@ -287,6 +289,8 @@ The `overrides` pattern forces you to provide required discriminant fields (`nod
 - **Don't test DOM rendering** — we don't render Svelte components in tests. Test the logic layer underneath.
 - **Don't use `npx`** — it's `pnpm`. Always `pnpm test:run`.
 - **Don't run tests outside Docker** — the container has the correct node_modules and environment. Your host machine doesn't.
+- **Don't run `svelte-check`** — directly or through another script; it is prohibited for agents.
+- **Don't use browser-based verification** — browsers, browser automation, screenshots, and manual visual inspection are prohibited for verifying agent work.
 - **Don't create `__tests__/` directories** — colocate. Always.
 - **Don't use JSDoc comments** — project-wide rule, tests included.
 - **Don't import with `.js` extensions** — always use `.ts` imports.
