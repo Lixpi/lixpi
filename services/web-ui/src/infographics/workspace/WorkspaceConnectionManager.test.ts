@@ -9,8 +9,7 @@ import {
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getContextRegionCloudAnchorPoint } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 // =============================================================================
 // HELPERS
@@ -292,11 +291,11 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 		expect(config.onEdgesChange).not.toHaveBeenCalled()
 	})
 
-	it('uses webUiSettings.proximityConnectThreshold as the distance limit', () => {
-		const original = webUiSettings.proximityConnectThreshold
+	it('uses settings.connector.proximityConnectThreshold as the distance limit', () => {
+		const original = settings.connector.proximityConnectThreshold
 		try {
 			// Set a very small threshold so nodes that are normally in range are rejected
-			webUiSettings.proximityConnectThreshold = 10
+			settings.connector.proximityConnectThreshold = 10
 
 			const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
 			const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 300, y: 50 }, dimensions: { width: 200, height: 100 } })
@@ -310,15 +309,15 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 
 			expect(config.onEdgesChange).not.toHaveBeenCalled()
 		} finally {
-			webUiSettings.proximityConnectThreshold = original
+			settings.connector.proximityConnectThreshold = original
 		}
 	})
 
 	it('triggers proximity when distance is within a custom threshold', () => {
-		const original = webUiSettings.proximityConnectThreshold
+		const original = settings.connector.proximityConnectThreshold
 		try {
 			// Set threshold large enough to include both nodes
-			webUiSettings.proximityConnectThreshold = 200
+			settings.connector.proximityConnectThreshold = 200
 
 			const imgNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
 			const chatNode = makeNode({ nodeId: 'chat-1', type: 'aiChatThread', position: { x: 300, y: 50 }, dimensions: { width: 200, height: 100 } })
@@ -332,7 +331,7 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 
 			expect(config.onEdgesChange).toHaveBeenCalledTimes(1)
 		} finally {
-			webUiSettings.proximityConnectThreshold = original
+			settings.connector.proximityConnectThreshold = original
 		}
 	})
 
@@ -754,11 +753,11 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 		expect(spread.targetT).toBe(0.75) // falls back to stored value
 	})
 
-	it('clamps using webUiThemeSettings.aiChatThreadRailEdgeMargin', () => {
-		const original = webUiThemeSettings.aiChatThreadRailEdgeMargin
+	it('clamps using settings.aiChatThread.rail.edgeMargin', () => {
+		const original = settings.aiChatThread.rail.edgeMargin
 
 		// Temporarily set a larger margin
-		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailEdgeMargin = 0.1
+		settings.aiChatThread.rail.edgeMargin = 0.1
 
 		try {
 			// Source far above target → should clamp to 0.1 (not 0.025)
@@ -778,13 +777,13 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 			const spread2 = result2.get('e-2')!
 			expect(spread2.targetT).toBe(0.9)
 		} finally {
-			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailEdgeMargin = original
+			settings.aiChatThread.rail.edgeMargin = original
 		}
 	})
 
 	it('snaps targetT to 0.5 when target height is below aiChatThreadRailMinSlideHeight', () => {
-		const original = webUiThemeSettings.aiChatThreadRailMinSlideHeight
-		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = 200
+		const original = settings.aiChatThread.rail.minSlideHeight
+		settings.aiChatThread.rail.minSlideHeight = 200
 
 		try {
 			// Target height (100) is below threshold (200) → snap to center
@@ -795,13 +794,13 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 
 			expect(result.get('e-1')!.targetT).toBe(0.5)
 		} finally {
-			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = original
+			settings.aiChatThread.rail.minSlideHeight = original
 		}
 	})
 
 	it('slides freely when target height meets aiChatThreadRailMinSlideHeight threshold', () => {
-		const original = webUiThemeSettings.aiChatThreadRailMinSlideHeight
-		;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = 200
+		const original = settings.aiChatThread.rail.minSlideHeight
+		settings.aiChatThread.rail.minSlideHeight = 200
 
 		try {
 			// Target height (300) exceeds threshold (200) → slide freely
@@ -816,7 +815,7 @@ describe('computeSpreadTValues — targetT auto-alignment', () => {
 			expect(spread.targetT).toBeGreaterThan(0)
 			expect(spread.targetT).toBeLessThan(1)
 		} finally {
-			;(webUiThemeSettings as Record<string, unknown>).aiChatThreadRailMinSlideHeight = original
+			settings.aiChatThread.rail.minSlideHeight = original
 		}
 	})
 

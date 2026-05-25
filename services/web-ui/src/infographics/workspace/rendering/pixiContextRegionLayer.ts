@@ -7,7 +7,7 @@ import {
     Texture,
 } from 'pixi.js'
 
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { Easing } from '$src/utils/animations/easing.ts'
 import { FreeformGradientRenderer } from '$src/utils/animations/gradients/freeformGradient.ts'
@@ -67,7 +67,7 @@ type WatercolorTextureSize = { width: number; height: number }
 
 const VISIBILITY_MARGIN = 1600
 const CONTEXT_REGION_TEXTURE_VERSION = 4
-const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud
+const contextRegionCloudTheme = settings.contextRegion.cloud
 const CO2_CLOUD_VIEWBOX_SIZE = 512
 const CO2_CLOUD_MAIN_PATH = 'm482.856 229.936c12.391-15.534 19.801-35.216 19.801-56.63 0-50.198-40.694-90.892-90.892-90.892-5.966 0-11.796.581-17.441 1.679-25.94-49.959-78.143-84.093-138.324-84.093s-112.384 34.134-138.324 84.093c-5.645-1.097-11.475-1.679-17.441-1.679-50.198 0-90.892 40.694-90.892 90.892 0 21.415 7.41 41.096 19.801 56.63-18.325 25.172-29.144 56.158-29.144 89.676 0 84.244 68.293 152.538 152.537 152.538 5.374 0 10.683-.282 15.914-.824 21.017 24.873 52.435 40.674 87.549 40.674s66.532-15.801 87.549-40.674c5.231.542 10.539.824 15.914.824 84.244 0 152.537-68.294 152.537-152.538 0-33.518-10.819-64.504-29.144-89.676z'
 const CO2_CLOUD_CIRCLES = [

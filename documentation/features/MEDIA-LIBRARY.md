@@ -115,7 +115,7 @@ The old feature-only drawer is replaced by [`mediaLibraryPanel.ts`](../../servic
 - Its width is two-thirds of the space available after any open AI chat panel is reserved.
 - If AI chat is open, AI chat remains rightmost and the Media Library moves immediately to its left.
 - The bottom-right Media Library icon and the existing zoom indicator independently move left with AI chat. While the panel is open, the drawer covers the launcher.
-- `webUiThemeSettings.mediaLibrary.panelWidthFraction` owns the drawer width.
+- `settings.mediaLibrary.panelWidthFraction` owns the drawer width.
 - Features use a browser and inspector layout: browse cards show a large preview, title, scope, and a two-line summary preview; the selected inspector preserves the full summary, tags, instructions, samples, palette data, and management controls.
 - When the remaining width is narrow, selecting a Feature replaces the browser with a focused detail view and an explicit **Back** action.
 

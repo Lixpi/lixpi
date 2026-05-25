@@ -247,7 +247,7 @@ Each AI chat thread canvas node gets its own dedicated floating input. On submit
 Both types:
 - Use `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
 - Receive the same control factories (`createGenericAiModelDropdown`, `createGenericImageModelDropdown`, `createGenericImageSizeDropdown`, `createGenericSubmitButton`) from `primitives/aiControls/`
-- Render inside a `.ai-prompt-input-floating` container with optional shifting gradient background (controlled by `webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode`; see [GRADIENTS.md](../../../../../../../documentation/features/GRADIENTS.md))
+- Render inside a `.ai-prompt-input-floating` container with optional shifting gradient background (controlled by `settings.aiPromptInput.useShiftingGradientBackground`; see [GRADIENTS.md](../../../../../../../documentation/features/GRADIENTS.md))
 
 ## Styling
 

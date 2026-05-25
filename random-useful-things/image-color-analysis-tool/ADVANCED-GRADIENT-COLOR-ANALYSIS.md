@@ -180,7 +180,7 @@ The final section prints:
 - `const CURRENT_PHASE = ...`
 - Sample point comparisons between reference and rendered colors
 
-The printed TypeScript object is not the current app's preferred configuration shape. Convert the colors into the hex array in `services/web-ui/src/webUiThemeSettings.ts`:
+The printed TypeScript object is not the current app's preferred configuration shape. Convert the colors into the hex array in `services/web-ui/src/settings.ts`:
 
 ```typescript
 contextRegionAreaShiftingGradientColors: ['#DDECE7', '#C7DAD4', '#EEF8F5', '#D6E7E1']
@@ -264,8 +264,8 @@ For repeatable work, download the image first and run the script on a local file
 
 The output uses `GRADIENT_COLORS` and `CURRENT_PHASE`. Current app code uses:
 
-- `webUiThemeSettings.contextRegionAreaShiftingGradientColors` for context region card color hex values
-- `webUiThemeSettings.shiftingGradientColors` for the shared default gradient and animated border palette
+- `settings.contextRegion.cloud.palettes.surfaceGradient` for context-region cloud surface colors
+- `settings.gradient.shiftingColors` for the shared default gradient and animated border palette
 - `INITIAL_PHASE` in `shiftingGradientRenderer.ts` for the starting phase
 
 Do the conversion manually and keep comments accurate.
@@ -278,7 +278,7 @@ Do the conversion manually and keep comments accurate.
 4. If targeting the region card, make sure phase 4 is tested.
 5. Copy candidate colors into `region-gradient-preview.html` first.
 6. Tune the preview visually against `gradient-sample.png`.
-7. Copy accepted colors to `services/web-ui/src/webUiThemeSettings.ts`.
+7. Copy accepted colors to `services/web-ui/src/settings.ts`.
 8. Copy accepted overlay changes to `services/web-ui/src/infographics/workspace/workspace-canvas.scss`.
 9. Verify the actual app still uses `createShiftingGradientBackground()` for the region card.
 

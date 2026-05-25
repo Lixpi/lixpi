@@ -16,7 +16,7 @@ import {
     type FreeformGradientHexColorSet,
     type FreeformGradientPoint,
 } from '$src/utils/animations/gradients/freeformGradient.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 export type ShiftingGradientColorSet = FreeformGradientHexColorSet
 
@@ -73,7 +73,7 @@ export class ShiftingGradientRenderer {
         this.renderGradient()
     }
 
-    static getInstance(colors: ShiftingGradientColorSet = webUiThemeSettings.shiftingGradientColors): ShiftingGradientRenderer {
+    static getInstance(colors: ShiftingGradientColorSet = settings.gradient.shiftingColors): ShiftingGradientRenderer {
         const instanceKey = ShiftingGradientRenderer.getColorSetKey(colors)
         let renderer = ShiftingGradientRenderer.instances.get(instanceKey)
 

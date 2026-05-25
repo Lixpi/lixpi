@@ -22,7 +22,6 @@ import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/com
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
 import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,

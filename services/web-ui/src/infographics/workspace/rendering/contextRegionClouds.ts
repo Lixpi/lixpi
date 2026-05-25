@@ -1,7 +1,7 @@
 import {
-    webUiThemeSettings,
+    settings,
     type ContextRegionCloudThemeStyle,
-} from '$src/webUiThemeSettings.ts'
+} from '$src/settings.ts'
 import { scaleCanvasChromeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 
 export type ContextRegionCloudAspect = ContextRegionCloudThemeStyle['aspect']
@@ -54,7 +54,7 @@ const CO2_CLOUD_CIRCLES = [
 const EDGE_ANCHOR_SAMPLE_STEPS = 128
 const EDGE_ANCHOR_BINARY_SEARCH_STEPS = 12
 const EDGE_ANCHOR_CROSS_AXIS_STEPS = 96
-const contextRegionCloudTheme = webUiThemeSettings.contextRegion.cloud
+const contextRegionCloudTheme = settings.contextRegion.cloud
 const EDGE_SAMPLE_DIRECTIONS = [
     { x: 1, y: 0 },
     { x: -1, y: 0 },

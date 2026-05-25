@@ -32,7 +32,7 @@ import {
     type WorldPosition,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 
 type PixiImageEntry = {
     sprite: Sprite
@@ -486,7 +486,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function getImageBorderRadius(width: number, height: number): number {
-        const borderRadius = webUiThemeSettings.imageNode.borderRadius
+        const borderRadius = settings.imageNode.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }

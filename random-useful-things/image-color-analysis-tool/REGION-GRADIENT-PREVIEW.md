@@ -35,7 +35,7 @@ When tuning the region card:
 1. Edit the `colors` array in `region-gradient-preview.html`.
 2. Edit the CSS values on `.workspace-ai-chat-thread-node--region`, `::before`, and `::after` if the base, center depth, or glass edge needs adjustment.
 3. Reload the preview and compare the empty card against the sample.
-4. Copy accepted palette changes to `contextRegionAreaShiftingGradientColors` in `services/web-ui/src/webUiThemeSettings.ts`.
+4. Copy accepted palette changes to `settings.contextRegion.cloud.palettes.surfaceGradient` in `services/web-ui/src/settings.ts`.
 5. Copy accepted CSS changes to `services/web-ui/src/infographics/workspace/workspace-canvas.scss`.
 6. Keep `INITIAL_PHASE = 4` in `services/web-ui/src/utils/shiftingGradientRenderer.ts` unless intentionally retuning the color placement.
 

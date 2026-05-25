@@ -62,8 +62,7 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
 import { SvgGradientRenderer } from '$src/utils/animations/gradients/svgGradient.ts'
-import { webUiSettings } from '$src/webUiSettings.ts'
-import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
+import { settings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
@@ -201,19 +200,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const { paneEl, viewportEl, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange, onAiChatThreadContentChange } = options
     let workspaceId = options.workspaceId
 
-    paneEl.style.setProperty('--connector-line-default-color', webUiThemeSettings.nodesConnectorLineDefaultColor)
-    paneEl.style.setProperty('--connector-line-focus-color', webUiThemeSettings.nodesConnectorLineFocusColor)
-    paneEl.style.setProperty('--selection-marquee-border-color', webUiThemeSettings.selectionMarqueeBorderColor)
-    paneEl.style.setProperty('--selection-marquee-background-color', webUiThemeSettings.selectionMarqueeBackgroundColor)
-    paneEl.style.setProperty('--selection-overlay-border-color', webUiThemeSettings.selectionOverlayBorderColor)
-    paneEl.style.setProperty('--selection-overlay-background-color', webUiThemeSettings.selectionOverlayBackgroundColor)
-    paneEl.style.setProperty('--selection-outline-color', webUiThemeSettings.selectionOutlineColor)
-    paneEl.style.setProperty('--workspace-image-default-box-shadow', webUiThemeSettings.imageNode.defaultBoxShadow)
-    paneEl.style.setProperty('--workspace-image-selected-box-shadow', webUiThemeSettings.imageNode.selectedBoxShadow)
-    paneEl.style.setProperty('--workspace-image-border-radius', `${webUiThemeSettings.imageNode.borderRadius}px`)
-    paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', webUiThemeSettings.imageNode.contextRegionChildImageFrameColor)
-    paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', webUiThemeSettings.imageNode.contextRegionChildImageDropShadow)
-    paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', webUiThemeSettings.imageNode.modelBadgeBoxShadow)
+    paneEl.style.setProperty('--connector-line-default-color', settings.connector.lineDefaultColor)
+    paneEl.style.setProperty('--connector-line-focus-color', settings.connector.lineFocusColor)
+    paneEl.style.setProperty('--selection-marquee-border-color', settings.selection.marqueeBorderColor)
+    paneEl.style.setProperty('--selection-marquee-background-color', settings.selection.marqueeBackgroundColor)
+    paneEl.style.setProperty('--selection-overlay-border-color', settings.selection.overlayBorderColor)
+    paneEl.style.setProperty('--selection-overlay-background-color', settings.selection.overlayBackgroundColor)
+    paneEl.style.setProperty('--selection-outline-color', settings.selection.outlineColor)
+    paneEl.style.setProperty('--workspace-image-default-box-shadow', settings.imageNode.defaultBoxShadow)
+    paneEl.style.setProperty('--workspace-image-selected-box-shadow', settings.imageNode.selectedBoxShadow)
+    paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)
+    paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', settings.imageNode.contextRegionChildImageFrameColor)
+    paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', settings.imageNode.contextRegionChildImageDropShadow)
+    paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
@@ -274,10 +273,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     canvasImageLifecycle.initializeFromCanvasState(currentCanvasState)
 
     const pixiSelectionColors: SelectionColors = {
-        marqueeStroke: webUiThemeSettings.selectionMarqueeBorderColor,
-        marqueeFill: webUiThemeSettings.selectionMarqueeBackgroundColor,
-        groupOverlayStroke: webUiThemeSettings.selectionOverlayBorderColor,
-        groupOverlayFill: webUiThemeSettings.selectionOverlayBackgroundColor,
+        marqueeStroke: settings.selection.marqueeBorderColor,
+        marqueeFill: settings.selection.marqueeBackgroundColor,
+        groupOverlayStroke: settings.selection.overlayBorderColor,
+        groupOverlayFill: settings.selection.overlayBackgroundColor,
     }
     pixiMediaLayer = createPixiMediaLayer({
         paneEl,
@@ -335,7 +334,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (edgeIndex === -1) return
 
                 const edge = currentCanvasState.edges[edgeIndex]
-                const currentCurve = edge.pathType ?? webUiSettings.nodesConnectorLineCurve
+                const currentCurve = edge.pathType ?? settings.connector.lineCurve
                 const newCurve = currentCurve === 'horizontal-bezier' ? 'orthogonal' : 'horizontal-bezier'
 
                 const updatedEdge = { ...edge, pathType: newCurve }
@@ -941,7 +940,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function getGeneratedImageInsertionSize(): number {
-        return webUiThemeSettings.imageBranchLineage.generatedImageSize
+        return settings.imageBranchLineage.generatedImageSize
     }
 
     function getNextRegionChildPosition(region: CanvasNode, childWidth: number, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
@@ -963,8 +962,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
         const regionDatum = getContextRegionCloudDatum(region, threadMap.get(region.referenceId), nodesById)
         const cloudBounds = getContextRegionCloudBounds(regionDatum)
-        const horizontalGap = webUiThemeSettings.imageBranchLineage.contextRegionOutputGap
-        const verticalGap = webUiThemeSettings.imageBranchLineage.branchToBranchGap
+        const horizontalGap = settings.imageBranchLineage.contextRegionOutputGap
+        const verticalGap = settings.imageBranchLineage.branchToBranchGap
         const existingBranchRoots = getGeneratedChildOutputs(region, nodes, currentCanvasState?.edges ?? [])
             .filter((node: ImageCanvasNode) => node.generatedBy?.aiChatThreadId === region.referenceId)
         const previousBranchRoot = getMostRecentGeneratedChildOutput(existingBranchRoots)
@@ -1616,8 +1615,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const threadFloatingInputs: Map<string, ThreadFloatingInputEntry> = new Map()
 
     // Vertical rail elements — one per AI chat thread, spanning thread + floating input
-    const RAIL_OFFSET = webUiThemeSettings.aiChatThreadRailOffset
-    const RAIL_GRAB_WIDTH = webUiSettings.aiChatThreadRailDragGrabWidth
+    const RAIL_OFFSET = settings.aiChatThread.rail.offset
+    const RAIL_GRAB_WIDTH = settings.aiChatThread.rail.dragGrabWidth
     const AI_CHAT_PANEL_RAIL_PROMPT_GAP = 16
     const AI_CHAT_PANEL_MIN_WIDTH = 320
     const AI_CHAT_PANEL_MAX_PANE_MARGIN = 64
@@ -1999,15 +1998,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onclick=${(event: Event) => event.stopPropagation()}
         ></div>` as HTMLDivElement
 
-        panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', webUiThemeSettings.aiChatThreadNodeBoxShadow)
-        panelEl.style.setProperty('--ai-chat-thread-node-border', webUiThemeSettings.aiChatThreadNodeBorder)
+        panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', settings.aiChatThread.nodeBoxShadow)
+        panelEl.style.setProperty('--ai-chat-thread-node-border', settings.aiChatThread.nodeBorder)
         const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop" aria-hidden="true"></div>` as HTMLDivElement
 
-        if (!webUiSettings.showHeaderOnAiChatThreadNodes) {
+        if (!settings.aiChatThread.showHeader) {
             panelEl.classList.add('workspace-ai-chat-thread-node-hide-title')
         }
 
-        const gradient = webUiSettings.useShiftingGradientBackgroundOnAiChatThreadNode
+        const gradient = settings.aiChatThread.useShiftingGradientBackground
             ? createShiftingGradientBackground(panelEl)
             : null
 
@@ -2146,8 +2145,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
 
         const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel-prompt nopan"></div>` as HTMLDivElement
-        promptEl.style.setProperty('--dropdown-popover-box-shadow', webUiThemeSettings.dropdownPopoverBoxShadow)
-        if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
+        promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
+        if (settings.aiPromptInput.useShiftingGradientBackground) {
             activeAiChatPromptGradient = createShiftingGradientBackground(promptEl)
         }
 
@@ -2219,8 +2218,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             style=${railStyle}
             data=${{ threadNodeId: regionNode.nodeId }}
         ></div>` as HTMLDivElement
-        rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
-        rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
+        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.gradient)
+        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.width)
         rail.addEventListener('mousedown', (event) => {
             handleActiveAiChatPanelResizeStart(event, panelEl)
         })
@@ -2228,7 +2227,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
         const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
-        const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
+        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.boundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
         if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
         if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
@@ -2262,7 +2261,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         floatingInputEl = html`<div className="ai-prompt-input-floating nopan" style=${floatingInputStyle}></div>` as HTMLDivElement
 
         // Add gradient background (controlled by settings flag)
-        if (webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode) {
+        if (settings.aiPromptInput.useShiftingGradientBackground) {
             floatingInputGradient = createShiftingGradientBackground(floatingInputEl)
         }
 
@@ -2355,7 +2354,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             data=${{ threadNodeId: node.nodeId }}
         ></div>` as HTMLDivElement
 
-        const gradient = webUiSettings.useShiftingGradientBackgroundOnAiUserInputNode
+        const gradient = settings.aiPromptInput.useShiftingGradientBackground
             ? createShiftingGradientBackground(el)
             : null
 
@@ -2483,13 +2482,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             style=${railStyle}
             data=${{ threadNodeId: node.nodeId }}
         ></div>` as HTMLDivElement
-        rail.style.setProperty('--rail-gradient', webUiThemeSettings.aiChatThreadRailGradient)
-        rail.style.setProperty('--rail-width', webUiThemeSettings.aiChatThreadRailWidth)
+        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.gradient)
+        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.width)
 
         const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
         const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
-        const [outerColor, ringColor, innerColor] = webUiThemeSettings.aiChatThreadRailBoundaryCircleColors
+        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.boundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
         if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
         if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
@@ -2677,7 +2676,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const anchorRect = previousOutput ? getNodeWorldRect(previousOutput) : getNodeWorldRect(sourceNode)
 
         return {
-            x: anchorRect.x + anchorRect.width + webUiThemeSettings.imageBranchLineage.imageToImageGap,
+            x: anchorRect.x + anchorRect.width + settings.imageBranchLineage.imageToImageGap,
             y: anchorRect.y,
         }
     }
@@ -3249,11 +3248,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                     }
 
-                    const threadDimensions = { ...webUiThemeSettings.contextRegion.defaultDimensions }
+                    const threadDimensions = { ...settings.contextRegion.defaultDimensions }
                     const fallbackPosition = getCenteredInsertionPosition(threadDimensions)
                     const sourceImageRect = sourceImageNode ? getNodeWorldRect(sourceImageNode) : null
                     const threadPosition = sourceImageRect
-                        ? { x: sourceImageRect.x + sourceImageRect.width + webUiThemeSettings.contextRegion.adjacentNodeGap, y: sourceImageRect.y }
+                        ? { x: sourceImageRect.x + sourceImageRect.width + settings.contextRegion.adjacentNodeGap, y: sourceImageRect.y }
                         : fallbackPosition
 
                     const threadNode: ContextRegionCanvasNode = {
@@ -3372,10 +3371,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // of every image/text in the viewport, causing visible flickering.
             viewportBridge?.applyViewport(vp)
             if (zoomChanged) {
-                if (webUiSettings.useZoomCompensatedResizeHandleScaling) {
+                if (settings.imageNode.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
                 }
-                if (webUiSettings.useZoomCompensatedConnectorScaling) {
+                if (settings.connector.useZoomCompensatedScaling) {
                     // Recompute and flush the connector canvas in the same turn as the DOM
                     // viewport transform. If the pan/zoom callback runs inside a rAF, waiting
                     // for PIXI's scheduled rAF lets the browser paint one frame where nodes
@@ -3656,7 +3655,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Handle sizing/positioning of resize handles so they appear constant in screen pixels
     function applyHandleSizing(handle: HTMLElement, corner: ResizeCorner, zoom: number) {
-        const { size: sizePx, offset: offsetPx } = webUiSettings.useZoomCompensatedResizeHandleScaling
+        const { size: sizePx, offset: offsetPx } = settings.imageNode.useZoomCompensatedResizeHandleScaling
             ? getResizeHandleScaledSizes(zoom)
             : { size: 24, offset: 6 }
 
@@ -4503,7 +4502,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 .attr('x1', '0').attr('y1', '0.5')
                 .attr('x2', '1').attr('y2', '0.5')
 
-            SvgGradientRenderer.appendRepeatingLinearGradientStops(gradient, webUiThemeSettings.shiftingGradientColors)
+            SvgGradientRenderer.appendRepeatingLinearGradientStops(gradient, settings.gradient.shiftingColors)
 
             // Draw the border rectangle
             svg.append('rect')
@@ -5022,7 +5021,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 itemId: item.itemId,
                             })
                             if (!materialized.fileId || !materialized.url) return false
-                            const width = webUiThemeSettings.imageNode.defaultInsertionWidth
+                            const width = settings.imageNode.defaultInsertionWidth
                             const imageNode: Omit<ImageCanvasNode, 'position'> = {
                                 nodeId: `node-${materialized.fileId}`,
                                 type: 'image',
