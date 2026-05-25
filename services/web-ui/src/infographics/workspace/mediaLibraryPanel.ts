@@ -17,6 +17,8 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
+import { userStore } from '$src/stores/userStore.ts'
+import { xIcon } from '$src/svgIcons/index.ts'
 import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
 
 const SCOPES: Array<{ key: MediaLibraryScope; label: string }> = [
@@ -162,7 +164,6 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                     workspaceId,
                     organizationId,
                     scope: scope.key,
-                    scopeOwnerId: scope.key === MEDIA_LIBRARY_SCOPE.WORKSPACE ? workspaceId : '',
                 }),
             ))
             allFeatures = results.flatMap((result) => result?.items ?? [])
@@ -215,13 +216,19 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         return `${apiUrl}${separator}${new URLSearchParams({ token: accessToken }).toString()}`
     }
 
+    function getStoredSampleUrl(feature: FeatureMeta, sampleIndex: number): string {
+        const params = new URLSearchParams({ workspaceId, token: accessToken })
+        const organizationId = organizationStore.getData('organizationId')
+        if (organizationId) params.set('organizationId', organizationId)
+        return withApiBaseUrl(`/api/features/${feature.featureId}/samples/${sampleIndex}?${params.toString()}`)
+    }
+
     function getSampleUrl(feature: FeatureMeta, sampleIndex = 0): string {
-        if (sampleIndex === 0 && feature.sampleZeroUrl) return appendImageAuth(feature.sampleZeroUrl)
         const details = featureDetails.get(feature.featureId)
         const featureSample = isFeatureDetails(details) ? details.sampleImages?.find((sample) => sample.idx === sampleIndex) ?? details.sampleImages?.[sampleIndex] : undefined
+        if (sampleIndex === 0 && feature.sampleZeroUrl) return appendImageAuth(feature.sampleZeroUrl)
         if (featureSample?.imageUrl) return appendImageAuth(featureSample.imageUrl)
-        const params = new URLSearchParams({ workspaceId, token: accessToken })
-        return withApiBaseUrl(`/api/features/${feature.featureId}/samples/${sampleIndex}?${params.toString()}`)
+        return getStoredSampleUrl(feature, sampleIndex)
     }
 
     function handleSampleImageError(event: Event, feature: FeatureMeta, sampleIndex = 0) {
@@ -235,8 +242,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             return
         }
         imageEl.dataset.sampleFallbackTried = 'true'
-        const params = new URLSearchParams({ workspaceId, token: accessToken })
-        imageEl.src = withApiBaseUrl(`/api/features/${feature.featureId}/samples/${sampleIndex}?${params.toString()}`)
+        imageEl.src = getStoredSampleUrl(feature, sampleIndex)
     }
 
     async function ensureFeatureDetails(featureId: string) {
@@ -250,7 +256,8 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             }
             const token = accessToken || await AuthService.getTokenSilently()
             accessToken = token
-            const result = await nats.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.GET, { token, workspaceId, featureId })
+            const organizationId = organizationStore.getData('organizationId') || undefined
+            const result = await nats.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.GET, { token, workspaceId, organizationId, featureId })
             featureDetails.set(featureId, result?.error ? { error: result.error } : result as Feature)
         } catch (error) {
             console.error('Failed to load feature details:', error)
@@ -269,23 +276,38 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
 
     function renderContent() {
         if (!panelEl) return
-        const listEl = panelEl.querySelector('.media-library-body') as HTMLElement
-        if (!listEl) return
-        listEl.replaceChildren()
+        const browserEl = panelEl.querySelector('.media-library-browser') as HTMLElement
+        const inspectorEl = panelEl.querySelector('.media-library-inspector') as HTMLElement
+        if (!browserEl || !inspectorEl) return
+        browserEl.replaceChildren()
+        inspectorEl.replaceChildren()
+        const showingFeatures = activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES
+        panelEl.classList.toggle('media-library-panel-images', !showingFeatures)
+        panelEl.classList.toggle('media-library-panel-feature-selected', showingFeatures && selectedFeatureId !== null)
         if (isLoading) {
-            listEl.appendChild(html`<div className="media-library-state">Loading ${activeCategory}</div>` as HTMLElement)
+            browserEl.appendChild(html`<div className="media-library-state">Loading ${activeCategory}</div>` as HTMLElement)
             return
         }
         if (errorMessage) {
-            listEl.appendChild(html`<div className="media-library-state media-library-state-error">${errorMessage}</div>` as HTMLElement)
+            browserEl.appendChild(html`<div className="media-library-state media-library-state-error">${errorMessage}</div>` as HTMLElement)
             return
         }
         if (activeCategory === MEDIA_LIBRARY_CATEGORY.IMAGES) {
-            renderImages(listEl)
+            browserEl.appendChild(html`<div className="media-library-browser-intro">
+                <h2>Images</h2>
+                <p>Saved image assets you can add back to the canvas.</p>
+            </div>` as HTMLElement)
+            renderImages(browserEl)
             return
         }
+        browserEl.appendChild(html`<div className="media-library-browser-intro">
+            <h2>Features</h2>
+            <p>Reusable visual properties extracted from images. Select one to inspect its guidance and samples.</p>
+        </div>` as HTMLElement)
         const filtered = getFiltered()
-        if (filtered.length === 0) { listEl.appendChild(html`<div className="media-library-state">No features found.</div>` as HTMLElement); return }
+        if (filtered.length === 0) {
+            browserEl.appendChild(html`<div className="media-library-state">No features found.</div>` as HTMLElement)
+        }
 
         const groups = new Map<string, FeatureMeta[]>()
         for (const feature of filtered) {
@@ -306,7 +328,19 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 itemsEl.hidden = collapsed
             })
             for (const feature of features) itemsEl.appendChild(buildRow(feature))
-            listEl.appendChild(sectionEl)
+            browserEl.appendChild(sectionEl)
+        }
+
+        const selectedFeature = allFeatures.find((feature) => feature.featureId === selectedFeatureId)
+        if (selectedFeature) {
+            inspectorEl.appendChild(buildFeatureInspector(selectedFeature))
+        } else {
+            selectedFeatureId = null
+            panelEl.classList.remove('media-library-panel-feature-selected')
+            inspectorEl.appendChild(html`<div className="feature-library-inspector-empty">
+                <strong>Select a Feature</strong>
+                <span>Full instructions, palette details, samples, and sharing controls appear here.</span>
+            </div>` as HTMLElement)
         }
     }
 
@@ -450,12 +484,74 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         return galleryEl
     }
 
+    async function handleUseFeature(feature: FeatureMeta) {
+        const inserted = onUseFeature?.(feature) ?? false
+        if (!inserted) {
+            try {
+                await navigator.clipboard?.writeText(`/use ${feature.name}`)
+            } catch (clipboardError) {
+                console.warn('Failed to copy feature use command:', clipboardError)
+            }
+        }
+        setFeedback(inserted ? `Added @${feature.name} to the prompt.` : `Copied /use ${feature.name}.`)
+    }
+
+    async function deleteFeature(feature: FeatureMeta) {
+        if (!window.confirm(`Delete "${feature.name}"?`)) return
+        const nats = servicesStore.getData('nats')
+        const token = await AuthService.getTokenSilently()
+        const response = await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.DELETE, { token, workspaceId, featureId: feature.featureId })
+        if (response?.error) {
+            setFeedback(`Could not delete @${feature.name}.`)
+            return
+        }
+        allFeatures = allFeatures.filter((storedFeature) => storedFeature.featureId !== feature.featureId)
+        featureDetails.delete(feature.featureId)
+        if (selectedFeatureId === feature.featureId) selectedFeatureId = null
+        renderContent()
+        setFeedback(`Deleted @${feature.name}.`)
+    }
+
+    async function reportFeature(feature: FeatureMeta) {
+        const nats = servicesStore.getData('nats')
+        const token = await AuthService.getTokenSilently()
+        const response = await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.REPORT_ABUSE, { token, workspaceId, featureId: feature.featureId })
+        setFeedback(response?.error ? `Could not report @${feature.name}.` : `Reported @${feature.name}.`)
+    }
+
+    async function changeFeatureScope(feature: FeatureMeta, selectEl: HTMLSelectElement) {
+        const newScope = selectEl.value as MediaLibraryScope
+        if (newScope === feature.scope) return
+        if (newScope === MEDIA_LIBRARY_SCOPE.PUBLIC && !window.confirm(`Make @${feature.name} public? Anyone will be able to discover and use it.`)) {
+            selectEl.value = feature.scope
+            return
+        }
+        const nats = servicesStore.getData('nats')
+        const token = await AuthService.getTokenSilently()
+        const organizationId = organizationStore.getData('organizationId') || undefined
+        const response = await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.CHANGE_SCOPE, {
+            token,
+            workspaceId,
+            organizationId,
+            featureId: feature.featureId,
+            newScope,
+        })
+        if (!response || response.error) {
+            selectEl.value = feature.scope
+            setFeedback(`Could not change sharing for @${feature.name}.`)
+            return
+        }
+        browseMode = newScope
+        const scopeSelect = panelEl?.querySelector('.media-library-scope-select') as HTMLSelectElement | null
+        if (scopeSelect) scopeSelect.value = newScope
+        setFeedback(`Moved @${feature.name} to ${selectEl.options[selectEl.selectedIndex]?.text ?? newScope}.`)
+        await loadFeatures()
+    }
+
     function buildRow(feature: FeatureMeta): HTMLElement {
-        const isExpanded = selectedFeatureId === feature.featureId
-        const details = featureDetails.get(feature.featureId)
-        if (isExpanded) void ensureFeatureDetails(feature.featureId)
-        const rowEl = html`<div className=${`feature-library-row${isExpanded ? ' feature-library-row-expanded' : ''}`} data=${{ featureId: feature.featureId }} tabindex="0" aria-expanded=${isExpanded ? 'true' : 'false'}>
-            ${feature.sampleZeroKey && accessToken ? html`<img className="feature-library-row-thumb" src=${getSampleUrl(feature)} alt=${`${feature.name} sample`} width="48" height="48" onerror=${(event: Event) => handleSampleImageError(event, feature)} />` : html`<div className="feature-library-row-thumb-placeholder" aria-hidden="true"></div>`}
+        const isSelected = selectedFeatureId === feature.featureId
+        const rowEl = html`<article className=${`feature-library-row${isSelected ? ' feature-library-row-selected' : ''}`} data=${{ featureId: feature.featureId }} tabindex="0" aria-selected=${isSelected ? 'true' : 'false'}>
+            ${feature.sampleZeroKey && accessToken ? html`<img className="feature-library-row-thumb" src=${getSampleUrl(feature)} alt=${`${feature.name} sample`} onerror=${(event: Event) => handleSampleImageError(event, feature)} />` : html`<div className="feature-library-row-thumb-placeholder" aria-hidden="true"></div>`}
             <div className="feature-library-row-info">
                 <div className="feature-library-row-meta">
                     <span className="feature-library-row-category">${feature.category || 'feature'}</span>
@@ -463,107 +559,105 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 </div>
                 <div className="feature-library-row-name">@${feature.name}</div>
                 <div className="feature-library-row-summary">${feature.summary}</div>
-                <div className="feature-library-row-tags"></div>
             </div>
-            <div className="feature-library-row-actions">
-                <button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use</button>
-                ${feature.scope === MEDIA_LIBRARY_SCOPE.PUBLIC ? html`<button type="button" className="feature-library-row-action" data-action="report">Report</button>` : html`<button type="button" className="feature-library-row-action" data-action="delete">Delete</button>`}
-            </div>
-            ${isExpanded ? html`<div className="feature-library-row-details">
-                <div className="feature-library-row-detail-summary">${feature.summary || 'No summary stored.'}</div>
-                <div className="feature-library-row-detail-grid">
-                    <div className="feature-library-row-detail-field"><span>Category</span><strong>${feature.category || 'feature'}</strong></div>
-                    <div className="feature-library-row-detail-field"><span>Scope</span><strong>${feature.scope}</strong></div>
-                    <div className="feature-library-row-detail-field"><span>Feature ID</span><strong>${feature.featureId}</strong></div>
-                </div>
-                <div className="feature-library-row-detail-status">${loadingFeatureDetails.has(feature.featureId) ? 'Loading full feature details' : details && 'error' in details ? details.error : ''}</div>
-                <div className="feature-library-row-palette-mount"></div>
-                <div className="feature-library-row-instructions-mount"></div>
-                <div className="feature-library-row-detail-tags"></div>
-                <div className="feature-library-row-samples-mount"></div>
-            </div>` : null}
-        </div>` as HTMLElement
+            <button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use</button>
+        </article>` as HTMLElement
 
-        if (isExpanded) {
-            const samplesMount = rowEl.querySelector('.feature-library-row-samples-mount') as HTMLElement | null
-            if (samplesMount) samplesMount.appendChild(buildSampleGallery(feature, details))
-        }
-
-        if (isExpanded && isFeatureDetails(details)) {
-            const paletteMount = rowEl.querySelector('.feature-library-row-palette-mount') as HTMLElement | null
-            const instructionsMount = rowEl.querySelector('.feature-library-row-instructions-mount') as HTMLElement | null
-            const colors = getPaletteColors(details)
-            if (paletteMount) {
-                if (colors.length > 0) paletteMount.appendChild(buildPaletteDetails(colors))
-                else if (feature.category === 'color-palette') paletteMount.appendChild(html`<div className="feature-library-row-detail-empty">No structured palette colors saved.</div>` as HTMLElement)
-            }
-            const instructionsPreview = buildInstructionsPreview(details)
-            if (instructionsMount && instructionsPreview) instructionsMount.appendChild(instructionsPreview)
-        }
-
-        const tagsEl = rowEl.querySelector('.feature-library-row-tags') as HTMLElement
-        for (const tag of feature.tags ?? []) {
-            tagsEl.appendChild(html`<span className="feature-library-row-tag">${tag}</span>` as HTMLElement)
-        }
-
-        const detailTagsEl = rowEl.querySelector('.feature-library-row-detail-tags') as HTMLElement | null
-        if (detailTagsEl) {
-            const tags = feature.tags ?? []
-            if (tags.length === 0) detailTagsEl.appendChild(html`<span className="feature-library-row-detail-empty">No tags.</span>` as HTMLElement)
-            for (const tag of tags) {
-                detailTagsEl.appendChild(html`<span className="feature-library-row-tag">${tag}</span>` as HTMLElement)
-            }
-        }
-
-        const toggleDetails = () => {
-            selectedFeatureId = selectedFeatureId === feature.featureId ? null : feature.featureId
+        const selectFeature = () => {
+            selectedFeatureId = feature.featureId
+            void ensureFeatureDetails(feature.featureId)
             renderContent()
         }
-
         rowEl.addEventListener('keydown', (event) => {
             if (event.target instanceof HTMLElement && event.target.closest('[data-action]')) return
             if (event.key !== 'Enter' && event.key !== ' ') return
             event.preventDefault()
-            toggleDetails()
+            selectFeature()
         })
-
-        rowEl.addEventListener('click', async (event) => {
-            const target = event.target as HTMLElement
-            const actionButton = target.closest('[data-action]') as HTMLElement | null
-            if (!actionButton) {
-                if (!target.closest('.feature-library-row-details')) toggleDetails()
+        rowEl.addEventListener('click', (event) => {
+            const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
+            if (action === 'use') {
+                void handleUseFeature(feature)
                 return
             }
-            const action = actionButton.dataset.action
-            if (action === 'use') {
-                const inserted = onUseFeature?.(feature) ?? false
-                if (!inserted) {
-                    try {
-                        await navigator.clipboard?.writeText(`/use ${feature.name}`)
-                    } catch (clipboardError) {
-                        console.warn('Failed to copy feature use command:', clipboardError)
-                    }
-                }
-                setFeedback(inserted ? `Added @${feature.name} to the prompt.` : `Copied /use ${feature.name}.`)
-            }
-            else if (action === 'delete') {
-                if (!window.confirm(`Delete "${feature.name}"?`)) return
-                const nats = servicesStore.getData('nats')
-                const token = await AuthService.getTokenSilently()
-                await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.DELETE, { token, workspaceId, featureId: feature.featureId })
-                allFeatures = allFeatures.filter((storedFeature) => storedFeature.featureId !== feature.featureId)
-                if (selectedFeatureId === feature.featureId) selectedFeatureId = null
-                renderContent()
-                setFeedback(`Deleted @${feature.name}.`)
-            }
-            else if (action === 'report') {
-                const nats = servicesStore.getData('nats')
-                const token = await AuthService.getTokenSilently()
-                await nats?.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.REPORT_ABUSE, { token, workspaceId, featureId: feature.featureId })
-                setFeedback(`Reported @${feature.name}.`)
-            }
+            selectFeature()
         })
         return rowEl
+    }
+
+    function buildFeatureInspector(feature: FeatureMeta): HTMLElement {
+        const details = featureDetails.get(feature.featureId)
+        const isOwner = userStore.getData('userId') === feature.ownerUserId
+        const organizationId = organizationStore.getData('organizationId') || undefined
+        const inspectorEl = html`<article className="feature-library-inspector-card">
+            <div className="feature-library-inspector-nav">
+                <button type="button" className="feature-library-inspector-back">Back</button>
+                <span>Feature details</span>
+            </div>
+            <div className="feature-library-inspector-heading">
+                <div className="feature-library-row-meta">
+                    <span className="feature-library-row-category">${feature.category || 'feature'}</span>
+                    <span className="feature-library-row-scope">${feature.scope}</span>
+                </div>
+                <h2>@${feature.name}</h2>
+                <p>${feature.summary || 'No summary stored.'}</p>
+            </div>
+            <div className="feature-library-inspector-actions">
+                <button type="button" className="feature-library-row-action feature-library-row-action-primary" data-action="use">Use Feature</button>
+                ${isOwner ? html`<button type="button" className="feature-library-row-action" data-action="delete">Delete</button>` : feature.scope === MEDIA_LIBRARY_SCOPE.PUBLIC ? html`<button type="button" className="feature-library-row-action" data-action="report">Report</button>` : null}
+            </div>
+            ${isOwner ? html`<label className="feature-library-inspector-scope">Sharing
+                <select className="feature-library-scope-editor">
+                    <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
+                    <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
+                    ${organizationId ? html`<option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>` : null}
+                    <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
+                </select>
+            </label>` : null}
+            <div className="feature-library-row-detail-grid">
+                <div className="feature-library-row-detail-field"><span>Category</span><strong>${feature.category || 'feature'}</strong></div>
+                <div className="feature-library-row-detail-field"><span>Scope</span><strong>${feature.scope}</strong></div>
+                <div className="feature-library-row-detail-field"><span>Feature ID</span><strong>${feature.featureId}</strong></div>
+            </div>
+            <div className="feature-library-row-detail-status">${loadingFeatureDetails.has(feature.featureId) ? 'Loading full feature details' : details && 'error' in details ? details.error : ''}</div>
+            <div className="feature-library-row-samples-mount"></div>
+            <div className="feature-library-row-palette-mount"></div>
+            <div className="feature-library-row-instructions-mount"></div>
+            <div className="feature-library-row-detail-tags"></div>
+        </article>` as HTMLElement
+
+        inspectorEl.querySelector('.feature-library-inspector-back')!.addEventListener('click', () => {
+            selectedFeatureId = null
+            renderContent()
+        })
+        const scopeEditor = inspectorEl.querySelector('.feature-library-scope-editor') as HTMLSelectElement | null
+        if (scopeEditor) {
+            scopeEditor.value = feature.scope
+            scopeEditor.addEventListener('change', () => void changeFeatureScope(feature, scopeEditor))
+        }
+        inspectorEl.querySelector('.feature-library-inspector-actions')!.addEventListener('click', (event) => {
+            const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
+            if (action === 'use') void handleUseFeature(feature)
+            else if (action === 'delete') void deleteFeature(feature)
+            else if (action === 'report') void reportFeature(feature)
+        })
+
+        const samplesMount = inspectorEl.querySelector('.feature-library-row-samples-mount') as HTMLElement
+        samplesMount.appendChild(buildSampleGallery(feature, details))
+        if (isFeatureDetails(details)) {
+            const colors = getPaletteColors(details)
+            const paletteMount = inspectorEl.querySelector('.feature-library-row-palette-mount') as HTMLElement
+            if (colors.length > 0) paletteMount.appendChild(buildPaletteDetails(colors))
+            else if (feature.category === 'color-palette') paletteMount.appendChild(html`<div className="feature-library-row-detail-empty">No structured palette colors saved.</div>` as HTMLElement)
+            const instructionsPreview = buildInstructionsPreview(details)
+            const instructionsMount = inspectorEl.querySelector('.feature-library-row-instructions-mount') as HTMLElement
+            if (instructionsPreview) instructionsMount.appendChild(instructionsPreview)
+        }
+        const tagsEl = inspectorEl.querySelector('.feature-library-row-detail-tags') as HTMLElement
+        const tags = feature.tags ?? []
+        if (tags.length === 0) tagsEl.appendChild(html`<span className="feature-library-row-detail-empty">No tags.</span>` as HTMLElement)
+        for (const tag of tags) tagsEl.appendChild(html`<span className="feature-library-row-tag">${tag}</span>` as HTMLElement)
+        return inspectorEl
     }
 
     function open() {
@@ -577,20 +671,30 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             <div className="media-library-header">
                 <div className="media-library-header-title-group">
                     <span className="media-library-header-title">Media Library</span>
+                    <span className="media-library-header-subtitle">Features and saved images</span>
                     <span className="media-library-feedback"></span>
                 </div>
-                <input type="text" className="media-library-header-search" placeholder="Search features" />
-                <button type="button" className="media-library-header-close">x</button>
+                <button type="button" className="media-library-header-close" aria-label="Close Media Library">
+                    <span className="media-library-header-close-icon" innerHTML=${xIcon}></span>
+                </button>
             </div>
-            <div className="media-library-category-tabs"></div>
-            <div className="media-library-filter-tabs"></div>
-            <div className="media-library-body"></div>
+            <div className="media-library-controls">
+                <div className="media-library-category-tabs" role="tablist" aria-label="Library content"></div>
+                <label className="media-library-scope-control">
+                    <span>Scope</span>
+                    <select className="media-library-scope-select"></select>
+                </label>
+                <input type="text" className="media-library-header-search" placeholder="Search features" />
+            </div>
+            <div className="media-library-body">
+                <section className="media-library-browser"></section>
+                <aside className="media-library-inspector"></aside>
+            </div>
             <div className="media-library-footer">
                 <button type="button" className="media-library-footer-new-btn">+ Extract new</button>
             </div>
         </div>` as HTMLElement
         panelEl.style.setProperty('--media-library-panel-fraction', String(webUiThemeSettings.mediaLibrary.panelWidthFraction))
-        panelEl.style.setProperty('--media-library-panel-edge-gap', `${webUiThemeSettings.mediaLibrary.edgeGap}px`)
 
         const searchInput = panelEl.querySelector('.media-library-header-search') as HTMLInputElement
         searchInput.addEventListener('input', () => {
@@ -602,10 +706,15 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
 
         const categoryTabsEl = panelEl.querySelector('.media-library-category-tabs') as HTMLElement
         for (const category of [{ key: MEDIA_LIBRARY_CATEGORY.FEATURES, label: 'Features' }, { key: MEDIA_LIBRARY_CATEGORY.IMAGES, label: 'Images' }] as Array<{ key: MediaLibraryCategory; label: string }>) {
-            const btn = html`<button type="button" className=${`media-library-tab${activeCategory === category.key ? ' media-library-tab-active' : ''}`} data=${{ category: category.key }}>${category.label}</button>` as HTMLButtonElement
+            const btn = html`<button type="button" role="tab" aria-selected=${activeCategory === category.key ? 'true' : 'false'} className=${`media-library-tab${activeCategory === category.key ? ' media-library-tab-active' : ''}`} data=${{ category: category.key }}>${category.label}</button>` as HTMLButtonElement
             btn.addEventListener('click', () => {
                 activeCategory = category.key
-                categoryTabsEl.querySelectorAll('.media-library-tab').forEach((el) => el.classList.toggle('media-library-tab-active', (el as HTMLElement).dataset.category === category.key))
+                selectedFeatureId = null
+                categoryTabsEl.querySelectorAll('.media-library-tab').forEach((el) => {
+                    const isActive = (el as HTMLElement).dataset.category === category.key
+                    el.classList.toggle('media-library-tab-active', isActive)
+                    el.setAttribute('aria-selected', String(isActive))
+                })
                 searchInput.placeholder = `Search ${category.label.toLowerCase()}`
                 const footerEl = panelEl?.querySelector('.media-library-footer') as HTMLElement | null
                 if (footerEl) footerEl.hidden = activeCategory !== MEDIA_LIBRARY_CATEGORY.FEATURES
@@ -614,16 +723,16 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             categoryTabsEl.appendChild(btn)
         }
 
-        const filterTabsEl = panelEl.querySelector('.media-library-filter-tabs') as HTMLElement
+        const filterSelectEl = panelEl.querySelector('.media-library-scope-select') as HTMLSelectElement
         for (const filter of [...SCOPES, { key: MEDIA_LIBRARY_BROWSE_ALL, label: 'All available' }] as Array<{ key: MediaLibraryBrowseMode; label: string }>) {
-            const btn = html`<button type="button" className=${`media-library-tab${browseMode === filter.key ? ' media-library-tab-active' : ''}`} data=${{ filter: filter.key }}>${filter.label}</button>` as HTMLButtonElement
-            btn.addEventListener('click', () => {
-                browseMode = filter.key
-                filterTabsEl.querySelectorAll('.media-library-tab').forEach((el) => el.classList.toggle('media-library-tab-active', (el as HTMLElement).dataset.filter === filter.key))
-                void loadActiveCategory()
-            })
-            filterTabsEl.appendChild(btn)
+            filterSelectEl.appendChild(html`<option value=${filter.key}>${filter.label}</option>` as HTMLOptionElement)
         }
+        filterSelectEl.value = browseMode
+        filterSelectEl.addEventListener('change', () => {
+            browseMode = filterSelectEl.value as MediaLibraryBrowseMode
+            selectedFeatureId = null
+            void loadActiveCategory()
+        })
 
         panelEl.querySelector('.media-library-footer-new-btn')!.addEventListener('click', () => {
             const id = crypto.randomUUID?.() ?? `run-${Date.now()}`
@@ -643,6 +752,9 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 renderContent()
             })
             nats?.subscribe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.DELETED, (data: any) => { if (data?.featureId) { allFeatures = allFeatures.filter((f) => f.featureId !== data.featureId); renderContent() } })
+            nats?.subscribe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.FEATURE_SUBJECTS.EVENTS.UPDATED, () => {
+                if (isOpen && activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES) void loadFeatures()
+            })
         }
         if (!hasMediaEventSubscriptions) {
             hasMediaEventSubscriptions = true

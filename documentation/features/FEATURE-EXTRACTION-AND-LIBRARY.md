@@ -418,16 +418,16 @@ This is **server-resolved by ID**, not client-injected text. Three reasons (per 
 
 ## The Media Library panel
 
-**Closed state**: a single Media Library icon in `.workspace-floating-toolbar` in [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte). Svelte invokes the canvas API and imports the stylesheet; panel behavior remains in the vanilla TypeScript canvas layer.
+**Closed state**: an independent Media Library icon above the existing bottom-right zoom indicator in [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte). The icon and zoom indicator independently shift left with AI chat. Svelte invokes the canvas API and imports the stylesheet; panel behavior remains in the vanilla TypeScript canvas layer.
 
 **Open state**:
 
-- The canvas-owned panel opens on the right and uses two-thirds of the workspace pane space available after any AI chat panel and configured gaps. When chat is visible it remains rightmost and the Media Library sits immediately to its left.
+- The canvas-owned panel opens as a full-height right drawer and uses two-thirds of the workspace pane space available after any AI chat panel. When chat is visible it remains rightmost and the Media Library sits immediately to its left; the drawer covers its launcher.
 - The top-level categories are `Features` and `Images`. Documents and videos are not represented in this implementation.
-- Scope filters preserve `Workspace`, `Mine`, `Organization`, and `Public`, with a one-click `All available` aggregate view; the initial scope is the current workspace.
+- A segmented category control and compact `Scope` selector preserve `Workspace`, `Mine`, `Organization`, `Public`, and `All available`; the initial scope is the current workspace.
 - Feature cards continue to use `FEATURE_SUBJECTS` and the dedicated Feature data model. The panel is a UI adapter only; it does not migrate feature records or alter extraction and `/use` behavior.
 - Image cards represent explicit saved copies: `Add to Media Library` on a completed canvas image creates an independent JetStream Object Store object; adding that library item back to the canvas creates a fresh workspace image object and node.
-- Names, summaries, instructions, tags, metadata, and feedback wrap in the browse surface; the panel does not use ellipsis or line clamping.
+- Feature browse cards prioritize identification with a large preview, name, scope, and two-line summary preview. Selecting one opens a separate inspector with complete summary, instructions, tags, palette and sample content; narrow available widths use a focused inspector with Back.
 - The `+ Extract new` action remains available within the `Features` category, and Feature event subscriptions continue to update the Feature view.
 
 **Tech stack**: vanilla TypeScript module attached to `paneEl`, mirroring the existing AI chat floating panel pattern in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts). The active module is [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts), with [`media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss). No new Svelte panel component is introduced.
@@ -496,24 +496,24 @@ We mirror the existing `MAIN + _META + _ACCESS_LIST` triad pattern from [`infras
 
 | Table | PK | SK | Indexes | Purpose |
 |---|---|---|---|---|
-| `FEATURES` | `featureId` | `version` | LSI `updatedAt`; **GSI `byScopeAndOwner` (PK `scope#scopeOwnerId`, SK `updatedAt`)** | Primary feature record. The composite GSI's partition key uses `scope#scopeOwnerId` where `scopeOwnerId` is the workspaceId / userId / organizationId / fixed `'public'` — one GSI covers all four scope queries. |
+| `FEATURES` | `featureId` | `version` | **GSI `byScopeAndOwner` (PK `scope#scopeOwnerId`, SK `updatedAt`)** | Primary feature record. The composite GSI's partition key uses `scope#scopeOwnerId` where `scopeOwnerId` is the workspaceId / userId / organizationId / fixed `'public'` - one GSI covers all four scope queries. |
 | `FEATURES_META` | `featureId` | — | — | Lightweight projection for list rendering (name, category, summary, scope, sample-0 thumbnail key, updatedAt). Avoids fetching full instructions blobs for the library list. |
 | `FEATURES_ACCESS_LIST` | `userId` | `featureId` | — | Explicit per-feature ACL beyond the scope rules (e.g. "share this `workspace`-scoped feature with one specific user outside the workspace"). Mirrors the existing `DOCUMENTS_ACCESS_LIST`. |
-| `EXTRACTION_RUNS` | `extractionRunId` | `workspaceId` | LSI `userId`, LSI `createdAt` | Persists the extraction tab's transcript (ProseMirror JSON) + status + resulting `featureId` + source-context snapshot. Lets us restore the extraction tab UX on reload and supports historical browsing. |
+| `EXTRACTION_RUNS` | `extractionRunId` | `workspaceId` | — | Persists the extraction tab's transcript (ProseMirror JSON) + status + resulting `featureId` + source-context snapshot. Lets us restore the extraction tab UX on reload and supports historical browsing. |
 
 ### NATS Object Store layout (sample images)
 
 We use the existing per-workspace NATS JetStream Object Store buckets — `workspace-{workspaceId}-files`, created on workspace creation in [`workspace-subjects.ts`](../../services/api/src/NATS/subscriptions/workspace-subjects.ts).
 
-Sample images (all three kinds — `source-crop`, `texture-specimen`, `applied-medium-probe`) are stored through the existing [`storeWorkspaceImage`](../../services/api/src/services/image-storage.ts) path in the **originating workspace's bucket** (the workspace where the feature was extracted, regardless of its current scope). `Feature.sampleImages[]` stores the logical sample index plus the `kind` discriminator, the workspace image `fileId`, the `imageUrl`, and (for source crops) the `cropRegion` metadata. `FeatureMeta.sampleZeroUrl` carries the first preview for fast library rendering — for `surface-texture` features that is the deterministic texture-specimen composite; for other visual features it is typically a source-crop with the most representative medium evidence.
+Sample images (all three kinds — `source-crop`, `texture-specimen`, `applied-medium-probe`) initially use the originating workspace's bucket while a feature remains workspace-scoped. `Feature.sampleImages[]` stores the logical sample index plus the `kind` discriminator, the workspace image `fileId`, the `imageUrl`, and (for source crops) the `cropRegion` metadata. When an owner promotes a feature to `user`, `organization`, or `public`, [`feature-sample-storage.ts`](../../services/api/src/services/feature-sample-storage.ts) copies each sample to `user-{ownerUserId}-features` before the scope metadata is committed. This gives promoted features a durable home independent of their extraction workspace.
 
 The full original source images are **never** persisted to `Feature.sampleImages`. They live exclusively in their original canvas image nodes and the workspace image store entries they were uploaded to; the feature record references them only via `sourceContext.sourceImages[].imageUrl` as provenance metadata, not as visual evidence. This ensures that exporting / sharing / promoting a feature never carries the full source frame.
 
 The older `features/{featureId}/sample-{idx}.{ext}` object-key layout is treated as a legacy fallback only. New extractions must validate the generated bytes as PNG or JPEG, store them as workspace image objects, and immediately read the object back by `fileId` before persisting the feature. If any required visual sample cannot be generated, stored, and read back, the extraction fails and no feature is saved.
 
-Cross-scope reads always go through a new ACL-checked API proxy: `GET /api/features/:featureId/samples/:sampleIndex`. The handler verifies the requester's access (via the feature's scope + ACL list), then streams the bytes from the appropriate workspace bucket. This avoids inventing four parallel bucket strategies (per workspace / user / org / public) — features keep their physical home in their birth workspace, and visibility is governed entirely by the feature record's scope + ACL.
+Cross-scope reads always go through the ACL-checked API proxy: `GET /api/features/:featureId/samples/:sampleIndex`. The handler validates the supplied workspace or organization context before applying scope access rules. Workspace Features read from their workspace bucket; broader-scope Features read from durable user-owned Feature storage and fall back to their origin workspace only for promoted records created before migration support existed.
 
-If the originating workspace is later deleted, its features' samples become orphaned. Cleanup policy: when a workspace is deleted, all features whose `sourceContext.sourceWorkspaceId` matches are also deleted unless they've been promoted to `user` / `organization` / `public` scope, in which case the samples are migrated to a new owner bucket (`user-{ownerUserId}-features`) before workspace teardown. This migration is part of Phase 11.
+When an originating workspace is deleted, workspace-scoped Features are deleted with it. The deletion handler scans for promoted Features born in that workspace and ensures their sample bytes exist in `user-{ownerUserId}-features` before removing the workspace Object Store bucket. If preservation fails, workspace deletion aborts rather than losing reusable samples.
 
 ### NATS subjects
 
@@ -968,8 +968,8 @@ The implementation maps onto the following paths. Use this section as an index w
 - [`services/web-ui/src/infographics/workspace/extractionTab.ts`](../../services/web-ui/src/infographics/workspace/extractionTab.ts) — stage-aware timeline rendering one row per streamed `StageTraceEvent`; reasoning panel auto-opens on first chunk; feature card rendering; persisted state restoration.
 - [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts) — right-side Media Library panel; adapts existing Features and manages explicitly saved Images.
 - [`services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) — bubble-menu Ask-AI handler wired to extraction; panel-tabs controller; library-panel toggle wiring.
-- [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) — adds the library-toggle icon to `.workspace-floating-toolbar` (the only Svelte change).
-- [`services/web-ui/src/infographics/workspace/media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss) — Media Library panel + stage timeline styles with full-content wrapping.
+- [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) — adds the independent bottom-right Media Library launcher above the existing standalone zoom indicator.
+- [`services/web-ui/src/infographics/workspace/media-library-panel.scss`](../../services/web-ui/src/infographics/workspace/media-library-panel.scss) — Media Library browser/inspector drawer and stage timeline styles.
 - [`services/web-ui/src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts`](../../services/web-ui/src/components/proseMirror/plugins/slashCommandsMenuPlugin/commandRegistry.ts) — `/use` and `/extract` slash commands.
 
 ---
@@ -1136,13 +1136,14 @@ The existing slash menu plugin already supports filtering, arrow keys, Esc, clic
 **Files**:
 
 - Superseded by `services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts` (vanilla TS, attached to `paneEl`, mirrors existing chat panel styling pattern):
-  - Media Library toggle icon in [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) `.workspace-floating-toolbar`. ARIA label: "Media Library."
-  - Right-side two-thirds layout that shifts left of the AI chat panel.
-  - Header: title, search input, scope tabs, close X.
-  - Body: features grouped by category, each row a feature card with thumbnail, name, summary, scope chip, action buttons.
+  - Independent Media Library toggle icon above the bottom-right zoom indicator in [`services/web-ui/src/components/WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte). ARIA label: "Media Library."
+  - Full-height right-side two-thirds drawer that shifts left of the AI chat panel and covers its launcher while open.
+  - Header and compact control bar: title, segmented `Features` / `Images` mode, `Scope` select, search input, close X.
+  - Body: Features grouped by category as concise cards with large thumbnail, name, two-line summary preview, scope chip, and `Use`; the selected Feature renders all stored details and management controls in a separate inspector.
+  - At narrow available widths, selecting a Feature switches to a focused detail view with a Back action.
   - Footer-right floating button: `+ Extract new`.
   - Live updates via `FEATURE_SUBJECTS.CREATE`/`UPDATE`/`DELETE` NATS broadcasts.
-- SCSS: `services/web-ui/src/infographics/workspace/media-library-panel.scss` for right-side layout, responsive positioning, and non-truncating content.
+- SCSS: `services/web-ui/src/infographics/workspace/media-library-panel.scss` for glass drawer chrome, backed content surfaces, right-side layout, AI-chat positioning, and responsive inspector behavior.
 
 **Tests**: visual QA + scope-tab filter unit tests.
 
@@ -1150,12 +1151,13 @@ The existing slash menu plugin already supports filtering, arrow keys, Esc, clic
 
 **Files**:
 
-- Library card: `Change scope` UI (dropdown with 4 levels + confirmation modal for `public` promotion).
-- Library card: `Report` button on public features → emits `FEATURE_SUBJECTS.REPORT_ABUSE`.
-- API handler: increment `reportCount`, threshold-flip to `'reported'` status when ≥ `REPORT_THRESHOLD`.
-- Modify the `WORKSPACE_SUBJECTS.DELETE_WORKSPACE` handler in [`workspace-subjects.ts`](../../services/api/src/NATS/subscriptions/workspace-subjects.ts): when a workspace is deleted, find all features born in that workspace; for those still scoped to the workspace, delete; for those promoted to user/org/public, migrate samples to a new `user-{ownerUserId}-features` bucket before workspace teardown.
+- The selected Feature inspector exposes an owner-only scope dropdown; moving to `public` requires confirmation.
+- The inspector exposes `Report` on public Features the current user does not own, emitting `FEATURE_SUBJECTS.REPORT_ABUSE`.
+- NATS handlers verify ownership for Feature mutation, derive scope owners from authenticated workspace/organization membership, and preserve public report threshold behavior.
+- [`feature-sample-storage.ts`](../../services/api/src/services/feature-sample-storage.ts) performs copy-before-promotion into `user-{ownerUserId}-features` and supports legacy fallback reads.
+- The `WORKSPACE_SUBJECTS.DELETE_WORKSPACE` handler in [`workspace-subjects.ts`](../../services/api/src/NATS/subscriptions/workspace-subjects.ts) preserves promoted sample sets before workspace storage teardown and aborts if that preservation cannot complete.
 
-**Tests**: report-threshold integration test; workspace-deletion migration test with both workspace-scoped and promoted features.
+**Tests**: Feature NATS authorization and promotion-order tests plus durable sample-copy and legacy fallback tests.
 
 ## Known limitations and trade-offs
 

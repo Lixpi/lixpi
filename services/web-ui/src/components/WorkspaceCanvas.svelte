@@ -22,15 +22,13 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { webUiThemeSettings } from '$src/webUiThemeSettings.ts'
-    import { createNewFileIcon, imageIcon, aiChatBubbleIcon } from '$src/svgIcons/index.ts'
+    import { createNewFileIcon, imageIcon, aiChatBubbleIcon, mediaLibraryIcon } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
-
-    const mediaLibraryIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>'
 
     function handleToggleMediaLibrary() {
         renderer?.toggleMediaLibrary?.()
@@ -391,11 +389,6 @@
     class:workspace-canvas-chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
 >
     <div class="workspace-floating-toolbar">
-        <button class="workspace-floating-toolbar-button" onclick={handleToggleMediaLibrary} aria-label="Media Library">
-            {@html mediaLibraryIcon}
-            <span class="workspace-floating-toolbar-tooltip">Media Library</span>
-        </button>
-        <div class="workspace-floating-toolbar-divider"></div>
         <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument}>
             {@html createNewFileIcon}
             <span class="workspace-floating-toolbar-tooltip">New Document</span>
@@ -455,6 +448,10 @@
             <span class="workspace-floating-toolbar-tooltip">AI Chat</span>
         </button>
     </div>
+    <button class="workspace-media-library-launcher" onclick={handleToggleMediaLibrary} aria-label="Media Library">
+        {@html mediaLibraryIcon}
+        <span class="workspace-media-library-launcher-tooltip">Media Library</span>
+    </button>
     <span class="workspace-zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>
     <div class="workspace-pane" bind:this={paneEl}>
         <div class="workspace-viewport" bind:this={viewportEl}></div>
