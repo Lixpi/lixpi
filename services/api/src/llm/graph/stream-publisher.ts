@@ -32,6 +32,7 @@ export type ChunkPayload = {
         extractionStatus?: string
         extractionDetail?: string
         stageTraceEvent?: StageTraceEvent
+        featureCard?: Record<string, any>
     }
     aiChatThreadId: string
 }
@@ -227,6 +228,19 @@ export class StreamPublisher {
                 status: STREAM_STATUS.STREAMING,
                 aiProvider: this.provider,
                 stageTraceEvent: event,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    // Publishes the extracted feature as structured content. Sent this way (not as JSON
+    // embedded in the token stream) so TagAwareStream's tail buffering can't truncate it.
+    featureCard(payload: Record<string, any>): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.STREAMING,
+                aiProvider: this.provider,
+                featureCard: payload,
             },
             aiChatThreadId: this.aiChatThreadId,
         })
