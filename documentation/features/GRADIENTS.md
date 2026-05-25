@@ -1,17 +1,18 @@
 # Gradient Rendering and Animation System
 
-This document is the source of truth for the web UI gradient ecosystem: freeform bitmap gradients, animated shifting backgrounds, context-region cloud gradients, SVG gradient borders, and the shared easing curves that animate them. Detailed context-region shape, hit testing, and PIXI layer behavior remains in [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
+This document is the source of truth for the web UI gradient ecosystem: freeform bitmap gradients, animated shifting backgrounds, context-region cloud gradients, SVG gradient borders, PIXI generated-image progress outlines, and the shared easing curves that animate them. Detailed context-region shape, hit testing, and PIXI layer behavior remains in [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
 ## System Overview
 
-The gradient system has two rendering families:
+The gradient system has three rendering families:
 
 | Family | Renderer | Output | Consumers |
 |---|---|---|---|
 | Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds, context-region watercolor surface sampling, active thought-circle textures |
-| SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border, generated-image border |
+| SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border |
+| PIXI traveling outline | `PixiTravelingOutlineRenderer` | PIXI `Graphics` track with a colored segment traveling around a rounded perimeter while active | Generated-image progress border and future PIXI outlined progress surfaces |
 
-Animation curves are centralized in `Easing`, while surface-specific lifecycle remains with each consumer. `ShiftingGradientRenderer` owns canvas subscription and phase-transition lifecycle; `pixiContextRegionLayer.ts` owns PIXI texture caching and active-region overlay lifecycle; SVG consumers own their D3 element creation while delegating reusable gradient construction and rotation to `SvgGradientRenderer`.
+Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer. `ShiftingGradientRenderer` owns canvas subscription and phase-transition lifecycle; `pixiContextRegionLayer.ts` owns PIXI texture caching and active-region overlay lifecycle; SVG consumers own their D3 element creation while delegating reusable gradient construction and rotation to `SvgGradientRenderer`; `PixiTravelingOutlineRenderer` owns traveling PIXI outline geometry, paint, and bounded animation lifecycle while consumers provide active bounds and style.
 
 ## Shared Modules
 
@@ -21,11 +22,13 @@ Animation curves are centralized in `Easing`, while surface-specific lifecycle r
 | `FreeformGradientRenderer` | `services/web-ui/src/utils/animations/gradients/freeformGradient.ts` | Color parsing, phase positions, freeform sampling, image-data painting, and canvas bitmap drawing |
 | `ShiftingGradientRenderer` | `services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts` | Singleton-per-color-set canvas renderer, subscriptions, visibility, resize redraws, optional pattern overlays, and animated phase changes |
 | `SvgGradientRenderer` | `services/web-ui/src/utils/animations/gradients/svgGradient.ts` | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
+| `PixiTravelingOutlineRenderer` | `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` | Reusable PIXI rounded track and traveling colored-segment renderer with active-only animation lifecycle |
 
 ### Reuse Rules
 
 - New Canvas or PIXI freeform gradient surfaces should call `FreeformGradientRenderer`; they should not copy the pixel sampling, phase, or swirl algorithm into consumer files.
 - New SVG animated gradient borders should call `SvgGradientRenderer` for stop construction and rotation.
+- New PIXI traveling progress outlines should call `PixiTravelingOutlineRenderer` and supply their own style and active bounds.
 - Runtime JavaScript animations that match existing interaction motion should use `Easing`, not reimplement cubic-bezier calculations.
 - Visual color choices belong in `settings.ts`; renderer classes consume configured colors rather than owning product palettes.
 
@@ -35,7 +38,8 @@ The system intentionally has separate palettes for different visual roles:
 
 | Setting | Purpose | Consumers |
 |---|---|---|
-| `settings.gradient.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, generated-image animated border, document thread border, document context selection |
+| `settings.gradient.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
+| `settings.imageNode.generationBorder.snakeColors` | Bright traveling progress path palette | PIXI generated-image progress outline |
 | `settings.contextRegion.cloud.palettes.surfaceGradient` through `contextRegion.cloud.gradientColors` | Translucent seafoam watercolor surface palette | PIXI context-region cloud surface sampling |
 | `settings.contextRegion.cloud.palettes.activeThoughtCircle` through `contextRegion.cloud.activeThoughtCircleGradientColors` | Soft sage active marker palette | PIXI active context-region detached thought circle |
 
@@ -59,9 +63,13 @@ When active chat context changes, the layer crossfades between adjacent freeform
 
 - `appendLinearGradientStops()` lays out ordinary linear stops for document context selection.
 - `appendRepeatingLinearGradientStops()` creates looping stops for animated borders.
-- `startRotatingLinearGradient()` rotates gradient endpoints for document thread and generated-image borders, defaulting to `Easing.hoverTransition()`.
+- `startRotatingLinearGradient()` rotates gradient endpoints for document thread borders, defaulting to `Easing.hoverTransition()`.
 
 These SVG consumers use `settings.gradient.shiftingColors`; they reuse the palette but do not run the freeform pixel sampler.
+
+### PIXI Generated-Image Progress Outline
+
+`PixiTravelingOutlineRenderer` renders a subdued rounded track and a bright colored segment moving around its perimeter with PIXI `Graphics`. It is not tied to generated images: consumers synchronize arbitrary active outline bounds and style data into it. The workspace media layer uses it for generated-image progress with the blue-to-purple-to-orange palette configured in `settings.imageNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
 
 ### Static CSS Gradient Surfaces
 
@@ -84,6 +92,7 @@ Do not route ordinary CSS background treatments through `FreeformGradientRendere
 |---|---|---|
 | `Easing.hoverTransition()` | `(0.19, 1, 0.22, 1)` | Context-region active thought-circle transition and rotating SVG gradients |
 | `Easing.shiftingGradientTransition()` | `(0.33, 0, 0, 1)` | Freeform phase transition in `ShiftingGradientRenderer` |
+| `Easing.travelingOutlineTransition()` | Smooth periodic pace pulse, `0.6x` to `1.4x` linear speed | PIXI traveling outline motion without a lap-boundary stall |
 
 ## Test Coverage
 
@@ -92,6 +101,7 @@ Do not route ordinary CSS background treatments through `FreeformGradientRendere
 | `services/web-ui/src/utils/animations/easing.test.ts` | Cubic-bezier identity/clamping, valid curve bounds, and shared easing profiles |
 | `services/web-ui/src/utils/animations/gradients/freeformGradient.test.ts` | Colors, phases, sampling, bitmap painting, and context drawing |
 | `services/web-ui/src/utils/animations/gradients/svgGradient.test.ts` | Stop creation, repeated stops, rotating transitions, and shared default easing |
+| `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.test.ts` | Rounded perimeter sampling, default eased travel, and colored segment interpolation |
 | `services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.test.ts` | Singleton lifecycle, animation phase changes, pixels, subscriptions, resize redraw, patterns, and teardown |
 | `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.test.ts` | Active thought-circle-only PIXI integration regression guards |
 
@@ -451,7 +461,7 @@ Edit the `gradient.shiftingColors` array in `settings.ts`:
 shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. The same colors are also used by the image generation animated border in `WorkspaceCanvas.ts` and the document shape borders in `documentThreadShape.ts` / `documentContextSelection.ts`.
+These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; generated-image progress outlines use the separate palette in `settings.imageNode.generationBorder.snakeColors`.
 
 #### Changing Animation Speed
 

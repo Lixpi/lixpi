@@ -101,6 +101,18 @@ export type ImageNodeSettings = {
     selectedBoxShadow: string
     defaultInsertionWidth: number
     borderRadius: number
+    generationBorder: {
+        radius: number
+        trackWidth: number
+        trackColor: string
+        trackAlpha: number
+        snakeWidth: number
+        snakeLengthFraction: number
+        snakeTailAlpha: number
+        snakeSegmentCount: number
+        snakeColors: [string, string, string, string, string]
+        animationDurationMs: number
+    }
     contextRegionChildImageFrameColor: string
     contextRegionChildImageDropShadow: string
     modelBadgeBoxShadow: string
@@ -288,8 +300,23 @@ export const settings: Settings = {
         selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
         // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
         defaultInsertionWidth: 600,
-        // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds both PIXI-rendered stored images and DOM partial previews more strongly.
+        // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
         borderRadius: 8,
+
+        // PIXI-rendered animated outline shown only while an AI-generated image is receiving partials.
+        generationBorder: {
+            radius: 10,
+            trackWidth: 3,
+            trackColor: '#D0D6E1',
+            trackAlpha: 0.72,
+            snakeWidth: 4,
+            snakeLengthFraction: 0.24,
+            snakeTailAlpha: 0.25,
+            snakeSegmentCount: 72,
+            snakeColors: ['#1D57CB', '#2474FF', '#7C4DFF', '#D63FF0', '#FF9933'],
+            animationDurationMs: 3200,
+        },
+
         // Frame color used for image nodes parented inside a context region. Changing it updates the card-like surface around adopted images.
         contextRegionChildImageFrameColor: '#FCFCFA',
         // Drop shadow used by image nodes parented inside a context region. Larger shadows make child images feel more lifted from the cloud.

@@ -2,7 +2,7 @@
 
 A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
-> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Image-node DOM `<img>` elements are interaction chrome and the partial-streaming surface during AI image generation. Stored image nodes leave their DOM `<img>` without `src` so the browser does not double-fetch pixels already owned by PIXI. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
+> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`, and delegates generated-image progress painting to the reusable PIXI `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Canvas image nodes have no DOM `<img>` pixel surface: stored images, generated partials, and their animated in-progress outline are visible only through PIXI. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
 >
 > For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For collision resolution, placement cleanup, drag-release collision rules, and context-region shape-aware collision planning, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md). For the CO2-shaped seafoam context-region cloud system specifically, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
@@ -603,7 +603,7 @@ flowchart LR
     subgraph DOM["DOM (z-index 1)"]
         VP[.workspace-viewport]
         DOCNODES[.workspace-document-node]
-        IMGNODES[.workspace-image-node<br/>img.src empty when PIXI healthy]
+        IMGNODES[.workspace-image-node<br/>DOM interaction shell only]
         THREADNODES[.workspace-ai-chat-thread-node]
         HANDLES[.workspace-handle]
         ED[.document-node-editor]
@@ -613,6 +613,7 @@ flowchart LR
     subgraph PIXI["PIXI v8 (z-index 2)"]
         PML[pixiMediaLayer.sync]
         SPR[Image sprites + colorRect placeholders]
+        GEN[PixiTravelingOutlineRenderer progress paths]
         PEDG[Pixi edge Graphics — diffed]
         FG[Selection outlines, marquee, group overlay]
     end
@@ -642,6 +643,7 @@ flowchart LR
     PM --> ED
     PM --> TED
     PML --> SPR
+    PML --> GEN
     PML --> FG
 ```
 
@@ -1084,7 +1086,7 @@ Multi-turn editing is supported: users can continue refining an image within the
 1. User enables "Image Generation" mode in an AI chat thread's settings
 2. User types a prompt like "Create a logo for a coffee shop"
 3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
-4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with an animated gradient border and a three-dot bounce spinner
+4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with a PIXI-rendered traveling progress border and a three-dot bounce spinner
 5. OpenAI streams back partial images (up to 3) as the generation progresses. The first real partial removes the spinner; subsequent partials update the image progressively
 6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, finalizes the canvas node with full metadata, and updates the edge with `sourceMessageId` so the connector points back to the producing AI response.
 7. The revised prompt text appears inside the AI response message in the chat thread
@@ -1129,7 +1131,7 @@ sequenceDiagram
         LLM->>AIS: IMAGE_PARTIAL { imageUrl: "", partialIndex: 0 }
         AIS->>Thread: Plugin routes to canvas callback
         Thread->>Canvas: onImagePartialToCanvas({ imageUrl: "" })
-        Canvas->>Canvas: Create ImageCanvasNode (transparent 1×1 PNG) + animated D3 gradient border + 3-dot spinner
+        Canvas->>Canvas: Create ImageCanvasNode (transparent 1×1 PNG) + PIXI traveling progress border + 3-dot spinner
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -1196,10 +1198,10 @@ Multi-turn image editing uses a **provider-agnostic approach** by leveraging can
 
 When the AI generates an image:
 
-1. An early `IMAGE_PARTIAL` with an empty `imageUrl` creates the `ImageCanvasNode` placeholder on the canvas (transparent 1×1 PNG, animated gradient border, bounce spinner). Subsequent `IMAGE_PARTIAL` events with real image data update the existing node in place.
+1. An early `IMAGE_PARTIAL` with an empty `imageUrl` creates the `ImageCanvasNode` placeholder on the canvas (transparent 1×1 PNG, PIXI traveling progress border, bounce spinner). Subsequent `IMAGE_PARTIAL` events with real image data update the existing node in place.
 2. The `partialImageTracker` Map records the pending partial SYNCHRONOUSLY before any async work to prevent race conditions with `IMAGE_COMPLETE`
-3. Progressive partial previews update the canvas node's image in real-time via direct DOM updates. The first real partial removes the bounce spinner.
-4. `IMAGE_COMPLETE` removes the animated border and spinner, then finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
+3. Progressive partial previews update the same canvas image node in real-time; `pixiMediaLayer.ts` renders the changing image pixels and synchronizes its progress bounds into `PixiTravelingOutlineRenderer`. The first real partial removes the bounce spinner.
+4. `IMAGE_COMPLETE` clears the active-generation tracker so PIXI removes the animated border only after the final image is received, then finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
 5. A `WorkspaceEdge` connects the thread to the image with `sourceMessageId` identifying the specific `aiResponseMessage` (the response node gets a unique `id` when created by `handleStreamStart`)
 6. Multiple images from the same thread stack vertically using spacing from `settings.imageBranchLineage`
 7. Collision resolution runs after finalization to push apart any overlapping nodes

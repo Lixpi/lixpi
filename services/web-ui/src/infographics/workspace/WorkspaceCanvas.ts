@@ -61,7 +61,6 @@ import { shouldPreserveLiveViewportForViewportOnlyRender } from '$src/infographi
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
-import { SvgGradientRenderer } from '$src/utils/animations/gradients/svgGradient.ts'
 import { settings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
@@ -87,8 +86,6 @@ import {
 } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
-
-import { select } from 'd3-selection'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner | ContextRegionCloudResizeHandle
@@ -263,6 +260,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null
     let nodePointerPanLockNodeId: string | null = null
     let paneNoPanAddedForNodePointer = false
+    const partialImageTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId: string }>()
     // Visibility tracking for lazy loading
     const visibleNodeIds: Set<string> = new Set()
     const loadedNodeIds: Set<string> = new Set()
@@ -358,16 +356,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 commitCanvasState({ ...currentCanvasState, nodes: updatedNodes, edges: updatedEdges })
             },
             onDownloadImage: (nodeId) => {
-                const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
-                const imgEl = nodeEl?.querySelector('img') as HTMLImageElement | null
-                if (imgEl?.src) {
-                    downloadImage(imgEl.src, {
+                const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+                if (!node || node.type !== 'image') return
+
+                void (async () => {
+                    const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+                    const token = await AuthService.getTokenSilently()
+                    const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
+                    const isStoredImage = strippedSrc.startsWith('/api/') || (strippedSrc.startsWith('http') && strippedSrc.includes('/api/images/'))
+                    const resolvedSrc = isStoredImage ? `/api/images/${workspaceId}/${node.fileId}` : strippedSrc
+                    const imageSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token || false)
+                    await downloadImage(imageSrc, {
                         getAuthToken: async () => {
-                            const token = await AuthService.getTokenSilently()
-                            return token || ''
+                            const freshToken = await AuthService.getTokenSilently()
+                            return freshToken || ''
                         }
                     })
-                }
+                })()
             },
             onReplaceImage: (nodeId) => {
                 const input = html`<input type="file" accept="image/*" style=${{ display: 'none' }}></input>` as HTMLInputElement
@@ -394,12 +399,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const data = await response.json()
                     const newSrc = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
 
-                    // Update DOM immediately
-                    const nodeEl = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
-                    const imgEl = nodeEl?.querySelector('img') as HTMLImageElement | null
-                    if (imgEl) imgEl.src = newSrc
-
-                    // Update canvas state
+                    // Update canvas state; the PIXI sprite replaces its texture.
                     if (!currentCanvasState) return
                     const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
                         if (n.nodeId !== nodeId || n.type !== 'image') return n
@@ -798,7 +798,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         contextRegionLayer?.sync(datums)
     }
 
+    function syncPixiGeneratingImageNodes(): void {
+        pixiMediaLayer?.setGeneratingImageNodes(
+            new Set(Array.from(partialImageTracker.values()).map((entry) => entry.nodeId))
+        )
+    }
+
     function syncPixiMediaLayer(canvasState: CanvasState | null = currentCanvasState): void {
+        syncPixiGeneratingImageNodes()
         pixiMediaLayer?.sync(canvasState)
         syncGeneratedImageChrome(canvasState)
     }
@@ -2624,8 +2631,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         createdAt: number
     }
 
-    // Tracks in-progress partial images per thread (threadId → canvas node info)
-    const partialImageTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId: string }>()
     const pendingGeneratedImagePlacements = new Map<string, PendingGeneratedImagePlacement>()
 
     function findSourceThreadNode(threadId: string): ContextRegionNode | undefined {
@@ -2790,8 +2795,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return `data:image/png;base64,${imageUrl}`
     }
 
-    function showImageErrorPlaceholder(imgEl: HTMLImageElement, nodeEl: HTMLElement): void {
-        applyStyle(imgEl, { display: 'none' })
+    function showImageErrorPlaceholder(nodeEl: HTMLElement): void {
         if (nodeEl.querySelector('.image-error-placeholder')) return
 
         nodeEl.appendChild(html`
@@ -2924,16 +2928,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             partialImageTracker.delete(threadId)
             selectedNodeIds.delete(existing.nodeId)
+            syncPixiGeneratingImageNodes()
 
             // Show error placeholder on the node so the user sees what failed,
             // then remove it from the canvas state (and DOM) after a short delay.
             const nodeEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"]`) as HTMLElement | null
             const spinnerEl = nodeEl?.querySelector('.image-generating-spinner')
             if (spinnerEl) spinnerEl.remove()
-            const borderSvg = nodeEl?.querySelector('.image-generating-border')
-            if (borderSvg) borderSvg.remove()
-            const imgEl = nodeEl?.querySelector('img.image-node-img') as HTMLImageElement | null
-            if (nodeEl && imgEl) showImageErrorPlaceholder(imgEl, nodeEl)
+            if (nodeEl) showImageErrorPlaceholder(nodeEl)
 
             const errorNodeId = existing.nodeId
             setTimeout(() => {
@@ -2950,28 +2952,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }, 4000)
         },
 
-        onImagePartialToCanvas: async (data) => {
+        onImagePartialToCanvas: (data) => {
             const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId } = data
 
-            // Check tracker SYNCHRONOUSLY before any await to prevent race with onImageCompleteToCanvas
             const existing = partialImageTracker.get(threadId)
 
             if (existing) {
-                // Subsequent partial — update DOM directly, no canvas state change
-                const token = await AuthService.getTokenSilently()
-                const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-                const imgEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"] img.image-node-img`) as HTMLImageElement | null
-                if (imgEl && imageUrl) {
-                    imgEl.src = buildImageSrc(imageUrl, API_BASE_URL, token)
-                    // Remove the spinner once real image data arrives
+                if (imageUrl && currentCanvasState) {
+                    const imageSrc = buildImageSrc(imageUrl, '', false)
+                    const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
+                        if (node.nodeId !== existing.nodeId) return node
+                        const imageNode = node as ImageCanvasNode
+                        return {
+                            ...imageNode,
+                            fileId: fileId || imageNode.fileId,
+                            workspaceId: imgWorkspaceId || imageNode.workspaceId,
+                            src: imageSrc,
+                        } satisfies ImageCanvasNode
+                    })
+
+                    commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: updatedNodes })
+
                     const spinnerEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"] .image-generating-spinner`)
                     if (spinnerEl) spinnerEl.remove()
                 }
+
                 partialImageTracker.set(threadId, { ...existing, fileId: fileId || existing.fileId })
                 return
             }
 
-            // First partial for this thread — register in tracker IMMEDIATELY before await
             const sourceThread = findSourceThreadNode(threadId)
             if (!sourceThread) return
             const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)
@@ -2980,9 +2989,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const nodeId = `node-${fileId || uuidv4()}`
             partialImageTracker.set(threadId, { nodeId, fileId: fileId || '', sourceNodeId: sourceNode.nodeId })
 
-            const token = await AuthService.getTokenSilently()
-            const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-            const imageSrc = buildImageSrc(imageUrl, API_BASE_URL, token)
+            const imageSrc = buildImageSrc(imageUrl, '', false)
 
             const imageWidth = getGeneratedImageInsertionSize()
             const imageHeight = imageWidth
@@ -3024,15 +3031,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             appendImageNodeToDOM(imageNode)
         },
 
-        onImageCompleteToCanvas: async (data) => {
+        onImageCompleteToCanvas: (data) => {
             const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, imageModelProvider, responseMessageId } = data
 
-            // Read tracker SYNCHRONOUSLY before any await
             const partial = partialImageTracker.get(threadId)
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-            const token = await AuthService.getTokenSilently()
-            const imageSrc = buildImageSrc(imageUrl, API_BASE_URL, token)
+            const imageSrc = buildImageSrc(imageUrl, '', false)
 
             if (partial) {
                 const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
@@ -3070,9 +3074,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 partialImageTracker.delete(threadId)
                 pendingGeneratedImagePlacements.delete(threadId)
 
-                // Remove the animated generating border and spinner
-                const borderSvg = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-border`)
-                if (borderSvg) borderSvg.remove()
+                // PIXI removes the progress border when the tracker is cleared and this state commits.
                 const spinnerEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-spinner`)
                 if (spinnerEl) spinnerEl.remove()
                 const collisionExclusions = new Set<string>()
@@ -3102,10 +3104,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     nodes: resolvedNodes,
                     edges,
                 })
-
-                // Update the existing DOM image src directly
-                const imgEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] img.image-node-img`) as HTMLImageElement | null
-                if (imgEl) imgEl.src = imageSrc
 
             } else {
                 // No partial existed — IMAGE_COMPLETE without prior IMAGE_PARTIAL.
@@ -4097,9 +4095,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const isImageNode = node?.type === 'image'
         const isContextRegionResize = isContextRegionNodeElement(nodeEl)
 
-        // PIXI owns image pixels; the hidden DOM <img> can finish loading after
-        // workspace switches, so do not derive resize behavior from DOM natural
-        // dimensions. Use the persisted canvas-node aspect ratio instead.
+        // PIXI owns image pixels, so resize behavior uses the persisted
+        // canvas-node aspect ratio instead of a rendered surface.
         let aspectRatio: number | null = null
         if (isImageNode) {
             aspectRatio = node.aspectRatio || null
@@ -4389,67 +4386,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncContextRegionImageFrame(nodeEl, node)
         dragOverlay.className = 'image-drag-overlay nopan'
 
-        // Create the img element - fills the container
-        const imgEl = html`<img className="image-node-img" alt="" draggable="false"></img>` as HTMLImageElement
-
-        // For data: URLs (streaming partials) and external URLs, use node.src
-        // directly. For NATS-stored images, build a canonical path from the
-        // current workspaceId (kept in sync by render()) to avoid stale refs.
-        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-        const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
-        const isStoredImage = strippedSrc.startsWith('/api/') || (strippedSrc.startsWith('http') && strippedSrc.includes('/api/images/'))
-        const resolvedSrc = isStoredImage
-            ? `/api/images/${workspaceId}/${node.fileId}`
-            : strippedSrc
-
-        let retried = false
-        const assignSrc = async () => {
-            try {
-                const token = await AuthService.getTokenSilently()
-                imgEl.src = buildImageSrc(resolvedSrc, API_BASE_URL, token)
-            } catch {
-                showImageErrorPlaceholder(imgEl, nodeEl)
-            }
-        }
-
-        // Stored images are rendered by PIXI. Setting `<img>.src` here would
-        // double-fetch every image: once for the hidden DOM `<img>` and once for
-        // the PIXI worker. Data URLs and external URLs still load directly because
-        // PIXI only owns stored canvas images.
-        if (!isStoredImage) {
-            void assignSrc()
-        }
-
-        imgEl.onerror = async () => {
-            if (!retried) {
-                retried = true
-                try {
-                    const token = await AuthService.getTokenSilently()
-                    if (token) {
-                        const freshSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token)
-                        if (imgEl.src !== freshSrc) {
-                            imgEl.src = freshSrc
-                            return
-                        }
-                    }
-                    showImageErrorPlaceholder(imgEl, nodeEl)
-                } catch {
-                    showImageErrorPlaceholder(imgEl, nodeEl)
-                }
-            } else {
-                showImageErrorPlaceholder(imgEl, nodeEl)
-            }
-        }
-
-        // PIXI owns image pixels. The hidden DOM <img> exists as part of the
-        // image-node DOM structure for interaction chrome; it must never mutate
-        // canvas state after async load, especially across workspace switches.
-        imgEl.onload = () => {
-            return
-        }
-
-        nodeEl.appendChild(imgEl)
-
         // Check if this image is currently generating
         const isGenerating = Array.from(partialImageTracker.values()).some(p => p.nodeId === node.nodeId)
 
@@ -4487,44 +4423,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             spinnerContainer.appendChild(dotsWrapper)
             nodeEl.appendChild(spinnerContainer)
 
-            const gradientId = `img-grad-${node.nodeId}`
-
-            // Create an SVG overlay that covers the image node
-            const svg = select(nodeEl).append('svg')
-                .attr('class', 'image-generating-border')
-                .style('position', 'absolute')
-                .style('top', '0')
-                .style('left', '0')
-                .style('width', '100%')
-                .style('height', '100%')
-                .style('pointer-events', 'none')
-                .style('border-radius', 'inherit')
-                .style('z-index', '10')
-
-            const defs = svg.append('defs')
-            const gradient = defs.append('linearGradient')
-                .attr('id', gradientId)
-                .attr('gradientUnits', 'objectBoundingBox')
-                .attr('x1', '0').attr('y1', '0.5')
-                .attr('x2', '1').attr('y2', '0.5')
-
-            SvgGradientRenderer.appendRepeatingLinearGradientStops(gradient, settings.gradient.shiftingColors)
-
-            // Draw the border rectangle
-            svg.append('rect')
-                .attr('width', '100%')
-                .attr('height', '100%')
-                .attr('rx', 6) // Match image node's border radius
-                .attr('ry', 6)
-                .attr('fill', 'none')
-                .attr('stroke', `url(#${gradientId})`)
-                .attr('stroke-width', 4)
-
-            SvgGradientRenderer.startRotatingLinearGradient(gradient, {
-                center: { x: 0.5, y: 0.5 },
-                radius: 0.707, // sqrt(0.5^2 + 0.5^2) to cover corners
-                duration: 50,
-            })
         }
 
         return nodeEl

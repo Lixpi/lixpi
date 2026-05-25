@@ -32,6 +32,10 @@ import {
     type WorldPosition,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
+import {
+    PixiTravelingOutlineRenderer,
+    type PixiTravelingOutlineDatum,
+} from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
 import { settings } from '$src/settings.ts'
 
 type PixiImageEntry = {
@@ -83,6 +87,7 @@ type SelectionOverlayOptions = {
 
 export type PixiMediaLayer = {
     sync: (canvasState: CanvasState | null) => void
+    setGeneratingImageNodes: (nodeIds: Set<string>) => void
     setViewport: (viewport: CanvasViewport) => void
     setNodeLiveTransform: (
         nodeId: string,
@@ -179,17 +184,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     const app = new Application()
     const world = new Container({ label: 'workspace-pixi-media-world' })
+    const imageLayer = new Container({ label: 'workspace-pixi-images' })
+    const generatingBorderLayer = new Container({ label: 'workspace-pixi-generating-borders' })
     const fgLayer = new Container({ label: 'workspace-pixi-fg' })
     const edgeLayer = new Container({ label: 'workspace-pixi-edges' })
     const entries = new Map<string, PixiImageEntry>()
+    let generatingImageNodeIds = new Set<string>()
     let edgeRenderer: PixiEdgeRenderer | null = null
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
-    const pixiOwnedNodeIds = new Set<string>()
-    // Cached element refs keyed by nodeId. A single querySelectorAll on every
-    // sync is dramatically cheaper than per-node querySelector(`[data-node-id]`)
-    // calls during upsert.
-    const nodeElCache = new Map<string, HTMLElement>()
     let textureBytes = 0
     let textureClock = 0
     let destroyed = false
@@ -204,6 +207,23 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
+    const generationBorder = settings.imageNode.generationBorder
+    const generatingBorderRenderer = new PixiTravelingOutlineRenderer({
+        container: generatingBorderLayer,
+        style: {
+            radius: generationBorder.radius,
+            trackWidth: generationBorder.trackWidth,
+            trackColor: generationBorder.trackColor,
+            trackAlpha: generationBorder.trackAlpha,
+            segmentWidth: generationBorder.snakeWidth,
+            segmentLengthFraction: generationBorder.snakeLengthFraction,
+            segmentTailAlpha: generationBorder.snakeTailAlpha,
+            segmentCount: generationBorder.snakeSegmentCount,
+            segmentColors: generationBorder.snakeColors,
+            durationMs: generationBorder.animationDurationMs,
+        },
+        onFrame: scheduleRender,
+    })
 
     function setHealth(next: PixiRendererHealth): void {
         if (health === next) return
@@ -246,6 +266,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
             app.stage.addChild(edgeLayer)
             app.stage.addChild(world)
+            world.addChild(imageLayer)
+            world.addChild(generatingBorderLayer)
             world.addChild(fgLayer)
             edgeRenderer = createPixiEdgeRenderer(edgeLayer)
             edgeRenderer.render(latestPixiEdges, currentViewport)
@@ -298,38 +320,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         })
     }
 
-    function refreshNodeElCache(): void {
-        nodeElCache.clear()
-        const all = viewportEl.querySelectorAll<HTMLElement>('[data-node-id]')
-        for (const el of all) {
-            const id = el.dataset.nodeId
-            if (id) nodeElCache.set(id, el)
-        }
-    }
-
-    function getNodeEl(nodeId: string): HTMLElement | null {
-        const cached = nodeElCache.get(nodeId)
-        if (cached && cached.isConnected) return cached
-        // Fall back to a one-shot query if the cache is stale (e.g. a node
-        // was just appended after the most recent sync).
-        const el = viewportEl.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
-        if (el) nodeElCache.set(nodeId, el)
-        return el
-    }
-
-    function setPixiOwnedClass(nodeId: string, owned: boolean): void {
-        const el = getNodeEl(nodeId)
-        if (!el) return
-        el.classList.toggle('workspace-image-node-pixi-owned', owned)
-    }
-
     function sync(canvasState: CanvasState | null): void {
         lastState = canvasState
-        // Refresh DOM element cache once per sync. All subsequent per-node
-        // calls (setDomOwnership, etc.) read from the cache rather than
-        // querying the DOM.
-        refreshNodeElCache()
-        syncDomOwnership(canvasState)
         if (!canvasState || health !== 'ready' || destroyed) return
 
         // On workspace switch the external setViewport call arrives after sync.
@@ -349,13 +341,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
         for (const [nodeId, entry] of entries) {
             if (!activeIds.has(nodeId)) {
-                setDomOwnership(nodeId, false)
                 releaseTexture(entry.textureKey)
                 // Remove from spatial index before destroying the entry.
                 spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
-                world.removeChild(entry.sprite)
-                world.removeChild(entry.spriteMask)
-                world.removeChild(entry.colorRect)
+                imageLayer.removeChild(entry.sprite)
+                imageLayer.removeChild(entry.spriteMask)
+                imageLayer.removeChild(entry.colorRect)
                 entry.sprite.mask = null
                 entry.sprite.destroy()
                 entry.spriteMask.destroy()
@@ -365,6 +356,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
 
         upsertAllEntries(canvasState)
+        syncGeneratingImageBorders()
         // Single visibility pass loads textures for visible entries only.
         updateVisibleImages()
         schedulePrefetch()
@@ -439,46 +431,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entry.colorRectH = h
         }
 
+        generatingBorderRenderer.updateGeometry(nodeId, { x, y, width: w, height: h })
+
         spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
         const newRect: IndexedImage = { minX: x, minY: y, maxX: x + w, maxY: y + h, nodeId }
         entry.worldRect = newRect
         spatialIndex.insert(newRect)
 
         scheduleRender()
-    }
-
-    function syncDomOwnership(canvasState: CanvasState | null): void {
-        const nextImageNodeIds = new Set<string>(
-            canvasState?.nodes
-                .filter((node: CanvasState['nodes'][number]): node is ImageCanvasNode => node.type === 'image')
-                .map((node: ImageCanvasNode) => node.nodeId) ?? []
-        )
-
-        for (const nodeId of pixiOwnedNodeIds) {
-            if (!nextImageNodeIds.has(nodeId)) {
-                setDomOwnership(nodeId, false)
-            }
-        }
-
-        for (const nodeId of nextImageNodeIds) {
-            setDomOwnership(nodeId, true)
-        }
-    }
-
-    function setDomOwnership(nodeId: string, owned: boolean): void {
-        setPixiOwnedClass(nodeId, owned)
-        if (owned) {
-            pixiOwnedNodeIds.add(nodeId)
-        } else {
-            pixiOwnedNodeIds.delete(nodeId)
-        }
-    }
-
-    function releaseAllDomOwnership(): void {
-        for (const nodeId of pixiOwnedNodeIds) {
-            setPixiOwnedClass(nodeId, false)
-        }
-        pixiOwnedNodeIds.clear()
     }
 
     function makeSourceKey(node: ImageCanvasNode): string {
@@ -520,9 +480,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             const colorRect = new Graphics()
             colorRect.label = `pixi-image-color-${node.nodeId}`
             colorRect.eventMode = 'none'
-            world.addChild(sprite)
-            world.addChild(spriteMask)
-            world.addChild(colorRect)
+            imageLayer.addChild(sprite)
+            imageLayer.addChild(spriteMask)
+            imageLayer.addChild(colorRect)
             const rect = makeIndexedImage(node, worldPosition)
             entry = {
                 sprite,
@@ -544,8 +504,6 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             }
             entries.set(node.nodeId, entry)
             spatialIndex.insert(rect)
-            // DOM ownership is new — always set.
-            setDomOwnership(node.nodeId, true)
         } else if (entry.sourceKey !== newSourceKey) {
             // Source image replaced. Drop loaded state; next visibility pass refetches.
             if (entry.textureKey) releaseTexture(entry.textureKey)
@@ -588,10 +546,6 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             spatialIndex.insert(newRect)
         }
 
-        // DOM ownership — skip classList.toggle when already in the right state.
-        if (!pixiOwnedNodeIds.has(node.nodeId)) {
-            setDomOwnership(node.nodeId, true)
-        }
         // IMPORTANT: do NOT trigger texture loading here. Texture loading is
         // driven by visibility (updateVisibleImages / ensureTextureForEntry).
     }
@@ -600,6 +554,30 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         rect.clear()
         rect.roundRect(0, 0, width, height, getImageBorderRadius(width, height))
         rect.fill({ color: 0xe7eaee, alpha: 0.85 })
+    }
+
+    function syncGeneratingImageBorders(): void {
+        const datums: PixiTravelingOutlineDatum[] = []
+        for (const nodeId of generatingImageNodeIds) {
+            const imageEntry = entries.get(nodeId)
+            if (!imageEntry) continue
+            datums.push({
+                id: nodeId,
+                x: imageEntry.worldRect.minX,
+                y: imageEntry.worldRect.minY,
+                width: imageEntry.nodeRef.dimensions.width,
+                height: imageEntry.nodeRef.dimensions.height,
+                visible: imageEntry.isVisible,
+            })
+        }
+        generatingBorderRenderer.sync(datums)
+    }
+
+    function setGeneratingImageNodes(nodeIds: Set<string>): void {
+        generatingImageNodeIds = new Set(nodeIds)
+        if (destroyed || health !== 'ready') return
+        syncGeneratingImageBorders()
+        scheduleRender()
     }
 
     // Idempotent texture-quality guarantor. Ensures the entry has at least
@@ -856,6 +834,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             if (isVisible !== entry.isVisible) {
                 entry.sprite.renderable = isVisible
                 entry.colorRect.renderable = isVisible
+                generatingBorderRenderer.setVisible(nodeId, isVisible)
                 entry.isVisible = isVisible
             }
             // Only fetch/upload textures for sprites that are actually on
@@ -987,17 +966,16 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             cancelAnimationFrame(visibilityRaf)
             visibilityRaf = null
         }
-        for (const [nodeId, entry] of entries) {
-            setDomOwnership(nodeId, false)
+        generatingBorderRenderer.destroy()
+        generatingImageNodeIds.clear()
+        for (const [, entry] of entries) {
             releaseTexture(entry.textureKey)
             entry.sprite.mask = null
             entry.sprite.destroy()
             entry.spriteMask.destroy()
             entry.colorRect.destroy()
         }
-        releaseAllDomOwnership()
         entries.clear()
-        nodeElCache.clear()
         marqueeGraphics?.destroy()
         marqueeGraphics = null
         groupOverlayGraphics?.destroy()
@@ -1018,6 +996,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     return {
         sync,
+        setGeneratingImageNodes,
         setViewport,
         setNodeLiveTransform,
         setSelectedImageNodes,

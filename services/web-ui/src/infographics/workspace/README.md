@@ -81,7 +81,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - **Floating panel resize** — the canvas-owned AI chat panel reuses the same full-height outer rail on its left edge as the horizontal resize target. Dragging that rail changes `--workspace-ai-chat-sidebar-width`, keeping the panel right edge fixed and preserving the zoom indicator offset
 - The horizontal offset from the node edge is configurable via `settings.aiChatThread.rail.offset` (default `-2px`), and the invisible resize/drag grab area uses `settings.aiChatThread.rail.dragGrabWidth` (default `20px`). Negative offsets move the rail inside the node boundary; the rail is rendered at z-index 9990 (above all nodes, below floating inputs) to ensure it stays visible regardless of node layering.
 - **AI-generated images** appear as independent canvas nodes positioned to the right of the source thread, source context-region cloud bounds, or previous image in the branch lineage, with generous canvas-space breathing room. New region-rooted branch rows are placed below the previous region-rooted branch using `settings.imageBranchLineage.branchToBranchGap`, while descendants in the same lineage continue horizontally using `imageToImageGap`. Their insertion dimensions are fixed canvas units regardless of the current zoom, so generated outputs arrive at the same logical size as a 100% zoom insertion. Generated outputs are connected by an edge with `sourceMessageId` tracking which `aiResponseMessage` produced the image, stay freely draggable, and are not adopted into context regions during drag release.
-- Progressive partial previews update the canvas node in real-time during generation, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
+- Progressive partial previews update the same PIXI-backed canvas image node in real-time during generation, including across changing provider preview indices, and the finalized response inserts the revised prompt plus a small `aiGeneratedImage` thumbnail that references the same stored image (`imageUrl`, `fileId`, and `workspaceId`) as the canvas node.
 - Generated image provider badges and the image-generation info button render in a transformed chrome layer above PIXI. The info button opens a full-image-width block below the image that reconstructs the original user prompt plus the producing AI response's image-generation details from the persisted chat thread, using the same chat message shells and trace details renderer as chat history. The canvas provenance block expands to its full content height; it does not crop long prompts or reference metadata.
 - Drag membership is planned by `workspaceDragPlan.ts`, so context-region drags move only the region and real `parentId` descendants. Generated-image adoption rules live in `workspaceImageNodePlan.ts`, which keeps generated outputs independent unless a future interaction model explicitly makes them real region children.
 - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active AI chat panel emits a stale metadata render while a local drag commit is still waiting for store acknowledgement, the canvas preserves the locally committed node and edge positions until the store acknowledges the visual state.
@@ -205,13 +205,9 @@ Image nodes have a simpler structure:
 
 ```
 ┌─────────────────────────────────────────┐
-│  img.image-node-img                     │
-│   ─ no src for stored images            │
-│   ─ opacity:0 via .pixi-owned class     │
 │  .image-drag-overlay                    │
 │   (covers entire image for dragging)    │
 │  .image-generating-spinner (during gen) │
-│  .image-generating-border (during gen)  │
 └─────────────────────────────────────────┘
   ↖ resize     resize ↗
   handle       handle
@@ -222,7 +218,7 @@ Image nodes have a simpler structure:
 
 Generated-image provider badges, info buttons, and expanded provenance panels do not live inside the image node shell. They render in `.workspace-image-chrome-viewport`, above the PIXI media layer, so stored image sprites cannot cover them.
 
-The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). The DOM `<img>` is the partial-streaming surface during AI image generation; once the image is committed to canvas state, PIXI owns the stored image pixels and the DOM `<img>` remains hidden via the `workspace-image-node-pixi-owned` class. Image corner rounding is configured through `settings.imageNode.borderRadius` and applied to both DOM partial previews and the PIXI sprite mask for stored images.
+The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the image sprite. Image corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask.
 
 New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 
@@ -246,11 +242,11 @@ When an AI-generated image is being created, the canvas provides visual feedback
 
 1. **Candidate snapshot** — On submit with an image model selected, the browser builds an `ImageBranchCandidateSnapshot` from context-region images, generated image nodes, lineage metadata, and thread transcript labels. If exactly one image node in the active thread context is selected, the snapshot marks it as `active-target` and records `activeTargetNodeId` so purely deictic prompts can continue the selected lineage. The selected image is not sorted ahead of other candidates; the API VLM must still inspect all candidate pixels and let explicit subject text like "that man" or "that goat" override a conflicting selection. This snapshot is non-authoritative; it only gives the API VLM candidates to inspect.
 2. **VLM branch resolution** — The API emits `IMAGE_BRANCH_RESOLVED` before image partials. `WorkspaceCanvas.ts` stores that result and uses it for generated-image placement, parent edge selection, and `generatedBy` lineage metadata. When the API identifies an existing generated candidate as the target/identity reference, placement follows that generated node and preserves its branch id even if the requested color palette or medium changes. `IMAGE_BRANCH_RESOLUTION_ERROR` clears pending placement and stops the generation path visibly.
-3. **Early placeholder** — The backend emits an `IMAGE_PARTIAL` with an empty `imageUrl` as soon as OpenAI's `response.output_item.added` event fires (before any pixel data arrives). `buildImageSrc` converts the empty URL to a transparent 1×1 PNG data URI so the `<img>` element has a valid source.
-4. **Animated gradient border** — An SVG `linearGradient` border (`.image-generating-border`) is added around the image node using D3 (`d3-selection`). The gradient rotates continuously through the four colors from `settings.gradient.shiftingColors`, matching the `documentShape` animated border style.
+3. **Early placeholder** — The backend emits an `IMAGE_PARTIAL` with an empty `imageUrl` as soon as OpenAI's `response.output_item.added` event fires (before any pixel data arrives). `buildImageSrc` converts the empty URL to a transparent 1×1 PNG data URI for the generated canvas node.
+4. **Animated progress border** — `pixiMediaLayer.ts` feeds active generated-image bounds to the shared `PixiTravelingOutlineRenderer`, which draws a PIXI `Graphics` track with a colored snake segment traveling around the rounded image perimeter while the image remains in `partialImageTracker`. Motion follows the loop-safe `Easing.travelingOutlineTransition()` curve; track, snake palette, length, width, and lap duration are configured through `settings.imageNode.generationBorder`.
 5. **Bounce spinner** — A three-dot bounce animation (`.image-generating-spinner`) appears centered over the image while waiting for the first real partial. The spinner uses inline styles and an injected `@keyframes img-dot-bounce` so it works without external SCSS.
-6. **First real partial** — When `onImagePartialToCanvas` receives a non-empty `imageUrl`, the spinner is removed and the image begins updating progressively.
-7. **Completion** — `onImageCompleteToCanvas` removes both `.image-generating-border` and `.image-generating-spinner` from the image node.
+6. **First real partial** — When `onImagePartialToCanvas` receives a non-empty `imageUrl`, it commits the updated canvas image node for PIXI to render, removes the spinner, and continues replacing that node for later partials.
+7. **Completion** — `onImageCompleteToCanvas` clears the tracker only after the final image arrives, which removes the PIXI progress outline and the DOM spinner.
 
 ### Image Lifecycle
 
@@ -425,8 +421,9 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 |------|---------|
 | `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration, and PIXI media/context-region layer wiring |
 | `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, PIXI edge data feed, cached path hit-testing, bubble-menu anchoring, selection/deletion |
-| `pixiMediaLayer.ts` | PIXI v8 media layer for image pixels: sprite registry, texture cache, LoD-tier loader, RBush-based visibility scanner, idle prefetch scheduler, mipmap config |
+| `pixiMediaLayer.ts` | PIXI v8 media layer for image pixels and generated-image progress-outline synchronization: sprite registry, texture cache, LoD-tier loader, RBush-based visibility scanner, idle prefetch scheduler, mipmap config |
 | `pixiMediaLayerLogic.ts` | Pure helpers used by the PIXI layer: tier ranking (`tierRank`), world-position math, source URL building, LoD `?size=` injection, world-rect computation |
+| `../../utils/animations/gradients/pixiTravelingOutlineRenderer.ts` | Reusable PIXI traveling outline renderer: rounded-perimeter sampling, track/segment paint, easing, active-only rAF lifecycle |
 | `pixiImageDecoder.ts` | Six-worker decode pool. Round-robin dispatch with per-worker request tracking so a single worker crash does not nuke all in-flight requests |
 | `pixiImageDecodeWorker.ts` | Web Worker body: `fetch` → `createImageBitmap` → transfer the bitmap back to the main thread |
 | `rendering/contextRegionClouds.ts` | Pure context-region cloud helpers: style selection, CO2 SVG-mask hit geometry, title hit zones, point hit-testing, drag-adoption scoring |
@@ -434,7 +431,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `rendering/pixiEdgeRenderer.ts` | Diffed PIXI edge renderer: reuses `Graphics` objects across renders; only repaints when an edge's path/colour/arrow fingerprint changes |
 | `rendering/viewportBridge.ts` | Single call site that applies a viewport change to the DOM CSS transform, PIXI media world, and PIXI context-region world |
 | `rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio). Image nodes are handled directly by `pixiMediaLayer`; the registry exists so video/audio handlers can plug in without touching the core |
-| `workspace-canvas.scss` | All styles for canvas, nodes, handles, edges, editors, the `workspace-image-node-pixi-owned` opacity rule, and the transparent context-region proxy |
+| `workspace-canvas.scss` | All styles for canvas, DOM interaction nodes, handles, edges, editors, and the transparent context-region proxy |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
 | `imagePositioning.ts` | Computes viewport-normalized insertion dimensions and generated image placement positions next to source threads |
@@ -460,12 +457,9 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.image-drag-overlay` | Full-area overlay for dragging images |
 | `.document-node-editor` | ProseMirror container for documents |
 | `.ai-chat-thread-node-editor` | ProseMirror container for AI chat threads |
-| `.image-node-img` | The DOM `<img>` element used for partial-streaming during AI image generation; stored image nodes keep it source-less so PIXI is the only stored-image pixel renderer |
-| `.workspace-image-node-pixi-owned` | Class added by `pixiMediaLayer` while PIXI is rendering this image. Sets `opacity: 0` on `.image-node-img` so the PIXI sprite is the only visible surface |
 | `.workspace-image-node-context-region-child` | Image node contained by a context region, with the region-only off-white frame |
 | `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
 | `.workspace-thread-rail-line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
-| `.image-generating-border` | SVG animated gradient border shown during image generation |
 | `.image-generating-spinner` | Three-dot bounce spinner shown before first partial image arrives |
 | `.workspace-generated-image-chrome` | Per-generated-image chrome container positioned below the image node at the exact image-node width |
 | `.image-model-badge` | Large circular image-provider icon badge for generated images |
