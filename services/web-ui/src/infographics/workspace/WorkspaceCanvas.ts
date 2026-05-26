@@ -41,7 +41,9 @@ import { getCanvasChromeZoomMultiplier, getResizeHandleScaledSizes } from '$src/
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import {
+    computeLineageContinuationPositionToRightOfRect,
     computeNextBranchRowPositionToRightOfRect,
+    computeVerticallyCenteredY,
     computeViewportCenterInsertionPosition,
 } from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
@@ -840,14 +842,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const heightChanged = Math.abs(imageNode.dimensions.height - fittedDimensions.height) > 0.5
         if (!aspectChanged && !widthChanged && !heightChanged) return
 
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const worldPosition = getNodeWorldPosition(imageNode, nodesById)
         const positionOffset = {
             x: (imageNode.dimensions.width - fittedDimensions.width) / 2,
             y: (imageNode.dimensions.height - fittedDimensions.height) / 2,
         }
-        const nextPosition = {
-            x: imageNode.position.x + positionOffset.x,
-            y: imageNode.position.y + positionOffset.y,
+        const lineageAnchorRect = getGeneratedImageLineageAnchorRect(imageNode, currentCanvasState.nodes, currentCanvasState.edges)
+        const nextWorldPosition = {
+            x: worldPosition.x + positionOffset.x,
+            y: lineageAnchorRect
+                ? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)
+                : worldPosition.y + positionOffset.y,
         }
+        const nextPosition = imageNode.parentId
+            ? toParentRelativePosition(nextWorldPosition, imageNode.parentId, nodesById)
+            : nextWorldPosition
 
         const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
             if (node.nodeId !== imageNode.nodeId) return node
@@ -859,13 +869,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         })
 
-        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
-        const worldPosition = getNodeWorldPosition(imageNode, nodesById)
         const nodeEl = viewportEl?.querySelector(`[data-node-id="${imageNode.nodeId}"]`) as HTMLElement | null
         if (nodeEl) {
             applyStyle(nodeEl, {
-                left: `${worldPosition.x + positionOffset.x}px`,
-                top: `${worldPosition.y + positionOffset.y}px`,
+                left: `${nextWorldPosition.x}px`,
+                top: `${nextWorldPosition.y}px`,
                 width: `${fittedDimensions.width}px`,
                 height: `${fittedDimensions.height}px`,
             })
@@ -2675,6 +2683,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }).at(-1)
     }
 
+    function getGeneratedImageLineageAnchorRect(
+        imageNode: ImageCanvasNode,
+        nodes: CanvasNode[],
+        edges: WorkspaceEdge[]
+    ): Rect | undefined {
+        if (!imageNode.generatedBy) return undefined
+
+        const nodesById = getCanvasNodesById(nodes)
+        const metadataParent = imageNode.generatedBy.parentImageNodeId
+            ? nodesById.get(imageNode.generatedBy.parentImageNodeId)
+            : undefined
+        const edgeSourceNodeId = edges.find((edge: WorkspaceEdge) => edge.targetNodeId === imageNode.nodeId)?.sourceNodeId
+        const edgeSource = edgeSourceNodeId ? nodesById.get(edgeSourceNodeId) : undefined
+        const anchorNode = metadataParent?.type === 'image'
+            ? metadataParent
+            : edgeSource?.type === 'image'
+                ? edgeSource
+                : undefined
+
+        return anchorNode ? getNodeWorldRect(anchorNode, nodesById) : undefined
+    }
+
     function getNextGeneratedImagePosition(sourceNode: CanvasNode, imageHeight: number): { x: number; y: number } {
         const nodes = currentCanvasState?.nodes || []
         if (isContextRegionCanvasNode(sourceNode)) {
@@ -2686,10 +2716,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const previousOutput = getMostRecentGeneratedChildOutput(existingChildOutputs)
         const anchorRect = previousOutput ? getNodeWorldRect(previousOutput) : getNodeWorldRect(sourceNode)
 
-        return {
-            x: anchorRect.x + anchorRect.width + settings.imageBranchLineage.imageToImageGap,
-            y: anchorRect.y,
-        }
+        return computeLineageContinuationPositionToRightOfRect(
+            anchorRect,
+            imageHeight,
+            settings.imageBranchLineage.imageToImageGap
+        )
     }
 
     function createGeneratedImageEdge(sourceNode: CanvasNode, imageNodeId: string, responseMessageId?: string): WorkspaceEdge {
