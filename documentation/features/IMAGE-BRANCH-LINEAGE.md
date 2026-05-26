@@ -398,6 +398,7 @@ When `IMAGE_PARTIAL` arrives:
 1. The canvas creates or updates the generated image node placeholder.
 2. The placeholder edge uses the VLM-selected source node if one was resolved.
 3. The image node's `generatedBy` metadata includes `getPendingGeneratedImageLineage()` output.
+4. If placement continues from an image node, the placeholder is vertically centered on that preceding image rather than top-aligned to it.
 
 When `IMAGE_COMPLETE` arrives:
 
@@ -405,6 +406,8 @@ When `IMAGE_COMPLETE` arrives:
 2. The edge `sourceMessageId` is set to the AI response message ID when applicable.
 3. Resolver metadata is persisted onto `generatedBy`.
 4. Pending placement is cleared.
+
+PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels load. For generated image-to-image continuations, each intrinsic-size correction recomputes the node's vertical position from its image lineage anchor center. A square placeholder, landscape partial, and portrait final therefore remain on one branch center line even though their rectangles change size.
 
 The finalized generated-image node also gets canvas provenance chrome: the provider badge and info button render in the image chrome overlay, and the full-width info panel uses `generatedBy.responseMessageId` plus the persisted chat thread to show the original user prompt, producing AI response, and the same image-generation trace metadata shown in chat history without cropping long prompts or reference metadata.
 
