@@ -4,8 +4,10 @@ import { describe, it, expect } from 'vitest'
 import type { CanvasNode, AiChatThreadCanvasNode, ImageCanvasNode } from '@lixpi/constants'
 import {
 	computeImagePositionNextToThread,
+	computeLineageContinuationPositionToRightOfRect,
 	computeNextBranchRowPositionToRightOfRect,
 	computeStackedPositionToRightOfRect,
+	computeVerticallyCenteredY,
 	computeViewportCenterInsertionPosition,
 	computeViewportGridInsertionPosition,
 	countExistingImagesForThread,
@@ -137,6 +139,26 @@ describe('computeNextBranchRowPositionToRightOfRect', () => {
 		)
 
 		expect(position).toEqual({ x: 716, y: 760 })
+	})
+})
+
+describe('computeLineageContinuationPositionToRightOfRect', () => {
+	it('centers a square placeholder against a landscape predecessor', () => {
+		const position = computeLineageContinuationPositionToRightOfRect(
+			{ x: 100, y: 375, width: 800, height: 450 },
+			800,
+			192
+		)
+
+		expect(position).toEqual({ x: 1092, y: 200 })
+	})
+
+	it('recomputes the same center line when a partial or final image resolves to a new height', () => {
+		const predecessor = { x: 100, y: 375, width: 800, height: 450 }
+
+		expect(computeVerticallyCenteredY(predecessor, 800)).toBe(200)
+		expect(computeVerticallyCenteredY(predecessor, 600)).toBe(300)
+		expect(computeVerticallyCenteredY(predecessor, 450)).toBe(375)
 	})
 })
 

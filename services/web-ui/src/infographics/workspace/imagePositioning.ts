@@ -108,6 +108,21 @@ export function computeNextBranchRowPositionToRightOfRect(
     }
 }
 
+export function computeVerticallyCenteredY(rect: RectLike, itemHeight: number): number {
+    return rect.y + (rect.height - itemHeight) / 2
+}
+
+export function computeLineageContinuationPositionToRightOfRect(
+    rect: RectLike,
+    itemHeight: number,
+    horizontalGap: number
+): Point {
+    return {
+        x: rect.x + rect.width + horizontalGap,
+        y: computeVerticallyCenteredY(rect, itemHeight),
+    }
+}
+
 export function computeImagePositionNextToThread(
     threadNode: AiChatThreadCanvasNode,
     existingImageCount: number,
