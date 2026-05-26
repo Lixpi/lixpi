@@ -339,6 +339,12 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
 	})
+
+	it('keeps image-to-image lineage continuations on their predecessor center line as image proportions resolve', () => {
+		expectSourceToContain(ts, 'computeLineageContinuationPositionToRightOfRect(')
+		expectSourceToContain(ts, 'const lineageAnchorRect = getGeneratedImageLineageAnchorRect(imageNode, currentCanvasState.nodes, currentCanvasState.edges)')
+		expectSourceToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
+	})
 })
 
 // =============================================================================
