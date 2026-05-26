@@ -207,7 +207,6 @@ Image nodes have a simpler structure:
 ┌─────────────────────────────────────────┐
 │  .image-drag-overlay                    │
 │   (covers entire image for dragging)    │
-│  .image-generating-spinner (during gen) │
 └─────────────────────────────────────────┘
   ↖ resize     resize ↗
   handle       handle
@@ -244,9 +243,8 @@ When an AI-generated image is being created, the canvas provides visual feedback
 2. **VLM branch resolution** — The API emits `IMAGE_BRANCH_RESOLVED` before image partials. `WorkspaceCanvas.ts` stores that result and uses it for generated-image placement, parent edge selection, and `generatedBy` lineage metadata. When the API identifies an existing generated candidate as the target/identity reference, placement follows that generated node and preserves its branch id even if the requested color palette or medium changes. `IMAGE_BRANCH_RESOLUTION_ERROR` clears pending placement and stops the generation path visibly.
 3. **Early placeholder** — The backend emits an `IMAGE_PARTIAL` with an empty `imageUrl` as soon as OpenAI's `response.output_item.added` event fires (before any pixel data arrives). `buildImageSrc` converts the empty URL to a transparent 1×1 PNG data URI for the generated canvas node.
 4. **Animated progress border** — `pixiMediaLayer.ts` feeds active generated-image bounds to the shared `PixiTravelingOutlineRenderer`, which draws a PIXI `Graphics` track with a colored snake segment traveling around the rounded image perimeter while the image remains in `partialImageTracker`. Motion follows the loop-safe `Easing.travelingOutlineTransition()` curve; track, snake palette, length, width, and lap duration are configured through `settings.imageNode.generationBorder`.
-5. **Bounce spinner** — A three-dot bounce animation (`.image-generating-spinner`) appears centered over the image while waiting for the first real partial. The spinner uses inline styles and an injected `@keyframes img-dot-bounce` so it works without external SCSS.
-6. **First real partial** — When `onImagePartialToCanvas` receives a non-empty `imageUrl`, it commits the updated canvas image node for PIXI to render, removes the spinner, and continues replacing that node for later partials.
-7. **Completion** — `onImageCompleteToCanvas` clears the tracker only after the final image arrives, which removes the PIXI progress outline and the DOM spinner.
+5. **First real partial** — When `onImagePartialToCanvas` receives a non-empty `imageUrl`, it commits the updated canvas image node for PIXI to render and continues replacing that node for later partials.
+6. **Completion** — `onImageCompleteToCanvas` clears the tracker only after the final image arrives, which removes the PIXI progress outline.
 
 ### Image Lifecycle
 
@@ -460,7 +458,6 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-image-node-context-region-child` | Image node contained by a context region, with the region-only off-white frame |
 | `.workspace-thread-rail` | Vertical rail outer container spanning thread + gap + floating input (drag handle, connection proxy) |
 | `.workspace-thread-rail-line` | Inner visual line child limited to thread node height; hosts `::before` gradient line |
-| `.image-generating-spinner` | Three-dot bounce spinner shown before first partial image arrives |
 | `.workspace-generated-image-chrome` | Per-generated-image chrome container positioned below the image node at the exact image-node width |
 | `.image-model-badge` | Large circular image-provider icon badge for generated images |
 | `.image-info-button` | Large circular icon button that expands the generated-image metadata block and uses `$steelBlue` when active |

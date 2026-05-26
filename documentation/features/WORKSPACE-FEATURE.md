@@ -1086,9 +1086,9 @@ Multi-turn editing is supported: users can continue refining an image within the
 1. User enables "Image Generation" mode in an AI chat thread's settings
 2. User types a prompt like "Create a logo for a coffee shop"
 3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
-4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with a PIXI-rendered traveling progress border and a three-dot bounce spinner
-5. OpenAI streams back partial images (up to 3) as the generation progresses. The first real partial removes the spinner; subsequent partials update the image progressively
-6. On completion, `IMAGE_COMPLETE` removes the animated border and spinner, finalizes the canvas node with full metadata, and updates the edge with `sourceMessageId` so the connector points back to the producing AI response.
+4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with a PIXI-rendered traveling progress border
+5. OpenAI streams back partial images (up to 3) as the generation progresses. Each partial updates the image progressively while the border remains active
+6. On completion, `IMAGE_COMPLETE` removes the animated border, finalizes the canvas node with full metadata, and updates the edge with `sourceMessageId` so the connector points back to the producing AI response.
 7. The revised prompt text appears inside the AI response message in the chat thread
 8. Multiple generated images stack using the spacing configured in `settings.imageBranchLineage`.
 
@@ -1126,12 +1126,12 @@ sequenceDiagram
     %% PHASE 2: EARLY PLACEHOLDER → CANVAS
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over User, Storage: PHASE 2 - EARLY PLACEHOLDER — Animated border + spinner before pixels arrive
+        Note over User, Storage: PHASE 2 - EARLY PLACEHOLDER — Animated border before pixels arrive
         OpenAI->>LLM: response.output_item.added (image_generation_call)
         LLM->>AIS: IMAGE_PARTIAL { imageUrl: "", partialIndex: 0 }
         AIS->>Thread: Plugin routes to canvas callback
         Thread->>Canvas: onImagePartialToCanvas({ imageUrl: "" })
-        Canvas->>Canvas: Create ImageCanvasNode (transparent 1×1 PNG) + PIXI traveling progress border + 3-dot spinner
+        Canvas->>Canvas: Create ImageCanvasNode (transparent 1×1 PNG) + PIXI traveling progress border
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -1144,7 +1144,7 @@ sequenceDiagram
             LLM->>AIS: IMAGE_PARTIAL { partialIndex, imageUrl, fileId }
             AIS->>Thread: Plugin routes to canvas callback
             Thread->>Canvas: onImagePartialToCanvas(...)
-            Canvas->>Canvas: Remove spinner on first real partial, update image
+            Canvas->>Canvas: Update image; keep PIXI progress border active
         end
     end
 
@@ -1198,9 +1198,9 @@ Multi-turn image editing uses a **provider-agnostic approach** by leveraging can
 
 When the AI generates an image:
 
-1. An early `IMAGE_PARTIAL` with an empty `imageUrl` creates the `ImageCanvasNode` placeholder on the canvas (transparent 1×1 PNG, PIXI traveling progress border, bounce spinner). Subsequent `IMAGE_PARTIAL` events with real image data update the existing node in place.
+1. An early `IMAGE_PARTIAL` with an empty `imageUrl` creates the `ImageCanvasNode` placeholder on the canvas (transparent 1×1 PNG and PIXI traveling progress border). Subsequent `IMAGE_PARTIAL` events with real image data update the existing node in place.
 2. The `partialImageTracker` Map records the pending partial SYNCHRONOUSLY before any async work to prevent race conditions with `IMAGE_COMPLETE`
-3. Progressive partial previews update the same canvas image node in real-time; `pixiMediaLayer.ts` renders the changing image pixels and synchronizes its progress bounds into `PixiTravelingOutlineRenderer`. The first real partial removes the bounce spinner.
+3. Progressive partial previews update the same canvas image node in real-time; `pixiMediaLayer.ts` renders the changing image pixels and synchronizes its progress bounds into `PixiTravelingOutlineRenderer` until the final image arrives.
 4. `IMAGE_COMPLETE` clears the active-generation tracker so PIXI removes the animated border only after the final image is received, then finalizes the canvas node with full `generatedBy` metadata: `{ aiChatThreadId, responseId, aiModel, revisedPrompt }`
 5. A `WorkspaceEdge` connects the thread to the image with `sourceMessageId` identifying the specific `aiResponseMessage` (the response node gets a unique `id` when created by `handleStreamStart`)
 6. Multiple images from the same thread stack vertically using spacing from `settings.imageBranchLineage`

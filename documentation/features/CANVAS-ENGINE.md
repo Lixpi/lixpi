@@ -123,7 +123,7 @@ flowchart TB
 
 The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Generated-image provider badges, info buttons, and full-width provenance panels sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Image-node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
-1. They host core interaction chrome — drag overlay, resize handles, and generation spinner.
+1. They host core interaction chrome — drag overlay and resize handles.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 
 Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
