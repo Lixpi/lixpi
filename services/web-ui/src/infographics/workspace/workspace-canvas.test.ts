@@ -320,6 +320,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(settingsTs, 'animationDurationMs: 3200')
 		expectSourceNotToContain(ts, 'SvgGradientRenderer')
 		expectSourceNotToContain(ts, 'image-generating-border')
+		expectSourceNotToContain(ts, 'image-generating-spinner')
+		expectSourceNotToContain(ts, 'img-dot-bounce')
 		expectSourceNotToContain(scss, '.workspace-image-progress-viewport')
 		expectExcerptNotToContain(partialHandler, 'partialImageTracker.delete', 'partial image handler')
 		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(threadId)')
@@ -1869,6 +1871,8 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 		expectExcerptNotToContain(fnBody, 'image-node-img', 'createImageNode')
 		expectExcerptNotToContain(fnBody, '<img', 'createImageNode')
 		expectExcerptNotToContain(fnBody, 'imgEl', 'createImageNode')
+		expectExcerptNotToContain(fnBody, 'image-generating-spinner', 'createImageNode')
+		expectExcerptNotToContain(fnBody, 'img-dot-bounce', 'createImageNode')
 		expectSourceNotToContain(pixiLayerTs, 'workspace-image-node-pixi-owned')
 	})
 

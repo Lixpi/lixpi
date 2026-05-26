@@ -2933,8 +2933,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Show error placeholder on the node so the user sees what failed,
             // then remove it from the canvas state (and DOM) after a short delay.
             const nodeEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"]`) as HTMLElement | null
-            const spinnerEl = nodeEl?.querySelector('.image-generating-spinner')
-            if (spinnerEl) spinnerEl.remove()
             if (nodeEl) showImageErrorPlaceholder(nodeEl)
 
             const errorNodeId = existing.nodeId
@@ -2972,9 +2970,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     })
 
                     commitCanvasStatePreservingEditors({ ...currentCanvasState, nodes: updatedNodes })
-
-                    const spinnerEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"] .image-generating-spinner`)
-                    if (spinnerEl) spinnerEl.remove()
                 }
 
                 partialImageTracker.set(threadId, { ...existing, fileId: fileId || existing.fileId })
@@ -3075,8 +3070,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 pendingGeneratedImagePlacements.delete(threadId)
 
                 // PIXI removes the progress border when the tracker is cleared and this state commits.
-                const spinnerEl = viewportEl?.querySelector(`[data-node-id="${partial.nodeId}"] .image-generating-spinner`)
-                if (spinnerEl) spinnerEl.remove()
                 const collisionExclusions = new Set<string>()
                 for (const child of nodes) {
                     if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
@@ -4385,45 +4378,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         syncContextRegionImageFrame(nodeEl, node)
         dragOverlay.className = 'image-drag-overlay nopan'
-
-        // Check if this image is currently generating
-        const isGenerating = Array.from(partialImageTracker.values()).some(p => p.nodeId === node.nodeId)
-
-        if (isGenerating) {
-            // Add loading spinner — three bouncing dots matching AI response message style
-            const spinnerContainerStyle = {
-                position: 'absolute' as const,
-                top: '0',
-                left: '0',
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: '5',
-                pointerEvents: 'none' as const,
-            }
-            const spinnerContainer = html`<div className="image-generating-spinner" style=${spinnerContainerStyle}></div>` as HTMLDivElement
-
-            const dotsWrapperStyle = { display: 'flex', gap: '8px', alignItems: 'center' }
-            const dotsWrapper = html`<div style=${dotsWrapperStyle}></div>` as HTMLDivElement
-
-            for (let i = 0; i < 3; i++) {
-                const dotStyle = { width: '8px', height: '8px', borderRadius: '50%', background: '#b0b0b0', animation: `img-dot-bounce 1s ${i * 0.15}s infinite ease-in-out` }
-                const dot = html`<div style=${dotStyle}></div>` as HTMLDivElement
-                dotsWrapper.appendChild(dot)
-            }
-
-            // Inject keyframes if not already present
-            if (!document.getElementById('img-dot-bounce-keyframes')) {
-                const style = html`<style id="img-dot-bounce-keyframes" innerHTML=${'@keyframes img-dot-bounce { 0%,80%,100%{transform:scale(1);opacity:.4} 40%{transform:scale(1.3);opacity:1} }'}></style>` as HTMLStyleElement
-                document.head.appendChild(style)
-            }
-
-            spinnerContainer.appendChild(dotsWrapper)
-            nodeEl.appendChild(spinnerContainer)
-
-        }
 
         return nodeEl
     }
