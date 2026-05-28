@@ -1148,6 +1148,11 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'openFeatureExtractionTab(extractionRunId)')
 	})
 
+	it('rehydrates pending extraction context from the persisted snapshot when reopening a tab', () => {
+		expectSourceToContain(ts, 'if (extractionState?.sourceContextSnapshot && !getPendingExtractionContext(activeSidebarTab.refId)) {')
+		expectSourceToContain(ts, 'setPendingExtractionContext(activeSidebarTab.refId, extractionState.sourceContextSnapshot as any)')
+	})
+
 	it('bubble menu callbacks include onTriggerConnection', () => {
 		expectSourceToContain(ts, 'onTriggerConnection')
 	})
