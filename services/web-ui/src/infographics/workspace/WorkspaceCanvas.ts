@@ -98,7 +98,7 @@ import {
     getStandaloneContextNodeIds,
     setAiChatPanelState,
 } from '$src/infographics/workspace/aiChatPanelState.ts'
-import { createContextSelector } from '$src/components/contextSelector/index.ts'
+import { createSlidingSwitch } from '$src/components/slidingSwitch/index.ts'
 import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
@@ -2213,10 +2213,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : null
 
         const lineageSwitchMarkup = `<svg class="workspace-ai-chat-panel-lineage-switch-svg" viewBox="0 0 26.4 14.4" role="switch" aria-label="Include Upstream Context" aria-checked="${String(aiChatPanelState.includeUpstreamContext)}" tabindex="0"></svg>`
+        const slidingSwitchMarkup = `<svg class="workspace-ai-chat-panel-context-selector-svg" viewBox="0 0 120 26" role="radiogroup" aria-label="Standalone chat context mode"></svg>`
         const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">
             <div className="workspace-ai-chat-panel-context-mode">
                 <span className="workspace-ai-chat-panel-context-heading">Context</span>
-                <div className="workspace-ai-chat-panel-context-selector"></div>
+                <div className="workspace-ai-chat-panel-context-selector" innerHTML=${slidingSwitchMarkup}></div>
                 <span className="workspace-ai-chat-panel-context-divider" aria-hidden="true"></span>
                 <div className="workspace-ai-chat-panel-lineage-control">
                     <span className="workspace-ai-chat-panel-lineage-label">With Sources</span>
@@ -2245,18 +2246,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             persistAiChatSidebarState()
         }
-        const contextSelectorHostEl = controlsEl.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-context-selector')!
-        const contextSelector = createContextSelector<CanvasAiChatPanelState['contextMode']>({
+        const contextSelectorSvg = controlsEl.querySelector<SVGSVGElement>('.workspace-ai-chat-panel-context-selector-svg')!
+        const contextSelector = createSlidingSwitch<CanvasAiChatPanelState['contextMode']>(select(contextSelectorSvg), {
             id: 'workspace-ai-chat-context-selector',
+            x: 0,
+            y: 0,
+            width: 120,
+            height: 26,
             options: [
                 { label: 'Follow', value: 'followSelection' },
                 { label: 'Pinned', value: 'pinnedContext' },
             ],
             selectedValue: aiChatPanelState.contextMode,
-            ariaLabel: 'Standalone chat context mode',
             onChange: selectContextMode,
         })
-        contextSelectorHostEl.appendChild(contextSelector.dom)
         const lineageSwitchSvg = controlsEl.querySelector<SVGSVGElement>('.workspace-ai-chat-panel-lineage-switch-svg')!
         const saveIncludeUpstreamContext = (checked: boolean): void => {
             select(lineageSwitchSvg).attr('aria-checked', String(checked))
