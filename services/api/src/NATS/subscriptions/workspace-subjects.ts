@@ -69,9 +69,9 @@ export const workspaceSubjects = [
                 }
 
                 try {
+                    // Replication factor is owned by NATS_Service (R3 by default).
                     await natsService.createObjectStore(bucketName, {
-                        description: `Files for workspace ${workspace.workspaceId}`,
-                        replicas: 1
+                        description: `Files for workspace ${workspace.workspaceId}`
                     })
                     info(`Created Object Store bucket: ${bucketName}`)
                 } catch (bucketError: any) {
