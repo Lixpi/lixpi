@@ -289,7 +289,7 @@ An empty panel shows the compact context controls, a Sessions toggle, and an emp
 
 ### Standalone Chat and Context Controls
 
-With no active standalone session, the composer is an unsent panel draft. The context control is panel-global. It exposes a `Follow` / `Pinned` slider — the reusable D3-managed [contextSelector](../../services/web-ui/src/components/contextSelector/) whose indicator position is animated by CSS rather than D3 to avoid a `DOMMatrix` interpolation failure on percentage transforms — and a `With Sources` switch implemented with the relocated D3 SVG [toggleSwitch](../../services/web-ui/src/components/toggleSwitch/). The stored values remain `followSelection`, `pinnedContext`, and `includeUpstreamContext`.
+With no active standalone session, the composer is an unsent panel draft. The context control is panel-global. It exposes a `Follow` / `Pinned` slider — the reusable, domain-agnostic SVG [slidingSwitch](../../services/web-ui/src/components/slidingSwitch/), a d3 component that animates the indicator's `x` attribute — and a `With Sources` switch implemented with the SVG [toggleSwitch](../../services/web-ui/src/components/toggleSwitch/). The stored values remain `followSelection`, `pinnedContext`, and `includeUpstreamContext`.
 
 - **`Follow`** tracks the current canvas selection: supported selection changes update `contextNodeIds`. Clicking a context region does not load it as ordinary content — it opens that region's tab instead.
 - **`Pinned`** freezes the currently loaded node ids; later selection changes are ignored. At submit time the latest content of each retained node is resolved, and missing or context-region nodes are filtered out. There is no separate chip add/remove control.
