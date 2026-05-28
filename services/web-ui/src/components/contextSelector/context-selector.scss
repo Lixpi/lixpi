@@ -1,0 +1,64 @@
+.context-selector {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 26px;
+    gap: 0;
+    padding: 2px;
+    border-radius: 14px;
+    background: rgba(105, 115, 133, 0.1);
+    isolation: isolate;
+}
+
+.context-selector-indicator {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 2px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.86);
+    box-shadow: 0 1px 5px rgba(35, 45, 63, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.context-selector-indicator-animated {
+    transition: transform 230ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+.context-selector-option {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    height: 22px;
+    min-width: 0;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: rgba(49, 59, 78, 0.68);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 550;
+    transition: color 150ms ease;
+}
+
+.context-selector-option:hover,
+.context-selector-option-selected {
+    color: #1a2744;
+}
+
+.context-selector-option:focus-visible {
+    outline: 2px solid rgba(76, 125, 239, 0.45);
+    outline-offset: -1px;
+}
+
+.context-selector-option-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

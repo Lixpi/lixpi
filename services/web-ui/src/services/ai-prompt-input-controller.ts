@@ -53,6 +53,7 @@ type AiPromptInputControllerOptions = {
         threadId: string
         content: any
         aiModel: string
+        owner?: { type: 'contextRegion'; contextRegionNodeId: string } | { type: 'standalone' }
     }) => Promise<any>
     onAiSubmit: (threadId: string, payload: AiSubmitPayload) => void
     onAiStop: (threadId: string) => void
@@ -287,11 +288,13 @@ export class AiPromptInputController {
 
         // Create the thread on the backend
         try {
+            const contextRegionNodeId = `node-${threadId}`
             const thread = await this.createAiChatThread({
                 workspaceId: this.workspaceId,
                 threadId,
                 content: initialContent,
-                aiModel
+                aiModel,
+                owner: { type: 'contextRegion', contextRegionNodeId }
             })
 
             if (!thread) {
@@ -315,7 +318,7 @@ export class AiPromptInputController {
             }
 
             const threadCanvasNode: ContextRegionCanvasNode = {
-                nodeId: `node-${threadId}`,
+                nodeId: contextRegionNodeId,
                 type: 'contextRegion',
                 referenceId: threadId,
                 position: threadPosition,

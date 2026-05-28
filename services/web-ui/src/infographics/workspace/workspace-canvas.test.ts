@@ -337,7 +337,20 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		const completeHandler = ts.slice(completeStart, callbackEnd)
 		expectExcerptToContain(completeHandler, "const imageSrc = buildImageSrc(imageUrl, '', false)")
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
+		expect([...completeHandler.matchAll(/\.\.\.\(currentCanvasState \?\? \{\}\)/g)]).toHaveLength(2)
 		expectExcerptNotToContain(completeHandler, 'imgEl.src', 'complete image handler')
+	})
+
+	it('preserves workspace panel metadata when image workflows write canvas state', () => {
+		const partialStart = ts.indexOf('onImagePartialToCanvas:')
+		const completeStart = ts.indexOf('onImageCompleteToCanvas:', partialStart)
+		const editStart = ts.indexOf('onEditInNewThread:')
+		const partialHandler = ts.slice(partialStart, completeStart)
+		const editHandler = ts.slice(editStart, ts.indexOf('// Visibility detection for lazy loading', editStart))
+
+		expectExcerptToContain(partialHandler, '...(currentCanvasState ?? {})', 'partial image handler')
+		expectExcerptToContain(editHandler, '...(currentCanvasState ?? {})', 'edit-in-new-thread handler')
+		expectSourceToContain(ts, 'const nextState: CanvasState = {\n                    ...currentCanvasState,')
 	})
 
 	it('keeps image-to-image lineage continuations on their predecessor center line as image proportions resolve', () => {
@@ -377,10 +390,10 @@ describe('Workspace canvas — context-region child world positioning', () => {
 })
 
 // =============================================================================
-// Context-region AI panel — stable reload path
+// Workspace AI chat panel — stable reload path
 // =============================================================================
 
-describe('Workspace canvas — context-region AI panel reload stability', () => {
+describe('Workspace canvas — AI panel reload stability', () => {
 	const ts = loadTs()
 
 	it('tracks the mounted panel thread separately from the selected active thread', () => {
@@ -395,7 +408,7 @@ describe('Workspace canvas — context-region AI panel reload stability', () => 
 		const fnMatch = ts.match(/function\s+renderActiveAiChatPanel[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('const panelThreadId = activeAiChatThreadId')
+		expect(fnBody).toContain("const panelThreadId = activeSidebarTab?.type === 'thread' ? activeSidebarTab.refId : null")
 		expect(fnBody).toContain('aiChatThreadId: panelThreadId')
 		expect(fnBody).toContain('threadId: panelThreadId')
 		expect(fnBody).toContain('threadEditors.set(panelThreadId')
@@ -416,9 +429,8 @@ describe('Workspace canvas — context-region AI panel reload stability', () => 
 		expectSourceToContain(ts, 'function refreshActiveAiChatPanelWhenContentLoads(): void')
 		expectSourceToContain(ts, 'if (activeAiChatPanelHadContent) return')
 		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, thread)')
-		expectSourceToContain(ts, `} else {
-                refreshActiveAiChatPanelWhenContentLoads()
-            }`)
+		expectSourceToContain(ts, 'refreshActiveAiChatPanelWhenContentLoads()')
+		expectSourceToContain(ts, 'if (aiChatPanelState.isOpen && !activeAiChatPanelEl) renderActiveAiChatPanel()')
 	})
 
 	it('preserves local visual drag commits when active-panel renders arrive stale', () => {
@@ -1130,9 +1142,10 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'onAskAi')
 	})
 
-	it('onAskAi handler creates an AI chat thread and edge', () => {
+	it('onAskAi opens a persisted extraction session without creating a context region', () => {
 		expect(ts).toMatch(/onAskAi.*async|async.*onAskAi/)
-		expectSourceToContain(ts, 'createAiChatThread')
+		expectSourceToContain(ts, 'persistFeatureExtractionState({')
+		expectSourceToContain(ts, 'openFeatureExtractionTab(extractionRunId)')
 	})
 
 	it('bubble menu callbacks include onTriggerConnection', () => {
@@ -1171,6 +1184,59 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceNotToContain(ts, `AiChat${'Panel.svelte'}`)
 	})
 
+	it('opens the panel without requiring a context-region thread and creates standalone history on submit', () => {
+		expectSourceToContain(ts, 'function openAiChatPanel(): void')
+		expectSourceToContain(ts, 'aiChatPanelState = { ...aiChatPanelState, isOpen: true }')
+		expectSourceToContain(ts, 'async function createStandaloneThreadAndSubmit(data: any): Promise<void>')
+		expectSourceToContain(ts, "owner: { type: 'standalone' }")
+		expectSourceToContain(ts, 'if (!panelThreadId) {')
+		expectSourceToContain(ts, 'void loadExtractionSessionHistory()')
+		expectSourceToContain(ts, 'extractionSessionHistoryLoaded = false')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-title')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-close')
+	})
+
+	it('provides persisted selection-context controls for standalone chat sends', () => {
+		expectSourceToContain(ts, "{ label: 'Follow', value: 'followSelection' }")
+		expectSourceToContain(ts, "{ label: 'Pinned', value: 'pinnedContext' }")
+		expectSourceToContain(ts, '>With Sources</span>')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-divider')
+		expectSourceToContain(ts, 'aria-label="Include Upstream Context"')
+		expectSourceToContain(ts, 'aiChatPanelToggleHistoryIcon')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-control')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
+		expectSourceToContain(ts, 'const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-sessions-hidden')
+		expectSourceToContain(ts, "import { select } from 'd3-selection'")
+		expectSourceToContain(ts, "import { createContextSelector } from '$src/components/contextSelector/index.ts'")
+		expectSourceToContain(ts, "import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'")
+		expectSourceToContain(ts, "const contextSelector = createContextSelector<CanvasAiChatPanelState['contextMode']>({")
+		expectSourceToContain(ts, 'contextSelectorHostEl.appendChild(contextSelector.dom)')
+		expectSourceToContain(ts, 'const lineageSwitch = createToggleSwitch(select(lineageSwitchSvg), {')
+		expectSourceToContain(ts, 'const lineageSwitchMarkup = `<svg class="workspace-ai-chat-panel-lineage-switch-svg"')
+		expectSourceToContain(ts, 'innerHTML=${lineageSwitchMarkup}')
+		expectSourceNotToContain(ts, 'const lineageSwitchSvg = html`<svg')
+		expectSourceNotToContain(ts, 'type="checkbox"')
+		expectSourceNotToContain(ts, '<select>')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-selector')
+		expectSourceToContain(ts, 'extractSelectedContext({')
+		expectSourceToContain(ts, 'includeUpstream: aiChatPanelState.includeUpstreamContext')
+	})
+
+	it('removes drafts only when a session is deleted, not when its tab is closed', () => {
+		const closeStart = ts.indexOf('function closeAiChatSidebarTab')
+		const removeDraftStart = ts.indexOf('function removeAiChatPanelDraft', closeStart)
+		const deleteChatStart = ts.indexOf('async function deleteAiChatSession', removeDraftStart)
+		const deleteExtractionStart = ts.indexOf('async function deleteExtractionSession', deleteChatStart)
+		const closeBody = ts.slice(closeStart, removeDraftStart)
+		const deleteChatBody = ts.slice(deleteChatStart, deleteExtractionStart)
+		const deleteExtractionBody = ts.slice(deleteExtractionStart, ts.indexOf('async function loadExtractionSessionHistory', deleteExtractionStart))
+
+		expectExcerptNotToContain(closeBody, 'removeAiChatPanelDraft', 'close-tab handler')
+		expectExcerptToContain(deleteChatBody, 'removeAiChatPanelDraft(`thread:${threadId}`)', 'delete-chat handler')
+		expectExcerptToContain(deleteExtractionBody, 'removeAiChatPanelDraft(`extraction:${extractionRunId}`)', 'delete-extraction handler')
+	})
+
 	it('uses the floating panel rail as the horizontal resize handle', () => {
 		const scss = loadScss()
 
@@ -1196,12 +1262,25 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(scss, '@media (prefers-reduced-transparency: reduce)')
 		expectSourceToContain(svelte, 'class:workspace-canvas-chat-panel-open')
 		expectSourceToContain(svelte, 'workspace-media-library-launcher')
+		expectSourceToContain(svelte, 'workspace-ai-chat-launcher')
+		expectSourceToContain(svelte, 'aiChatIcon')
+		expectSourceToContain(svelte, 'aiChatPanelCollapseIcon')
+		expectSourceToContain(svelte, "aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}")
+		expectSourceNotToContain(svelte, 'workspace-ai-chat-launcher-tooltip')
 		expectSourceToContain(svelte, 'workspace-zoom-indicator')
 		expectSourceNotToContain(svelte, 'workspace-canvas-utility-capsule')
 		expectSourceToContain(scss, '.workspace-canvas-chat-panel-open .workspace-media-library-launcher')
-		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap))')
+		expectSourceToContain(scss, '.workspace-canvas-chat-panel-open .workspace-ai-chat-launcher')
+		expectSourceToContain(scss, 'top: 15px')
+		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px)')
+		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap) + 3px)')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline))')
 		expectSourceToContain(scss, 'bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
+		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
+		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'border-radius: 10px', 'outer chat panel')
+		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
+		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel-prompt'), 'width: 100% !important', 'chat composer')
+		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel-prompt'), 'margin-top: 12px', 'chat composer')
 		expectSourceToContain(layout, 'workspace-sidebar-shell')
 		expectSourceToContain(layout, 'workspace-sidebar-body')
 		expectSourceToContain(layout, 'workspace-sidebar-footer')
@@ -1676,7 +1755,9 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	it('keeps toolbar insertion collision logic out of the Svelte wrapper', () => {
 		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(documentNode)')
 		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(imageNode)')
-		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(contextRegionNode, { lastActiveAiChatThreadId: thread.threadId })')
+		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(contextRegionNode, {')
+		expectSourceToContain(svelte, 'lastActiveAiChatThreadId: thread.threadId,')
+		expectSourceToContain(svelte, 'aiChatPanel: { ...panelState, isOpen: true, tabs, activeTabId: tabId },')
 		expectSourceNotToContain(svelte, "from '$src/infographics/utils/resolveCollisions.ts'")
 		expectSourceNotToContain(svelte, 'resolveInsertionCollisions')
 		expectSourceNotToContain(svelte, 'computeViewportCenterInsertionPosition')

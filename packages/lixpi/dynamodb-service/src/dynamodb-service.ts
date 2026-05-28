@@ -12,7 +12,8 @@ import {
     BatchGetCommand,
     PutCommand,
     UpdateCommand,
-    BatchWriteCommand
+    BatchWriteCommand,
+    TransactWriteCommand
 } from '@aws-sdk/lib-dynamodb'
 
 // Export all methods from '@aws-sdk/util-dynamodb' module, specifically marshall and unmarshall methods that are used to read DynamoDB streams
@@ -446,6 +447,36 @@ export default class DynamoDBService {
             return response.Attributes
         } catch (error) {
             console.error('Error updating item:', error)
+            throw error
+        }
+    }
+
+    async transactWriteItems({
+        transactItems = [],
+        origin = 'unknown'
+    }) {
+        if (transactItems.length === 0) {
+            console.error(`Error: At least one transaction item must be provided!, origin: ${origin}`)
+            return
+        }
+
+        try {
+            const response = await this.dynamodbDocumentClient.send(new TransactWriteCommand({
+                TransactItems: transactItems,
+                ReturnConsumedCapacity: 'TOTAL'
+            }))
+
+            logStats({
+                operation: 'transactWriteItems',
+                operationType: 'write',
+                capacityUnits: toCapacityUnits(response.ConsumedCapacity),
+                tableName: transactItems.map((item) => Object.values(item)[0]?.TableName).join(','),
+                origin
+            })
+
+            return response
+        } catch (error) {
+            console.error('Error completing DynamoDB transaction:', error)
             throw error
         }
     }
