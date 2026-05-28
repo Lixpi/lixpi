@@ -18,7 +18,7 @@ When a user types a message and submits:
 3. Calls the `onSubmit` callback with `{ contentJSON, aiModel, imageOptions }`
 4. Clears the input content and resets the cursor
 
-The plugin does **not** handle AI streaming, message routing, or thread management — that is the responsibility of the `AiPromptInputController` service and the `aiChatThreadPlugin`.
+The plugin does **not** handle AI streaming, message routing, or thread management — that is the responsibility of the `AiPromptInputController` service and the `aiChatThreadPlugin`. In the workspace AI Chat panel, `WorkspaceCanvas.ts` persists each prompt editor document as a per-tab draft in `canvasState.aiChatPanel` and restores it on panel/tab reload; the plugin remains unaware of that storage policy.
 
 ## Technical Architecture
 

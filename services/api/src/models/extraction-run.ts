@@ -15,7 +15,8 @@ export default {
         const run: ExtractionRun = {
             extractionRunId: providedId ?? uuid(),
             workspaceId, userId, status: 'pending',
-            sourceContextSnapshot, createdAt: now, updatedAt: now,
+            ...(sourceContextSnapshot ? { sourceContextSnapshot } : {}),
+            createdAt: now, updatedAt: now,
         }
         try {
             await dynamoDBService.putItem({ tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE), item: run, origin: 'ExtractionRun.createRun' })
@@ -27,6 +28,45 @@ export default {
         const item = await dynamoDBService.getItem({ tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE), key: { extractionRunId, workspaceId }, origin: `ExtractionRun.getRun(${extractionRunId})` })
         if (!item || Object.keys(item).length === 0) return { error: 'NOT_FOUND' }
         return item as ExtractionRun
+    },
+
+    listWorkspaceRuns: async ({ workspaceId }: { workspaceId: string }): Promise<ExtractionRun[]> => {
+        const result = await dynamoDBService.scanItems({
+            tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+            fetchAllItems: true,
+            origin: 'ExtractionRun.listWorkspaceRuns',
+        })
+
+        return (result?.items ?? [])
+            .filter((item: ExtractionRun) => item.workspaceId === workspaceId)
+            .sort((a: ExtractionRun, b: ExtractionRun) => b.updatedAt - a.updatedAt)
+    },
+
+    deleteRun: async ({ extractionRunId, workspaceId }: { extractionRunId: string; workspaceId: string }): Promise<void> => {
+        await dynamoDBService.deleteItems({
+            tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+            key: { extractionRunId, workspaceId },
+            origin: 'ExtractionRun.deleteRun',
+        })
+    },
+
+    deleteWorkspaceRuns: async ({ workspaceId }: { workspaceId: string }): Promise<number> => {
+        const runs = await dynamoDBService.scanItems({
+            tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+            fetchAllItems: true,
+            origin: 'ExtractionRun.deleteWorkspaceRuns:list',
+        })
+        const matchingRuns = (runs?.items ?? []).filter((item: ExtractionRun) => item.workspaceId === workspaceId)
+
+        for (const run of matchingRuns) {
+            await dynamoDBService.deleteItems({
+                tableName: getDynamoDbTableStageName('EXTRACTION_RUNS', ORG_NAME, STAGE),
+                key: { extractionRunId: run.extractionRunId, workspaceId },
+                origin: 'ExtractionRun.deleteWorkspaceRuns:delete',
+            })
+        }
+
+        return matchingRuns.length
     },
 
     updateStatus: async ({ extractionRunId, workspaceId, status }: { extractionRunId: string; workspaceId: string; status: ExtractionRunStatus }): Promise<void> => {

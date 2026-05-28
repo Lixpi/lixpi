@@ -14,7 +14,7 @@ Context region clouds are implemented in the web UI and run as part of the hybri
 - [viewportBridge.ts](../../services/web-ui/src/infographics/workspace/rendering/viewportBridge.ts) applies the same viewport transform to DOM nodes, the PIXI media layer, and the PIXI context-region layer.
 - Context-region settings live in [settings.ts](../../services/web-ui/src/settings.ts), with cloud-specific settings nested under `contextRegion.cloud`.
 
-No backend schema, NATS subject, DynamoDB table, or persisted visual-style field is required. Context region clouds are a frontend rendering and interaction primitive over existing canvas nodes.
+The cloud renderer itself does not require a persisted visual-style field. Context-region lifecycle does have persisted chat ownership: deleting a context region uses the workspace delete operation to remove the region and its dedicated chat history atomically.
 
 ## Product Role
 
@@ -29,6 +29,16 @@ The important product principles are:
 3. Pan, zoom, drag, resize, and selection must remain fast with hundreds of regions.
 4. Motion should be event feedback, not continuous decoration.
 5. Runtime state should stay simple unless users explicitly get style controls later.
+
+## Chat Ownership
+
+A context region is a spatial collection of canvas items plus lineage/history ownership; it is not the AI Chat panel and it is not a general standalone chat session.
+
+- `Create Context Region` creates the region and a dedicated `AiChatThread`, then opens that history in the AI Chat panel.
+- Clicking a cloud activates the region and reopens its dedicated history tab, independent of the panel's standalone context mode.
+- The AI Chat launcher can open the panel with no context region and no created conversation.
+- Region-owned history appears in Sessions but cannot be deleted separately while the region exists.
+- Deleting the region removes its node and dedicated history in the same workspace operation.
 
 ## Architecture
 
@@ -87,7 +97,7 @@ Persisted canvas nodes remain unchanged. Existing context-region-compatible node
 | Field | Source | Purpose |
 |---|---|---|
 | `nodeId` | `CanvasNode` | Stable identity for selection, drag, texture style hashing, and layer entries. |
-| `referenceId` | `ContextRegionCanvasNode` / AI chat thread node | Links the region to its AI chat thread. |
+| `referenceId` | `ContextRegionCanvasNode` | Links the region to its dedicated persisted chat history. |
 | `position` | `CanvasNode` | Persisted position. Child positions remain parent-relative. |
 | `dimensions` | `CanvasNode` | Logical region width and height. |
 | `parentId` on child nodes | Existing canvas containment | Tracks documents/images adopted into the region. |

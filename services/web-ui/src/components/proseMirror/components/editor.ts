@@ -162,7 +162,15 @@ export class ProseMirrorEditor {
         })
 
         if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
-            // Floating prompt input — always create fresh
+            if (hasValidContent) {
+                try {
+                    const doc = this.editorSchema.nodeFromJSON(initialVal)
+                    doc.check()
+                    return doc
+                } catch (e) {
+                    console.warn('[EDITOR] Invalid AI prompt draft, creating fresh input:', e)
+                }
+            }
             const inputNode = this.editorSchema.nodes[aiPromptInputNodeType].createAndFill()
             return this.editorSchema.nodes.doc.create(null, [inputNode])
         }
