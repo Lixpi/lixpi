@@ -24,13 +24,13 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Drag selected groups** as a rigid set while preserving relative spacing
 - **Resize** nodes from any corner by hovering that corner handle (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
-- **Chat with AI** in AI chat thread nodes—each thread maintains its own conversation context
+- **Chat with AI** in the right-side panel; it can open with no region and creates a standalone session only on first submit
 - **Add images** via the toolbar button which opens an upload modal
 - **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features or explicitly saved Images; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save an image for reuse** from its bubble menu; the saved Media Library image is an independent Object Store copy that survives removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same image reuses the existing item instead of duplicating it
-- **Add AI Chats** via the toolbar button which creates a new AI chat thread
+- **Create Context Regions** via the toolbar button, which creates a region-owned history and opens its chat tab
 - **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
-- **Provide AI context** by connecting documents/images to an AI chat thread—connected content is automatically sent to the AI
+- **Provide AI context** through a context region, or from selected items in a standalone chat using the `Follow` / `Pinned` modes and optional `With Sources` lineage toggle
 - **Group context** by dropping nodes into seafoam context-region clouds
 - **Use the floating prompt input** to send prompts to the currently selected node; for non-thread nodes, the input appears on selection and hides on deselect
 - **Select edges** by clicking the connector line
@@ -61,7 +61,13 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Uses `settings.mediaLibrary` for its two-thirds width, is flush to the canvas top and bottom, and occupies the space immediately to the left of visible AI chat.
 - Uses concise Feature browse cards with large previews and two-line summary previews; selection opens a full-detail inspector, or a focused detail view with Back at narrow widths.
 
-### AI Chat Thread Nodes
+### AI Chat Panel And Sessions
+
+The canvas owns a singleton right-side AI Chat panel independent of context-region activation. The outside top-right toggle shows the chat icon while closed and the collapse icon while open, shifting left when the panel opens; it opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first standalone prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and standalone context controls are stored in `canvasState.aiChatPanel`. The visible `Follow` / `Pinned` control is the reusable D3-backed `components/contextSelector` slider, and the `With Sources` control uses `components/toggleSwitch`.
+
+The Sessions surface includes standalone chats, context-region-owned histories, and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the context-control row; its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature. Context-region histories cannot be deleted from Sessions while their owning region still exists.
+
+### Legacy AI Chat Thread Nodes
 - Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
@@ -233,7 +239,7 @@ Resizing uses a stable diagonal-based calculation to preserve aspect ratio smoot
 
 Empty context regions preserve their persisted dimensions. Region auto-expansion may still grow a region to fit children dropped inside it, but it must not reset an empty region back to the default `300x200` size after a commit. When a child image or document is dropped into a larger existing region, the region keeps its existing size unless the child bounds plus padding exceed it.
 
-AI chat is rendered by a singleton canvas-owned floating panel. Context regions remain separate canvas nodes that hold prompt context; clicking a region opens the linked AI chat thread in the floating panel without replacing the region surface. The panel is right-flush and full-height within the workspace shell. A non-interactive decorative underlay extends left behind the rail and applies a masked glass blur so canvas imagery fades gradually beneath the panel instead of ending at a hard blur boundary. Reduced-transparency mode replaces that blur with a faded opaque surface. When it is open, the zoom indicator remains logically bottom-right but offsets left by the chat panel width, and the global user avatar moves to the panel's bottom-left corner.
+AI chat is rendered by a singleton canvas-owned floating panel. Context regions remain separate canvas nodes that own dedicated prompt context and history; clicking a region opens its history tab without replacing the region surface. Opening the panel itself does not select a region or create a conversation record. The panel is right-flush and full-height within the workspace shell. A non-interactive decorative underlay extends left behind the rail and applies a masked glass blur so canvas imagery fades gradually beneath the panel instead of ending at a hard blur boundary. Reduced-transparency mode replaces that blur with a faded opaque surface. When it is open, the zoom indicator remains logically bottom-right but offsets left by the chat panel width, and the global user avatar moves to the panel's bottom-left corner.
 
 ### Image Generation Visual Feedback
 
@@ -354,7 +360,7 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 
 ### AI Chat Context Extraction
 
-When a user sends a message in the canvas AI chat panel, the system extracts content from the linked context region and all nodes connected via incoming edges. This provides context to the AI model without requiring copy/paste.
+When a user sends a message from a context-region tab, the system extracts content from the linked context region and all nodes connected via incoming edges. Standalone chat tabs use the panel's selected-item context instead: `Follow` updates loaded direct items when selection changes, while `Pinned` keeps the currently loaded direct items. `With Sources` optionally traverses upstream canvas lineage in either standalone mode. This provides context to the AI model without requiring copy/paste and without requiring a context region.
 
 ```mermaid
 flowchart LR
@@ -367,7 +373,7 @@ flowchart LR
 
 The extraction flow:
 
-1. **Edge traversal** — `AiChatThreadService.extractConnectedContext(nodeId)` finds all nodes connected to the context region via incoming edges, recursively following the graph
+1. **Context source** — Region-owned tabs call `AiChatThreadService.extractConnectedContext(nodeId)`; standalone tabs call `extractSelectedContext({ nodeIds, includeUpstream })`
 2. **Content extraction** — Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64
 3. **Message building** — `buildContextMessage()` formats context as multimodal content blocks (`input_text` for text, `input_image` for images)
 4. **Submission** — The context message is prepended to the user's messages before sending to the AI

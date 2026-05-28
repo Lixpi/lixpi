@@ -50,8 +50,10 @@ export default {
         workspaceId,
         threadId,
         content,
-        aiModel
-    }: Pick<AiChatThread, 'workspaceId' | 'threadId' | 'content' | 'aiModel'>): Promise<AiChatThread | undefined> => {
+        aiModel,
+        title,
+        owner
+    }: Pick<AiChatThread, 'workspaceId' | 'threadId' | 'content' | 'aiModel'> & Partial<Pick<AiChatThread, 'title' | 'owner'>>): Promise<AiChatThread | undefined> => {
         const currentDate = new Date().getTime()
 
         const newThread: AiChatThread = {
@@ -59,6 +61,8 @@ export default {
             threadId,
             content,
             aiModel,
+            ...(title ? { title } : {}),
+            ...(owner ? { owner } : {}),
             status: 'active',
             createdAt: currentDate,
             updatedAt: currentDate

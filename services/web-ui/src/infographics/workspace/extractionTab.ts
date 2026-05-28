@@ -355,6 +355,7 @@ export async function submitExtractionRequest(
         stageReasoning,
         featureCard,
         traceEvents,
+        sourceContextSnapshot: ctx,
         error: extractionError,
         updatedAt: Date.now(),
     })
@@ -539,6 +540,7 @@ export async function submitExtractionRequest(
             token, workspaceId, organizationId: '', extractionRunId, messages,
             aiModel: ctx.aiModel,
             aiImageModel: ctx.aiImageModel,
+            sourceContextSnapshot: ctx,
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)

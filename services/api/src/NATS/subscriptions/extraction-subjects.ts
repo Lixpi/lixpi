@@ -4,6 +4,7 @@ import { info, err } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 import { NATS_SUBJECTS, type ProviderName } from '@lixpi/constants'
 import ExtractionRun from '../../models/extraction-run.ts'
+import Workspace from '../../models/workspace.ts'
 import AiModel from '../../models/ai-model.ts'
 import type { LlmModule } from '../../llm/index.ts'
 
@@ -35,12 +36,20 @@ export const extractionSubjects = [
         subject: FEATURE_EXTRACT.START, type: 'subscribe', queue: 'extraction', payloadType: 'json',
         permissions: { pub: { allow: [FEATURE_EXTRACT.START] }, sub: { allow: [`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.>`] } },
         handler: async (data: any) => {
-            const { user: { userId, stripeCustomerId }, workspaceId, organizationId, extractionRunId, messages, aiModel, aiImageModel } = data
+            const { user: { userId, stripeCustomerId }, workspaceId, organizationId, extractionRunId, messages, aiModel, aiImageModel, sourceContextSnapshot } = data
             const natsService = NATS_Service.getInstance()
 
             try {
+                const workspace = await Workspace.getWorkspace({ userId, workspaceId })
+                if (!workspace || 'error' in workspace) {
+                    natsService?.publish(`${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${extractionRunId}`, {
+                        error: workspace?.error || 'WORKSPACE_NOT_FOUND',
+                    })
+                    return
+                }
+
                 // Always create/upsert the run record — client sends pre-generated ID
-                await ExtractionRun.createRun({ extractionRunId, workspaceId, userId })
+                await ExtractionRun.createRun({ extractionRunId, workspaceId, userId, sourceContextSnapshot })
                 await ExtractionRun.updateStatus({ extractionRunId, workspaceId, status: 'analyzing' })
 
                 const [provider, model] = (aiModel as string).split(':')
@@ -101,7 +110,28 @@ export const extractionSubjects = [
         permissions: { pub: { allow: [FEATURE_EXTRACT.STATUS] }, sub: { allow: [FEATURE_EXTRACT.STATUS] } },
         handler: async (data: any) => {
             const { workspaceId, extractionRunId } = data
+            const workspace = await Workspace.getWorkspace({ userId: data.user.userId, workspaceId })
+            if (!workspace || 'error' in workspace) return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
             return await ExtractionRun.getRun({ extractionRunId, workspaceId })
+        },
+    },
+    {
+        subject: FEATURE_EXTRACT.LIST_BY_WORKSPACE, type: 'reply', payloadType: 'json',
+        permissions: { pub: { allow: [FEATURE_EXTRACT.LIST_BY_WORKSPACE] }, sub: { allow: [FEATURE_EXTRACT.LIST_BY_WORKSPACE] } },
+        handler: async (data: any) => {
+            const workspace = await Workspace.getWorkspace({ userId: data.user.userId, workspaceId: data.workspaceId })
+            if (!workspace || 'error' in workspace) return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            return await ExtractionRun.listWorkspaceRuns({ workspaceId: data.workspaceId })
+        },
+    },
+    {
+        subject: FEATURE_EXTRACT.DELETE, type: 'reply', payloadType: 'json',
+        permissions: { pub: { allow: [FEATURE_EXTRACT.DELETE] }, sub: { allow: [FEATURE_EXTRACT.DELETE] } },
+        handler: async (data: any) => {
+            const workspace = await Workspace.getWorkspace({ userId: data.user.userId, workspaceId: data.workspaceId })
+            if (!workspace || 'error' in workspace) return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            await ExtractionRun.deleteRun({ extractionRunId: data.extractionRunId, workspaceId: data.workspaceId })
+            return { success: true, extractionRunId: data.extractionRunId }
         },
     },
 ]

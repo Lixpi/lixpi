@@ -668,6 +668,24 @@ export type CanvasAiChatSidebarTab = {
     title: string
 }
 
+export type AiChatPanelContextMode = 'followSelection' | 'pinnedContext'
+
+export type CanvasAiChatPromptDraft = {
+    content?: object
+}
+
+export type CanvasAiChatPanelState = {
+    isOpen: boolean
+    isSessionHistoryOpen: boolean
+    tabs: CanvasAiChatSidebarTab[]
+    activeTabId?: string
+    contextMode: AiChatPanelContextMode
+    includeUpstreamContext: boolean
+    contextNodeIds: string[]
+    width?: number
+    drafts?: Record<string, CanvasAiChatPromptDraft>
+}
+
 export type CanvasFeatureExtractionState = {
     extractionRunId: string
     status: ExtractionRunStatus
@@ -680,6 +698,7 @@ export type CanvasFeatureExtractionState = {
     stageReasoning?: Record<string, string>
     featureCard?: Record<string, any>
     traceEvents?: StageTraceEvent[]
+    sourceContextSnapshot?: object
     error?: string
     updatedAt: number
 }
@@ -691,6 +710,7 @@ export type CanvasState = {
     lastActiveAiChatThreadId?: string
     aiChatSidebarTabs?: CanvasAiChatSidebarTab[]
     activeAiChatSidebarTabId?: string
+    aiChatPanel?: CanvasAiChatPanelState
     featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 
@@ -932,11 +952,17 @@ export type FinancialTransaction = {
 
 export type AiChatThreadStatus = 'active' | 'paused' | 'completed'
 
+export type AiChatThreadOwner =
+    | { type: 'standalone' }
+    | { type: 'contextRegion'; contextRegionNodeId: string }
+
 export type AiChatThread = {
     workspaceId: string
     threadId: string
     content: object
     aiModel: string
+    title?: string
+    owner?: AiChatThreadOwner
     status: AiChatThreadStatus
     createdAt: number
     updatedAt: number

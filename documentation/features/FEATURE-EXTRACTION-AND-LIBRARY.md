@@ -539,7 +539,9 @@ Extend [`packages/lixpi/constants/nats-subjects.json`](../../packages/lixpi/cons
   "FEATURE_EXTRACT": {
     "START": "ai.interaction.feature.extract.start",
     "STOP": "ai.interaction.feature.extract.stop",
-    "STATUS": "ai.interaction.feature.extract.status"
+    "STATUS": "ai.interaction.feature.extract.status",
+    "LIST_BY_WORKSPACE": "ai.interaction.feature.extract.listByWorkspace",
+    "DELETE": "ai.interaction.feature.extract.delete"
   }
 }
 ```
@@ -552,25 +554,37 @@ Extend [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/t
 
 ```typescript
 type CanvasState = {
-  viewport: CanvasViewport
   nodes: CanvasNode[]
   edges: WorkspaceEdge[]
   lastActiveAiChatThreadId?: string   // existing — kept for migration
 
-  panelTabs: PanelTab[]               // NEW — persists tab strip
-  activePanelTabId?: string           // NEW — which tab is active
+  aiChatPanel?: CanvasAiChatPanelState // panel visibility, tabs, drafts, and context controls
+  featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 
-type PanelTab = {
+type CanvasAiChatPanelState = {
+  isOpen: boolean
+  isSessionHistoryOpen: boolean
+  tabs: CanvasAiChatSidebarTab[]
+  activeTabId?: string
+  contextMode: 'followSelection' | 'pinnedContext'
+  includeUpstreamContext: boolean
+  contextNodeIds: string[]
+  width?: number
+  drafts?: Record<string, { content?: object }>
+}
+
+type CanvasAiChatSidebarTab = {
   tabId: string
   type: 'thread' | 'extraction'
-  refId: string                        // threadId or extractionRunId
-  pinned?: boolean                     // reserved for v2
-  openedAt: number
+  refId: string                       // threadId or extractionRunId
+  title: string
 }
 ```
 
 `CanvasNodeType` is **not** extended — features are library-only per the canvas-presence decision.
+
+Extraction runs appear in the AI Chat panel Sessions list alongside normal chats and context-region histories. Sessions is collapsed by default and expanded from the panel history toggle, whose state persists in `CanvasAiChatPanelState.isSessionHistoryOpen`. Closing an extraction tab keeps the run reopenable. Deleting an extraction session deletes only its `ExtractionRun` history and persisted panel draft; any saved `Feature` produced by that run remains a separate library entity.
 
 ### Extension to `AiInteractionChatSendMessagePayload`
 
@@ -1074,10 +1088,10 @@ Phase 4 is the heart of the rewrite. It is split into 4 independently-shippable 
 - Refactor [`services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) `renderActiveAiChatPanel` (~lines 1328–1533) into a `PanelTabsController`:
   - Tab strip rendered as a horizontal flex row at the top of `.workspace-ai-chat-floating-panel`.
   - Body factory dispatches by `PanelTab.type`: `renderThreadTabBody(threadId)` (factor out today's panel body) or `renderExtractionTabBody(extractionRunId)` (Phase 7).
-  - Persistence via existing `onCanvasStateChange?.()` hook.
+  - Persistence via existing `onCanvasStateChange?.()` hook in `canvasState.aiChatPanel`.
   - Reactive bridge: subscribe to `WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE` for cross-device tab sync.
   - Window-level keyboard listener: `Cmd/Ctrl+W`, `Cmd/Ctrl+1..9`, `Cmd/Ctrl+Shift+[`/`]` — only active when panel is focused.
-  - Migration: if `panelTabs` undefined and `lastActiveAiChatThreadId` set, synthesize a single thread tab and persist on first render.
+  - Migration: if `aiChatPanel` is undefined and `lastActiveAiChatThreadId` is set, synthesize a single thread tab from legacy state and persist on the next panel-state write.
 
 **Tests**: jsdom test of tab-state reducers; manual visual QA pass.
 
