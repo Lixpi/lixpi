@@ -4,7 +4,7 @@ import c from 'chalk'
 import { wsconnect } from '@nats-io/nats-core'
 import { connect } from "@nats-io/transport-node"
 import { fromSeed } from '@nats-io/nkeys'
-import { jetstream } from '@nats-io/jetstream'
+import { jetstream, jetstreamManager } from '@nats-io/jetstream'
 import { Objm } from '@nats-io/obj'
 
 import type {
@@ -13,8 +13,15 @@ import type {
     Subscription,
     ConnectionOptions
 } from '@nats-io/nats-core'
-import type { JetStreamClient } from '@nats-io/jetstream'
+import type { JetStreamClient, JetStreamManager } from '@nats-io/jetstream'
 import type { ObjectStore, ObjectStoreOptions, ObjectInfo } from '@nats-io/obj'
+
+// Default JetStream replication factor for all stores we create. The cluster
+// runs 3 nodes, so R3 keeps a quorum copy on every node: a single node lagging
+// or being briefly deemed unhealthy can no longer lose the only copy of data.
+// Never default to 1 in a cluster — an R1 asset has no redundancy and can be
+// silently lost when the meta-layer reassigns it during a health blip.
+const DEFAULT_STREAM_REPLICAS = 3
 
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
@@ -36,6 +43,7 @@ export type NatsServiceConfig = {
     subscriptions?: NatsSubjectSubscription[]
     middleware?: NatsMiddleware[]              // Middleware for all subscriptions
     replyMiddleware?: ReplyMiddleware[]        // Middleware specifically for replies
+    streamReplicas?: number                    // Replication factor for created stores (defaults to DEFAULT_STREAM_REPLICAS)
 }
 
 export type NatsSubjectSubscription<T = any> = {
@@ -141,8 +149,10 @@ export default class NatsService {
     private static instance: NatsService
     private nc: NatsConnection | null = null
     private js: JetStreamClient | null = null
+    private jsm: JetStreamManager | null = null
     private objm: Objm | null = null
     private config: NatsServiceConfig
+    private streamReplicas: number
     private isMonitoring = false
     private isConnecting = false
     private reconnectTimer: NodeJS.Timeout | null = null
@@ -162,6 +172,7 @@ export default class NatsService {
 
     private constructor(config: NatsServiceConfig) {
         this.config = config
+        this.streamReplicas = config.streamReplicas ?? DEFAULT_STREAM_REPLICAS
     }
 
     private scheduleReconnect(delay = 500) {
@@ -517,10 +528,44 @@ export default class NatsService {
         return this.objm
     }
 
+    private async getJetStreamManager(): Promise<JetStreamManager> {
+        if (!this.nc) {
+            throw new Error('NATS client is not connected.')
+        }
+        if (!this.jsm) {
+            this.jsm = await jetstreamManager(this.nc)
+        }
+        return this.jsm
+    }
+
+    // Distinguishes "the stream genuinely does not exist" (safe to create) from
+    // transient/cluster errors like "no responders" or request timeouts (which
+    // must NOT be treated as missing — creating a fresh empty bucket on a
+    // transient error is how data loss was previously masked).
+    private isStreamNotFoundError(e: any): boolean {
+        const msg = (e?.message ?? String(e ?? '')).toLowerCase()
+        const code = e?.code ?? e?.api_error?.err_code ?? e?.jsError?.code
+        if (msg.includes('no responders') || msg.includes('timeout') || msg.includes('503')) return false
+        return code === 404 || code === 10059 || msg.includes('stream not found') || msg.includes('no stream') || msg.includes('not found')
+    }
+
+    // Open a bucket read-only. Returns null when the bucket genuinely does not
+    // exist; rethrows on transient/cluster errors so callers never mistake an
+    // unreachable store for an empty one.
+    private async openObjectStoreOrNull(bucketName: string): Promise<ObjectStore | null> {
+        try {
+            return await this.getObjectStoreManager().open(bucketName)
+        } catch (e: any) {
+            if (this.isStreamNotFoundError(e)) return null
+            throw e
+        }
+    }
+
     async createObjectStore(bucketName: string, options?: Partial<ObjectStoreOptions>): Promise<ObjectStore> {
         const objm = this.getObjectStoreManager()
-        const os = await objm.create(bucketName, options)
-        info(`Object Store bucket created: ${bucketName}`)
+        // Default to the configured replication factor; callers may override.
+        const os = await objm.create(bucketName, { replicas: this.streamReplicas, ...options })
+        info(`Object Store bucket created: ${bucketName} (replicas=${(options?.replicas ?? this.streamReplicas)})`)
         return os
     }
 
@@ -529,15 +574,20 @@ export default class NatsService {
         return objm.open(bucketName)
     }
 
-    // Open a bucket, auto-creating it if it was wiped or never existed.
-    // All internal methods use this so operations survive a NATS storage reset.
+    // Open a bucket for WRITES, creating it only if it genuinely does not exist.
+    // A transient open failure is rethrown rather than masked by creating an
+    // empty replacement bucket. New buckets are created replicated (R3).
     async ensureObjectStore(bucketName: string): Promise<ObjectStore> {
         const objm = this.getObjectStoreManager()
         try {
             return await objm.open(bucketName)
-        } catch {
-            warn(`Object Store bucket missing, recreating: ${bucketName}`)
-            return await objm.create(bucketName, { replicas: 1 })
+        } catch (e: any) {
+            if (!this.isStreamNotFoundError(e)) {
+                err(`Object Store open failed for ${bucketName} (NOT auto-creating — transient/cluster error):`, e)
+                throw e
+            }
+            warn(`Object Store bucket does not exist, creating (replicas=${this.streamReplicas}): ${bucketName}`)
+            return await objm.create(bucketName, { replicas: this.streamReplicas })
         }
     }
 
@@ -546,6 +596,30 @@ export default class NatsService {
         const result = await objm.destroy(bucketName)
         info(`Object Store bucket deleted: ${bucketName}`)
         return result
+    }
+
+    // List all stream names visible to this connection's account.
+    async listStreamNames(): Promise<string[]> {
+        const jsm = await this.getJetStreamManager()
+        const names: string[] = []
+        for await (const si of jsm.streams.list()) {
+            names.push(si.config.name)
+        }
+        return names
+    }
+
+    // Scale a stream up to at least `replicas`. No-op when already at/above it.
+    // Used to migrate legacy R1 stores to replicated storage. NATS adds the new
+    // replicas and syncs them from the current leader (additive, non-destructive).
+    async ensureStreamReplicas(streamName: string, replicas: number = this.streamReplicas): Promise<{ name: string; from: number; to: number; changed: boolean }> {
+        const jsm = await this.getJetStreamManager()
+        const si = await jsm.streams.info(streamName)
+        const from = si.config.num_replicas ?? 1
+        if (from >= replicas) {
+            return { name: streamName, from, to: from, changed: false }
+        }
+        await jsm.streams.update(streamName, { num_replicas: replicas })
+        return { name: streamName, from, to: replicas, changed: true }
     }
 
     // Helper to convert Uint8Array to ReadableStream (required by @nats-io/obj)
@@ -574,7 +648,10 @@ export default class NatsService {
     }
 
     async getObject(bucketName: string, name: string): Promise<Uint8Array | null> {
-        const os = await this.ensureObjectStore(bucketName)
+        const os = await this.openObjectStoreOrNull(bucketName)
+        if (!os) {
+            return null
+        }
         const result = await os.get(name)
         if (!result) {
             return null
@@ -599,7 +676,10 @@ export default class NatsService {
     }
 
     async getObjectStream(bucketName: string, name: string): Promise<ReadableStream<Uint8Array> | null> {
-        const os = await this.ensureObjectStore(bucketName)
+        const os = await this.openObjectStoreOrNull(bucketName)
+        if (!os) {
+            return null
+        }
         const result = await os.get(name)
         if (!result) {
             return null
@@ -608,18 +688,28 @@ export default class NatsService {
     }
 
     async getObjectInfo(bucketName: string, name: string): Promise<ObjectInfo | null> {
-        const os = await this.ensureObjectStore(bucketName)
+        const os = await this.openObjectStoreOrNull(bucketName)
+        if (!os) {
+            return null
+        }
         return os.info(name)
     }
 
     async deleteObject(bucketName: string, name: string): Promise<void> {
-        const os = await this.ensureObjectStore(bucketName)
+        const os = await this.openObjectStoreOrNull(bucketName)
+        if (!os) {
+            warn(`Object Store bucket missing on delete, nothing to do: ${bucketName}/${name}`)
+            return
+        }
         await os.delete(name)
         info(`Object deleted: ${bucketName}/${name}`)
     }
 
     async listObjects(bucketName: string): Promise<ObjectInfo[]> {
-        const os = await this.ensureObjectStore(bucketName)
+        const os = await this.openObjectStoreOrNull(bucketName)
+        if (!os) {
+            return []
+        }
         const objects: ObjectInfo[] = []
         const list = await os.list()
         for await (const obj of list) {

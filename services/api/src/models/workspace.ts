@@ -339,21 +339,22 @@ export default {
         const currentDate = new Date().getTime()
 
         try {
-            const workspace = await dynamoDBService.getItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                key: { workspaceId },
-                origin: 'model::Workspace->addFile()'
-            })
-
-            const currentFiles = workspace?.files || []
-            currentFiles.push(file)
-
+            // Atomic append. A read-modify-write here races when several images
+            // are stored concurrently (AI generation, extraction samples) and
+            // silently drops file registrations; list_append serializes per-item
+            // in DynamoDB so concurrent appends never clobber each other.
             await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                 key: { workspaceId },
-                updates: {
-                    files: currentFiles,
-                    updatedAt: currentDate
+                updateExpression: 'SET #files = list_append(if_not_exists(#files, :empty), :newFiles), #updatedAt = :now',
+                expressionAttributeNames: {
+                    '#files': 'files',
+                    '#updatedAt': 'updatedAt'
+                },
+                expressionAttributeValues: {
+                    ':empty': [],
+                    ':newFiles': [file],
+                    ':now': currentDate
                 },
                 origin: 'model::Workspace->addFile()'
             })
