@@ -59,6 +59,10 @@ graph TB
 
 **Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save any completed canvas image as an independent JetStream Object Store copy. Inserting a saved image creates a fresh workspace image object and a fresh canvas node, so library media survives deletion of its source node.
 
+**AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, compact `Follow` / `Pinned` and `With Sources` controls, and whether the history list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
+
+**Context Regions** are spatial context collections with dedicated chat history. `Create Context Region` creates a region and its owned history and opens that history as a panel tab. Activating an existing region opens the same dedicated tab. A context-region history cannot be deleted independently while its region exists; deleting the region removes its dedicated history with it.
+
 ---
 
 ## 3. Artifact Piping & Character Consistency

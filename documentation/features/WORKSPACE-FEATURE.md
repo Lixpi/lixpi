@@ -10,11 +10,15 @@ A workspace is the primary container where users organize and edit their documen
 
 **Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents, AI chat threads, and uploaded files.
 
-**Canvas Node** — A positioned rectangle on the canvas. Can be a document node (with ProseMirror editor), an image node, or an AI chat thread node. Stores position, dimensions, and type-specific data.
+**Canvas Node** — A positioned item on the canvas. It can be a document node, an image node, or a context region. Stores position, dimensions, and type-specific data.
 
 **Document** — The actual text content (ProseMirror JSON). Lives separately from its canvas representation so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'` and contain block-level content (paragraphs, headings, lists, etc.).
 
-**AI Chat Thread** — An independent AI conversation canvas node with its own persistence and lifecycle. Stored in the AI-Chat-Threads DynamoDB table. Each thread has its own `AiInteractionService` instance for streaming AI responses. Uses `documentType: 'aiChatThread'` for its ProseMirror editor.
+**AI Chat Thread** — A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread can be standalone or owned by one context region; its ProseMirror history is rendered in an AI Chat panel tab and streamed through its own `AiInteractionService`.
+
+**AI Chat Panel** — A workspace-owned right-side surface that can be opened without selecting a region or creating a chat session. It persists visibility, tabs, active tab, width, prompt drafts, and standalone context settings. A standalone `AiChatThread` is created only when the first prompt is submitted.
+
+**Context Region** — A canvas collection of contextual items with one dedicated chat history. Creating or activating a region opens that history in an AI Chat tab. The owned history remains visible in Sessions but cannot be deleted independently while its region exists.
 
 **Image** — An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas. A user can explicitly save a separate Media Library copy that is not deleted with the source node.
 
@@ -110,6 +114,18 @@ type CanvasState = {
     }
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]  // Connections between nodes
+    aiChatPanel?: {
+        isOpen: boolean
+        isSessionHistoryOpen: boolean
+        tabs: Array<{ tabId: string; type: 'thread' | 'extraction'; refId: string; title: string }>
+        activeTabId?: string
+        contextMode: 'followSelection' | 'pinnedContext'
+        includeUpstreamContext: boolean
+        contextNodeIds: string[]
+        width?: number
+        drafts?: Record<string, { content?: object }>
+    }
+    featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 ```
 
@@ -545,6 +561,7 @@ AI chat threads belonging to the current workspace.
 | `WORKSPACE.CREATE_WORKSPACE` | Create new workspace |
 | `WORKSPACE.UPDATE_WORKSPACE` | Update name |
 | `WORKSPACE.UPDATE_CANVAS_STATE` | Persist viewport and node positions |
+| `WORKSPACE.DELETE_CONTEXT_REGION` | Atomically delete a context region and its owned chat history |
 | `WORKSPACE.DELETE_WORKSPACE` | Delete workspace |
 | `WORKSPACE.GET_WORKSPACE_DOCUMENTS` | Get documents in workspace |
 | `DOCUMENT.CREATE_DOCUMENT` | Create document |
@@ -557,6 +574,8 @@ AI chat threads belonging to the current workspace.
 | `AI_CHAT_THREAD.GET_BY_WORKSPACE` | Get all AI chat threads in workspace |
 | `AI_INTERACTION.CHAT_SEND_MESSAGE` | Send message to AI for processing |
 | `AI_INTERACTION.CHAT_STOP_MESSAGE` | Stop active AI streaming |
+| `AI_INTERACTION.FEATURE_EXTRACT.LIST_BY_WORKSPACE` | List extraction sessions for Sessions history |
+| `AI_INTERACTION.FEATURE_EXTRACT.DELETE` | Delete an extraction session without deleting its saved Feature |
 | `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image from Object Store |
 | `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_IMAGE` | Copy a stored canvas image into the Media Library |
 | `WORKSPACE.MEDIA_LIBRARY.LIST_AVAILABLE` | List saved media visible in selected scopes |
@@ -658,6 +677,10 @@ Canvas state changes are debounced (1 second) before persisting. This prevents h
 Document content changes are handled by `DocumentService.updateDocument()` which has its own debouncing logic.
 
 AI chat thread content changes are handled by `AiChatThreadService.updateAiChatThread()` with similar debouncing.
+
+AI Chat panel state is stored inside `canvasState.aiChatPanel`. Opening or closing the panel, expanding or collapsing Sessions, opening or closing tabs, resizing it, changing context controls, and editing prompt drafts persist workspace UI state but do not create a conversation entity. Submitting from an empty panel creates a standalone chat session; creating a context region creates its region-owned session.
+
+Sessions is collapsed by default and toggled from the history icon in the panel control row. When expanded it lists standalone chats, context-region histories, and extraction sessions. Closing a tab only changes panel presentation and the session remains reopenable. Explicit standalone or extraction deletion removes that session and its saved prompt draft. Region-owned chat deletion is blocked while its context region exists; deleting the region removes its owned history atomically. A saved Feature remains independent when its extraction session is deleted.
 
 Position and dimension changes after drag/resize are persisted immediately via `onCanvasStateChange`.
 
@@ -770,7 +793,7 @@ sequenceDiagram
     end
 ```
 
-Each AI chat thread node has its own `AiInteractionService` instance, enabling concurrent AI streams across multiple threads in the same workspace.
+Each open AI chat thread tab has its own `AiInteractionService` instance, enabling concurrent AI streams across multiple threads in the same workspace. A context-region tab and a standalone tab use the same streaming path; the difference is context ownership and deletion rules.
 
 ---
 
@@ -1041,13 +1064,18 @@ sequenceDiagram
 
 ---
 
-## AI Chat Context from Connected Nodes
+## AI Chat Context
 
-When nodes are connected TO an AI chat thread (incoming edges), the AI chat automatically extracts their content and passes it to the AI model. This includes text from documents, text from other AI chat threads, and images (converted to base64). Context is extracted by walking the edge graph backwards from the AI chat node, collecting all connected content recursively.
+Context-region chats and standalone chats deliberately use different context sources.
+
+- A context-region chat extracts content from the region and its incoming graph exactly as before. Activating a region always opens its owned history, regardless of the standalone context control.
+- A standalone chat may include the selected eligible canvas items directly. In the `Follow` mode (`followSelection`), later selection changes update the loaded standalone context. In the `Pinned` mode (`pinnedContext`), later selection changes do not alter it.
+- `With Sources` (`includeUpstreamContext`) applies in both standalone modes: off submits only the loaded direct items; on also traverses their upstream lineage using the existing graph extraction rules.
+- No selected item means no automatically attached standalone context.
 
 ### How It Works
 
-1. **Edge Traversal** — When a user sends a message in an AI chat thread, `AiChatThreadService.extractConnectedContext()` finds all nodes connected via incoming edges (recursively)
+1. **Context selection** — A region-owned send uses `extractConnectedContext(regionNodeId)`. A standalone send uses `extractSelectedContext({ nodeIds, includeUpstream })`.
 2. **Content Extraction** — Documents and AI threads have their ProseMirror content parsed for text; embedded images are also extracted. Standalone image nodes are fetched and converted to base64
 3. **Message Building** — `buildContextMessage()` formats the extracted context as a multimodal message with interleaved text and images
 4. **API Format** — All content uses the OpenAI Responses API format (`input_text`, `input_image` blocks) as the canonical format. The `llm-api` service converts to provider-specific formats (e.g., Anthropic) as needed

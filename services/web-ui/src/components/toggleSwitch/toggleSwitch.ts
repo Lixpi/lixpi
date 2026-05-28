@@ -1,4 +1,4 @@
-// Toggle switch SVG primitive - renders interactive toggle switches as SVG elements
+// Toggle switch SVG component - renders interactive toggle switches as SVG elements
 // Emits events on state changes for parent to handle
 
 // @ts-ignore - runtime import
