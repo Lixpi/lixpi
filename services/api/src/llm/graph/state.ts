@@ -18,6 +18,12 @@ export type ImageUsage = {
     quality: string
 }
 
+export type VideoUsage = {
+    durationSeconds: number
+    resolution: string
+    aspectRatio: string
+}
+
 export type EventMeta = {
     userId?: string
     stripeCustomerId?: string
@@ -90,6 +96,23 @@ export type ProviderState = {
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot | undefined
     imageBranchResolution?: ImageBranchVlmResolution | undefined
 
+    // Video generation (VEO) — async submit/poll routing. Mirrors the image
+    // fields above; the VLM branch resolution is shared (reused for first-frame
+    // + reference selection), so no separate video resolution field is needed.
+    enableVideoGeneration?: boolean | undefined
+    videoModelMetaInfo?: AiModelMetaInfo | undefined
+    videoModelVersion?: string | undefined
+    videoProviderName?: ProviderName | undefined
+    videoAspectRatio?: string | undefined
+    videoResolution?: string | undefined
+    videoDurationSeconds?: number | undefined
+    generatedVideoPrompt?: string | undefined
+    videoFirstFrameImage?: string | undefined
+    videoReferenceImages?: string[] | undefined
+    videoSourceForExtension?: string | undefined
+    generatedVideos?: string[] | undefined
+    videoUsage?: VideoUsage | undefined
+
     // Multi-turn editing (OpenAI Responses API)
     previousResponseId?: string | undefined
 
@@ -136,6 +159,19 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     generatedImages: { reducer: keep },
     imageBranchCandidateSnapshot: { reducer: keep },
     imageBranchResolution: { reducer: keep },
+    enableVideoGeneration: { reducer: keep, default: () => false },
+    videoModelMetaInfo: { reducer: keep },
+    videoModelVersion: { reducer: keep },
+    videoProviderName: { reducer: keep },
+    videoAspectRatio: { reducer: keep },
+    videoResolution: { reducer: keep },
+    videoDurationSeconds: { reducer: keep },
+    generatedVideoPrompt: { reducer: keep },
+    videoFirstFrameImage: { reducer: keep },
+    videoReferenceImages: { reducer: keep },
+    videoSourceForExtension: { reducer: keep },
+    generatedVideos: { reducer: keep },
+    videoUsage: { reducer: keep },
     previousResponseId: { reducer: keep },
     referencedFeatureIds: { reducer: keep },
     featureUsagePrompt: { reducer: keep },

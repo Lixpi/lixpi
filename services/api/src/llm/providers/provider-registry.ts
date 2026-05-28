@@ -7,6 +7,7 @@ import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import type { StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
+import type { StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
 
 export type ProviderConstructor = new (
@@ -20,10 +21,12 @@ export class ProviderRegistry {
     private readonly providerCtors: Map<ProviderName, ProviderConstructor>
     private readonly usageReporter: UsageReporter
     private imageRouter?: (state: ProviderState) => Promise<Partial<ProviderState>>
+    private videoRouter?: (state: ProviderState) => Promise<Partial<ProviderState>>
 
     constructor(
         private readonly natsService: NatsService,
         private readonly storeWorkspaceImage: StoreWorkspaceImageFn,
+        private readonly storeWorkspaceVideo: StoreWorkspaceVideoFn,
         ctors: Record<ProviderName, ProviderConstructor>,
     ) {
         this.providerCtors = new Map(Object.entries(ctors) as Array<[ProviderName, ProviderConstructor]>)
@@ -35,16 +38,28 @@ export class ProviderRegistry {
         this.imageRouter = router
     }
 
+    // late-bound to break the registry↔video-router circular dependency
+    setVideoRouter(router: (state: ProviderState) => Promise<Partial<ProviderState>>): void {
+        this.videoRouter = router
+    }
+
     private buildDeps(): BaseProviderDeps {
         return {
             natsService: this.natsService,
             storeWorkspaceImage: this.storeWorkspaceImage,
+            storeWorkspaceVideo: this.storeWorkspaceVideo,
             usageReporter: this.usageReporter,
             runImageRouter: async (state: ProviderState) => {
                 if (!this.imageRouter) {
                     throw new Error('ImageRouter not initialized')
                 }
                 return this.imageRouter(state)
+            },
+            runVideoRouter: async (state: ProviderState) => {
+                if (!this.videoRouter) {
+                    throw new Error('VideoRouter not initialized')
+                }
+                return this.videoRouter(state)
             },
         }
     }

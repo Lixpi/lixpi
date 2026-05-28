@@ -7,6 +7,7 @@ import type {
     ImageCanvasNode,
     DocumentCanvasNode,
     AiChatThreadCanvasNode,
+    VideoCanvasNode,
 } from '@lixpi/constants'
 
 const { AI_CHAT_THREAD_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
@@ -22,7 +23,7 @@ import type { Document } from '$src/stores/documentStore.ts'
 
 // ========== CONTEXT EXTRACTION TYPES ==========
 
-export type ContextItemType = 'document' | 'image' | 'aiChatThread'
+export type ContextItemType = 'document' | 'image' | 'aiChatThread' | 'video'
 
 export type ContextItem = {
     type: ContextItemType
@@ -30,11 +31,18 @@ export type ContextItem = {
     title?: string
     content: string
     parentNodeId?: string
-    // For images stored in NATS object store
+    // For images and video posters stored in NATS object store
     fileId?: string
     workspaceId?: string
-    // Links this image to a specific aiResponseMessage within the source AI chat thread
+    // Links this image/video to a specific aiResponseMessage within the source AI chat thread
     sourceMessageId?: string
+    // Video-only fields (used when type === 'video'). The poster lives at
+    // workspace-{workspaceId}-files/{posterFileId} and is fed to the LLM in
+    // place of the MP4 (text models can't natively consume video).
+    posterFileId?: string
+    durationSeconds?: number
+    aspectRatio?: number
+    hasAudio?: boolean
 }
 
 export type ExtractedContext = ContextItem[]
@@ -162,6 +170,9 @@ function extractContentFromProseMirror(content: string | object): ExtractedConte
 function getContextDedupeKey(item: ContextItem): string {
     if (item.type === 'image') {
         return [item.type, item.fileId ?? item.content, item.workspaceId ?? ''].join(':')
+    }
+    if (item.type === 'video') {
+        return [item.type, item.fileId ?? item.nodeId, item.workspaceId ?? ''].join(':')
     }
 
     return [item.type, item.nodeId, item.title ?? '', item.content].join(':')
@@ -375,6 +386,26 @@ class AiChatThreadService {
                     workspaceId: imgNode.workspaceId,
                     sourceMessageId: edge.sourceMessageId,
                 })
+            } else if (node.type === 'video') {
+                // Video context: feed the ffmpeg-extracted poster frame in
+                // place of the MP4 (cross-provider compatibility), plus a JSON
+                // text block describing the video's metadata so the text model
+                // knows it's looking at a still from a video, not a photo.
+                const videoNode = node as VideoCanvasNode
+                if (videoNode.fileId) {
+                    context.push({
+                        type: 'video',
+                        nodeId: node.nodeId,
+                        content: '',
+                        fileId: videoNode.fileId,
+                        workspaceId: videoNode.workspaceId,
+                        posterFileId: videoNode.posterFileId,
+                        durationSeconds: videoNode.durationSeconds,
+                        aspectRatio: videoNode.aspectRatio,
+                        hasAudio: videoNode.hasAudio,
+                        sourceMessageId: edge.sourceMessageId,
+                    })
+                }
             } else if (node.type === 'aiChatThread') {
                 const threadNode = node as AiChatThreadCanvasNode
                 const thread = threadsMap.get(threadNode.referenceId)
@@ -410,6 +441,7 @@ class AiChatThreadService {
 
         const contentBlocks: MessageContentBlock[] = []
         const standaloneImages: ContextItem[] = []
+        const standaloneVideos: ContextItem[] = []
         const textItems: ContextItem[] = []
         const embeddedImagesByParent = new Map<string, ContextItem[]>()
 
@@ -422,6 +454,8 @@ class AiChatThreadService {
                 } else {
                     standaloneImages.push(item)
                 }
+            } else if (item.type === 'video') {
+                standaloneVideos.push(item)
             } else {
                 textItems.push(item)
             }
@@ -475,6 +509,45 @@ class AiChatThreadService {
                 image_url: imageUrl,
                 detail: 'auto',
             })
+        }
+
+        for (const item of standaloneVideos) {
+            // Cross-provider video context: serialize metadata as JSON text,
+            // then attach the poster frame (still image) so vision-capable
+            // text models can reason about the video's content. The MP4 itself
+            // is only consumable by VEO via the video extension path
+            // (sourceVideoNodeId / videoSourceForExtension).
+            const videoMetadata: Record<string, unknown> = {
+                type: 'standalone_video',
+            }
+            if (item.fileId && item.workspaceId) {
+                videoMetadata.video_url = `nats-obj://workspace-${item.workspaceId}-files/${item.fileId}`
+            }
+            if (typeof item.durationSeconds === 'number' && item.durationSeconds > 0) {
+                videoMetadata.duration_s = item.durationSeconds
+            }
+            if (typeof item.aspectRatio === 'number' && item.aspectRatio > 0) {
+                videoMetadata.aspect_ratio = item.aspectRatio
+            }
+            if (typeof item.hasAudio === 'boolean') {
+                videoMetadata.has_audio = item.hasAudio
+            }
+            if (item.sourceMessageId) {
+                videoMetadata.sourceMessageId = item.sourceMessageId
+            }
+
+            contentBlocks.push({
+                type: 'input_text',
+                text: JSON.stringify(videoMetadata),
+            })
+
+            if (item.posterFileId && item.workspaceId) {
+                contentBlocks.push({
+                    type: 'input_image',
+                    image_url: `nats-obj://workspace-${item.workspaceId}-files/${item.posterFileId}`,
+                    detail: 'auto',
+                })
+            }
         }
 
         if (contentBlocks.length === 0) return null

@@ -12,6 +12,12 @@ type SubmitHandler = (data: {
         aiImageModel?: string
         imageGenerationSize: string
     }
+    videoOptions?: {
+        aiVideoModel?: string
+        videoAspectRatio?: string
+        videoResolution?: string
+        videoDuration?: string
+    }
 }) => void
 
 type StopHandler = () => void
@@ -23,6 +29,10 @@ type AiPromptInputPluginOptions = {
     createModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createModelDropdown']
     createImageModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createImageModelDropdown']
     createImageSizeDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createImageSizeDropdown']
+    createVideoModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createVideoModelDropdown']
+    createVideoAspectDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createVideoAspectDropdown']
+    createVideoResolutionDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createVideoResolutionDropdown']
+    createVideoDurationDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createVideoDurationDropdown']
     createSubmitButton: Parameters<typeof createAiPromptInputNodeView>[0]['createSubmitButton']
     placeholderText: string
 }
@@ -55,14 +65,36 @@ function extractContentJSON(state: EditorState): any[] | null {
     return content
 }
 
-function getInputAttrs(state: EditorState): { aiModel: string; aiImageModel: string; imageGenerationSize: string } {
-    let attrs = { aiModel: '', aiImageModel: '', imageGenerationSize: 'auto' }
+type InputAttrs = {
+    aiModel: string
+    aiImageModel: string
+    imageGenerationSize: string
+    aiVideoModel: string
+    videoAspectRatio: string
+    videoResolution: string
+    videoDuration: string
+}
+
+function getInputAttrs(state: EditorState): InputAttrs {
+    let attrs: InputAttrs = {
+        aiModel: '',
+        aiImageModel: '',
+        imageGenerationSize: 'auto',
+        aiVideoModel: '',
+        videoAspectRatio: '',
+        videoResolution: '',
+        videoDuration: '',
+    }
     state.doc.descendants((node: ProseMirrorNode) => {
         if (node.type.name === aiPromptInputNodeType) {
             attrs = {
                 aiModel: node.attrs.aiModel || '',
                 aiImageModel: node.attrs.aiImageModel || '',
                 imageGenerationSize: node.attrs.imageGenerationSize || 'auto',
+                aiVideoModel: node.attrs.aiVideoModel || '',
+                videoAspectRatio: node.attrs.videoAspectRatio || '',
+                videoResolution: node.attrs.videoResolution || '',
+                videoDuration: node.attrs.videoDuration || '',
             }
             return false
         }
@@ -110,9 +142,28 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         createModelDropdown,
         createImageModelDropdown,
         createImageSizeDropdown,
+        createVideoModelDropdown,
+        createVideoAspectDropdown,
+        createVideoResolutionDropdown,
+        createVideoDurationDropdown,
         createSubmitButton,
         placeholderText,
     } = options
+
+    const buildSubmitPayload = (contentJSON: any[], attrs: InputAttrs) => ({
+        contentJSON,
+        aiModel: attrs.aiModel,
+        imageOptions: {
+            aiImageModel: attrs.aiImageModel,
+            imageGenerationSize: attrs.imageGenerationSize,
+        },
+        videoOptions: {
+            aiVideoModel: attrs.aiVideoModel,
+            videoAspectRatio: attrs.videoAspectRatio,
+            videoResolution: attrs.videoResolution,
+            videoDuration: attrs.videoDuration,
+        },
+    })
 
     const handleSubmit = (view: EditorView) => {
         const contentJSON = extractContentJSON(view.state)
@@ -120,14 +171,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
 
         const attrs = getInputAttrs(view.state)
 
-        onSubmit({
-            contentJSON,
-            aiModel: attrs.aiModel,
-            imageOptions: {
-                aiImageModel: attrs.aiImageModel,
-                imageGenerationSize: attrs.imageGenerationSize,
-            },
-        })
+        onSubmit(buildSubmitPayload(contentJSON, attrs))
 
         clearInputContent(view)
     }
@@ -185,6 +229,10 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     createModelDropdown,
                     createImageModelDropdown,
                     createImageSizeDropdown,
+                    createVideoModelDropdown,
+                    createVideoAspectDropdown,
+                    createVideoResolutionDropdown,
+                    createVideoDurationDropdown,
                     createSubmitButton,
                 }),
             },
@@ -207,14 +255,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                 const contentJSON = extractContentJSON(newState)
                 if (contentJSON) {
                     const attrs = getInputAttrs(newState)
-                    onSubmit({
-                        contentJSON,
-                        aiModel: attrs.aiModel,
-                        imageOptions: {
-                            aiImageModel: attrs.aiImageModel,
-                            imageGenerationSize: attrs.imageGenerationSize,
-                        },
-                    })
+                    onSubmit(buildSubmitPayload(contentJSON, attrs))
                 }
             }
 

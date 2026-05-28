@@ -20,6 +20,10 @@ import {
     extractReferenceImages,
     getToolForProvider,
 } from '../tools/image-generation.ts'
+import {
+    extractVideoToolCall,
+    getVideoToolForProvider,
+} from '../tools/video-generation.ts'
 import { detectCapabilities } from '../extraction/capabilities.ts'
 
 export class AnthropicProvider extends BaseProvider {
@@ -41,6 +45,7 @@ export class AnthropicProvider extends BaseProvider {
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
         const hasImageModel = !!state.imageModelVersion
+        const hasVideoModel = !!state.videoModelVersion
         const maxTokens = state.maxCompletionSize ?? 4096
 
         // Convert messages to Anthropic format (resolve nats-obj://, then convert content blocks).
@@ -61,8 +66,11 @@ export class AnthropicProvider extends BaseProvider {
         if (hasImageModel) {
             tools.push(getToolForProvider('Anthropic', state.imageModelMetaInfo, state.imageProviderName))
         }
+        if (hasVideoModel) {
+            tools.push(getVideoToolForProvider('Anthropic'))
+        }
 
-        let systemPrompt = getSystemPrompt(hasImageModel)
+        let systemPrompt = getSystemPrompt(hasImageModel, hasVideoModel)
         if (hasImageModel) {
             const adjusted = applyImagePromptLimitToSystemPrompt(
                 systemPrompt,
@@ -100,21 +108,34 @@ export class AnthropicProvider extends BaseProvider {
 
             const finalMessage = await stream.finalMessage()
 
-            if (hasImageModel) {
-                const toolCall = extractToolCall('Anthropic', finalMessage)
-                if (toolCall) {
+            if (hasImageModel || hasVideoModel) {
+                const videoCall = hasVideoModel ? extractVideoToolCall('Anthropic', finalMessage) : undefined
+                const imageCall = hasImageModel && !videoCall ? extractToolCall('Anthropic', finalMessage) : undefined
+                if (videoCall) {
+                    update.generatedVideoPrompt = videoCall.prompt
+                    info(`[Anthropic:${this.instanceKey}] generate_video tool call ${JSON.stringify({
+                        chatModel: modelVersion,
+                        targetVideoProvider: state.videoProviderName,
+                        targetVideoModel: state.videoModelVersion,
+                        promptLen: videoCall.prompt.length,
+                    }, null, 0)}`)
+                } else if (imageCall) {
                     const refs = extractReferenceImages(messages)
-                    update.generatedImagePrompt = toolCall.prompt
+                    update.generatedImagePrompt = imageCall.prompt
                     update.referenceImages = refs
                     info(`[Anthropic:${this.instanceKey}] generate_image tool call ${JSON.stringify({
                         chatModel: modelVersion,
                         targetImageProvider: state.imageProviderName,
                         targetImageModel: state.imageModelVersion,
-                        promptLen: toolCall.prompt.length,
+                        promptLen: imageCall.prompt.length,
                         referenceImagesExtracted: refs.length,
                     }, null, 0)}`)
-                } else {
+                } else if (hasImageModel && hasVideoModel) {
+                    warn(`[Anthropic:${this.instanceKey}] did not emit generate_image or generate_video (model=${modelVersion})`)
+                } else if (hasImageModel) {
                     warn(`[Anthropic:${this.instanceKey}] did not emit generate_image (model=${modelVersion}); image gen will not run`)
+                } else {
+                    warn(`[Anthropic:${this.instanceKey}] did not emit generate_video (model=${modelVersion}); video gen will not run`)
                 }
             }
 

@@ -32,6 +32,7 @@ import {
     type WorldPosition,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
+import { createMediaNodeRegistry, type MediaNodeRegistry } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import {
     PixiTravelingOutlineRenderer,
     type PixiTravelingOutlineDatum,
@@ -185,9 +186,18 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     const app = new Application()
     const world = new Container({ label: 'workspace-pixi-media-world' })
     const imageLayer = new Container({ label: 'workspace-pixi-images' })
+    // Non-image media (video for now; audio later) lives in a sibling layer so
+    // image-only sync, texture-cache, and LoD logic stay untouched. Handlers
+    // are dispatched here through mediaNodeRegistry — pixiMediaLayer doesn't
+    // own video texture lifecycle directly.
+    const videoLayer = new Container({ label: 'workspace-pixi-videos' })
     const generatingBorderLayer = new Container({ label: 'workspace-pixi-generating-borders' })
     const fgLayer = new Container({ label: 'workspace-pixi-fg' })
     const edgeLayer = new Container({ label: 'workspace-pixi-edges' })
+    const mediaNodeRegistry: MediaNodeRegistry = createMediaNodeRegistry()
+    // Tracks which non-image nodes the registry currently owns so sync() can
+    // detect removal (when a node leaves canvasState we dispatch remove).
+    let registryDispatchedNodes: Set<string> = new Set()
     const entries = new Map<string, PixiImageEntry>()
     let generatingImageNodeIds = new Set<string>()
     let edgeRenderer: PixiEdgeRenderer | null = null
@@ -267,6 +277,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             app.stage.addChild(edgeLayer)
             app.stage.addChild(world)
             world.addChild(imageLayer)
+            world.addChild(videoLayer)
             world.addChild(generatingBorderLayer)
             world.addChild(fgLayer)
             edgeRenderer = createPixiEdgeRenderer(edgeLayer)
@@ -357,10 +368,31 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
         upsertAllEntries(canvasState)
         syncGeneratingImageBorders()
+        // Dispatch non-image media nodes (video for now) through the registry.
+        // Image LoD/texture-cache/visibility logic above is intentionally not
+        // shared — image-specific perf invariants stay scoped to image entries.
+        dispatchNonImageMediaNodes(canvasState)
         // Single visibility pass loads textures for visible entries only.
         updateVisibleImages()
         schedulePrefetch()
         scheduleRender()
+    }
+
+    function dispatchNonImageMediaNodes(canvasState: CanvasState): void {
+        const nodesById = buildNodesById(canvasState.nodes)
+        const currentRegistryNodes = new Set<string>()
+        for (const node of canvasState.nodes) {
+            if (node.type === 'image') continue
+            const worldPosition = computeWorldPosition(node, nodesById)
+            const handled = mediaNodeRegistry.dispatchSync(node, worldPosition, canvasState)
+            if (handled) currentRegistryNodes.add(node.nodeId)
+        }
+        for (const nodeId of registryDispatchedNodes) {
+            if (!currentRegistryNodes.has(nodeId)) {
+                mediaNodeRegistry.dispatchRemove(nodeId)
+            }
+        }
+        registryDispatchedNodes = currentRegistryNodes
     }
 
     function upsertAllEntries(canvasState: CanvasState): void {
@@ -413,7 +445,15 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     ): void {
         if (destroyed) return
         const entry = entries.get(nodeId)
-        if (!entry) return
+        if (!entry) {
+            // Non-image (e.g. video) nodes flow through the registry so their
+            // sprite transforms stay in lockstep with DOM hitboxes during drag/resize.
+            if (registryDispatchedNodes.has(nodeId)) {
+                mediaNodeRegistry.dispatchLiveTransform(nodeId, worldPosition, dimensions)
+                scheduleRender()
+            }
+            return
+        }
 
         const x = worldPosition.x
         const y = worldPosition.y
@@ -560,14 +600,32 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const datums: PixiTravelingOutlineDatum[] = []
         for (const nodeId of generatingImageNodeIds) {
             const imageEntry = entries.get(nodeId)
-            if (!imageEntry) continue
+            if (imageEntry) {
+                datums.push({
+                    id: nodeId,
+                    x: imageEntry.worldRect.minX,
+                    y: imageEntry.worldRect.minY,
+                    width: imageEntry.nodeRef.dimensions.width,
+                    height: imageEntry.nodeRef.dimensions.height,
+                    visible: imageEntry.isVisible,
+                })
+                continue
+            }
+            // Non-image media (currently video) doesn't live in `entries` —
+            // those nodes are dispatched through `mediaNodeRegistry`. Read the
+            // bounds directly from canvas state so the snake outline can frame
+            // VEO placeholders during their long async wait.
+            const fallbackNode = lastState?.nodes.find((n) => n.nodeId === nodeId)
+            if (!fallbackNode || fallbackNode.type === 'image') continue
+            const nodesById = buildNodesById(lastState!.nodes)
+            const worldPosition = computeWorldPosition(fallbackNode, nodesById)
             datums.push({
                 id: nodeId,
-                x: imageEntry.worldRect.minX,
-                y: imageEntry.worldRect.minY,
-                width: imageEntry.nodeRef.dimensions.width,
-                height: imageEntry.nodeRef.dimensions.height,
-                visible: imageEntry.isVisible,
+                x: worldPosition.x,
+                y: worldPosition.y,
+                width: fallbackNode.dimensions.width,
+                height: fallbackNode.dimensions.height,
+                visible: true,
             })
         }
         generatingBorderRenderer.sync(datums)
@@ -968,6 +1026,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
         generatingBorderRenderer.destroy()
         generatingImageNodeIds.clear()
+        mediaNodeRegistry.destroy()
+        registryDispatchedNodes.clear()
         for (const [, entry] of entries) {
             releaseTexture(entry.textureKey)
             entry.sprite.mask = null
@@ -1005,6 +1065,14 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         setPixiEdges,
         renderNow,
         getHealth,
+        // Caller (WorkspaceCanvas) registers handlers for non-image media via
+        // the returned registry; videoLayer is exposed so handlers know which
+        // PIXI Container to add their sprites to.
+        getMediaNodeRegistry: () => mediaNodeRegistry,
+        getVideoLayer: () => videoLayer,
+        // Triggers another render through the rAF-coalesced scheduler. Video
+        // handlers call this on each video frame so PIXI updates the texture.
+        scheduleRender: () => scheduleRender(),
         destroy,
     }
 }

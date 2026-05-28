@@ -14,6 +14,10 @@ export const aiPromptInputNodeSpec = {
         aiModel: { default: '' },
         aiImageModel: { default: '' },
         imageGenerationSize: { default: 'auto' },
+        aiVideoModel: { default: '' },
+        videoAspectRatio: { default: '' },
+        videoResolution: { default: '' },
+        videoDuration: { default: '' },
     },
     parseDOM: [
         {
@@ -22,6 +26,10 @@ export const aiPromptInputNodeSpec = {
                 aiModel: dom.getAttribute('data-ai-model') || '',
                 aiImageModel: dom.getAttribute('data-ai-image-model') || '',
                 imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
+                aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
+                videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
+                videoResolution: dom.getAttribute('data-video-resolution') || '',
+                videoDuration: dom.getAttribute('data-video-duration') || '',
             })
         },
     ],
@@ -33,6 +41,10 @@ export const aiPromptInputNodeSpec = {
                 'data-ai-model': node.attrs.aiModel,
                 'data-ai-image-model': node.attrs.aiImageModel,
                 'data-image-generation-size': node.attrs.imageGenerationSize,
+                'data-ai-video-model': node.attrs.aiVideoModel,
+                'data-video-aspect-ratio': node.attrs.videoAspectRatio,
+                'data-video-resolution': node.attrs.videoResolution,
+                'data-video-duration': node.attrs.videoDuration,
             },
             0,
         ]
@@ -61,25 +73,34 @@ type ImageModelControls = {
     setImageModel: (aiModel: string) => void
 }
 
+type VideoModelControls = {
+    getCurrentVideoModel: () => string
+    setVideoModel: (aiModel: string) => void
+}
+
+type VideoOptionControls = {
+    getValue: () => string
+    setValue: (value: string) => void
+    getCurrentVideoModel?: () => string
+}
+
+type DropdownView = {
+    dom: HTMLElement
+    destroy?: () => void
+    update: () => void
+}
+
 type AiPromptInputNodeViewOptions = {
     onSubmit: () => void
     onStop: () => void
     isReceiving: () => boolean
-    createModelDropdown: (controls: AiModelControls, dropdownId: string) => {
-        dom: HTMLElement
-        destroy?: () => void
-        update: () => void
-    }
-    createImageModelDropdown: (controls: ImageModelControls, dropdownId: string) => {
-        dom: HTMLElement
-        destroy?: () => void
-        update: () => void
-    }
-    createImageSizeDropdown: (controls: ImageSizeControls, dropdownId: string) => {
-        dom: HTMLElement
-        destroy?: () => void
-        update: () => void
-    }
+    createModelDropdown: (controls: AiModelControls, dropdownId: string) => DropdownView
+    createImageModelDropdown: (controls: ImageModelControls, dropdownId: string) => DropdownView
+    createImageSizeDropdown: (controls: ImageSizeControls, dropdownId: string) => DropdownView
+    createVideoModelDropdown: (controls: VideoModelControls, dropdownId: string) => DropdownView
+    createVideoAspectDropdown: (controls: VideoOptionControls, dropdownId: string) => DropdownView
+    createVideoResolutionDropdown: (controls: VideoOptionControls, dropdownId: string) => DropdownView
+    createVideoDurationDropdown: (controls: VideoOptionControls, dropdownId: string) => DropdownView
     createSubmitButton: (controls: SubmitControls) => HTMLElement
 }
 
@@ -127,6 +148,29 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             getProvider: () => (getNodeAttr(view, getPos, 'aiImageModel') || getNodeAttr(view, getPos, 'aiModel') || '').split(':')[0] || '',
         }
 
+        const videoModelControls: VideoModelControls = {
+            getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
+            setVideoModel: (aiModel: string) => setNodeAttr(view, getPos, 'aiVideoModel', aiModel),
+        }
+
+        const videoAspectControls: VideoOptionControls = {
+            getValue: () => getNodeAttr(view, getPos, 'videoAspectRatio') || '',
+            setValue: (value: string) => setNodeAttr(view, getPos, 'videoAspectRatio', value),
+            getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
+        }
+
+        const videoResolutionControls: VideoOptionControls = {
+            getValue: () => getNodeAttr(view, getPos, 'videoResolution') || '',
+            setValue: (value: string) => setNodeAttr(view, getPos, 'videoResolution', value),
+            getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
+        }
+
+        const videoDurationControls: VideoOptionControls = {
+            getValue: () => getNodeAttr(view, getPos, 'videoDuration') || '',
+            setValue: (value: string) => setNodeAttr(view, getPos, 'videoDuration', value),
+            getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
+        }
+
         const submitControls: SubmitControls = {
             onSubmit: options.onSubmit,
             onStop: options.onStop,
@@ -137,11 +181,19 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const modelDropdown = options.createModelDropdown(modelControls, 'ai-prompt-input')
         const imageModelDropdown = options.createImageModelDropdown(imageModelControls, 'ai-image-model')
         const imageSizeDropdown = options.createImageSizeDropdown(imageControls, 'ai-image-size')
+        const videoModelDropdown = options.createVideoModelDropdown(videoModelControls, 'ai-video-model')
+        const videoAspectDropdown = options.createVideoAspectDropdown(videoAspectControls, 'ai-video-aspect')
+        const videoResolutionDropdown = options.createVideoResolutionDropdown(videoResolutionControls, 'ai-video-resolution')
+        const videoDurationDropdown = options.createVideoDurationDropdown(videoDurationControls, 'ai-video-duration')
         const submitButton = options.createSubmitButton(submitControls)
 
         controlsEl.appendChild(modelDropdown.dom)
         controlsEl.appendChild(imageModelDropdown.dom)
         controlsEl.appendChild(imageSizeDropdown.dom)
+        controlsEl.appendChild(videoModelDropdown.dom)
+        controlsEl.appendChild(videoAspectDropdown.dom)
+        controlsEl.appendChild(videoResolutionDropdown.dom)
+        controlsEl.appendChild(videoDurationDropdown.dom)
         controlsEl.appendChild(submitButton)
 
         dom.appendChild(contentDOM)
@@ -179,6 +231,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 modelDropdown.update()
                 imageModelDropdown.update()
                 imageSizeDropdown.update()
+                videoModelDropdown.update()
+                videoAspectDropdown.update()
+                videoResolutionDropdown.update()
+                videoDurationDropdown.update()
                 return true
             },
             destroy: () => {
@@ -186,6 +242,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 modelDropdown.destroy?.()
                 imageModelDropdown.destroy?.()
                 imageSizeDropdown.destroy?.()
+                videoModelDropdown.destroy?.()
+                videoAspectDropdown.destroy?.()
+                videoResolutionDropdown.destroy?.()
+                videoDurationDropdown.destroy?.()
             },
             stopEvent: (e: Event) => {
                 // Prevent ProseMirror from stealing focus/clicks from controls

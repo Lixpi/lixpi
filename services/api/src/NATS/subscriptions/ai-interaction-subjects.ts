@@ -43,11 +43,16 @@ export const aiInteractionSubjects = [
                 messages,
                 aiModel,
                 aiImageModel,
+                aiVideoModel,
                 workspaceId,
                 aiChatThreadId,
                 organizationId,
                 enableImageGeneration,
                 imageSize,
+                videoAspectRatio,
+                videoResolution,
+                videoDuration,
+                videoSourceForExtension,
                 referencedFeatureIds,
                 imageBranchCandidateSnapshot,
             } = data as {
@@ -58,6 +63,11 @@ export const aiInteractionSubjects = [
                 enableImageGeneration?: boolean
                 imageSize?: string
                 aiImageModel?: string
+                aiVideoModel?: string
+                videoAspectRatio?: string
+                videoResolution?: string
+                videoDuration?: number | string
+                videoSourceForExtension?: string
             } & AiInteractionChatSendMessagePayload
 
             const [provider, model] = (aiModel as string).split(':')
@@ -93,6 +103,21 @@ export const aiInteractionSubjects = [
                     }
                 }
 
+                let videoModelMetaInfo: any = null
+                if (aiVideoModel) {
+                    const [videoProvider, videoModel] = (aiVideoModel as string).split(':')
+                    videoModelMetaInfo = await AiModel.getAiModel({
+                        provider: videoProvider!,
+                        model: videoModel!,
+                        omitPricing: false,
+                    })
+                    if (videoModelMetaInfo) {
+                        info(`Video model resolved: ${videoProvider}:${videoModel}`)
+                    } else {
+                        warn(`Video model not found: ${aiVideoModel}, proceeding without video routing`)
+                    }
+                }
+
                 const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
                 infoStr([
@@ -113,10 +138,17 @@ export const aiInteractionSubjects = [
                         messages,
                         aiModelMetaInfo,
                         imageModelMetaInfo,
+                        videoModelMetaInfo,
                         workspaceId,
                         aiChatThreadId,
                         enableImageGeneration,
                         imageSize,
+                        videoAspectRatio,
+                        videoResolution,
+                        videoDurationSeconds: typeof videoDuration === 'string'
+                            ? Number(videoDuration)
+                            : videoDuration,
+                        videoSourceForExtension,
                         referencedFeatureIds,
                         imageBranchCandidateSnapshot,
                         eventMeta: {

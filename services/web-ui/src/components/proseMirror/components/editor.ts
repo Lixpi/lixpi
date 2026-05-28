@@ -28,6 +28,9 @@ import {
     aiGeneratedImageNodeType,
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeView,
+    aiGeneratedVideoNodeType,
+    aiGeneratedVideoNodeSpec,
+    aiGeneratedVideoNodeView,
     aiCollapsibleBlockNodeType,
     aiCollapsibleBlockNodeSpec,
     aiCollapsibleBlockNodeView
@@ -205,6 +208,7 @@ export class ProseMirrorEditor {
                 [aiUserInputNodeType]: aiUserInputNodeSpec,
                 [aiUserMessageNodeType]: aiUserMessageNodeSpec,
                 [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec,
+                [aiGeneratedVideoNodeType]: aiGeneratedVideoNodeSpec,
                 [aiCollapsibleBlockNodeType]: aiCollapsibleBlockNodeSpec
             }
         } else if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
@@ -268,6 +272,10 @@ export class ProseMirrorEditor {
                     createModelDropdown: this.promptControlFactories?.createModelDropdown,
                     createImageModelDropdown: this.promptControlFactories?.createImageModelDropdown,
                     createImageSizeDropdown: this.promptControlFactories?.createImageSizeDropdown,
+                    createVideoModelDropdown: this.promptControlFactories?.createVideoModelDropdown,
+                    createVideoAspectDropdown: this.promptControlFactories?.createVideoAspectDropdown,
+                    createVideoResolutionDropdown: this.promptControlFactories?.createVideoResolutionDropdown,
+                    createVideoDurationDropdown: this.promptControlFactories?.createVideoDurationDropdown,
                     createSubmitButton: this.promptControlFactories?.createSubmitButton,
                     placeholderText: 'Talk to me...'
                 })

@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'contextRegion'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'contextRegion' | 'video'
 
 type CanvasNodePosition = {
     x: number
@@ -257,6 +257,44 @@ export type ImageGenerationTraceStreamPayload = {
     imageGenerationTrace: ImageGenerationTrace
 }
 
+// Mirrors ImageGenerationTrace but for VEO video generation. Reuses the same
+// reference-trace shape so the frontend can render selected/excluded media
+// candidates the same way it does for images.
+export type VideoGenerationTrace = {
+    traceVersion: 'video-generation-trace-v1'
+    chatModelProvider: string
+    chatModelId: string
+    videoModelProvider: string
+    videoModelId: string
+    aspectRatio: string
+    resolution: string
+    durationSeconds: number
+    toolPrompt: string
+    finalPrompt: string
+    promptWasChanged: boolean
+    referenceImages: ImageGenerationTraceReference[]
+    excludedReferences: ImageGenerationTraceExcludedReference[]
+    resolver?: {
+        resolverKind: 'structured-vlm'
+        resolverVersion: string
+        resolverModelProvider: string
+        resolverModelId: string
+        mode: ImageBranchSelectionMode
+        operationKind: ImageGenerationOperationKind
+        confidence: number
+        rationale: string
+        targetImageNodeId: string | null
+        parentImageNodeId?: string
+        branchId: string | null
+    }
+}
+
+export type VideoGenerationTraceStreamPayload = {
+    status: 'VIDEO_GENERATION_TRACE'
+    aiProvider: string
+    videoGenerationTrace: VideoGenerationTrace
+}
+
 export type ImageGeneratedByMetadata = {
     aiChatThreadId: string
     responseId: string
@@ -300,6 +338,66 @@ export type ImageCanvasNode = CanvasNodeParentingFields & {
     generatedBy?: ImageGeneratedByMetadata
 }
 
+// Provenance + lineage for an AI-generated video node. Mirrors
+// ImageGeneratedByMetadata and reuses the same branch-lineage audit field
+// names so the structured VLM resolver output maps over without translation.
+export type VideoGeneratedByMetadata = {
+    aiChatThreadId: string
+    responseId: string
+    videoModel: AiModelId
+    videoModelProvider?: string
+    revisedPrompt: string
+    responseMessageId?: string
+    // video-specific generation parameters
+    aspectRatio?: string
+    resolution?: string
+    durationSeconds?: number
+    hasAudio?: boolean
+    veoOperationName?: string
+    sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
+    // reused branch-lineage audit fields (identical names to images)
+    branchId?: string
+    parentImageNodeId?: string
+    sourceContextNodeIds?: string[]
+    referenceImageNodeIds?: string[]
+    operationKind?: ImageGenerationOperationKind
+    promptText?: string
+    promptFingerprint?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    targetImageNodeId?: string
+    styleReferenceNodeIds?: string[]
+    excludedNodeIds?: string[]
+    resolverKind?: 'structured-vlm'
+    resolverModelProvider?: string
+    resolverModelId?: string
+    resolverRationale?: string
+    resolverConfidence?: number
+    resolverVersion?: string
+    createdAt?: number
+}
+
+// AI-generated (or otherwise stored) video node. The MP4 lives in the workspace
+// Object Store under `fileId`; `posterFileId` is an ffmpeg frame-0 image used by
+// the PIXI media layer at low LoD before the live video texture is swapped in.
+export type VideoCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'video'
+    fileId: string                // MP4 object key in workspace-{workspaceId}-files
+    posterFileId: string          // ffmpeg frame-0 poster (an image object)
+    workspaceId: string
+    src: string                   // tokenized MP4 URL (Range-capable video route)
+    posterSrc: string             // tokenized poster image URL (PIXI low-LoD)
+    aspectRatio: number           // width / height
+    durationSeconds: number       // 4 | 6 | 8
+    hasAudio: boolean
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    generatedBy?: VideoGeneratedByMetadata
+}
+
 export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'aiChatThread'
@@ -316,7 +414,7 @@ export type ContextRegionCanvasNode = CanvasNodeParentingFields & {
     dimensions: CanvasNodeDimensions
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | ContextRegionCanvasNode
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | ContextRegionCanvasNode | VideoCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -555,6 +653,7 @@ export const MEDIA_LIBRARY_PUBLIC_OWNER_ID = 'public'
 // Features retain their existing persistence path and are adapted into the library UI.
 export const MEDIA_LIBRARY_ITEM_KIND = {
     IMAGE: 'image',
+    VIDEO: 'video',
 } as const
 export type MediaLibraryItemKind = typeof MEDIA_LIBRARY_ITEM_KIND[keyof typeof MEDIA_LIBRARY_ITEM_KIND]
 
@@ -568,6 +667,7 @@ export type MediaLibraryItemStatus = typeof MEDIA_LIBRARY_ITEM_STATUS[keyof type
 export const MEDIA_LIBRARY_CATEGORY = {
     FEATURES: 'features',
     IMAGES: 'images',
+    VIDEOS: 'videos',
 } as const
 export type MediaLibraryCategory = typeof MEDIA_LIBRARY_CATEGORY[keyof typeof MEDIA_LIBRARY_CATEGORY]
 
@@ -625,6 +725,65 @@ export type MediaLibraryImageMeta = {
     createdAt: number
     updatedAt: number
 }
+
+// Video items reuse the same scope/access model as images. The MP4 lives in
+// the library asset bucket with the same `MediaLibraryAssetRef` shape; the
+// `poster` field is a fully separate asset reference to a frame-0 PNG (or
+// JPEG) so the panel can render a still preview without decoding the MP4.
+export type MediaLibraryVideoData = {
+    durationSeconds: number
+    aspectRatio: number  // width / height
+    hasAudio: boolean
+    width?: number
+    height?: number
+}
+
+export type MediaLibraryVideoItem = {
+    itemId: string
+    version: 1
+    kind: 'video'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    sourceFileId: string          // workspace-{ws}-files MP4 object key the item was saved from
+    sourcePosterFileId?: string   // workspace-{ws}-files poster object key (may be missing if ffmpeg failed)
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    asset: MediaLibraryAssetRef         // MP4 in library bucket
+    poster?: MediaLibraryAssetRef       // PNG/JPEG poster in library bucket
+    video: MediaLibraryVideoData
+    createdAt: number
+    updatedAt: number
+}
+
+export type MediaLibraryVideoMeta = {
+    itemId: string
+    kind: 'video'
+    displayName: string
+    ownerUserId: string
+    originWorkspaceId: string
+    scope: MediaLibraryScope
+    scopeOwnerId: string
+    scopeAndOwner: string
+    status: MediaLibraryItemStatus
+    mimeType: string
+    byteSize: number
+    durationSeconds: number
+    aspectRatio: number
+    hasAudio: boolean
+    width?: number
+    height?: number
+    previewUrl: string          // MP4 content route (Range-capable)
+    posterPreviewUrl?: string   // poster image route (PNG/JPEG)
+    createdAt: number
+    updatedAt: number
+}
+
+// Unions for call-sites that switch on `kind`.
+export type MediaLibraryItem = MediaLibraryImageItem | MediaLibraryVideoItem
+export type MediaLibraryMeta = MediaLibraryImageMeta | MediaLibraryVideoMeta
 
 export type MediaLibraryAccessList = {
     itemId: string
@@ -798,6 +957,11 @@ export type AiModel = {
     sortingPosition: number
     modalities: Array<{ modality: string; title: string; shortTitle: string }>
     imageSizes?: ImageSizeOption[]
+    // Video generation option lists (VEO and future video providers). Reuse the
+    // ImageSizeOption { value, label } shape the size dropdown already consumes.
+    videoAspectRatios?: ImageSizeOption[]
+    videoResolutions?: ImageSizeOption[]
+    videoDurations?: ImageSizeOption[]
     pricing: {
         currency: string
         resaleMargin: string
@@ -822,6 +986,12 @@ export type AiModel = {
             pricePer: string
             prompt: string
             completion: string
+        }
+        // Video models (VEO) are billed per second of generated video.
+        video?: {
+            measuringUnit: string
+            pricePer: string
+            price: string
         }
     }
     createdAt: number
