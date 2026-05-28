@@ -8,6 +8,7 @@ import {
     type ProviderName,
     type StageTraceEvent,
     type StreamStatus,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
 
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
@@ -28,6 +29,7 @@ export type ChunkPayload = {
         imageModelId?: string
         resolution?: ImageBranchVlmResolution
         imageGenerationTrace?: ImageGenerationTrace
+        videoGenerationTrace?: VideoGenerationTrace
         error?: string
         extractionStatus?: string
         extractionDetail?: string
@@ -263,6 +265,17 @@ export class StreamPublisher {
                 status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
                 aiProvider: this.provider,
                 imageGenerationTrace: trace,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    videoGenerationTrace(trace: VideoGenerationTrace): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
+                aiProvider: this.provider,
+                videoGenerationTrace: trace,
             },
             aiChatThreadId: this.aiChatThreadId,
         })

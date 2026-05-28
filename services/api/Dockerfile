@@ -29,7 +29,11 @@ RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store
 FROM node:${NODE_VERSION}-alpine
 
 # Install necessary packages
-RUN apk add --update --no-cache curl
+# ffmpeg is used by services/api/src/services/video-storage.ts to extract a
+# poster frame from generated VEO videos for the PIXI low-LoD texture path.
+# Poster extraction is best-effort — if ffmpeg is unavailable for any reason,
+# video generation still completes, the canvas just won't have a static poster.
+RUN apk add --update --no-cache curl ffmpeg
 
 # Install pnpm globally (in the runtime stage)
 RUN npm install -g pnpm

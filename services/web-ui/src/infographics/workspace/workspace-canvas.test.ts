@@ -2077,3 +2077,89 @@ describe('workspace connectors — PIXI owns visible pixels', () => {
 		expectSourceNotToContain(pixiLogicTs, "'failed'")
 	})
 })
+
+// =============================================================================
+// Video generation pipeline — VideoCanvasNode + VEO
+// =============================================================================
+
+describe('video generation — canvas + plugin source shape', () => {
+	const ts = loadTs()
+
+	it('registers the VideoCanvasNode lifecycle alongside images', () => {
+		// Phase 5: video nodes share the same generation tracker pattern as
+		// images, but never live in the PIXI image entries map — they're
+		// dispatched through the mediaNodeRegistry (videoNodeHandler).
+		expectSourceToContain(ts, 'videoGenerationTracker')
+		expectSourceToContain(ts, 'createVideoNodeHandler')
+		expectSourceToContain(ts, 'createCanvasVideoLifecycleTracker')
+		expectSourceToContain(ts, "type: 'video'")
+		expectSourceToContain(ts, 'setAiGeneratedVideoCallbacks({')
+		expectSourceToContain(ts, 'onVideoPendingToCanvas:')
+		expectSourceToContain(ts, 'onVideoCompleteToCanvas:')
+		expectSourceToContain(ts, 'onVideoErrorToCanvas:')
+	})
+
+	it('feeds the PIXI traveling outline with both image and video pending nodes', () => {
+		// Phase 5 v1.1: the snake outline must frame VEO video placeholders
+		// during the 11s–6min wait, not just images. Regression-guards the
+		// merged set returned from syncPixiGeneratingImageNodes.
+		const pixiLayerTs = loadPixiMediaLayer()
+		expectSourceToContain(ts, 'function syncPixiGeneratingImageNodes()')
+		expectSourceToContain(ts, 'for (const partial of partialImageTracker.values())')
+		expectSourceToContain(ts, 'for (const pending of videoGenerationTracker.values())')
+		expectSourceToContain(ts, 'pixiMediaLayer?.setGeneratingImageNodes(generatingIds)')
+		// Video bounds come from the canvas state (no PIXI image entry exists
+		// for them) — the outline renderer reads dimensions directly off the
+		// CanvasNode and feeds them into PixiTravelingOutlineDatum.
+		expectSourceToContain(pixiLayerTs, 'fallbackNode.dimensions.width')
+		expectSourceToContain(pixiLayerTs, 'fallbackNode.dimensions.height')
+	})
+
+	it('keeps no DOM bounce-dot spinner for generating videos either', () => {
+		// PR #202 regression: PIXI outline is the sole canvas indicator for
+		// both kinds. The video placeholder must not reintroduce any of the
+		// removed DOM-spinner CSS classes.
+		expectSourceNotToContain(ts, 'video-generating-spinner')
+		expectSourceNotToContain(ts, 'video-dot-bounce')
+	})
+
+	it('wires the bubble menu for video nodes (Extend + Connect + Delete)', () => {
+		// Phase 6: video nodes share Connect with image, but get a dedicated
+		// Extend-in-new-thread entry and a video-specific Delete.
+		const bubbleMenuTs = readSourceFile('canvasBubbleMenuItems.ts')
+		expectSourceToContain(ts, "import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT")
+		expectSourceToContain(ts, "node.type !== 'image' && node.type !== 'video'")
+		expectSourceToContain(ts, "node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT")
+		expectSourceToContain(ts, 'onExtendVideoInNewThread: async (nodeId) => {')
+		expectSourceToContain(bubbleMenuTs, "export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'")
+		expectSourceToContain(bubbleMenuTs, "title: 'Extend video in new thread'")
+		expectSourceToContain(bubbleMenuTs, "title: 'Delete video'")
+		expectSourceToContain(bubbleMenuTs, 'context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT]')
+	})
+
+	it('resolves sourceVideoNodeId to a workspace Object Store URI at submit time', () => {
+		// Phase 6: the chat plugin forwards `sourceVideoNodeId` only via thread
+		// attrs; WorkspaceCanvas converts it to a `nats-obj://` URI just before
+		// publishing to NATS. VEO's precedence is extension > first-frame >
+		// references > text-only.
+		expectSourceToContain(ts, 'let videoSourceForExtension: string | undefined')
+		expectSourceToContain(ts, "videoOptions?.sourceVideoNodeId")
+		expectSourceToContain(ts, "`nats-obj://workspace-${workspaceId}-files/${sourceVideoNode.fileId}`")
+		expectSourceToContain(ts, 'videoSourceForExtension,')
+	})
+
+	it('emits video context items with poster + metadata for downstream threads', () => {
+		// Phase 7: vision-capable text models can't ingest MP4, so an upstream
+		// video is fed as its ffmpeg poster + a JSON text block describing
+		// duration/aspect/audio.
+		const serviceTs = readSourceFile('../../services/ai-chat-thread-service.ts')
+		expectSourceToContain(serviceTs, "export type ContextItemType = 'document' | 'image' | 'aiChatThread' | 'video'")
+		expectSourceToContain(serviceTs, "node.type === 'video'")
+		expectSourceToContain(serviceTs, 'posterFileId: videoNode.posterFileId')
+		expectSourceToContain(serviceTs, 'durationSeconds: videoNode.durationSeconds')
+		expectSourceToContain(serviceTs, 'aspectRatio: videoNode.aspectRatio')
+		expectSourceToContain(serviceTs, 'hasAudio: videoNode.hasAudio')
+		expectSourceToContain(serviceTs, "type: 'standalone_video'")
+		expectSourceToContain(serviceTs, '`nats-obj://workspace-${item.workspaceId}-files/${item.posterFileId}`')
+	})
+})

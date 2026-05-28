@@ -18,6 +18,13 @@ type ThreadEditorEntry = {
     triggerGradientAnimation?: () => void
 }
 
+type VideoOptions = {
+    aiVideoModel?: string
+    videoAspectRatio?: string
+    videoResolution?: string
+    videoDuration?: string
+}
+
 type AiSubmitPayload = {
     messages: any[]
     aiModel: string
@@ -26,6 +33,7 @@ type AiSubmitPayload = {
         aiImageModel?: string
         imageGenerationSize: ImageGenerationSize
     }
+    videoOptions?: VideoOptions
 }
 
 type TargetNode = {
@@ -41,6 +49,7 @@ type PendingMessage = {
         aiImageModel?: string
         imageGenerationSize: ImageGenerationSize
     }
+    videoOptions?: VideoOptions
 }
 
 type AiPromptInputControllerOptions = {
@@ -138,8 +147,9 @@ export class AiPromptInputController {
             aiImageModel?: string
             imageGenerationSize: ImageGenerationSize
         }
+        videoOptions?: VideoOptions
     }): Promise<void> {
-        const { contentJSON, aiModel, imageOptions } = params
+        const { contentJSON, aiModel, imageOptions, videoOptions } = params
 
         if (!this.target) {
             console.warn('[AiPromptInputController] No target set, cannot submit')
@@ -154,10 +164,10 @@ export class AiPromptInputController {
         if (this.target.type === 'aiChatThread' || this.target.type === 'contextRegion') {
             // Target is an existing AI chat thread — inject message directly
             const threadId = this.target.referenceId
-            this.injectMessageAndSubmit(threadId, { content: contentJSON, aiModel, imageOptions })
+            this.injectMessageAndSubmit(threadId, { content: contentJSON, aiModel, imageOptions, videoOptions })
         } else {
             // Target is a document or image — auto-create a new AI chat thread
-            await this.createThreadAndSubmit(contentJSON, aiModel, imageOptions)
+            await this.createThreadAndSubmit(contentJSON, aiModel, imageOptions, videoOptions)
         }
     }
 
@@ -222,11 +232,15 @@ export class AiPromptInputController {
         const insertPos = threadPos + (threadNode as ProseMirrorNode).nodeSize - 1
         let tr = state.tr.insert(insertPos, messageNode)
 
-        // Update the AI model and image options on the thread node
+        // Update the AI model, image options, and video options on the thread node
         const currentAttrs = (threadNode as ProseMirrorNode).attrs
         const needsUpdate = currentAttrs.aiModel !== pending.aiModel
             || (pending.imageOptions?.aiImageModel && currentAttrs.aiImageModel !== pending.imageOptions.aiImageModel)
             || (pending.imageOptions?.imageGenerationSize && currentAttrs.imageGenerationSize !== pending.imageOptions.imageGenerationSize)
+            || (pending.videoOptions?.aiVideoModel && currentAttrs.aiVideoModel !== pending.videoOptions.aiVideoModel)
+            || (pending.videoOptions?.videoAspectRatio && currentAttrs.videoAspectRatio !== pending.videoOptions.videoAspectRatio)
+            || (pending.videoOptions?.videoResolution && currentAttrs.videoResolution !== pending.videoOptions.videoResolution)
+            || (pending.videoOptions?.videoDuration && currentAttrs.videoDuration !== pending.videoOptions.videoDuration)
 
         if (needsUpdate) {
             const mappedThreadPos = tr.mapping.map(threadPos)
@@ -236,6 +250,12 @@ export class AiPromptInputController {
                 ...(pending.imageOptions ? {
                     aiImageModel: pending.imageOptions.aiImageModel,
                     imageGenerationSize: pending.imageOptions.imageGenerationSize,
+                } : {}),
+                ...(pending.videoOptions ? {
+                    aiVideoModel: pending.videoOptions.aiVideoModel || '',
+                    videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
+                    videoResolution: pending.videoOptions.videoResolution || '',
+                    videoDuration: pending.videoOptions.videoDuration || '',
                 } : {})
             })
         }
@@ -251,7 +271,8 @@ export class AiPromptInputController {
     private async createThreadAndSubmit(
         contentJSON: any,
         aiModel: string,
-        imageOptions?: PendingMessage['imageOptions']
+        imageOptions?: PendingMessage['imageOptions'],
+        videoOptions?: PendingMessage['videoOptions']
     ): Promise<void> {
         if (!this.target) return
 
@@ -273,6 +294,10 @@ export class AiPromptInputController {
                         aiModel,
                         ...(imageOptions?.aiImageModel ? { aiImageModel: imageOptions.aiImageModel } : {}),
                         ...(imageOptions?.imageGenerationSize ? { imageGenerationSize: imageOptions.imageGenerationSize } : {}),
+                        ...(videoOptions?.aiVideoModel ? { aiVideoModel: videoOptions.aiVideoModel } : {}),
+                        ...(videoOptions?.videoAspectRatio ? { videoAspectRatio: videoOptions.videoAspectRatio } : {}),
+                        ...(videoOptions?.videoResolution ? { videoResolution: videoOptions.videoResolution } : {}),
+                        ...(videoOptions?.videoDuration ? { videoDuration: videoOptions.videoDuration } : {}),
                     },
                     content: [
                         {
@@ -336,7 +361,7 @@ export class AiPromptInputController {
 
             // Queue the AI submit for after the thread editor mounts
             // The message is already in the initial content, so we just need to trigger the AI request
-            this.pendingMessages.set(threadId, { content: contentJSON, aiModel, imageOptions })
+            this.pendingMessages.set(threadId, { content: contentJSON, aiModel, imageOptions, videoOptions })
 
             this.persistCanvasState(newCanvasState)
 

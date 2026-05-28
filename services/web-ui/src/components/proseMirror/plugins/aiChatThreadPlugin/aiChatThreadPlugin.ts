@@ -34,6 +34,7 @@ import type {
 } from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
+import { setAiGeneratedVideoCallbacks, getAiGeneratedVideoCallbacks, aiGeneratedVideoNodeType, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 
 // dispatchSendAiChatFromUserInput has been removed — messages are now injected by AiPromptInputController
 // findUserInputInThread is no longer needed — aiUserInput has been removed from the schema
@@ -47,16 +48,30 @@ type ImageOptions = {
     imageGenerationSize: ImageGenerationSize
 }
 
-type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions }) => void
+type VideoOptions = {
+    aiVideoModel: string
+    videoAspectRatio?: string
+    videoResolution?: string
+    videoDuration?: string
+    // Set when the user invoked "Extend in new thread" from a generated video
+    // node. WorkspaceCanvas resolves the nodeId to a workspace Object Store URI
+    // (`nats-obj://workspace-{ws}-files/{fileId}`) before forwarding to the
+    // backend as `videoSourceForExtension`.
+    sourceVideoNodeId?: string
+}
+
+type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
+type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type SegmentEvent = {
     status?: StreamStatus
-    type?: ImageSegmentType | CollapsibleSegmentType
+    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType
     aiProvider?: string
     imageModelProvider?: string
+    videoModelProvider?: string
     threadId?: string
     aiChatThreadId?: string
     collapsibleTitle?: string
@@ -72,6 +87,15 @@ type SegmentEvent = {
     revisedPrompt?: string
     imageBranchResolution?: ImageBranchVlmResolution
     imageGenerationTrace?: ImageGenerationTrace
+    // Video segment fields (mirror VideoPublisher payloads)
+    videoUrl?: string
+    posterUrl?: string
+    posterFileId?: string
+    durationSeconds?: number
+    aspectRatio?: number
+    hasAudio?: boolean
+    videoModel?: string
+    videoGenerationTrace?: import('@lixpi/constants').VideoGenerationTrace
     error?: string
 }
 type ImageReference = { fileId: string; workspaceId: string }
@@ -893,6 +917,34 @@ class AiChatThreadPluginClass {
                 return
             }
 
+            // Video generation events — VEO is async (submit/poll), no partial
+            // frames. PENDING creates the placeholder, GENERATING is a keepalive
+            // heartbeat, COMPLETE finalizes the same canvas node, ERROR cleans up.
+            if (type === 'video_pending') {
+                this.handleVideoPending(view, event)
+                return
+            }
+
+            if (type === 'video_generating') {
+                this.handleVideoGenerating(view, event)
+                return
+            }
+
+            if (type === 'video_complete') {
+                this.handleVideoComplete(view, event)
+                return
+            }
+
+            if (type === 'video_error') {
+                this.handleVideoError(view, event)
+                return
+            }
+
+            if (type === 'video_generation_trace') {
+                this.handleVideoGenerationTrace(view, event)
+                return
+            }
+
             if (type === 'image_branch_resolved') {
                 const callbacks = getAiGeneratedImageCallbacks()
                 if (effectiveThreadId && event.imageBranchResolution) {
@@ -1019,6 +1071,86 @@ class AiChatThreadPluginClass {
             aiModel: aiProvider || '',
             imageModelProvider: imageModelProvider || '',
             responseMessageId,
+        })
+    }
+
+    // Video segment handlers. The canvas owns the visible representation
+    // (placeholder node + PIXI traveling outline + final inline texture); the
+    // chat-thread document doesn't insert an aiGeneratedVideo block in Phase 5
+    // v1, but the schema + nodeView are registered so future iterations can.
+    private handleVideoPending(_view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId, aiProvider } = event
+        if (!aiChatThreadId) return
+        const callbacks = getAiGeneratedVideoCallbacks()
+        callbacks.onVideoPendingToCanvas?.({
+            threadId: aiChatThreadId,
+            aiProvider: aiProvider || '',
+        })
+    }
+
+    private handleVideoGenerating(_view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId, aiProvider } = event
+        if (!aiChatThreadId) return
+        const callbacks = getAiGeneratedVideoCallbacks()
+        callbacks.onVideoGeneratingToCanvas?.({
+            threadId: aiChatThreadId,
+            aiProvider: aiProvider || '',
+        })
+    }
+
+    private handleVideoComplete(_view: EditorView, event: SegmentEvent): void {
+        const {
+            aiChatThreadId,
+            videoUrl,
+            fileId,
+            workspaceId,
+            posterUrl,
+            posterFileId,
+            durationSeconds,
+            aspectRatio,
+            hasAudio,
+            responseId,
+            revisedPrompt,
+            videoModel,
+            videoModelProvider,
+        } = event
+        if (!aiChatThreadId || !videoUrl) return
+        const callbacks = getAiGeneratedVideoCallbacks()
+        callbacks.onVideoCompleteToCanvas?.({
+            threadId: aiChatThreadId,
+            videoUrl,
+            fileId: fileId || '',
+            workspaceId: workspaceId || '',
+            posterUrl: posterUrl || '',
+            posterFileId: posterFileId || '',
+            durationSeconds: durationSeconds || 0,
+            aspectRatio: aspectRatio || 1.777,
+            hasAudio: hasAudio ?? true,
+            responseId: responseId || '',
+            revisedPrompt: revisedPrompt || '',
+            videoModel: videoModel || '',
+            videoModelProvider: videoModelProvider || '',
+            responseMessageId: '',
+        })
+    }
+
+    private handleVideoError(_view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId, error } = event
+        if (!aiChatThreadId) return
+        const callbacks = getAiGeneratedVideoCallbacks()
+        callbacks.onVideoErrorToCanvas?.({
+            threadId: aiChatThreadId,
+            error: error || 'Video generation failed',
+        })
+    }
+
+    private handleVideoGenerationTrace(_view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId, videoGenerationTrace } = event
+        if (!aiChatThreadId || !videoGenerationTrace) return
+        const callbacks = getAiGeneratedVideoCallbacks()
+        callbacks.onVideoGenerationTrace?.({
+            threadId: aiChatThreadId,
+            videoGenerationTrace,
         })
     }
 
@@ -1454,13 +1586,18 @@ class AiChatThreadPluginClass {
             return
         }
 
-        // Extract thread attributes including image generation settings
+        // Extract thread attributes including image + video generation settings
         const {
             aiModel = '',
             aiImageModel = '',
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
-            imageGenerationSize = 'auto'
+            imageGenerationSize = 'auto',
+            aiVideoModel = '',
+            videoAspectRatio = '',
+            videoResolution = '',
+            videoDuration = '',
+            sourceVideoNodeId = ''
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 
@@ -1482,7 +1619,18 @@ class AiChatThreadPluginClass {
             imageGenerationSize
         } : undefined
 
-        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions, referencedFeatureIds })
+        // Build video generation options if a video model is selected. The
+        // sourceVideoNodeId is preserved through the thread node attrs and only
+        // forwarded when present (set by the "Extend in new thread" action).
+        const videoOptions = aiVideoModel ? {
+            aiVideoModel,
+            videoAspectRatio,
+            videoResolution,
+            videoDuration,
+            ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
+        } : undefined
+
+        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions, videoOptions, referencedFeatureIds })
     }
 
     private handleStopRequest(transaction: Transaction): void {
@@ -1748,6 +1896,8 @@ class AiChatThreadPluginClass {
                         aiUserMessageNodeView(node, view, getPos),
                     [aiCollapsibleBlockNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiCollapsibleBlockNodeView(node, view, getPos),
+                    [aiGeneratedVideoNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
+                        aiGeneratedVideoNodeView(node, view, getPos),
                     // Note: aiGeneratedImage is handled by imageSelectionPlugin for bubble menu integration
                 },
                 view: (editorView: EditorView) => {
@@ -1779,17 +1929,24 @@ export function createAiChatThreadPlugin({
     stopAiRequestHandler,
     placeholders,
     imageCallbacks,
+    videoCallbacks,
     onReceivingStateChange
 }: {
     sendAiRequestHandler: SendAiRequestHandler
     stopAiRequestHandler: StopAiRequestHandler
     placeholders: PlaceholderOptions
     imageCallbacks?: AiGeneratedImageCallbacks
+    videoCallbacks?: AiGeneratedVideoCallbacks
     onReceivingStateChange?: (threadId: string, receiving: boolean) => void
 }): Plugin {
     // Set image generation callbacks if provided
     if (imageCallbacks) {
         setAiGeneratedImageCallbacks(imageCallbacks)
+    }
+
+    // Set video generation callbacks if provided (mirror image callback wiring).
+    if (videoCallbacks) {
+        setAiGeneratedVideoCallbacks(videoCallbacks)
     }
 
     const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders, onReceivingStateChange })

@@ -9,9 +9,11 @@ import { AnthropicProvider } from './providers/anthropic-provider.ts'
 import { GoogleProvider } from './providers/google-provider.ts'
 import { StabilityProvider } from './providers/stability-provider.ts'
 import { ImageRouter } from './tools/image-router.ts'
+import { VideoRouter } from './tools/video-router.ts'
 import { ExtractionOrchestrator } from './extraction/orchestrator.ts'
 
 import type { StoreWorkspaceImageFn } from './graph/image-publisher.ts'
+import type { StoreWorkspaceVideoFn } from './graph/video-publisher.ts'
 import type { ExtractionInput, ExtractionResult } from './extraction/types.ts'
 
 export type LlmModule = {
@@ -27,12 +29,14 @@ export type LlmModule = {
 export type LlmModuleDeps = {
     natsService: NatsService
     storeWorkspaceImage: StoreWorkspaceImageFn
+    storeWorkspaceVideo: StoreWorkspaceVideoFn
 }
 
 export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     const registry = new ProviderRegistry(
         deps.natsService,
         deps.storeWorkspaceImage,
+        deps.storeWorkspaceVideo,
         {
             OpenAI: OpenAIProvider,
             Anthropic: AnthropicProvider,
@@ -43,6 +47,9 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
 
     const imageRouter = new ImageRouter(registry)
     registry.setImageRouter((state) => imageRouter.execute(state))
+
+    const videoRouter = new VideoRouter(registry)
+    registry.setVideoRouter((state) => videoRouter.execute(state))
 
     const extractionOrchestrator = new ExtractionOrchestrator(deps.natsService, {
         runImageRouter: (state) => imageRouter.execute(state),

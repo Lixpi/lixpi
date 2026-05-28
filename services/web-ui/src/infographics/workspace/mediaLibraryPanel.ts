@@ -12,6 +12,7 @@ import {
     type MediaLibraryCategory,
     type MediaLibraryImageMeta,
     type MediaLibraryScope,
+    type MediaLibraryVideoMeta,
 } from '@lixpi/constants'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
@@ -36,6 +37,7 @@ type MediaLibraryPanelOptions = {
     onOpenExtractionTab: (extractionRunId: string) => void
     onUseFeature?: (feature: FeatureMeta) => boolean
     onInsertImage?: (item: MediaLibraryImageMeta) => Promise<boolean>
+    onInsertVideo?: (item: MediaLibraryVideoMeta) => Promise<boolean>
 }
 
 type FeatureDetailsState = Feature | { error: string }
@@ -122,7 +124,7 @@ const toFeatureMeta = (feature: Feature | FeatureMeta): FeatureMeta => {
 }
 
 export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
-    const { workspaceId, paneEl, onOpenExtractionTab, onUseFeature, onInsertImage } = options
+    const { workspaceId, paneEl, onOpenExtractionTab, onUseFeature, onInsertImage, onInsertVideo } = options
     const mediaLibraryService = new MediaLibraryService()
     let isOpen = false
     let activeCategory: MediaLibraryCategory = MEDIA_LIBRARY_CATEGORY.FEATURES
@@ -130,6 +132,7 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
     let searchQuery = ''
     let allFeatures: FeatureMeta[] = []
     let allImages: MediaLibraryImageMeta[] = []
+    let allVideos: MediaLibraryVideoMeta[] = []
     let isLoading = false
     let errorMessage = ''
     let feedbackMessage = ''
@@ -199,8 +202,33 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         }
     }
 
+    async function loadVideos() {
+        isLoading = true
+        errorMessage = ''
+        renderContent()
+        try {
+            accessToken = await AuthService.getTokenSilently()
+            allVideos = await mediaLibraryService.listVideos({
+                workspaceId,
+                scopes: browseMode === MEDIA_LIBRARY_BROWSE_ALL
+                    ? Object.values(MEDIA_LIBRARY_SCOPE)
+                    : [browseMode],
+                includeAllAvailable: browseMode === MEDIA_LIBRARY_BROWSE_ALL,
+                query: searchQuery,
+            })
+        } catch (e) {
+            console.error('Failed to load Media Library videos:', e)
+            errorMessage = 'Could not load videos.'
+        } finally {
+            isLoading = false
+            renderContent()
+        }
+    }
+
     function loadActiveCategory() {
-        return activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES ? loadFeatures() : loadImages()
+        if (activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES) return loadFeatures()
+        if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) return loadVideos()
+        return loadImages()
     }
 
     function setFeedback(message: string) {
@@ -300,6 +328,14 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
             renderImages(browserEl)
             return
         }
+        if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) {
+            browserEl.appendChild(html`<div className="media-library-browser-intro">
+                <h2>Videos</h2>
+                <p>Saved video assets you can add back to the canvas. Hover a card to preview.</p>
+            </div>` as HTMLElement)
+            renderVideos(browserEl)
+            return
+        }
         browserEl.appendChild(html`<div className="media-library-browser-intro">
             <h2>Features</h2>
             <p>Reusable visual properties extracted from images. Select one to inspect its guidance and samples.</p>
@@ -359,6 +395,121 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         const imagesEl = html`<div className="media-library-images"></div>` as HTMLElement
         for (const item of allImages) imagesEl.appendChild(buildImageRow(item))
         listEl.appendChild(imagesEl)
+    }
+
+    function getVideoPreviewUrl(item: MediaLibraryVideoMeta): string {
+        const params = new URLSearchParams({ workspaceId, token: accessToken })
+        const organizationId = organizationStore.getData('organizationId')
+        if (organizationId) params.set('organizationId', organizationId)
+        return withApiBaseUrl(`${item.previewUrl}?${params.toString()}`)
+    }
+
+    function getVideoPosterUrl(item: MediaLibraryVideoMeta): string | null {
+        if (!item.posterPreviewUrl) return null
+        const params = new URLSearchParams({ workspaceId, token: accessToken })
+        const organizationId = organizationStore.getData('organizationId')
+        if (organizationId) params.set('organizationId', organizationId)
+        return withApiBaseUrl(`${item.posterPreviewUrl}?${params.toString()}`)
+    }
+
+    function renderVideos(listEl: HTMLElement) {
+        if (allVideos.length === 0) {
+            listEl.appendChild(html`<div className="media-library-state">No videos found.</div>` as HTMLElement)
+            return
+        }
+        const videosEl = html`<div className="media-library-videos"></div>` as HTMLElement
+        for (const item of allVideos) videosEl.appendChild(buildVideoRow(item))
+        listEl.appendChild(videosEl)
+    }
+
+    function buildVideoRow(item: MediaLibraryVideoMeta): HTMLElement {
+        const posterUrl = getVideoPosterUrl(item)
+        const dimensionsLabel = (typeof item.width === 'number' && typeof item.height === 'number')
+            ? `${item.width} x ${item.height} pixels`
+            : `${item.aspectRatio.toFixed(2)}:1`
+        const rowEl = html`<article className="media-library-video">
+            <div className="media-library-video-preview-wrap">
+                ${posterUrl
+                    ? html`<img className="media-library-video-poster" src=${posterUrl} alt=${item.displayName} />`
+                    : html`<div className="media-library-video-poster media-library-video-poster-missing"></div>`}
+                <video
+                    className="media-library-video-preview"
+                    src=${getVideoPreviewUrl(item)}
+                    muted
+                    playsinline
+                    preload="metadata"
+                    loop
+                ></video>
+            </div>
+            <div className="media-library-video-copy">
+                <strong className="media-library-video-name">${item.displayName}</strong>
+                <span className="media-library-video-metadata">${`${dimensionsLabel} | ${item.durationSeconds}s | ${item.mimeType} | ${item.byteSize} bytes${item.hasAudio ? ' | audio' : ''}`}</span>
+                <span className="media-library-video-scope">${`Scope: ${item.scope}`}</span>
+            </div>
+            <div className="media-library-video-actions">
+                <button type="button" data-action="insert">Add to canvas</button>
+                <label>Scope
+                    <select className="media-library-video-scope-select">
+                        <option value=${MEDIA_LIBRARY_SCOPE.WORKSPACE}>Workspace</option>
+                        <option value=${MEDIA_LIBRARY_SCOPE.USER}>Mine</option>
+                        <option value=${MEDIA_LIBRARY_SCOPE.ORGANIZATION}>Organization</option>
+                        <option value=${MEDIA_LIBRARY_SCOPE.PUBLIC}>Public</option>
+                    </select>
+                </label>
+                <button type="button" data-action="delete">Delete</button>
+            </div>
+        </article>` as HTMLElement
+
+        // Hover-to-play preview. Released playback is muted so it works without
+        // user interaction; full-volume playback only happens after materialize.
+        const videoEl = rowEl.querySelector('.media-library-video-preview') as HTMLVideoElement
+        rowEl.addEventListener('mouseenter', () => { videoEl.play().catch(() => {}) })
+        rowEl.addEventListener('mouseleave', () => { videoEl.pause(); videoEl.currentTime = 0 })
+
+        const scopeSelect = rowEl.querySelector('.media-library-video-scope-select') as HTMLSelectElement
+        const organizationId = organizationStore.getData('organizationId') || undefined
+        if (!organizationId) scopeSelect.querySelector(`option[value="${MEDIA_LIBRARY_SCOPE.ORGANIZATION}"]`)?.remove()
+        scopeSelect.value = item.scope
+        scopeSelect.addEventListener('change', async () => {
+            const newScope = scopeSelect.value as MediaLibraryScope
+            const response = await mediaLibraryService.changeItemScope({
+                workspaceId,
+                itemId: item.itemId,
+                newScope,
+                organizationId,
+            })
+            if (response.error) {
+                scopeSelect.value = item.scope
+                setFeedback(`Could not move ${item.displayName}.`)
+                return
+            }
+            const scopeLabel = scopeSelect.options[scopeSelect.selectedIndex]?.text ?? newScope
+            setFeedback(`Moved ${item.displayName} to ${scopeLabel}.`)
+            await loadVideos()
+        })
+
+        rowEl.addEventListener('click', async (event) => {
+            const action = (event.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action')
+            if (!action) return
+            if (action === 'insert') {
+                const inserted = await onInsertVideo?.(item)
+                setFeedback(inserted ? `Added ${item.displayName} to the canvas.` : `Could not add ${item.displayName} to the canvas.`)
+                return
+            }
+            if (action === 'delete') {
+                if (!window.confirm(`Delete "${item.displayName}"?`)) return
+                const response = await mediaLibraryService.deleteItem(item.itemId)
+                if (response.error) {
+                    setFeedback(`Could not delete ${item.displayName}.`)
+                    return
+                }
+                allVideos = allVideos.filter((storedItem) => storedItem.itemId !== item.itemId)
+                renderContent()
+                setFeedback(`Deleted ${item.displayName}.`)
+                return
+            }
+        })
+        return rowEl
     }
 
     function buildImageRow(item: MediaLibraryImageMeta): HTMLElement {
@@ -700,12 +851,17 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
         searchInput.addEventListener('input', () => {
             searchQuery = searchInput.value
             if (activeCategory === MEDIA_LIBRARY_CATEGORY.FEATURES) renderContent()
+            else if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) void loadVideos()
             else void loadImages()
         })
         panelEl.querySelector('.media-library-header-close')!.addEventListener('click', close)
 
         const categoryTabsEl = panelEl.querySelector('.media-library-category-tabs') as HTMLElement
-        for (const category of [{ key: MEDIA_LIBRARY_CATEGORY.FEATURES, label: 'Features' }, { key: MEDIA_LIBRARY_CATEGORY.IMAGES, label: 'Images' }] as Array<{ key: MediaLibraryCategory; label: string }>) {
+        for (const category of [
+            { key: MEDIA_LIBRARY_CATEGORY.FEATURES, label: 'Features' },
+            { key: MEDIA_LIBRARY_CATEGORY.IMAGES, label: 'Images' },
+            { key: MEDIA_LIBRARY_CATEGORY.VIDEOS, label: 'Videos' },
+        ] as Array<{ key: MediaLibraryCategory; label: string }>) {
             const btn = html`<button type="button" role="tab" aria-selected=${activeCategory === category.key ? 'true' : 'false'} className=${`media-library-tab${activeCategory === category.key ? ' media-library-tab-active' : ''}`} data=${{ category: category.key }}>${category.label}</button>` as HTMLButtonElement
             btn.addEventListener('click', () => {
                 activeCategory = category.key
@@ -765,7 +921,9 @@ export function createMediaLibraryPanel(options: MediaLibraryPanelOptions) {
                 NATS_SUBJECTS.WORKSPACE_SUBJECTS.MEDIA_LIBRARY_SUBJECTS.EVENTS.DELETED,
             ]) {
                 nats?.subscribe(subject, () => {
-                    if (isOpen && activeCategory === MEDIA_LIBRARY_CATEGORY.IMAGES) void loadImages()
+                    if (!isOpen) return
+                    if (activeCategory === MEDIA_LIBRARY_CATEGORY.IMAGES) void loadImages()
+                    else if (activeCategory === MEDIA_LIBRARY_CATEGORY.VIDEOS) void loadVideos()
                 })
             }
         }

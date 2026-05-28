@@ -29,6 +29,9 @@
 		"IMAGE_SUBJECTS": {
 			"DELETE_IMAGE": "workspace.image.delete"
 		},
+		"VIDEO_SUBJECTS": {
+			"DELETE_VIDEO": "workspace.video.delete"
+		},
 		"DOCUMENT_SUBJECTS": {
 			"CREATE_DOCUMENT": "workspace.document.create",
 			"GET_DOCUMENT": "workspace.document.get",
@@ -61,9 +64,11 @@
 		},
 		"MEDIA_LIBRARY_SUBJECTS": {
 			"CREATE_FROM_IMAGE": "workspace.mediaLibrary.image.createFromCanvas",
+			"CREATE_FROM_VIDEO": "workspace.mediaLibrary.video.createFromCanvas",
 			"GET": "workspace.mediaLibrary.get",
 			"LIST_AVAILABLE": "workspace.mediaLibrary.listAvailable",
 			"MATERIALIZE_IMAGE_TO_WORKSPACE": "workspace.mediaLibrary.image.materializeToWorkspace",
+			"MATERIALIZE_VIDEO_TO_WORKSPACE": "workspace.mediaLibrary.video.materializeToWorkspace",
 			"CHANGE_SCOPE": "workspace.mediaLibrary.changeScope",
 			"DELETE": "workspace.mediaLibrary.delete",
 			"EVENTS": {

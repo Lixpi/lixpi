@@ -11,6 +11,7 @@ import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
     convertAttachmentsForProvider,
+    parseDataUrl,
     resolveImageUrls,
 } from '../utils/attachments.ts'
 import {
@@ -20,6 +21,16 @@ import {
     extractReferenceImages,
     getToolForProvider,
 } from '../tools/image-generation.ts'
+import {
+    VIDEO_TOOL_NAME,
+    getVideoToolForProvider,
+} from '../tools/video-generation.ts'
+import { extractPosterFrame } from '../../services/video-storage.ts'
+import { VEO_POLL_INTERVAL_MS } from '../config.ts'
+
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 export class GoogleProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Google'
@@ -52,6 +63,13 @@ export class GoogleProvider extends BaseProvider {
         const hasImageModel = !!state.imageModelVersion
         const injectTool = hasImageModel && !enableImageGeneration
 
+        const enableVideoGeneration = state.enableVideoGeneration ?? false
+        const modelNameImpliesVideoOutput = /veo/i.test(modelVersion)
+        const effectiveVideoGen = enableVideoGeneration && modelNameImpliesVideoOutput
+
+        const hasVideoModel = !!state.videoModelVersion
+        const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
+
         // Resolve message content (so reference-image extraction sees data URLs)
         // and convert each message to a Google `Content` object.
         const resolvedMessages: ChatMessage[] = []
@@ -76,18 +94,22 @@ export class GoogleProvider extends BaseProvider {
             }
         }
 
-        if (injectTool) {
-            const toolDef = getToolForProvider('Google', state.imageModelMetaInfo, state.imageProviderName)
-            config.tools = [{
-                functionDeclarations: [
-                    { name: TOOL_NAME, description: toolDef.description, parameters: toolDef.parameters },
-                ],
-            }]
+        if (injectTool || injectVideoTool) {
+            const functionDeclarations: Array<Record<string, any>> = []
+            if (injectTool) {
+                const toolDef = getToolForProvider('Google', state.imageModelMetaInfo, state.imageProviderName)
+                functionDeclarations.push({ name: TOOL_NAME, description: toolDef.description, parameters: toolDef.parameters })
+            }
+            if (injectVideoTool) {
+                const videoToolDef = getVideoToolForProvider('Google')
+                functionDeclarations.push({ name: VIDEO_TOOL_NAME, description: videoToolDef.description, parameters: videoToolDef.parameters })
+            }
+            config.tools = [{ functionDeclarations }]
         }
 
         let systemInstruction: string | undefined
         if (supportsSystemPrompt) {
-            systemInstruction = getSystemPrompt(injectTool)
+            systemInstruction = getSystemPrompt(injectTool, injectVideoTool)
             if (injectTool && systemInstruction) {
                 systemInstruction = applyImagePromptLimitToSystemPrompt(
                     systemInstruction,
@@ -105,11 +127,21 @@ export class GoogleProvider extends BaseProvider {
         const update: Partial<ProviderState> = {}
 
         try {
-            if (!effectiveImageGen) this.publisher.start()
+            if (!effectiveImageGen && !effectiveVideoGen) this.publisher.start()
 
             let usageMetadata: any = null
 
-            if (effectiveImageGen) {
+            if (effectiveVideoGen) {
+                // Native video-generation path (called via VideoRouter). Async
+                // submit + poll with keepalive pings; no streamed partial frames.
+                await this.runVeoGeneration(state)
+                update.generatedVideos = ['veo-complete']
+                update.videoUsage = {
+                    durationSeconds: state.videoDurationSeconds ?? 0,
+                    resolution: state.videoResolution ?? '',
+                    aspectRatio: state.videoAspectRatio ?? '',
+                }
+            } else if (effectiveImageGen) {
                 // Native image-generation path (called via ImageRouter).
                 const inputImageCount = contents.reduce((acc, c) => acc + (Array.isArray((c as any).parts)
                     ? (c as any).parts.filter((p: any) => p?.inlineData || p?.inline_data).length
@@ -176,13 +208,14 @@ export class GoogleProvider extends BaseProvider {
                     })
                     update.generatedImages = [final]
                 }
-            } else if (injectTool) {
+            } else if (injectTool || injectVideoTool) {
                 const stream = await this.client.models.generateContentStream({
                     model: modelVersion,
                     contents: contents as any,
                     config: config as any,
                 })
-                let detected: string | undefined
+                let detectedImage: string | undefined
+                let detectedVideo: string | undefined
                 for await (const chunk of stream) {
                     if (this.shouldStop) break
                     if (chunk.usageMetadata) usageMetadata = chunk.usageMetadata
@@ -191,27 +224,40 @@ export class GoogleProvider extends BaseProvider {
                         for (const part of candidate.content.parts) {
                             const fnCall = (part as any).functionCall ?? (part as any).function_call
                             if (fnCall && fnCall.name === TOOL_NAME) {
-                                const args = fnCall.args ?? {}
-                                detected = args.prompt ?? ''
+                                detectedImage = (fnCall.args ?? {}).prompt ?? ''
+                            } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
+                                detectedVideo = (fnCall.args ?? {}).prompt ?? ''
                             } else if ((part as any).text) {
                                 this.publisher.chunk((part as any).text)
                             }
                         }
                     }
                 }
-                if (detected) {
+                if (detectedVideo) {
+                    update.generatedVideoPrompt = detectedVideo
+                    info(`[Google:${this.instanceKey}] generate_video tool call ${JSON.stringify({
+                        chatModel: modelVersion,
+                        targetVideoProvider: state.videoProviderName,
+                        targetVideoModel: state.videoModelVersion,
+                        promptLen: detectedVideo.length,
+                    }, null, 0)}`)
+                } else if (detectedImage) {
                     const refs = extractReferenceImages(resolvedMessages)
-                    update.generatedImagePrompt = detected
+                    update.generatedImagePrompt = detectedImage
                     update.referenceImages = refs
                     info(`[Google:${this.instanceKey}] generate_image tool call ${JSON.stringify({
                         chatModel: modelVersion,
                         targetImageProvider: state.imageProviderName,
                         targetImageModel: state.imageModelVersion,
-                        promptLen: detected.length,
+                        promptLen: detectedImage.length,
                         referenceImagesExtracted: refs.length,
                     }, null, 0)}`)
-                } else {
+                } else if (injectTool && injectVideoTool) {
+                    warn(`Google did not emit generate_image or generate_video tool call for ${this.instanceKey}`)
+                } else if (injectTool) {
                     warn(`Google did not emit generate_image tool call for ${this.instanceKey}`)
+                } else {
+                    warn(`Google did not emit generate_video tool call for ${this.instanceKey}`)
                 }
             } else {
                 // Pure text streaming
@@ -257,7 +303,7 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
 
-            if (!effectiveImageGen) this.publisher.end()
+            if (!effectiveImageGen && !effectiveVideoGen) this.publisher.end()
         } catch (e: any) {
             err(`Google streaming failed: ${e?.message ?? e}`)
             update.error = e?.message ?? String(e)
@@ -311,5 +357,203 @@ export class GoogleProvider extends BaseProvider {
         }
         const out = parts.filter(Boolean).join('\n').trim()
         return out || undefined
+    }
+
+    // Synchronous submit + poll loop for VEO video generation. Emits
+    // VIDEO_PENDING immediately, then VIDEO_GENERATING keepalive pings every
+    // VEO_POLL_INTERVAL_MS, then VIDEO_COMPLETE on success (or VIDEO_ERROR +
+    // throws on failure, which the streamImpl catch converts to update.error).
+    //
+    // Image-to-video first frame and reference-conditioned generation are wired
+    // through state.videoFirstFrameImage / state.videoReferenceImages, which the
+    // structured VLM resolver populates from the candidate snapshot. VEO's
+    // `image` (top-level) and `referenceImages` (config) are MUTUALLY EXCLUSIVE
+    // per the SDK — the resolver picks ONE based on whether it identified a
+    // target image (edit/style operations) vs. a set of style references.
+    private async runVeoGeneration(state: ProviderState): Promise<void> {
+        const modelVersion = state.modelVersion
+        // VideoRouter passes the prompt as the first user message's string content.
+        const first = state.messages[0]
+        const prompt = typeof first?.content === 'string' ? first.content : ''
+        if (!prompt) throw new Error('VEO: missing prompt in user message')
+
+        const veoConfig: Record<string, any> = {
+            numberOfVideos: 1,
+            generateAudio: true,
+            personGeneration: 'allow_adult',
+            abortSignal: this.signal,
+        }
+        if (state.videoAspectRatio) veoConfig.aspectRatio = state.videoAspectRatio
+        if (state.videoResolution) veoConfig.resolution = state.videoResolution
+        if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds
+
+        // Video extension (Phase 6) is mutually exclusive with image/referenceImages
+        // per the VEO API ("Not allowed if image is provided"). When the canvas
+        // submits with sourceVideoNodeId set, the backend reads the existing MP4
+        // bytes from the workspace Object Store and passes them as VEO's `video`
+        // parameter. Extension takes precedence; first-frame + reference images
+        // are skipped on this path.
+        let extensionVideo: { videoBytes: string; mimeType: string } | undefined
+        if (state.videoSourceForExtension) {
+            try {
+                const bytes = await this.fetchObjectStoreBytes(state.videoSourceForExtension)
+                if (bytes && bytes.length > 0) {
+                    extensionVideo = { videoBytes: bytes.toString('base64'), mimeType: 'video/mp4' }
+                }
+            } catch (e) {
+                warn(`[Google:${this.instanceKey}] extension source load failed: ${(e as any)?.message ?? e}`)
+            }
+        }
+
+        // First-frame (image-to-video) takes precedence over reference images —
+        // they're mutually exclusive. The resolver should only populate one.
+        // When extension is active, both are suppressed.
+        let firstFrameImage: { imageBytes: string; mimeType: string } | undefined
+        if (!extensionVideo && state.videoFirstFrameImage) {
+            const parsed = this.dataUrlToImageBytes(state.videoFirstFrameImage)
+            if (parsed) firstFrameImage = parsed
+        }
+        if (!extensionVideo && !firstFrameImage && state.videoReferenceImages && state.videoReferenceImages.length > 0) {
+            const refs = state.videoReferenceImages
+                .map(url => this.dataUrlToImageBytes(url))
+                .filter((r): r is { imageBytes: string; mimeType: string } => !!r)
+                .slice(0, 3)
+            if (refs.length > 0) {
+                veoConfig.referenceImages = refs.map(image => ({ image, referenceType: 'style' }))
+            }
+        }
+
+        info(`[Google:${this.instanceKey}] VEO submit ${JSON.stringify({
+            model: modelVersion,
+            aspectRatio: veoConfig.aspectRatio,
+            resolution: veoConfig.resolution,
+            durationSeconds: veoConfig.durationSeconds,
+            promptLen: prompt.length,
+            hasFirstFrame: !!firstFrameImage,
+            referenceImagesCount: (veoConfig.referenceImages as any[] | undefined)?.length ?? 0,
+            hasExtensionSource: !!extensionVideo,
+        }, null, 0)}`)
+
+        try {
+            this.videoPub.pending()
+
+            const veoParams: Record<string, any> = {
+                model: modelVersion,
+                prompt,
+                config: veoConfig,
+            }
+            // VEO precedence: extension > first-frame > reference-images > text-only.
+            if (extensionVideo) {
+                veoParams.video = extensionVideo
+            } else if (firstFrameImage) {
+                veoParams.image = firstFrameImage
+            }
+            let operation: any = await this.client.models.generateVideos(veoParams as any)
+
+            while (!operation.done) {
+                if (this.shouldStop) throw new Error('Video generation aborted')
+                await new Promise(resolve => setTimeout(resolve, VEO_POLL_INTERVAL_MS))
+                if (this.shouldStop) throw new Error('Video generation aborted')
+                this.videoPub.generating()
+                operation = await this.client.operations.getVideosOperation({
+                    operation,
+                    config: { abortSignal: this.signal } as any,
+                } as any)
+            }
+
+            if ((operation as any).error) {
+                const opErr = (operation as any).error
+                throw new Error(`VEO operation error: ${typeof opErr === 'object' ? JSON.stringify(opErr) : String(opErr)}`)
+            }
+
+            const video = operation.response?.generatedVideos?.[0]?.video
+            if (!video) throw new Error('VEO: operation completed without a video')
+
+            const videoBuffer = await this.fetchVideoBytes(video)
+            if (!videoBuffer || videoBuffer.length === 0) {
+                throw new Error('VEO: empty video bytes after download')
+            }
+
+            const posterBuffer = await extractPosterFrame(videoBuffer)
+
+            await this.videoPub.complete({
+                videoBuffer,
+                posterBuffer,
+                durationSeconds: Number(state.videoDurationSeconds) || 0,
+                aspectRatio: state.videoAspectRatio ?? '',
+                hasAudio: true,
+                responseId: typeof operation.name === 'string' ? operation.name : '',
+                revisedPrompt: prompt,
+                videoModelId: modelVersion,
+            })
+        } catch (e: any) {
+            const message = e?.message ?? String(e)
+            err(`[Google:${this.instanceKey}] VEO failed: ${message}`)
+            try { this.videoPub.error(message) } catch { /* publisher may not be initialized */ }
+            throw e
+        }
+    }
+
+    // Reads a `nats-obj://workspace-{ws}-files/{fileId}` URI from the workspace
+    // Object Store and returns the raw bytes. Used by the video-extension path
+    // to load the source MP4 so VEO can extend it. Returns undefined when the
+    // URI is malformed, the bucket is missing, or the object can't be fetched —
+    // callers must treat that as "fall back to non-extension generation".
+    private async fetchObjectStoreBytes(natsObjUri: string): Promise<Buffer | undefined> {
+        const match = /^nats-obj:\/\/([^/]+)\/(.+)$/.exec(natsObjUri || '')
+        if (!match) {
+            warn(`[Google:${this.instanceKey}] unrecognized object-store URI: ${natsObjUri}`)
+            return undefined
+        }
+        const bucket = match[1]!
+        const objectKey = match[2]!
+        try {
+            const data = await this.nats.getObject(bucket, objectKey)
+            if (!data) return undefined
+            return Buffer.from(data)
+        } catch (e: any) {
+            warn(`[Google:${this.instanceKey}] getObject(${bucket}/${objectKey}) failed: ${e?.message ?? e}`)
+            return undefined
+        }
+    }
+
+    // Parses a `data:<mime>;base64,<payload>` URL into the SDK's Image_2 shape
+    // (base64 imageBytes + mimeType). Returns undefined for non-data URLs so the
+    // caller can fall back to text-to-video gracefully rather than throw.
+    private dataUrlToImageBytes(dataUrl: string): { imageBytes: string; mimeType: string } | undefined {
+        if (!dataUrl || !dataUrl.startsWith('data:')) return undefined
+        try {
+            const { mediaType, base64 } = parseDataUrl(dataUrl)
+            if (!base64) return undefined
+            return { imageBytes: base64, mimeType: mediaType || 'image/png' }
+        } catch (e) {
+            warn(`[Google:${this.instanceKey}] dataUrlToImageBytes failed: ${e}`)
+            return undefined
+        }
+    }
+
+    // Returns MP4 bytes for a VEO Video object. The Gemini API normally returns
+    // a `uri` (the file is hosted) — the SDK's files.download writes to disk, so
+    // we download to a temp file and read it back. Some responses inline
+    // `videoBytes` (base64); use that directly when present.
+    private async fetchVideoBytes(video: { uri?: string; videoBytes?: string; mimeType?: string }): Promise<Buffer> {
+        if (video.videoBytes) {
+            return Buffer.from(video.videoBytes, 'base64')
+        }
+        if (!video.uri) {
+            throw new Error('VEO: generated video has neither videoBytes nor uri')
+        }
+        let dir: string | undefined
+        try {
+            dir = await mkdtemp(join(tmpdir(), 'veo-dl-'))
+            const outPath = join(dir, 'video.mp4')
+            await this.client.files.download({
+                file: video as any,
+                downloadPath: outPath,
+            } as any)
+            return await readFile(outPath)
+        } finally {
+            if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {})
+        }
     }
 }

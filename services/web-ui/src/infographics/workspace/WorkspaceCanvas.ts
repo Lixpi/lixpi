@@ -14,6 +14,7 @@ import {
     type CanvasNode,
     type DocumentCanvasNode,
     type ImageCanvasNode,
+    type VideoCanvasNode,
     type AiChatThreadCanvasNode,
     type ContextRegionCanvasNode,
     type AiChatThread,
@@ -22,11 +23,12 @@ import {
     type CanvasFeatureExtractionState,
     type FeatureMeta,
     type MediaLibraryImageMeta,
+    type MediaLibraryVideoMeta,
     type ImageBranchCandidateSnapshot,
     type ImageBranchVlmResolution,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
-import { setAiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
+import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
 import { getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
@@ -35,6 +37,8 @@ import AiInteractionService from '$src/services/ai-interaction-service.ts'
 import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
+import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
+import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
 import { getCanvasChromeZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
@@ -65,7 +69,7 @@ import AuthService from '$src/services/auth-service.ts'
 import { createShiftingGradientBackground } from '$src/utils/animations/gradients/shiftingGradientRenderer.ts'
 import { settings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '$src/components/bubbleMenu/index.ts'
-import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
+import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
@@ -75,7 +79,16 @@ import {
     getPromptTextFromMessages,
 } from '$src/services/ai-image-branching.ts'
 import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
-import { createGenericAiModelDropdown, createGenericSubmitButton, createGenericImageSizeDropdown, createGenericImageModelDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+import {
+    createGenericAiModelDropdown,
+    createGenericSubmitButton,
+    createGenericImageSizeDropdown,
+    createGenericImageModelDropdown,
+    createGenericVideoModelDropdown,
+    createGenericVideoAspectDropdown,
+    createGenericVideoResolutionDropdown,
+    createGenericVideoDurationDropdown,
+} from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createPixiContextRegionLayer, type PixiContextRegionLayer } from '$src/infographics/workspace/rendering/pixiContextRegionLayer.ts'
@@ -272,6 +285,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const canvasImageLifecycle = createCanvasImageLifecycleTracker()
     canvasImageLifecycle.initializeFromCanvasState(currentCanvasState)
 
+    // Video lifecycle tracker (sibling of canvasImageLifecycle) — deletes the
+    // MP4 + poster from the workspace Object Store when a VideoCanvasNode is
+    // removed from canvas state.
+    const canvasVideoLifecycle = createCanvasVideoLifecycleTracker()
+    canvasVideoLifecycle.initializeFromCanvasState(currentCanvasState)
+
+    // Pending video-generation tracker: mirrors partialImageTracker. VEO has no
+    // partial frames, so the sequence is VIDEO_PENDING (create placeholder +
+    // tracker entry) -> VIDEO_GENERATING keepalives (no state mutation) ->
+    // VIDEO_COMPLETE (finalize the same node + clear tracker). Source-shape
+    // tests guard that this is the ONLY tracker used for video generation —
+    // there is no DOM spinner, mirroring PR #202's image pattern.
+    const videoGenerationTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId: string }>()
+    let videoNodeHandler: VideoNodeHandlerControl | null = null
+
     const pixiSelectionColors: SelectionColors = {
         marqueeStroke: settings.selection.marqueeBorderColor,
         marqueeFill: settings.selection.marqueeBackgroundColor,
@@ -285,6 +313,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         selectionColors: pixiSelectionColors,
         onImageIntrinsicSize: handleImageIntrinsicSize,
     })
+
+    // Register the VideoCanvasNode handler with the PIXI media layer's
+    // mediaNodeRegistry. The handler owns video sprites (poster + VideoSource
+    // texture swap on click) under pixiMediaLayer's videoLayer Container, so
+    // video pixels render through PIXI alongside image pixels — no DOM <video>
+    // element on the canvas (CANVAS-ENGINE.md "no DOM pixel surface" rule).
+    {
+        const mediaRegistry = pixiMediaLayer?.getMediaNodeRegistry?.()
+        const videoLayer = pixiMediaLayer?.getVideoLayer?.()
+        if (mediaRegistry && videoLayer) {
+            videoNodeHandler = createVideoNodeHandler({
+                videoLayer,
+                onIntrinsicSize: handleVideoIntrinsicSize,
+                onRender: () => pixiMediaLayer?.scheduleRender?.(),
+            })
+            mediaRegistry.register(videoNodeHandler)
+        }
+    }
     contextRegionLayer = createPixiContextRegionLayer({
         paneEl,
         viewportEl,
@@ -415,30 +461,72 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             canAddToMediaLibrary: (nodeId) => {
                 if (!nodeId || !currentCanvasState) return false
                 const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-                if (!node || node.type !== 'image' || !node.fileId) return false
-                return !Array.from(partialImageTracker.values()).some((partial) => partial.nodeId === nodeId)
+                if (!node) return false
+                if (node.type === 'image') {
+                    if (!node.fileId) return false
+                    return !Array.from(partialImageTracker.values()).some((partial) => partial.nodeId === nodeId)
+                }
+                if (node.type === 'video') {
+                    if (!node.fileId) return false
+                    return !Array.from(videoGenerationTracker.values()).some((pending) => pending.nodeId === nodeId)
+                }
+                return false
             },
             onAddToMediaLibrary: async (nodeId) => {
                 const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-                if (!node || node.type !== 'image' || !node.fileId) return
-                if (Array.from(partialImageTracker.values()).some((partial) => partial.nodeId === nodeId)) return
-                try {
-                    const response = await mediaLibraryService.addCanvasImage({ workspaceId, fileId: node.fileId })
-                    if (response.error || !response.itemId) {
-                        console.error('Failed to add image to Media Library:', response.error ?? 'No saved item was returned.')
+                if (!node) return
+                if (node.type === 'image') {
+                    if (!node.fileId) return
+                    if (Array.from(partialImageTracker.values()).some((partial) => partial.nodeId === nodeId)) return
+                    try {
+                        const response = await mediaLibraryService.addCanvasImage({ workspaceId, fileId: node.fileId })
+                        if (response.error || !response.itemId) {
+                            console.error('Failed to add image to Media Library:', response.error ?? 'No saved item was returned.')
+                            showCanvasToast('Could not save image to Media Library.', 'error')
+                            return
+                        }
+                        const savedName = response.displayName ? `"${response.displayName}"` : 'Image'
+                        showCanvasToast(
+                            response.deduplicated
+                                ? `${savedName} is already in your Media Library.`
+                                : `${savedName} saved to Media Library.`,
+                            'success',
+                        )
+                    } catch (error) {
+                        console.error('Failed to add image to Media Library:', error)
                         showCanvasToast('Could not save image to Media Library.', 'error')
-                        return
                     }
-                    const savedName = response.displayName ? `"${response.displayName}"` : 'Image'
-                    showCanvasToast(
-                        response.deduplicated
-                            ? `${savedName} is already in your Media Library.`
-                            : `${savedName} saved to Media Library.`,
-                        'success',
-                    )
-                } catch (error) {
-                    console.error('Failed to add image to Media Library:', error)
-                    showCanvasToast('Could not save image to Media Library.', 'error')
+                    return
+                }
+                if (node.type === 'video') {
+                    if (!node.fileId) return
+                    if (Array.from(videoGenerationTracker.values()).some((pending) => pending.nodeId === nodeId)) return
+                    try {
+                        const response = await mediaLibraryService.addCanvasVideo({
+                            workspaceId,
+                            fileId: node.fileId,
+                            posterFileId: node.posterFileId || undefined,
+                            durationSeconds: node.durationSeconds || 0,
+                            aspectRatio: node.aspectRatio || 1,
+                            hasAudio: node.hasAudio ?? false,
+                        })
+                        if (response.error || !response.itemId) {
+                            console.error('Failed to add video to Media Library:', response.error ?? 'No saved item was returned.')
+                            showCanvasToast('Could not save video to Media Library.', 'error')
+                            return
+                        }
+                        const savedName = response.displayName ? `"${response.displayName}"` : 'Video'
+                        showCanvasToast(
+                            response.deduplicated
+                                ? `${savedName} is already in your Media Library.`
+                                : `${savedName} saved to Media Library.`,
+                            'success',
+                        )
+                    } catch (error) {
+                        console.error('Failed to add video to Media Library:', error)
+                        showCanvasToast('Could not save video to Media Library.', 'error')
+                    }
+                    return
                 }
             },
             onAskAi: async (nodeId) => {
@@ -471,6 +559,120 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (!connectionManager) return
 
                 connectionManager.startConnectionFromMenu(nodeId)
+            },
+            onExtendVideoInNewThread: async (nodeId) => {
+                // Mirrors onEditInNewThread (image edit) but seeds the new
+                // thread with `sourceVideoNodeId` so the VEO extension input
+                // resolves at submit time. Carry video model + generation
+                // params across so the user does not have to re-pick.
+                const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+                if (!aiChatThreadService) {
+                    console.error('AI Chat Thread service not available')
+                    return
+                }
+
+                const sourceVideoNode = currentCanvasState?.nodes.find(
+                    (n: CanvasNode) => n.nodeId === nodeId && n.type === 'video'
+                ) as VideoCanvasNode | undefined
+                if (!sourceVideoNode) return
+
+                try {
+                    const threadId = uuidv4()
+                    const rawVideoModel = String(sourceVideoNode.generatedBy?.videoModel ?? '')
+                    const videoModelProvider = String(sourceVideoNode.generatedBy?.videoModelProvider ?? '')
+                    const inheritedVideoModel = rawVideoModel
+                        ? (rawVideoModel.includes(':')
+                            ? rawVideoModel
+                            : (videoModelProvider ? `${videoModelProvider}:${rawVideoModel}` : rawVideoModel))
+                        : ''
+                    const inheritedAspectRatio = sourceVideoNode.generatedBy?.aspectRatio ?? ''
+                    const inheritedResolution = sourceVideoNode.generatedBy?.resolution ?? ''
+                    const inheritedDuration = sourceVideoNode.generatedBy?.durationSeconds != null
+                        ? String(sourceVideoNode.generatedBy.durationSeconds)
+                        : ''
+
+                    const initialContent = {
+                        type: 'doc',
+                        content: [
+                            {
+                                type: 'documentTitle',
+                                content: [{ type: 'text', text: 'Extend Video' }]
+                            },
+                            {
+                                type: 'aiChatThread',
+                                attrs: {
+                                    threadId,
+                                    sourceVideoNodeId: nodeId,
+                                    aiVideoModel: inheritedVideoModel,
+                                    videoAspectRatio: inheritedAspectRatio,
+                                    videoResolution: inheritedResolution,
+                                    videoDuration: inheritedDuration,
+                                },
+                                content: [
+                                    {
+                                        type: 'aiUserMessage',
+                                        attrs: { id: uuidv4(), createdAt: Date.now() },
+                                        content: [
+                                            {
+                                                type: 'paragraph',
+                                                content: [{ type: 'text', text: 'Describe how you want to extend this video...' }]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+
+                    const thread = await aiChatThreadService.createAiChatThread({
+                        workspaceId,
+                        threadId,
+                        content: initialContent,
+                        aiModel: 'openai:gpt-4o'
+                    })
+
+                    if (!thread) return
+
+                    const existingNodes = currentCanvasState?.nodes || []
+                    const threadDimensions = { ...settings.contextRegion.defaultDimensions }
+                    const fallbackPosition = getCenteredInsertionPosition(threadDimensions)
+                    const sourceVideoRect = getNodeWorldRect(sourceVideoNode)
+                    const threadPosition = sourceVideoRect
+                        ? { x: sourceVideoRect.x + sourceVideoRect.width + settings.contextRegion.adjacentNodeGap, y: sourceVideoRect.y }
+                        : fallbackPosition
+
+                    const threadNode: ContextRegionCanvasNode = {
+                        nodeId: `node-${thread.threadId}`,
+                        type: 'contextRegion',
+                        referenceId: thread.threadId,
+                        position: threadPosition,
+                        dimensions: threadDimensions,
+                    }
+
+                    const newCanvasState: CanvasState = {
+                        viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                        edges: currentCanvasState?.edges ?? [],
+                        nodes: resolveTopLevelNodeCollisions([...existingNodes, threadNode])
+                    }
+
+                    const newEdge: WorkspaceEdge = {
+                        edgeId: `edge-${sourceVideoNode.nodeId}-${threadNode.nodeId}`,
+                        sourceNodeId: sourceVideoNode.nodeId,
+                        targetNodeId: threadNode.nodeId,
+                        sourceHandle: 'right',
+                        targetHandle: 'left'
+                    }
+                    newCanvasState.edges = [...(newCanvasState.edges || []), newEdge]
+
+                    onCanvasStateChange?.(newCanvasState)
+                    activeAiChatThreadId = thread.threadId
+                    activeAiChatRegionNodeId = threadNode.nodeId
+                    requestAnimationFrame(() => {
+                        renderActiveAiChatPanel(threadNode, thread)
+                    })
+                } catch (error) {
+                    console.error('Failed to create extend video thread:', error)
+                }
             },
             onHide: () => {
                 canvasBubbleMenu?.forceHide()
@@ -801,9 +1003,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function syncPixiGeneratingImageNodes(): void {
-        pixiMediaLayer?.setGeneratingImageNodes(
-            new Set(Array.from(partialImageTracker.values()).map((entry) => entry.nodeId))
-        )
+        // Feeds the PIXI traveling outline (snake border) renderer with the set
+        // of currently-generating media nodes, both image and video. VEO's
+        // 11s–6min wait would otherwise be visually silent on the canvas after
+        // PR #202 removed the DOM spinner; the snake outline is the sole
+        // generation indicator.
+        const generatingIds = new Set<string>()
+        for (const partial of partialImageTracker.values()) generatingIds.add(partial.nodeId)
+        for (const pending of videoGenerationTracker.values()) generatingIds.add(pending.nodeId)
+        pixiMediaLayer?.setGeneratingImageNodes(generatingIds)
     }
 
     function syncPixiMediaLayer(canvasState: CanvasState | null = currentCanvasState): void {
@@ -821,6 +1029,71 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return { width: widthFromHeight, height: dimensions.height }
         }
         return { width: dimensions.width, height: dimensions.width / aspectRatio }
+    }
+
+    // Mirror of handleImageIntrinsicSize, fired when the PIXI VideoSource
+    // reports the MP4's intrinsic width/height via the video <video> element's
+    // loadedmetadata event. Re-fits the canvas node dimensions to the real
+    // aspect and re-centers the Y position on the lineage anchor's center line
+    // (PR #204 pattern) so a 16:9 video placed below a 1:1 placeholder slides
+    // up to share the predecessor's horizontal axis.
+    function handleVideoIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
+        if (!currentCanvasState) return
+        if (draggingNodeId === size.nodeId || resizingNodeId === size.nodeId) return
+        if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) return
+
+        const intrinsicAspectRatio = size.width / size.height
+        if (!Number.isFinite(intrinsicAspectRatio) || intrinsicAspectRatio <= 0) return
+
+        const videoNode = currentCanvasState.nodes.find(
+            (node: CanvasNode): node is VideoCanvasNode => node.type === 'video' && node.nodeId === size.nodeId
+        )
+        if (!videoNode) return
+
+        const fittedDimensions = fitImageDimensionsToAspectRatio(videoNode.dimensions, intrinsicAspectRatio)
+        const aspectChanged = Math.abs((videoNode.aspectRatio || 0) - intrinsicAspectRatio) > 0.001
+        const widthChanged = Math.abs(videoNode.dimensions.width - fittedDimensions.width) > 0.5
+        const heightChanged = Math.abs(videoNode.dimensions.height - fittedDimensions.height) > 0.5
+        if (!aspectChanged && !widthChanged && !heightChanged) return
+
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const worldPosition = getNodeWorldPosition(videoNode, nodesById)
+        const positionOffset = {
+            x: (videoNode.dimensions.width - fittedDimensions.width) / 2,
+            y: (videoNode.dimensions.height - fittedDimensions.height) / 2,
+        }
+        const lineageAnchorRect = getGeneratedMediaLineageAnchorRect(videoNode, currentCanvasState.nodes, currentCanvasState.edges)
+        const nextWorldPosition = {
+            x: worldPosition.x + positionOffset.x,
+            y: lineageAnchorRect
+                ? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)
+                : worldPosition.y + positionOffset.y,
+        }
+        const nextPosition = videoNode.parentId
+            ? toParentRelativePosition(nextWorldPosition, videoNode.parentId, nodesById)
+            : nextWorldPosition
+
+        const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
+            if (node.nodeId !== videoNode.nodeId) return node
+            return {
+                ...videoNode,
+                aspectRatio: intrinsicAspectRatio,
+                position: nextPosition,
+                dimensions: fittedDimensions,
+            }
+        })
+
+        const nodeEl = viewportEl?.querySelector(`[data-node-id="${videoNode.nodeId}"]`) as HTMLElement | null
+        if (nodeEl) {
+            applyStyle(nodeEl, {
+                left: `${nextWorldPosition.x}px`,
+                top: `${nextWorldPosition.y}px`,
+                width: `${fittedDimensions.width}px`,
+                height: `${fittedDimensions.height}px`,
+            })
+        }
+
+        commitCanvasState({ ...currentCanvasState, nodes: updatedNodes })
     }
 
     function handleImageIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
@@ -1539,7 +1812,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!canvasBubbleMenu || !canvasBubbleMenuItems || !currentCanvasState) return
 
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
-        if (!node || node.type !== 'image') {
+        if (!node || (node.type !== 'image' && node.type !== 'video')) {
             canvasBubbleMenu.hide()
             return
         }
@@ -1557,7 +1830,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             clampToParent: false,
             animateOnShow: false,
         }
-        canvasBubbleMenu.show(CANVAS_IMAGE_CONTEXT, position)
+        const context = node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT
+        canvasBubbleMenu.show(context, position)
         canvasBubbleMenu.refreshState()
     }
 
@@ -1679,6 +1953,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             createModelDropdown: createGenericAiModelDropdown,
             createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
+            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoAspectDropdown: createGenericVideoAspectDropdown,
+            createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
+            createVideoDurationDropdown: createGenericVideoDurationDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
     }
@@ -2104,28 +2382,52 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
             },
             onProjectTitleChange: () => {},
-            onAiChatSubmit: async ({ messages, aiModel, imageOptions, referencedFeatureIds }: any) => {
+            onAiChatSubmit: async ({ messages, aiModel, imageOptions, videoOptions, referencedFeatureIds }: any) => {
                 gradient?.triggerAnimation()
                 activeAiChatPromptGradient?.triggerAnimation()
                 contextRegionLayer?.pulseRegion(regionNode.nodeId)
 
                 try {
                     const aiChatThreadService = servicesStore.getData('aiChatThreadService')
+                    // The branch-resolver snapshot is reused for video generation too —
+                    // VEO image-to-video / reference-image inputs come from the same VLM
+                    // resolution, so the snapshot must be built whenever an image OR
+                    // video model is selected.
+                    const hasMediaModel = Boolean(imageOptions?.aiImageModel || videoOptions?.aiVideoModel)
                     const imagePlacement = rememberGeneratedImagePlacement(
                         regionNode.referenceId,
                         regionNode,
                         messages,
-                        Boolean(imageOptions?.aiImageModel)
+                        hasMediaModel
                     )
                     const context = await aiChatThreadService.extractConnectedContext(regionNode.nodeId)
                     const contextMessage = aiChatThreadService.buildContextMessage(context)
                     const messagesWithContext = contextMessage ? [contextMessage, ...messages] : messages
+
+                    // Resolve `sourceVideoNodeId` (set by the "Extend video in new
+                    // thread" action) to a workspace Object Store URI. VEO consumes
+                    // this as its `video` (extension) input — see google-provider
+                    // `runVeoGeneration` precedence: extension > first-frame > refs.
+                    let videoSourceForExtension: string | undefined
+                    if (videoOptions?.sourceVideoNodeId) {
+                        const sourceVideoNode = currentCanvasState?.nodes.find(
+                            (n: CanvasNode) => n.nodeId === videoOptions.sourceVideoNodeId && n.type === 'video'
+                        ) as VideoCanvasNode | undefined
+                        if (sourceVideoNode?.fileId) {
+                            videoSourceForExtension = `nats-obj://workspace-${workspaceId}-files/${sourceVideoNode.fileId}`
+                        }
+                    }
 
                     aiService.sendChatMessage({
                         messages: messagesWithContext,
                         aiModel,
                         aiImageModel: imageOptions?.aiImageModel,
                         imageSize: imageOptions?.imageGenerationSize,
+                        aiVideoModel: videoOptions?.aiVideoModel,
+                        videoAspectRatio: videoOptions?.videoAspectRatio,
+                        videoResolution: videoOptions?.videoResolution,
+                        videoDuration: videoOptions?.videoDuration,
+                        videoSourceForExtension,
                         referencedFeatureIds,
                         imageBranchCandidateSnapshot: imagePlacement.imageBranchCandidateSnapshot,
                     })
@@ -2212,6 +2514,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
                     imageOptions: data.imageOptions,
+                    videoOptions: data.videoOptions,
                 })
             },
             onPromptStop: () => {
@@ -2293,6 +2596,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             createModelDropdown: createGenericAiModelDropdown,
             createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
+            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoAspectDropdown: createGenericVideoAspectDropdown,
+            createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
+            createVideoDurationDropdown: createGenericVideoDurationDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
 
@@ -2312,6 +2619,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
                     imageOptions: data.imageOptions,
+                    videoOptions: data.videoOptions,
                 })
             },
             onPromptStop: () => {
@@ -2386,6 +2694,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             createModelDropdown: createGenericAiModelDropdown,
             createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
+            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoAspectDropdown: createGenericVideoAspectDropdown,
+            createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
+            createVideoDurationDropdown: createGenericVideoDurationDropdown,
             createSubmitButton: createGenericSubmitButton,
         }
 
@@ -2413,6 +2725,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
                     imageOptions: data.imageOptions,
+                    videoOptions: data.videoOptions,
                 })
             },
             onPromptStop: () => {
@@ -2683,6 +2996,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }).at(-1)
     }
 
+    // Generalized lineage anchor lookup for both image AND video continuations.
+    // The resolver populates generatedBy.parentImageNodeId regardless of which
+    // media type the parent is, so a video-to-video continuation, an image-to-
+    // video continuation, and an image-to-image continuation all share the same
+    // anchor-lookup logic. This is what keeps the vertical-center alignment
+    // (PR #204) working across mixed-media lineages.
+    function getGeneratedMediaLineageAnchorRect(
+        mediaNode: ImageCanvasNode | VideoCanvasNode,
+        nodes: CanvasNode[],
+        edges: WorkspaceEdge[]
+    ): Rect | undefined {
+        if (!mediaNode.generatedBy) return undefined
+
+        const nodesById = getCanvasNodesById(nodes)
+        const metadataParent = mediaNode.generatedBy.parentImageNodeId
+            ? nodesById.get(mediaNode.generatedBy.parentImageNodeId)
+            : undefined
+        const edgeSourceNodeId = edges.find((edge: WorkspaceEdge) => edge.targetNodeId === mediaNode.nodeId)?.sourceNodeId
+        const edgeSource = edgeSourceNodeId ? nodesById.get(edgeSourceNodeId) : undefined
+        const isMedia = (n: CanvasNode | undefined): n is ImageCanvasNode | VideoCanvasNode =>
+            !!n && (n.type === 'image' || n.type === 'video')
+        const anchorNode = isMedia(metadataParent)
+            ? metadataParent
+            : isMedia(edgeSource)
+                ? edgeSource
+                : undefined
+
+        return anchorNode ? getNodeWorldRect(anchorNode, nodesById) : undefined
+    }
+
     function getGeneratedImageLineageAnchorRect(
         imageNode: ImageCanvasNode,
         nodes: CanvasNode[],
@@ -2843,6 +3186,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = createImageNode(imageNode)
         viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(imageNode.nodeId, nodeEl as HTMLDivElement)
+        syncPixiMediaLayer(currentCanvasState)
+    }
+
+    // Sibling of appendImageNodeToDOM for VideoCanvasNode placeholders. The
+    // PIXI media layer's videoNodeHandler picks the new node up on the next
+    // syncPixiMediaLayer() call and creates the corresponding sprite under the
+    // videoLayer Container.
+    function appendVideoNodeToDOM(videoNode: VideoCanvasNode): void {
+        const nodeEl = createVideoNode(videoNode)
+        viewportEl.appendChild(nodeEl)
+        connectionManager?.registerNodeElement(videoNode.nodeId, nodeEl as HTMLDivElement)
         syncPixiMediaLayer(currentCanvasState)
     }
 
@@ -3323,6 +3677,171 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     })
 
+    // VideoCanvasNode lifecycle callbacks, fired from the AI chat thread plugin
+    // when VIDEO_* segments arrive. Mirrors setAiGeneratedImageCallbacks above
+    // but skips the in-chat node insertion path that images use (the chat
+    // schema registers aiGeneratedVideo but does not yet auto-insert it; the
+    // canvas-side placeholder is the user-visible representation in Phase 5
+    // v1). The pendingGeneratedImagePlacements Map is shared with images: the
+    // resolveImageBranch snapshot serves both media types, and a single thread
+    // can only emit one media generation at a time.
+    setAiGeneratedVideoCallbacks({
+        onVideoPendingToCanvas: (data) => {
+            const { threadId } = data
+
+            if (videoGenerationTracker.has(threadId)) return
+
+            const sourceThread = findSourceThreadNode(threadId)
+            if (!sourceThread) return
+            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)
+            const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
+
+            const nodeId = `node-${uuidv4()}`
+            videoGenerationTracker.set(threadId, { nodeId, fileId: '', sourceNodeId: sourceNode.nodeId })
+
+            // Placeholder is square until the PIXI VideoSource reports the
+            // MP4's intrinsic dimensions (handleVideoIntrinsicSize then re-fits
+            // + recenters via computeVerticallyCenteredY, PR #204 pattern).
+            const placeholderWidth = getGeneratedImageInsertionSize()
+            const placeholderHeight = placeholderWidth
+            const position = getNextGeneratedImagePosition(sourceNode, placeholderHeight)
+
+            const videoNode: VideoCanvasNode = {
+                nodeId,
+                type: 'video',
+                fileId: '',
+                posterFileId: '',
+                workspaceId,
+                src: '',
+                posterSrc: '',
+                aspectRatio: 1,
+                durationSeconds: 0,
+                hasAudio: false,
+                position,
+                dimensions: { width: placeholderWidth, height: placeholderHeight },
+                generatedBy: {
+                    aiChatThreadId: threadId,
+                    responseId: '',
+                    videoModel: '' as any,
+                    revisedPrompt: promptText,
+                    ...getPendingGeneratedImageLineage(threadId),
+                },
+            }
+
+            const existingNodes = currentCanvasState?.nodes || []
+            const existingEdges = currentCanvasState?.edges || []
+            const newEdges = [
+                ...existingEdges,
+                createGeneratedImageEdge(sourceNode, nodeId),
+            ]
+
+            const newCanvasState: CanvasState = {
+                viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
+                nodes: [...existingNodes, videoNode],
+                edges: newEdges,
+            }
+            commitCanvasStatePreservingEditors(newCanvasState)
+            appendVideoNodeToDOM(videoNode)
+        },
+
+        onVideoGeneratingToCanvas: (_data) => {
+            // VEO keepalive heartbeat. The PIXI traveling outline is already
+            // running on the placeholder via pixiMediaLayer's generating-image
+            // tracker, so no canvas state mutation is required here. Phase 6
+            // may add a "still generating" pulse animation.
+        },
+
+        onVideoCompleteToCanvas: (data) => {
+            const {
+                threadId,
+                videoUrl,
+                fileId,
+                workspaceId: videoWorkspaceId,
+                posterUrl,
+                posterFileId,
+                durationSeconds,
+                aspectRatio,
+                hasAudio,
+                responseId,
+                revisedPrompt,
+                videoModel,
+                videoModelProvider,
+                responseMessageId,
+            } = data
+
+            const existing = videoGenerationTracker.get(threadId)
+            if (!existing || !currentCanvasState) return
+
+            const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
+            const lineage = getPendingGeneratedImageLineage(threadId)
+
+            const nodes = currentCanvasState.nodes.map((n: CanvasNode) => {
+                if (n.nodeId !== existing.nodeId || n.type !== 'video') return n
+                const videoNode = n as VideoCanvasNode
+                const fittedAspect = Number.isFinite(aspectRatio) && aspectRatio > 0
+                    ? aspectRatio
+                    : videoNode.aspectRatio
+                return {
+                    ...videoNode,
+                    fileId: fileId || videoNode.fileId,
+                    posterFileId: posterFileId || videoNode.posterFileId,
+                    workspaceId: videoWorkspaceId || videoNode.workspaceId,
+                    src: videoUrl || videoNode.src,
+                    posterSrc: posterUrl || videoNode.posterSrc,
+                    aspectRatio: fittedAspect,
+                    durationSeconds: durationSeconds || videoNode.durationSeconds,
+                    hasAudio: hasAudio ?? videoNode.hasAudio,
+                    generatedBy: {
+                        aiChatThreadId: threadId,
+                        responseId,
+                        videoModel: videoModel as any,
+                        videoModelProvider: videoModelProvider || '',
+                        revisedPrompt: revisedPrompt || videoNode.generatedBy?.revisedPrompt || promptText,
+                        responseMessageId: responseMessageId || '',
+                        durationSeconds: durationSeconds || 0,
+                        hasAudio: hasAudio ?? true,
+                        ...lineage,
+                    },
+                } satisfies VideoCanvasNode
+            })
+
+            // Clearing the tracker removes the PIXI traveling outline (the
+            // outline lifecycle is tracker-driven, same mechanism as images).
+            videoGenerationTracker.delete(threadId)
+            pendingGeneratedImagePlacements.delete(threadId)
+
+            commitCanvasState({
+                viewport: currentCanvasState.viewport,
+                nodes,
+                edges: currentCanvasState.edges,
+            })
+        },
+
+        onVideoErrorToCanvas: (data) => {
+            const { threadId } = data
+            pendingGeneratedImagePlacements.delete(threadId)
+            const existing = videoGenerationTracker.get(threadId)
+            if (!existing || !currentCanvasState) return
+
+            videoGenerationTracker.delete(threadId)
+
+            const errorNodeId = existing.nodeId
+            setTimeout(() => {
+                if (!currentCanvasState) return
+                const nextState: CanvasState = {
+                    viewport: currentCanvasState.viewport,
+                    nodes: currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId),
+                    edges: currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
+                        edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
+                    ),
+                }
+                commitCanvasStatePreservingEditors(nextState)
+                const nodeEl = viewportEl?.querySelector(`[data-node-id="${errorNodeId}"]`) as HTMLElement | null
+                nodeEl?.remove()
+            }, 3000)
+        },
+    })
+
     // Visibility detection for lazy loading
     function isNodeInViewport(node: CanvasNode, viewport: Viewport): boolean {
         if (!paneRect) {
@@ -3533,6 +4052,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function commitCanvasState(nextState: CanvasState) {
         // Track image changes and delete orphaned images from storage
         canvasImageLifecycle.trackCanvasState(nextState)
+        // Same lifecycle treatment for VideoCanvasNode entries: when a node
+        // leaves canvasState, the tracker fires the workspace.video.delete
+        // NATS subject to remove both the MP4 and its companion poster image.
+        canvasVideoLifecycle.trackCanvasState(nextState)
         currentCanvasState = nextState
         pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)
         onCanvasStateChange?.(nextState)
@@ -4413,6 +4936,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    // DOM shell for VideoCanvasNode. Mirrors createImageNode — the DOM only
+    // owns interaction chrome (drag overlay, resize handles via the shared base
+    // element). Video pixels live in the PIXI media layer via videoNodeHandler.
+    // Double-click toggles inline playback by swapping the PIXI sprite's texture
+    // between the poster and a live VideoSource (see videoNodeHandler.toggle).
+    //
+    // There is NO DOM bounce-dot spinner here; the PIXI traveling outline
+    // (shared with image generation via pixiMediaLayer.setGeneratingImageNodes)
+    // is the sole canvas indicator while a video is generating — mirroring the
+    // image-side cleanup that removed the centered dot-bounce DOM element from
+    // generated canvas image nodes.
+    function createVideoNode(node: VideoCanvasNode): HTMLElement {
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-video-node',
+            { fileId: node.fileId }
+        )
+        dragOverlay.className = 'video-drag-overlay nopan'
+
+        const togglePlayback = (event: Event) => {
+            event.stopPropagation()
+            if (videoNodeHandler?.hasEntry(node.nodeId)) {
+                videoNodeHandler.toggle(node.nodeId).catch(() => {})
+            }
+        }
+        dragOverlay.addEventListener('dblclick', togglePlayback)
+
+        return nodeEl
+    }
+
     function handlePanePointerDown(event: PointerEvent): void {
         if (event.button !== 0 || !event.isPrimary) return
         if (!isCanvasBackgroundTarget(event.target)) return
@@ -4614,6 +5167,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createDocumentNode(docNode, doc)
             } else if (node.type === 'image') {
                 nodeEl = createImageNode(node as ImageCanvasNode)
+            } else if (node.type === 'video') {
+                nodeEl = createVideoNode(node as VideoCanvasNode)
             } else if (isContextRegionCanvasNode(node)) {
                 const thread = threadMap.get(node.referenceId)
                 nodeEl = createContextRegionNode(node, thread)
@@ -4785,6 +5340,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         return true
                     } catch (error) {
                         console.error('Failed to add Media Library image to canvas:', error)
+                        return false
+                    }
+                },
+                onInsertVideo: async (item: MediaLibraryVideoMeta) => {
+                    try {
+                        const materialized = await mediaLibraryService.materializeVideo({
+                            workspaceId,
+                            itemId: item.itemId,
+                        })
+                        if (!materialized.video?.fileId || !materialized.video?.url) return false
+                        // Reuse the image default insertion width — the video node
+                        // resizes to its intrinsic aspect on first frame.
+                        const width = settings.imageNode.defaultInsertionWidth
+                        const aspectRatio = item.aspectRatio || 1
+                        const videoNode: Omit<VideoCanvasNode, 'position'> = {
+                            nodeId: `node-${materialized.video.fileId}`,
+                            type: 'video',
+                            fileId: materialized.video.fileId,
+                            posterFileId: materialized.poster?.fileId ?? '',
+                            workspaceId,
+                            src: materialized.video.url,
+                            posterSrc: materialized.poster?.url ?? '',
+                            aspectRatio,
+                            durationSeconds: item.durationSeconds,
+                            hasAudio: item.hasAudio,
+                            dimensions: { width, height: width / aspectRatio },
+                        }
+                        insertNodeAtViewportCenterInternal(videoNode)
+                        return true
+                    } catch (error) {
+                        console.error('Failed to add Media Library video to canvas:', error)
                         return false
                     }
                 },
@@ -4996,6 +5582,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             threadEditors.clear()
             canvasImageLifecycle.destroy()
+            canvasVideoLifecycle.destroy()
+            videoNodeHandler?.destroy()
+            videoNodeHandler = null
+            videoGenerationTracker.clear()
             canvasBubbleMenu?.destroy()
             canvasBubbleMenu = null
 

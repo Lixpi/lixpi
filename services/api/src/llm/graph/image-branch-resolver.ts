@@ -527,10 +527,15 @@ const buildResolvedBranchMessage = (
 }
 
 export const resolveImageBranch = async (state: ProviderState, deps: ResolveImageBranchDeps): Promise<Partial<ProviderState>> => {
-    if (!state.imageModelVersion) return {}
+    // The resolver runs for both image AND video generation: VEO image-to-video
+    // and reference-conditioned video both need the same VLM grounding that
+    // image generation uses.
+    if (!state.imageModelVersion && !state.videoModelVersion) return {}
     const snapshot = state.imageBranchCandidateSnapshot
     if (!snapshot) {
-        const message = 'Image branch candidate snapshot is required for image generation.'
+        const message = state.videoModelVersion
+            ? 'Image branch candidate snapshot is required for video generation.'
+            : 'Image branch candidate snapshot is required for image generation.'
         deps.publisher.imageBranchResolutionError(message)
         throw new Error(message)
     }
@@ -586,9 +591,33 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             rationale: resolution.rationale,
         }, null, 0)}`)
 
+        // For video generation, map the VLM-selected references onto VEO inputs.
+        // VEO's `image` (first frame, image-to-video) and `referenceImages`
+        // (up to 3 style/content guides) are MUTUALLY EXCLUSIVE in the API,
+        // so we pick one path based on whether the resolver identified a target:
+        //   - target set (edit / style_transfer / continuation) -> first-frame mode
+        //   - no target, refs present                            -> referenceImages mode
+        //   - no refs at all                                     -> text-to-video (both undefined)
+        let videoFirstFrameImage: string | undefined
+        let videoReferenceImages: string[] | undefined
+        if (state.videoModelVersion && resolution.referenceImageNodeIds.length > 0) {
+            const urlByNodeId = new Map(resolvedCandidates.map(c => [c.nodeId, c.imageUrl]))
+            const orderedUrls = resolution.referenceImageNodeIds
+                .map(nodeId => urlByNodeId.get(nodeId))
+                .filter((url): url is string => typeof url === 'string' && url.length > 0)
+
+            if (resolution.targetImageNodeId) {
+                videoFirstFrameImage = urlByNodeId.get(resolution.targetImageNodeId) ?? orderedUrls[0]
+            } else if (orderedUrls.length > 0) {
+                videoReferenceImages = orderedUrls.slice(0, 3)
+            }
+        }
+
         return {
             imageBranchResolution: resolution,
             messages,
+            videoFirstFrameImage,
+            videoReferenceImages,
         }
     } catch (error: any) {
         const message = error?.message ?? String(error)

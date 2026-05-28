@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
     verify: vi.fn(),
-    getImageItem: vi.fn(),
+    // After Phase 8 the content route serves both kinds, so the model exposes
+    // a kind-agnostic getAnyItem instead of getImageItem.
+    getAnyItem: vi.fn(),
     getUserWorkspaces: vi.fn(),
     getUserOrganizations: vi.fn(),
     getObject: vi.fn(),
@@ -18,7 +20,7 @@ vi.mock('../helpers/auth.ts', () => ({
     jwtVerifier: { verify: mocks.verify },
 }))
 vi.mock('../models/media-library-item.ts', () => ({
-    default: { getImageItem: mocks.getImageItem },
+    default: { getAnyItem: mocks.getAnyItem },
 }))
 vi.mock('../models/workspace.ts', () => ({
     default: { getUserWorkspaces: mocks.getUserWorkspaces },
@@ -49,7 +51,8 @@ describe('Media Library preview route', () => {
             { workspaceId: 'workspace-other' },
         ])
         mocks.getUserOrganizations.mockResolvedValue([{ organizationId: 'organization-1' }])
-        mocks.getImageItem.mockResolvedValue({
+        mocks.getAnyItem.mockResolvedValue({
+            kind: 'image',
             asset: {
                 bucketName: 'media-library-workspace-workspace-other-files',
                 objectKey: 'item-1',
@@ -72,7 +75,7 @@ describe('Media Library preview route', () => {
         expect(next).toHaveBeenCalledOnce()
         await route.stack[1].handle(req, res)
 
-        expect(mocks.getImageItem).toHaveBeenCalledWith({
+        expect(mocks.getAnyItem).toHaveBeenCalledWith({
             itemId: 'item-1',
             requesterContext: {
                 userId: 'user-1',
@@ -85,7 +88,7 @@ describe('Media Library preview route', () => {
     })
 
     it('does not read object bytes when item authorization fails', async () => {
-        mocks.getImageItem.mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
+        mocks.getAnyItem.mockResolvedValueOnce({ error: 'PERMISSION_DENIED' })
         const req: any = {
             params: { itemId: 'item-1' },
             headers: { authorization: 'Bearer token-1' },

@@ -1,0 +1,343 @@
+import { Sprite, Texture, Graphics, type Container } from 'pixi.js'
+
+import type { CanvasNode, CanvasState, VideoCanvasNode } from '@lixpi/constants'
+
+import AuthService from '$src/services/auth-service.ts'
+import { settings } from '$src/settings.ts'
+
+import type { MediaNodeHandler } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
+import type { WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
+
+// PIXI handler for VideoCanvasNode entries, registered via mediaNodeRegistry
+// and dispatched from pixiMediaLayer's sync. The visible surface is owned by
+// PIXI (sprite + mask + colorRect placeholder); the DOM only hosts interaction
+// chrome (the existing image DOM shell pattern from CANVAS-ENGINE.md).
+//
+// Phase 5 v1 keeps this small: the sprite shows the ffmpeg-extracted poster
+// image until the user clicks the node, at which point we swap to a PIXI
+// VideoSource texture and start playback. Pause reverts to the poster. The
+// off-screen visibility, prefetch, and concurrent-player cap that the image
+// media layer exposes for image LoD are deliberately not duplicated here in
+// v1 — VEO clips are short (max 8s) and single-user playback is the common
+// case. The handler is structured so those refinements can land later without
+// changing the registry contract.
+
+type VideoEntry = {
+    sprite: Sprite
+    spriteMask: Graphics
+    colorRect: Graphics
+    videoElement: HTMLVideoElement
+    videoTexture: Texture | null
+    posterTexture: Texture | null
+    sourceKey: string
+    worldRect: { x: number; y: number; width: number; height: number }
+    isPlaying: boolean
+}
+
+export type VideoNodeHandlerOptions = {
+    videoLayer: Container
+    onIntrinsicSize?: (info: { nodeId: string; width: number; height: number }) => void
+    onRender?: () => void
+}
+
+export type VideoNodeHandlerControl = MediaNodeHandler<VideoCanvasNode> & {
+    play: (nodeId: string) => Promise<void>
+    pause: (nodeId: string) => void
+    toggle: (nodeId: string) => Promise<void>
+    isPlaying: (nodeId: string) => boolean
+    hasEntry: (nodeId: string) => boolean
+}
+
+export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoNodeHandlerControl {
+    const { videoLayer, onIntrinsicSize, onRender } = options
+    const entries = new Map<string, VideoEntry>()
+    let destroyed = false
+
+    const canHandle = (node: CanvasNode): node is VideoCanvasNode => node.type === 'video'
+
+    const buildAuthenticatedUrl = async (url: string): Promise<string> => {
+        if (!url) return ''
+        if (url.startsWith('data:') || url.startsWith('blob:')) return url
+        if (url.startsWith('/api/')) {
+            const token = await AuthService.getTokenSilently()
+            const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+            return `${API_BASE_URL}${url}${token ? `?token=${token}` : ''}`
+        }
+        if (url.startsWith('http')) {
+            const stripped = url.replace(/[?&]token=[^&]+/, '')
+            if (stripped.includes('/api/videos/') || stripped.includes('/api/images/')) {
+                const token = await AuthService.getTokenSilently()
+                return `${stripped}${token ? `?token=${token}` : ''}`
+            }
+            return url
+        }
+        return url
+    }
+
+    const getBorderRadius = (w: number, h: number): number => {
+        const borderRadius = (settings as any).imageNode?.borderRadius ?? 12
+        if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
+        return Math.min(borderRadius, w / 2, h / 2)
+    }
+
+    const drawColorRect = (g: Graphics, w: number, h: number): void => {
+        g.clear()
+        const radius = getBorderRadius(w, h)
+        g.roundRect(0, 0, w, h, radius)
+        g.fill({ color: 0x222222, alpha: 1 })
+    }
+
+    const scheduleVideoFrameLoop = (entry: VideoEntry): void => {
+        const videoEl = entry.videoElement as HTMLVideoElement & {
+            requestVideoFrameCallback?: (cb: () => void) => number
+        }
+        const tick = () => {
+            if (!entry.isPlaying || destroyed) return
+            onRender?.()
+            if (typeof videoEl.requestVideoFrameCallback === 'function') {
+                videoEl.requestVideoFrameCallback(tick)
+            } else {
+                requestAnimationFrame(tick)
+            }
+        }
+        if (typeof videoEl.requestVideoFrameCallback === 'function') {
+            videoEl.requestVideoFrameCallback(tick)
+        } else {
+            requestAnimationFrame(tick)
+        }
+    }
+
+    const updateMediaSources = async (entry: VideoEntry, node: VideoCanvasNode): Promise<void> => {
+        // Load poster as the default texture so the node is visible immediately
+        // without paying the cost of decoding the MP4 just to extract frame 0.
+        if (node.posterSrc) {
+            try {
+                const posterSrc = await buildAuthenticatedUrl(node.posterSrc)
+                const posterTexture = await Texture.from(posterSrc)
+                if (destroyed) return
+                if (entry.posterTexture && entry.posterTexture !== posterTexture) {
+                    entry.posterTexture.destroy()
+                }
+                entry.posterTexture = posterTexture
+                if (!entry.isPlaying) {
+                    entry.sprite.texture = posterTexture
+                }
+                onRender?.()
+            } catch (e) {
+                console.warn('[videoNodeHandler] poster load failed', e)
+            }
+        }
+
+        if (node.src) {
+            try {
+                const videoSrc = await buildAuthenticatedUrl(node.src)
+                if (destroyed) return
+                if (entry.videoElement.src !== videoSrc) {
+                    entry.videoElement.src = videoSrc
+                    entry.videoElement.load()
+                }
+            } catch (e) {
+                console.warn('[videoNodeHandler] video src apply failed', e)
+            }
+        }
+    }
+
+    const upsert = (node: VideoCanvasNode, worldPosition: WorldPosition, _canvasState: CanvasState): void => {
+        if (destroyed) return
+
+        const x = worldPosition.x
+        const y = worldPosition.y
+        const w = node.dimensions.width
+        const h = node.dimensions.height
+
+        let entry = entries.get(node.nodeId)
+
+        if (!entry) {
+            const sprite = new Sprite(Texture.EMPTY)
+            sprite.label = `pixi-video-${node.nodeId}`
+            sprite.eventMode = 'none'
+            sprite.visible = false
+
+            const spriteMask = new Graphics()
+            spriteMask.label = `pixi-video-mask-${node.nodeId}`
+            spriteMask.eventMode = 'none'
+            sprite.mask = spriteMask
+
+            const colorRect = new Graphics()
+            colorRect.label = `pixi-video-rect-${node.nodeId}`
+            colorRect.eventMode = 'none'
+
+            videoLayer.addChild(colorRect)
+            videoLayer.addChild(spriteMask)
+            videoLayer.addChild(sprite)
+
+            const videoElement = document.createElement('video')
+            videoElement.muted = true
+            videoElement.playsInline = true
+            videoElement.preload = 'metadata'
+            videoElement.loop = true
+            videoElement.crossOrigin = 'anonymous'
+            videoElement.addEventListener('loadedmetadata', () => {
+                const vw = videoElement.videoWidth
+                const vh = videoElement.videoHeight
+                if (vw > 0 && vh > 0) {
+                    onIntrinsicSize?.({ nodeId: node.nodeId, width: vw, height: vh })
+                }
+            })
+
+            entry = {
+                sprite,
+                spriteMask,
+                colorRect,
+                videoElement,
+                videoTexture: null,
+                posterTexture: null,
+                sourceKey: '',
+                worldRect: { x, y, width: w, height: h },
+                isPlaying: false,
+            }
+            entries.set(node.nodeId, entry)
+        }
+
+        // Transform: sprite + mask + colorRect all positioned identically.
+        entry.sprite.position.set(x, y)
+        entry.sprite.width = w
+        entry.sprite.height = h
+        entry.sprite.visible = true
+
+        entry.spriteMask.clear()
+        const radius = getBorderRadius(w, h)
+        entry.spriteMask.roundRect(0, 0, w, h, radius)
+        entry.spriteMask.fill({ color: 0xffffff, alpha: 1 })
+        entry.spriteMask.position.set(x, y)
+
+        if (w !== entry.worldRect.width || h !== entry.worldRect.height) {
+            drawColorRect(entry.colorRect, w, h)
+        } else if (entry.worldRect.width === 0) {
+            drawColorRect(entry.colorRect, w, h)
+        }
+        entry.colorRect.position.set(x, y)
+
+        entry.worldRect = { x, y, width: w, height: h }
+
+        const sourceKey = `${node.workspaceId}|${node.fileId}|${node.posterFileId}|${node.src}|${node.posterSrc}`
+        if (sourceKey !== entry.sourceKey) {
+            entry.sourceKey = sourceKey
+            updateMediaSources(entry, node).catch(() => {})
+        }
+
+        onRender?.()
+    }
+
+    const remove = (nodeId: string): void => {
+        const entry = entries.get(nodeId)
+        if (!entry) return
+
+        try {
+            entry.videoElement.pause()
+            entry.videoElement.removeAttribute('src')
+            entry.videoElement.load()
+        } catch {
+            // Best-effort teardown.
+        }
+
+        videoLayer.removeChild(entry.sprite)
+        videoLayer.removeChild(entry.spriteMask)
+        videoLayer.removeChild(entry.colorRect)
+        entry.sprite.mask = null
+        entry.sprite.destroy()
+        entry.spriteMask.destroy()
+        entry.colorRect.destroy()
+        if (entry.videoTexture) entry.videoTexture.destroy()
+        if (entry.posterTexture) entry.posterTexture.destroy()
+        entries.delete(nodeId)
+        onRender?.()
+    }
+
+    const setLiveTransform = (
+        nodeId: string,
+        worldPosition: WorldPosition,
+        dimensions: { width: number; height: number }
+    ): void => {
+        const entry = entries.get(nodeId)
+        if (!entry) return
+
+        const x = worldPosition.x
+        const y = worldPosition.y
+        const w = dimensions.width
+        const h = dimensions.height
+
+        entry.sprite.position.set(x, y)
+        entry.sprite.width = w
+        entry.sprite.height = h
+        entry.spriteMask.position.set(x, y)
+        entry.colorRect.position.set(x, y)
+
+        if (w !== entry.worldRect.width || h !== entry.worldRect.height) {
+            entry.spriteMask.clear()
+            const radius = getBorderRadius(w, h)
+            entry.spriteMask.roundRect(0, 0, w, h, radius)
+            entry.spriteMask.fill({ color: 0xffffff, alpha: 1 })
+            drawColorRect(entry.colorRect, w, h)
+        }
+
+        entry.worldRect = { x, y, width: w, height: h }
+        onRender?.()
+    }
+
+    const destroy = (): void => {
+        destroyed = true
+        for (const nodeId of Array.from(entries.keys())) {
+            remove(nodeId)
+        }
+        entries.clear()
+    }
+
+    const play = async (nodeId: string): Promise<void> => {
+        const entry = entries.get(nodeId)
+        if (!entry || destroyed) return
+        if (entry.isPlaying) return
+
+        try {
+            await entry.videoElement.play()
+            const videoTexture = Texture.from(entry.videoElement as unknown as HTMLVideoElement)
+            entry.videoTexture = videoTexture
+            entry.sprite.texture = videoTexture
+            entry.isPlaying = true
+            scheduleVideoFrameLoop(entry)
+        } catch (e) {
+            console.warn('[videoNodeHandler] play failed', e)
+        }
+    }
+
+    const pause = (nodeId: string): void => {
+        const entry = entries.get(nodeId)
+        if (!entry) return
+        try { entry.videoElement.pause() } catch { /* noop */ }
+        entry.isPlaying = false
+        if (entry.posterTexture) {
+            entry.sprite.texture = entry.posterTexture
+        }
+        onRender?.()
+    }
+
+    const toggle = async (nodeId: string): Promise<void> => {
+        const entry = entries.get(nodeId)
+        if (!entry) return
+        if (entry.isPlaying) pause(nodeId)
+        else await play(nodeId)
+    }
+
+    return {
+        canHandle,
+        upsert,
+        remove,
+        setLiveTransform,
+        destroy,
+        play,
+        pause,
+        toggle,
+        isPlaying: (nodeId: string) => entries.get(nodeId)?.isPlaying ?? false,
+        hasEntry: (nodeId: string) => entries.has(nodeId),
+    }
+}
