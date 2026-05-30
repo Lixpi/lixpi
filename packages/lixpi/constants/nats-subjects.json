@@ -15,7 +15,9 @@
 		"FEATURE_EXTRACT": {
 			"START": "ai.interaction.feature.extract.start",
 			"STOP": "ai.interaction.feature.extract.stop",
-			"STATUS": "ai.interaction.feature.extract.status"
+			"STATUS": "ai.interaction.feature.extract.status",
+			"LIST_BY_WORKSPACE": "ai.interaction.feature.extract.listByWorkspace",
+			"DELETE": "ai.interaction.feature.extract.delete"
 		}
 	},
 	"WORKSPACE_SUBJECTS": {
@@ -23,6 +25,7 @@
 		"GET_WORKSPACE": "workspace.get",
 		"UPDATE_WORKSPACE": "workspace.update",
 		"DELETE_WORKSPACE": "workspace.delete",
+		"DELETE_CONTEXT_REGION": "workspace.contextRegion.delete",
 		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
 		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
 		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments",

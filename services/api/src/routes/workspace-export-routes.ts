@@ -168,6 +168,7 @@ router.get(
             // Export both to ensure imported workspaces have all referenced images.
             const files: DocumentFile[] = workspace.files || []
             const exportedFileIds = new Set<string>()
+            const missingFileIds = new Set<string>()
             const natsService = NATS_Service.getInstance()
             const bucketName = getWorkspaceBucketName(workspaceId)
 
@@ -180,9 +181,12 @@ router.get(
                             const ext = getFileExtension(file.mimeType, file.name)
                             archive.append(Buffer.from(data), { name: `images/${file.id}${ext}` })
                             exportedFileIds.add(file.id)
+                        } else {
+                            missingFileIds.add(file.id)
                         }
                     } catch (e: any) {
                         err(`Export: failed to retrieve file ${file.id}:`, e)
+                        missingFileIds.add(file.id)
                     }
                 }
 
@@ -197,15 +201,34 @@ router.get(
                         if (data) {
                             archive.append(Buffer.from(data), { name: `images/${fileId}.png` })
                             exportedFileIds.add(fileId)
+                        } else {
+                            missingFileIds.add(fileId)
                         }
                     } catch (e: any) {
                         err(`Export: failed to retrieve canvas-referenced file ${fileId}:`, e)
+                        missingFileIds.add(fileId)
                     }
                 }
             }
 
+            // Be loud about referenced images whose bytes are gone, and record them
+            // in the archive so a later import does not silently reproduce dangling
+            // nodes without any trace of what was lost.
+            if (missingFileIds.size > 0) {
+                const missing = [...missingFileIds]
+                err(`Workspace ${workspaceId} export: ${missing.length} referenced image(s) have NO bytes in storage and were omitted: ${missing.join(', ')}`)
+                archive.append(
+                    JSON.stringify({
+                        workspaceId,
+                        missingFileIds: missing,
+                        note: 'These fileIds are referenced by the workspace but their bytes were not found in storage at export time. The corresponding canvas image nodes will render broken until re-generated/re-uploaded.'
+                    }, null, 2),
+                    { name: 'missing-images.json' }
+                )
+            }
+
             await archive.finalize()
-            info(`Workspace ${workspaceId} exported successfully`)
+            info(`Workspace ${workspaceId} exported successfully (${exportedFileIds.size} images, ${missingFileIds.size} missing)`)
         } catch (e: any) {
             err('Workspace export failed:', e)
             if (!res.headersSent) {
@@ -352,7 +375,16 @@ router.post(
                 files
             })
 
-            info(`Workspace ${workspaceId} imported successfully (${manifest.documents.length} documents, ${manifest.aiChatThreads.length} threads, ${imageEntries.length} images)`)
+            // Be loud about canvas image nodes whose bytes were not present in the
+            // archive — these will render broken. Surface them instead of silently
+            // importing dangling references.
+            const importedImageIds = new Set(imageEntries.map((img) => img.fileId))
+            const danglingFileIds = collectCanvasImageFileIds(canvasState?.nodes || [], importedImageIds)
+            if (danglingFileIds.length > 0) {
+                err(`Workspace ${workspaceId} import: ${danglingFileIds.length} canvas image node(s) reference images not present in the archive and will render broken: ${danglingFileIds.join(', ')}`)
+            }
+
+            info(`Workspace ${workspaceId} imported successfully (${manifest.documents.length} documents, ${manifest.aiChatThreads.length} threads, ${imageEntries.length} images, ${danglingFileIds.length} dangling image refs)`)
 
             res.json({
                 success: true,
@@ -361,7 +393,8 @@ router.post(
                     documents: manifest.documents.length,
                     aiChatThreads: manifest.aiChatThreads.length,
                     images: imageEntries.length
-                }
+                },
+                ...(danglingFileIds.length > 0 ? { warnings: [{ type: 'missing_images', message: 'Some canvas image nodes reference images that were not in the archive and will render broken.', fileIds: danglingFileIds }] } : {})
             })
         } catch (e: any) {
             err('Workspace import failed:', e)

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 
 import NATS_Service from '@lixpi/nats-service'
 import { type DocumentFile } from '@lixpi/constants'
-import { info, err } from '@lixpi/debug-tools'
+import { info, warn, err } from '@lixpi/debug-tools'
 
 import Workspace from '../models/workspace.ts'
 
@@ -47,6 +47,13 @@ export const storeWorkspaceImage = async (input: StoreImageInput): Promise<Store
         throw new Error(`Workspace not found: ${workspaceId}`)
     }
 
+    const natsService = NATS_Service.getInstance()
+    if (!natsService) {
+        throw new Error('NATS service unavailable')
+    }
+
+    const bucketName = getWorkspaceBucketName(workspaceId)
+
     let fileId: string
     if (useContentHash) {
         const hash = createHash('sha256').update(buffer).digest('hex')
@@ -54,25 +61,26 @@ export const storeWorkspaceImage = async (input: StoreImageInput): Promise<Store
 
         const existing = workspace.files?.find((f: DocumentFile) => f.id === fileId)
         if (existing) {
-            info(`Duplicate image detected: ${fileId} (skipping upload)`)
-            return {
-                fileId,
-                url: `/api/images/${workspaceId}/${fileId}`,
-                isDuplicate: true,
-                size: existing.size,
-                mimeType: existing.mimeType,
+            // Only short-circuit as a duplicate if the bytes are ACTUALLY still
+            // in storage. If the object is gone (e.g. lost earlier), fall through
+            // and re-store it so the dangling reference self-heals instead of
+            // staying permanently broken.
+            const storedInfo = await natsService.getObjectInfo(bucketName, fileId).catch(() => null)
+            if (storedInfo && !storedInfo.deleted) {
+                info(`Duplicate image detected: ${fileId} (skipping upload)`)
+                return {
+                    fileId,
+                    url: `/api/images/${workspaceId}/${fileId}`,
+                    isDuplicate: true,
+                    size: existing.size,
+                    mimeType: existing.mimeType,
+                }
             }
+            warn(`Hash ${fileId} is registered in workspace ${workspaceId} but its bytes are missing from storage — re-storing`)
         }
     } else {
         fileId = uuid()
     }
-
-    const natsService = NATS_Service.getInstance()
-    if (!natsService) {
-        throw new Error('NATS service unavailable')
-    }
-
-    const bucketName = getWorkspaceBucketName(workspaceId)
 
     try {
         await natsService.putObject(bucketName, fileId, buffer, {

@@ -1,10 +1,10 @@
-# Toggle Switch Shape Primitive
+# Toggle Switch Component
 
-Interactive SVG toggle switch component for use in infographic visualizations.
+Interactive SVG toggle switch component for reusable D3-backed controls.
 
 ## What it is
 
-A D3-based toggle switch renderer that creates SVG toggle elements with built-in state management, smooth animations, and event handling. Designed to be embedded in larger SVG visualizations like the contextSelector.
+A D3-based toggle switch renderer that creates SVG toggle elements with built-in state management, smooth animations, and event handling. It is a UI control and is no longer owned by the infographic shape directory.
 
 **Key features:**
 - SVG-native rendering (no foreignObject)
@@ -62,7 +62,7 @@ Creates and renders a toggle switch within a D3 SVG selection.
 
 ```typescript
 import { select } from 'd3-selection'
-import { createToggleSwitch } from '$src/infographics/shapes/toggleSwitch/index.ts'
+import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'
 
 const svg = select('svg')
 const g = svg.append('g')
@@ -113,14 +113,13 @@ The toggle switch uses relative proportions based on the `size` parameter:
 - Instant color changes (no transition)
 - Brightens track fill on hover
 
-## Integration with Context Selector
+## AI Chat Panel Integration
 
-The toggle switch is used in workspace mode to allow users to select which threads are included in the AI context:
+The workspace AI Chat panel uses this SVG control for `Include Upstream Context`:
 
-1. Rendered at `x: 0` (left edge of visualization)
-2. Size configured via `TOGGLE_SWITCH_SIZE` constant
-3. Document shapes shift right by `TOGGLE_SWITCH_SIZE + TOGGLE_SWITCH_MARGIN`
-4. State synchronized with ProseMirror document via `workspaceSelected` attribute
+1. It is rendered inside an SVG host so D3 can append SVG-native track and knob elements.
+2. Its checked state is persisted in `canvasState.aiChatPanel.includeUpstreamContext`.
+3. Its value applies to both Follow Selection and Pinned Context submissions.
 
 
 ## Implementation Notes

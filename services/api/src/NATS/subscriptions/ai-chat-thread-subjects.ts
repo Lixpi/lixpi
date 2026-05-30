@@ -71,7 +71,9 @@ export const aiChatThreadSubjects = [
                 workspaceId,
                 threadId,
                 content,
-                aiModel
+                aiModel,
+                title,
+                owner
             } = data
 
             const workspace = await Workspace.getWorkspace({ userId, workspaceId })
@@ -83,7 +85,9 @@ export const aiChatThreadSubjects = [
                 workspaceId,
                 threadId,
                 content,
-                aiModel
+                aiModel,
+                title,
+                owner
             })
 
             return thread
@@ -137,6 +141,13 @@ export const aiChatThreadSubjects = [
             const workspace = await Workspace.getWorkspace({ userId, workspaceId })
             if (!workspace || 'error' in workspace) {
                 return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            }
+
+            const hasContextRegionOwner = workspace.canvasState?.nodes?.some(
+                (node: any) => node.type === 'contextRegion' && node.referenceId === threadId
+            )
+            if (hasContextRegionOwner) {
+                return { error: 'CONTEXT_REGION_HISTORY_CANNOT_BE_DELETED' }
             }
 
             await AiChatThread.delete({

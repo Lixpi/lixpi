@@ -13,6 +13,7 @@
     } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
+    import { getAiChatPanelState } from '$src/infographics/workspace/aiChatPanelState.ts'
     import DocumentService from '$src/services/document-service.ts'
     import AiChatThreadService from '$src/services/ai-chat-thread-service.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
@@ -22,7 +23,7 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, aiChatBubbleIcon, mediaLibraryIconFilled } from '$src/svgIcons/index.ts'
+    import { createNewFileIcon, imageIcon, aiChatBubbleIcon, aiChatPanelCollapseIcon, aiChatIcon, mediaLibraryIconFilled } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
@@ -34,8 +35,13 @@
         renderer?.toggleMediaLibrary?.()
     }
 
+    function handleToggleAiChatPanel() {
+        renderer?.toggleAiChatPanel?.()
+    }
+
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
     let canvasState = $derived($workspaceStore.data.canvasState)
+    let isAiChatPanelOpen = $derived(Boolean(canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveAiChatThreadId))
     let documents = $derived($documentsStore.data)
     let aiChatThreads = $derived(Array.from($aiChatThreadsStore.data.values()))
 
@@ -262,7 +268,7 @@
         img.src = src
     }
 
-    async function handleAddAiChatThread() {
+    async function handleCreateContextRegion() {
         if (!workspaceId) {
             console.error('No workspaceId available!')
             return
@@ -292,11 +298,19 @@
                 workspaceId,
                 threadId,
                 content: initialContent,
-                aiModel: ''
+                aiModel: '',
+                title: 'New AI Chat',
+                owner: { type: 'contextRegion', contextRegionNodeId: `node-${threadId}` }
             })
 
             if (thread) {
                 const dimensions = { ...settings.contextRegion.defaultDimensions }
+                const tabId = `thread:${thread.threadId}`
+                const panelState = getAiChatPanelState(canvasState)
+                const threadTab = { tabId, type: 'thread' as const, refId: thread.threadId, title: 'AI Chat' }
+                const tabs = panelState.tabs.some((tab) => tab.tabId === tabId)
+                    ? panelState.tabs
+                    : [threadTab, ...panelState.tabs]
 
                 const contextRegionNode: Omit<ContextRegionCanvasNode, 'position'> = {
                     nodeId: `node-${thread.threadId}`,
@@ -305,7 +319,12 @@
                     dimensions,
                 }
 
-                renderer?.insertNodeAtViewportCenter(contextRegionNode, { lastActiveAiChatThreadId: thread.threadId })
+                renderer?.insertNodeAtViewportCenter(contextRegionNode, {
+                    lastActiveAiChatThreadId: thread.threadId,
+                    aiChatPanel: { ...panelState, isOpen: true, tabs, activeTabId: tabId },
+                    aiChatSidebarTabs: tabs,
+                    activeAiChatSidebarTabId: tabId,
+                })
             }
         } catch (error) {
             console.error('Error creating AI chat thread:', error)
@@ -386,7 +405,7 @@
 
 <div
     class="workspace-canvas"
-    class:workspace-canvas-chat-panel-open={Boolean(canvasState?.lastActiveAiChatThreadId)}
+    class:workspace-canvas-chat-panel-open={isAiChatPanelOpen}
 >
     <div class="workspace-floating-toolbar">
         <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument}>
@@ -443,11 +462,22 @@
             onchange={handleFileInputChange}
         />
         <div class="workspace-floating-toolbar-divider"></div>
-        <button class="workspace-floating-toolbar-button" onclick={handleAddAiChatThread}>
+        <button class="workspace-floating-toolbar-button" onclick={handleCreateContextRegion}>
             {@html aiChatBubbleIcon}
-            <span class="workspace-floating-toolbar-tooltip">AI Chat</span>
+            <span class="workspace-floating-toolbar-tooltip">Create Context Region</span>
         </button>
     </div>
+    <button
+        class="workspace-ai-chat-launcher"
+        onclick={handleToggleAiChatPanel}
+        aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}
+    >
+        {#if isAiChatPanelOpen}
+            {@html aiChatPanelCollapseIcon}
+        {:else}
+            {@html aiChatIcon}
+        {/if}
+    </button>
     <button class="workspace-media-library-launcher" onclick={handleToggleMediaLibrary} aria-label="Media Library">
         {@html mediaLibraryIconFilled}
         <span class="workspace-media-library-launcher-tooltip">Media Library</span>
