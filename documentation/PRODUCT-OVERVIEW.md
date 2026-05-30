@@ -212,8 +212,9 @@ Each AI thread has a model selector dropdown. Users can switch models between me
 | **Anthropic** | Claude 4 Opus, Claude Sonnet 4 | Text generation |
 | **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash | Text generation |
 | **Google** | Nano Banana, Nano Banana Pro, Nano Banana 2 | Image generation (progressive streaming via Thinking) |
+| **Google** | Veo 3, Veo 3 Fast, Veo 3.1 | Video generation with audio (async submit/poll) — see [Video Generation](features/VIDEO-GENERATION.md) |
 
-Each model carries metadata: context window size, max completion, supported modalities, and detailed pricing (input/output token rates, cached rates, image tiers by resolution). Five modalities are defined in the type system: `text`, `image`, `audio`, `voice`, `video` — image is fully implemented, others are infrastructure-ready.
+Each model carries metadata: context window size, max completion, supported modalities, and detailed pricing (input/output token rates, cached rates, image tiers by resolution, per-second video rates). Five modalities are defined in the type system: `text`, `image`, `audio`, `voice`, `video` — **image and video are implemented** (the latter via Google VEO 3); `audio` and `voice` remain infrastructure-ready.
 
 ---
 

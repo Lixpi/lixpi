@@ -262,4 +262,5 @@ flowchart TB
 - [Development Guide](DEVELOPMENT.md) — building services, local auth, Pulumi
 - [Canvas Engine](features/CANVAS-ENGINE.md) — rendering, pan/zoom, node interaction
 - [Image Generation](features/IMAGE-GENERATION.md) — progressive streaming, placement modes, multi-turn editing
+- [Video Generation](features/VIDEO-GENERATION.md) — Google VEO 3, async submit/poll, inline canvas playback
 - [Workspace Feature](features/WORKSPACE-FEATURE.md) — workspace management and persistence
