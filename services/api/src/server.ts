@@ -128,6 +128,9 @@ await NATS_Service.init({
     name: 'api-server',
     user: 'regular_user',
     pass: env.NATS_REGULAR_USER_PASSWORD,
+    // Replication factor for JetStream stores/object-stores. Defaults to 3 (one
+    // copy per cluster node) so a single node hiccup can't lose the only copy.
+    ...(env.NATS_STREAM_REPLICAS ? { streamReplicas: Number(env.NATS_STREAM_REPLICAS) } : {}),
     middleware: [
         jwtAuthMiddleware, // global middleware, applies to all subscriptions
     ],

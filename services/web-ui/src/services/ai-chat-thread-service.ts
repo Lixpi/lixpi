@@ -238,14 +238,30 @@ class AiChatThreadService {
         }
     }
 
-    public async createAiChatThread({ workspaceId, threadId, content, aiModel }: { workspaceId: string; threadId: string; content: any; aiModel: string }): Promise<AiChatThread | null> {
+    public async createAiChatThread({
+        workspaceId,
+        threadId,
+        content,
+        aiModel,
+        title,
+        owner,
+    }: {
+        workspaceId: string
+        threadId: string
+        content: any
+        aiModel: string
+        title?: string
+        owner?: AiChatThread['owner']
+    }): Promise<AiChatThread | null> {
         try {
             const thread: any = await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.CREATE_AI_CHAT_THREAD, {
                 token: await AuthService.getTokenSilently(),
                 workspaceId,
                 threadId,
                 content,
-                aiModel
+                aiModel,
+                title,
+                owner,
             })
 
             if (thread.error) {
@@ -321,33 +337,35 @@ class AiChatThreadService {
         await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.UPDATE_AI_CHAT_THREAD, updatePayload)
     }
 
-    public async deleteAiChatThread({ workspaceId, threadId }: { workspaceId: string; threadId: string }): Promise<void> {
+    public async deleteAiChatThread({ workspaceId, threadId }: { workspaceId: string; threadId: string }): Promise<boolean> {
         try {
-            await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.DELETE_AI_CHAT_THREAD, {
+            const response: any = await servicesStore.getData('nats')!.request(AI_CHAT_THREAD_SUBJECTS.DELETE_AI_CHAT_THREAD, {
                 token: await AuthService.getTokenSilently(),
                 workspaceId,
                 threadId
             })
 
+            if (response?.error) {
+                throw new Error(response.error)
+            }
+
             // Remove from store
             aiChatThreadsStore.removeThread(threadId)
+            return true
         } catch (error) {
             console.error('Failed to delete AI chat thread:', error)
+            return false
         }
     }
 
     // ========== CONTEXT EXTRACTION ==========
 
-    public async extractConnectedContext(aiChatNodeId: string): Promise<ExtractedContext> {
+    private extractContextItems(connectedItems: ConnectedNodeWithEdge[]): ExtractedContext {
         const canvasState = workspaceStore.getData('canvasState')
         if (!canvasState) return []
 
-        const edges: WorkspaceEdge[] = canvasState.edges || []
-        const nodes: CanvasNode[] = canvasState.nodes || []
         const documents: Document[] = documentsStore.getData()
         const threadsMap: Map<string, AiChatThread> = aiChatThreadsStore.getData()
-
-        const connectedItems = findConnectedNodes(aiChatNodeId, edges, nodes, new Set())
         const context: ExtractedContext = []
 
         for (const { node, edge } of connectedItems) {
@@ -434,6 +452,55 @@ class AiChatThreadService {
         }
 
         return dedupeContextItems(context)
+    }
+
+    public async extractConnectedContext(aiChatNodeId: string): Promise<ExtractedContext> {
+        const canvasState = workspaceStore.getData('canvasState')
+        if (!canvasState) return []
+
+        const connectedItems = findConnectedNodes(
+            aiChatNodeId,
+            canvasState.edges || [],
+            canvasState.nodes || [],
+            new Set(),
+        )
+        return this.extractContextItems(connectedItems)
+    }
+
+    public async extractSelectedContext({
+        nodeIds,
+        includeUpstream,
+    }: {
+        nodeIds: string[]
+        includeUpstream: boolean
+    }): Promise<ExtractedContext> {
+        const canvasState = workspaceStore.getData('canvasState')
+        if (!canvasState) return []
+
+        const nodes: CanvasNode[] = canvasState.nodes || []
+        const edges: WorkspaceEdge[] = canvasState.edges || []
+        const directItems: ConnectedNodeWithEdge[] = []
+        const upstreamItems: ConnectedNodeWithEdge[] = []
+
+        for (const nodeId of nodeIds) {
+            const node = nodes.find((candidate) => candidate.nodeId === nodeId)
+            if (!node || node.type === 'contextRegion') continue
+            directItems.push({
+                node,
+                edge: {
+                    edgeId: `selected-context-${nodeId}`,
+                    sourceNodeId: nodeId,
+                    targetNodeId: nodeId,
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                },
+            })
+            if (includeUpstream) {
+                upstreamItems.push(...findConnectedNodes(nodeId, edges, nodes, new Set()))
+            }
+        }
+
+        return this.extractContextItems([...directItems, ...upstreamItems])
     }
 
     public buildContextMessage(context: ExtractedContext): ContextMessage {

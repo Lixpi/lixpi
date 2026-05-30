@@ -7,6 +7,8 @@ import Workspace from '../../models/workspace.ts'
 import Document from '../../models/document.ts'
 import Feature from '../../models/feature.ts'
 import MediaLibraryItem from '../../models/media-library-item.ts'
+import AiChatThread from '../../models/ai-chat-thread.ts'
+import ExtractionRun from '../../models/extraction-run.ts'
 import {
     deleteLibraryImageObject,
     deleteLibraryVideoObject,
@@ -68,9 +70,9 @@ export const workspaceSubjects = [
                 }
 
                 try {
+                    // Replication factor is owned by NATS_Service (R3 by default).
                     await natsService.createObjectStore(bucketName, {
-                        description: `Files for workspace ${workspace.workspaceId}`,
-                        replicas: 1
+                        description: `Files for workspace ${workspace.workspaceId}`
                     })
                     info(`Created Object Store bucket: ${bucketName}`)
                 } catch (bucketError: any) {
@@ -149,6 +151,34 @@ export const workspaceSubjects = [
     },
 
     {
+        subject: WORKSPACE_SUBJECTS.DELETE_CONTEXT_REGION,
+        type: 'reply',
+        payloadType: 'json',
+        permissions: {
+            pub: { allow: [WORKSPACE_SUBJECTS.DELETE_CONTEXT_REGION] },
+            sub: { allow: [WORKSPACE_SUBJECTS.DELETE_CONTEXT_REGION] }
+        },
+        handler: async (data: any, msg: any) => {
+            const workspace = await Workspace.getWorkspace({
+                userId: data.user.userId,
+                workspaceId: data.workspaceId
+            })
+            if (!workspace || 'error' in workspace) {
+                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
+            }
+
+            const canvasState = await Workspace.deleteContextRegion({
+                workspaceId: data.workspaceId,
+                canvasState: workspace.canvasState,
+                contextRegionNodeId: data.contextRegionNodeId,
+            })
+            if ('error' in canvasState) return canvasState
+
+            return { success: true, workspaceId: data.workspaceId, canvasState }
+        }
+    },
+
+    {
         subject: WORKSPACE_SUBJECTS.DELETE_WORKSPACE,
         type: 'reply',
         payloadType: 'json',
@@ -200,6 +230,12 @@ export const workspaceSubjects = [
                 await deleteMediaLibraryWorkspaceBucket(workspaceId).catch(() => {})
                 info(`Deleted ${mediaItems.length} workspace Media Library items for ${workspaceId}`)
             } catch (e: any) { warn(`Could not clean up Media Library items for workspace ${workspaceId}:`, e.message) }
+
+            try {
+                const deletedThreads = await AiChatThread.deleteWorkspaceAiChatThreads({ workspaceId })
+                const deletedExtractionRuns = await ExtractionRun.deleteWorkspaceRuns({ workspaceId })
+                info(`Deleted ${deletedThreads} AI chats and ${deletedExtractionRuns} extraction runs for ${workspaceId}`)
+            } catch (e: any) { warn(`Could not clean up AI chat history for workspace ${workspaceId}:`, e.message) }
 
             try {
                 const natsService = NATS_Service.getInstance()

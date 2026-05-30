@@ -1,6 +1,6 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, AI chat panels, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. PIXI v8 owns image pixel rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; the reusable `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` paints traveling progress outlines; `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts` owns context-region CO2-shaped cloud visuals.
+The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The AI Chat panel can be open with zero tabs and without a context region; its UI state is persisted in canvas state. PIXI v8 owns image pixel rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; the reusable `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` paints traveling progress outlines; `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts` owns context-region CO2-shaped cloud visuals.
 
 The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. The current path is renderer ownership by workload: DOM owns text-rich controls and interaction structure; PIXI owns high-volume pixels, connector strokes, context-region clouds, and canvas chrome.
 
@@ -28,6 +28,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | File | Purpose |
 |------|---------|
 | `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media/context-region sync points |
+| `workspace/aiChatPanelState.ts` | Persisted AI Chat panel defaults, legacy-tab migration, and standalone selected-context filtering |
 | `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved Image browsing, scope filters, and insertion actions |
 | `workspace/media-library-panel.scss` | Right-side Media Library layout and full-content wrapping rules |
 | `utils/resolveCollisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
