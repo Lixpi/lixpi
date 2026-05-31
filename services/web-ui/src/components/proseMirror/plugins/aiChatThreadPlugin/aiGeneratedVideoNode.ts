@@ -3,13 +3,15 @@ import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
 import type { ImageBranchVlmResolution, VideoGenerationTrace } from '@lixpi/constants'
+// @ts-ignore - runtime import
+import { select } from 'd3-selection'
+import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 
 // Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
 // video. While VIDEO_PENDING is the active state, the node renders a placeholder
 // (matching the canvas placeholder style — no DOM spinner per PR #202). On
-// VIDEO_COMPLETE the node swaps to a poster + <video> element with controls;
-// because the workspace canvas owns inline playback, this in-chat player is
-// intentionally controls-based and small.
+// VIDEO_COMPLETE the node swaps to a poster + controls-less <video> element plus
+// the shared SVG videoControls bar used by the workspace canvas.
 
 export const aiGeneratedVideoNodeType = 'aiGeneratedVideo'
 
@@ -172,13 +174,28 @@ const buildAuthenticatedUrl = async (url: string): Promise<string> => {
 }
 
 export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => number | undefined) => {
+    const containerStyle = {
+        position: 'relative' as const,
+        overflow: 'hidden' as const,
+    }
+    const controlsHostStyle = {
+        position: 'absolute' as const,
+        left: '10px',
+        right: '10px',
+        bottom: '10px',
+        height: '44px',
+        pointerEvents: 'auto' as const,
+        filter: 'drop-shadow(0 4px 14px rgba(0, 0, 0, 0.34))',
+        display: 'none',
+    }
     const wrapper = html`
         <div className="ai-generated-video-wrapper">
-            <div className="ai-generated-video-container">
+            <div className="ai-generated-video-container" style=${containerStyle}>
                 <div className="ai-generated-video-placeholder">
                     <span className="placeholder-text">Generating video…</span>
                 </div>
-                <video className="ai-generated-video-content" controls preload="metadata" playsinline crossorigin="anonymous"></video>
+                <video className="ai-generated-video-content" preload="metadata" playsinline crossorigin="anonymous"></video>
+                <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
             </div>
         </div>
     `
@@ -187,12 +204,16 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     const placeholderElement = wrapper.querySelector('.ai-generated-video-placeholder') as HTMLElement
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
+    const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
+    let videoControls: VideoControlsInstance | null = null
+    let controlsSvg: any = null
+    let resizeObserver: ResizeObserver | null = null
 
     applyStyle(videoElement, { display: 'none' })
 
     const handleClick = (event: MouseEvent) => {
-        // Don't intercept clicks on the video controls themselves
-        if ((event.target as HTMLElement).tagName === 'VIDEO') return
+        const target = event.target as HTMLElement
+        if (target.closest('.ai-generated-video-controls-host') || target.tagName === 'VIDEO') return
 
         event.preventDefault()
         event.stopPropagation()
@@ -207,11 +228,66 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
     wrapper.addEventListener('click', handleClick)
 
+    const getControlsWidth = (): number => {
+        const measuredWidth = controlsHost.getBoundingClientRect().width || controlsHost.clientWidth
+        return Math.max(240, measuredWidth || 520)
+    }
+
+    const syncControlsGeometry = (): void => {
+        if (!videoControls || !controlsSvg) return
+        const width = getControlsWidth()
+        controlsSvg
+            .attr('viewBox', `0 0 ${width} 44`)
+            .attr('width', '100%')
+            .attr('height', '44')
+        videoControls.resize(0, 0, width)
+    }
+
+    const destroyVideoControls = (): void => {
+        videoControls?.destroy()
+        videoControls = null
+        controlsSvg = null
+        controlsHost.replaceChildren()
+    }
+
+    const ensureVideoControls = (): void => {
+        if (videoControls) {
+            syncControlsGeometry()
+            return
+        }
+
+        const width = getControlsWidth()
+        controlsSvg = select(controlsHost)
+            .append('svg')
+            .attr('class', 'ai-generated-video-controls-svg')
+            .attr('width', '100%')
+            .attr('height', '44')
+            .attr('viewBox', `0 0 ${width} 44`)
+            .style('display', 'block')
+            .style('overflow', 'visible')
+
+        videoControls = createVideoControls(controlsSvg, {
+            id: String(node.attrs.responseId || node.attrs.fileId || 'chat-video'),
+            x: 0,
+            y: 0,
+            width,
+            videoEl: videoElement,
+            className: 'ai-generated-video-controls',
+        })
+
+        if (!resizeObserver && typeof ResizeObserver !== 'undefined') {
+            resizeObserver = new ResizeObserver(syncControlsGeometry)
+            resizeObserver.observe(controlsHost)
+        }
+    }
+
     const updateDisplay = async () => {
         const { videoUrl, posterUrl, isPending, errorMessage } = node.attrs
 
         if (errorMessage) {
             applyStyle(videoElement, { display: 'none' })
+            applyStyle(controlsHost, { display: 'none' })
+            destroyVideoControls()
             placeholderElement.classList.remove('is-active')
             if (!container.querySelector('.video-error-placeholder')) {
                 container.appendChild(html`
@@ -223,6 +299,8 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
         if (isPending || !videoUrl) {
             applyStyle(videoElement, { display: 'none' })
+            applyStyle(controlsHost, { display: 'none' })
+            destroyVideoControls()
             placeholderElement.classList.add('is-active')
             placeholderText.textContent = 'Generating video…'
             return
@@ -230,6 +308,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
         placeholderElement.classList.remove('is-active')
         applyStyle(videoElement, { display: 'block' })
+        applyStyle(controlsHost, { display: 'block' })
 
         const resolvedVideoSrc = await buildAuthenticatedUrl(videoUrl)
         const resolvedPosterSrc = posterUrl ? await buildAuthenticatedUrl(posterUrl) : ''
@@ -240,10 +319,13 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         if (resolvedPosterSrc && videoElement.poster !== resolvedPosterSrc) {
             videoElement.poster = resolvedPosterSrc
         }
+        ensureVideoControls()
     }
 
     videoElement.onerror = () => {
         applyStyle(videoElement, { display: 'none' })
+        applyStyle(controlsHost, { display: 'none' })
+        destroyVideoControls()
         if (!container.querySelector('.video-error-placeholder')) {
             container.appendChild(html`
                 <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Video unavailable</span></div>
@@ -266,6 +348,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         },
         destroy: () => {
             wrapper.removeEventListener('click', handleClick)
+            resizeObserver?.disconnect()
+            resizeObserver = null
+            destroyVideoControls()
             try {
                 videoElement.pause()
                 videoElement.removeAttribute('src')
@@ -274,8 +359,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
                 // Pause/teardown is best-effort during ProseMirror destroy.
             }
         },
-        stopEvent: (_event: Event) => {
-            return false
+        stopEvent: (event: Event) => {
+            const target = event.target as HTMLElement | null
+            return Boolean(target?.closest('.ai-generated-video-controls-host') || target === videoElement)
         },
     }
 }
