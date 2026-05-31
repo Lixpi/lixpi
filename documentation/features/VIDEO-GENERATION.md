@@ -109,7 +109,7 @@ The video fields mirror the image fields and use the same "keep if undefined" ch
 | `videoProviderName` | `ProviderName` | Video model provider (`Google`) |
 | `videoAspectRatio` | `string` | `16:9` \| `9:16` |
 | `videoResolution` | `string` | `720p` \| `1080p` \| `4k` |
-| `videoDurationSeconds` | `number` | `4` \| `6` \| `8` |
+| `videoDurationSeconds` | `number` | Selected duration from the synced model metadata; VEO dropdowns currently expose `8` because reference images, extension, and higher resolutions require 8 seconds |
 | `generatedVideoPrompt` | `string` | Enhanced prompt extracted from the text model's `generate_video` tool call |
 | `videoFirstFrameImage` | `string` | VLM-selected first frame, as a data URL (image-to-video) |
 | `videoReferenceImages` | `string[]` | VLM-selected style/content references (≤3) |
@@ -274,7 +274,7 @@ The structured VLM resolver (`services/api/src/llm/graph/image-branch-resolver.t
 | Resolver outcome | VEO input |
 |---|---|
 | Target identified (edit / style-transfer / continuation) | `videoFirstFrameImage` → VEO `image` (first frame, image-to-video) |
-| No target, references present | `videoReferenceImages` (≤3) → VEO `referenceImages` (`referenceType: 'style'`) |
+| No target, references present | `videoReferenceImages` (≤3) → VEO `referenceImages` (`referenceType: 'asset'`) |
 | No references | neither set → text-to-video |
 
 VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per the SDK, so the resolver populates exactly one path. The browser receives the same `IMAGE_BRANCH_RESOLVED` event it already understands for images.
@@ -283,7 +283,7 @@ VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per
 
 `GoogleProvider.runVeoGeneration` (`services/api/src/llm/providers/google-provider.ts`) runs only when `enableVideoGeneration && modelNameImpliesVideoOutput` — a non-VEO Google model never enters this path. The existing image branch is untouched.
 
-**Config** — `numberOfVideos: 1`, `generateAudio: true`, `personGeneration: 'allow_adult'`, plus `aspectRatio` / `resolution` / `durationSeconds` from state and the request's `abortSignal`.
+**Config** — `numberOfVideos: 1`, `personGeneration: 'allow_adult'`, plus `aspectRatio` / `resolution` / `durationSeconds` from synced model metadata and the request's `abortSignal`. `generateAudio` is sent only for Vertex clients; the Gemini Developer API rejects that knob but still generates VEO 3 audio by default. Google currently requires `durationSeconds: 8` for `referenceImages`, extension, and `1080p` / `4K` requests, so model synchronization exposes only the safe `8s` duration for VEO dropdowns.
 
 **Input precedence** — exactly one conditioning input is sent, in this order:
 
@@ -329,7 +329,7 @@ One new subject group under `WORKSPACE_SUBJECTS` in `packages/lixpi/constants/na
 "VIDEO_SUBJECTS": { "DELETE_VIDEO": "workspace.video.delete" }
 ```
 
-The `CHAT_SEND_MESSAGE` payload gains `aiVideoModel`, `videoAspectRatio`, `videoResolution`, `videoDuration`, and `videoSourceForExtension`. The gateway (`ai-interaction-subjects.ts`) resolves `aiVideoModel` (`Provider:model`) to `videoModelMetaInfo` and forwards the video params (coercing `videoDuration` to a number).
+The `CHAT_SEND_MESSAGE` payload gains `aiVideoModel`, `videoAspectRatio`, `videoResolution`, `videoDuration`, and `videoSourceForExtension`. The gateway (`ai-interaction-subjects.ts`) resolves `aiVideoModel` (`Provider:model`) to `videoModelMetaInfo`, normalizes requested video params against the synced model option lists, and forwards the selected duration as a number.
 
 ## Canvas Node & Playback
 
@@ -347,7 +347,7 @@ A new member of the `CanvasNode` union (`packages/lixpi/constants/ts/types.ts`).
 | `src` | `string` | Tokenized MP4 URL (Range-capable video route) |
 | `posterSrc` | `string` | Tokenized poster image URL (PIXI low-LoD) |
 | `aspectRatio` | `number` | width / height (e.g. 16:9 → 1.778) |
-| `durationSeconds` | `number` | `4` \| `6` \| `8` |
+| `durationSeconds` | `number` | Effective generated duration from the synced model option |
 | `hasAudio` | `boolean` | VEO 3 generates audio by default |
 | `position` / `dimensions` | `{x,y}` / `{w,h}` | Canvas geometry |
 | `generatedBy` | `VideoGeneratedByMetadata?` | Provenance + branch lineage (mirrors `ImageGeneratedByMetadata`, adds `videoModel`, `resolution`, `durationSeconds`, `veoOperationName`, `sourceVideoNodeId`) |
@@ -373,11 +373,11 @@ On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a p
 
 - A new `video_generation` modality (`{ title: 'Video Generation', shortTitle: 'VID GEN' }`); VEO models carry modalities `['video', 'video_generation']`.
 - `'veo'` removed from the Google blacklist; `fetchGoogleModels` allows VEO ids through (keeping `-preview` ids, dropping dated snapshots).
-- Per-model option lists reused as `ImageSizeOption[]`: aspect `16:9` / `9:16`; resolution `720p` / `1080p` / `4K`; duration `4s` / `6s` / `8s`.
+- Per-model option lists reused as `ImageSizeOption[]`: aspect `16:9` / `9:16`; resolution according to the VEO family; duration currently `8s` for VEO models to avoid invalid reference-image, extension, and high-resolution combinations.
 - **Per-second pricing** on `AiModel.pricing.video` (`{ measuringUnit: 'seconds', pricePer: '1', price }`). Current prices are **placeholders** to reconcile against [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
 - Friendly titles: `veo-3.0-generate-001` → "Veo 3", `veo-3.0-fast-generate-001` → "Veo 3 Fast", `veo-3.1-generate-preview` → "Veo 3.1", etc.
 
-The three frontend video dropdowns (`createGenericVideoAspectDropdown` / `…Resolution…` / `…Duration…` in `aiControls.ts`) read their options straight off the selected model's `videoAspectRatios` / `videoResolutions` / `videoDurations`. The options are **independent** — there is no dependent constraint (e.g. resolution does not force a duration). The Video-model dropdown filters models by the `video_generation` modality and is excluded from the text-model list.
+The three frontend video dropdowns (`createGenericVideoAspectDropdown` / `…Resolution…` / `…Duration…` in `aiControls.ts`) read their options straight off the selected model's `videoAspectRatios` / `videoResolutions` / `videoDurations`. The Video-model dropdown filters models by the `video_generation` modality and is excluded from the text-model list. Since the current dropdown model is flat, synchronization publishes conservative VEO options that avoid invalid combinations instead of letting the provider silently rewrite the request.
 
 ## Usage Metering
 

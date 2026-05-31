@@ -360,6 +360,46 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	})
 })
 
+describe('Workspace canvas — generated video canvas state', () => {
+	const ts = loadTs()
+
+	it('preserves workspace panel metadata when video workflows write canvas state', () => {
+		// Regression: the video callbacks used to build a fresh { viewport, nodes,
+		// edges } object, dropping aiChatPanel / sidebar tabs and collapsing the
+		// chat panel. Every video write must spread the existing canvas state.
+		const pendingStart = ts.indexOf('onVideoPendingToCanvas:')
+		const generatingStart = ts.indexOf('onVideoGeneratingToCanvas:', pendingStart)
+		const completeStart = ts.indexOf('onVideoCompleteToCanvas:', generatingStart)
+		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
+		const errorEnd = ts.indexOf('// Visibility detection for lazy loading', errorStart)
+
+		expect(pendingStart).toBeGreaterThan(-1)
+		expect(completeStart).toBeGreaterThan(pendingStart)
+		expect(errorStart).toBeGreaterThan(completeStart)
+		expect(errorEnd).toBeGreaterThan(errorStart)
+
+		const pendingHandler = ts.slice(pendingStart, generatingStart)
+		const completeHandler = ts.slice(completeStart, errorStart)
+		const errorHandler = ts.slice(errorStart, errorEnd)
+
+		expectExcerptToContain(pendingHandler, '...(currentCanvasState ?? {})', 'video pending handler')
+		expectExcerptToContain(completeHandler, '...currentCanvasState', 'video complete handler')
+		expectExcerptToContain(errorHandler, '...currentCanvasState', 'video error handler')
+	})
+
+	it('renders a click-to-play button for completed video nodes in the chrome layer', () => {
+		// The play button must live in the z-index-3 chrome layer (PIXI paints the
+		// video pixels above the DOM node shell) and be wired to the handler.
+		expectSourceToContain(ts, 'function createVideoPlayButtonChrome(node: VideoCanvasNode)')
+		expectSourceToContain(ts, 'className="workspace-video-play-button nopan"')
+		expectSourceToContain(ts, 'videoNodeHandler.toggle(node.nodeId)')
+		// Only completed videos (with a stored MP4 src) get the button.
+		expectSourceToContain(ts, "node.type === 'video' && Boolean((node as VideoCanvasNode).src)")
+		// The chrome geometry tracks the node during live drag/resize.
+		expectSourceToContain(ts, 'applyVideoPlayButtonGeometry(videoChromeEl, position, dimensions)')
+	})
+})
+
 // =============================================================================
 // Context-region child world positioning
 // =============================================================================
@@ -1129,13 +1169,17 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
 	})
 
-	it('updateSelectionDrivenUi hides floating input for image and context region selections', () => {
+	it('updateSelectionDrivenUi never shows the detached floating input under any node', () => {
 		const fnMatch = ts.match(/function\s+updateSelectionDrivenUi[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('isContextRegionCanvasNode(node)')
-		expect(fnBody).toContain("selectedNodeType === 'image'")
+		// The deprecated detached prompt-input-below-node must never render for any
+		// node type (documents, threads, images, video).
+		expect(fnBody).not.toContain('showFloatingInput')
 		expect(fnBody).toContain('hideFloatingInput')
+		// Context-region selections still set the docked panel's prompt target.
+		expect(fnBody).toContain('isContextRegionCanvasNode(node)')
+		expect(fnBody).toContain('promptInputController.setTarget')
 	})
 
 	it('bubble menu callbacks include onAskAi', () => {

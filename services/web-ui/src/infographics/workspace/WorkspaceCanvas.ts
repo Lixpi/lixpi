@@ -38,7 +38,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon, videoPlayGlyphIcon, videoPauseGlyphIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -918,14 +918,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    // The video play-button chrome spans the whole node so the button can center
+    // over the poster/video pixels (PIXI paints those above the DOM node shell, so
+    // a shell button would be hidden). The container is click-through; only the
+    // button captures pointer events.
+    function applyVideoPlayButtonGeometry(
+        chromeEl: HTMLElement,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number }
+    ): void {
+        applyStyle(chromeEl, {
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            width: `${dimensions.width}px`,
+            height: `${dimensions.height}px`,
+        })
+    }
+
     function updateGeneratedImageChromeLiveTransform(
         nodeId: string,
         position: { x: number; y: number },
         dimensions: { width: number; height: number }
     ): void {
         const chromeEl = imageChromeViewportEl?.querySelector(`[data-image-chrome-node-id="${nodeId}"]`) as HTMLElement | null
-        if (!chromeEl) return
-        applyGeneratedImageChromeGeometry(chromeEl, position, dimensions)
+        if (chromeEl) applyGeneratedImageChromeGeometry(chromeEl, position, dimensions)
+        const videoChromeEl = imageChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        if (videoChromeEl) applyVideoPlayButtonGeometry(videoChromeEl, position, dimensions)
     }
 
     function appendTextParagraph(host: HTMLElement, text: string, fallbackText: string): void {
@@ -1025,6 +1043,43 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return chromeEl
     }
 
+    // Click-to-play button for a completed video node, rendered in the same
+    // transform-synced chrome layer (z-index 3) as image provenance chrome because
+    // PIXI paints the video pixels above the DOM node shell.
+    function createVideoPlayButtonChrome(node: VideoCanvasNode): HTMLElement {
+        const button = html`
+            <button type="button" className="workspace-video-play-button nopan" aria-label="Play video">
+                <span className="workspace-video-play-button-icon" innerHTML=${videoPlayGlyphIcon}></span>
+            </button>
+        ` as HTMLButtonElement
+
+        const syncIcon = () => {
+            const playing = videoNodeHandler?.isPlaying(node.nodeId) ?? false
+            button.classList.toggle('is-playing', playing)
+            const iconEl = button.querySelector('.workspace-video-play-button-icon') as HTMLElement | null
+            if (iconEl) iconEl.innerHTML = playing ? videoPauseGlyphIcon : videoPlayGlyphIcon
+            button.setAttribute('aria-label', playing ? 'Pause video' : 'Play video')
+        }
+
+        button.addEventListener('click', async (event: MouseEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!videoNodeHandler?.hasEntry(node.nodeId)) return
+            await videoNodeHandler.toggle(node.nodeId).catch(() => {})
+            syncIcon()
+        })
+
+        const chromeEl = html`
+            <div className="workspace-video-chrome" data=${{ videoChromeNodeId: node.nodeId }}>
+                ${button}
+            </div>
+        ` as HTMLElement
+
+        applyVideoPlayButtonGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions)
+        syncIcon()
+        return chromeEl
+    }
+
     function syncGeneratedImageChrome(canvasState: CanvasState | null = currentCanvasState): void {
         if (!imageChromeViewportEl) return
         const generatedImageNodes = (canvasState?.nodes ?? [])
@@ -1035,7 +1090,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!generatedNodeIds.has(expandedNodeId)) expandedGeneratedImageInfoNodeIds.delete(expandedNodeId)
         }
 
-        imageChromeViewportEl.replaceChildren(...generatedImageNodes.map(createGeneratedImageChrome))
+        // Completed video nodes (those with a stored MP4 src) get a centered
+        // play/pause button in the same chrome layer.
+        const playableVideoNodes = (canvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is VideoCanvasNode => node.type === 'video' && Boolean((node as VideoCanvasNode).src))
+
+        imageChromeViewportEl.replaceChildren(
+            ...generatedImageNodes.map(createGeneratedImageChrome),
+            ...playableVideoNodes.map(createVideoPlayButtonChrome),
+        )
     }
 
     function syncContextRegionLayer(canvasState: CanvasState | null = currentCanvasState): void {
@@ -1759,17 +1822,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         const selectedNodeIsContextRegion = isContextRegionCanvasNode(node)
-        const selectedNodeType = (node as CanvasNode).type
-        if (selectedNodeIsContextRegion || selectedNodeType === 'image') {
-            if (selectedNodeIsContextRegion) {
-                const refId = node.referenceId || singleSelectedNodeId
-                promptInputController.setTarget({ nodeId: singleSelectedNodeId, type: node.type, referenceId: refId })
-            }
-            hideFloatingInput()
-            return
+        if (selectedNodeIsContextRegion) {
+            const refId = node.referenceId || singleSelectedNodeId
+            promptInputController.setTarget({ nodeId: singleSelectedNodeId, type: node.type, referenceId: refId })
         }
-
-        showFloatingInput(singleSelectedNodeId)
+        // The detached prompt input that used to appear below a selected node is
+        // deprecated — the docked AI chat panel is the only composer. It must
+        // NEVER render under any node type (documents, threads, images, video).
+        hideFloatingInput()
     }
 
     function clearSelectedEdgeSelection(force = false): void {
@@ -4072,6 +4132,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ]
 
             const newCanvasState: CanvasState = {
+                ...(currentCanvasState ?? {}),
                 viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
                 nodes: [...existingNodes, videoNode],
                 edges: newEdges,
@@ -4147,9 +4208,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pendingGeneratedImagePlacements.delete(threadId)
 
             commitCanvasState({
-                viewport: currentCanvasState.viewport,
+                ...currentCanvasState,
                 nodes,
-                edges: currentCanvasState.edges,
             })
         },
 
@@ -4165,7 +4225,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             setTimeout(() => {
                 if (!currentCanvasState) return
                 const nextState: CanvasState = {
-                    viewport: currentCanvasState.viewport,
+                    ...currentCanvasState,
                     nodes: currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId),
                     edges: currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
                         edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId

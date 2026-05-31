@@ -27,7 +27,7 @@ describe('AiModelsSync — VEO video model mapping', () => {
         })
     })
 
-    it('maps veo-3.0-generate-001 with video + video_generation modalities, per-second pricing, and option lists', () => {
+    it('maps veo-3.0-generate-001 with video + video_generation modalities, per-second pricing, and safe option lists', () => {
         const model = sync.mapGoogleModelToAiModel({ name: 'veo-3.0-generate-001' }, 1)
         const modalities = model.modalities.map((m: any) => m.modality)
 
@@ -39,8 +39,8 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(model.pricing.video?.price).toBe('0.40')
 
         expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '9:16'])
-        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
-        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
+        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p'])
+        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
 
         expect(model.title).toBe('Veo 3')
         expect(model.shortTitle).toBe('Veo 3')
@@ -56,14 +56,20 @@ describe('AiModelsSync — VEO video model mapping', () => {
         const v31 = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-generate-preview' }, 3)
         expect(v31.title).toBe('Veo 3.1')
         expect(v31.pricing.video?.price).toBe('0.40')
+        expect(v31.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
+        expect(v31.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
 
         const lite = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-lite-generate-preview' }, 4)
         expect(lite.title).toBe('Veo 3.1 Lite')
         expect(lite.pricing.video?.price).toBe('0.10')
+        expect(lite.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p'])
+        expect(lite.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
 
         const fast = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-fast-generate-preview' }, 5)
         expect(fast.title).toBe('Veo 3.1 Fast')
         expect(fast.pricing.video?.price).toBe('0.15')
+        expect(fast.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
+        expect(fast.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
     })
 
     it('does NOT give gemini text models any video modality, options, or pricing (regression)', () => {
