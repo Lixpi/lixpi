@@ -4,6 +4,7 @@ import type { CanvasNode, CanvasState, VideoCanvasNode } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
+import { decodeImageInWorker } from '$src/infographics/workspace/pixiImageDecoder.ts'
 
 import type { MediaNodeHandler } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import type { WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
@@ -113,8 +114,14 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         if (node.posterSrc) {
             try {
                 const posterSrc = await buildAuthenticatedUrl(node.posterSrc)
-                const posterTexture = await Texture.from(posterSrc)
+                // PIXI v8's Texture.from(urlString) does NOT fetch a remote URL — it
+                // only resolves already-loaded sources / cache aliases, so a poster
+                // URL renders as an empty texture (the dark colorRect shows through =
+                // black rectangle). Decode the bytes in the shared worker pool, the
+                // same path the image media layer uses, then build from the bitmap.
+                const bitmap = await decodeImageInWorker(posterSrc)
                 if (destroyed) return
+                const posterTexture = Texture.from(bitmap)
                 if (entry.posterTexture && entry.posterTexture !== posterTexture) {
                     entry.posterTexture.destroy()
                 }

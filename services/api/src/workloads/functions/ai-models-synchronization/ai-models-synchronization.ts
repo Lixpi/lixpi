@@ -49,11 +49,12 @@ const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
 const VEO_RESOLUTIONS: ImageSizeOption[] = [
     { value: '720p', label: '720p' },
     { value: '1080p', label: '1080p' },
+]
+const VEO_31_RESOLUTIONS: ImageSizeOption[] = [
+    ...VEO_RESOLUTIONS,
     { value: '4k', label: '4K' },
 ]
-const VEO_DURATIONS: ImageSizeOption[] = [
-    { value: '4', label: '4s' },
-    { value: '6', label: '6s' },
+const VEO_SAFE_DURATIONS: ImageSizeOption[] = [
     { value: '8', label: '8s' },
 ]
 
@@ -452,11 +453,11 @@ export class AiModelsSync {
                 // VEO 3 / 3.1 video generation models (billed per second of video).
                 // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
                 // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
-                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
-                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
-                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
+                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
             ],
             contains: [],
             fallback: {

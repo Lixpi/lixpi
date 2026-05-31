@@ -142,6 +142,18 @@ function createState(overrides: {
     }
 }
 
+function createVideoState(overrides: Parameters<typeof createState>[0] = {}): ProviderState {
+    // A video-only request: no image model selected, only a VEO video model.
+    // The resolver must still run and ground references for VEO.
+    return {
+        ...createState(overrides),
+        imageModelVersion: undefined,
+        imageProviderName: undefined,
+        videoModelVersion: 'veo-3.0-generate-001',
+        videoProviderName: 'Google',
+    }
+}
+
 function createParsedResolution(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
     return {
         mode: 'context-only',
@@ -437,5 +449,53 @@ describe('resolveImageBranch', () => {
         await expect(resolveImageBranch(createState(), deps)).rejects.toThrow('could not disambiguate')
         expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
         expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+    })
+
+    it('runs for a video-only request and maps the resolved target onto videoFirstFrameImage', async () => {
+        const { deps, publisher } = createDeps(createParsedResolution({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetImageNodeId: 'person-generated',
+            parentImageNodeId: 'person-generated',
+            referenceImageNodeIds: ['person-generated'],
+            sourceContextNodeIds: ['portrait-source'],
+            decisions: [
+                { nodeId: 'person-generated', role: 'target', reason: 'animate this generated portrait' },
+            ],
+        }))
+
+        const update = await resolveImageBranch(createVideoState({
+            promptText: 'animate that portrait, slow zoom in with ambient sound',
+            activeTargetNodeId: 'person-generated',
+        }), deps)
+
+        // The resolver must run off videoModelVersion alone (no image model selected)
+        // and feed the chosen target identity into VEO as the first frame.
+        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
+        expect(update.imageBranchResolution?.targetImageNodeId).toBe('person-generated')
+        expect(update.videoFirstFrameImage).toBe(resolvedTinyPngUrl)
+        expect(update.videoReferenceImages).toBeUndefined()
+    })
+
+    it('maps references onto videoReferenceImages when a video request identifies no target', async () => {
+        const { deps, publisher } = createDeps(createParsedResolution({
+            mode: 'context-only',
+            operationKind: 'new_image',
+            referenceImageNodeIds: ['landscape-source'],
+            sourceContextNodeIds: ['landscape-source'],
+            styleReferenceNodeIds: ['landscape-source'],
+            decisions: [
+                { nodeId: 'landscape-source', role: 'style-reference', reason: 'style and mood reference' },
+            ],
+        }))
+
+        const update = await resolveImageBranch(createVideoState({
+            promptText: 'a fox trotting through falling snow in this painting style',
+        }), deps)
+
+        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
+        expect(update.imageBranchResolution?.targetImageNodeId).toBeNull()
+        expect(update.videoReferenceImages).toEqual([resolvedTinyPngUrl])
+        expect(update.videoFirstFrameImage).toBeUndefined()
     })
 })

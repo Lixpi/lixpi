@@ -32,6 +32,12 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+type VeoImageInput = { imageBytes: string; mimeType: string }
+
+export function buildVeoReferenceImages(refs: VeoImageInput[]): Array<{ image: VeoImageInput; referenceType: 'asset' }> {
+    return refs.map(image => ({ image, referenceType: 'asset' }))
+}
+
 export class GoogleProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Google'
     private readonly client: GoogleGenAI
@@ -379,10 +385,13 @@ export class GoogleProvider extends BaseProvider {
 
         const veoConfig: Record<string, any> = {
             numberOfVideos: 1,
-            generateAudio: true,
             personGeneration: 'allow_adult',
             abortSignal: this.signal,
         }
+        // `generateAudio` is a Vertex-AI-only knob. The Gemini Developer API
+        // (apiKey mode) rejects it outright — VEO 3 still generates audio there
+        // by default — so only send the flag when the client is in Vertex mode.
+        if (this.client.vertexai) veoConfig.generateAudio = true
         if (state.videoAspectRatio) veoConfig.aspectRatio = state.videoAspectRatio
         if (state.videoResolution) veoConfig.resolution = state.videoResolution
         if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds
@@ -416,12 +425,14 @@ export class GoogleProvider extends BaseProvider {
         if (!extensionVideo && !firstFrameImage && state.videoReferenceImages && state.videoReferenceImages.length > 0) {
             const refs = state.videoReferenceImages
                 .map(url => this.dataUrlToImageBytes(url))
-                .filter((r): r is { imageBytes: string; mimeType: string } => !!r)
+                .filter((r): r is VeoImageInput => !!r)
                 .slice(0, 3)
             if (refs.length > 0) {
-                veoConfig.referenceImages = refs.map(image => ({ image, referenceType: 'style' }))
+                veoConfig.referenceImages = buildVeoReferenceImages(refs)
             }
         }
+
+        const referenceImagesCount = (veoConfig.referenceImages as any[] | undefined)?.length ?? 0
 
         info(`[Google:${this.instanceKey}] VEO submit ${JSON.stringify({
             model: modelVersion,
@@ -430,7 +441,7 @@ export class GoogleProvider extends BaseProvider {
             durationSeconds: veoConfig.durationSeconds,
             promptLen: prompt.length,
             hasFirstFrame: !!firstFrameImage,
-            referenceImagesCount: (veoConfig.referenceImages as any[] | undefined)?.length ?? 0,
+            referenceImagesCount,
             hasExtensionSource: !!extensionVideo,
         }, null, 0)}`)
 

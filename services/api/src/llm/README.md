@@ -7,7 +7,7 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. Repla
 - Receives a chat request from the NATS gateway handler (`services/api/src/NATS/subscriptions/ai-interaction-subjects.ts`).
 - Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`.
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
-- Routes dual-model image generation: text model emits a `generate_image` tool call, the workflow's conditional edge spawns a transient image-model provider (OpenAI gpt-image-*, Google Gemini, Stability) that uploads the final image to NATS Object Store.
+- Routes dual-model image/video generation: text model emits `generate_image` or `generate_video`, then the workflow spawns a transient image-model provider or VEO video provider that stores the generated media in NATS Object Store.
 - Publishes an `IMAGE_GENERATION_TRACE` event immediately before invoking the transient image-model provider. The trace contains the text-model tool prompt, the final routed image-model prompt, every reference-image slot sent to the image model, preview-safe image URLs when available, and resolver audit metadata for selected/excluded branch candidates.
 - Reports token + image usage costs via `decimal.js` pricing math against the model's pricing metadata.
 
@@ -50,7 +50,7 @@ src/llm/
         provider-registry.ts     # Map<instanceKey, provider> + active-task dedupe via Map<string, AbortController>
         openai-provider.ts       # OpenAI Responses API + Image API (gpt-image-*)
         anthropic-provider.ts    # Anthropic messages.stream() + tool_use blocks
-        google-provider.ts       # Google generateContentStream + native image generation
+        google-provider.ts       # Google generateContentStream + native image generation + VEO video generation
         stability-provider.ts    # Stability v2beta REST (multipart, no streaming)
     tools/
         image-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
