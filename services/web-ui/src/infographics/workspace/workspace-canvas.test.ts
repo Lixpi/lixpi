@@ -387,16 +387,16 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(errorHandler, '...currentCanvasState', 'video error handler')
 	})
 
-	it('renders a click-to-play button for completed video nodes in the chrome layer', () => {
-		// The play button must live in the z-index-3 chrome layer (PIXI paints the
-		// video pixels above the DOM node shell) and be wired to the handler.
-		expectSourceToContain(ts, 'function createVideoPlayButtonChrome(node: VideoCanvasNode)')
-		expectSourceToContain(ts, 'className="workspace-video-play-button nopan"')
-		expectSourceToContain(ts, 'videoNodeHandler.toggle(node.nodeId)')
-		// Only completed videos (with a stored MP4 src) get the button.
+	it('renders shared SVG controls for completed video nodes in the chrome layer', () => {
+		// The controls must live in the z-index-3 chrome layer because PIXI paints
+		// the video pixels above the DOM node shell.
+		expectSourceToContain(ts, 'function createVideoControlsChrome(node: VideoCanvasNode)')
+		expectSourceToContain(ts, 'createVideoControls(svg, {')
+		expectSourceToContain(ts, 'videoNodeHandler?.getVideoElement(node.nodeId)')
+		// Only completed videos (with a stored MP4 src) get the controls.
 		expectSourceToContain(ts, "node.type === 'video' && Boolean((node as VideoCanvasNode).src)")
 		// The chrome geometry tracks the node during live drag/resize.
-		expectSourceToContain(ts, 'applyVideoPlayButtonGeometry(videoChromeEl, position, dimensions)')
+		expectSourceToContain(ts, 'applyVideoControlsGeometry(videoChromeEl, position, dimensions)')
 	})
 })
 
