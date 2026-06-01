@@ -40,32 +40,32 @@ type ButtonControl = {
     icon: any
 }
 
-const DEFAULT_HEIGHT = 44
+const DEFAULT_HEIGHT = 52
 const DEFAULT_SKIP_SECONDS = 10
 const DEFAULT_PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
-const PADDING = 6
-const GAP = 4
-const BUTTON_SIZE = 30
-const ICON_SIZE = 18
-const BAR_RADIUS = 10
+const PADDING = 10
+const GAP = 6
+const BUTTON_SIZE = 34
+const ICON_SIZE = 20
+const BAR_RADIUS = 18
 const SCRUBBER_HEIGHT = 5
-const SCRUBBER_HANDLE_RADIUS = 5
-const TIME_WIDTH = 42
-const SPEED_WIDTH = 44
-const VOLUME_SLIDER_WIDTH = 54
+const SCRUBBER_HANDLE_RADIUS = 5.5
+const TIME_WIDTH = 48
+const SPEED_WIDTH = 48
+const VOLUME_SLIDER_WIDTH = 62
 
 const COLORS = {
-    background: 'rgba(14, 18, 24, 0.82)',
-    backgroundStroke: 'rgba(255, 255, 255, 0.14)',
-    buttonHover: 'rgba(255, 255, 255, 0.12)',
-    icon: 'rgba(255, 255, 255, 0.92)',
+    background: 'rgba(24, 28, 34, 0.68)',
+    backgroundStroke: 'rgba(255, 255, 255, 0.18)',
+    buttonHover: 'rgba(255, 255, 255, 0.14)',
+    icon: 'rgba(255, 255, 255, 0.95)',
     iconMuted: 'rgba(255, 255, 255, 0.58)',
-    text: 'rgba(255, 255, 255, 0.88)',
-    textSubtle: 'rgba(255, 255, 255, 0.62)',
-    rail: 'rgba(255, 255, 255, 0.22)',
-    buffered: 'rgba(255, 255, 255, 0.32)',
+    text: 'rgba(255, 255, 255, 0.92)',
+    textSubtle: 'rgba(255, 255, 255, 0.76)',
+    rail: 'rgba(255, 255, 255, 0.24)',
+    buffered: 'rgba(255, 255, 255, 0.34)',
     progress: '#ffffff',
-    popup: 'rgba(18, 23, 32, 0.96)',
+    popup: 'rgba(24, 28, 34, 0.94)',
 }
 
 const MEDIA_EVENTS = [
@@ -195,6 +195,13 @@ class VideoControls implements VideoControlsInstance {
     private speedMenuOpen = false
     private destroyed = false
     private activePointerCleanup: (() => void) | null = null
+    private scrubPreviewTime: number | null = null
+    private scrubDragActive = false
+    private scrubResumeOnRelease = false
+    private scrubSeekTarget: number | null = null
+    private scrubAppliedTime: number | null = null
+    private scrubSeekInFlight = false
+    private scrubSeekCleanup: (() => void) | null = null
 
     private readonly group: any
     private readonly background: any
@@ -272,7 +279,7 @@ class VideoControls implements VideoControlsInstance {
             .attr('class', 'video-controls-current-time')
             .attr('y', this.height / 2)
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 11)
+            .attr('font-size', 13)
             .attr('font-weight', 600)
             .attr('fill', COLORS.textSubtle)
 
@@ -280,7 +287,7 @@ class VideoControls implements VideoControlsInstance {
             .attr('class', 'video-controls-duration')
             .attr('y', this.height / 2)
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 11)
+            .attr('font-size', 13)
             .attr('font-weight', 600)
             .attr('fill', COLORS.textSubtle)
 
@@ -347,7 +354,7 @@ class VideoControls implements VideoControlsInstance {
             .attr('y', this.height / 2)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 11)
+            .attr('font-size', 13)
             .attr('font-weight', 650)
             .attr('fill', COLORS.text)
 
@@ -389,7 +396,7 @@ class VideoControls implements VideoControlsInstance {
 
         this.bindButtonActions()
         this.bindSpeedButton()
-        this.bindPointerDrag(this.seekHit, this.setVideoTimeFromEvent)
+        this.bindSeekDrag()
         this.bindPointerDrag(this.volumeHit, this.setVolumeFromEvent)
         this.addMediaListeners()
         this.createSpeedMenu()
@@ -401,7 +408,7 @@ class VideoControls implements VideoControlsInstance {
         this.layout()
 
         const duration = isFiniteDuration(this.videoEl) ? this.videoEl.duration : 0
-        const currentTime = duration > 0 ? clamp(this.videoEl.currentTime, 0, duration) : 0
+        const currentTime = duration > 0 ? clamp(this.scrubPreviewTime ?? this.videoEl.currentTime, 0, duration) : 0
         const progressRatio = duration > 0 ? currentTime / duration : 0
         const bufferedRatio = duration > 0 ? bufferedEnd(this.videoEl) / duration : 0
         const volume = this.videoEl.muted ? 0 : clamp(this.videoEl.volume, 0, 1)
@@ -438,7 +445,7 @@ class VideoControls implements VideoControlsInstance {
     resize = (nextX: number, nextY: number, nextWidth: number): void => {
         this.x = nextX
         this.y = nextY
-        this.width = Math.max(120, nextWidth)
+        this.width = Math.max(1, nextWidth)
         this.group.attr('transform', `translate(${this.x}, ${this.y})`)
         this.render()
     }
@@ -448,6 +455,7 @@ class VideoControls implements VideoControlsInstance {
         this.destroyed = true
         this.activePointerCleanup?.()
         this.activePointerCleanup = null
+        this.cancelScrubSeek()
         for (const eventName of MEDIA_EVENTS) {
             this.videoEl.removeEventListener(eventName, this.onMediaEvent)
         }
@@ -486,7 +494,7 @@ class VideoControls implements VideoControlsInstance {
             .attr('y', BUTTON_SIZE / 2)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 11)
+            .attr('font-size', 12)
             .attr('font-weight', 650)
             .attr('fill', COLORS.text)
             .attr('display', 'none')
@@ -546,7 +554,7 @@ class VideoControls implements VideoControlsInstance {
                 .attr('y', optionHeight / 2)
                 .attr('text-anchor', 'middle')
                 .attr('dominant-baseline', 'central')
-                .attr('font-size', 11)
+                .attr('font-size', 12)
                 .attr('font-weight', 650)
                 .attr('fill', COLORS.text)
                 .text(formatRate(rate))
@@ -640,7 +648,9 @@ class VideoControls implements VideoControlsInstance {
 
     private readonly setVideoTimeFromEvent = (event: PointerEvent | MouseEvent): void => {
         if (!isFiniteDuration(this.videoEl)) return
-        this.videoEl.currentTime = this.seekRatioFromEvent(event) * this.videoEl.duration
+        const targetTime = this.seekRatioFromEvent(event) * this.videoEl.duration
+        this.scrubPreviewTime = targetTime
+        this.queueScrubSeek(targetTime)
         this.render()
     }
 
@@ -668,6 +678,130 @@ class VideoControls implements VideoControlsInstance {
             window.addEventListener('pointerup', up)
             this.activePointerCleanup = up
         })
+    }
+
+    private bindSeekDrag(): void {
+        this.seekHit.on('pointerdown', (event: PointerEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!isFiniteDuration(this.videoEl)) return
+
+            this.activePointerCleanup?.()
+            this.scrubDragActive = true
+            this.scrubResumeOnRelease = !this.videoEl.paused
+            if (this.scrubResumeOnRelease) this.videoEl.pause()
+            this.setVideoTimeFromEvent(event)
+
+            const move = (moveEvent: PointerEvent) => {
+                moveEvent.preventDefault()
+                moveEvent.stopPropagation()
+                this.setVideoTimeFromEvent(moveEvent)
+            }
+            const removeListeners = () => {
+                window.removeEventListener('pointermove', move)
+                window.removeEventListener('pointerup', up)
+                window.removeEventListener('pointercancel', cancel)
+                this.activePointerCleanup = null
+            }
+            const finish = () => {
+                removeListeners()
+                this.scrubDragActive = false
+                this.cancelScrubSeek()
+                this.applyScrubSeekTarget()
+                this.cancelScrubSeek()
+                this.finishScrubAfterSeek()
+            }
+            const up = () => finish()
+            const cancel = () => finish()
+
+            window.addEventListener('pointermove', move)
+            window.addEventListener('pointerup', up)
+            window.addEventListener('pointercancel', cancel)
+            this.activePointerCleanup = finish
+        })
+    }
+
+    private queueScrubSeek(targetTime: number): void {
+        if (!isFiniteDuration(this.videoEl)) return
+        this.scrubSeekTarget = clamp(targetTime, 0, this.videoEl.duration)
+        if (!this.scrubSeekInFlight) this.applyScrubSeekTarget()
+    }
+
+    private applyScrubSeekTarget(): void {
+        if (this.destroyed || !isFiniteDuration(this.videoEl) || this.scrubSeekTarget === null) return
+        const targetTime = this.scrubSeekTarget
+        const lastAppliedTime = this.scrubAppliedTime ?? this.videoEl.currentTime
+        if (Math.abs(lastAppliedTime - targetTime) < 0.001) return
+
+        this.cancelScrubSeek()
+        this.scrubSeekInFlight = true
+        let settled = false
+        let nextSeekTimerId: number | null = null
+        let failSafeTimerId: number | null = null
+
+        const cleanup = () => {
+            this.videoEl.removeEventListener('seeked', finishSeek)
+            this.videoEl.removeEventListener('loadeddata', finishSeek)
+            if (nextSeekTimerId !== null) {
+                window.clearTimeout(nextSeekTimerId)
+                nextSeekTimerId = null
+            }
+            if (failSafeTimerId !== null) {
+                window.clearTimeout(failSafeTimerId)
+                failSafeTimerId = null
+            }
+            if (this.scrubSeekCleanup === cleanup) this.scrubSeekCleanup = null
+        }
+
+        const finishSeek = () => {
+            if (settled) return
+            settled = true
+            cleanup()
+            nextSeekTimerId = window.setTimeout(() => {
+                nextSeekTimerId = null
+                this.scrubSeekInFlight = false
+                if (this.destroyed || this.scrubSeekTarget === null) return
+                const appliedTime = this.scrubAppliedTime ?? this.videoEl.currentTime
+                if (Math.abs(appliedTime - this.scrubSeekTarget) >= 0.001) this.applyScrubSeekTarget()
+                else this.render()
+            }, 0)
+            this.scrubSeekCleanup = cleanup
+        }
+
+        this.videoEl.addEventListener('seeked', finishSeek)
+        this.videoEl.addEventListener('loadeddata', finishSeek)
+        failSafeTimerId = window.setTimeout(finishSeek, 500)
+        this.scrubSeekCleanup = cleanup
+
+        try {
+            this.videoEl.currentTime = targetTime
+            this.scrubAppliedTime = targetTime
+        } catch {
+            cleanup()
+            this.scrubSeekInFlight = false
+            this.scrubSeekTarget = null
+            this.scrubAppliedTime = null
+        }
+    }
+
+    private cancelScrubSeek(): void {
+        this.scrubSeekCleanup?.()
+        this.scrubSeekCleanup = null
+        this.scrubSeekInFlight = false
+    }
+
+    private finishScrubAfterSeek(): void {
+        this.scrubPreviewTime = null
+        this.scrubSeekTarget = null
+        this.scrubAppliedTime = null
+        const shouldResume = this.scrubResumeOnRelease
+        this.scrubResumeOnRelease = false
+        if (shouldResume && !this.destroyed) {
+            this.videoEl.play().catch((error) => {
+                console.warn('[videoControls] resume after seek failed', error)
+            })
+        }
+        this.render()
     }
 
     private readonly closeSpeedMenuOnOutsidePointer = (event: PointerEvent): void => {

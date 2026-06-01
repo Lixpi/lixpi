@@ -391,12 +391,29 @@ describe('Workspace canvas — generated video canvas state', () => {
 		// The controls must live in the z-index-3 chrome layer because PIXI paints
 		// the video pixels above the DOM node shell.
 		expectSourceToContain(ts, 'function createVideoControlsChrome(node: VideoCanvasNode)')
+		expectSourceToContain(ts, 'className="workspace-video-chrome nopan"')
 		expectSourceToContain(ts, 'createVideoControls(svg, {')
 		expectSourceToContain(ts, 'videoNodeHandler?.getVideoElement(node.nodeId)')
+		expectSourceToContain(ts, 'if (!videoEl.currentSrc && !videoEl.src) return null')
+		expectSourceToContain(ts, "chromeEl.addEventListener('mouseenter', () => showVideoControls(node.nodeId))")
+		expectSourceToContain(ts, "chromeEl.addEventListener('mousemove', (event: MouseEvent) => {")
+		expectSourceToContain(ts, 'handleDragStart(event, node.nodeId)')
+		expectSourceToContain(ts, 'handleResizeStart(event, node.nodeId, resizeHandle)')
 		// Only completed videos (with a stored MP4 src) get the controls.
 		expectSourceToContain(ts, "node.type === 'video' && Boolean((node as VideoCanvasNode).src)")
 		// The chrome geometry tracks the node during live drag/resize.
 		expectSourceToContain(ts, 'applyVideoControlsGeometry(videoChromeEl, position, dimensions)')
+	})
+
+	it('syncs video chrome after video handler entries exist', () => {
+		const renderStart = ts.indexOf('render(newCanvasState: CanvasState | null')
+		const pixiSync = ts.indexOf('syncPixiMediaLayer(currentCanvasState)', renderStart)
+		const chromeSync = ts.indexOf('syncGeneratedImageChrome(currentCanvasState)', renderStart)
+
+		expect(renderStart).toBeGreaterThan(-1)
+		expect(pixiSync).toBeGreaterThan(-1)
+		expect(chromeSync).toBeGreaterThan(pixiSync)
+		expectSourceToContain(ts, 'onVideoElementReady: () => scheduleGeneratedMediaChromeSync(),')
 	})
 
 	it('counts prior videos as siblings when positioning a new generated output', () => {
@@ -470,6 +487,15 @@ describe('Workspace canvas — video node interaction', () => {
 		expectExcerptToContain(overlay, 'cursor: move', '.video-drag-overlay')
 		const nodeBlock = extractBlock(scss, '.workspace-video-node')
 		expectExcerptToContain(nodeBlock, '&.is-dragging', '.workspace-video-node')
+	})
+
+	it('lets the visible video chrome and controls own hover while preserving pointer interaction', () => {
+		const chrome = extractBlock(scss, '.workspace-video-chrome')
+		const controlsHost = extractBlock(scss, '.workspace-video-controls-host')
+
+		expectExcerptToContain(chrome, 'pointer-events: auto', '.workspace-video-chrome')
+		expectExcerptToContain(controlsHost, 'pointer-events: auto', '.workspace-video-controls-host')
+		expectExcerptToContain(controlsHost, '&.is-visible', '.workspace-video-controls-host')
 	})
 
 	it('shows resize handles on video node hover/selection', () => {

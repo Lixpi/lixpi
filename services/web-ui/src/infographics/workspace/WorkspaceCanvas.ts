@@ -254,6 +254,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let contextRegionLayer: PixiContextRegionLayer | null = null
     let viewportBridge: ViewportBridge | null = null
     let imageChromeViewportEl: HTMLDivElement | null = null
+    let generatedMediaChromeSyncRaf: number | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
     let edgesRaf: number | null = null
@@ -265,6 +266,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const videoControlsHideTimers: Map<string, number> = new Map()
+    const VIDEO_CONTROLS_HEIGHT = 52
+    const VIDEO_CONTROLS_HORIZONTAL_INSET = 18
+    const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = 8
+    const VIDEO_CONTROLS_BOTTOM_INSET = 14
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     let selectionRectEl: HTMLDivElement | null = null
@@ -336,10 +341,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     })
 
     // Register the VideoCanvasNode handler with the PIXI media layer's
-    // mediaNodeRegistry. The handler owns video sprites (poster + VideoSource
-    // texture swap on click) under pixiMediaLayer's videoLayer Container, so
-    // video pixels render through PIXI alongside image pixels — no DOM <video>
-    // element on the canvas (CANVAS-ENGINE.md "no DOM pixel surface" rule).
+    // mediaNodeRegistry. The handler owns the poster/placeholder sprite and the
+    // attached HTMLVideoElement; completed playback is composited by moving that
+    // element into the chrome layer, above PIXI.
     {
         const mediaRegistry = pixiMediaLayer?.getMediaNodeRegistry?.()
         const videoLayer = pixiMediaLayer?.getVideoLayer?.()
@@ -348,6 +352,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 videoLayer,
                 onIntrinsicSize: handleVideoIntrinsicSize,
                 onRender: () => pixiMediaLayer?.scheduleRender?.(),
+                onVideoElementReady: () => scheduleGeneratedMediaChromeSync(),
             })
             mediaRegistry.register(videoNodeHandler)
         }
@@ -925,9 +930,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    // The video controls chrome spans the whole node so the SVG bar can sit over
-    // the PIXI-painted video pixels. The container is click-through; only the
-    // SVG host captures pointer events.
+    function getVideoControlsChromeLayout(nodeWidth: number): { insetX: number; width: number } {
+        const insetX = nodeWidth >= 260 ? VIDEO_CONTROLS_HORIZONTAL_INSET : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
+        return {
+            insetX,
+            width: Math.max(1, nodeWidth - insetX * 2),
+        }
+    }
+
+    function getVideoChromeResizeHandle(event: MouseEvent, chromeEl: HTMLElement): ResizeCorner | null {
+        const rect = chromeEl.getBoundingClientRect()
+        const x = event.clientX - rect.left
+        const y = event.clientY - rect.top
+        const { size, offset } = settings.imageNode.useZoomCompensatedResizeHandleScaling
+            ? getResizeHandleScaledSizes(getCurrentViewportZoom())
+            : { size: 24, offset: 6 }
+        const hitSize = Math.max(16, size + Math.max(0, offset))
+
+        if (x <= hitSize && y <= hitSize) return 'top-left'
+        if (x >= rect.width - hitSize && y <= hitSize) return 'top-right'
+        if (x <= hitSize && y >= rect.height - hitSize) return 'bottom-left'
+        if (x >= rect.width - hitSize && y >= rect.height - hitSize) return 'bottom-right'
+        return null
+    }
+
+    // The video controls chrome spans the whole node so hover is reliable over
+    // the visible video surface. Controls capture their own events; the remaining
+    // chrome surface mirrors the node drag/click hit target.
     function applyVideoControlsGeometry(
         chromeEl: HTMLElement,
         position: { x: number; y: number },
@@ -940,14 +969,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             height: `${dimensions.height}px`,
         })
 
-        // The controls host is bottom-pinned (bottom:10px, height:44px) inside the
-        // node-sized chrome, and its SVG is 44px tall — so the bar sits at y=0 in
-        // that SVG, not pushed down the node. Keep the SVG viewBox width synced to
-        // the node so the bar spans the full width at any zoom/resize.
+        const { insetX, width } = getVideoControlsChromeLayout(dimensions.width)
+        const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLElement | null
+        if (host) {
+            applyStyle(host, {
+                left: `${insetX}px`,
+                bottom: `${VIDEO_CONTROLS_BOTTOM_INSET}px`,
+                width: `${width}px`,
+                height: `${VIDEO_CONTROLS_HEIGHT}px`,
+            })
+        }
+
+        // The controls host is bottom-pinned inside the node-sized chrome. Keep
+        // the SVG viewBox synced to the pill width at any zoom/resize.
         const svg = chromeEl.querySelector('.workspace-video-controls-svg') as SVGSVGElement | null
-        svg?.setAttribute('viewBox', `0 0 ${Math.max(1, dimensions.width)} 44`)
+        svg?.setAttribute('viewBox', `0 0 ${width} ${VIDEO_CONTROLS_HEIGHT}`)
+        svg?.setAttribute('height', String(VIDEO_CONTROLS_HEIGHT))
         const controls = videoControlInstances.get(chromeEl.dataset.videoChromeNodeId || '')
-        controls?.resize(0, 0, dimensions.width)
+        controls?.resize(0, 0, width)
     }
 
     function updateGeneratedImageChromeLiveTransform(
@@ -1129,16 +1168,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createVideoControlsChrome(node: VideoCanvasNode): HTMLElement | null {
         const videoEl = videoNodeHandler?.getVideoElement(node.nodeId)
         if (!videoEl) return null
+        if (!videoEl.currentSrc && !videoEl.src) return null
 
+        const { insetX, width: controlsWidth } = getVideoControlsChromeLayout(node.dimensions.width)
         const controlsHostStyle = {
             position: 'absolute' as const,
-            left: '0',
-            bottom: '10px',
-            width: '100%',
-            height: '44px',
+            left: `${insetX}px`,
+            bottom: `${VIDEO_CONTROLS_BOTTOM_INSET}px`,
+            width: `${controlsWidth}px`,
+            height: `${VIDEO_CONTROLS_HEIGHT}px`,
         }
         const chromeEl = html`
-            <div className="workspace-video-chrome" data=${{ videoChromeNodeId: node.nodeId }}>
+            <div className="workspace-video-chrome nopan" data=${{ videoChromeNodeId: node.nodeId }}>
                 <div className="workspace-video-surface"></div>
                 <div className="workspace-video-controls-host nopan" style=${controlsHostStyle}></div>
             </div>
@@ -1149,8 +1190,42 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLDivElement
         surface.appendChild(videoEl)
 
-        // Controls auto-hide: revealed on hover of the node body (the drag overlay,
-        // which lives in the DOM node shell) or of the bar itself.
+        const isControlsEvent = (event: Event): boolean => {
+            const target = event.target as HTMLElement | null
+            return Boolean(target?.closest('.workspace-video-controls-host'))
+        }
+        const togglePlayback = (event: Event) => {
+            if (isControlsEvent(event)) return
+            event.preventDefault()
+            event.stopPropagation()
+            if (videoNodeHandler?.hasEntry(node.nodeId)) {
+                videoNodeHandler.toggle(node.nodeId).catch(() => {})
+            }
+        }
+
+        chromeEl.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
+        chromeEl.addEventListener('mousemove', (event: MouseEvent) => {
+            showVideoControls(node.nodeId)
+            if (isControlsEvent(event)) return
+            const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
+            chromeEl.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : 'move'
+        })
+        chromeEl.addEventListener('mouseleave', () => {
+            chromeEl.style.cursor = ''
+            hideVideoControls(node.nodeId)
+        })
+        chromeEl.addEventListener('mousedown', (event: MouseEvent) => {
+            if (isControlsEvent(event)) return
+            const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
+            if (resizeHandle) {
+                handleResizeStart(event, node.nodeId, resizeHandle)
+                return
+            }
+            handleDragStart(event, node.nodeId)
+        })
+        chromeEl.addEventListener('dblclick', togglePlayback)
+
+        // Controls auto-hide: revealed on hover of the node chrome or bar.
         const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLDivElement
         host.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
         host.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
@@ -1159,8 +1234,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .append('svg')
             .attr('class', 'workspace-video-controls-svg')
             .attr('width', '100%')
-            .attr('height', '44')
-            .attr('viewBox', `0 0 ${node.dimensions.width} 44`)
+            .attr('height', String(VIDEO_CONTROLS_HEIGHT))
+            .attr('viewBox', `0 0 ${controlsWidth} ${VIDEO_CONTROLS_HEIGHT}`)
             .style('display', 'block')
             .style('overflow', 'visible')
 
@@ -1168,7 +1243,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             id: node.nodeId,
             x: 0,
             y: 0,
-            width: node.dimensions.width,
+            width: controlsWidth,
+            height: VIDEO_CONTROLS_HEIGHT,
             videoEl,
             className: 'workspace-video-controls',
         })
@@ -1186,9 +1262,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         videoControlInstances.clear()
     }
 
+    function scheduleGeneratedMediaChromeSync(): void {
+        if (generatedMediaChromeSyncRaf !== null) return
+        generatedMediaChromeSyncRaf = requestAnimationFrame(() => {
+            generatedMediaChromeSyncRaf = null
+            syncGeneratedImageChrome(currentCanvasState)
+        })
+    }
+
     // Show/hide the auto-hiding control bar for a video node. The hide is debounced
-    // so moving the pointer between the node body (drag overlay) and the bar — which
-    // live in different layers — doesn't flicker the controls off.
+    // so moving between the visible video surface and the bar doesn't flicker the
+    // controls off.
     function showVideoControls(nodeId: string): void {
         const pending = videoControlsHideTimers.get(nodeId)
         if (pending !== undefined) {
@@ -1279,10 +1363,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return { width: dimensions.width, height: dimensions.width / aspectRatio }
     }
 
-    // Mirror of handleImageIntrinsicSize, fired when the PIXI VideoSource
-    // reports the MP4's intrinsic width/height via the video <video> element's
-    // loadedmetadata event. Re-fits the canvas node dimensions to the real
-    // aspect and re-centers the Y position on the lineage anchor's center line
+    // Mirror of handleImageIntrinsicSize, fired when the attached <video>
+    // reports the MP4's intrinsic width/height via loadedmetadata. Re-fits the
+    // canvas node dimensions to the real aspect and re-centers the Y position on
+    // the lineage anchor's center line
     // (PR #204 pattern) so a 16:9 video placed below a 1:1 placeholder slides
     // up to share the predecessor's horizontal axis.
     function handleVideoIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
@@ -4342,9 +4426,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const nodeId = `node-${uuidv4()}`
             videoGenerationTracker.set(threadId, { nodeId, fileId: '', sourceNodeId: sourceNode.nodeId })
 
-            // Placeholder is square until the PIXI VideoSource reports the
-            // MP4's intrinsic dimensions (handleVideoIntrinsicSize then re-fits
-            // + recenters via computeVerticallyCenteredY, PR #204 pattern).
+            // Placeholder is square until the attached <video> reports the MP4's
+            // intrinsic dimensions (handleVideoIntrinsicSize then re-fits +
+            // recenters via computeVerticallyCenteredY, PR #204 pattern).
             const placeholderWidth = getGeneratedImageInsertionSize()
             const placeholderHeight = placeholderWidth
             const position = getNextGeneratedImagePosition(sourceNode, placeholderHeight)
@@ -5608,11 +5692,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
-    // DOM shell for VideoCanvasNode. Mirrors createImageNode — the DOM only
-    // owns interaction chrome (drag overlay, resize handles via the shared base
-    // element). Video pixels live in the PIXI media layer via videoNodeHandler.
-    // Double-click toggles inline playback by swapping the PIXI sprite's texture
-    // between the poster and a live VideoSource (see videoNodeHandler.toggle).
+    // DOM shell for VideoCanvasNode. Mirrors createImageNode: the shell owns
+    // fallback interaction chrome, while completed videos get a visible DOM
+    // <video> surface in the transformed chrome layer.
+    // Double-click toggles inline playback through videoNodeHandler.toggle().
     //
     // There is NO DOM bounce-dot spinner here; the PIXI traveling outline
     // (shared with image generation via pixiMediaLayer.setGeneratingImageNodes)
@@ -5627,8 +5710,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'video-drag-overlay nopan'
 
-        // Reveal the (auto-hiding) control bar while the pointer is over the node.
-        // The bar lives in the chrome layer; this overlay covers the node body.
+        // Fallback reveal while the pointer is over the node shell. Completed
+        // videos normally use the chrome-layer hit target above the visible video.
         dragOverlay.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
         dragOverlay.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
 
@@ -6170,7 +6253,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentDocuments = newDocuments
             currentAiChatThreads = newAiChatThreads
             syncActiveAiChatPanelFromState()
-            syncGeneratedImageChrome(currentCanvasState)
 
             // 1. Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
             if (needsRerender) {
@@ -6199,6 +6281,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             } else if (currentCanvasState) {
                 syncContextRegionLayer(currentCanvasState)
             }
+
+            // Video controls need videoNodeHandler entries. Those entries are
+            // created by syncPixiMediaLayer, so media chrome must sync after the
+            // PIXI/media-registry pass.
+            syncGeneratedImageChrome(currentCanvasState)
 
             // 3. Apply viewport after PIXI sync. `setViewport` may trigger
             //    `upsertAllImages(lastState)` on a tier change, but `lastState`
@@ -6239,6 +6326,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (edgesRaf !== null) {
                 cancelAnimationFrame(edgesRaf)
                 edgesRaf = null
+            }
+            if (generatedMediaChromeSyncRaf !== null) {
+                cancelAnimationFrame(generatedMediaChromeSyncRaf)
+                generatedMediaChromeSyncRaf = null
             }
             if (transformSideEffectsRaf !== null) {
                 cancelAnimationFrame(transformSideEffectsRaf)

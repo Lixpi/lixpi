@@ -380,7 +380,7 @@
 
 .workspace-video-chrome {
     position: absolute;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .workspace-video-surface {
@@ -401,13 +401,15 @@
 
 .workspace-video-controls-host {
     opacity: 0;
-    pointer-events: none;
-    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.34));
+    pointer-events: auto;
+    border-radius: 18px;
+    filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     transition: opacity 0.15s ease;
 
     &.is-visible {
         opacity: 1;
-        pointer-events: auto;
     }
 }
 
@@ -1240,10 +1242,9 @@
     background: transparent;
 }
 
-// Video nodes mirror image nodes: the PIXI media layer owns the pixels, the DOM
-// shell owns interaction chrome (drag overlay + resize handles). Without these
-// rules the transparent drag overlay has no box, so pointer events fall through
-// to the canvas and a node drag becomes a canvas pan.
+// Video nodes mirror image nodes for selection/resize chrome. Completed playback
+// is composited by a DOM <video> in .workspace-video-chrome; the node shell still
+// provides fallback drag/resize hit areas.
 .workspace-video-node {
     background: transparent;
     border-radius: var(--workspace-image-border-radius);
