@@ -2,7 +2,7 @@ import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { ImageBranchVlmResolution, VideoGenerationTrace } from '@lixpi/constants'
+import type { ImageBranchVlmResolution } from '@lixpi/constants'
 
 // Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
 // video. While VIDEO_PENDING is the active state, the node renders a placeholder
@@ -113,6 +113,8 @@ export type AiGeneratedVideoCallbacks = {
         workspaceId: string
         posterUrl: string
         posterFileId: string
+        frameUrl: string
+        frameFileId: string
         durationSeconds: number
         aspectRatio: number
         hasAudio: boolean
@@ -132,10 +134,6 @@ export type AiGeneratedVideoCallbacks = {
     onVideoBranchResolvedToCanvas?: (data: {
         threadId: string
         resolution: ImageBranchVlmResolution
-    }) => void
-    onVideoGenerationTrace?: (data: {
-        threadId: string
-        videoGenerationTrace: VideoGenerationTrace
     }) => void
 }
 

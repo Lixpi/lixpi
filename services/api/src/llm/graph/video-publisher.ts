@@ -54,6 +54,7 @@ export class VideoPublisher {
     async complete(args: {
         videoBuffer: Buffer
         posterBuffer: Buffer | null
+        frameBuffer?: Buffer | null
         durationSeconds: number
         aspectRatio: string
         hasAudio: boolean
@@ -61,7 +62,7 @@ export class VideoPublisher {
         revisedPrompt: string
         videoModelId: string
     }): Promise<void> {
-        const { videoBuffer, posterBuffer, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId } = args
+        const { videoBuffer, posterBuffer, frameBuffer, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId } = args
 
         if (!videoBuffer || videoBuffer.length === 0) {
             throw new Error('Video completion failed: provider returned no video bytes')
@@ -84,31 +85,38 @@ export class VideoPublisher {
             useContentHash: true,
         })
 
-        let posterUrl = ''
-        let posterFileId = ''
-        if (posterBuffer && posterBuffer.length > 0) {
+        // Both the poster (frame 0, for the PIXI low-LoD preview) and the
+        // representative mid-frame (for the branch resolver / VEO anchor) are
+        // stored as ordinary workspace images. Both are best-effort: the video
+        // still completes without either.
+        const storeFrameImage = async (buffer: Buffer | null | undefined, originalName: string): Promise<{ url: string; fileId: string }> => {
+            if (!buffer || buffer.length === 0) return { url: '', fileId: '' }
             try {
-                const posterResult = await this.storeImage({
+                const result = await this.storeImage({
                     workspaceId: this.workspaceId,
-                    buffer: posterBuffer,
-                    originalName: 'generated-video-poster.png',
+                    buffer,
+                    originalName,
                     mimeType: 'image/png',
                     useContentHash: true,
                 })
-                posterUrl = posterResult.url
-                posterFileId = posterResult.fileId
+                return { url: result.url, fileId: result.fileId }
             } catch {
-                // Poster is best-effort; the video still completes without it.
+                return { url: '', fileId: '' }
             }
         }
+
+        const poster = await storeFrameImage(posterBuffer, 'generated-video-poster.png')
+        const frame = await storeFrameImage(frameBuffer, 'generated-video-frame.png')
 
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
                 status: STREAM_STATUS.VIDEO_COMPLETE,
                 videoUrl: videoResult.url,
                 fileId: videoResult.fileId,
-                posterUrl,
-                posterFileId,
+                posterUrl: poster.url,
+                posterFileId: poster.fileId,
+                frameUrl: frame.url,
+                frameFileId: frame.fileId,
                 durationSeconds,
                 aspectRatio,
                 hasAudio,

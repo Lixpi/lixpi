@@ -91,6 +91,8 @@ type SegmentEvent = {
     videoUrl?: string
     posterUrl?: string
     posterFileId?: string
+    frameUrl?: string
+    frameFileId?: string
     durationSeconds?: number
     aspectRatio?: number
     hasAudio?: boolean
@@ -1106,6 +1108,8 @@ class AiChatThreadPluginClass {
             workspaceId,
             posterUrl,
             posterFileId,
+            frameUrl,
+            frameFileId,
             durationSeconds,
             aspectRatio,
             hasAudio,
@@ -1123,6 +1127,8 @@ class AiChatThreadPluginClass {
             workspaceId: workspaceId || '',
             posterUrl: posterUrl || '',
             posterFileId: posterFileId || '',
+            frameUrl: frameUrl || '',
+            frameFileId: frameFileId || '',
             durationSeconds: durationSeconds || 0,
             aspectRatio: aspectRatio || 1.777,
             hasAudio: hasAudio ?? true,
@@ -1144,32 +1150,16 @@ class AiChatThreadPluginClass {
         })
     }
 
-    private handleVideoGenerationTrace(_view: EditorView, event: SegmentEvent): void {
-        const { aiChatThreadId, videoGenerationTrace } = event
-        if (!aiChatThreadId || !videoGenerationTrace) return
-        const callbacks = getAiGeneratedVideoCallbacks()
-        callbacks.onVideoGenerationTrace?.({
-            threadId: aiChatThreadId,
-            videoGenerationTrace,
-        })
-    }
-
-    private handleImageGenerationTrace(view: EditorView, event: SegmentEvent): void {
-        const { aiChatThreadId: threadId, imageGenerationTrace } = event
-        if (!threadId || !imageGenerationTrace) return
-
+    // Enrich (or insert) the response's collapsible block with a generation
+    // trace. Shared by the image and video trace handlers — the only difference
+    // between them is which trace attr + title they pass in. The generalized
+    // aiCollapsibleBlock renderer picks image vs video by which trace is set.
+    private applyGenerationTraceCollapsible(view: EditorView, threadId: string, attrs: Record<string, unknown>): void {
         const { state, dispatch } = view
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) return
 
         const tr = state.tr
-        const attrs = {
-            title: 'Image generation details',
-            isOpen: false,
-            isStreaming: false,
-            imageGenerationTrace,
-            imageGenerationTraceId: null,
-        }
         const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId)
 
         if (collapsibleInfo.found && collapsibleInfo.nodePos !== undefined) {
@@ -1193,6 +1183,29 @@ class AiChatThreadPluginClass {
             tr.setMeta('skipDispatch', true)
             dispatch(tr)
         }
+    }
+
+    private handleVideoGenerationTrace(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId: threadId, videoGenerationTrace } = event
+        if (!threadId || !videoGenerationTrace) return
+        this.applyGenerationTraceCollapsible(view, threadId, {
+            title: 'Video generation details',
+            isOpen: false,
+            isStreaming: false,
+            videoGenerationTrace,
+        })
+    }
+
+    private handleImageGenerationTrace(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId: threadId, imageGenerationTrace } = event
+        if (!threadId || !imageGenerationTrace) return
+        this.applyGenerationTraceCollapsible(view, threadId, {
+            title: 'Image generation details',
+            isOpen: false,
+            isStreaming: false,
+            imageGenerationTrace,
+            imageGenerationTraceId: null,
+        })
     }
 
     private handleCreateVariantRequest(view: EditorView, node: ProseMirrorNode, pos: number): void {

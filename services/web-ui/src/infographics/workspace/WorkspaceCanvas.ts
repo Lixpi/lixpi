@@ -30,6 +30,8 @@ import {
     type MediaLibraryVideoMeta,
     type ImageBranchCandidateSnapshot,
     type ImageBranchVlmResolution,
+    type MediaDescriptor,
+    MEDIA_DESCRIPTOR_VERSION,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
@@ -77,6 +79,8 @@ import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT,
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
+import { describeMedia } from '$src/services/media-descriptor-service.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     buildImageBranchCandidateSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
@@ -952,51 +956,94 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         host.replaceChildren(html`<p className=${className}>${value || fallbackText}</p>`)
     }
 
-    function createGeneratedImageInfoPanel(node: ImageCanvasNode): HTMLElement {
-        const generatedBy = node.generatedBy
-        const thread = generatedBy
-            ? currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === generatedBy.aiChatThreadId)
-            : undefined
-        const turnInfo = getGeneratedImageTurnInfoFromThreadContent(thread?.content, generatedBy?.responseMessageId)
-        const userPromptText = turnInfo?.userPromptText || generatedBy?.promptText || ''
-        const responseText = turnInfo?.responseText || generatedBy?.revisedPrompt || ''
-        const responseProvider = turnInfo?.responseProvider || String(generatedBy?.aiModel || '')
-        const userShell = createAiUserMessageShell({ wrapperClassName: 'canvas-generated-image-user' })
-        const responseShell = createAiResponseMessageShell({
-            provider: responseProvider,
-            wrapperClassName: 'canvas-generated-image-response',
-            includeSpinner: false,
-        })
-        const panel = html`
-            <div className="canvas-generated-image-info-panel nopan">
-                ${userShell.wrapper}
-                ${responseShell.wrapper}
+    // The node's compact descriptor (summary + tags) — shown for ALL media,
+    // including uploads with no generation metadata. Returns null when there is
+    // nothing useful to show (no descriptor, or analysis failed).
+    function buildMediaDescriptorSection(descriptor: MediaDescriptor | undefined): HTMLElement | null {
+        if (!descriptor) return null
+        if (descriptor.status === 'analyzing') {
+            return html`
+                <div className="canvas-media-descriptor is-analyzing">
+                    <span className="canvas-media-descriptor-label">Analyzing media…</span>
+                    <p className="canvas-media-descriptor-summary">Generating a short description of this media. It runs once and is reused later.</p>
+                </div>
+            ` as HTMLElement
+        }
+        if (descriptor.status === 'failed' || !descriptor.summary) return null
+
+        const section = html`
+            <div className="canvas-media-descriptor">
+                <span className="canvas-media-descriptor-label">Description</span>
+                <p className="canvas-media-descriptor-summary">${descriptor.summary}</p>
             </div>
         ` as HTMLElement
-
-        appendTextParagraph(userShell.contentEl, userPromptText, 'Original prompt unavailable.')
-        appendTextParagraph(responseShell.contentEl, responseText, 'AI response details unavailable.')
-
-        if (turnInfo?.imageGenerationTrace) {
-            const traceDetails = createImageGenerationTraceDetails({
-                className: 'canvas-generated-image-trace-details',
-                renderReferencesWhenClosed: true,
-            })
-            traceDetails.dom.open = true
-            traceDetails.render({
-                attrs: {
-                    title: 'Image generation details',
-                    isOpen: true,
-                    isStreaming: false,
-                    imageGenerationTrace: turnInfo.imageGenerationTrace,
-                    imageGenerationTraceId: null,
-                },
-                childCount: turnInfo.imageGenerationPromptText ? 1 : 0,
-                forceToolPromptFallback: true,
-                toolPromptFallbackText: turnInfo.imageGenerationPromptText || turnInfo.imageGenerationTrace.toolPrompt,
-            })
-            responseShell.contentEl.appendChild(traceDetails.dom)
+        const tags = [...descriptor.entityTags, ...descriptor.styleTags]
+        if (tags.length > 0) {
+            const tagsEl = html`<div className="canvas-media-descriptor-tags"></div>` as HTMLElement
+            for (const tag of tags) {
+                tagsEl.appendChild(html`<span className="canvas-media-descriptor-tag">${tag}</span>` as HTMLElement)
+            }
+            section.appendChild(tagsEl)
         }
+        return section
+    }
+
+    // Shared info panel for generated AND uploaded media (image or video). When
+    // the node carries generation context it shows the prompt/response shells and
+    // the reusable generation-trace details (image OR video trace); for every
+    // media object it appends the compact descriptor.
+    function createGeneratedMediaInfoPanel(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
+        const generatedBy = node.generatedBy
+        const panel = html`<div className="canvas-generated-image-info-panel nopan"></div>` as HTMLElement
+
+        if (generatedBy) {
+            const thread = currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === generatedBy.aiChatThreadId)
+            const turnInfo = getGeneratedImageTurnInfoFromThreadContent(thread?.content, generatedBy.responseMessageId)
+            const modelName = node.type === 'video'
+                ? String((generatedBy as VideoCanvasNode['generatedBy'])?.videoModel || '')
+                : String((generatedBy as ImageCanvasNode['generatedBy'])?.aiModel || '')
+            const userPromptText = turnInfo?.userPromptText || generatedBy.promptText || ''
+            const responseText = turnInfo?.responseText || generatedBy.revisedPrompt || ''
+            const responseProvider = turnInfo?.responseProvider || modelName
+            const userShell = createAiUserMessageShell({ wrapperClassName: 'canvas-generated-image-user' })
+            const responseShell = createAiResponseMessageShell({
+                provider: responseProvider,
+                wrapperClassName: 'canvas-generated-image-response',
+                includeSpinner: false,
+            })
+            panel.appendChild(userShell.wrapper)
+            panel.appendChild(responseShell.wrapper)
+
+            appendTextParagraph(userShell.contentEl, userPromptText, 'Original prompt unavailable.')
+            appendTextParagraph(responseShell.contentEl, responseText, 'AI response details unavailable.')
+
+            const trace = turnInfo?.imageGenerationTrace ?? turnInfo?.videoGenerationTrace ?? null
+            if (trace) {
+                const isVideoTrace = Boolean(turnInfo?.videoGenerationTrace)
+                const traceDetails = createImageGenerationTraceDetails({
+                    className: 'canvas-generated-image-trace-details',
+                    renderReferencesWhenClosed: true,
+                })
+                traceDetails.dom.open = true
+                traceDetails.render({
+                    attrs: {
+                        title: isVideoTrace ? 'Video generation details' : 'Image generation details',
+                        isOpen: true,
+                        isStreaming: false,
+                        imageGenerationTrace: isVideoTrace ? null : turnInfo!.imageGenerationTrace,
+                        videoGenerationTrace: isVideoTrace ? turnInfo!.videoGenerationTrace : null,
+                        imageGenerationTraceId: null,
+                    },
+                    childCount: turnInfo!.imageGenerationPromptText ? 1 : 0,
+                    forceToolPromptFallback: true,
+                    toolPromptFallbackText: turnInfo!.imageGenerationPromptText || trace.toolPrompt,
+                })
+                responseShell.contentEl.appendChild(traceDetails.dom)
+            }
+        }
+
+        const descriptorSection = buildMediaDescriptorSection(node.descriptor)
+        if (descriptorSection) panel.appendChild(descriptorSection)
 
         return panel
     }
@@ -1010,32 +1057,49 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedImageChrome(currentCanvasState)
     }
 
-    function createGeneratedImageChrome(node: ImageCanvasNode): HTMLElement {
-        const generatedBy = node.generatedBy
-        const imageModelProvider = generatedBy?.imageModelProvider || ''
-        const providerIcon = getAiProviderIcon(imageModelProvider)
+    // Shared info (i) button used by both image and video chrome. Pulses while
+    // the media descriptor is still being analyzed and explains itself on hover.
+    function createMediaInfoButton(node: ImageCanvasNode | VideoCanvasNode): HTMLButtonElement {
+        const analyzing = node.descriptor?.status === 'analyzing'
         const isExpanded = expandedGeneratedImageInfoNodeIds.has(node.nodeId)
-        const handleInfoClick = (event: MouseEvent) => {
+        const title = analyzing ? 'Analyzing media — generating a description…' : 'Media details'
+        const button = html`
+            <button
+                className=${`image-info-button nopan${isExpanded ? ' is-active' : ''}${analyzing ? ' is-analyzing' : ''}`}
+                type="button"
+                aria-label=${title}
+                aria-expanded=${String(isExpanded)}
+                title=${title}
+            >
+                <span innerHTML=${infoCircleIcon}></span>
+            </button>
+        ` as HTMLButtonElement
+        button.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault()
             event.stopPropagation()
             toggleGeneratedImageInfo(node.nodeId)
-        }
+        })
+        return button
+    }
+
+    // Provenance/descriptor chrome (provider badge + info button + expandable
+    // panel) rendered as a strip BELOW the node — identical placement for image
+    // and video so the info affordance is consistent across media. The video
+    // play button is a SEPARATE centered overlay (createVideoPlayButtonChrome).
+    function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
+        const generatedBy = node.generatedBy
+        const modelProvider = (node.type === 'video'
+            ? (generatedBy as VideoCanvasNode['generatedBy'])?.videoModelProvider
+            : (generatedBy as ImageCanvasNode['generatedBy'])?.imageModelProvider) || ''
+        const providerIcon = getAiProviderIcon(modelProvider)
+        const isExpanded = expandedGeneratedImageInfoNodeIds.has(node.nodeId)
         const chromeEl = html`
             <div className="workspace-generated-image-chrome" data=${{ imageChromeNodeId: node.nodeId }}>
                 <div className="workspace-generated-image-actions">
-                    ${providerIcon ? html`<div className="image-model-badge" innerHTML=${providerIcon} title=${imageModelProvider}></div>` : null}
-                    <button
-                        className=${`image-info-button nopan${isExpanded ? ' is-active' : ''}`}
-                        type="button"
-                        aria-label="Image generation details"
-                        aria-expanded=${String(isExpanded)}
-                        title="Image generation details"
-                        onclick=${handleInfoClick}
-                    >
-                        <span innerHTML=${infoCircleIcon}></span>
-                    </button>
+                    ${providerIcon ? html`<div className="image-model-badge" innerHTML=${providerIcon} title=${modelProvider}></div>` : null}
+                    ${createMediaInfoButton(node)}
                 </div>
-                ${isExpanded ? createGeneratedImageInfoPanel(node) : null}
+                ${isExpanded ? createGeneratedMediaInfoPanel(node) : null}
             </div>
         ` as HTMLElement
 
@@ -1069,6 +1133,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             syncIcon()
         })
 
+        // The play button is the only thing in this centered overlay. The info
+        // button + descriptor panel live in createGeneratedMediaChrome (a strip
+        // below the node) so they sit exactly where images put them instead of
+        // fighting the play button for the centre of the node.
         const chromeEl = html`
             <div className="workspace-video-chrome" data=${{ videoChromeNodeId: node.nodeId }}>
                 ${button}
@@ -1082,21 +1150,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function syncGeneratedImageChrome(canvasState: CanvasState | null = currentCanvasState): void {
         if (!imageChromeViewportEl) return
-        const generatedImageNodes = (canvasState?.nodes ?? [])
-            .filter((node: CanvasNode): node is ImageCanvasNode => node.type === 'image' && Boolean((node as ImageCanvasNode).generatedBy))
-        const generatedNodeIds = new Set(generatedImageNodes.map((node: ImageCanvasNode) => node.nodeId))
+        // Generated/uploaded media (image OR video) carrying generation metadata
+        // or a descriptor gets the below-node provenance chrome (info button +
+        // panel + analyzing pulse) — placed identically for both media types.
+        const mediaInfoNodes = (canvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+                (node.type === 'image' || node.type === 'video')
+                && Boolean((node as ImageCanvasNode | VideoCanvasNode).generatedBy || (node as ImageCanvasNode | VideoCanvasNode).descriptor))
 
-        for (const expandedNodeId of Array.from(expandedGeneratedImageInfoNodeIds)) {
-            if (!generatedNodeIds.has(expandedNodeId)) expandedGeneratedImageInfoNodeIds.delete(expandedNodeId)
-        }
-
-        // Completed video nodes (those with a stored MP4 src) get a centered
-        // play/pause button in the same chrome layer.
+        // Completed video nodes (those with a stored MP4 src) additionally get a
+        // centered play/pause button overlay.
         const playableVideoNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is VideoCanvasNode => node.type === 'video' && Boolean((node as VideoCanvasNode).src))
 
+        // Drop expanded state for nodes that no longer show info chrome, so a
+        // deleted node doesn't leak an orphaned open panel.
+        const infoNodeIds = new Set<string>(mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.nodeId))
+        for (const expandedNodeId of Array.from(expandedGeneratedImageInfoNodeIds)) {
+            if (!infoNodeIds.has(expandedNodeId)) expandedGeneratedImageInfoNodeIds.delete(expandedNodeId)
+        }
+
         imageChromeViewportEl.replaceChildren(
-            ...generatedImageNodes.map(createGeneratedImageChrome),
+            ...mediaInfoNodes.map(createGeneratedMediaChrome),
             ...playableVideoNodes.map(createVideoPlayButtonChrome),
         )
     }
@@ -1357,7 +1432,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const horizontalGap = settings.imageBranchLineage.contextRegionOutputGap
         const verticalGap = settings.imageBranchLineage.branchToBranchGap
         const existingBranchRoots = getGeneratedChildOutputs(region, nodes, currentCanvasState?.edges ?? [])
-            .filter((node: ImageCanvasNode) => node.generatedBy?.aiChatThreadId === region.referenceId)
+            .filter((node: ImageCanvasNode | VideoCanvasNode) => node.generatedBy?.aiChatThreadId === region.referenceId)
         const previousBranchRoot = getMostRecentGeneratedChildOutput(existingBranchRoots)
         const previousBranchRect = previousBranchRoot ? getNodeWorldRect(previousBranchRoot, nodesById) : undefined
 
@@ -3363,16 +3438,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
-    function getGeneratedChildOutputs(sourceNode: CanvasNode, nodes: CanvasNode[], edges: WorkspaceEdge[]): ImageCanvasNode[] {
-        return nodes.filter((node: CanvasNode): node is ImageCanvasNode => {
-            if (node.type !== 'image' || node.parentId) return false
+    // A new generated output is positioned relative to its most recent sibling.
+    // Both images and videos count as siblings here — otherwise a freshly
+    // generated video cannot "see" a previously generated video and the two
+    // stack on the same spot. Both node types expose the shared fields used
+    // below (generatedBy.createdAt, position).
+    function getGeneratedChildOutputs(sourceNode: CanvasNode, nodes: CanvasNode[], edges: WorkspaceEdge[]): (ImageCanvasNode | VideoCanvasNode)[] {
+        return nodes.filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode => {
+            if ((node.type !== 'image' && node.type !== 'video') || node.parentId) return false
             if (!node.generatedBy) return false
             return edges.some((edge: WorkspaceEdge) => edge.sourceNodeId === sourceNode.nodeId && edge.targetNodeId === node.nodeId)
         })
     }
 
-    function getMostRecentGeneratedChildOutput(outputs: ImageCanvasNode[]): ImageCanvasNode | undefined {
-        return [...outputs].sort((a: ImageCanvasNode, b: ImageCanvasNode) => {
+    function getMostRecentGeneratedChildOutput(outputs: (ImageCanvasNode | VideoCanvasNode)[]): ImageCanvasNode | VideoCanvasNode | undefined {
+        return [...outputs].sort((a: ImageCanvasNode | VideoCanvasNode, b: ImageCanvasNode | VideoCanvasNode) => {
             const createdAtDelta = (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
             if (createdAtDelta !== 0) return createdAtDelta
             return a.position.x - b.position.x
@@ -3540,6 +3620,100 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             resolverConfidence: resolution?.confidence,
             resolverVersion: resolution?.resolverVersion ?? placement.imageBranchCandidateSnapshot?.resolverVersion,
             createdAt: existingGeneratedBy?.createdAt ?? placement.createdAt,
+        }
+    }
+
+    // Compose a media descriptor for AI-generated media for free from the branch
+    // resolver's summaries already carried on generatedBy — no extra model call.
+    // Uploaded media has no generatedBy and is captioned separately (see
+    // analyzeUploadedMedia).
+    function buildDescriptorFromGeneratedBy(
+        generatedBy: ImageCanvasNode['generatedBy'] | VideoCanvasNode['generatedBy']
+    ): MediaDescriptor | undefined {
+        if (!generatedBy) return undefined
+        const summaryParts = [
+            generatedBy.visualEntitySummary ?? generatedBy.entitySummary,
+            generatedBy.visualStyleSummary,
+        ].filter((text): text is string => Boolean(text?.trim()))
+        const summary = (summaryParts.join(' — ') || generatedBy.revisedPrompt || generatedBy.promptText || '').trim()
+        if (!summary) return undefined
+        return {
+            status: 'ready',
+            summary,
+            entityTags: generatedBy.entityTags ?? [],
+            styleTags: generatedBy.styleTags ?? [],
+            source: 'generation',
+            version: MEDIA_DESCRIPTOR_VERSION,
+            updatedAt: Date.now(),
+        }
+    }
+
+    function buildAnalyzingDescriptor(): MediaDescriptor {
+        return {
+            status: 'analyzing',
+            summary: '',
+            entityTags: [],
+            styleTags: [],
+            source: 'analysis',
+            version: MEDIA_DESCRIPTOR_VERSION,
+            updatedAt: Date.now(),
+        }
+    }
+
+    // The branch resolver and descriptor captioner both need a vision-capable
+    // model. Pick one the workspace already exposes (image input, not image
+    // generation), preferring the configured sort order. Returns a
+    // `Provider:model` id, or undefined when no vision model is available.
+    function pickDescriptorModel(): string | undefined {
+        const models = (aiModelsStore.getData() ?? []) as Array<{ provider: string; model: string; modalities?: Array<{ modality: string }>; sortingPosition?: number }>
+        const visionModels = models.filter((model) => {
+            const modalities = model.modalities?.map((entry) => entry.modality) ?? []
+            return modalities.includes('image') && !modalities.includes('image_generation')
+        })
+        if (visionModels.length === 0) return undefined
+        const best = [...visionModels].sort((a, b) => (a.sortingPosition ?? 0) - (b.sortingPosition ?? 0))[0]
+        return `${best.provider}:${best.model}`
+    }
+
+    // Patch a single media node's descriptor and re-commit so the canvas chrome
+    // (analyzing indicator, info panel) re-renders. No-op if the node is gone.
+    function patchMediaNodeDescriptor(nodeId: string, descriptor: MediaDescriptor): void {
+        if (!currentCanvasState) return
+        if (!currentCanvasState.nodes.some((node: CanvasNode) => node.nodeId === nodeId)) return
+        const nodes = currentCanvasState.nodes.map((node: CanvasNode) => {
+            if (node.nodeId !== nodeId || (node.type !== 'image' && node.type !== 'video')) return node
+            return { ...node, descriptor }
+        })
+        commitCanvasState({ ...currentCanvasState, nodes })
+    }
+
+    // Caption a freshly uploaded media object. `stillFileId` is the image's own
+    // file or a video's poster — never the MP4. Best-effort: on any failure the
+    // descriptor is marked 'failed' so the analyzing indicator resolves.
+    async function analyzeUploadedMedia(nodeId: string, stillFileId: string): Promise<void> {
+        const failed = (): MediaDescriptor => ({ ...buildAnalyzingDescriptor(), status: 'failed', updatedAt: Date.now() })
+        const aiModel = pickDescriptorModel()
+        if (!aiModel || !stillFileId) {
+            patchMediaNodeDescriptor(nodeId, failed())
+            return
+        }
+        try {
+            const result = await describeMedia({ workspaceId, fileId: stillFileId, aiModel })
+            if (result.error || !result.summary) {
+                patchMediaNodeDescriptor(nodeId, failed())
+                return
+            }
+            patchMediaNodeDescriptor(nodeId, {
+                status: 'ready',
+                summary: result.summary,
+                entityTags: result.entityTags ?? [],
+                styleTags: result.styleTags ?? [],
+                source: 'analysis',
+                version: MEDIA_DESCRIPTOR_VERSION,
+                updatedAt: Date.now(),
+            })
+        } catch {
+            patchMediaNodeDescriptor(nodeId, failed())
         }
     }
 
@@ -3810,20 +3984,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const nodes = (currentCanvasState?.nodes || []).map((n: CanvasNode) => {
                     if (n.nodeId !== partial.nodeId) return n
                     const imgNode = n as ImageCanvasNode
+                    const generatedBy: ImageCanvasNode['generatedBy'] = {
+                        aiChatThreadId: threadId,
+                        responseId,
+                        aiModel: aiModel as any,
+                        imageModelProvider: imageModelProvider || '',
+                        revisedPrompt: revisedPrompt || imgNode.generatedBy?.revisedPrompt || promptText,
+                        responseMessageId: responseMessageId || '',
+                        ...getPendingGeneratedImageLineage(threadId, imgNode.generatedBy),
+                    }
                     return {
                         ...imgNode,
                         fileId: fileId || imgNode.fileId,
                         workspaceId: imgWorkspaceId || imgNode.workspaceId,
                         src: imageSrc,
-                        generatedBy: {
-                            aiChatThreadId: threadId,
-                            responseId,
-                            aiModel: aiModel as any,
-                            imageModelProvider: imageModelProvider || '',
-                            revisedPrompt: revisedPrompt || imgNode.generatedBy?.revisedPrompt || promptText,
-                            responseMessageId: responseMessageId || '',
-                            ...getPendingGeneratedImageLineage(threadId, imgNode.generatedBy),
-                        },
+                        generatedBy,
+                        descriptor: buildDescriptorFromGeneratedBy(generatedBy) ?? imgNode.descriptor,
                     } satisfies ImageCanvasNode
                 })
 
@@ -3888,6 +4064,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const imageHeight = imageWidth
                 const position = getNextGeneratedImagePosition(sourceNode, imageHeight)
 
+                const generatedBy: ImageCanvasNode['generatedBy'] = {
+                    aiChatThreadId: threadId,
+                    responseId,
+                    aiModel: aiModel as any,
+                    imageModelProvider: imageModelProvider || '',
+                    revisedPrompt: revisedPrompt || promptText,
+                    responseMessageId: responseMessageId || '',
+                    ...getPendingGeneratedImageLineage(threadId),
+                }
                 const imageNode: ImageCanvasNode = {
                     nodeId,
                     type: 'image',
@@ -3897,15 +4082,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     aspectRatio: 1,
                     position,
                     dimensions: { width: imageWidth, height: imageHeight },
-                    generatedBy: {
-                        aiChatThreadId: threadId,
-                        responseId,
-                        aiModel: aiModel as any,
-                        imageModelProvider: imageModelProvider || '',
-                        revisedPrompt: revisedPrompt || promptText,
-                        responseMessageId: responseMessageId || '',
-                        ...getPendingGeneratedImageLineage(threadId),
-                    },
+                    generatedBy,
+                    descriptor: buildDescriptorFromGeneratedBy(generatedBy),
                 }
 
                 const existingNodes = currentCanvasState?.nodes || []
@@ -4156,6 +4334,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 workspaceId: videoWorkspaceId,
                 posterUrl,
                 posterFileId,
+                frameFileId,
                 durationSeconds,
                 aspectRatio,
                 hasAudio,
@@ -4178,27 +4357,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const fittedAspect = Number.isFinite(aspectRatio) && aspectRatio > 0
                     ? aspectRatio
                     : videoNode.aspectRatio
+                const generatedBy: VideoCanvasNode['generatedBy'] = {
+                    aiChatThreadId: threadId,
+                    responseId,
+                    videoModel: videoModel as any,
+                    videoModelProvider: videoModelProvider || '',
+                    revisedPrompt: revisedPrompt || videoNode.generatedBy?.revisedPrompt || promptText,
+                    responseMessageId: responseMessageId || '',
+                    durationSeconds: durationSeconds || 0,
+                    hasAudio: hasAudio ?? true,
+                    ...lineage,
+                }
                 return {
                     ...videoNode,
                     fileId: fileId || videoNode.fileId,
                     posterFileId: posterFileId || videoNode.posterFileId,
+                    frameFileId: frameFileId || videoNode.frameFileId,
                     workspaceId: videoWorkspaceId || videoNode.workspaceId,
                     src: videoUrl || videoNode.src,
                     posterSrc: posterUrl || videoNode.posterSrc,
                     aspectRatio: fittedAspect,
                     durationSeconds: durationSeconds || videoNode.durationSeconds,
                     hasAudio: hasAudio ?? videoNode.hasAudio,
-                    generatedBy: {
-                        aiChatThreadId: threadId,
-                        responseId,
-                        videoModel: videoModel as any,
-                        videoModelProvider: videoModelProvider || '',
-                        revisedPrompt: revisedPrompt || videoNode.generatedBy?.revisedPrompt || promptText,
-                        responseMessageId: responseMessageId || '',
-                        durationSeconds: durationSeconds || 0,
-                        hasAudio: hasAudio ?? true,
-                        ...lineage,
-                    },
+                    generatedBy,
+                    descriptor: buildDescriptorFromGeneratedBy(generatedBy) ?? videoNode.descriptor,
                 } satisfies VideoCanvasNode
             })
 
@@ -4207,9 +4389,34 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             videoGenerationTracker.delete(threadId)
             pendingGeneratedImagePlacements.delete(threadId)
 
+            // Backstop against overlap, mirroring onImageCompleteToCanvas. The
+            // initial placement already accounts for prior media, so this is a
+            // no-op in the common case and only nudges genuinely colliding nodes.
+            const collisionExclusions = new Set<string>()
+            for (const child of nodes) {
+                if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
+            }
+            const collisionPlan = createShapeAwareCollisionPlan(nodes)
+            const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
+                excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
+                shouldResolvePair: collisionPlan.shouldResolvePair,
+            })
+
+            const resolvedNodes = collisionResult.hasChanges
+                ? nodes.map((n: CanvasNode) => {
+                    const resolved = collisionResult.nodes.get(n.nodeId)
+                    if (!resolved) return n
+                    const resolvedPosition = getResolvedNodePositionFromCollisionBox(n, resolved, collisionPlan.entries)
+                    const position = n.parentId
+                        ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(nodes))
+                        : resolvedPosition
+                    return { ...n, position }
+                })
+                : nodes
+
             commitCanvasState({
                 ...currentCanvasState,
-                nodes,
+                nodes: resolvedNodes,
             })
         },
 
@@ -5723,16 +5930,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         })
                         if (!materialized.fileId || !materialized.url) return false
                         const width = settings.imageNode.defaultInsertionWidth
+                        const imageNodeId = `node-${materialized.fileId}`
                         const imageNode: Omit<ImageCanvasNode, 'position'> = {
-                            nodeId: `node-${materialized.fileId}`,
+                            nodeId: imageNodeId,
                             type: 'image',
                             fileId: materialized.fileId,
                             workspaceId,
                             src: materialized.url,
                             aspectRatio: item.aspectRatio,
                             dimensions: { width, height: width / item.aspectRatio },
+                            descriptor: buildAnalyzingDescriptor(),
                         }
                         insertNodeAtViewportCenterInternal(imageNode)
+                        // Caption the upload in the background; updates the node's
+                        // descriptor (analyzing → ready/failed) when it resolves.
+                        void analyzeUploadedMedia(imageNodeId, materialized.fileId)
                         return true
                     } catch (error) {
                         console.error('Failed to add Media Library image to canvas:', error)
@@ -5750,11 +5962,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // resizes to its intrinsic aspect on first frame.
                         const width = settings.imageNode.defaultInsertionWidth
                         const aspectRatio = item.aspectRatio || 1
+                        const videoNodeId = `node-${materialized.video.fileId}`
+                        const posterFileId = materialized.poster?.fileId ?? ''
                         const videoNode: Omit<VideoCanvasNode, 'position'> = {
-                            nodeId: `node-${materialized.video.fileId}`,
+                            nodeId: videoNodeId,
                             type: 'video',
                             fileId: materialized.video.fileId,
-                            posterFileId: materialized.poster?.fileId ?? '',
+                            posterFileId,
                             workspaceId,
                             src: materialized.video.url,
                             posterSrc: materialized.poster?.url ?? '',
@@ -5762,8 +5976,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             durationSeconds: item.durationSeconds,
                             hasAudio: item.hasAudio,
                             dimensions: { width, height: width / aspectRatio },
+                            descriptor: buildAnalyzingDescriptor(),
                         }
                         insertNodeAtViewportCenterInternal(videoNode)
+                        // Caption from the poster still (never the MP4); updates the
+                        // node's descriptor (analyzing → ready/failed) on resolve.
+                        void analyzeUploadedMedia(videoNodeId, posterFileId)
                         return true
                     } catch (error) {
                         console.error('Failed to add Media Library video to canvas:', error)

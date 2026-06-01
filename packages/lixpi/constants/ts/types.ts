@@ -125,6 +125,11 @@ export type ImageBranchCandidateImage = {
     fileId?: string
     workspaceId?: string
     imageUrl: string
+    // Whether `imageUrl` points at a still image or at a video's representative
+    // frame. Videos are grounded by a single extracted frame — never the MP4 —
+    // so the resolver pays the same per-candidate cost regardless of media type.
+    // Defaults to 'image' when absent so existing image candidates are unchanged.
+    mediaKind?: 'image' | 'video'
     roleHints: ImageBranchCandidateRoleHint[]
     branchId?: string
     parentImageNodeId?: string
@@ -326,6 +331,23 @@ export type ImageGeneratedByMetadata = {
     createdAt?: number
 }
 
+// A compact, model-friendly description of a media object (image or video)
+// stored on the canvas node so any feature can read it without re-deriving it.
+// AI-generated media composes it for free from the branch resolver's summaries;
+// uploaded media is captioned by a single VLM pass. Deliberately short so it can
+// be fed into model context (e.g. the branch-resolver transcript) without bloat.
+export type MediaDescriptorStatus = 'analyzing' | 'ready' | 'failed'
+
+export type MediaDescriptor = {
+    status: MediaDescriptorStatus
+    summary: string
+    entityTags: string[]
+    styleTags: string[]
+    source: 'generation' | 'analysis'
+    version: string
+    updatedAt: number
+}
+
 export type ImageCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'image'
@@ -336,6 +358,7 @@ export type ImageCanvasNode = CanvasNodeParentingFields & {
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: ImageGeneratedByMetadata
+    descriptor?: MediaDescriptor
 }
 
 // Provenance + lineage for an AI-generated video node. Mirrors
@@ -363,6 +386,7 @@ export type VideoGeneratedByMetadata = {
     operationKind?: ImageGenerationOperationKind
     promptText?: string
     promptFingerprint?: string
+    entitySummary?: string
     visualEntitySummary?: string
     visualStyleSummary?: string
     entityTags?: string[]
@@ -387,6 +411,7 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     type: 'video'
     fileId: string                // MP4 object key in workspace-{workspaceId}-files
     posterFileId: string          // ffmpeg frame-0 poster (an image object)
+    frameFileId?: string          // ffmpeg representative mid-frame used to ground the video to the VLM and as VEO's image-to-video anchor
     workspaceId: string
     src: string                   // tokenized MP4 URL (Range-capable video route)
     posterSrc: string             // tokenized poster image URL (PIXI low-LoD)
@@ -396,6 +421,7 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: VideoGeneratedByMetadata
+    descriptor?: MediaDescriptor
 }
 
 export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {

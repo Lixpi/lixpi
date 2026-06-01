@@ -8,6 +8,7 @@ import type {
     ImageBranchCandidateRoleHint,
     ImageBranchCandidateSnapshot,
     ImageCanvasNode,
+    VideoCanvasNode,
     WorkspaceEdge,
 } from '@lixpi/constants'
 import {
@@ -17,6 +18,11 @@ import {
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 
 const RESOLVER_VERSION = 'image-branch-vlm-v1'
+
+// Branch lineage spans both media types: a video continuation can have an image
+// parent and vice versa. The snapshot grounds every media object by a single
+// still — an image's file, or a video's representative frame — never the MP4.
+type MediaCanvasNode = ImageCanvasNode | VideoCanvasNode
 
 type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
 
@@ -35,8 +41,12 @@ type ChatMessageLike = {
     content?: unknown
 }
 
-function isGeneratedImageForThread(node: CanvasNode, threadId: string): node is ImageCanvasNode {
-    return node.type === 'image' && (node as ImageCanvasNode).generatedBy?.aiChatThreadId === threadId
+function isMediaCanvasNode(node: CanvasNode): node is MediaCanvasNode {
+    return node.type === 'image' || node.type === 'video'
+}
+
+function isGeneratedMediaForThread(node: CanvasNode, threadId: string): node is MediaCanvasNode {
+    return isMediaCanvasNode(node) && node.generatedBy?.aiChatThreadId === threadId
 }
 
 export function getPromptTextFromMessages(messages: ChatMessageLike[]): string {
@@ -116,41 +126,41 @@ function getSourceContextNodeIds(nodes: CanvasNode[], edges: WorkspaceEdge[], re
     return Array.from(nodeIds)
 }
 
-function getContextImageNodes(nodes: CanvasNode[], sourceContextNodeIds: string[]): ImageCanvasNode[] {
+function getContextMediaNodes(nodes: CanvasNode[], sourceContextNodeIds: string[]): MediaCanvasNode[] {
     const sourceContextNodeIdSet = new Set(sourceContextNodeIds)
-    return nodes.filter((node): node is ImageCanvasNode => node.type === 'image' && sourceContextNodeIdSet.has(node.nodeId))
+    return nodes.filter((node): node is MediaCanvasNode => isMediaCanvasNode(node) && sourceContextNodeIdSet.has(node.nodeId))
 }
 
-function getGeneratedImagesForThread(nodes: CanvasNode[], threadId: string): ImageCanvasNode[] {
-    return nodes.filter((node): node is ImageCanvasNode => isGeneratedImageForThread(node, threadId))
+function getGeneratedMediaForThread(nodes: CanvasNode[], threadId: string): MediaCanvasNode[] {
+    return nodes.filter((node): node is MediaCanvasNode => isGeneratedMediaForThread(node, threadId))
 }
 
-function getLeafGeneratedImages(images: ImageCanvasNode[], edges: WorkspaceEdge[]): ImageCanvasNode[] {
-    const imageIds = new Set(images.map((image) => image.nodeId))
+function getLeafGeneratedMedia(media: MediaCanvasNode[], edges: WorkspaceEdge[]): MediaCanvasNode[] {
+    const mediaIds = new Set(media.map((node) => node.nodeId))
     const sourceIdsWithGeneratedChildren = new Set(
         edges
-            .filter((edge) => imageIds.has(edge.sourceNodeId) && imageIds.has(edge.targetNodeId))
+            .filter((edge) => mediaIds.has(edge.sourceNodeId) && mediaIds.has(edge.targetNodeId))
             .map((edge) => edge.sourceNodeId)
     )
 
-    for (const image of images) {
-        const parentImageNodeId = image.generatedBy?.parentImageNodeId
-        if (parentImageNodeId && imageIds.has(parentImageNodeId)) sourceIdsWithGeneratedChildren.add(parentImageNodeId)
+    for (const node of media) {
+        const parentImageNodeId = node.generatedBy?.parentImageNodeId
+        if (parentImageNodeId && mediaIds.has(parentImageNodeId)) sourceIdsWithGeneratedChildren.add(parentImageNodeId)
     }
 
-    const leaves = images.filter((image) => !sourceIdsWithGeneratedChildren.has(image.nodeId))
-    return leaves.length > 0 ? leaves : images
+    const leaves = media.filter((node) => !sourceIdsWithGeneratedChildren.has(node.nodeId))
+    return leaves.length > 0 ? leaves : media
 }
 
 function collectImageBranchAncestors(
-    selectedImage: ImageCanvasNode,
-    imagesById: Map<string, ImageCanvasNode>,
+    selectedMedia: MediaCanvasNode,
+    mediaById: Map<string, MediaCanvasNode>,
     edges: WorkspaceEdge[],
     regionNodeId: string
 ): string[] {
     const branchNodeIds: string[] = []
     const visited = new Set<string>()
-    let current: ImageCanvasNode | undefined = selectedImage
+    let current: MediaCanvasNode | undefined = selectedMedia
 
     while (current && !visited.has(current.nodeId)) {
         visited.add(current.nodeId)
@@ -158,58 +168,68 @@ function collectImageBranchAncestors(
 
         const incomingEdge = edges.find((edge) => edge.targetNodeId === current?.nodeId)
         if (incomingEdge && incomingEdge.sourceNodeId !== regionNodeId) {
-            current = imagesById.get(incomingEdge.sourceNodeId)
+            current = mediaById.get(incomingEdge.sourceNodeId)
             if (current) continue
         }
 
         const parentImageNodeId = current.generatedBy?.parentImageNodeId
-        current = parentImageNodeId ? imagesById.get(parentImageNodeId) : undefined
+        current = parentImageNodeId ? mediaById.get(parentImageNodeId) : undefined
     }
 
     return branchNodeIds
 }
 
-function getBranchIdForImage(selectedImage: ImageCanvasNode, ancestorNodeIds: string[], imagesById: Map<string, ImageCanvasNode>): string | undefined {
-    const explicitBranchId = selectedImage.generatedBy?.branchId
+function getBranchIdForMedia(selectedMedia: MediaCanvasNode, ancestorNodeIds: string[], mediaById: Map<string, MediaCanvasNode>): string | undefined {
+    const explicitBranchId = selectedMedia.generatedBy?.branchId
     if (explicitBranchId) return explicitBranchId
 
     for (const ancestorNodeId of ancestorNodeIds) {
-        const ancestorBranchId = imagesById.get(ancestorNodeId)?.generatedBy?.branchId
+        const ancestorBranchId = mediaById.get(ancestorNodeId)?.generatedBy?.branchId
         if (ancestorBranchId) return ancestorBranchId
     }
 
     return undefined
 }
 
-function getImageUrl(image: ImageCanvasNode): string {
-    if (image.fileId && image.workspaceId) {
-        return `nats-obj://workspace-${image.workspaceId}-files/${image.fileId}`
+// Resolve the still the resolver sees for a candidate. For videos this is the
+// representative mid-frame (falling back to the frame-0 poster); the MP4 itself
+// is never sent to the VLM — only the explicit "extend video" action ships it.
+function getMediaUrl(node: MediaCanvasNode): string {
+    if (node.type === 'video') {
+        const frameFileId = node.frameFileId || node.posterFileId
+        if (frameFileId && node.workspaceId) return `nats-obj://workspace-${node.workspaceId}-files/${frameFileId}`
+        return node.posterSrc || node.src
     }
-    return image.src
+    if (node.fileId && node.workspaceId) return `nats-obj://workspace-${node.workspaceId}-files/${node.fileId}`
+    return node.src
 }
 
-function getImagePromptText(image: ImageCanvasNode, generatedImageTextByNodeId: Record<string, string> = {}): string {
+function getMediaPromptText(node: MediaCanvasNode, generatedMediaTextByNodeId: Record<string, string> = {}): string {
+    const generatedBy = node.generatedBy
     return [
-        image.generatedBy?.promptText,
-        image.generatedBy?.revisedPrompt,
-        image.generatedBy?.visualEntitySummary,
-        image.generatedBy?.visualStyleSummary,
-        image.generatedBy?.entitySummary,
-        generatedImageTextByNodeId[image.nodeId],
+        generatedBy?.promptText,
+        generatedBy?.revisedPrompt,
+        generatedBy?.visualEntitySummary,
+        generatedBy?.visualStyleSummary,
+        generatedBy?.entitySummary,
+        // Uploaded media has no generation metadata — its descriptor summary is
+        // the only text that distinguishes it.
+        node.descriptor?.summary,
+        generatedMediaTextByNodeId[node.nodeId],
     ].filter((text): text is string => Boolean(text?.trim())).join('\n')
 }
 
 function getBranchPromptText(
-    selectedImage: ImageCanvasNode,
-    imagesById: Map<string, ImageCanvasNode>,
+    selectedMedia: MediaCanvasNode,
+    mediaById: Map<string, MediaCanvasNode>,
     edges: WorkspaceEdge[],
     regionNodeId: string,
-    generatedImageTextByNodeId: Record<string, string> = {}
+    generatedMediaTextByNodeId: Record<string, string> = {}
 ): string {
-    return collectImageBranchAncestors(selectedImage, imagesById, edges, regionNodeId)
-        .map((nodeId) => imagesById.get(nodeId))
-        .filter((image): image is ImageCanvasNode => Boolean(image))
-        .map((image) => getImagePromptText(image, generatedImageTextByNodeId))
+    return collectImageBranchAncestors(selectedMedia, mediaById, edges, regionNodeId)
+        .map((nodeId) => mediaById.get(nodeId))
+        .filter((node): node is MediaCanvasNode => Boolean(node))
+        .map((node) => getMediaPromptText(node, generatedMediaTextByNodeId))
         .filter(Boolean)
         .join('\n---\n')
 }
@@ -225,7 +245,7 @@ export function getGeneratedImageTextByNodeIdFromThreadContent(
     const responseTextById = collectResponseTextById(root)
     const textByNodeId: Record<string, string> = {}
     for (const node of nodes) {
-        if (!isGeneratedImageForThread(node, threadId)) continue
+        if (!isGeneratedMediaForThread(node, threadId)) continue
         const responseMessageId = node.generatedBy?.responseMessageId
         if (!responseMessageId) continue
         const text = responseTextById[responseMessageId]
@@ -257,62 +277,71 @@ function addActiveTargetHint(roleHints: ImageBranchCandidateRoleHint[], imageNod
     return uniqueRoleHints(imageNodeId === activeTargetNodeId ? [...roleHints, 'active-target'] : roleHints)
 }
 
-function createBaseContextCandidate(image: ImageCanvasNode, activeTargetNodeId: string | undefined): ImageBranchCandidateImage {
-    const generatedBy = image.generatedBy
+// The candidate fileId tracks the still the resolver grounds against, so for a
+// video it is the representative frame (or poster) rather than the MP4 object.
+function getCandidateStillFileId(node: MediaCanvasNode): string | undefined {
+    if (node.type === 'video') return node.frameFileId || node.posterFileId || undefined
+    return node.fileId
+}
+
+function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: string | undefined): ImageBranchCandidateImage {
+    const generatedBy = media.generatedBy
     const roleHints: ImageBranchCandidateRoleHint[] = ['base-context']
     if (generatedBy) roleHints.push('generated-variant')
 
     return {
-        nodeId: image.nodeId,
-        fileId: image.fileId,
-        workspaceId: image.workspaceId,
-        imageUrl: getImageUrl(image),
-        roleHints: addActiveTargetHint(roleHints, image.nodeId, activeTargetNodeId),
+        nodeId: media.nodeId,
+        fileId: getCandidateStillFileId(media),
+        workspaceId: media.workspaceId,
+        imageUrl: getMediaUrl(media),
+        mediaKind: media.type,
+        roleHints: addActiveTargetHint(roleHints, media.nodeId, activeTargetNodeId),
         branchId: generatedBy?.branchId,
         parentImageNodeId: generatedBy?.parentImageNodeId,
-        ancestorNodeIds: generatedBy?.parentImageNodeId ? [generatedBy.parentImageNodeId, image.nodeId] : [image.nodeId],
-        sourceContextNodeIds: [image.nodeId],
+        ancestorNodeIds: generatedBy?.parentImageNodeId ? [generatedBy.parentImageNodeId, media.nodeId] : [media.nodeId],
+        sourceContextNodeIds: [media.nodeId],
         sourceMessageId: generatedBy?.responseMessageId,
-        promptText: getImagePromptText(image),
+        promptText: getMediaPromptText(media),
         visualEntitySummary: generatedBy?.visualEntitySummary ?? generatedBy?.entitySummary,
         visualStyleSummary: generatedBy?.visualStyleSummary,
-        entityTags: generatedBy?.entityTags ?? [],
-        styleTags: generatedBy?.styleTags ?? [],
+        entityTags: generatedBy?.entityTags ?? media.descriptor?.entityTags ?? [],
+        styleTags: generatedBy?.styleTags ?? media.descriptor?.styleTags ?? [],
         createdAt: generatedBy?.createdAt,
     }
 }
 
 function createGeneratedCandidate(args: {
-    image: ImageCanvasNode
-    imagesById: Map<string, ImageCanvasNode>
+    media: MediaCanvasNode
+    mediaById: Map<string, MediaCanvasNode>
     edges: WorkspaceEdge[]
     regionNodeId: string
     sourceContextNodeIds: string[]
     leafNodeIds: Set<string>
-    generatedImageTextByNodeId: Record<string, string>
+    generatedMediaTextByNodeId: Record<string, string>
     activeTargetNodeId?: string
 }): ImageBranchCandidateImage {
-    const ancestorNodeIds = collectImageBranchAncestors(args.image, args.imagesById, args.edges, args.regionNodeId)
-    const generatedBy = args.image.generatedBy
+    const ancestorNodeIds = collectImageBranchAncestors(args.media, args.mediaById, args.edges, args.regionNodeId)
+    const generatedBy = args.media.generatedBy
     const roleHints: ImageBranchCandidateRoleHint[] = ['generated-variant']
-    roleHints.push(args.leafNodeIds.has(args.image.nodeId) ? 'branch-leaf' : 'branch-ancestor')
+    roleHints.push(args.leafNodeIds.has(args.media.nodeId) ? 'branch-leaf' : 'branch-ancestor')
 
     return {
-        nodeId: args.image.nodeId,
-        fileId: args.image.fileId,
-        workspaceId: args.image.workspaceId,
-        imageUrl: getImageUrl(args.image),
-        roleHints: addActiveTargetHint(roleHints, args.image.nodeId, args.activeTargetNodeId),
-        branchId: getBranchIdForImage(args.image, ancestorNodeIds, args.imagesById),
+        nodeId: args.media.nodeId,
+        fileId: getCandidateStillFileId(args.media),
+        workspaceId: args.media.workspaceId,
+        imageUrl: getMediaUrl(args.media),
+        mediaKind: args.media.type,
+        roleHints: addActiveTargetHint(roleHints, args.media.nodeId, args.activeTargetNodeId),
+        branchId: getBranchIdForMedia(args.media, ancestorNodeIds, args.mediaById),
         parentImageNodeId: generatedBy?.parentImageNodeId,
         ancestorNodeIds,
         sourceContextNodeIds: uniqueValues([...(generatedBy?.sourceContextNodeIds ?? []), ...args.sourceContextNodeIds]),
         sourceMessageId: generatedBy?.responseMessageId,
-        promptText: getBranchPromptText(args.image, args.imagesById, args.edges, args.regionNodeId, args.generatedImageTextByNodeId),
+        promptText: getBranchPromptText(args.media, args.mediaById, args.edges, args.regionNodeId, args.generatedMediaTextByNodeId),
         visualEntitySummary: generatedBy?.visualEntitySummary ?? generatedBy?.entitySummary,
         visualStyleSummary: generatedBy?.visualStyleSummary,
-        entityTags: generatedBy?.entityTags ?? [],
-        styleTags: generatedBy?.styleTags ?? [],
+        entityTags: generatedBy?.entityTags ?? args.media.descriptor?.entityTags ?? [],
+        styleTags: generatedBy?.styleTags ?? args.media.descriptor?.styleTags ?? [],
         createdAt: generatedBy?.createdAt,
     }
 }
@@ -320,6 +349,7 @@ function createGeneratedCandidate(args: {
 function buildTranscriptContext(candidates: ImageBranchCandidateImage[], prompt: string, activeTargetNodeId: string | undefined): string {
     const candidateLines = candidates.map((candidate) => [
         `nodeId=${candidate.nodeId}`,
+        `kind=${candidate.mediaKind ?? 'image'}`,
         `roles=${candidate.roleHints.join(',')}`,
         candidate.branchId ? `branchId=${candidate.branchId}` : undefined,
         candidate.visualEntitySummary ? `visualEntity=${candidate.visualEntitySummary}` : undefined,
@@ -330,7 +360,7 @@ function buildTranscriptContext(candidates: ImageBranchCandidateImage[], prompt:
     return [
         `Current user prompt: ${prompt}`,
         activeTargetNodeId ? `Active target nodeId: ${activeTargetNodeId}` : undefined,
-        'Candidate image labels:',
+        'Candidate media labels:',
         ...candidateLines,
     ].filter((line): line is string => typeof line === 'string').join('\n')
 }
@@ -345,25 +375,25 @@ export function buildImageBranchCandidateSnapshot({
     generatedImageTextByNodeId = {},
 }: BuildImageBranchCandidateSnapshotParams): ImageBranchCandidateSnapshot {
     const sourceContextNodeIds = getSourceContextNodeIds(nodes, edges, regionNodeId)
-    const contextImages = getContextImageNodes(nodes, sourceContextNodeIds)
-    const generatedImages = getGeneratedImagesForThread(nodes, threadId)
-    const generatedImagesById = new Map(generatedImages.map((image) => [image.nodeId, image]))
-    const leafNodeIds = new Set(getLeafGeneratedImages(generatedImages, edges).map((image) => image.nodeId))
+    const contextMedia = getContextMediaNodes(nodes, sourceContextNodeIds)
+    const generatedMedia = getGeneratedMediaForThread(nodes, threadId)
+    const generatedMediaById = new Map(generatedMedia.map((node) => [node.nodeId, node]))
+    const leafNodeIds = new Set(getLeafGeneratedMedia(generatedMedia, edges).map((node) => node.nodeId))
     const candidatesById = new Map<string, ImageBranchCandidateImage>()
 
-    for (const image of contextImages) {
-        addCandidate(candidatesById, createBaseContextCandidate(image, activeTargetNodeId))
+    for (const media of contextMedia) {
+        addCandidate(candidatesById, createBaseContextCandidate(media, activeTargetNodeId))
     }
 
-    for (const image of generatedImages) {
+    for (const media of generatedMedia) {
         addCandidate(candidatesById, createGeneratedCandidate({
-            image,
-            imagesById: generatedImagesById,
+            media,
+            mediaById: generatedMediaById,
             edges,
             regionNodeId,
             sourceContextNodeIds,
             leafNodeIds,
-            generatedImageTextByNodeId,
+            generatedMediaTextByNodeId: generatedImageTextByNodeId,
             activeTargetNodeId,
         }))
     }

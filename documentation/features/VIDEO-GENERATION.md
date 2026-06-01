@@ -279,6 +279,8 @@ The structured VLM resolver (`services/api/src/llm/graph/image-branch-resolver.t
 
 VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per the SDK, so the resolver populates exactly one path. The browser receives the same `IMAGE_BRANCH_RESOLVED` event it already understands for images.
 
+**Videos are grounded by a single still, never the MP4.** The browser's candidate snapshot (`services/web-ui/src/services/ai-image-branching.ts`) now includes prior **video** nodes alongside images, each contributing its representative frame (`frameFileId`, falling back to the frame-0 poster) as the candidate `imageUrl` plus a compact `mediaKind`/descriptor label. This is what lets an *edit to a previous video variation continue that video's branch* (the resolver can finally see it) while keeping the VLM cost identical to an image — one frame, never the clip. The full MP4 only ever reaches VEO via the explicit "extend video" action (`videoSourceForExtension`). Because the resolved candidate's `imageUrl` is the mid-frame, VEO's image-to-video anchor for a continuation is automatically that frame.
+
 ## VEO Provider Path (Google)
 
 `GoogleProvider.runVeoGeneration` (`services/api/src/llm/providers/google-provider.ts`) runs only when `enableVideoGeneration && modelNameImpliesVideoOutput` — a non-VEO Google model never enters this path. The existing image branch is untouched.
@@ -296,7 +298,7 @@ VEO's `image` (first frame) and `referenceImages` are **mutually exclusive** per
 
 **Download** — `fetchVideoBytes` uses inline `videoBytes` (base64) when present, otherwise `client.files.download(...)` to a temp file. `VideoPublisher.complete` validates the MP4 (`ftyp` box) before storing; non-MP4 bytes throw.
 
-**Poster** — `extractPosterFrame` shells `ffmpeg` to extract frame 0 as a PNG. It is **best-effort**: if ffmpeg is unavailable or fails, video generation still completes without a poster (the media layer falls back to decoding the MP4). `ffmpeg` is installed in the API container image.
+**Poster + representative frame** — both shell `ffmpeg` via a shared single-frame extractor in `services/api/src/services/video-storage.ts`. `extractPosterFrame` grabs frame 0 (the PIXI low-LoD poster); `extractRepresentativeFrame` seeks to the clip midpoint (`durationSeconds / 2`) for the still that grounds the video to the VLM and anchors image-to-video continuations. Both are **best-effort**: if ffmpeg is unavailable or a seek fails, generation still completes without that frame (mid-frame consumers fall back to the poster). `ffmpeg` is installed in the API container image. `VideoPublisher.complete` stores each frame as a normal workspace image and publishes its `frameUrl` / `frameFileId` alongside the poster.
 
 ## Storage & Durability
 
@@ -320,7 +322,7 @@ Video events reuse the per-thread receive subject `ai.interaction.chat.receiveMe
 | `VIDEO_GENERATION_TRACE` | `{ videoGenerationTrace }` | `video_generation_trace` | Tool prompt + selected/excluded references (audit) |
 | `VIDEO_PENDING` | — | `video_pending` | Create placeholder node + start traveling outline |
 | `VIDEO_GENERATING` | — | `video_generating` | Keepalive ping during the poll loop |
-| `VIDEO_COMPLETE` | `{ videoUrl, fileId, posterUrl, posterFileId, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId, videoModelProvider }` | `video_complete` | Finalize node; PIXI renders poster |
+| `VIDEO_COMPLETE` | `{ videoUrl, fileId, posterUrl, posterFileId, frameUrl, frameFileId, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId, videoModelProvider }` | `video_complete` | Finalize node; PIXI renders poster; `frameFileId` enables cheap re-grounding of later edits |
 | `VIDEO_ERROR` | `{ error }` | `video_error` | Surface failure; clean up |
 
 One new subject group under `WORKSPACE_SUBJECTS` in `packages/lixpi/constants/nats-subjects.json`:
@@ -343,6 +345,7 @@ A new member of the `CanvasNode` union (`packages/lixpi/constants/ts/types.ts`).
 | `type` | `'video'` | Discriminant in `CanvasNode` / `CanvasNodeType` |
 | `fileId` | `string` | MP4 object key in `workspace-{workspaceId}-files` |
 | `posterFileId` | `string` | ffmpeg frame-0 poster (an image object key) |
+| `frameFileId` | `string?` | ffmpeg representative mid-frame (image object key) used to ground the video to the VLM and as VEO's image-to-video anchor; falls back to `posterFileId` |
 | `workspaceId` | `string` | Deletion + bucket context |
 | `src` | `string` | Tokenized MP4 URL (Range-capable video route) |
 | `posterSrc` | `string` | Tokenized poster image URL (PIXI low-LoD) |
@@ -351,6 +354,7 @@ A new member of the `CanvasNode` union (`packages/lixpi/constants/ts/types.ts`).
 | `hasAudio` | `boolean` | VEO 3 generates audio by default |
 | `position` / `dimensions` | `{x,y}` / `{w,h}` | Canvas geometry |
 | `generatedBy` | `VideoGeneratedByMetadata?` | Provenance + branch lineage (mirrors `ImageGeneratedByMetadata`, adds `videoModel`, `resolution`, `durationSeconds`, `veoOperationName`, `sourceVideoNodeId`) |
+| `descriptor` | `MediaDescriptor?` | Compact summary + entity/style tags (see [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md)); derived for free from `generatedBy` for generated video |
 
 ### Playback (`videoNodeHandler.ts`)
 
@@ -413,6 +417,8 @@ A completed `VideoCanvasNode` can be continued: the bubble-menu **Extend video i
 | HTTP route | whole-object GET | Range-capable GET (seeking) |
 | Canvas playback | static texture | poster → click-to-play looping video texture |
 | Model selection | auto-selects a default | opt-in (placeholder until chosen) |
+
+Branch lineage, canvas positioning/collision, the generation-trace meta-info (in-chat collapsible + canvas info panel), and media descriptors are **shared**, not differences: video reuses the same candidate snapshot, `getGeneratedChildOutputs` positioning, shape-aware collision pass, `createImageGenerationTraceDetails` renderer, and `MediaDescriptor` as images. A video candidate simply contributes its mid-frame still instead of a full image. See [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md), [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md), and [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md).
 
 ## File Structure
 
