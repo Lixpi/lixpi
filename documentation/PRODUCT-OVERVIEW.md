@@ -18,15 +18,17 @@ By treating all generated text, images, and video iterations as concrete "nodes"
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Every node embeds a full ProseMirror rich-text editor. The canvas supports three node types and directional edges between them.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing nodes embed ProseMirror editors; media and context nodes use specialized canvas chrome. The canvas supports five node types and directional edges between them.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TB
     subgraph "Canvas Node Types"
         Doc[Document Node<br/>ProseMirror editor<br/>documentType: 'document']
-        Img[Image Node<br/>Uploaded or AI-generated<br/>Aspect-ratio-locked resize]
+        Img[Image Node<br/>Uploaded, imported, or AI-generated<br/>PIXI-rendered pixels]
+        Vid[Video Node<br/>VEO-generated or library video<br/>DOM playback over PIXI poster]
         Thread[AI Chat Thread Node<br/>ProseMirror editor<br/>documentType: 'aiChatThread']
+        Region[Context Region Node<br/>Spatial grouping + dedicated chat]
     end
 
     subgraph "Connections"
@@ -41,6 +43,7 @@ graph TB
 
     Doc -->|edge| Thread
     Img -->|edge| Thread
+    Vid -->|edge| Thread
     Thread -->|edge| Thread
     Edge -.->|defines| Doc
     Prox -.->|creates| Edge
@@ -50,14 +53,16 @@ graph TB
 | Node Type | Editor | Resize | Persistence |
 |-----------|--------|--------|-------------|
 | **Document** | ProseMirror (`documentType: 'document'`) | Free | DynamoDB Documents table |
-| **Image** | None (img element) | Aspect-ratio locked | NATS JetStream Object Store |
+| **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | NATS JetStream Object Store |
+| **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | NATS JetStream Object Store |
 | **AI Chat Thread** | ProseMirror (`documentType: 'aiChatThread'`) | Free | DynamoDB AI-Chat-Threads table |
+| **Context Region** | None | Free | Workspace `canvasState` |
 
 **Edges** are directional connections stored in `canvasState.edges`. Each edge means "include your content as context for the target." Edges can be created by explicit handle drag or by **Proximity Connect** — dragging a node within range of an AI thread shows a dashed ghost line; dropping commits the connection.
 
 **Floating Prompt Input** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) that appears below each AI thread node. It provides rich-text composition, an AI model selector dropdown, an image generation size picker, and Cmd/Ctrl+Enter to submit. The input is decoupled from threads — it only handles composition; an `AiPromptInputController` routes messages to the correct target.
 
-**Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save any completed canvas image as an independent JetStream Object Store copy. Inserting a saved image creates a fresh workspace image object and a fresh canvas node, so library media survives deletion of its source node.
+**Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save completed canvas images or videos as independent JetStream Object Store copies. Inserting saved media creates fresh workspace objects and fresh canvas nodes, so library media survives deletion of its source node.
 
 **AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, compact `Follow` / `Pinned` and `With Sources` controls, and whether the history list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
 
@@ -94,7 +99,7 @@ graph TD
     end
 ```
 
-By piping the exact same reference artifact into different threads, consistency is guaranteed mechanically. This architecture naturally extends to video generation, allowing users to pipe static character reference sheets or specific keyframes into video generation models.
+By piping the exact same reference artifact into different threads, consistency is guaranteed mechanically. This architecture extends to video generation: images can seed image-to-video, prior videos contribute a representative still for branch grounding, and explicit **Extend video in new thread** actions pass the MP4 to VEO's video-extension input.
 
 ---
 
@@ -135,9 +140,17 @@ graph LR
 
 **Size options**: OpenAI: Square (1024×1024), Landscape (1536×1024), Portrait (1024×1536), Auto. Google: 1:1, 3:2, 2:3, 16:9, 9:16, 4:3, 3:4, 4:5, 5:4, 21:9, Auto. The size picker adapts automatically based on the selected provider.
 
+## 5. Video Generation Pipeline
+
+Video generation is powered by Google VEO through the same dual-model architecture as images. The user selects a text model and an explicit video model; the text model emits a `generate_video` tool call with a cinematic prompt, then the API's in-process LangGraph workflow routes that prompt to a transient VEO provider.
+
+VEO generation is asynchronous: the API submits a `generateVideos` operation, polls until completion, publishes keepalive events while no partial frames exist, downloads and validates the MP4, extracts a frame-0 poster and representative mid-frame with `ffmpeg`, and stores the result in NATS Object Store. The completed clip becomes a `VideoCanvasNode`.
+
+On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, PiP, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](features/VIDEO-GENERATION.md) for the full architecture.
+
 ---
 
-## 5. System Architecture
+## 6. System Architecture
 
 Lixpi operates on a highly decoupled microservices architecture. All inter-service communication flows through NATS — no REST polling for real-time data.
 
@@ -157,7 +170,7 @@ graph TB
     end
 
     subgraph "Execution Tier"
-        PyLLM[Python LLM API<br/>LangGraph Orchestration]
+        LLM[In-process LangGraph workflow<br/>token streaming · image · video]
         Provider[External Models<br/>OpenAI · Anthropic · Google]
     end
 
@@ -174,9 +187,9 @@ graph TB
     UI <-->|REST| API
     API <-->|Publish/Subscribe| NATS
     API <--> DDB
-    NATS <-->|Consume/Publish| PyLLM
-    PyLLM <-->|API Calls| Provider
-    PyLLM -->|Stream Tokens Direct| NATS
+    API --> LLM
+    LLM <-->|API Calls| Provider
+    LLM -->|Stream Events Direct| NATS
     API -.->|JWT verify| LA
     API -.->|JWT verify| Auth0
 ```
@@ -184,24 +197,23 @@ graph TB
 | Service | Language | Role |
 |---------|----------|------|
 | **web-ui** | Svelte / TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction |
-| **api** | Node.js / TypeScript | Gateway — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge for client requests |
-| **llm-api** | Python (LangGraph) | AI orchestration — 4-stage workflow (validate → stream → calculate_usage → cleanup), streams responses directly to NATS |
-| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream Object Store for image storage |
+| **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge, token streaming, image generation, video generation |
+| **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream Object Store for image and video storage |
 | **localauth0** | Node.js | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 
 ### Key Architecture Decisions
 
-**NATS-native**: The entire system runs through NATS — auth, messaging, file storage (Object Store), streaming. The browser connects via WebSocket directly to NATS. AI token streaming bypasses the API service entirely: the Python LLM service publishes tokens straight to per-thread NATS subjects that the browser subscribes to, giving sub-100ms delivery latency.
+**NATS-native**: The entire system runs through NATS — auth, messaging, file storage (Object Store), streaming. The browser connects via WebSocket directly to NATS. The API-hosted LLM workflow publishes tokens, image events, and video events straight to per-thread NATS subjects that the browser subscribes to.
 
 **Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. Svelte is a thin binding layer. This insulates the canvas from framework churn.
 
-**Provider-agnostic AI**: Every AI request sends the full conversation history — no provider-specific session IDs. Users can start a conversation with Claude, switch to GPT-5, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseLLMProvider` class (a LangGraph 4-stage workflow).
+**Provider-agnostic AI**: Every AI request sends the full conversation history — no provider-specific session IDs. Users can start a conversation with Claude, switch to GPT-5, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`, which plugs into the shared LangGraph workflow.
 
-**Context extraction is client-side**: When a user sends a message, the browser-side `AiChatThreadService` traverses the edge graph, extracts content from connected nodes, and assembles the multimodal payload. The API service forwards it to NATS without needing to understand the graph.
+**Context extraction is client-side**: When a user sends a message, the browser-side `AiChatThreadService` traverses the edge graph, extracts content from connected nodes, and assembles the multimodal payload. Images and videos contribute Object Store references; videos use representative stills for model context unless the user explicitly starts a video-extension flow.
 
 ---
 
-## 6. Multi-Model Support
+## 7. Multi-Model Support
 
 Each AI thread has a model selector dropdown. Users can switch models between messages mid-conversation.
 
@@ -218,7 +230,7 @@ Each model carries metadata: context window size, max completion, supported moda
 
 ---
 
-## 7. Context Extraction Flow
+## 8. Context Extraction Flow
 
 When a user submits a prompt in an AI chat thread, the system traverses the preceding node graph to build the LLM's multimodal context payload.
 
@@ -229,13 +241,13 @@ sequenceDiagram
     participant Ext as Context Extractor
     participant API as Node.js API
     participant NATS as NATS JetStream
-    participant Py as Python LLM
+    participant LLM as API LLM module
 
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 1: TOPOLOGICAL TRAVERSAL & CONTENT RESOLUTION
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
-        Note over UI, Py: PHASE 1 — TOPOLOGICAL TRAVERSAL & CONTENT RESOLUTION
+        Note over UI, LLM: PHASE 1 — TOPOLOGICAL TRAVERSAL & CONTENT RESOLUTION
         UI->>Ext: User hits 'Send' on Thread Node
         activate Ext
         Ext->>Ext: Recursively map incoming edges to this Thread
@@ -250,33 +262,30 @@ sequenceDiagram
     %% PHASE 2: PAYLOAD DELIVERY & EXECUTION
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over UI, Py: PHASE 2 — PAYLOAD DELIVERY & EXECUTION
+        Note over UI, LLM: PHASE 2 — PAYLOAD DELIVERY & EXECUTION
         activate API
-        API->>NATS: Publish payload to execution topic
-        activate NATS
-        NATS->>Py: Deliver to AI Worker
-        deactivate NATS
-        activate Py
-        Py->>NATS: Stream response tokens back
+        API->>LLM: Invoke in-process LangGraph workflow
+        activate LLM
+        LLM->>NATS: Stream response/media events back
         activate NATS
         NATS->>UI: Render directly in ProseMirror (via WebSocket)
         deactivate NATS
-        deactivate Py
+        deactivate LLM
         deactivate API
     end
 ```
 
 ### Execution Steps:
 1. **Graph Traversal**: `findConnectedNodes()` filters workspace edges targeting the active thread. Traversal depth is configurable: `'direct'` (one hop, default) or `'full'` (recursive with cycle detection).
-2. **Content Extraction**: `extractConnectedContext()` parses connected nodes — ProseMirror JSON → plain text for documents, `nats-obj://` URL references for images, full conversation history for upstream threads.
+2. **Content Extraction**: `extractConnectedContext()` parses connected nodes — ProseMirror JSON → plain text for documents, `nats-obj://` URL references for images and video representative stills, full conversation history for upstream threads.
 3. **Message Assembly**: `buildContextMessage()` assembles everything into multimodal `input_text` + `input_image` blocks, prepended to the conversation history.
-4. **Image Resolution**: The Python LLM API resolves `nats-obj://` URLs to base64 data URLs using magic-byte MIME detection, then converts to the target provider's format (OpenAI Responses API or Anthropic Messages API).
+4. **Media Resolution**: The API LLM module resolves `nats-obj://` URLs to base64 data URLs using magic-byte MIME detection, then converts to the target provider's format.
 
 ---
 
-## 8. Streaming Architecture
+## 9. Streaming Architecture
 
-The complete token path from AI provider to rendered DOM, bypassing the API service entirely:
+The complete token path from AI provider to rendered DOM:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -285,8 +294,8 @@ graph LR
         LLM[OpenAI / Anthropic]
     end
 
-    subgraph "LLM API · Python"
-        LG[LangGraph Workflow]
+    subgraph "API Service"
+        LG[In-process LangGraph Workflow]
         Pub[NATS Publish]
     end
 
@@ -302,7 +311,7 @@ graph LR
         DOM[ProseMirror DOM]
     end
 
-    LLM -->|SSE tokens| LG
+    LLM -->|SSE tokens / operation results| LG
     LG --> Pub
     Pub -->|STREAMING chunks| Subj
     Subj -->|WebSocket| AIS
@@ -312,7 +321,7 @@ graph LR
     SI --> DOM
 ```
 
-**Stream events**: `START_STREAM` → `STREAMING` chunks → `END_STREAM`. Image events (`IMAGE_PARTIAL`, `IMAGE_COMPLETE`) bypass the text pipeline and go directly to the canvas renderer.
+**Stream events**: `START_STREAM` → `STREAMING` chunks → `END_STREAM`. Image events (`IMAGE_PARTIAL`, `IMAGE_COMPLETE`) and video events (`VIDEO_PENDING`, `VIDEO_GENERATING`, `VIDEO_COMPLETE`, `VIDEO_ERROR`) bypass the text parser and go directly to chat/canvas media handlers.
 
 **MarkdownStreamParser** converts raw token text into structured segments (headers, paragraphs, code blocks, inline marks). The `StreamingInserter` translates these into ProseMirror transactions that insert content into the editor DOM in real-time.
 
@@ -320,7 +329,7 @@ graph LR
 
 ---
 
-## 9. Authentication & Security
+## 10. Authentication & Security
 
 Lixpi uses a dual authentication model — Auth0 JWTs for users, Ed25519 NKey JWTs for internal services.
 
@@ -332,7 +341,7 @@ graph LR
     end
 
     subgraph "Services"
-        LLM[LLM API]
+        API[API service]
     end
 
     subgraph "NATS Auth Callout"
@@ -346,28 +355,28 @@ graph LR
     end
 
     WebUI -->|Auth0 JWT| AC
-    LLM -->|NKey JWT| AC
+    API -->|NKey JWT| AC
     AC --> AV
     AV -->|verify| Auth0
     AV -->|verify| NKey
     AC -->|signed user JWT| WebUI
-    AC -->|signed service JWT| LLM
+    AC -->|signed service JWT| API
 ```
 
-**NATS Auth Callout** intercepts every NATS connection attempt. It decrypts the request, verifies the token via `@lixpi/auth-service`, builds permissions, and returns a signed user JWT to NATS. Services like `llm-api` run in isolated NATS accounts with minimal permissions — they cannot access DynamoDB or receive client messages directly.
+**NATS Auth Callout** intercepts every NATS connection attempt. It decrypts the request, verifies the token via `@lixpi/auth-service`, builds permissions, and returns a signed JWT to NATS. Backend services run with scoped service permissions; browser clients receive user-scoped permissions.
 
 **LocalAuth0** provides zero-config offline development. It generates RS256 keypairs, issues JWTs matching production Auth0's OAuth flows, and persists state in a Docker volume. No Auth0 account needed, no internet required.
 
 ---
 
-## 10. Shared Infrastructure
+## 11. Shared Infrastructure
 
-Cross-language packages keep TypeScript and Python services in sync:
+Shared packages keep service contracts in sync:
 
 | Package | Purpose |
 |---------|---------|
 | `@lixpi/constants` | NATS subjects (single JSON source of truth), shared types, AI model metadata with pricing |
-| `@lixpi/nats-service` | Dual TypeScript + Python NATS client with identical API, JetStream Object Store, NKey auth |
+| `@lixpi/nats-service` | TypeScript NATS client, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by API and NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
 | `@xyflow/system` (vendored) | Framework-agnostic pan/zoom/coordinate math — used at the low-level API, not React Flow or Svelte Flow |

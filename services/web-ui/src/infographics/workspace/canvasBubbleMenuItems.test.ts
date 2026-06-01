@@ -54,6 +54,11 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[4].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
     })
 
+    it('the Add to Media Library button is shared between image and video contexts', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[3].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
+    })
+
     it('the two video-only items follow the image items', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
         expect(items[6].context).toEqual([CANVAS_VIDEO_CONTEXT])
@@ -268,7 +273,7 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         expect(callbacks.onHide).toHaveBeenCalledOnce()
     })
 
-    it('Add to Media Library update hides unsaveable images', () => {
+    it('Add to Media Library update hides unsaveable media', () => {
         const callbacks = createCallbacks()
         callbacks.canAddToMediaLibrary = vi.fn(() => false)
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)

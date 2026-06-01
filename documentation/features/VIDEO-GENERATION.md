@@ -14,7 +14,7 @@ Video **extends** the image pipeline rather than replacing it. It adds a sibling
 
 **VLM-Grounded References** — VEO's headline capability is character consistency via image-to-video. Video reuses the structured VLM resolver (`resolveImageBranch`) that image generation uses to answer "which connected pixels does *that character* mean?" The resolver's gate is generalized to run whenever an image **or** video model is selected, and its output is mapped onto VEO inputs.
 
-**Inline PIXI Playback** — A finished video plays inline on the canvas as a PIXI texture, consistent with the "PIXI owns pixels" rule in [CANVAS-ENGINE.md](CANVAS-ENGINE.md). The backend extracts a poster frame (ffmpeg, frame 0); the canvas shows the poster until the user clicks the node, then swaps to a live, looping video texture.
+**Browser-Composited Playback** — A finished video plays inline on the canvas through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer. PIXI still owns the frame-0 poster/placeholder behind the node for stable canvas geometry and initial paint, but completed playback, seeking, PiP, fullscreen, and scrubbing are driven by the browser-composited element. This avoids a PIXI `VideoSource` frame loop fighting the edge renderer and connector canvas.
 
 **New `VideoCanvasNode` Type** — Generated videos persist as a new discriminated member of the `CanvasNode` union (`type: 'video'`), alongside `image`, `document`, `aiChatThread`, and `contextRegion`. There is no new database table — like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
 
@@ -28,7 +28,7 @@ flowchart TB
         AIS[AiInteractionService<br/>VIDEO_* handlers]
         Editor[AI Chat Thread<br/>aiGeneratedVideoNode]
         Canvas[WorkspaceCanvas<br/>VideoCanvasNode]
-        Pixi[pixiMediaLayer + videoNodeHandler<br/>poster to video texture]
+        VideoChrome[pixiMediaLayer + videoNodeHandler<br/>PIXI poster + DOM video chrome]
     end
 
     subgraph Backend["API Service (in-process LLM)"]
@@ -65,9 +65,9 @@ flowchart TB
     VPub -->|NATS: receiveMessage| AIS
     AIS --> Editor
     AIS --> Canvas
-    Canvas --> Pixi
+    Canvas --> VideoChrome
     Canvas --> DDB
-    Obj --> Pixi
+    Obj --> VideoChrome
     VEO --> Usage
 ```
 
@@ -204,10 +204,12 @@ sequenceDiagram
     %% PHASE 5: PLAYBACK
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(200, 220, 228)
-        Note over User, VeoApi: PHASE 5 - PLAYBACK — Poster at rest; click swaps to a live looping texture
-        User->>Canvas: click the video node
+        Note over User, VeoApi: PHASE 5 - PLAYBACK — PIXI poster behind a visible browser video surface
+        User->>Canvas: hover video node
         activate Canvas
-        Canvas->>Canvas: videoNodeHandler swaps poster → muted looping video texture
+        Canvas->>Canvas: reveal shared SVG controls over DOM <video>
+        User->>Canvas: play, pause, or scrub
+        Canvas->>Canvas: HTMLVideoElement owns playback and seeking
         deactivate Canvas
     end
 ```
@@ -309,7 +311,7 @@ Video reuses the workspace bucket and the same content-hash dedup as images.
 
 **Self-healing dedup (durability).** In line with the NATS Object Store durability work (PR #208 / LIX-207, see [WORKSPACE-EXPORT.md](WORKSPACE-EXPORT.md)), the hash-dedup short-circuit only returns "duplicate" after confirming the bytes are actually present (`getObjectInfo`). If a hash is registered in `workspace.files` but its bytes are missing, `storeWorkspaceVideo` re-stores them so the dangling reference self-heals instead of returning a URL to lost bytes. Object-store reads/deletes are open-only and never auto-create a bucket.
 
-**HTTP route** — `GET /api/videos/:workspaceId/:fileId` (`services/api/src/routes/video-routes.ts`) streams the MP4 with **HTTP Range support** (206 Partial Content) so HTML5 `<video>` / PIXI `VideoSource` can seek; it returns 404 when the object or bucket is missing. Authentication mirrors the image route (Bearer or `?token=`). The poster reuses `GET /api/images/...`.
+**HTTP route** — `GET /api/videos/:workspaceId/:fileId` (`services/api/src/routes/video-routes.ts`) streams the MP4 with **HTTP Range support** (206 Partial Content) so the HTML `<video>` element can seek and scrub; it returns 404 when the object or bucket is missing. Authentication mirrors the image route (Bearer or `?token=`). The poster reuses `GET /api/images/...`.
 
 **Deletion** — `workspace.video.delete` (`video-subjects.ts`) removes the MP4 from the Object Store and its `workspace.files` entry. On the canvas, `canvasVideoLifecycle.ts` tracks `VideoCanvasNode`s across state commits and, when one disappears, fires `deleteVideo(fileId, workspaceId, posterFileId)` — the MP4 via the video subject and the poster via the image-delete subject (the poster is a normal image). Workspace deletion cleans up video Media Library items by branching on `item.kind`.
 
@@ -322,7 +324,7 @@ Video events reuse the per-thread receive subject `ai.interaction.chat.receiveMe
 | `VIDEO_GENERATION_TRACE` | `{ videoGenerationTrace }` | `video_generation_trace` | Tool prompt + selected/excluded references (audit) |
 | `VIDEO_PENDING` | — | `video_pending` | Create placeholder node + start traveling outline |
 | `VIDEO_GENERATING` | — | `video_generating` | Keepalive ping during the poll loop |
-| `VIDEO_COMPLETE` | `{ videoUrl, fileId, posterUrl, posterFileId, frameUrl, frameFileId, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId, videoModelProvider }` | `video_complete` | Finalize node; PIXI renders poster; `frameFileId` enables cheap re-grounding of later edits |
+| `VIDEO_COMPLETE` | `{ videoUrl, fileId, posterUrl, posterFileId, frameUrl, frameFileId, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId, videoModelProvider }` | `video_complete` | Finalize node; PIXI renders the poster behind the browser video surface; `frameFileId` enables cheap re-grounding of later edits |
 | `VIDEO_ERROR` | `{ error }` | `video_error` | Surface failure; clean up |
 
 One new subject group under `WORKSPACE_SUBJECTS` in `packages/lixpi/constants/nats-subjects.json`:
@@ -348,7 +350,7 @@ A new member of the `CanvasNode` union (`packages/lixpi/constants/ts/types.ts`).
 | `frameFileId` | `string?` | ffmpeg representative mid-frame (image object key) used to ground the video to the VLM and as VEO's image-to-video anchor; falls back to `posterFileId` |
 | `workspaceId` | `string` | Deletion + bucket context |
 | `src` | `string` | Tokenized MP4 URL (Range-capable video route) |
-| `posterSrc` | `string` | Tokenized poster image URL (PIXI low-LoD) |
+| `posterSrc` | `string` | Tokenized poster image URL used by PIXI for initial paint and by the DOM `<video>` as its native poster |
 | `aspectRatio` | `number` | width / height (e.g. 16:9 → 1.778) |
 | `durationSeconds` | `number` | Effective generated duration from the synced model option |
 | `hasAudio` | `boolean` | VEO 3 generates audio by default |
@@ -356,20 +358,22 @@ A new member of the `CanvasNode` union (`packages/lixpi/constants/ts/types.ts`).
 | `generatedBy` | `VideoGeneratedByMetadata?` | Provenance + branch lineage (mirrors `ImageGeneratedByMetadata`, adds `videoModel`, `resolution`, `durationSeconds`, `veoOperationName`, `sourceVideoNodeId`) |
 | `descriptor` | `MediaDescriptor?` | Compact summary + entity/style tags (see [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md)); derived for free from `generatedBy` for generated video |
 
-### Playback (`videoNodeHandler.ts`)
+### Playback (`videoNodeHandler.ts` + `WorkspaceCanvas.ts`)
 
-The handler is registered through the `mediaNodeRegistry` and dispatched by `pixiMediaLayer`. The visible surface is owned by PIXI (a `Sprite` + rounded mask + dark `colorRect` placeholder); the DOM only hosts interaction chrome, matching the image DOM-shell pattern.
+The handler is registered through the `mediaNodeRegistry` and dispatched by `pixiMediaLayer`, but playback is split by renderer responsibility:
 
-- A **detached `<video>` element** (created with `document.createElement`, never attached to the visible DOM — muted, `playsInline`, `loop`, `crossOrigin: 'anonymous'`) is the texture source. The visible pixels are always the PIXI sprite.
-- On load, the **poster** texture is shown so the node is visible immediately without decoding the MP4.
-- On **click**, the handler swaps the sprite to a live `Texture.from(videoElement)` and starts playback, driving repaints via `requestVideoFrameCallback` (falling back to `requestAnimationFrame`). **Pause** reverts to the poster.
+- `videoNodeHandler.ts` owns the PIXI poster/placeholder, loads the poster through the shared image decode worker, creates an authenticated `HTMLVideoElement`, and exposes that element through `getVideoElement(nodeId)`.
+- The video element starts in an off-screen host only until its authenticated source is ready. `WorkspaceCanvas.ts` then moves the same element into `.workspace-video-chrome`, above the PIXI poster.
+- The browser-composited `<video>` owns completed playback, seeking, scrubbing, PiP, fullscreen, and native frame production. The PIXI layer never creates `Texture.from(videoElement)` and never runs a video-frame repaint loop.
 - Intrinsic `videoWidth/Height` from `loadedmetadata` feeds aspect-correct sizing.
+- Double-clicking the visible video surface toggles playback. The shared SVG `components/videoControls` bar appears whenever the pointer is over the visible video chrome or the bar.
+- Scrubbing pauses at the pressed timestamp, moves the control position immediately, writes the first seek immediately, then applies the latest drag target as soon as the active seek settles so paused video frames keep updating while the pointer is still down. Release resumes playback only if the video was already playing.
 
-> **v1 scope.** Playback is **click-to-play**, not auto-play-on-focus. The off-screen-pause heuristics and a hard concurrent-player cap are intentionally **not** implemented yet — VEO clips are short (≤8s) and single-clip playback is the common case. The handler is structured so those refinements can land later without changing the registry contract.
+This split is deliberate. Hidden video elements can be throttled by the browser, and a PIXI video texture loop caused connector lines to disappear during playback. Keeping the real element visible lets the browser decode frames normally while PIXI keeps stable canvas geometry and edge rendering.
 
 ### Lifecycle & bubble menu
 
-On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a placeholder `VideoCanvasNode` near the source region with a traveling progress outline; on `VIDEO_COMPLETE` it upgrades the node to poster + MP4 with `generatedBy` lineage and removes the outline; on `VIDEO_ERROR` it cleans up. The in-chat `aiGeneratedVideoNode` mirrors the generated-image node, showing pending / keepalive / playable / error states while the `<video_prompt>` text streams. The canvas bubble menu exposes a `CANVAS_VIDEO_CONTEXT` with **Extend video in new thread**, **Connect** (shared with images), and **Delete video**.
+On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a placeholder `VideoCanvasNode` near the source region with a traveling progress outline; on `VIDEO_COMPLETE` it upgrades the node to poster + MP4 with `generatedBy` lineage and removes the outline; on `VIDEO_ERROR` it cleans up. The in-chat `aiGeneratedVideoNode` mirrors the generated-image node, showing pending / keepalive / playable / error states while the `<video_prompt>` text streams. The canvas bubble menu exposes a `CANVAS_VIDEO_CONTEXT` with **Add to Media Library**, **Extend video in new thread**, **Connect** (shared with images), and **Delete video**.
 
 ## Model Sync & Pricing
 
@@ -415,7 +419,7 @@ A completed `VideoCanvasNode` can be continued: the bubble-menu **Extend video i
 | Workflow node | `validateImagePrompt` → `executeImageGeneration` | `executeVideoGeneration` (no validate step) |
 | Pricing | per-image tiers | per-second of video |
 | HTTP route | whole-object GET | Range-capable GET (seeking) |
-| Canvas playback | static texture | poster → click-to-play looping video texture |
+| Canvas playback | static texture | PIXI poster behind browser-composited `<video>` + SVG controls |
 | Model selection | auto-selects a default | opt-in (placeholder until chosen) |
 
 Branch lineage, canvas positioning/collision, the generation-trace meta-info (in-chat collapsible + canvas info panel), and media descriptors are **shared**, not differences: video reuses the same candidate snapshot, `getGeneratedChildOutputs` positioning, shape-aware collision pass, `createImageGenerationTraceDetails` renderer, and `MediaDescriptor` as images. A video candidate simply contributes its mid-frame still instead of a full image. See [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md), [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md), and [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md).
@@ -458,10 +462,11 @@ services/api/src/
 services/web-ui/src/
 ├── infographics/workspace/
 │   ├── WorkspaceCanvas.ts            # VideoCanvasNode placement, lifecycle callbacks, extend-in-new-thread
-│   ├── rendering/videoNodeHandler.ts # PIXI poster → click-to-play video texture
+│   ├── rendering/videoNodeHandler.ts # PIXI poster + authenticated DOM video element
 │   ├── canvasVideoLifecycle.ts       # delete MP4 + poster when a node disappears
 │   ├── pixiMediaLayer.ts             # dispatch non-image nodes to the registry
 │   └── canvasBubbleMenuItems.ts      # CANVAS_VIDEO_CONTEXT (extend / connect / delete)
+├── components/videoControls/         # shared SVG playback controls
 ├── components/proseMirror/plugins/
 │   ├── primitives/aiControls/aiControls.ts             # video model + aspect/resolution/duration dropdowns
 │   ├── aiPromptInputPlugin/aiPromptInputNode.ts        # video attrs + submit payload
@@ -489,6 +494,6 @@ packages/lixpi/constants/
 - [IMAGE-GENERATION.md](IMAGE-GENERATION.md) — the dual-model + tool-calling pipeline video extends
 - [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md) — the structured VLM resolver reused for first-frame + references
 - [MEDIA-LIBRARY.md](MEDIA-LIBRARY.md) — scope/ownership model reused for video items
-- [CANVAS-ENGINE.md](CANVAS-ENGINE.md) — PIXI media layer, LoD, and the "PIXI owns pixels" rule
+- [CANVAS-ENGINE.md](CANVAS-ENGINE.md) — PIXI media layer, DOM chrome layer, and renderer ownership split
 - [WORKSPACE-EXPORT.md](WORKSPACE-EXPORT.md) — Object Store durability context for stored media
 - [PRODUCT-OVERVIEW.md](../PRODUCT-OVERVIEW.md) — product thesis (image + video pipelines)

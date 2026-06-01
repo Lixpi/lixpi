@@ -405,7 +405,7 @@ export type VideoGeneratedByMetadata = {
 
 // AI-generated (or otherwise stored) video node. The MP4 lives in the workspace
 // Object Store under `fileId`; `posterFileId` is an ffmpeg frame-0 image used by
-// the PIXI media layer at low LoD before the live video texture is swapped in.
+// the PIXI media layer for the poster/placeholder behind the DOM video surface.
 export type VideoCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
     type: 'video'

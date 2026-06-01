@@ -9,8 +9,8 @@ This document covers the technical internals of Lixpi's architecture. For a high
 | Service | Language | Path | Role |
 |---------|----------|------|------|
 | **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction |
-| **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (token streaming, image generation, usage tracking) |
-| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for image storage |
+| **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (token streaming, image generation, video generation, usage tracking) |
+| **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for image and video storage |
 | **localauth0** | Node.js | `services/localauth0/` | Mock Auth0 for zero-config offline development |
 | **DynamoDB** | AWS (local via Docker) | — | Document storage, user data, AI model metadata |
 
@@ -56,6 +56,8 @@ The in-process LLM module publishes these events to per-thread NATS subjects (`r
 
 - `START_STREAM` → `STREAMING` chunks → `END_STREAM` for text responses
 - `IMAGE_PARTIAL` → `IMAGE_COMPLETE` for images (bypass text pipeline, go directly to canvas renderer)
+- `VIDEO_PENDING` → `VIDEO_GENERATING` keepalives → `VIDEO_COMPLETE` / `VIDEO_ERROR` for VEO videos (bypass text pipeline, go directly to chat and canvas media handlers)
+- `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` before transient media providers are invoked
 - `COLLAPSIBLE_START` / `COLLAPSIBLE_END` to wrap `<image_prompt>...</image_prompt>` content emitted by the text model
 - A 20-minute circuit breaker timeout prevents runaway requests
 
@@ -115,7 +117,7 @@ The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero fr
 
 ### Provider-Agnostic AI
 
-Every AI request sends the full conversation history — no provider-specific session IDs are stored. Users can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/` (a LangGraph 6-node workflow: `validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`).
+Every AI request sends the full conversation history — no provider-specific session IDs are stored. Users can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`. The shared LangGraph workflow resolves `/use` features and branch candidates, streams the text model, then conditionally routes `generate_image` and `generate_video` tool calls through transient media providers before calculating usage and cleaning up.
 
 ### Client-Side Context Extraction
 

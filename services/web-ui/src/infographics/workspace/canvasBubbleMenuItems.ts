@@ -213,7 +213,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
         {
             element: addToLibraryButton,
-            context: [CANVAS_IMAGE_CONTEXT],
+            context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT],
             update: () => applyStyle(addToLibraryButton, {
                 display: callbacks.canAddToMediaLibrary(activeNodeId) ? '' : 'none',
             }),
