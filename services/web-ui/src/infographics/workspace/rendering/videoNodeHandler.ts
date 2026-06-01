@@ -115,9 +115,13 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
     const scheduleVideoFrameLoop = (entry: VideoEntry): void => {
         if (entry.frameLoopRunning) return
         entry.frameLoopRunning = true
-        const videoEl = entry.videoElement as HTMLVideoElement & {
-            requestVideoFrameCallback?: (cb: () => void) => number
-        }
+        // Pump the texture from requestAnimationFrame, NOT requestVideoFrameCallback.
+        // The canvas <video> lives in an off-screen host, and the browser does not
+        // fire rVFC for a video it isn't compositing — so an rVFC-driven loop (and
+        // PIXI's own rVFC-based VideoSource auto-update) never pushes frames and the
+        // sprite stays stuck on its initial blank frame. rAF always fires; calling
+        // source.update() each tick re-uploads the current decoded frame while the
+        // muted clip plays.
         const tick = () => {
             if (!entry.isPlaying || destroyed) {
                 entry.frameLoopRunning = false
@@ -125,17 +129,9 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
             }
             updateVideoTextureSource(entry)
             onRender?.()
-            if (typeof videoEl.requestVideoFrameCallback === 'function') {
-                videoEl.requestVideoFrameCallback(tick)
-            } else {
-                requestAnimationFrame(tick)
-            }
-        }
-        if (typeof videoEl.requestVideoFrameCallback === 'function') {
-            videoEl.requestVideoFrameCallback(tick)
-        } else {
             requestAnimationFrame(tick)
         }
+        requestAnimationFrame(tick)
     }
 
     const updateVideoTextureSource = (entry: VideoEntry): void => {
@@ -145,23 +141,19 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
 
     const repaintVideoFrame = (entry: VideoEntry): void => {
         if (!entry.videoTexture) return
-        updateVideoTextureSource(entry)
-        onRender?.()
-
-        const videoEl = entry.videoElement as HTMLVideoElement & {
-            requestVideoFrameCallback?: (cb: () => void) => number
+        // Re-read the current frame now, then again across the next few animation
+        // frames. A seek/pause decodes asynchronously, and (as above) rVFC is
+        // unreliable for the off-screen element — so a short rAF burst guarantees
+        // the freshly-decoded frame reaches the texture even while paused.
+        let ticks = 0
+        const pump = () => {
+            if (destroyed || !entry.videoTexture) return
+            updateVideoTextureSource(entry)
+            onRender?.()
+            ticks += 1
+            if (ticks < 4) requestAnimationFrame(pump)
         }
-        if (typeof videoEl.requestVideoFrameCallback === 'function') {
-            videoEl.requestVideoFrameCallback(() => {
-                updateVideoTextureSource(entry)
-                onRender?.()
-            })
-        } else {
-            requestAnimationFrame(() => {
-                updateVideoTextureSource(entry)
-                onRender?.()
-            })
-        }
+        pump()
     }
 
     const activateVideoTexture = (entry: VideoEntry): void => {
