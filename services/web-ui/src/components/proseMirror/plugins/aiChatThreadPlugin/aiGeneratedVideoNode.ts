@@ -2,7 +2,7 @@ import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { ImageBranchVlmResolution, VideoGenerationTrace } from '@lixpi/constants'
+import type { ImageBranchVlmResolution } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
 import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
@@ -115,6 +115,8 @@ export type AiGeneratedVideoCallbacks = {
         workspaceId: string
         posterUrl: string
         posterFileId: string
+        frameUrl: string
+        frameFileId: string
         durationSeconds: number
         aspectRatio: number
         hasAudio: boolean
@@ -134,10 +136,6 @@ export type AiGeneratedVideoCallbacks = {
     onVideoBranchResolvedToCanvas?: (data: {
         threadId: string
         resolution: ImageBranchVlmResolution
-    }) => void
-    onVideoGenerationTrace?: (data: {
-        threadId: string
-        videoGenerationTrace: VideoGenerationTrace
     }) => void
 }
 

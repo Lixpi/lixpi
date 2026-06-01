@@ -21,6 +21,14 @@ export const BILLING_CONFIG: Record<string, string> = {
     defaultCurrency: 'usd',
 }
 
+// Schema version stamped onto every MediaDescriptor (see MediaDescriptor in
+// types.ts). Bump when the descriptor shape or generation prompt changes so
+// stale descriptors can be detected/regenerated. SUMMARY_MAX_LENGTH keeps the
+// summary "descriptive but not massive" — short enough to feed into model
+// context (e.g. the branch-resolver transcript) without bloat.
+export const MEDIA_DESCRIPTOR_VERSION = 'media-descriptor-v1'
+export const MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH = 280
+
 
 
 export const USER_SUBSCRIPTION_EVENTS_SQS_MESSAGE_TYPES: Record<string, string> = {

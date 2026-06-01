@@ -246,6 +246,8 @@ export default class AiInteractionService {
                     workspaceId: this.workspaceId,
                     posterUrl: content.posterUrl,
                     posterFileId: content.posterFileId,
+                    frameUrl: content.frameUrl,
+                    frameFileId: content.frameFileId,
                     durationSeconds: content.durationSeconds,
                     aspectRatio: content.aspectRatio,
                     hasAudio: content.hasAudio,

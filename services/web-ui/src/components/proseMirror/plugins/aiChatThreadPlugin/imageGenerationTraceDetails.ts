@@ -2,10 +2,17 @@ import type {
     ImageGenerationTrace,
     ImageGenerationTraceExcludedReference,
     ImageGenerationTraceReference,
+    VideoGenerationTrace,
 } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'
 import { html } from '$src/utils/domTemplates.ts'
+
+// Image and video generation traces share an identical reference/excluded/
+// resolver/prompt shape, so this renderer is reused verbatim for both media
+// kinds — only the summary title differs. The video trace carries the extra
+// aspectRatio/resolution/durationSeconds fields, which this renderer ignores.
+export type GenerationTrace = ImageGenerationTrace | VideoGenerationTrace
 
 export type ImageGenerationTraceDetailsAttrs = {
     title: string
@@ -13,6 +20,7 @@ export type ImageGenerationTraceDetailsAttrs = {
     isStreaming: boolean
     imageGenerationTrace?: ImageGenerationTrace | null
     imageGenerationTraceId?: string | null
+    videoGenerationTrace?: VideoGenerationTrace | null
 }
 
 type RenderImageGenerationTraceDetailsParams = {
@@ -32,7 +40,7 @@ export type ImageGenerationTraceDetails = {
     summary: HTMLElement
     contentDom: HTMLElement
     render: (params: RenderImageGenerationTraceDetailsParams) => void
-    renderReferenceGrid: (trace: ImageGenerationTrace) => void
+    renderReferenceGrid: (trace: GenerationTrace) => void
 }
 
 const imageGenerationTraceCache = new Map<string, ImageGenerationTrace>()
@@ -41,12 +49,13 @@ export const cacheImageGenerationTrace = (traceId: string, trace: ImageGeneratio
     imageGenerationTraceCache.set(traceId, trace)
 }
 
-export const getImageGenerationTrace = (attrs: ImageGenerationTraceDetailsAttrs): ImageGenerationTrace | null => {
+export const getImageGenerationTrace = (attrs: ImageGenerationTraceDetailsAttrs): GenerationTrace | null => {
     if (attrs.imageGenerationTraceId) return imageGenerationTraceCache.get(attrs.imageGenerationTraceId) ?? null
-    return attrs.imageGenerationTrace ?? null
+    return attrs.imageGenerationTrace ?? attrs.videoGenerationTrace ?? null
 }
 
 export const getImageGenerationSummaryTitle = (attrs: ImageGenerationTraceDetailsAttrs): string => {
+    if (attrs.videoGenerationTrace) return 'Video generation details'
     if (attrs.imageGenerationTrace || attrs.imageGenerationTraceId) return 'Image generation details'
     return attrs.isStreaming ? 'Preparing image generation prompt' : attrs.title
 }
@@ -162,11 +171,11 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                     <pre className="ai-image-generation-tool-prompt-fallback"></pre>
                 </section>
                 <section className="ai-image-generation-final-prompt-section">
-                    <div className="ai-image-generation-section-label">Final prompt sent to image model</div>
+                    <div className="ai-image-generation-section-label">Final prompt sent to the model</div>
                     <pre className="ai-image-generation-final-prompt"></pre>
                 </section>
                 <section className="ai-image-generation-reference-section">
-                    <div className="ai-image-generation-section-label">Reference images sent to image model</div>
+                    <div className="ai-image-generation-section-label">Reference images sent to the model</div>
                     <div className="ai-image-generation-reference-grid"></div>
                 </section>
                 <section className="ai-image-generation-resolver-section">
@@ -195,10 +204,10 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
     const excludedList = wrapper.querySelector('.ai-image-generation-excluded-list') as HTMLElement
 
     let renderedSignature = ''
-    let renderedTrace: ImageGenerationTrace | null = null
-    let renderedReferenceTrace: ImageGenerationTrace | null = null
+    let renderedTrace: GenerationTrace | null = null
+    let renderedReferenceTrace: GenerationTrace | null = null
 
-    const renderReferenceGrid = (trace: ImageGenerationTrace) => {
+    const renderReferenceGrid = (trace: GenerationTrace) => {
         if (renderedReferenceTrace === trace) return
 
         if (trace.referenceImages.length > 0) {

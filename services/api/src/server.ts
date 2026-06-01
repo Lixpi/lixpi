@@ -29,6 +29,7 @@ import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
 import { videoSubjects } from './NATS/subscriptions/video-subjects.ts'
 import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
+import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { mediaLibrarySubjects } from './NATS/subscriptions/media-library-subjects.ts'
 import { extractionSubjects, setExtractionLlmModule } from './NATS/subscriptions/extraction-subjects.ts'
 import imageRoutes from './routes/image-routes.ts'
@@ -120,6 +121,7 @@ const subscriptions = [
     ...featureSubjects,
     ...mediaLibrarySubjects,
     ...extractionSubjects,
+    ...mediaDescriptorSubjects,
 ]
 
 // Initialize with your NATS server connection

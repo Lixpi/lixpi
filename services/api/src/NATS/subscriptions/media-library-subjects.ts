@@ -9,7 +9,6 @@ import {
     MEDIA_LIBRARY_PUBLIC_OWNER_ID,
     MEDIA_LIBRARY_SCOPE,
     type MediaLibraryImageItem,
-    type MediaLibraryItem,
     type MediaLibraryScope,
     type MediaLibraryVideoItem,
 } from '@lixpi/constants'

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_EDGE_CONTEXT } from './canvasBubbleMenuItems.ts'
+import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_EDGE_CONTEXT } from './canvasBubbleMenuItems.ts'
 
 // =============================================================================
 // HELPERS
@@ -37,22 +37,33 @@ describe('CANVAS_IMAGE_CONTEXT', () => {
 describe('buildCanvasBubbleMenuItems — structure', () => {
     const callbacks = createCallbacks()
 
-    it('returns 8 items total (6 image + 2 edge)', () => {
+    it('returns 10 items total (image, video, and edge contexts)', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items).toHaveLength(8)
+        expect(items).toHaveLength(10)
     })
 
-    it('first 6 items have canvasImage context', () => {
+    it('first 6 items expose the canvasImage context', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
         for (let i = 0; i < 6; i++) {
-            expect(items[i].context).toEqual([CANVAS_IMAGE_CONTEXT])
+            expect(items[i].context).toContain(CANVAS_IMAGE_CONTEXT)
         }
+    })
+
+    it('the Connect button is shared between image and video contexts', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[4].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
+    })
+
+    it('the two video-only items follow the image items', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[6].context).toEqual([CANVAS_VIDEO_CONTEXT])
+        expect(items[7].context).toEqual([CANVAS_VIDEO_CONTEXT])
     })
 
     it('last 2 items have canvasEdge context', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[6].context).toEqual([CANVAS_EDGE_CONTEXT])
-        expect(items[7].context).toEqual([CANVAS_EDGE_CONTEXT])
+        expect(items[8].context).toEqual([CANVAS_EDGE_CONTEXT])
+        expect(items[9].context).toEqual([CANVAS_EDGE_CONTEXT])
     })
 
     it('first item is Ask AI button', () => {
@@ -85,14 +96,24 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[5].element.getAttribute('title')).toBe('Delete image')
     })
 
-    it('seventh item is Change connector curve button', () => {
+    it('seventh item is Extend video button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[6].element.getAttribute('title')).toBe('Change connector curve')
+        expect(items[6].element.getAttribute('title')).toBe('Extend video in new thread')
     })
 
-    it('eighth item is Delete connection button', () => {
+    it('eighth item is Delete video button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[7].element.getAttribute('title')).toBe('Delete connection')
+        expect(items[7].element.getAttribute('title')).toBe('Delete video')
+    })
+
+    it('ninth item is Change connector curve button', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[8].element.getAttribute('title')).toBe('Change connector curve')
+    })
+
+    it('tenth item is Delete connection button', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[9].element.getAttribute('title')).toBe('Delete connection')
     })
 
     it('items are HTMLButtonElement instances with bubble-menu-button class', () => {

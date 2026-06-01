@@ -398,6 +398,117 @@ describe('Workspace canvas — generated video canvas state', () => {
 		// The chrome geometry tracks the node during live drag/resize.
 		expectSourceToContain(ts, 'applyVideoControlsGeometry(videoChromeEl, position, dimensions)')
 	})
+
+	it('counts prior videos as siblings when positioning a new generated output', () => {
+		// Regression: getGeneratedChildOutputs used to match only images, so a new
+		// video could not see a previously generated video and the two stacked on
+		// the same spot. Both media types must qualify as sibling outputs.
+		expectSourceToContain(ts, "if ((node.type !== 'image' && node.type !== 'video') || node.parentId) return false")
+	})
+
+	it('runs collision resolution when a video completes, mirroring images', () => {
+		const completeStart = ts.indexOf('onVideoCompleteToCanvas:')
+		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
+		const completeHandler = ts.slice(completeStart, errorStart)
+
+		expectExcerptToContain(completeHandler, 'createShapeAwareCollisionPlan(nodes)', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'resolveCollisions(collisionPlan.nodeBoxes', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
+	})
+
+	it('threads the representative mid-frame fileId onto the completed video node', () => {
+		const completeStart = ts.indexOf('onVideoCompleteToCanvas:')
+		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
+		const completeHandler = ts.slice(completeStart, errorStart)
+		expectExcerptToContain(completeHandler, 'frameFileId: frameFileId || videoNode.frameFileId,', 'video complete handler')
+	})
+
+	it('renders the info button + panel in the below-node media chrome (image+video parity)', () => {
+		// The shared media chrome (a strip below the node) carries the info button
+		// and descriptor panel for BOTH images and videos.
+		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		const chromeEnd = ts.indexOf('function createVideoControlsChrome', chromeStart)
+		const mediaChrome = ts.slice(chromeStart, chromeEnd)
+		expect(chromeStart).toBeGreaterThan(-1)
+		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome')
+		expectExcerptToContain(mediaChrome, 'createGeneratedMediaInfoPanel(node)', 'media chrome')
+		expectExcerptToContain(mediaChrome, 'applyGeneratedImageChromeGeometry(', 'media chrome')
+	})
+
+	it('keeps the video controls overlay free of the info button', () => {
+		// Regression: the info button used to share the video overlay, which shoved
+		// both affordances to opposite edges of the node. The video controls overlay
+		// must contain ONLY the controls now; the info button lives in the
+		// below-node media chrome.
+		const chromeStart = ts.indexOf('function createVideoControlsChrome(node: VideoCanvasNode)')
+		const chromeEnd = ts.indexOf('function destroyVideoControlInstances', chromeStart)
+		const controlsChrome = ts.slice(chromeStart, chromeEnd)
+		expectExcerptToContain(controlsChrome, 'workspace-video-controls-host nopan', 'video controls chrome')
+		expectExcerptNotToContain(controlsChrome, 'createMediaInfoButton(node)', 'video controls chrome')
+		expectExcerptNotToContain(controlsChrome, 'workspace-generated-image-actions', 'video controls chrome')
+	})
+
+	it('renders media info chrome for both image and video nodes', () => {
+		expectSourceToContain(ts, '...mediaInfoNodes.map(createGeneratedMediaChrome),')
+		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
+	})
+})
+
+// =============================================================================
+// Video node interaction (drag + resize parity with images)
+// =============================================================================
+
+describe('Workspace canvas — video node interaction', () => {
+	const scss = loadScss()
+
+	it('gives the video node + drag overlay the same box/pointer wiring as images', () => {
+		// Without these the transparent drag overlay has no box, so pointer events
+		// fall through to the canvas and a node drag becomes a canvas pan.
+		const overlay = extractBlock(scss, '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'position: absolute', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'z-index: 15', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'cursor: move', '.video-drag-overlay')
+		const nodeBlock = extractBlock(scss, '.workspace-video-node')
+		expectExcerptToContain(nodeBlock, '&.is-dragging', '.workspace-video-node')
+	})
+
+	it('shows resize handles on video node hover/selection', () => {
+		expectSourceToContain(scss, '.workspace-video-node:hover .workspace-handle')
+		expectSourceToContain(scss, '.workspace-video-node.is-selected .workspace-handle')
+	})
+})
+
+// =============================================================================
+// Media descriptors
+// =============================================================================
+
+describe('Workspace canvas — media descriptors', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+
+	it('derives a descriptor from generated media metadata for free (no extra model call)', () => {
+		expectSourceToContain(ts, 'function buildDescriptorFromGeneratedBy(')
+		// Generated image and video completion both stamp the descriptor.
+		expectSourceToContain(ts, 'descriptor: buildDescriptorFromGeneratedBy(generatedBy)')
+		expectSourceToContain(ts, "source: 'generation',")
+	})
+
+	it('captions uploaded media from a still (never the MP4) with an analyzing → ready flow', () => {
+		expectSourceToContain(ts, 'async function analyzeUploadedMedia(nodeId: string, stillFileId: string)')
+		expectSourceToContain(ts, 'descriptor: buildAnalyzingDescriptor(),')
+		// Uploaded video is captioned from the poster still, not the MP4.
+		expectSourceToContain(ts, 'void analyzeUploadedMedia(videoNodeId, posterFileId)')
+		expectSourceToContain(ts, 'void analyzeUploadedMedia(imageNodeId, materialized.fileId)')
+	})
+
+	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
+		expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
+		const buttonBlock = extractBlock(scss, '.image-info-button')
+		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.image-info-button')
+		expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
+		const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
+		expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
+	})
 })
 
 // =============================================================================

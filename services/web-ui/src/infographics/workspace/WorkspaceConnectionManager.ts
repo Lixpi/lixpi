@@ -249,12 +249,20 @@ function computeTFromPointerPosition(
 	return t
 }
 
+// Image AND video nodes always anchor edges to the middle of their side — no
+// pointer/source-Y projection or fan-out spreading — so a connector meets the
+// node cleanly at the centre of its left/right edge. (AI chat threads and
+// documents still auto-align so stacked branches don't overlap.)
+function isMidSideAnchorNode(node: CanvasNode | undefined): boolean {
+	return node?.type === 'image' || node?.type === 'video'
+}
+
 function resolveEdgeAnchorT(node: CanvasNode | undefined, t: number | undefined): number {
-	return node?.type === 'image' ? 0.5 : t ?? 0.5
+	return isMidSideAnchorNode(node) ? 0.5 : t ?? 0.5
 }
 
 function canAutoAlignTargetT(node: CanvasNode | undefined): boolean {
-	return Boolean(node && node.type !== 'image')
+	return Boolean(node && !isMidSideAnchorNode(node))
 }
 
 function isSameConnection(
@@ -530,7 +538,7 @@ export function computeSpreadTValues(
 	// Sort by TARGET node's Y position so lines don't cross
 	for (const [, group] of sourceGroups) {
 		if (group.length <= 1) continue
-		if (nodeMap.get(group[0]?.sourceNodeId)?.type === 'image') continue
+		if (isMidSideAnchorNode(nodeMap.get(group[0]?.sourceNodeId))) continue
 
 		// Sort by target node Y position (smaller Y = higher on screen = smaller t)
 		group.sort((a, b) => {
