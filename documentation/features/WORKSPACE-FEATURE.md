@@ -1,8 +1,8 @@
 # Workspace Feature
 
-A workspace is the primary container where users organize and edit their documents and images. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
+A workspace is the primary container where users organize and edit their documents, images, videos, and AI context. Think of it as an infinite canvas where cards float, can be arranged freely, resized, and edited in place.
 
-> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`, and delegates generated-image progress painting to the reusable PIXI `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Canvas image nodes have no DOM `<img>` pixel surface: stored images, generated partials, and their animated in-progress outline are visible only through PIXI. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
+> **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels, video posters/placeholders, and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`, and delegates generated-image progress painting to the reusable PIXI `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Canvas image nodes have no DOM `<img>` pixel surface: stored images, generated partials, and their animated in-progress outline are visible only through PIXI. Completed videos are the exception to pure PIXI pixels: a visible DOM `<video>` element owns playback and shared SVG controls above the PIXI poster. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
 >
 > For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For collision resolution, placement cleanup, drag-release collision rules, and context-region shape-aware collision planning, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md). For the CO2-shaped seafoam context-region cloud system specifically, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
@@ -10,7 +10,7 @@ A workspace is the primary container where users organize and edit their documen
 
 **Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents, AI chat threads, and uploaded files.
 
-**Canvas Node** — A positioned item on the canvas. It can be a document node, an image node, or a context region. Stores position, dimensions, and type-specific data.
+**Canvas Node** — A positioned item on the canvas. It can be a document node, an image node, a video node, an AI chat thread node, or a context region. Stores position, dimensions, and type-specific data.
 
 **Document** — The actual text content (ProseMirror JSON). Lives separately from its canvas representation so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'` and contain block-level content (paragraphs, headings, lists, etc.).
 
@@ -21,6 +21,8 @@ A workspace is the primary container where users organize and edit their documen
 **Context Region** — A canvas collection of contextual items with one dedicated chat history. Creating or activating a region opens that history in an AI Chat tab. The owned history remains visible in Sessions but cannot be deleted independently while its region exists.
 
 **Image** — An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas. A user can explicitly save a separate Media Library copy that is not deleted with the source node.
+
+**Video** — A generated or restored MP4 stored in NATS Object Store with a poster and optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, PiP, and fullscreen do not depend on a PIXI video texture loop.
 
 **Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off. While a workspace is open, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform.
 
@@ -60,7 +62,7 @@ flowchart TB
 
     subgraph Backend["Backend"]
         API[API Service]
-        LLMAPI[llm-api Python]
+        LLM[API LLM module<br/>in-process LangGraph]
         DB[(DynamoDB)]
     end
 
@@ -83,7 +85,7 @@ flowchart TB
     TSvc --> NATS
     AIS --> NATS
     NATS --> API
-    NATS --> LLMAPI
+    NATS --> LLM
     API --> DB
 ```
 
@@ -356,13 +358,13 @@ sequenceDiagram
 
 Note: after an image is uploaded or imported from a public URL, the client loads the persisted workspace object to determine the natural aspect ratio. URL insertion uses `POST /api/images/:workspaceId/import-url`, which validates and stores the fetched image in the workspace Object Store before creating a canvas node; a canvas image node is therefore never backed only by an external URL. On load the client verifies that the stored node dimensions match that ratio; if they do not match it corrects the node dimensions and persists the corrected values so stale nodes self-heal. Image resize uses a diagonal-based algorithm for smooth, aspect-locked resizing and the UI computes resize handle size/offsets dynamically so handles remain visually consistent regardless of canvas zoom.
 
-### Saving an Image to the Media Library
+### Saving Media to the Media Library
 
-Completed image nodes expose `Add to Media Library` in their canvas bubble menu. Partially streaming AI-generated image nodes do not expose the action until a stored final object exists. Saving is explicit: it copies the image bytes from `workspace-{workspaceId}-files/{fileId}` into a Media Library scope-owned Object Store bucket and writes a generic media metadata record. New saves start in `Workspace` scope; users can view or move items through `Workspace`, `Mine`, `Organization`, and `Public` scopes, or browse `All available`. Saving confirms in place with a transient message on the canvas; it does not open or switch the panel. Re-saving the same source image is deduplicated — the server returns the existing library item instead of writing a second independent copy.
+Completed image and video nodes expose `Add to Media Library` in their canvas bubble menu. Partially streaming AI-generated images and VEO videos still polling do not expose the action until a stored final object exists. Saving is explicit: it copies image bytes, or video MP4 plus poster bytes, from `workspace-{workspaceId}-files/{fileId}` into a Media Library scope-owned Object Store bucket and writes a generic media metadata record. New saves start in `Workspace` scope; users can view or move items through `Workspace`, `Mine`, `Organization`, and `Public` scopes, or browse `All available`. Saving confirms in place with a transient message on the canvas; it does not open or switch the panel. Re-saving the same source media is deduplicated — the server returns the existing library item instead of writing a second independent copy.
 
-The Media Library panel is implemented by the canvas module rather than a Svelte component. Its independent launcher sits above the existing bottom-right zoom indicator, and both shift left with any active AI chat panel. The open drawer covers that launcher, is flush to the pane's top and bottom, and occupies two-thirds of the remaining workspace width. A segmented `Features` / `Images` control and compact `Scope` selector replace stacked filter rows. `Features` (the default category) uses concise visual browse cards and a separate inspector that exposes full summaries, instructions, tags, samples, palette details, and owner sharing controls; at narrow widths selection becomes a focused detail view with Back. Feature cards clamp only the browsing summary preview; complete stored details remain available in the inspector.
+The Media Library panel is implemented by the canvas module rather than a Svelte component. Its independent launcher sits above the existing bottom-right zoom indicator, and both shift left with any active AI chat panel. The open drawer covers that launcher, is flush to the pane's top and bottom, and occupies two-thirds of the remaining workspace width. A segmented `Features` / `Images` / `Videos` control and compact `Scope` selector replace stacked filter rows. `Features` (the default category) uses concise visual browse cards and a separate inspector that exposes full summaries, instructions, tags, samples, palette details, and owner sharing controls; at narrow widths selection becomes a focused detail view with Back. Feature cards clamp only the browsing summary preview; complete stored details remain available in the inspector.
 
-Selecting `Add to canvas` on a saved image reads its library object, calls the existing workspace image storage path to create a new workspace-owned object, and inserts a fresh `ImageCanvasNode` through the canvas insertion helper. Removing the original canvas image therefore does not remove its explicitly saved Media Library copy. Deleting a workspace removes only Media Library images still scoped to that workspace; images moved to a broader scope are separate retained objects. Promoted Features are different records: their sample bytes are copied into durable user-owned Feature storage before promotion, and deletion of an origin workspace migrates legacy promoted samples before deleting the workspace bucket.
+Selecting `Add to canvas` on saved media reads its library object, calls the existing workspace image or video storage path to create fresh workspace-owned object(s), and inserts a fresh `ImageCanvasNode` or `VideoCanvasNode` through the canvas insertion helper. Removing the original canvas media therefore does not remove its explicitly saved Media Library copy. Deleting a workspace removes only Media Library items still scoped to that workspace; media moved to a broader scope is retained separately. Promoted Features are different records: their sample bytes are copied into durable user-owned Feature storage before promotion, and deletion of an origin workspace migrates legacy promoted samples before deleting the workspace bucket.
 
 ### Deleting an Image
 
@@ -577,11 +579,14 @@ AI chat threads belonging to the current workspace.
 | `AI_INTERACTION.FEATURE_EXTRACT.LIST_BY_WORKSPACE` | List extraction sessions for Sessions history |
 | `AI_INTERACTION.FEATURE_EXTRACT.DELETE` | Delete an extraction session without deleting its saved Feature |
 | `WORKSPACE_IMAGE.DELETE_IMAGE` | Delete image from Object Store |
+| `WORKSPACE_VIDEO.DELETE_VIDEO` | Delete video from Object Store |
 | `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_IMAGE` | Copy a stored canvas image into the Media Library |
+| `WORKSPACE.MEDIA_LIBRARY.CREATE_FROM_VIDEO` | Copy a stored canvas video and poster into the Media Library |
 | `WORKSPACE.MEDIA_LIBRARY.LIST_AVAILABLE` | List saved media visible in selected scopes |
 | `WORKSPACE.MEDIA_LIBRARY.MATERIALIZE_IMAGE_TO_WORKSPACE` | Copy a saved image into workspace storage for canvas insertion |
+| `WORKSPACE.MEDIA_LIBRARY.MATERIALIZE_VIDEO_TO_WORKSPACE` | Copy a saved video and poster into workspace storage for canvas insertion |
 | `WORKSPACE.MEDIA_LIBRARY.CHANGE_SCOPE` | Copy a library object to a new scope and update metadata |
-| `WORKSPACE.MEDIA_LIBRARY.DELETE` | Delete a saved library image and its stored object |
+| `WORKSPACE.MEDIA_LIBRARY.DELETE` | Delete a saved library item and its stored object(s) |
 
 ### Image HTTP Endpoints
 
@@ -590,7 +595,9 @@ AI chat threads belonging to the current workspace.
 | `/api/images/:workspaceId` | POST | Upload image (multipart/form-data) |
 | `/api/images/:workspaceId/import-url` | POST | Fetch a public image URL into workspace Object Store before canvas insertion |
 | `/api/images/:workspaceId/:fileId` | GET | Serve image with auth token |
-| `/api/media-library/items/:itemId/content` | GET | Serve an ACL-checked saved Media Library image preview |
+| `/api/videos/:workspaceId/:fileId` | GET | Serve video with auth token and HTTP Range support |
+| `/api/media-library/items/:itemId/content` | GET | Serve an ACL-checked saved Media Library image preview or Range-capable video preview |
+| `/api/media-library/items/:itemId/poster` | GET | Serve an ACL-checked saved Media Library video poster |
 | `/api/workspaces/:workspaceId/export` | GET | Download workspace as ZIP archive (see [WORKSPACE-EXPORT.md](WORKSPACE-EXPORT.md)) |
 
 ## Rendering Pipeline
@@ -695,7 +702,7 @@ Images on the canvas are tracked by `canvasImageLifecycle.ts`. When an image nod
 3. Calls `deleteImage()` from `imageUtils.ts` to delete from storage
 4. The same `deleteImage()` utility is shared with ProseMirror's `imageLifecyclePlugin`
 
-This ensures orphaned workspace-node images don't accumulate in storage. It does not delete Media Library images, which are intentionally independent saved copies with their own scope and deletion lifecycle.
+This ensures orphaned workspace-node images don't accumulate in storage. Video nodes use the parallel `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` path. Neither path deletes Media Library items, which are intentionally independent saved copies with their own scope and deletion lifecycle.
 
 ## Lazy Content Loading
 
@@ -751,7 +758,7 @@ sequenceDiagram
     participant AIS as AiInteractionService
     participant NATS as NATS
     participant API as API Gateway
-    participant LLM as llm-api (Python)
+    participant LLM as API LLM module<br/>(in-process LangGraph)
     Note over AIS: Subscribes to<br/>receiveMessage.{workspaceId}.{threadId}
     %% ═══════════════════════════════════════════════════════════════
     %% PHASE 1: REQUEST
@@ -772,9 +779,8 @@ sequenceDiagram
         NATS->>API: Route to handler
         API->>API: Validate workspace access
         API->>API: Fetch AI model pricing
-        API->>NATS: publish(CHAT_PROCESS, {...})
+        API->>LLM: process(instanceKey, provider, payload)
         deactivate API
-        NATS->>LLM: Route to Python
         activate LLM
     end
 
@@ -1076,9 +1082,9 @@ Context-region chats and standalone chats deliberately use different context sou
 ### How It Works
 
 1. **Context selection** — A region-owned send uses `extractConnectedContext(regionNodeId)`. A standalone send uses `extractSelectedContext({ nodeIds, includeUpstream })`.
-2. **Content Extraction** — Documents and AI threads have their ProseMirror content parsed for text; embedded images are also extracted. Standalone image nodes are fetched and converted to base64
-3. **Message Building** — `buildContextMessage()` formats the extracted context as a multimodal message with interleaved text and images
-4. **API Format** — All content uses the OpenAI Responses API format (`input_text`, `input_image` blocks) as the canonical format. The `llm-api` service converts to provider-specific formats (e.g., Anthropic) as needed
+2. **Content Extraction** — Documents and AI threads have their ProseMirror content parsed for text; embedded images are also extracted. Standalone image nodes are fetched and converted to base64. Video nodes contribute a representative still (`frameFileId`, falling back to poster) for normal model context.
+3. **Message Building** — `buildContextMessage()` formats the extracted context as a multimodal message with interleaved text, images, and video stills
+4. **API Format** — All content uses the OpenAI Responses API format (`input_text`, `input_image` blocks) as the canonical format. The API LLM module converts to provider-specific formats (e.g., Anthropic) as needed
 
 ### Multimodal Content Format
 
@@ -1096,7 +1102,7 @@ Context-region chats and standalone chats deliberately use different context sou
 |------|---------|
 | `services/web-ui/src/services/ai-chat-thread-service.ts` | Context extraction (`extractConnectedContext`, `buildContextMessage`) |
 | `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` | Integration point (`onAiChatSubmit` calls context extraction) |
-| `services/llm-api/src/utils/attachments.py` | Attachment format conversion for LLM providers |
+| `services/api/src/llm/utils/attachments.ts` | Attachment format conversion for LLM providers |
 | `packages/lixpi/constants/ts/types.ts` | Shared multimodal types (`TextContentBlock`, `ImageContentBlock`) |
 
 ---
@@ -1113,8 +1119,8 @@ Multi-turn editing is supported: users can continue refining an image within the
 
 1. User enables "Image Generation" mode in an AI chat thread's settings
 2. User types a prompt like "Create a logo for a coffee shop"
-3. The request goes to `llm-api` which calls OpenAI with the `image_generation` tool
-4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `provider.py` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with a PIXI-rendered traveling progress border
+3. The request goes to the API LLM module, which calls OpenAI with the `image_generation` tool
+4. As soon as OpenAI fires `response.output_item.added` (before any pixel data), `openai-provider.ts` publishes an early `IMAGE_PARTIAL` with an empty `imageUrl`. This triggers the canvas to create a placeholder image node with a PIXI-rendered traveling progress border
 5. OpenAI streams back partial images (up to 3) as the generation progresses. Each partial updates the image progressively while the border remains active
 6. On completion, `IMAGE_COMPLETE` removes the animated border, finalizes the canvas node with full metadata, and updates the edge with `sourceMessageId` so the connector points back to the producing AI response.
 7. The revised prompt text appears inside the AI response message in the chat thread
@@ -1129,7 +1135,7 @@ sequenceDiagram
     participant Thread as AI Chat Thread
     participant AIS as AiInteractionService
     participant API as API Gateway
-    participant LLM as llm-api (Python)
+    participant LLM as API LLM module<br/>(in-process LangGraph)
     participant OpenAI as OpenAI API
     participant Canvas as WorkspaceCanvas
     participant Storage as Object Store
@@ -1144,7 +1150,7 @@ sequenceDiagram
         activate AIS
         AIS->>API: CHAT_SEND_MESSAGE
         activate API
-        API->>LLM: CHAT_PROCESS (with image options)
+        API->>LLM: process(instanceKey, provider, image options)
         activate LLM
         LLM->>OpenAI: responses.create({ tools: [image_generation], ... })
         deactivate Thread
@@ -1216,7 +1222,7 @@ Multi-turn image editing uses a **provider-agnostic approach** by leveraging can
 1. The image appears as an `ImageCanvasNode` on the canvas, connected to the AI chat thread via an edge
 2. The edge's `sourceMessageId` links the image to the specific `aiResponseMessage` that produced it
 3. When extracting connected context for follow-up messages, `extractConnectedContext()` traverses incoming edges and includes image nodes with their `sourceMessageId` metadata
-4. The LLM API fetches images from NATS Object Store via `nats-obj://` references and converts to base64 before sending to any provider
+4. The API LLM module fetches images from NATS Object Store via `nats-obj://` references and converts them to provider-ready attachment blocks before sending to any provider
 
 **Thread-level continuity**: All AI-generated images connected to the thread are automatically included in subsequent requests via the workspace edge system. Saying "make the background blue" works because the previous image is part of the connected context.
 

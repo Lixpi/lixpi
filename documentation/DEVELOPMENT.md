@@ -5,8 +5,7 @@
 | Service | Path | Purpose |
 |---------|------|---------|
 | **web-ui** | `services/web-ui/` | Svelte SPA — canvas, editors, AI chat UI |
-| **api** | `services/api/` | Node.js gateway — auth, CRUD, DynamoDB |
-| **llm-api** | `services/llm-api/` | Python AI orchestration (LangGraph) |
+| **api** | `services/api/` | Node.js gateway — auth, CRUD, DynamoDB, in-process LangGraph AI streaming, image generation, and video generation |
 | **nats** | `services/nats/` | NATS message bus (3-node cluster) |
 | **localauth0** | `services/localauth0/` | Mock Auth0 for local dev |
 
@@ -79,26 +78,6 @@ docker-compose --env-file .env.<stage-name> up lixpi-web-ui
 
 # Then run single service
 docker-compose --env-file .env.<stage-name> up lixpi-api
-```
-
-### LLM API
-
-```shell
-# Remove all previous builds including dangling images and force re-build
-./rebuild-containers.sh lixpi-llm-api
-
-# Then run single service
-docker-compose --env-file .env.<stage-name> up lixpi-llm-api
-```
-
-**Note:** Before running the LLM API service, ensure you have generated NKey credentials:
-
-```shell
-# Generate LLM service NKey user credentials (NOT account!)
-docker exec -it lixpi-nats-cli nsc generate nkey --user
-
-# Add the seed to your .env file as NATS_LLM_SERVICE_NKEY_SEED
-# Add the public key to your .env file as NATS_LLM_SERVICE_NKEY_PUBLIC
 ```
 
 ---

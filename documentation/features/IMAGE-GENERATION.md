@@ -26,7 +26,7 @@ flowchart TB
         Canvas[Workspace Canvas]
     end
 
-    subgraph Backend["llm-api Python Service"]
+    subgraph Backend["API service<br/>in-process LangGraph module"]
         subgraph Providers["Text Model Providers"]
             Anthropic[Anthropic Provider<br/>Claude]
             OpenAI[OpenAI Provider<br/>GPT-4.1 / GPT-5]
@@ -58,7 +58,8 @@ flowchart TB
         Prompts[System Prompt<br/>+ image_generation_instructions.txt]
     end
 
-    Input -->|NATS: CHAT_SEND_MESSAGE| Providers
+    Input -->|NATS: CHAT_SEND_MESSAGE| Backend
+    Backend --> Providers
     Providers --> Validate
     Validate --> Stream
     Prompts -.-> Stream
@@ -81,7 +82,7 @@ flowchart TB
 
 ## LangGraph State Machine
 
-Every provider (Anthropic, OpenAI, Google) shares the same LangGraph workflow defined in `BaseLLMProvider`. The workflow is a state machine that processes each request through a fixed sequence of nodes with one conditional branch for image generation.
+Every provider (Anthropic, OpenAI, Google) shares the same LangGraph workflow defined in `BaseProvider`. The workflow is a state machine that processes each request through shared resolver, streaming, media-routing, usage, and cleanup nodes. This page focuses on the image branch.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -358,19 +359,16 @@ On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in pla
 ## File Structure
 
 ```
-services/llm-api/src/
+services/api/src/llm/
 ├── providers/
-│   ├── base.py                    # LangGraph workflow, ProviderState, BaseLLMProvider
-│   ├── openai/
-│   │   └── provider.py            # _generate_via_image_api(), _generate_via_responses_api()
-│   ├── anthropic/
-│   │   └── provider.py            # Tool injection + extraction for Claude
-│   └── google/
-│       └── provider.py            # Native image gen + tool injection
+│   ├── base-provider.ts           # LangGraph workflow, ProviderState, BaseProvider
+│   ├── openai-provider.ts         # OpenAI Responses API + Image API
+│   ├── anthropic-provider.ts      # Tool injection + extraction for Claude
+│   └── google-provider.ts         # Native image gen + tool injection
 ├── tools/
-│   ├── image_generation.py        # Tool definitions, extract_tool_call(), extract_reference_images()
-│   └── image_router.py            # ImageRouter — bridges text model → image model
+│   ├── image-generation.ts        # Tool definitions and tool-call extractors
+│   └── image-router.ts            # ImageRouter — bridges text model → image model
 └── prompts/
-    ├── __init__.py                # get_system_prompt(include_image_generation)
+    ├── load-prompts.ts            # Loads system prompts at module startup
     └── image_generation_instructions.txt  # Detailed instructions for text models
 ```
