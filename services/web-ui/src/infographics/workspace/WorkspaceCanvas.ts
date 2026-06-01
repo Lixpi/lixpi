@@ -40,7 +40,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon, videoPlayGlyphIcon, videoPauseGlyphIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -117,6 +117,7 @@ import {
 } from '$src/infographics/workspace/aiChatPanelState.ts'
 import { createSlidingSwitch } from '$src/components/slidingSwitch/index.ts'
 import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'
+import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner | ContextRegionCloudResizeHandle
@@ -262,6 +263,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
     const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
+    const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
+    const videoControlsHideTimers: Map<string, number> = new Map()
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     let selectionRectEl: HTMLDivElement | null = null
@@ -922,11 +925,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    // The video play-button chrome spans the whole node so the button can center
-    // over the poster/video pixels (PIXI paints those above the DOM node shell, so
-    // a shell button would be hidden). The container is click-through; only the
-    // button captures pointer events.
-    function applyVideoPlayButtonGeometry(
+    // The video controls chrome spans the whole node so the SVG bar can sit over
+    // the PIXI-painted video pixels. The container is click-through; only the
+    // SVG host captures pointer events.
+    function applyVideoControlsGeometry(
         chromeEl: HTMLElement,
         position: { x: number; y: number },
         dimensions: { width: number; height: number }
@@ -937,6 +939,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             width: `${dimensions.width}px`,
             height: `${dimensions.height}px`,
         })
+
+        // The controls host is bottom-pinned (bottom:10px, height:44px) inside the
+        // node-sized chrome, and its SVG is 44px tall — so the bar sits at y=0 in
+        // that SVG, not pushed down the node. Keep the SVG viewBox width synced to
+        // the node so the bar spans the full width at any zoom/resize.
+        const svg = chromeEl.querySelector('.workspace-video-controls-svg') as SVGSVGElement | null
+        svg?.setAttribute('viewBox', `0 0 ${Math.max(1, dimensions.width)} 44`)
+        const controls = videoControlInstances.get(chromeEl.dataset.videoChromeNodeId || '')
+        controls?.resize(0, 0, dimensions.width)
     }
 
     function updateGeneratedImageChromeLiveTransform(
@@ -947,7 +958,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const chromeEl = imageChromeViewportEl?.querySelector(`[data-image-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (chromeEl) applyGeneratedImageChromeGeometry(chromeEl, position, dimensions)
         const videoChromeEl = imageChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
-        if (videoChromeEl) applyVideoPlayButtonGeometry(videoChromeEl, position, dimensions)
+        if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions)
     }
 
     function appendTextParagraph(host: HTMLElement, text: string, fallbackText: string): void {
@@ -1085,7 +1096,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // Provenance/descriptor chrome (provider badge + info button + expandable
     // panel) rendered as a strip BELOW the node — identical placement for image
     // and video so the info affordance is consistent across media. The video
-    // play button is a SEPARATE centered overlay (createVideoPlayButtonChrome).
+    // control bar is a SEPARATE overlay (createVideoControlsChrome).
     function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
         const generatedBy = node.generatedBy
         const modelProvider = (node.type === 'video'
@@ -1107,45 +1118,98 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return chromeEl
     }
 
-    // Click-to-play button for a completed video node, rendered in the same
-    // transform-synced chrome layer (z-index 3) as image provenance chrome because
-    // PIXI paints the video pixels above the DOM node shell.
-    function createVideoPlayButtonChrome(node: VideoCanvasNode): HTMLElement {
-        const button = html`
-            <button type="button" className="workspace-video-play-button nopan" aria-label="Play video">
-                <span className="workspace-video-play-button-icon" innerHTML=${videoPlayGlyphIcon}></span>
-            </button>
-        ` as HTMLButtonElement
+    // Video chrome for completed video nodes: the actual <video> shown on the node
+    // PLUS the SVG control bar, both in the transform-synced chrome layer (above
+    // the PIXI poster). The element MUST be visibly composited — the browser
+    // throttles frame production for a <video> it isn't rendering, so sampling a
+    // hidden element into a PIXI texture renders blank on play (it only decodes
+    // when made visible, e.g. fullscreen). Showing the real element is what makes
+    // playback, PiP and fullscreen work; the opaque surface covers the redundant
+    // PIXI sprite behind it.
+    function createVideoControlsChrome(node: VideoCanvasNode): HTMLElement | null {
+        const videoEl = videoNodeHandler?.getVideoElement(node.nodeId)
+        if (!videoEl) return null
 
-        const syncIcon = () => {
-            const playing = videoNodeHandler?.isPlaying(node.nodeId) ?? false
-            button.classList.toggle('is-playing', playing)
-            const iconEl = button.querySelector('.workspace-video-play-button-icon') as HTMLElement | null
-            if (iconEl) iconEl.innerHTML = playing ? videoPauseGlyphIcon : videoPlayGlyphIcon
-            button.setAttribute('aria-label', playing ? 'Pause video' : 'Play video')
+        const controlsHostStyle = {
+            position: 'absolute' as const,
+            left: '0',
+            bottom: '10px',
+            width: '100%',
+            height: '44px',
         }
-
-        button.addEventListener('click', async (event: MouseEvent) => {
-            event.preventDefault()
-            event.stopPropagation()
-            if (!videoNodeHandler?.hasEntry(node.nodeId)) return
-            await videoNodeHandler.toggle(node.nodeId).catch(() => {})
-            syncIcon()
-        })
-
-        // The play button is the only thing in this centered overlay. The info
-        // button + descriptor panel live in createGeneratedMediaChrome (a strip
-        // below the node) so they sit exactly where images put them instead of
-        // fighting the play button for the centre of the node.
         const chromeEl = html`
             <div className="workspace-video-chrome" data=${{ videoChromeNodeId: node.nodeId }}>
-                ${button}
+                <div className="workspace-video-surface"></div>
+                <div className="workspace-video-controls-host nopan" style=${controlsHostStyle}></div>
             </div>
         ` as HTMLElement
 
-        applyVideoPlayButtonGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions)
-        syncIcon()
+        // Move the handler's <video> out of its off-screen host and onto the node
+        // so it actually renders (and plays).
+        const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLDivElement
+        surface.appendChild(videoEl)
+
+        // Controls auto-hide: revealed on hover of the node body (the drag overlay,
+        // which lives in the DOM node shell) or of the bar itself.
+        const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLDivElement
+        host.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
+        host.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
+
+        const svg = select(host)
+            .append('svg')
+            .attr('class', 'workspace-video-controls-svg')
+            .attr('width', '100%')
+            .attr('height', '44')
+            .attr('viewBox', `0 0 ${node.dimensions.width} 44`)
+            .style('display', 'block')
+            .style('overflow', 'visible')
+
+        const controls = createVideoControls(svg, {
+            id: node.nodeId,
+            x: 0,
+            y: 0,
+            width: node.dimensions.width,
+            videoEl,
+            className: 'workspace-video-controls',
+        })
+        videoControlInstances.set(node.nodeId, controls)
+        applyVideoControlsGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions)
         return chromeEl
+    }
+
+    function destroyVideoControlInstances(): void {
+        for (const timer of videoControlsHideTimers.values()) clearTimeout(timer)
+        videoControlsHideTimers.clear()
+        for (const controls of videoControlInstances.values()) {
+            controls.destroy()
+        }
+        videoControlInstances.clear()
+    }
+
+    // Show/hide the auto-hiding control bar for a video node. The hide is debounced
+    // so moving the pointer between the node body (drag overlay) and the bar — which
+    // live in different layers — doesn't flicker the controls off.
+    function showVideoControls(nodeId: string): void {
+        const pending = videoControlsHideTimers.get(nodeId)
+        if (pending !== undefined) {
+            clearTimeout(pending)
+            videoControlsHideTimers.delete(nodeId)
+        }
+        imageChromeViewportEl
+            ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
+            ?.classList.add('is-visible')
+    }
+
+    function hideVideoControls(nodeId: string): void {
+        const pending = videoControlsHideTimers.get(nodeId)
+        if (pending !== undefined) clearTimeout(pending)
+        const timer = window.setTimeout(() => {
+            videoControlsHideTimers.delete(nodeId)
+            imageChromeViewportEl
+                ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
+                ?.classList.remove('is-visible')
+        }, 140)
+        videoControlsHideTimers.set(nodeId, timer)
     }
 
     function syncGeneratedImageChrome(canvasState: CanvasState | null = currentCanvasState): void {
@@ -1158,10 +1222,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 (node.type === 'image' || node.type === 'video')
                 && Boolean((node as ImageCanvasNode | VideoCanvasNode).generatedBy || (node as ImageCanvasNode | VideoCanvasNode).descriptor))
 
-        // Completed video nodes (those with a stored MP4 src) additionally get a
-        // centered play/pause button overlay.
+        destroyVideoControlInstances()
+
+        // Completed video nodes (those with a stored MP4 src) get the shared SVG
+        // control bar in the same chrome layer.
         const playableVideoNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is VideoCanvasNode => node.type === 'video' && Boolean((node as VideoCanvasNode).src))
+        const videoChromeEls = playableVideoNodes
+            .map(createVideoControlsChrome)
+            .filter((el): el is HTMLElement => Boolean(el))
 
         // Drop expanded state for nodes that no longer show info chrome, so a
         // deleted node doesn't leak an orphaned open panel.
@@ -1172,7 +1241,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         imageChromeViewportEl.replaceChildren(
             ...mediaInfoNodes.map(createGeneratedMediaChrome),
-            ...playableVideoNodes.map(createVideoPlayButtonChrome),
+            ...videoChromeEls,
         )
     }
 
@@ -5558,6 +5627,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'video-drag-overlay nopan'
 
+        // Reveal the (auto-hiding) control bar while the pointer is over the node.
+        // The bar lives in the chrome layer; this overlay covers the node body.
+        dragOverlay.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
+        dragOverlay.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
+
         const togglePlayback = (event: Event) => {
             event.stopPropagation()
             if (videoNodeHandler?.hasEntry(node.nodeId)) {
@@ -6179,6 +6253,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             connectionManager?.destroy()
             connectionManager = null
             viewportBridge = null
+            destroyVideoControlInstances()
             imageChromeViewportEl?.remove()
             imageChromeViewportEl = null
             expandedGeneratedImageInfoNodeIds.clear()
