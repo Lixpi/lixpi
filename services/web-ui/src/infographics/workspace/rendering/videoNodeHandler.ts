@@ -171,6 +171,12 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         if (node.posterSrc) {
             try {
                 const posterSrc = await buildAuthenticatedUrl(node.posterSrc)
+                // The element is shown directly on the canvas node (see
+                // createVideoControlsChrome) — a hidden element sampled only as a
+                // PIXI texture renders blank because the browser throttles frames
+                // for a video it isn't compositing. Give it a native poster so the
+                // at-rest frame shows before playback.
+                entry.videoElement.poster = posterSrc
                 // PIXI v8's Texture.from(urlString) does NOT fetch a remote URL — it
                 // only resolves already-loaded sources / cache aliases, so a poster
                 // URL renders as an empty texture (the dark colorRect shows through =

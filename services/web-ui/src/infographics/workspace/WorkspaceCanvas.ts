@@ -264,6 +264,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedEdgeId: string | null = null
     const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
+    const videoControlsHideTimers: Map<string, number> = new Map()
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     let selectionRectEl: HTMLDivElement | null = null
@@ -1117,9 +1118,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return chromeEl
     }
 
-    // Shared SVG control bar for completed video nodes. PIXI owns the pixels;
-    // this chrome only drives the same hidden HTMLVideoElement that videoNodeHandler
-    // samples as a texture.
+    // Video chrome for completed video nodes: the actual <video> shown on the node
+    // PLUS the SVG control bar, both in the transform-synced chrome layer (above
+    // the PIXI poster). The element MUST be visibly composited — the browser
+    // throttles frame production for a <video> it isn't rendering, so sampling a
+    // hidden element into a PIXI texture renders blank on play (it only decodes
+    // when made visible, e.g. fullscreen). Showing the real element is what makes
+    // playback, PiP and fullscreen work; the opaque surface covers the redundant
+    // PIXI sprite behind it.
     function createVideoControlsChrome(node: VideoCanvasNode): HTMLElement | null {
         const videoEl = videoNodeHandler?.getVideoElement(node.nodeId)
         if (!videoEl) return null
@@ -1130,14 +1136,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             bottom: '10px',
             width: '100%',
             height: '44px',
-            pointerEvents: 'auto' as const,
         }
         const chromeEl = html`
             <div className="workspace-video-chrome" data=${{ videoChromeNodeId: node.nodeId }}>
+                <div className="workspace-video-surface"></div>
                 <div className="workspace-video-controls-host nopan" style=${controlsHostStyle}></div>
             </div>
         ` as HTMLElement
+
+        // Move the handler's <video> out of its off-screen host and onto the node
+        // so it actually renders (and plays).
+        const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLDivElement
+        surface.appendChild(videoEl)
+
+        // Controls auto-hide: revealed on hover of the node body (the drag overlay,
+        // which lives in the DOM node shell) or of the bar itself.
         const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLDivElement
+        host.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
+        host.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
+
         const svg = select(host)
             .append('svg')
             .attr('class', 'workspace-video-controls-svg')
@@ -1161,10 +1178,38 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function destroyVideoControlInstances(): void {
+        for (const timer of videoControlsHideTimers.values()) clearTimeout(timer)
+        videoControlsHideTimers.clear()
         for (const controls of videoControlInstances.values()) {
             controls.destroy()
         }
         videoControlInstances.clear()
+    }
+
+    // Show/hide the auto-hiding control bar for a video node. The hide is debounced
+    // so moving the pointer between the node body (drag overlay) and the bar — which
+    // live in different layers — doesn't flicker the controls off.
+    function showVideoControls(nodeId: string): void {
+        const pending = videoControlsHideTimers.get(nodeId)
+        if (pending !== undefined) {
+            clearTimeout(pending)
+            videoControlsHideTimers.delete(nodeId)
+        }
+        imageChromeViewportEl
+            ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
+            ?.classList.add('is-visible')
+    }
+
+    function hideVideoControls(nodeId: string): void {
+        const pending = videoControlsHideTimers.get(nodeId)
+        if (pending !== undefined) clearTimeout(pending)
+        const timer = window.setTimeout(() => {
+            videoControlsHideTimers.delete(nodeId)
+            imageChromeViewportEl
+                ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
+                ?.classList.remove('is-visible')
+        }, 140)
+        videoControlsHideTimers.set(nodeId, timer)
     }
 
     function syncGeneratedImageChrome(canvasState: CanvasState | null = currentCanvasState): void {
@@ -5581,6 +5626,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             { fileId: node.fileId }
         )
         dragOverlay.className = 'video-drag-overlay nopan'
+
+        // Reveal the (auto-hiding) control bar while the pointer is over the node.
+        // The bar lives in the chrome layer; this overlay covers the node body.
+        dragOverlay.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
+        dragOverlay.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
 
         const togglePlayback = (event: Event) => {
             event.stopPropagation()
