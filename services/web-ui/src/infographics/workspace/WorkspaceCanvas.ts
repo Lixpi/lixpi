@@ -939,8 +939,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             height: `${dimensions.height}px`,
         })
 
+        // The controls host is bottom-pinned (bottom:10px, height:44px) inside the
+        // node-sized chrome, and its SVG is 44px tall — so the bar sits at y=0 in
+        // that SVG, not pushed down the node. Keep the SVG viewBox width synced to
+        // the node so the bar spans the full width at any zoom/resize.
+        const svg = chromeEl.querySelector('.workspace-video-controls-svg') as SVGSVGElement | null
+        svg?.setAttribute('viewBox', `0 0 ${Math.max(1, dimensions.width)} 44`)
         const controls = videoControlInstances.get(chromeEl.dataset.videoChromeNodeId || '')
-        controls?.resize(0, Math.max(0, dimensions.height - 54), dimensions.width)
+        controls?.resize(0, 0, dimensions.width)
     }
 
     function updateGeneratedImageChromeLiveTransform(
