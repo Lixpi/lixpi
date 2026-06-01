@@ -213,6 +213,12 @@ sequenceDiagram
 
 **`aiGeneratedImage`** - AI-generated images (from DALL-E, etc.)
 
+**`aiGeneratedVideo`** - AI-generated videos (from VEO, etc.)
+- Renders pending and error states inline in the AI response body
+- On completion, displays a controls-less `<video>` element with the shared SVG `components/videoControls` bar overlaid at the bottom
+- Uses the same authenticated URL resolution path as generated images for `/api/videos/...` and poster `/api/images/...` URLs
+- Emits canvas lifecycle callbacks for pending, generating, complete, error, branch-resolution, and trace events
+
 **`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
 - Content: `(paragraph | block)*`
 - Attributes: `title, isOpen, isStreaming, imageGenerationTrace, imageGenerationTraceId`

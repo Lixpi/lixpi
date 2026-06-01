@@ -53,6 +53,12 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Automatically delete their workspace object when removed from canvas; explicitly saved Media Library copies are separate objects and remain available
 - Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
 
+### Video Nodes
+- Display generated or media-library videos through the PIXI media layer, with a poster texture at rest and a live `Texture.from(videoElement)` source after playback or seeking starts
+- Keep the DOM node as an interaction shell only; video pixels are not rendered by a DOM `<video>` on the canvas
+- Use the shared SVG `components/videoControls` bar in the transformed image-chrome overlay, bound to the same hidden attached `HTMLVideoElement` that PIXI samples
+- Support play/pause, seek, skip, speed, volume, picture-in-picture, and fullscreen without persisting playback state into `canvasState`
+
 ### Media Library Panel
 - Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the unchanged zoom badge and the style import.
 - Renders `Features` through the established Feature subjects; promoted Feature samples copy to durable storage before scope changes and legacy promoted samples migrate before origin-workspace deletion.

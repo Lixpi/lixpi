@@ -27,4 +27,12 @@ describe('videoNodeHandler — poster texture loading', () => {
 		// VideoSource — so the play path legitimately keeps that form.
 		expect(source).toContain('Texture.from(entry.videoElement')
 	})
+
+	it('exposes the attached video element and repaints when paused seeks complete', () => {
+		expect(source).toContain('getVideoElement: (nodeId: string) => entries.get(nodeId)?.videoElement ?? null')
+		expect(source).toContain('ensureHiddenVideoHost().appendChild(videoElement)')
+		expect(source).toContain("videoElement.addEventListener('seeking', handleSeeking)")
+		expect(source).toContain("videoElement.addEventListener('seeked', handleSeeked)")
+		expect(source).toContain('videoSource?.update?.()')
+	})
 })

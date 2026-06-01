@@ -378,59 +378,42 @@
     pointer-events: none;
 }
 
-// Centered click-to-play overlay for completed video nodes. The container spans
-// the node and is click-through; only the button takes pointer events.
 .workspace-video-chrome {
     position: absolute;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     pointer-events: none;
 }
 
-.workspace-video-play-button {
-    pointer-events: auto;
-    width: 68px;
-    height: 68px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: rgba(20, 22, 28, 0.55);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    backdrop-filter: blur(3px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-    transition: background 0.15s ease, opacity 0.2s ease, transform 0.15s ease;
+.workspace-video-surface {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: var(--workspace-image-border-radius);
+    background: #1c1c1c;
+    pointer-events: none;
 
-    .workspace-video-play-button-icon {
-        display: flex;
-        width: 34px;
-        height: 34px;
-
-        svg {
-            width: 100%;
-            height: 100%;
-            fill: currentColor;
-        }
+    video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: contain;
     }
+}
 
-    &:hover {
-        background: rgba(20, 22, 28, 0.78);
-        transform: scale(1.05);
-    }
+.workspace-video-controls-host {
+    opacity: 0;
+    pointer-events: none;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.34));
+    transition: opacity 0.15s ease;
 
-    // While playing, fade the button so it doesn't cover the clip; hovering the
-    // center restores the pause control (an opacity-0 button still takes clicks).
-    &.is-playing {
-        opacity: 0;
-    }
-
-    &.is-playing:hover {
+    &.is-visible {
         opacity: 1;
+        pointer-events: auto;
     }
+}
+
+.workspace-video-controls-svg {
+    display: block;
+    overflow: visible;
 }
 
 .workspace-generated-image-actions {

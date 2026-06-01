@@ -94,6 +94,13 @@ export const pauseIcon = '<svg height="24" viewBox="0 0 24 24" width="24" xmlns=
 // circular background) for the canvas video node play/pause overlay.
 export const videoPlayGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z"/></svg>'
 export const videoPauseGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>'
+export const videoSkipBack10GlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11 7H7.8l2.1-2.1-1.4-1.4L4 8l4.5 4.5 1.4-1.4L7.8 9H11c2.8 0 5 2.2 5 5s-2.2 5-5 5a5 5 0 0 1-4.5-2.8l-1.8.9A7 7 0 1 0 11 7zm-1.7 5.1h1.4V17H9.3v-3.4l-.9.3-.3-1.1 1.2-.7zm2.4 2.4c0-1.6.8-2.5 2.1-2.5s2.1.9 2.1 2.5-.8 2.5-2.1 2.5-2.1-.9-2.1-2.5zm1.3 0c0 .9.3 1.4.8 1.4s.8-.5.8-1.4-.3-1.4-.8-1.4-.8.5-.8 1.4z"/></svg>'
+export const videoSkipForward10GlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13 7h3.2l-2.1-2.1 1.4-1.4L20 8l-4.5 4.5-1.4-1.4L16.2 9H13a5 5 0 1 0 4.5 7.2l1.8.9A7 7 0 1 1 13 7zm-4.7 5.1h1.4V17H8.3v-3.4l-.9.3-.3-1.1 1.2-.7zm2.4 2.4c0-1.6.8-2.5 2.1-2.5s2.1.9 2.1 2.5-.8 2.5-2.1 2.5-2.1-.9-2.1-2.5zm1.3 0c0 .9.3 1.4.8 1.4s.8-.5.8-1.4-.3-1.4-.8-1.4-.8.5-.8 1.4z"/></svg>'
+export const videoVolumeHighGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 9v6h4l5 4V5L8 9H4zm11.2-.6a5 5 0 0 1 0 7.2l1.4 1.4a7 7 0 0 0 0-10l-1.4 1.4zm2.8-2.8a9 9 0 0 1 0 12.8l1.4 1.4a11 11 0 0 0 0-15.6L18 5.6z"/></svg>'
+export const videoVolumeMutedGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 9v6h4l5 4V5L8 9H4zm12.6 1.4L15.2 12l1.4 1.6-1.4 1.4L13.8 13.4 12.4 15l-1.4-1.4 1.4-1.6-1.4-1.6L12.4 9l1.4 1.6L15.2 9l1.4 1.4z"/></svg>'
+export const videoPictureInPictureGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9h-2V5H5v14h7v2H5a2 2 0 0 1-2-2V5zm11 10h7v6h-7v-6z"/></svg>'
+export const videoFullscreenEnterGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 5h6v2H7v4H5V5zm8 0h6v6h-2V7h-4V5zM5 13h2v4h4v2H5v-6zm12 0h2v6h-6v-2h4v-4z"/></svg>'
+export const videoFullscreenExitGlyphIcon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 9H5V7h6v6H9V9zm6 0v4h-2V7h6v2h-4zM5 15h4v-4h2v6H5v-2zm10-4v4h4v2h-6v-6h2z"/></svg>'
 
 // By MONO
 // https://www.flaticon.com/free-icon/file-share_18764184

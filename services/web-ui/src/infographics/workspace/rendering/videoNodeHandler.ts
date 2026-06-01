@@ -5,6 +5,7 @@ import type { CanvasNode, CanvasState, VideoCanvasNode } from '@lixpi/constants'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { decodeImageInWorker } from '$src/infographics/workspace/pixiImageDecoder.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
 
 import type { MediaNodeHandler } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import type { WorldPosition } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
@@ -33,6 +34,9 @@ type VideoEntry = {
     sourceKey: string
     worldRect: { x: number; y: number; width: number; height: number }
     isPlaying: boolean
+    isActive: boolean
+    frameLoopRunning: boolean
+    removeEventListeners: () => void
 }
 
 export type VideoNodeHandlerOptions = {
@@ -47,14 +51,34 @@ export type VideoNodeHandlerControl = MediaNodeHandler<VideoCanvasNode> & {
     toggle: (nodeId: string) => Promise<void>
     isPlaying: (nodeId: string) => boolean
     hasEntry: (nodeId: string) => boolean
+    getVideoElement: (nodeId: string) => HTMLVideoElement | null
 }
 
 export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoNodeHandlerControl {
     const { videoLayer, onIntrinsicSize, onRender } = options
     const entries = new Map<string, VideoEntry>()
     let destroyed = false
+    let hiddenVideoHost: HTMLDivElement | null = null
 
     const canHandle = (node: CanvasNode): node is VideoCanvasNode => node.type === 'video'
+
+    const ensureHiddenVideoHost = (): HTMLDivElement => {
+        if (hiddenVideoHost?.isConnected) return hiddenVideoHost
+
+        const hiddenVideoHostStyle = {
+            position: 'fixed' as const,
+            left: '0',
+            top: '0',
+            width: '1px',
+            height: '1px',
+            overflow: 'hidden' as const,
+            pointerEvents: 'none' as const,
+            zIndex: '-1',
+        }
+        hiddenVideoHost = html`<div className="workspace-hidden-video-host" style=${hiddenVideoHostStyle}></div>` as HTMLDivElement
+        document.body.appendChild(hiddenVideoHost)
+        return hiddenVideoHost
+    }
 
     const buildAuthenticatedUrl = async (url: string): Promise<string> => {
         if (!url) return ''
@@ -89,23 +113,56 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
     }
 
     const scheduleVideoFrameLoop = (entry: VideoEntry): void => {
-        const videoEl = entry.videoElement as HTMLVideoElement & {
-            requestVideoFrameCallback?: (cb: () => void) => number
-        }
+        if (entry.frameLoopRunning) return
+        entry.frameLoopRunning = true
+        // Pump the texture from requestAnimationFrame, NOT requestVideoFrameCallback.
+        // The canvas <video> lives in an off-screen host, and the browser does not
+        // fire rVFC for a video it isn't compositing — so an rVFC-driven loop (and
+        // PIXI's own rVFC-based VideoSource auto-update) never pushes frames and the
+        // sprite stays stuck on its initial blank frame. rAF always fires; calling
+        // source.update() each tick re-uploads the current decoded frame while the
+        // muted clip plays.
         const tick = () => {
-            if (!entry.isPlaying || destroyed) return
-            onRender?.()
-            if (typeof videoEl.requestVideoFrameCallback === 'function') {
-                videoEl.requestVideoFrameCallback(tick)
-            } else {
-                requestAnimationFrame(tick)
+            if (!entry.isPlaying || destroyed) {
+                entry.frameLoopRunning = false
+                return
             }
-        }
-        if (typeof videoEl.requestVideoFrameCallback === 'function') {
-            videoEl.requestVideoFrameCallback(tick)
-        } else {
+            updateVideoTextureSource(entry)
+            onRender?.()
             requestAnimationFrame(tick)
         }
+        requestAnimationFrame(tick)
+    }
+
+    const updateVideoTextureSource = (entry: VideoEntry): void => {
+        const videoSource = entry.videoTexture?.source as { update?: () => void } | undefined
+        videoSource?.update?.()
+    }
+
+    const repaintVideoFrame = (entry: VideoEntry): void => {
+        if (!entry.videoTexture) return
+        // Re-read the current frame now, then again across the next few animation
+        // frames. A seek/pause decodes asynchronously, and (as above) rVFC is
+        // unreliable for the off-screen element — so a short rAF burst guarantees
+        // the freshly-decoded frame reaches the texture even while paused.
+        let ticks = 0
+        const pump = () => {
+            if (destroyed || !entry.videoTexture) return
+            updateVideoTextureSource(entry)
+            onRender?.()
+            ticks += 1
+            if (ticks < 4) requestAnimationFrame(pump)
+        }
+        pump()
+    }
+
+    const activateVideoTexture = (entry: VideoEntry): void => {
+        if (!entry.videoTexture) {
+            entry.videoTexture = Texture.from(entry.videoElement as unknown as HTMLVideoElement)
+        }
+        entry.sprite.texture = entry.videoTexture
+        entry.isActive = true
+        repaintVideoFrame(entry)
     }
 
     const updateMediaSources = async (entry: VideoEntry, node: VideoCanvasNode): Promise<void> => {
@@ -114,6 +171,12 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         if (node.posterSrc) {
             try {
                 const posterSrc = await buildAuthenticatedUrl(node.posterSrc)
+                // The element is shown directly on the canvas node (see
+                // createVideoControlsChrome) — a hidden element sampled only as a
+                // PIXI texture renders blank because the browser throttles frames
+                // for a video it isn't compositing. Give it a native poster so the
+                // at-rest frame shows before playback.
+                entry.videoElement.poster = posterSrc
                 // PIXI v8's Texture.from(urlString) does NOT fetch a remote URL — it
                 // only resolves already-loaded sources / cache aliases, so a poster
                 // URL renders as an empty texture (the dark colorRect shows through =
@@ -178,19 +241,53 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
             videoLayer.addChild(spriteMask)
             videoLayer.addChild(sprite)
 
-            const videoElement = document.createElement('video')
+            const videoElement = html`<video preload="metadata" playsinline crossorigin="anonymous"></video>` as HTMLVideoElement
+            const videoElementStyle = {
+                width: '100%',
+                height: '100%',
+                display: 'block',
+                objectFit: 'contain',
+            }
+            applyStyle(videoElement, videoElementStyle)
             videoElement.muted = true
             videoElement.playsInline = true
             videoElement.preload = 'metadata'
             videoElement.loop = true
             videoElement.crossOrigin = 'anonymous'
-            videoElement.addEventListener('loadedmetadata', () => {
+            ensureHiddenVideoHost().appendChild(videoElement)
+
+            let entryRef: VideoEntry
+            const handleLoadedMetadata = () => {
                 const vw = videoElement.videoWidth
                 const vh = videoElement.videoHeight
                 if (vw > 0 && vh > 0) {
                     onIntrinsicSize?.({ nodeId: node.nodeId, width: vw, height: vh })
                 }
-            })
+            }
+            const handlePlay = () => {
+                activateVideoTexture(entryRef)
+                entryRef.isPlaying = true
+                scheduleVideoFrameLoop(entryRef)
+            }
+            const handlePause = () => {
+                entryRef.isPlaying = false
+                repaintVideoFrame(entryRef)
+            }
+            const handleSeeking = () => {
+                activateVideoTexture(entryRef)
+                repaintVideoFrame(entryRef)
+            }
+            const handleSeeked = () => {
+                activateVideoTexture(entryRef)
+                repaintVideoFrame(entryRef)
+            }
+
+            videoElement.addEventListener('loadedmetadata', handleLoadedMetadata)
+            videoElement.addEventListener('play', handlePlay)
+            videoElement.addEventListener('pause', handlePause)
+            videoElement.addEventListener('ended', handlePause)
+            videoElement.addEventListener('seeking', handleSeeking)
+            videoElement.addEventListener('seeked', handleSeeked)
 
             entry = {
                 sprite,
@@ -202,7 +299,18 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
                 sourceKey: '',
                 worldRect: { x, y, width: w, height: h },
                 isPlaying: false,
+                isActive: false,
+                frameLoopRunning: false,
+                removeEventListeners: () => {
+                    videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata)
+                    videoElement.removeEventListener('play', handlePlay)
+                    videoElement.removeEventListener('pause', handlePause)
+                    videoElement.removeEventListener('ended', handlePause)
+                    videoElement.removeEventListener('seeking', handleSeeking)
+                    videoElement.removeEventListener('seeked', handleSeeked)
+                },
             }
+            entryRef = entry
             entries.set(node.nodeId, entry)
         }
 
@@ -247,6 +355,8 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         } catch {
             // Best-effort teardown.
         }
+        entry.removeEventListeners()
+        entry.videoElement.remove()
 
         videoLayer.removeChild(entry.sprite)
         videoLayer.removeChild(entry.spriteMask)
@@ -298,6 +408,8 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
             remove(nodeId)
         }
         entries.clear()
+        hiddenVideoHost?.remove()
+        hiddenVideoHost = null
     }
 
     const play = async (nodeId: string): Promise<void> => {
@@ -307,11 +419,9 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
 
         try {
             await entry.videoElement.play()
-            const videoTexture = Texture.from(entry.videoElement as unknown as HTMLVideoElement)
-            entry.videoTexture = videoTexture
-            entry.sprite.texture = videoTexture
-            entry.isPlaying = true
-            scheduleVideoFrameLoop(entry)
+            activateVideoTexture(entry)
+            entry.isPlaying = !entry.videoElement.paused
+            if (entry.isPlaying) scheduleVideoFrameLoop(entry)
         } catch (e) {
             console.warn('[videoNodeHandler] play failed', e)
         }
@@ -322,9 +432,7 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         if (!entry) return
         try { entry.videoElement.pause() } catch { /* noop */ }
         entry.isPlaying = false
-        if (entry.posterTexture) {
-            entry.sprite.texture = entry.posterTexture
-        }
+        if (entry.isActive) repaintVideoFrame(entry)
         onRender?.()
     }
 
@@ -346,5 +454,6 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
         toggle,
         isPlaying: (nodeId: string) => entries.get(nodeId)?.isPlaying ?? false,
         hasEntry: (nodeId: string) => entries.has(nodeId),
+        getVideoElement: (nodeId: string) => entries.get(nodeId)?.videoElement ?? null,
     }
 }
