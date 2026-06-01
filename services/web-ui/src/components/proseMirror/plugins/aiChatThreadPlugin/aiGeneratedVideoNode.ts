@@ -172,18 +172,22 @@ const buildAuthenticatedUrl = async (url: string): Promise<string> => {
 }
 
 export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => number | undefined) => {
+    const controlsHeight = 52
     const containerStyle = {
         position: 'relative' as const,
         overflow: 'hidden' as const,
     }
     const controlsHostStyle = {
         position: 'absolute' as const,
-        left: '10px',
-        right: '10px',
-        bottom: '10px',
-        height: '44px',
+        left: '18px',
+        right: '18px',
+        bottom: '14px',
+        height: `${controlsHeight}px`,
         pointerEvents: 'auto' as const,
-        filter: 'drop-shadow(0 4px 14px rgba(0, 0, 0, 0.34))',
+        borderRadius: '18px',
+        filter: 'drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28))',
+        backdropFilter: 'blur(10px)',
+        webkitBackdropFilter: 'blur(10px)',
         display: 'none',
     }
     const wrapper = html`
@@ -235,9 +239,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         if (!videoControls || !controlsSvg) return
         const width = getControlsWidth()
         controlsSvg
-            .attr('viewBox', `0 0 ${width} 44`)
+            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
             .attr('width', '100%')
-            .attr('height', '44')
+            .attr('height', String(controlsHeight))
         videoControls.resize(0, 0, width)
     }
 
@@ -259,8 +263,8 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             .append('svg')
             .attr('class', 'ai-generated-video-controls-svg')
             .attr('width', '100%')
-            .attr('height', '44')
-            .attr('viewBox', `0 0 ${width} 44`)
+            .attr('height', String(controlsHeight))
+            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
             .style('display', 'block')
             .style('overflow', 'visible')
 
@@ -269,6 +273,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             x: 0,
             y: 0,
             width,
+            height: controlsHeight,
             videoEl: videoElement,
             className: 'ai-generated-video-controls',
         })

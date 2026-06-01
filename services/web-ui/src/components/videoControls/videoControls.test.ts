@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { select } from 'd3-selection'
 import { createVideoControls } from '$src/components/videoControls/videoControls.ts'
 
@@ -6,6 +6,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg'
 
 type MockVideo = HTMLVideoElement & {
     _setCurrentTime: (value: number) => void
+    _currentTimeWrites: number[]
 }
 
 function createMockVideo(): MockVideo {
@@ -19,7 +20,11 @@ function createMockVideo(): MockVideo {
 
     Object.defineProperty(video, 'currentTime', {
         get: () => currentTime,
-        set: (value: number) => { currentTime = value },
+        set: (value: number) => {
+            currentTime = value
+            video._currentTimeWrites.push(value)
+            video.dispatchEvent(new Event('seeked'))
+        },
         configurable: true,
     })
     Object.defineProperty(video, 'duration', {
@@ -63,15 +68,15 @@ function createMockVideo(): MockVideo {
         paused = true
         video.dispatchEvent(new Event('pause'))
     })
+    video._currentTimeWrites = []
     video._setCurrentTime = (value: number) => { currentTime = value }
 
     return video
 }
 
-function mount(width = 520) {
+function mount(width = 520, video = createMockVideo()) {
     const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
     document.body.appendChild(svg)
-    const video = createMockVideo()
     const controls = createVideoControls(select(svg), {
         id: 'video-1',
         x: 0,
@@ -91,6 +96,14 @@ function pointerDown(element: Element, clientX: number): void {
     element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX }))
 }
 
+function pointerMove(clientX: number): void {
+    window.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, cancelable: true, clientX }))
+}
+
+function pointerUp(): void {
+    window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, cancelable: true }))
+}
+
 function mockRect(element: Element, width: number): void {
     element.getBoundingClientRect = () => ({
         x: 0,
@@ -98,9 +111,9 @@ function mockRect(element: Element, width: number): void {
         left: 0,
         top: 0,
         right: width,
-        bottom: 44,
+        bottom: 52,
         width,
-        height: 44,
+        height: 52,
         toJSON: () => ({}),
     })
 }
@@ -108,6 +121,12 @@ function mockRect(element: Element, width: number): void {
 describe('createVideoControls', () => {
     beforeEach(() => {
         document.body.innerHTML = ''
+        vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.restoreAllMocks()
     })
 
     it('appends an SVG control group with core controls', () => {
@@ -155,8 +174,62 @@ describe('createVideoControls', () => {
         mockRect(seekHit, 100)
 
         pointerDown(seekHit, 25)
+        pointerMove(75)
+        pointerUp()
 
+        expect(video.currentTime).toBe(90)
+        expect(video.play).not.toHaveBeenCalled()
+        expect(video.pause).not.toHaveBeenCalled()
+    })
+
+    it('pauses while dragging the scrubber and resumes only when it was already playing', async () => {
+        const { svg, video } = mount()
+        const seekHit = svg.querySelector('.video-controls-seek-hit')!
+        mockRect(seekHit, 100)
+
+        await video.play()
+        vi.mocked(video.play).mockClear()
+        vi.mocked(video.pause).mockClear()
+
+        pointerDown(seekHit, 25)
+        expect(video.pause).toHaveBeenCalledTimes(1)
+        expect(video.paused).toBe(true)
         expect(video.currentTime).toBe(30)
+
+        pointerMove(50)
+        vi.runOnlyPendingTimers()
+        expect(video.currentTime).toBe(60)
+
+        pointerUp()
+        await Promise.resolve()
+
+        expect(video.play).toHaveBeenCalledTimes(1)
+        expect(video.paused).toBe(false)
+    })
+
+    it('chases the latest scrub target after the current seek settles while pointer is still down', () => {
+        const video = createMockVideo()
+        const { svg } = mount(520, video)
+        const seekHit = svg.querySelector('.video-controls-seek-hit')!
+        mockRect(seekHit, 100)
+
+        pointerDown(seekHit, 25)
+        expect(video.currentTime).toBe(30)
+        expect(video._currentTimeWrites).toEqual([30])
+
+        pointerMove(50)
+        pointerMove(75)
+        expect(video.currentTime).toBe(30)
+
+        vi.runOnlyPendingTimers()
+
+        expect(video.currentTime).toBe(90)
+        expect(video._currentTimeWrites).toEqual([30, 90])
+
+        pointerUp()
+
+        expect(video.currentTime).toBe(90)
+        expect(video.play).not.toHaveBeenCalled()
     })
 
     it('sets playback rate from the speed menu', () => {

@@ -29,7 +29,7 @@ When UI is located on or around the canvas:
 3. Keep the D3/SVG layer thin. It should drive or annotate canvas state, not replace PIXI rendering for the scene.
 4. Keep ownership clear. PIXI owns pixels and scene objects. D3 owns the SVG control elements. The feature or host owns application state.
 
-The video player controls follow this split: PIXI renders video pixels, while D3 SVG renders the control bar and drives the `HTMLVideoElement`.
+The video player controls follow this split: the canvas media layer owns poster/geometry state, a browser-composited `HTMLVideoElement` owns completed playback, and D3 SVG renders the control bar that drives that element.
 
 ## D3 Policy
 

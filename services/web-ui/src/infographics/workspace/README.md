@@ -54,9 +54,11 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
 
 ### Video Nodes
-- Display generated or media-library videos through the PIXI media layer, with a poster texture at rest and a live `Texture.from(videoElement)` source after playback or seeking starts
-- Keep the DOM node as an interaction shell only; video pixels are not rendered by a DOM `<video>` on the canvas
-- Use the shared SVG `components/videoControls` bar in the transformed image-chrome overlay, bound to the same hidden attached `HTMLVideoElement` that PIXI samples
+- Display generated or media-library videos with a PIXI poster/placeholder behind a visible DOM `<video>` surface that is moved into the transformed chrome layer once the video handler creates the attached element
+- Keep the node shell as interaction chrome only; completed playback, seeking, PiP, and fullscreen are driven by the browser-composited `<video>` element so connector edges are not tied to a PIXI video frame loop
+- Use the shared SVG `components/videoControls` bar in the transformed image-chrome overlay, bound to that same attached `HTMLVideoElement`
+- Reveal the control bar whenever the pointer is over the visible video chrome or the bar itself; the chrome surface also mirrors node drag, click selection, and corner resize behavior
+- Scrubbing pauses at the pressed timestamp, moves the control position immediately, writes the first video seek immediately, then applies the latest drag target as soon as the active seek settles so paused video frames keep updating during drag; it resumes on release only when the video was already playing
 - Support play/pause, seek, skip, speed, volume, picture-in-picture, and fullscreen without persisting playback state into `canvasState`
 
 ### Media Library Panel
@@ -229,7 +231,7 @@ Image nodes have a simpler structure:
 
 Generated-image provider badges, info buttons, and expanded provenance panels do not live inside the image node shell. They render in `.workspace-image-chrome-viewport`, above the PIXI media layer, so stored image sprites cannot cover them.
 
-The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the image sprite. Image corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask.
+Image pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. Completed video playback is the exception: `videoNodeHandler.ts` still loads the poster into PIXI for stable canvas geometry, but `WorkspaceCanvas.ts` moves the attached `<video>` into `.workspace-video-chrome` for visible playback and controls. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the media sprite. Image/video corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask or chrome surface.
 
 New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 

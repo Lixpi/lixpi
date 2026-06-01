@@ -4,10 +4,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
-// The video node handler renders the VEO poster and the click-to-play video
-// through PIXI, which needs a real PIXI/DOM runtime to execute. These are
-// source-level guards on the texture-load contract that keeps the poster from
-// rendering as a black rectangle.
+// The video node handler renders the VEO poster through PIXI and exposes an
+// attached DOM video element for the workspace chrome. These are source-level
+// guards on the texture-load contract that keeps the poster from rendering as a
+// black rectangle without requiring a real PIXI/DOM runtime.
 const source = readFileSync(resolve(__dirname, 'videoNodeHandler.ts'), 'utf-8')
 
 describe('videoNodeHandler — poster texture loading', () => {
@@ -22,17 +22,13 @@ describe('videoNodeHandler — poster texture loading', () => {
 		expect(source).not.toContain('await Texture.from(posterSrc)')
 	})
 
-	it('builds the live playback texture from the video element', () => {
-		// Texture.from(HTMLVideoElement) IS valid in PIXI v8 — it creates a
-		// VideoSource — so the play path legitimately keeps that form.
-		expect(source).toContain('Texture.from(entry.videoElement')
-	})
-
-	it('exposes the attached video element and repaints when paused seeks complete', () => {
+	it('exposes the attached video element without starting a PIXI video texture loop', () => {
 		expect(source).toContain('getVideoElement: (nodeId: string) => entries.get(nodeId)?.videoElement ?? null')
 		expect(source).toContain('ensureHiddenVideoHost().appendChild(videoElement)')
-		expect(source).toContain("videoElement.addEventListener('seeking', handleSeeking)")
-		expect(source).toContain("videoElement.addEventListener('seeked', handleSeeked)")
-		expect(source).toContain('videoSource?.update?.()')
+		expect(source).toContain('onVideoElementReady?.(node.nodeId)')
+		expect(source).toContain("videoElement.addEventListener('play', handlePlay)")
+		expect(source).toContain("videoElement.addEventListener('pause', handlePause)")
+		expect(source).not.toContain('Texture.from(entry.videoElement')
+		expect(source).not.toContain('videoSource?.update?.()')
 	})
 })
