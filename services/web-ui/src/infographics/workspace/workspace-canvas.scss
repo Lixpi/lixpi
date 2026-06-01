@@ -383,9 +383,32 @@
     pointer-events: none;
 }
 
+.workspace-video-surface {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: var(--workspace-image-border-radius);
+    background: #1c1c1c;
+    pointer-events: none;
+
+    video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: contain;
+    }
+}
+
 .workspace-video-controls-host {
-    pointer-events: auto;
+    opacity: 0;
+    pointer-events: none;
     filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.34));
+    transition: opacity 0.15s ease;
+
+    &.is-visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
 }
 
 .workspace-video-controls-svg {
