@@ -19,15 +19,29 @@ const mocks = vi.hoisted(() => ({
         createImageItem: vi.fn(),
         getImageItem: vi.fn(),
         getOwnedImageItem: vi.fn(),
+        getAnyItem: vi.fn(),
+        getOwnedAnyItem: vi.fn(),
         listAvailable: vi.fn(),
         changeScope: vi.fn(),
         deleteImageItem: vi.fn(),
         findActiveWorkspaceImageBySource: vi.fn(),
+        // Video methods added in Phase 8 — included so the mock fully satisfies
+        // the model's surface for either-kind code paths.
+        createVideoItem: vi.fn(),
+        getVideoItem: vi.fn(),
+        getOwnedVideoItem: vi.fn(),
+        changeScopeVideo: vi.fn(),
+        deleteVideoItem: vi.fn(),
+        findActiveWorkspaceVideoBySource: vi.fn(),
     },
     copyWorkspaceImageToLibrary: vi.fn(),
     materializeLibraryImageToWorkspace: vi.fn(),
     copyLibraryImageToScope: vi.fn(),
     deleteLibraryImageObject: vi.fn(),
+    copyWorkspaceVideoToLibrary: vi.fn(),
+    materializeLibraryVideoToWorkspace: vi.fn(),
+    copyLibraryVideoToScope: vi.fn(),
+    deleteLibraryVideoObject: vi.fn(),
 }))
 
 vi.mock('@lixpi/debug-tools', () => ({
@@ -52,6 +66,10 @@ vi.mock('../../services/media-library-storage.ts', () => ({
     materializeLibraryImageToWorkspace: mocks.materializeLibraryImageToWorkspace,
     copyLibraryImageToScope: mocks.copyLibraryImageToScope,
     deleteLibraryImageObject: mocks.deleteLibraryImageObject,
+    copyWorkspaceVideoToLibrary: mocks.copyWorkspaceVideoToLibrary,
+    materializeLibraryVideoToWorkspace: mocks.materializeLibraryVideoToWorkspace,
+    copyLibraryVideoToScope: mocks.copyLibraryVideoToScope,
+    deleteLibraryVideoObject: mocks.deleteLibraryVideoObject,
 }))
 
 import { mediaLibrarySubjects } from './media-library-subjects.ts'
@@ -101,6 +119,12 @@ describe('Media Library NATS image lifecycle', () => {
         mocks.mediaLibraryItem.findActiveWorkspaceImageBySource.mockResolvedValue(undefined)
         mocks.mediaLibraryItem.getImageItem.mockResolvedValue(item)
         mocks.mediaLibraryItem.getOwnedImageItem.mockResolvedValue(item)
+        // After Phase 8, image-kind subjects route through the kind-agnostic
+        // getAnyItem / getOwnedAnyItem so they can serve videos too. Return the
+        // same image fixture for both so the existing image lifecycle tests
+        // still pass.
+        mocks.mediaLibraryItem.getAnyItem.mockResolvedValue(item)
+        mocks.mediaLibraryItem.getOwnedAnyItem.mockResolvedValue(item)
         mocks.materializeLibraryImageToWorkspace.mockResolvedValue({
             fileId: 'fresh-file-1',
             url: '/api/images/workspace-1/fresh-file-1',

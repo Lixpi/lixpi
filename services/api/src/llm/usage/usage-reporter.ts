@@ -60,6 +60,23 @@ export type ImageUsageReport = {
     }
 }
 
+export type VideoUsageReport = {
+    eventMeta: EventMeta
+    aiModel: string
+    aiVendorRequestId: string
+    aiRequestReceivedAt: number
+    aiRequestFinishedAt: number
+    video: {
+        durationSeconds: number
+        resolution: string
+        aspectRatio: string
+        pricePerSecond: string
+        pricePerSecondResale: string
+        purchasedFor: string
+        soldToClientFor: string
+    }
+}
+
 const dec = (v: unknown, fallback: string = '0'): Decimal =>
     new Decimal(v == null ? fallback : String(v))
 
@@ -178,6 +195,53 @@ export class UsageReporter {
             return report
         } catch (e) {
             warn(`Failed to report image usage: ${e}`)
+            return undefined
+        }
+    }
+
+    // Video models (VEO) are billed per second of generated video.
+    reportVideoUsage(args: {
+        eventMeta: EventMeta
+        aiModelMetaInfo: AiModelMetaInfo
+        aiVendorRequestId: string
+        durationSeconds: number
+        resolution: string
+        aspectRatio: string
+        aiRequestReceivedAt: number
+        aiRequestFinishedAt: number
+    }): VideoUsageReport | undefined {
+        try {
+            const { eventMeta, aiModelMetaInfo, aiVendorRequestId, durationSeconds, resolution, aspectRatio, aiRequestReceivedAt, aiRequestFinishedAt } = args
+            const pricing = aiModelMetaInfo.pricing ?? {}
+            const resaleMargin = dec(pricing.resaleMargin, '1.0')
+            const videoPricing = (pricing as any).video ?? {}
+            const pricePerSecond = dec(videoPricing.price, '0')
+            const pricePerSecondResale = pricePerSecond.mul(resaleMargin)
+            const seconds = dec(durationSeconds, '0')
+            const purchased = pricePerSecond.mul(seconds)
+            const sold = pricePerSecondResale.mul(seconds)
+
+            const report: VideoUsageReport = {
+                eventMeta,
+                aiModel: `${aiModelMetaInfo.provider}:${aiModelMetaInfo.model}`,
+                aiVendorRequestId,
+                aiRequestReceivedAt,
+                aiRequestFinishedAt,
+                video: {
+                    durationSeconds: Number(durationSeconds) || 0,
+                    resolution,
+                    aspectRatio,
+                    pricePerSecond: pricePerSecond.toString(),
+                    pricePerSecondResale: pricePerSecondResale.toString(),
+                    purchasedFor: purchased.toString(),
+                    soldToClientFor: sold.toString(),
+                },
+            }
+
+            // TODO: publish to NATS once usage.videos.ai subject is wired up.
+            return report
+        } catch (e) {
+            warn(`Failed to report video usage: ${e}`)
             return undefined
         }
     }

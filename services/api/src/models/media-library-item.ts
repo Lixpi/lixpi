@@ -10,7 +10,11 @@ import {
     type MediaLibraryAccessList,
     type MediaLibraryImageItem,
     type MediaLibraryImageMeta,
+    type MediaLibraryItem,
+    type MediaLibraryMeta,
     type MediaLibraryScope,
+    type MediaLibraryVideoItem,
+    type MediaLibraryVideoMeta,
 } from '@lixpi/constants'
 
 const { ORG_NAME, STAGE } = process.env
@@ -26,8 +30,16 @@ export const buildMediaLibraryScopeAndOwnerKey = (
     scopeOwnerId: string
 ): string => `${scope}#${scopeOwnerId}`
 
+// Widened to accept either kind. Access check is identical across image and
+// video — both share the same scope/owner model. Meta records carry the same
+// scope fields, so the check works on either an item or a meta record.
 export const canReadMediaLibraryItem = (
-    item: MediaLibraryImageItem,
+    item: {
+        status: typeof MEDIA_LIBRARY_ITEM_STATUS[keyof typeof MEDIA_LIBRARY_ITEM_STATUS]
+        ownerUserId: string
+        scope: MediaLibraryScope
+        scopeOwnerId: string
+    },
     requesterContext: MediaLibraryRequesterContext
 ): boolean => {
     if (item.status !== MEDIA_LIBRARY_ITEM_STATUS.ACTIVE) return false
@@ -54,6 +66,29 @@ const buildMeta = (item: MediaLibraryImageItem): MediaLibraryImageMeta => ({
     height: item.image.height,
     aspectRatio: item.image.aspectRatio,
     previewUrl: `/api/media-library/items/${item.itemId}/content`,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+})
+
+const buildVideoMeta = (item: MediaLibraryVideoItem): MediaLibraryVideoMeta => ({
+    itemId: item.itemId,
+    kind: item.kind,
+    displayName: item.displayName,
+    ownerUserId: item.ownerUserId,
+    originWorkspaceId: item.originWorkspaceId,
+    scope: item.scope,
+    scopeOwnerId: item.scopeOwnerId,
+    scopeAndOwner: item.scopeAndOwner,
+    status: item.status,
+    mimeType: item.asset.mimeType,
+    byteSize: item.asset.byteSize,
+    durationSeconds: item.video.durationSeconds,
+    aspectRatio: item.video.aspectRatio,
+    hasAudio: item.video.hasAudio,
+    ...(typeof item.video.width === 'number' ? { width: item.video.width } : {}),
+    ...(typeof item.video.height === 'number' ? { height: item.video.height } : {}),
+    previewUrl: `/api/media-library/items/${item.itemId}/content`,
+    ...(item.poster ? { posterPreviewUrl: `/api/media-library/items/${item.itemId}/poster` } : {}),
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
 })
@@ -160,8 +195,10 @@ export default {
         scopeOwnerIds: Partial<Record<MediaLibraryScope, string[]>>
         requesterContext: MediaLibraryRequesterContext
         query?: string
-    }): Promise<MediaLibraryImageMeta[]> => {
-        const records: MediaLibraryImageMeta[] = []
+    }): Promise<MediaLibraryMeta[]> => {
+        // Meta table is kind-mixed; rows discriminate on `kind`. canReadMediaLibraryItem
+        // checks scope/owner fields only, which both meta shapes carry.
+        const records: MediaLibraryMeta[] = []
         for (const scope of scopes) {
             for (const scopeOwnerId of scopeOwnerIds[scope] ?? []) {
                 const result = await dynamoDBService.queryItems({
@@ -172,33 +209,14 @@ export default {
                     scanIndexForward: false,
                     origin: `MediaLibraryItem.listAvailable(${scope})`,
                 })
-                records.push(...(result?.items ?? []) as MediaLibraryImageMeta[])
+                records.push(...(result?.items ?? []) as MediaLibraryMeta[])
             }
         }
 
         const normalizedQuery = query?.trim().toLowerCase()
         return records
             .filter((item) => item.status === MEDIA_LIBRARY_ITEM_STATUS.ACTIVE)
-            .filter((item) => {
-                const readableItem = {
-                    ...item,
-                    asset: {
-                        bucketName: '',
-                        objectKey: '',
-                        mimeType: item.mimeType,
-                        byteSize: item.byteSize,
-                        originalName: item.displayName,
-                    },
-                    image: {
-                        width: item.width,
-                        height: item.height,
-                        aspectRatio: item.aspectRatio,
-                    },
-                    sourceFileId: '',
-                    version: 1 as const,
-                } satisfies MediaLibraryImageItem
-                return canReadMediaLibraryItem(readableItem, requesterContext)
-            })
+            .filter((item) => canReadMediaLibraryItem(item, requesterContext))
             .filter((item) => !normalizedQuery || item.displayName.toLowerCase().includes(normalizedQuery))
             .sort((left, right) => right.updatedAt - left.updatedAt)
     },
@@ -292,7 +310,10 @@ export default {
                 && existing.ownerUserId === userId)
     },
 
-    listWorkspaceItemsForCleanup: async (workspaceId: string): Promise<MediaLibraryImageItem[]> => {
+    listWorkspaceItemsForCleanup: async (workspaceId: string): Promise<MediaLibraryItem[]> => {
+        // Workspace cleanup must reap both kinds of items — the item table is
+        // kind-mixed, so we widen to the union and downstream callers branch
+        // on `item.kind` to pick the right asset-deletion helper.
         const result = await dynamoDBService.queryItems({
             tableName: itemTableName(),
             indexName: 'scopeAndOwner',
@@ -301,7 +322,243 @@ export default {
             scanIndexForward: false,
             origin: `MediaLibraryItem.listWorkspaceItemsForCleanup(${workspaceId})`,
         })
-        return ((result?.items ?? []) as MediaLibraryImageItem[])
+        return ((result?.items ?? []) as MediaLibraryItem[])
             .filter((item) => item.status === MEDIA_LIBRARY_ITEM_STATUS.ACTIVE && item.scope === MEDIA_LIBRARY_SCOPE.WORKSPACE)
+    },
+
+    // =============================================================================
+    // VIDEO ITEM CRUD — mirrors the image surface 1:1, with separate keys so the
+    // image-only callers don't need to widen their return-type expectations.
+    // =============================================================================
+
+    createVideoItem: async (item: MediaLibraryVideoItem): Promise<MediaLibraryVideoItem> => {
+        const meta = buildVideoMeta(item)
+        const ownerAccess: MediaLibraryAccessList = {
+            itemId: item.itemId,
+            principalId: item.ownerUserId,
+            accessLevel: ACCESS_LEVEL.OWNER,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+        }
+
+        await dynamoDBService.putItem({
+            tableName: itemTableName(),
+            item,
+            origin: 'MediaLibraryItem.createVideoItem',
+        })
+        try {
+            await dynamoDBService.putItem({
+                tableName: metaTableName(),
+                item: meta,
+                origin: 'MediaLibraryItem.createVideoItem:meta',
+            })
+            await dynamoDBService.putItem({
+                tableName: accessListTableName(),
+                item: ownerAccess,
+                origin: 'MediaLibraryItem.createVideoItem:accessList',
+            })
+        } catch (error) {
+            await dynamoDBService.deleteItems({
+                tableName: itemTableName(),
+                key: { itemId: item.itemId, version: item.version },
+                origin: 'MediaLibraryItem.createVideoItem:rollback',
+            }).catch(() => {})
+            await dynamoDBService.deleteItems({
+                tableName: metaTableName(),
+                key: { itemId: item.itemId },
+                origin: 'MediaLibraryItem.createVideoItem:metaRollback',
+            }).catch(() => {})
+            throw error
+        }
+
+        return item
+    },
+
+    getVideoItem: async ({
+        itemId,
+        requesterContext,
+    }: {
+        itemId: string
+        requesterContext: MediaLibraryRequesterContext
+    }): Promise<MediaLibraryVideoItem | { error: string }> => {
+        const item = await dynamoDBService.getItem({
+            tableName: itemTableName(),
+            key: { itemId, version: 1 },
+            origin: `MediaLibraryItem.getVideoItem(${itemId})`,
+        }) as MediaLibraryVideoItem | undefined
+
+        if (!item || Object.keys(item).length === 0 || item.status !== MEDIA_LIBRARY_ITEM_STATUS.ACTIVE) {
+            return { error: 'NOT_FOUND' }
+        }
+        if (item.kind !== 'video') {
+            return { error: 'NOT_FOUND' }
+        }
+        if (!canReadMediaLibraryItem(item, requesterContext)) {
+            return { error: 'PERMISSION_DENIED' }
+        }
+        return item
+    },
+
+    getOwnedVideoItem: async ({
+        itemId,
+        userId,
+    }: {
+        itemId: string
+        userId: string
+    }): Promise<MediaLibraryVideoItem | { error: string }> => {
+        const item = await dynamoDBService.getItem({
+            tableName: itemTableName(),
+            key: { itemId, version: 1 },
+            origin: `MediaLibraryItem.getOwnedVideoItem(${itemId})`,
+        }) as MediaLibraryVideoItem | undefined
+
+        if (!item || Object.keys(item).length === 0 || item.status !== MEDIA_LIBRARY_ITEM_STATUS.ACTIVE) {
+            return { error: 'NOT_FOUND' }
+        }
+        if (item.kind !== 'video' || item.ownerUserId !== userId) {
+            return { error: 'PERMISSION_DENIED' }
+        }
+        return item
+    },
+
+    // Either-kind getter for the GET subject + content/poster routes — they
+    // don't know the kind in advance and the meta `previewUrl` is the same
+    // route for both. Returns the kind-discriminated item so callers can
+    // pick MP4 vs PNG path.
+    getAnyItem: async ({
+        itemId,
+        requesterContext,
+    }: {
+        itemId: string
+        requesterContext: MediaLibraryRequesterContext
+    }): Promise<MediaLibraryItem | { error: string }> => {
+        const item = await dynamoDBService.getItem({
+            tableName: itemTableName(),
+            key: { itemId, version: 1 },
+            origin: `MediaLibraryItem.getAnyItem(${itemId})`,
+        }) as MediaLibraryItem | undefined
+
+        if (!item || Object.keys(item).length === 0 || item.status !== MEDIA_LIBRARY_ITEM_STATUS.ACTIVE) {
+            return { error: 'NOT_FOUND' }
+        }
+        if (!canReadMediaLibraryItem(item, requesterContext)) {
+            return { error: 'PERMISSION_DENIED' }
+        }
+        return item
+    },
+
+    // Owner-only getter that doesn't pin to a specific kind. Used by
+    // change-scope and delete which must work on either kind.
+    getOwnedAnyItem: async ({
+        itemId,
+        userId,
+    }: {
+        itemId: string
+        userId: string
+    }): Promise<MediaLibraryItem | { error: string }> => {
+        const item = await dynamoDBService.getItem({
+            tableName: itemTableName(),
+            key: { itemId, version: 1 },
+            origin: `MediaLibraryItem.getOwnedAnyItem(${itemId})`,
+        }) as MediaLibraryItem | undefined
+
+        if (!item || Object.keys(item).length === 0 || item.status !== MEDIA_LIBRARY_ITEM_STATUS.ACTIVE) {
+            return { error: 'NOT_FOUND' }
+        }
+        if (item.ownerUserId !== userId) {
+            return { error: 'PERMISSION_DENIED' }
+        }
+        return item
+    },
+
+    changeScopeVideo: async ({
+        item,
+        newScope,
+        newScopeOwnerId,
+        newAsset,
+        newPoster,
+    }: {
+        item: MediaLibraryVideoItem
+        newScope: MediaLibraryScope
+        newScopeOwnerId: string
+        newAsset: MediaLibraryVideoItem['asset']
+        newPoster: MediaLibraryVideoItem['poster']
+    }): Promise<MediaLibraryVideoItem> => {
+        const updatedItem: MediaLibraryVideoItem = {
+            ...item,
+            scope: newScope,
+            scopeOwnerId: newScopeOwnerId,
+            scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(newScope, newScopeOwnerId),
+            asset: newAsset,
+            ...(newPoster ? { poster: newPoster } : { poster: undefined }),
+            updatedAt: Date.now(),
+        }
+        try {
+            await dynamoDBService.putItem({
+                tableName: itemTableName(),
+                item: updatedItem,
+                origin: 'MediaLibraryItem.changeScopeVideo',
+            })
+            await dynamoDBService.putItem({
+                tableName: metaTableName(),
+                item: buildVideoMeta(updatedItem),
+                origin: 'MediaLibraryItem.changeScopeVideo:meta',
+            })
+        } catch (error) {
+            await dynamoDBService.putItem({
+                tableName: itemTableName(),
+                item,
+                origin: 'MediaLibraryItem.changeScopeVideo:rollback',
+            }).catch(() => {})
+            await dynamoDBService.putItem({
+                tableName: metaTableName(),
+                item: buildVideoMeta(item),
+                origin: 'MediaLibraryItem.changeScopeVideo:metaRollback',
+            }).catch(() => {})
+            throw error
+        }
+        return updatedItem
+    },
+
+    deleteVideoItem: async ({ item }: { item: MediaLibraryVideoItem }): Promise<void> => {
+        await dynamoDBService.deleteItems({
+            tableName: itemTableName(),
+            key: { itemId: item.itemId, version: item.version },
+            origin: 'MediaLibraryItem.deleteVideoItem',
+        })
+        await dynamoDBService.deleteItems({
+            tableName: metaTableName(),
+            key: { itemId: item.itemId },
+            origin: 'MediaLibraryItem.deleteVideoItem:meta',
+        })
+        await dynamoDBService.deleteItems({
+            tableName: accessListTableName(),
+            key: { principalId: item.ownerUserId, itemId: item.itemId },
+            origin: 'MediaLibraryItem.deleteVideoItem:accessList',
+        })
+    },
+
+    findActiveWorkspaceVideoBySource: async ({
+        workspaceId,
+        sourceFileId,
+        userId,
+    }: {
+        workspaceId: string
+        sourceFileId: string
+        userId: string
+    }): Promise<MediaLibraryVideoItem | undefined> => {
+        const result = await dynamoDBService.queryItems({
+            tableName: itemTableName(),
+            indexName: 'scopeAndOwner',
+            keyConditions: { scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId) },
+            fetchAllItems: true,
+            scanIndexForward: false,
+            origin: `MediaLibraryItem.findActiveWorkspaceVideoBySource(${workspaceId})`,
+        })
+        return ((result?.items ?? []) as MediaLibraryItem[])
+            .filter((it): it is MediaLibraryVideoItem => it.kind === 'video')
+            .find((existing) => existing.status === MEDIA_LIBRARY_ITEM_STATUS.ACTIVE
+                && existing.sourceFileId === sourceFileId
+                && existing.ownerUserId === userId)
     },
 }

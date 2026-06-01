@@ -11,6 +11,7 @@ const read = (name: string): string =>
 
 export const SYSTEM_PROMPT = read('./system.txt')
 export const IMAGE_GENERATION_INSTRUCTIONS = read('./image_generation_instructions.txt')
+export const VIDEO_GENERATION_INSTRUCTIONS = read('./video_generation_instructions.txt')
 export const ANTHROPIC_CODE_BLOCK_HACK = read('./anthropic_code_block_hack.txt')
 
 // The v0 FEATURE_EXTRACTION_INSTRUCTIONS was a monolithic chat-LLM system prompt
@@ -19,9 +20,14 @@ export const ANTHROPIC_CODE_BLOCK_HACK = read('./anthropic_code_block_hack.txt')
 // dedicated 6-stage pipeline under services/api/src/llm/extraction/ with focused
 // per-stage prompts. Nothing in the chat graph needs an extraction system prompt.
 
-export const getSystemPrompt = (includeImageGeneration: boolean = false): string => {
-    if (includeImageGeneration) return `${SYSTEM_PROMPT}\n\n${IMAGE_GENERATION_INSTRUCTIONS}`
-    return SYSTEM_PROMPT
+export const getSystemPrompt = (
+    includeImageGeneration: boolean = false,
+    includeVideoGeneration: boolean = false,
+): string => {
+    let prompt = SYSTEM_PROMPT
+    if (includeImageGeneration) prompt += `\n\n${IMAGE_GENERATION_INSTRUCTIONS}`
+    if (includeVideoGeneration) prompt += `\n\n${VIDEO_GENERATION_INSTRUCTIONS}`
+    return prompt
 }
 
 // Anthropic-specific: coerces triple-backtick code fences instead of XML-tagged code blocks

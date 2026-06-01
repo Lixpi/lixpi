@@ -1,0 +1,370 @@
+import { brokenImageIcon } from '$src/svgIcons/index.ts'
+import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import AuthService from '$src/services/auth-service.ts'
+import { NodeSelection } from 'prosemirror-state'
+import type { ImageBranchVlmResolution } from '@lixpi/constants'
+// @ts-ignore - runtime import
+import { select } from 'd3-selection'
+import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+
+// Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
+// video. While VIDEO_PENDING is the active state, the node renders a placeholder
+// (matching the canvas placeholder style — no DOM spinner per PR #202). On
+// VIDEO_COMPLETE the node swaps to a poster + controls-less <video> element plus
+// the shared SVG videoControls bar used by the workspace canvas.
+
+export const aiGeneratedVideoNodeType = 'aiGeneratedVideo'
+
+export const aiGeneratedVideoNodeSpec = {
+    attrs: {
+        videoUrl: { default: '' },
+        fileId: { default: '' },
+        workspaceId: { default: '' },
+        posterUrl: { default: '' },
+        posterFileId: { default: '' },
+        durationSeconds: { default: 0 },
+        aspectRatio: { default: 1.777 },
+        hasAudio: { default: true },
+        revisedPrompt: { default: '' },
+        responseId: { default: '' },
+        videoModel: { default: '' },
+        isPending: { default: true },
+        errorMessage: { default: '' },
+        // Display attributes (mirror the image node)
+        width: { default: null },
+        alignment: { default: 'left' },
+        textWrap: { default: 'none' },
+    },
+    group: 'block',
+    draggable: false,
+    atom: true,
+    parseDOM: [
+        {
+            tag: 'div.ai-generated-video',
+            getAttrs(dom: HTMLElement) {
+                return {
+                    videoUrl: dom.getAttribute('data-video-url') || '',
+                    fileId: dom.getAttribute('data-file-id') || '',
+                    workspaceId: dom.getAttribute('data-workspace-id') || '',
+                    posterUrl: dom.getAttribute('data-poster-url') || '',
+                    posterFileId: dom.getAttribute('data-poster-file-id') || '',
+                    durationSeconds: Number(dom.getAttribute('data-duration-seconds') || 0),
+                    aspectRatio: Number(dom.getAttribute('data-aspect-ratio') || 1.777),
+                    hasAudio: dom.getAttribute('data-has-audio') === 'true',
+                    revisedPrompt: dom.getAttribute('data-revised-prompt') || '',
+                    responseId: dom.getAttribute('data-response-id') || '',
+                    videoModel: dom.getAttribute('data-video-model') || '',
+                    isPending: dom.getAttribute('data-is-pending') === 'true',
+                    errorMessage: dom.getAttribute('data-error-message') || '',
+                    width: dom.getAttribute('data-width') || null,
+                    alignment: dom.getAttribute('data-alignment') || 'left',
+                    textWrap: dom.getAttribute('data-text-wrap') || 'none',
+                }
+            },
+        },
+    ],
+    toDOM(node: any) {
+        return ['div', {
+            class: 'ai-generated-video',
+            'data-video-url': node.attrs.videoUrl,
+            'data-file-id': node.attrs.fileId,
+            'data-workspace-id': node.attrs.workspaceId,
+            'data-poster-url': node.attrs.posterUrl,
+            'data-poster-file-id': node.attrs.posterFileId,
+            'data-duration-seconds': String(node.attrs.durationSeconds),
+            'data-aspect-ratio': String(node.attrs.aspectRatio),
+            'data-has-audio': String(node.attrs.hasAudio),
+            'data-revised-prompt': node.attrs.revisedPrompt,
+            'data-response-id': node.attrs.responseId,
+            'data-video-model': node.attrs.videoModel,
+            'data-is-pending': String(node.attrs.isPending),
+            'data-error-message': node.attrs.errorMessage,
+            'data-width': node.attrs.width || '',
+            'data-alignment': node.attrs.alignment || 'left',
+            'data-text-wrap': node.attrs.textWrap || 'none',
+        }]
+    },
+}
+
+export type AiGeneratedVideoCallbacks = {
+    onAddToCanvas?: (data: {
+        videoUrl: string
+        fileId: string
+        posterUrl: string
+        posterFileId: string
+        durationSeconds: number
+        aspectRatio: number
+        hasAudio: boolean
+        responseId: string
+        revisedPrompt: string
+        videoModel: string
+    }) => void
+    onEditInNewThread?: (responseId: string) => void
+    onVideoPendingToCanvas?: (data: {
+        threadId: string
+        aiProvider: string
+    }) => void
+    onVideoGeneratingToCanvas?: (data: {
+        threadId: string
+        aiProvider: string
+    }) => void
+    onVideoCompleteToCanvas?: (data: {
+        threadId: string
+        videoUrl: string
+        fileId: string
+        workspaceId: string
+        posterUrl: string
+        posterFileId: string
+        frameUrl: string
+        frameFileId: string
+        durationSeconds: number
+        aspectRatio: number
+        hasAudio: boolean
+        responseId: string
+        revisedPrompt: string
+        videoModel: string
+        videoModelProvider: string
+        responseMessageId: string
+    }) => void
+    onVideoErrorToCanvas?: (data: {
+        threadId: string
+        error: string
+    }) => void
+    // The structured VLM resolver is shared with images; video uses the same
+    // resolution payload, so the resolved/error callbacks are reused from the
+    // image callback surface rather than duplicated here.
+    onVideoBranchResolvedToCanvas?: (data: {
+        threadId: string
+        resolution: ImageBranchVlmResolution
+    }) => void
+}
+
+let globalCallbacks: AiGeneratedVideoCallbacks = {}
+
+export function setAiGeneratedVideoCallbacks(callbacks: AiGeneratedVideoCallbacks) {
+    globalCallbacks = callbacks
+}
+
+export function getAiGeneratedVideoCallbacks(): AiGeneratedVideoCallbacks {
+    return globalCallbacks
+}
+
+// Resolves a path like /api/videos/{ws}/{fileId} or /api/images/... to a full
+// authenticated URL. Mirrors the helper inlined in aiGeneratedImageNode.ts so
+// the same auth-token attachment logic applies to both video and poster URLs.
+const buildAuthenticatedUrl = async (url: string): Promise<string> => {
+    if (!url) return ''
+    if (url.startsWith('data:') || url.startsWith('blob:')) return url
+    if (url.startsWith('/api/')) {
+        const token = await AuthService.getTokenSilently()
+        const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+        return `${API_BASE_URL}${url}${token ? `?token=${token}` : ''}`
+    }
+    if (url.startsWith('http')) {
+        const stripped = url.replace(/[?&]token=[^&]+/, '')
+        if (stripped.includes('/api/videos/') || stripped.includes('/api/images/')) {
+            const token = await AuthService.getTokenSilently()
+            return `${stripped}${token ? `?token=${token}` : ''}`
+        }
+        return url
+    }
+    return url
+}
+
+export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => number | undefined) => {
+    const controlsHeight = 52
+    const containerStyle = {
+        position: 'relative' as const,
+        overflow: 'hidden' as const,
+    }
+    const controlsHostStyle = {
+        position: 'absolute' as const,
+        left: '18px',
+        right: '18px',
+        bottom: '14px',
+        height: `${controlsHeight}px`,
+        pointerEvents: 'auto' as const,
+        borderRadius: '18px',
+        filter: 'drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28))',
+        backdropFilter: 'blur(10px)',
+        webkitBackdropFilter: 'blur(10px)',
+        display: 'none',
+    }
+    const wrapper = html`
+        <div className="ai-generated-video-wrapper">
+            <div className="ai-generated-video-container" style=${containerStyle}>
+                <div className="ai-generated-video-placeholder">
+                    <span className="placeholder-text">Generating video…</span>
+                </div>
+                <video className="ai-generated-video-content" preload="metadata" playsinline crossorigin="anonymous"></video>
+                <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
+            </div>
+        </div>
+    `
+
+    const container = wrapper.querySelector('.ai-generated-video-container') as HTMLElement
+    const placeholderElement = wrapper.querySelector('.ai-generated-video-placeholder') as HTMLElement
+    const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
+    const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
+    const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
+    let videoControls: VideoControlsInstance | null = null
+    let controlsSvg: any = null
+    let resizeObserver: ResizeObserver | null = null
+
+    applyStyle(videoElement, { display: 'none' })
+
+    const handleClick = (event: MouseEvent) => {
+        const target = event.target as HTMLElement
+        if (target.closest('.ai-generated-video-controls-host') || target.tagName === 'VIDEO') return
+
+        event.preventDefault()
+        event.stopPropagation()
+
+        const pos = getPos()
+        if (pos === undefined) return
+
+        const tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos))
+        view.dispatch(tr)
+        view.focus()
+    }
+
+    wrapper.addEventListener('click', handleClick)
+
+    const getControlsWidth = (): number => {
+        const measuredWidth = controlsHost.getBoundingClientRect().width || controlsHost.clientWidth
+        return Math.max(240, measuredWidth || 520)
+    }
+
+    const syncControlsGeometry = (): void => {
+        if (!videoControls || !controlsSvg) return
+        const width = getControlsWidth()
+        controlsSvg
+            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
+            .attr('width', '100%')
+            .attr('height', String(controlsHeight))
+        videoControls.resize(0, 0, width)
+    }
+
+    const destroyVideoControls = (): void => {
+        videoControls?.destroy()
+        videoControls = null
+        controlsSvg = null
+        controlsHost.replaceChildren()
+    }
+
+    const ensureVideoControls = (): void => {
+        if (videoControls) {
+            syncControlsGeometry()
+            return
+        }
+
+        const width = getControlsWidth()
+        controlsSvg = select(controlsHost)
+            .append('svg')
+            .attr('class', 'ai-generated-video-controls-svg')
+            .attr('width', '100%')
+            .attr('height', String(controlsHeight))
+            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
+            .style('display', 'block')
+            .style('overflow', 'visible')
+
+        videoControls = createVideoControls(controlsSvg, {
+            id: String(node.attrs.responseId || node.attrs.fileId || 'chat-video'),
+            x: 0,
+            y: 0,
+            width,
+            height: controlsHeight,
+            videoEl: videoElement,
+            className: 'ai-generated-video-controls',
+        })
+
+        if (!resizeObserver && typeof ResizeObserver !== 'undefined') {
+            resizeObserver = new ResizeObserver(syncControlsGeometry)
+            resizeObserver.observe(controlsHost)
+        }
+    }
+
+    const updateDisplay = async () => {
+        const { videoUrl, posterUrl, isPending, errorMessage } = node.attrs
+
+        if (errorMessage) {
+            applyStyle(videoElement, { display: 'none' })
+            applyStyle(controlsHost, { display: 'none' })
+            destroyVideoControls()
+            placeholderElement.classList.remove('is-active')
+            if (!container.querySelector('.video-error-placeholder')) {
+                container.appendChild(html`
+                    <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>${errorMessage}</span></div>
+                `)
+            }
+            return
+        }
+
+        if (isPending || !videoUrl) {
+            applyStyle(videoElement, { display: 'none' })
+            applyStyle(controlsHost, { display: 'none' })
+            destroyVideoControls()
+            placeholderElement.classList.add('is-active')
+            placeholderText.textContent = 'Generating video…'
+            return
+        }
+
+        placeholderElement.classList.remove('is-active')
+        applyStyle(videoElement, { display: 'block' })
+        applyStyle(controlsHost, { display: 'block' })
+
+        const resolvedVideoSrc = await buildAuthenticatedUrl(videoUrl)
+        const resolvedPosterSrc = posterUrl ? await buildAuthenticatedUrl(posterUrl) : ''
+
+        if (videoElement.src !== resolvedVideoSrc) {
+            videoElement.src = resolvedVideoSrc
+        }
+        if (resolvedPosterSrc && videoElement.poster !== resolvedPosterSrc) {
+            videoElement.poster = resolvedPosterSrc
+        }
+        ensureVideoControls()
+    }
+
+    videoElement.onerror = () => {
+        applyStyle(videoElement, { display: 'none' })
+        applyStyle(controlsHost, { display: 'none' })
+        destroyVideoControls()
+        if (!container.querySelector('.video-error-placeholder')) {
+            container.appendChild(html`
+                <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Video unavailable</span></div>
+            `)
+        }
+    }
+
+    updateDisplay().catch(() => {})
+
+    return {
+        dom: wrapper,
+        update: (updatedNode: any) => {
+            if (updatedNode.type.name !== aiGeneratedVideoNodeType) {
+                return false
+            }
+
+            node = updatedNode
+            updateDisplay().catch(() => {})
+            return true
+        },
+        destroy: () => {
+            wrapper.removeEventListener('click', handleClick)
+            resizeObserver?.disconnect()
+            resizeObserver = null
+            destroyVideoControls()
+            try {
+                videoElement.pause()
+                videoElement.removeAttribute('src')
+                videoElement.load()
+            } catch {
+                // Pause/teardown is best-effort during ProseMirror destroy.
+            }
+        },
+        stopEvent: (event: Event) => {
+            const target = event.target as HTMLElement | null
+            return Boolean(target?.closest('.ai-generated-video-controls-host') || target === videoElement)
+        },
+    }
+}

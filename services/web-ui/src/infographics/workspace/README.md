@@ -7,7 +7,7 @@ This module renders the main workspace view—a zoomable, pannable canvas where 
 > - For the rendering architecture (DOM interaction layer + PIXI v8 media/edge layers), the LoD-tier loader, the texture cache, the 6-worker decode pool, and the list of remaining performance issues, read [`documentation/features/CANVAS-ENGINE.md`](../../../../../documentation/features/CANVAS-ENGINE.md). That document is the source of truth for any rendering or perf work.
 > - For context-region cloud rendering, CO2-mask hit testing, adoption scoring, theme toggles, and gotchas, read [`documentation/features/CONTEXT-REGION-CLOUDS.md`](../../../../../documentation/features/CONTEXT-REGION-CLOUDS.md).
 > - For collision resolution, viewport-centered insertion cleanup, drag-release collision rules, and context-region shape-aware collision planning, read [`documentation/features/CANVAS-COLLISION-RESOLUTION.md`](../../../../../documentation/features/CANVAS-COLLISION-RESOLUTION.md).
-> - For workspace data flow (stores, services, NATS subjects, AI chat context extraction, image generation), read [`documentation/features/WORKSPACE-FEATURE.md`](../../../../../documentation/features/WORKSPACE-FEATURE.md).
+> - For workspace data flow (stores, services, NATS subjects, AI chat context extraction, image generation, and video generation), read [`documentation/features/WORKSPACE-FEATURE.md`](../../../../../documentation/features/WORKSPACE-FEATURE.md).
 > - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
 
 > **Configuration rule.** Workspace-canvas values that are meant to be tuned - colors, shadows, dimensions, gaps, hit radii, resize cursor activation areas, animation timing, behavior flags, and generated-image placement spacing - belong in [`settings.ts`](../../settings.ts). Keep them in logical top-level subsections such as `aiChatThread`, `connector`, `imageNode`, `contextRegion`, and `imageBranchLineage`; use nested subsections for child domains such as `aiChatThread.rail` and `contextRegion.cloud`; separate every group with a blank line before and after; and document every key with what changing it does. Use getters only when a setting needs to self-reference sibling settings through `this`; keep ordinary static values as plain properties.
@@ -26,8 +26,8 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** in the right-side panel; it can open with no region and creates a standalone session only on first submit
 - **Add images** via the toolbar button which opens an upload modal
-- **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features or explicitly saved Images; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
-- **Save an image for reuse** from its bubble menu; the saved Media Library image is an independent Object Store copy that survives removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same image reuses the existing item instead of duplicating it
+- **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
+- **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
 - **Create Context Regions** via the toolbar button, which creates a region-owned history and opens its chat tab
 - **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
 - **Provide AI context** through a context region, or from selected items in a standalone chat using the `Follow` / `Pinned` modes and optional `With Sources` lineage toggle
@@ -53,11 +53,20 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Automatically delete their workspace object when removed from canvas; explicitly saved Media Library copies are separate objects and remain available
 - Expose `Add to Media Library` in the bubble menu once their stored object is available; streaming generated-image placeholders hide the action until completion
 
+### Video Nodes
+- Display generated or media-library videos with a PIXI poster/placeholder behind a visible DOM `<video>` surface that is moved into the transformed chrome layer once the video handler creates the attached element
+- Keep the node shell as interaction chrome only; completed playback, seeking, PiP, and fullscreen are driven by the browser-composited `<video>` element so connector edges are not tied to a PIXI video frame loop
+- Use the shared SVG `components/videoControls` bar in the transformed image-chrome overlay, bound to that same attached `HTMLVideoElement`
+- Reveal the control bar whenever the pointer is over the visible video chrome or the bar itself; the chrome surface also mirrors node drag, click selection, and corner resize behavior
+- Scrubbing pauses at the pressed timestamp, moves the control position immediately, writes the first video seek immediately, then applies the latest drag target as soon as the active seek settles so paused video frames keep updating during drag; it resumes on release only when the video was already playing
+- Support play/pause, seek, skip, speed, volume, picture-in-picture, and fullscreen without persisting playback state into `canvasState`
+- Expose `Add to Media Library` once their stored MP4 is available; videos still polling through VEO hide the action until completion
+
 ### Media Library Panel
 - Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the unchanged zoom badge and the style import.
 - Renders `Features` through the established Feature subjects; promoted Feature samples copy to durable storage before scope changes and legacy promoted samples migrate before origin-workspace deletion.
-- Renders `Images` through generic media-library records whose Object Store bytes are copied on save and copied again when inserted back onto the canvas.
-- Supports `Workspace`, `Mine`, `Organization`, `Public`, and `All available` filtering in one compact scope selector; new image saves start in the current workspace scope.
+- Renders `Images` and `Videos` through generic media-library records whose Object Store bytes are copied on save and copied again when inserted back onto the canvas.
+- Supports `Workspace`, `Mine`, `Organization`, `Public`, and `All available` filtering in one compact scope selector; new media saves start in the current workspace scope.
 - Uses `settings.mediaLibrary` for its two-thirds width, is flush to the canvas top and bottom, and occupies the space immediately to the left of visible AI chat.
 - Uses concise Feature browse cards with large previews and two-line summary previews; selection opens a full-detail inspector, or a focused detail view with Back at narrow widths.
 
@@ -134,7 +143,7 @@ flowchart TB
     subgraph Backend["Backend Services"]
         NS[NATS Service]
         API[Workspace API]
-        LLMAPI[llm-api Python]
+        LLM[API LLM module<br/>in-process LangGraph]
         OBJ[NATS Object Store]
     end
 
@@ -158,7 +167,7 @@ flowchart TB
     CTX -->|"reads edges, nodes"| WS
     CTX -->|"reads content"| DS
     CTX -->|"reads content"| TS
-    AIS -->|"streaming"| LLMAPI
+    AIS -->|"streaming via NATS"| LLM
     CC --> IL
     IL -->|"deleteImage"| NS
     NS -->|"DELETE_IMAGE"| OBJ
@@ -223,7 +232,7 @@ Image nodes have a simpler structure:
 
 Generated-image provider badges, info buttons, and expanded provenance panels do not live inside the image node shell. They render in `.workspace-image-chrome-viewport`, above the PIXI media layer, so stored image sprites cannot cover them.
 
-The visible pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the image sprite. Image corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask.
+Image pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. Completed video playback is the exception: `videoNodeHandler.ts` still loads the poster into PIXI for stable canvas geometry, but `WorkspaceCanvas.ts` moves the attached `<video>` into `.workspace-video-chrome` for visible playback and controls. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the media sprite. Image/video corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask or chrome surface.
 
 New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 
@@ -374,8 +383,8 @@ flowchart LR
 The extraction flow:
 
 1. **Context source** — Region-owned tabs call `AiChatThreadService.extractConnectedContext(nodeId)`; standalone tabs call `extractSelectedContext({ nodeIds, includeUpstream })`
-2. **Content extraction** — Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64
-3. **Message building** — `buildContextMessage()` formats context as multimodal content blocks (`input_text` for text, `input_image` for images)
+2. **Content extraction** — Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64; video nodes contribute their representative still (`frameFileId`, falling back to poster) for normal model context
+3. **Message building** — `buildContextMessage()` formats context as multimodal content blocks (`input_text` for text, `input_image` for images and video stills)
 4. **Submission** — The context message is prepended to the user's messages before sending to the AI
 
 The context extraction logic lives in `AiChatThreadService`, not in the canvas module, since it's business logic rather than rendering.
@@ -406,16 +415,23 @@ sequenceDiagram
 
 ## Canvas Bubble Menu
 
-When an image node or an edge is selected on the canvas, a bubble menu appears below it — the same shared `BubbleMenu` component used in ProseMirror editors. The menu provides context-specific actions for canvas elements.
+When an image node, video node, or edge is selected on the canvas, a bubble menu appears below it — the same shared `BubbleMenu` component used in ProseMirror editors. The menu provides context-specific actions for canvas elements.
 
 ### Image Node Actions
 - **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
 - **Download** — fetches the image as a blob and triggers a browser download via `downloadImage()` utility
+- **Add to Media Library** — saves a completed stored image as an independent library copy
 - **Delete** — removes the node and its associated edges from canvas state
 
-The bubble menu automatically hides during drag and resize operations, and repositions itself when the selected image moves. Image menus anchor to the canvas image node box, not the inner `<img>` element, so the toolbar remains below the image while dragging it into or out of context regions.
+### Video Node Actions
+- **Add to Media Library** — saves a completed stored video and poster as independent library copies
+- **Connect to node** — starts the same menu-driven graph connection flow as images
+- **Extend video in new thread** — creates a new AI chat thread seeded with the selected video as VEO extension input
+- **Delete** — removes the node and its associated edges from canvas state
 
-The shared bubble menu measures layout size separately from visual scale when positioning. This keeps image menus horizontally centered on first show, during image movement, and throughout resize. Canvas image menus also opt out of parent-bound clamping and entrance motion, so the toolbar stays attached to the image when the image moves past the visible canvas edge and does not drift during first-load display.
+The bubble menu automatically hides during drag and resize operations, and repositions itself when the selected image or video moves. Media menus anchor to the canvas node box, not the inner pixel or video element, so the toolbar remains below the node while dragging it into or out of context regions.
+
+The shared bubble menu measures layout size separately from visual scale when positioning. This keeps media menus horizontally centered on first show, during movement, and throughout resize. Canvas media menus also opt out of parent-bound clamping and entrance motion, so the toolbar stays attached to the node when it moves past the visible canvas edge and does not drift during first-load display.
 
 Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` class is from `$src/components/bubbleMenu/`.
 
@@ -425,7 +441,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 |------|---------|
 | `WorkspaceCanvas.ts` | Core logic: pan/zoom setup, node creation, drag/resize handlers, bubble menu integration, and PIXI media/context-region layer wiring |
 | `WorkspaceConnectionManager.ts` | Edge connection logic: XYHandle integration, PIXI edge data feed, cached path hit-testing, bubble-menu anchoring, selection/deletion |
-| `pixiMediaLayer.ts` | PIXI v8 media layer for image pixels and generated-image progress-outline synchronization: sprite registry, texture cache, LoD-tier loader, RBush-based visibility scanner, idle prefetch scheduler, mipmap config |
+| `pixiMediaLayer.ts` | PIXI v8 media layer for image pixels, video posters/placeholders, and generated-image progress-outline synchronization: sprite registry, texture cache, LoD-tier loader, RBush-based visibility scanner, idle prefetch scheduler, mipmap config |
 | `pixiMediaLayerLogic.ts` | Pure helpers used by the PIXI layer: tier ranking (`tierRank`), world-position math, source URL building, LoD `?size=` injection, world-rect computation |
 | `../../utils/animations/gradients/pixiTravelingOutlineRenderer.ts` | Reusable PIXI traveling outline renderer: rounded-perimeter sampling, track/segment paint, easing, active-only rAF lifecycle |
 | `pixiImageDecoder.ts` | Six-worker decode pool. Round-robin dispatch with per-worker request tracking so a single worker crash does not nuke all in-flight requests |
@@ -434,7 +450,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `rendering/pixiContextRegionLayer.ts` | PIXI v8 context-region layer: shared CO2-shaped seafoam textures, cloud sprites, PIXI title text, optional baked border, culling, bounded pulse animation |
 | `rendering/pixiEdgeRenderer.ts` | Diffed PIXI edge renderer: reuses `Graphics` objects across renders; only repaints when an edge's path/colour/arrow fingerprint changes |
 | `rendering/viewportBridge.ts` | Single call site that applies a viewport change to the DOM CSS transform, PIXI media world, and PIXI context-region world |
-| `rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio). Image nodes are handled directly by `pixiMediaLayer`; the registry exists so video/audio handlers can plug in without touching the core |
+| `rendering/mediaNodeRegistry.ts` | Dispatches non-image media nodes to specialized handlers. Image nodes are handled directly by `pixiMediaLayer`; video nodes route to `videoNodeHandler.ts` |
+| `rendering/videoNodeHandler.ts` | Video renderer that owns PIXI poster/placeholder sprites and the authenticated `HTMLVideoElement` moved into DOM video chrome |
 | `workspace-canvas.scss` | All styles for canvas, DOM interaction nodes, handles, edges, editors, and the transparent context-region proxy |
 | `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
@@ -450,6 +467,8 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-pane` | Pan/zoom target |
 | `.workspace-viewport` | Transformed container for nodes |
 | `.workspace-image-chrome-viewport` | Transformed overlay layer for generated-image provider badges, info buttons, and expanded info blocks above PIXI image sprites |
+| `.workspace-video-chrome` | Transformed video overlay surface that hosts the visible `<video>` and shared SVG control bar above the PIXI poster |
+| `.workspace-video-controls-host` | DOM mount point for `components/videoControls` inside each video chrome surface |
 | `.workspace-pixi-context-region-layer` | PIXI canvas host for context-region CO2-shaped cloud textures below the DOM viewport |
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |

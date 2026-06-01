@@ -20,6 +20,15 @@ export {
     getAiGeneratedImageCallbacks
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
+// Export aiGeneratedVideo node for schema and NodeView registration
+export {
+    aiGeneratedVideoNodeType,
+    aiGeneratedVideoNodeSpec,
+    aiGeneratedVideoNodeView,
+    setAiGeneratedVideoCallbacks,
+    getAiGeneratedVideoCallbacks
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
+
 // Export aiCollapsibleBlock node for schema and NodeView registration
 export {
     aiCollapsibleBlockNodeType,

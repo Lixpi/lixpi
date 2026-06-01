@@ -5,7 +5,8 @@ import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
     ImageGenerationTrace,
-    ImageGenerationSize
+    ImageGenerationSize,
+    VideoGenerationTrace
 } from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
@@ -21,6 +22,15 @@ import { organizationStore } from '$src/stores/organizationStore.ts'
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
     aiImageModel?: string
     imageSize?: ImageGenerationSize
+    aiVideoModel?: string
+    videoAspectRatio?: string
+    videoResolution?: string
+    videoDuration?: string
+    // Workspace Object Store URI of an existing generated video that VEO should
+    // extend (continuation generation). Built by WorkspaceCanvas from the
+    // source VideoCanvasNode's fileId + workspaceId when the thread is rooted
+    // in an "Extend in new thread" action.
+    videoSourceForExtension?: string
 }
 
 export default class AiInteractionService {
@@ -188,6 +198,80 @@ export default class AiInteractionService {
                 return
             }
 
+            // Video generation events (VEO). PENDING creates the canvas placeholder
+            // and starts the PIXI traveling outline; GENERATING is a keepalive ping
+            // emitted during the multi-minute poll loop; COMPLETE finalizes the
+            // canvas node and removes the outline; ERROR cleans up.
+            if (content.status === STREAM_STATUS.VIDEO_GENERATION_TRACE) {
+                const videoGenerationTrace = content.videoGenerationTrace as VideoGenerationTrace
+                console.log('[AI_INTERACTION] VIDEO_GENERATION_TRACE received:', {
+                    videoModelId: videoGenerationTrace?.videoModelId,
+                    referenceCount: videoGenerationTrace?.referenceImages.length ?? 0,
+                    excludedReferenceCount: videoGenerationTrace?.excludedReferences.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'video_generation_trace',
+                    videoGenerationTrace,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.VIDEO_PENDING) {
+                console.log('[AI_INTERACTION] VIDEO_PENDING received')
+                this.segmentsReceiver.receiveSegment({
+                    type: 'video_pending',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.VIDEO_GENERATING) {
+                this.segmentsReceiver.receiveSegment({
+                    type: 'video_generating',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.VIDEO_COMPLETE) {
+                console.log('[AI_INTERACTION] VIDEO_COMPLETE received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'video_complete',
+                    videoUrl: content.videoUrl,
+                    fileId: content.fileId,
+                    workspaceId: this.workspaceId,
+                    posterUrl: content.posterUrl,
+                    posterFileId: content.posterFileId,
+                    frameUrl: content.frameUrl,
+                    frameFileId: content.frameFileId,
+                    durationSeconds: content.durationSeconds,
+                    aspectRatio: content.aspectRatio,
+                    hasAudio: content.hasAudio,
+                    responseId: content.responseId,
+                    revisedPrompt: content.revisedPrompt,
+                    videoModel: content.videoModelId,
+                    videoModelProvider: content.videoModelProvider || content.aiProvider || '',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.VIDEO_ERROR) {
+                console.log('[AI_INTERACTION] VIDEO_ERROR received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'video_error',
+                    error: content.error || 'Video generation failed',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
             if (content.status === STREAM_STATUS.ERROR) {
                 this.segmentsReceiver.receiveSegment({
                     status: 'ERROR',
@@ -240,6 +324,11 @@ export default class AiInteractionService {
         aiModel,
         aiImageModel,
         imageSize,
+        aiVideoModel,
+        videoAspectRatio,
+        videoResolution,
+        videoDuration,
+        videoSourceForExtension,
         referencedFeatureIds,
         imageBranchCandidateSnapshot,
     }: SendChatMessageOptions) {
@@ -269,12 +358,24 @@ export default class AiInteractionService {
             payload.imageSize = imageSize || 'auto'
         }
 
+        // Add video model routing options if a video model is selected. The
+        // text model decides between generate_image vs generate_video at runtime
+        // when both are present — see ImageBranchResolver + LangGraph routing.
+        if (aiVideoModel) {
+            payload.aiVideoModel = aiVideoModel
+            if (videoAspectRatio) payload.videoAspectRatio = videoAspectRatio
+            if (videoResolution) payload.videoResolution = videoResolution
+            if (videoDuration) payload.videoDuration = videoDuration
+            if (videoSourceForExtension) payload.videoSourceForExtension = videoSourceForExtension
+        }
+
         console.log(`[AI_INTERACTION] Publishing message to ${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE}`, {
             workspaceId: this.workspaceId,
             aiChatThreadId: this.aiChatThreadId,
             aiModel,
             messageCount: messages.length,
             hasImageModel: !!aiImageModel,
+            hasVideoModel: !!aiVideoModel,
             referencedFeatureCount: referencedFeatureIds?.length ?? 0,
             imageBranchCandidateCount: imageBranchCandidateSnapshot?.candidates.length ?? 0,
         })

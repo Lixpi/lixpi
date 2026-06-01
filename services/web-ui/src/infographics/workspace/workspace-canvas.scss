@@ -378,6 +378,46 @@
     pointer-events: none;
 }
 
+.workspace-video-chrome {
+    position: absolute;
+    pointer-events: auto;
+}
+
+.workspace-video-surface {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: var(--workspace-image-border-radius);
+    background: #1c1c1c;
+    pointer-events: none;
+
+    video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: contain;
+    }
+}
+
+.workspace-video-controls-host {
+    opacity: 0;
+    pointer-events: auto;
+    border-radius: 18px;
+    filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: opacity 0.15s ease;
+
+    &.is-visible {
+        opacity: 1;
+    }
+}
+
+.workspace-video-controls-svg {
+    display: block;
+    overflow: visible;
+}
+
 .workspace-generated-image-actions {
     display: flex;
     align-items: center;
@@ -438,6 +478,18 @@
         background: $steelBlue;
         border-color: $steelBlue;
     }
+
+    // Unobtrusive pulse while a freshly uploaded media object is being analyzed
+    // to generate its descriptor. The title/aria-label explains it on hover.
+    &.is-analyzing {
+        color: $steelBlue;
+        animation: workspace-media-analyzing-pulse 1.4s ease-in-out infinite;
+    }
+}
+
+@keyframes workspace-media-analyzing-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
 }
 
 .canvas-generated-image-info-panel {
@@ -522,6 +574,54 @@
             max-height: none;
             overflow: visible;
         }
+    }
+
+    // Compact media descriptor (summary + tags), shown for every media object —
+    // generated and uploaded alike. For uploads with no generation context this
+    // is the only section in the panel.
+    .canvas-media-descriptor {
+        margin: 0.65rem 0 0;
+
+        &.is-analyzing .canvas-media-descriptor-summary {
+            color: rgba(0, 0, 0, 0.46);
+            font-style: italic;
+        }
+    }
+
+    .canvas-media-descriptor-label {
+        display: block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgba(0, 0, 0, 0.5);
+        margin: 0 0 0.3rem;
+    }
+
+    .canvas-media-descriptor-summary {
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 0.78rem;
+        line-height: 1.45;
+    }
+
+    .canvas-media-descriptor-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        margin: 0.4rem 0 0;
+    }
+
+    .canvas-media-descriptor-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.1rem 0.45rem;
+        font-size: 0.68rem;
+        line-height: 1.4;
+        color: #4d5963;
+        background: rgba(34, 40, 49, 0.06);
+        border-radius: 10px;
     }
 }
 
@@ -1142,6 +1242,40 @@
     background: transparent;
 }
 
+// Video nodes mirror image nodes for selection/resize chrome. Completed playback
+// is composited by a DOM <video> in .workspace-video-chrome; the node shell still
+// provides fallback drag/resize hit areas.
+.workspace-video-node {
+    background: transparent;
+    border-radius: var(--workspace-image-border-radius);
+    box-shadow: var(--workspace-image-default-box-shadow);
+    overflow: visible;
+    padding: 0;
+
+    &.is-resizing {
+        user-select: none;
+    }
+
+    &.is-dragging {
+        cursor: move;
+    }
+
+    &.is-selected {
+        box-shadow: var(--workspace-image-selected-box-shadow);
+    }
+}
+
+.video-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    cursor: move;
+    z-index: 15;
+    background: transparent;
+}
+
 .image-error {
     display: flex;
     align-items: center;
@@ -1431,9 +1565,11 @@
 // Show handles on hover for all node types
 .workspace-document-node:hover .workspace-handle,
 .workspace-image-node:hover .workspace-handle,
+.workspace-video-node:hover .workspace-handle,
 .workspace-ai-chat-thread-node:hover .workspace-handle,
 .workspace-document-node.is-selected .workspace-handle,
 .workspace-image-node.is-selected .workspace-handle,
+.workspace-video-node.is-selected .workspace-handle,
 .workspace-ai-chat-thread-node.is-selected .workspace-handle {
     opacity: 1;
     pointer-events: auto;

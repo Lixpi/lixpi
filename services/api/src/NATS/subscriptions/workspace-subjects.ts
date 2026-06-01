@@ -11,6 +11,7 @@ import AiChatThread from '../../models/ai-chat-thread.ts'
 import ExtractionRun from '../../models/extraction-run.ts'
 import {
     deleteLibraryImageObject,
+    deleteLibraryVideoObject,
     deleteMediaLibraryWorkspaceBucket,
 } from '../../services/media-library-storage.ts'
 import { ensureFeatureSamplesForScope } from '../../services/feature-sample-storage.ts'
@@ -214,14 +215,21 @@ export const workspaceSubjects = [
             } catch (e: any) { warn(`Could not clean up features for workspace ${workspaceId}:`, e.message) }
 
             try {
+                // listWorkspaceItemsForCleanup returns a kind-mixed union; branch
+                // on item.kind to pick the right meta+asset cleanup helpers.
                 const mediaItems = await MediaLibraryItem.listWorkspaceItemsForCleanup(workspaceId)
                 for (const item of mediaItems) {
-                    await MediaLibraryItem.deleteImageItem({ item })
-                    await deleteLibraryImageObject(item).catch(() => {})
+                    if (item.kind === 'image') {
+                        await MediaLibraryItem.deleteImageItem({ item })
+                        await deleteLibraryImageObject(item).catch(() => {})
+                    } else {
+                        await MediaLibraryItem.deleteVideoItem({ item })
+                        await deleteLibraryVideoObject(item).catch(() => {})
+                    }
                 }
                 await deleteMediaLibraryWorkspaceBucket(workspaceId).catch(() => {})
-                info(`Deleted ${mediaItems.length} workspace Media Library images for ${workspaceId}`)
-            } catch (e: any) { warn(`Could not clean up Media Library images for workspace ${workspaceId}:`, e.message) }
+                info(`Deleted ${mediaItems.length} workspace Media Library items for ${workspaceId}`)
+            } catch (e: any) { warn(`Could not clean up Media Library items for workspace ${workspaceId}:`, e.message) }
 
             try {
                 const deletedThreads = await AiChatThread.deleteWorkspaceAiChatThreads({ workspaceId })

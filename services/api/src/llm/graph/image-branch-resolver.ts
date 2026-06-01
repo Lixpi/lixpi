@@ -66,7 +66,7 @@ const VALID_OPERATION_KINDS = new Set<ImageGenerationOperationKind>([
 
 const RESOLUTION_SCHEMA: VlmJsonSchema = {
     name: 'resolve_image_branch',
-    description: 'Resolve visual target/reference roles for an image generation request from labeled candidate images.',
+    description: 'Resolve visual target/reference roles for an image or video generation request from labeled candidate images.',
     schema: {
         type: 'object',
         properties: {
@@ -98,7 +98,7 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
             referenceImageNodeIds: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Exact candidate nodeIds that should be sent to the image model as visual references.',
+                description: 'Exact candidate nodeIds that should be sent to the image or video model as visual references.',
             },
             sourceContextNodeIds: {
                 type: 'array',
@@ -181,15 +181,16 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
 }
 
 const SYSTEM_PROMPT = [
-    'You are Lixpi\'s image branch resolver. Your job is to inspect the user prompt plus labeled candidate images and assign visual roles before image generation.',
+    'You are Lixpi\'s image branch resolver. Your job is to inspect the user prompt plus labeled candidate images and assign visual roles before image or video generation. Image generation and video generation are both fully supported capabilities; which one runs is decided elsewhere and is never your concern — you only ground visual references.',
+    'Resolve visual references only — never judge feasibility. Do not refuse, lower confidence, or return mode="ambiguous" because the request is for a video, because it asks for motion, animation, camera movement, or audio, or because of any perceived capability limit. Motion and clip requests are ordinary video generation and must be grounded exactly like image requests. For video, the target identity you pick becomes the first frame (image-to-video) and your selected style references become the video reference images.',
     'Always ground decisions in the actual candidate pixels. Do not route from regexes, recency, prompt text alone, or guessed entity tags.',
     'If the candidate metadata includes roleHints containing "active-target" or the prompt context names an Active target nodeId, treat that as a weak UI selection hint only. It is not visual truth and must never override the user prompt or candidate pixels.',
     'Purely deictic prompts like "this", "that", "it", or "make it" usually refer to the active-target candidate. Deictic prompts with an explicit visible subject like "that man", "that guy", "that person", "that goat", "that portrait", or "that landscape" must target a candidate whose pixels match that named subject. If the active target visibly conflicts with the named subject, exclude it and choose the matching candidate; if no candidate matches, return mode="ambiguous" with low confidence.',
     'For style/medium changes to an active-target candidate, return mode="edit-active-branch", operationKind="edit_existing", targetImageNodeId set to the active target nodeId, and include the active target as a reference only when the prompt is purely deictic or the active target visibly matches the named subject. Do not use the active target for a different visible subject or a fresh unrelated image.',
     'If the prompt identifies an existing generated candidate or branch as the subject/identity, continue that generated branch even when the requested palette, medium, or style changes substantially. If you include a generated candidate as the target/identity reference, set targetImageNodeId to that generated candidate, set parentImageNodeId to that candidate, preserve its branchId when available, and do not return targetless mode="fresh-branch".',
     'Separate target identity from style/source evidence. A phrase like "draw a goat in the style of that landscape painting" means the goat is the requested subject and the landscape can be style evidence; unrelated generated portraits must be excluded.',
-    'referenceImageNodeIds is authoritative: include only candidate nodeIds that should be sent to the image model. Exclude distractors aggressively because unrelated generated variants contaminate identity.',
-    'If the prompt is genuinely impossible to resolve from the candidate images, return mode="ambiguous" with low confidence and explain why.',
+    'referenceImageNodeIds is authoritative: include only candidate nodeIds that should be sent to the image or video model. Exclude distractors aggressively because unrelated generated variants contaminate identity.',
+    'Reserve mode="ambiguous" strictly for when the visual referent genuinely cannot be determined from the candidate pixels — never to flag an unsupported output type or a request you believe cannot be fulfilled. If the prompt is genuinely impossible to resolve from the candidate images, return mode="ambiguous" with low confidence and explain why.',
 ].join('\n')
 
 const getResolverModel = (state: ProviderState): { provider: ProviderName; modelVersion: string } => {
@@ -527,10 +528,15 @@ const buildResolvedBranchMessage = (
 }
 
 export const resolveImageBranch = async (state: ProviderState, deps: ResolveImageBranchDeps): Promise<Partial<ProviderState>> => {
-    if (!state.imageModelVersion) return {}
+    // The resolver runs for both image AND video generation: VEO image-to-video
+    // and reference-conditioned video both need the same VLM grounding that
+    // image generation uses.
+    if (!state.imageModelVersion && !state.videoModelVersion) return {}
     const snapshot = state.imageBranchCandidateSnapshot
     if (!snapshot) {
-        const message = 'Image branch candidate snapshot is required for image generation.'
+        const message = state.videoModelVersion
+            ? 'Image branch candidate snapshot is required for video generation.'
+            : 'Image branch candidate snapshot is required for image generation.'
         deps.publisher.imageBranchResolutionError(message)
         throw new Error(message)
     }
@@ -586,9 +592,33 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             rationale: resolution.rationale,
         }, null, 0)}`)
 
+        // For video generation, map the VLM-selected references onto VEO inputs.
+        // VEO's `image` (first frame, image-to-video) and `referenceImages`
+        // (up to 3 style/content guides) are MUTUALLY EXCLUSIVE in the API,
+        // so we pick one path based on whether the resolver identified a target:
+        //   - target set (edit / style_transfer / continuation) -> first-frame mode
+        //   - no target, refs present                            -> referenceImages mode
+        //   - no refs at all                                     -> text-to-video (both undefined)
+        let videoFirstFrameImage: string | undefined
+        let videoReferenceImages: string[] | undefined
+        if (state.videoModelVersion && resolution.referenceImageNodeIds.length > 0) {
+            const urlByNodeId = new Map(resolvedCandidates.map(c => [c.nodeId, c.imageUrl]))
+            const orderedUrls = resolution.referenceImageNodeIds
+                .map(nodeId => urlByNodeId.get(nodeId))
+                .filter((url): url is string => typeof url === 'string' && url.length > 0)
+
+            if (resolution.targetImageNodeId) {
+                videoFirstFrameImage = urlByNodeId.get(resolution.targetImageNodeId) ?? orderedUrls[0]
+            } else if (orderedUrls.length > 0) {
+                videoReferenceImages = orderedUrls.slice(0, 3)
+            }
+        }
+
         return {
             imageBranchResolution: resolution,
             messages,
+            videoFirstFrameImage,
+            videoReferenceImages,
         }
     } catch (error: any) {
         const message = error?.message ?? String(error)

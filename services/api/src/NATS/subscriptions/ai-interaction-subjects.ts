@@ -27,6 +27,21 @@ const getLlmModule = (): LlmModule => {
     return _llmModule
 }
 
+const normalizeModelOption = (
+    requested: string | number | undefined,
+    options: Array<{ value?: string; label?: string }> | undefined,
+): string | undefined => {
+    const requestedValue = requested == null ? '' : String(requested)
+    if (!Array.isArray(options) || options.length === 0) return requestedValue || undefined
+
+    const values = options
+        .map(option => option.value)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    if (values.length === 0) return requestedValue || undefined
+    if (requestedValue && values.includes(requestedValue)) return requestedValue
+    return values[0]
+}
+
 export const aiInteractionSubjects = [
     {
         subject: AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE,
@@ -43,11 +58,16 @@ export const aiInteractionSubjects = [
                 messages,
                 aiModel,
                 aiImageModel,
+                aiVideoModel,
                 workspaceId,
                 aiChatThreadId,
                 organizationId,
                 enableImageGeneration,
                 imageSize,
+                videoAspectRatio,
+                videoResolution,
+                videoDuration,
+                videoSourceForExtension,
                 referencedFeatureIds,
                 imageBranchCandidateSnapshot,
             } = data as {
@@ -58,6 +78,11 @@ export const aiInteractionSubjects = [
                 enableImageGeneration?: boolean
                 imageSize?: string
                 aiImageModel?: string
+                aiVideoModel?: string
+                videoAspectRatio?: string
+                videoResolution?: string
+                videoDuration?: number | string
+                videoSourceForExtension?: string
             } & AiInteractionChatSendMessagePayload
 
             const [provider, model] = (aiModel as string).split(':')
@@ -93,6 +118,25 @@ export const aiInteractionSubjects = [
                     }
                 }
 
+                let videoModelMetaInfo: any = null
+                if (aiVideoModel) {
+                    const [videoProvider, videoModel] = (aiVideoModel as string).split(':')
+                    videoModelMetaInfo = await AiModel.getAiModel({
+                        provider: videoProvider!,
+                        model: videoModel!,
+                        omitPricing: false,
+                    })
+                    if (videoModelMetaInfo) {
+                        info(`Video model resolved: ${videoProvider}:${videoModel}`)
+                    } else {
+                        warn(`Video model not found: ${aiVideoModel}, proceeding without video routing`)
+                    }
+                }
+
+                const normalizedVideoAspectRatio = normalizeModelOption(videoAspectRatio, videoModelMetaInfo?.videoAspectRatios)
+                const normalizedVideoResolution = normalizeModelOption(videoResolution, videoModelMetaInfo?.videoResolutions)
+                const normalizedVideoDuration = normalizeModelOption(videoDuration, videoModelMetaInfo?.videoDurations)
+
                 const instanceKey = `${workspaceId}:${aiChatThreadId}`
 
                 infoStr([
@@ -113,10 +157,15 @@ export const aiInteractionSubjects = [
                         messages,
                         aiModelMetaInfo,
                         imageModelMetaInfo,
+                        videoModelMetaInfo,
                         workspaceId,
                         aiChatThreadId,
                         enableImageGeneration,
                         imageSize,
+                        videoAspectRatio: normalizedVideoAspectRatio,
+                        videoResolution: normalizedVideoResolution,
+                        videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+                        videoSourceForExtension,
                         referencedFeatureIds,
                         imageBranchCandidateSnapshot,
                         eventMeta: {

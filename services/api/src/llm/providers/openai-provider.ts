@@ -21,6 +21,10 @@ import {
     extractReferenceImages,
     getToolForProvider,
 } from '../tools/image-generation.ts'
+import {
+    extractVideoToolCall,
+    getVideoToolForProvider,
+} from '../tools/video-generation.ts'
 
 type ImageRefFile = { file: File | Awaited<ReturnType<typeof toFile>>; name: string }
 
@@ -46,6 +50,9 @@ export class OpenAIProvider extends BaseProvider {
         const imageSize = state.imageSize ?? 'auto'
         const hasImageModel = !!state.imageModelVersion
         const injectTool = hasImageModel && !enableImageGeneration
+        const enableVideoGeneration = state.enableVideoGeneration ?? false
+        const hasVideoModel = !!state.videoModelVersion
+        const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
         const maxTokens = state.maxCompletionSize
 
         const inputMessages: Array<{ role: string; content: any }> = []
@@ -58,7 +65,7 @@ export class OpenAIProvider extends BaseProvider {
 
         let instructions: string | undefined
         if (supportsSystemPrompt) {
-            instructions = getSystemPrompt(hasImageModel)
+            instructions = getSystemPrompt(hasImageModel, hasVideoModel)
             if (hasImageModel) {
                 instructions = applyImagePromptLimitToSystemPrompt(
                     instructions,
@@ -72,11 +79,15 @@ export class OpenAIProvider extends BaseProvider {
         if (injectTool) {
             tools.push(getToolForProvider('OpenAI', state.imageModelMetaInfo, state.imageProviderName))
         }
+        if (injectVideoTool) {
+            tools.push(getVideoToolForProvider('OpenAI'))
+        }
 
         try {
-            // Skip START_STREAM when called as image model (via ImageRouter) —
-            // the parent text stream already manages the lifecycle.
-            if (!enableImageGeneration) this.publisher.start()
+            // Skip START_STREAM when called as image model (via ImageRouter) or
+            // when called as video model (via VideoRouter) — the parent text
+            // stream already manages the lifecycle.
+            if (!enableImageGeneration && !enableVideoGeneration) this.publisher.start()
 
             // gpt-image-* models must use the dedicated Image API path.
             if (enableImageGeneration && modelVersion.startsWith('gpt-image-')) {
@@ -88,7 +99,7 @@ export class OpenAIProvider extends BaseProvider {
                     workspaceId,
                     aiChatThreadId,
                 })
-                if (!enableImageGeneration) this.publisher.end()
+                if (!enableImageGeneration && !enableVideoGeneration) this.publisher.end()
                 return imageUpdate
             }
 
@@ -101,12 +112,14 @@ export class OpenAIProvider extends BaseProvider {
                 maxTokens,
                 tools: tools.length > 0 ? tools : undefined,
                 hasImageModel,
+                hasVideoModel,
                 enableImageGeneration,
+                enableVideoGeneration,
                 workspaceId,
                 aiChatThreadId,
             })
 
-            if (!enableImageGeneration) this.publisher.end()
+            if (!enableImageGeneration && !enableVideoGeneration) this.publisher.end()
             return update
         } catch (e: any) {
             err(`OpenAI streaming failed: ${e?.message ?? e}`)
@@ -138,7 +151,9 @@ export class OpenAIProvider extends BaseProvider {
         maxTokens: number | undefined
         tools: Array<Record<string, any>> | undefined
         hasImageModel: boolean
+        hasVideoModel: boolean
         enableImageGeneration: boolean
+        enableVideoGeneration: boolean
         workspaceId: string
         aiChatThreadId: string
     }): Promise<Partial<ProviderState>> {
@@ -209,21 +224,34 @@ export class OpenAIProvider extends BaseProvider {
                     update.responseId = response.id
                     update.aiVendorRequestId = response.id
 
-                    if (args.hasImageModel) {
-                        const toolCall = extractToolCall('OpenAI', response)
-                        if (toolCall) {
+                    if (args.hasImageModel || args.hasVideoModel) {
+                        const videoCall = args.hasVideoModel ? extractVideoToolCall('OpenAI', response) : undefined
+                        const imageCall = args.hasImageModel && !videoCall ? extractToolCall('OpenAI', response) : undefined
+                        if (videoCall) {
+                            update.generatedVideoPrompt = videoCall.prompt
+                            info(`[OpenAI:${this.instanceKey}] generate_video tool call ${JSON.stringify({
+                                chatModel: args.modelVersion,
+                                targetVideoProvider: args.state.videoProviderName,
+                                targetVideoModel: args.state.videoModelVersion,
+                                promptLen: videoCall.prompt.length,
+                            }, null, 0)}`)
+                        } else if (imageCall) {
                             const refs = extractReferenceImages(args.state.messages)
-                            update.generatedImagePrompt = toolCall.prompt
+                            update.generatedImagePrompt = imageCall.prompt
                             update.referenceImages = refs
                             info(`[OpenAI:${this.instanceKey}] generate_image tool call ${JSON.stringify({
                                 chatModel: args.modelVersion,
                                 targetImageProvider: args.state.imageProviderName,
                                 targetImageModel: args.state.imageModelVersion,
-                                promptLen: toolCall.prompt.length,
+                                promptLen: imageCall.prompt.length,
                                 referenceImagesExtracted: refs.length,
                             }, null, 0)}`)
-                        } else {
+                        } else if (args.hasImageModel && args.hasVideoModel) {
+                            warn(`[OpenAI:${this.instanceKey}] did not emit generate_image or generate_video (model=${args.modelVersion})`)
+                        } else if (args.hasImageModel) {
                             warn(`[OpenAI:${this.instanceKey}] did not emit generate_image (model=${args.modelVersion}); image gen will not run`)
+                        } else {
+                            warn(`[OpenAI:${this.instanceKey}] did not emit generate_video (model=${args.modelVersion}); video gen will not run`)
                         }
                     }
 

@@ -8,6 +8,7 @@ import {
     type ProviderName,
     type StageTraceEvent,
     type StreamStatus,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
 
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
@@ -28,6 +29,7 @@ export type ChunkPayload = {
         imageModelId?: string
         resolution?: ImageBranchVlmResolution
         imageGenerationTrace?: ImageGenerationTrace
+        videoGenerationTrace?: VideoGenerationTrace
         error?: string
         extractionStatus?: string
         extractionDetail?: string
@@ -37,17 +39,32 @@ export type ChunkPayload = {
     aiChatThreadId: string
 }
 
-// Detects <image_prompt>...</image_prompt> XML tags in a token stream and emits
-// COLLAPSIBLE_START/COLLAPSIBLE_END events around the tag content while passing
-// the inner text through as STREAMING. Handles partial tags split across chunk
-// boundaries by holding back up to BUFFER_SIZE characters.
+// A collapsible-wrapped prompt tag pair. The text model wraps the enhanced
+// image/video prompt it is about to send in these XML tags so the UI can render
+// it inside a collapsible instead of as raw inline text.
+type CollapsiblePromptTag = {
+    open: string
+    close: string
+    title: string
+}
+
+const COLLAPSIBLE_PROMPT_TAGS: readonly CollapsiblePromptTag[] = [
+    { open: '<image_prompt>', close: '</image_prompt>', title: 'Image generation prompt' },
+    { open: '<video_prompt>', close: '</video_prompt>', title: 'Video generation prompt' },
+]
+
+// Detects <image_prompt>…</image_prompt> and <video_prompt>…</video_prompt> XML tags
+// in a token stream and emits COLLAPSIBLE_START/COLLAPSIBLE_END events around the tag
+// content while passing the inner text through as STREAMING. Handles partial tags
+// split across chunk boundaries by holding back up to BUFFER_SIZE characters.
 export class TagAwareStream {
-    private static readonly OPEN_TAG = '<image_prompt>'
-    private static readonly CLOSE_TAG = '</image_prompt>'
-    private static readonly BUFFER_SIZE = TagAwareStream.CLOSE_TAG.length
+    // Hold back enough characters that no open or close tag can be split across a flush.
+    private static readonly BUFFER_SIZE = Math.max(
+        ...COLLAPSIBLE_PROMPT_TAGS.flatMap(tag => [tag.open.length, tag.close.length]),
+    )
 
     private buffer = ''
-    private inside = false
+    private active: CollapsiblePromptTag | null = null
 
     constructor(
         private readonly nats: NatsService,
@@ -65,7 +82,17 @@ export class TagAwareStream {
 
     reset(): void {
         this.buffer = ''
-        this.inside = false
+        this.active = null
+    }
+
+    // Finds the earliest-starting open tag in the buffer across all known specs.
+    private findEarliestOpenTag(): { index: number; tag: CollapsiblePromptTag } | null {
+        let best: { index: number; tag: CollapsiblePromptTag } | null = null
+        for (const tag of COLLAPSIBLE_PROMPT_TAGS) {
+            const index = this.buffer.indexOf(tag.open)
+            if (index !== -1 && (best === null || index < best.index)) best = { index, tag }
+        }
+        return best
     }
 
     // May hold back up to BUFFER_SIZE characters waiting to confirm whether
@@ -75,9 +102,9 @@ export class TagAwareStream {
         this.buffer += text
 
         while (this.buffer.length > 0) {
-            if (!this.inside) {
-                const idx = this.buffer.indexOf(TagAwareStream.OPEN_TAG)
-                if (idx === -1) {
+            if (!this.active) {
+                const match = this.findEarliestOpenTag()
+                if (!match) {
                     // No tag found — flush the safe portion (everything except a
                     // possible partial tag at the tail) and keep the rest buffered.
                     const safeLen = this.buffer.length - TagAwareStream.BUFFER_SIZE
@@ -93,23 +120,23 @@ export class TagAwareStream {
                     break
                 }
 
-                if (idx > 0) {
-                    const before = this.buffer.slice(0, idx)
+                if (match.index > 0) {
+                    const before = this.buffer.slice(0, match.index)
                     this.publish({
                         text: before,
                         status: STREAM_STATUS.STREAMING,
                         aiProvider: this.provider,
                     })
                 }
-                this.buffer = this.buffer.slice(idx + TagAwareStream.OPEN_TAG.length)
-                this.inside = true
+                this.buffer = this.buffer.slice(match.index + match.tag.open.length)
+                this.active = match.tag
                 this.publish({
                     status: STREAM_STATUS.COLLAPSIBLE_START,
-                    collapsibleTitle: 'Image generation prompt',
+                    collapsibleTitle: match.tag.title,
                     aiProvider: this.provider,
                 })
             } else {
-                const idx = this.buffer.indexOf(TagAwareStream.CLOSE_TAG)
+                const idx = this.buffer.indexOf(this.active.close)
                 if (idx === -1) {
                     const safeLen = this.buffer.length - TagAwareStream.BUFFER_SIZE
                     if (safeLen > 0) {
@@ -132,8 +159,8 @@ export class TagAwareStream {
                         aiProvider: this.provider,
                     })
                 }
-                this.buffer = this.buffer.slice(idx + TagAwareStream.CLOSE_TAG.length)
-                this.inside = false
+                this.buffer = this.buffer.slice(idx + this.active.close.length)
+                this.active = null
                 this.publish({
                     status: STREAM_STATUS.COLLAPSIBLE_END,
                     aiProvider: this.provider,
@@ -152,12 +179,12 @@ export class TagAwareStream {
             })
             this.buffer = ''
         }
-        if (this.inside) {
+        if (this.active) {
             this.publish({
                 status: STREAM_STATUS.COLLAPSIBLE_END,
                 aiProvider: this.provider,
             })
-            this.inside = false
+            this.active = null
         }
     }
 }
@@ -263,6 +290,17 @@ export class StreamPublisher {
                 status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
                 aiProvider: this.provider,
                 imageGenerationTrace: trace,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    videoGenerationTrace(trace: VideoGenerationTrace): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
+                aiProvider: this.provider,
+                videoGenerationTrace: trace,
             },
             aiChatThreadId: this.aiChatThreadId,
         })

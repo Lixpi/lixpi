@@ -27,10 +27,13 @@ import { documentSubjects } from './NATS/subscriptions/document-subjects.ts'
 import { aiChatThreadSubjects } from './NATS/subscriptions/ai-chat-thread-subjects.ts'
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { imageSubjects } from './NATS/subscriptions/image-subjects.ts'
+import { videoSubjects } from './NATS/subscriptions/video-subjects.ts'
 import { featureSubjects } from './NATS/subscriptions/feature-subjects.ts'
+import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { mediaLibrarySubjects } from './NATS/subscriptions/media-library-subjects.ts'
 import { extractionSubjects, setExtractionLlmModule } from './NATS/subscriptions/extraction-subjects.ts'
 import imageRoutes from './routes/image-routes.ts'
+import videoRoutes from './routes/video-routes.ts'
 import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 import featureRoutes from './routes/feature-routes.ts'
 import mediaLibraryRoutes from './routes/media-library-routes.ts'
@@ -38,6 +41,7 @@ import mediaLibraryRoutes from './routes/media-library-routes.ts'
 import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
 import { createLlmModule } from './llm/index.ts'
 import { storeWorkspaceImage } from './services/image-storage.ts'
+import { storeWorkspaceVideo } from './services/video-storage.ts'
 
 const env = process.env
 
@@ -113,9 +117,11 @@ const subscriptions = [
     ...documentSubjects,
     ...aiChatThreadSubjects,
     ...imageSubjects,
+    ...videoSubjects,
     ...featureSubjects,
     ...mediaLibrarySubjects,
     ...extractionSubjects,
+    ...mediaDescriptorSubjects,
 ]
 
 // Initialize with your NATS server connection
@@ -153,6 +159,7 @@ await startNatsAuthCalloutService({
 const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
     storeWorkspaceImage,
+    storeWorkspaceVideo,
 })
 setLlmModule(llmModule)
 setExtractionLlmModule(llmModule)
@@ -176,6 +183,9 @@ app.use(cookieParser())
 
 // Image upload/download routes
 app.use('/api/images', imageRoutes)
+
+// Video download route (Range-capable for HTML5 <video> + PIXI VideoSource)
+app.use('/api/videos', videoRoutes)
 
 // Workspace export routes
 app.use('/api/workspaces', workspaceExportRoutes)

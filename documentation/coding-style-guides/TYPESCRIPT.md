@@ -30,6 +30,13 @@ interface UserProfile {
 }
 ```
 
+## Classes And State Ownership
+
+- Prefer classes when a module owns cohesive state, behavior, lifecycle cleanup, or a public imperative API.
+- Use plain functions for pure utilities, small adapters, simple callbacks, and glue code where a class would add ceremony without making ownership clearer.
+- Prefer composition over inheritance. Do not build inheritance chains deeper than 3 levels; inheritance deeper than 3 levels is a deal breaker and must be redesigned.
+- Keep config, event payloads, and other object shapes as `type` definitions, not `interface`.
+
 ## Comments
 
 - Always use `//` single-line comments. For multi-line explanations, use multiple `//` lines.

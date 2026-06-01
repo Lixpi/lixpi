@@ -10,20 +10,24 @@ import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type ProviderState } from '../graph/state.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
+import { VideoPublisher, type StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
 import {
     getImagePromptMaxChars,
     validateImagePrompt as toolValidateImagePrompt,
 } from '../tools/image-generation.ts'
 import { buildImageGenerationTrace } from '../tools/image-generation-trace.ts'
+import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
     storeWorkspaceImage: StoreWorkspaceImageFn
+    storeWorkspaceVideo: StoreWorkspaceVideoFn
     usageReporter: UsageReporter
     runImageRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
+    runVideoRouter: (state: ProviderState) => Promise<Partial<ProviderState>>
 }
 
 // Shared LangGraph workflow for chat-style LLM calls (with optional image-gen branch).
@@ -50,6 +54,7 @@ export abstract class BaseProvider {
     protected abortController: AbortController | undefined
     protected streamPublisher: StreamPublisher | undefined
     protected imagePublisher: ImagePublisher | undefined
+    protected videoPublisher: VideoPublisher | undefined
     public readonly instanceKey: string
 
     constructor(
@@ -72,6 +77,7 @@ export abstract class BaseProvider {
             .addNode('streamTokens', async (s: ProviderState) => this.streamTokens(s))
             .addNode('validateImagePrompt', async (s: ProviderState) => this.validateImagePromptNode(s))
             .addNode('executeImageGeneration', async (s: ProviderState) => this.executeImageGeneration(s))
+            .addNode('executeVideoGeneration', async (s: ProviderState) => this.executeVideoGeneration(s))
             .addNode('calculateUsage', async (s: ProviderState) => this.calculateUsage(s))
             .addNode('cleanup', async (s: ProviderState) => this.cleanup(s))
 
@@ -81,8 +87,12 @@ export abstract class BaseProvider {
         graph.addEdge('validateRequest' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
             'streamTokens' as any,
-            (s: ProviderState) => this.shouldGenerateImage(s),
-            { generate_image: 'validateImagePrompt' as any, skip: 'calculateUsage' as any },
+            (s: ProviderState) => this.routeAfterStream(s),
+            {
+                generate_image: 'validateImagePrompt' as any,
+                generate_video: 'executeVideoGeneration' as any,
+                skip: 'calculateUsage' as any,
+            },
         )
         graph.addConditionalEdges(
             'validateImagePrompt' as any,
@@ -90,6 +100,7 @@ export abstract class BaseProvider {
             { generate_image: 'executeImageGeneration' as any, skip: 'calculateUsage' as any },
         )
         graph.addEdge('executeImageGeneration' as any, 'calculateUsage' as any)
+        graph.addEdge('executeVideoGeneration' as any, 'calculateUsage' as any)
         graph.addEdge('calculateUsage' as any, 'cleanup' as any)
         graph.addEdge('cleanup' as any, END)
         return graph
@@ -106,6 +117,14 @@ export abstract class BaseProvider {
         )
         this.imagePublisher = new ImagePublisher(
             this.deps.natsService,
+            this.deps.storeWorkspaceImage,
+            requestData.workspaceId,
+            requestData.aiChatThreadId,
+            this.providerName,
+        )
+        this.videoPublisher = new VideoPublisher(
+            this.deps.natsService,
+            this.deps.storeWorkspaceVideo,
             this.deps.storeWorkspaceImage,
             requestData.workspaceId,
             requestData.aiChatThreadId,
@@ -133,6 +152,16 @@ export abstract class BaseProvider {
             imagePromptRetryCount: 0,
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
             referencedFeatureIds: requestData.referencedFeatureIds,
+            enableVideoGeneration: requestData.enableVideoGeneration ?? false,
+            videoModelMetaInfo: requestData.videoModelMetaInfo,
+            videoModelVersion: requestData.videoModelMetaInfo?.modelVersion,
+            videoProviderName: requestData.videoModelMetaInfo?.provider,
+            videoAspectRatio: requestData.videoAspectRatio,
+            videoResolution: requestData.videoResolution,
+            videoDurationSeconds: requestData.videoDurationSeconds,
+            videoFirstFrameImage: requestData.videoFirstFrameImage,
+            videoReferenceImages: requestData.videoReferenceImages,
+            videoSourceForExtension: requestData.videoSourceForExtension,
         }
 
         const timeoutHandle = setTimeout(() => {
@@ -140,7 +169,7 @@ export abstract class BaseProvider {
         }, LLM_TIMEOUT_MS)
 
         try {
-            if (!initialState.enableImageGeneration) {
+            if (!initialState.enableImageGeneration && !initialState.enableVideoGeneration) {
                 this.streamPublisher.start()
             }
 
@@ -214,6 +243,15 @@ export abstract class BaseProvider {
 
     protected shouldGenerateImage(state: ProviderState): 'generate_image' | 'skip' {
         return state.generatedImagePrompt ? 'generate_image' : 'skip'
+    }
+
+    // Post-stream routing: a generate_video tool call takes precedence, then
+    // generate_image, else skip straight to usage. The text model normally emits
+    // at most one media tool call per turn.
+    protected routeAfterStream(state: ProviderState): 'generate_image' | 'generate_video' | 'skip' {
+        if (state.generatedVideoPrompt) return 'generate_video'
+        if (state.generatedImagePrompt) return 'generate_image'
+        return 'skip'
     }
 
     protected async validateImagePromptNode(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -290,6 +328,29 @@ export abstract class BaseProvider {
         return imageResult
     }
 
+    // Routes a generate_video tool call to the VideoRouter (transient VEO
+    // provider). The VEO submit/poll happens synchronously inside the router,
+    // emitting VIDEO_PENDING/GENERATING/COMPLETE on the same per-thread subject.
+    // The VIDEO_GENERATION_TRACE event is published BEFORE the router runs so
+    // chat history can render the tool prompt + selected/excluded references
+    // even if the VEO operation later fails.
+    protected async executeVideoGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
+        const trace = buildVideoGenerationTrace(state)
+        if (trace) {
+            try {
+                this.streamPublisher?.videoGenerationTrace(trace)
+            } catch (error: any) {
+                warn(`[BaseProvider] Skipping VIDEO_GENERATION_TRACE publish: ${error?.message ?? String(error)}`)
+            }
+        }
+
+        const videoResult = await this.deps.runVideoRouter(state)
+        if (videoResult.error) {
+            this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
+        }
+        return videoResult
+    }
+
     protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {
         if (state.error) return {}
         if (state.usage) {
@@ -310,6 +371,18 @@ export abstract class BaseProvider {
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
                 imageSize: state.imageUsage.size,
                 imageQuality: state.imageUsage.quality,
+                aiRequestReceivedAt: state.aiRequestReceivedAt,
+                aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
+            })
+        }
+        if (state.videoUsage) {
+            this.deps.usageReporter.reportVideoUsage({
+                eventMeta: state.eventMeta,
+                aiModelMetaInfo: state.videoModelMetaInfo ?? state.aiModelMetaInfo,
+                aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
+                durationSeconds: state.videoUsage.durationSeconds,
+                resolution: state.videoUsage.resolution,
+                aspectRatio: state.videoUsage.aspectRatio,
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
@@ -335,6 +408,11 @@ export abstract class BaseProvider {
     protected get imagePub(): ImagePublisher {
         if (!this.imagePublisher) throw new Error('ImagePublisher not initialized')
         return this.imagePublisher
+    }
+
+    protected get videoPub(): VideoPublisher {
+        if (!this.videoPublisher) throw new Error('VideoPublisher not initialized')
+        return this.videoPublisher
     }
 
     protected get signal(): AbortSignal {
