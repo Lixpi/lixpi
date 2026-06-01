@@ -1183,3 +1183,47 @@ describe('WorkspaceConnectionManager — railOffset', () => {
 		expect(() => mgr.render()).not.toThrow()
 	})
 })
+
+// =============================================================================
+// MEDIA NODE EDGE ANCHORING — image + video anchor to the middle of the side
+// =============================================================================
+
+describe('WorkspaceConnectionManager — media node edge anchoring', () => {
+	function renderArrowEndY(targetType: CanvasNode['type'], targetHeight: number): number {
+		const onPixiEdgesReady = vi.fn()
+		const config = {
+			...createMockConfig(),
+			getTransform: () => [0, 0, 1.04] as [number, number, number],
+			onPixiEdgesReady,
+		}
+		const manager = new WorkspaceConnectionManager(config)
+		// Source sits far ABOVE the target, so a node that auto-aligns its anchor
+		// would pull the connector toward the top of the target's side.
+		const source = makeNode({ nodeId: 'src', type: 'image', position: { x: 0, y: 0 }, dimensions: { width: 200, height: 100 } })
+		const target = makeNode({ nodeId: 'tgt', type: targetType, position: { x: 800, y: 600 }, dimensions: { width: 320, height: targetHeight } })
+		const edge = makeEdge({ edgeId: 'e-anchor', sourceNodeId: 'src', targetNodeId: 'tgt' })
+
+		manager.syncNodes([source, target])
+		manager.syncEdges([edge])
+		manager.render()
+
+		const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ id: string; arrowEnd: { x: number; y: number } | null }> | undefined
+		const rendered = pixiEdges?.find((candidate) => candidate.id === 'e-anchor')
+		expect(rendered?.arrowEnd).toBeDefined()
+		return rendered!.arrowEnd!.y
+	}
+
+	it('anchors a video target at the middle of its side, identical to an image target', () => {
+		const imageY = renderArrowEndY('image', 200)
+		const videoY = renderArrowEndY('video', 200)
+		expect(videoY).toBeCloseTo(imageY, 1)
+	})
+
+	it('does NOT auto-align video toward the source (unlike a chat thread node)', () => {
+		// A tall chat-thread target auto-aligns: its anchor is pulled UP toward the
+		// far-above source. The video target must stay at its own vertical middle.
+		const videoY = renderArrowEndY('video', 800)
+		const chatY = renderArrowEndY('aiChatThread', 800)
+		expect(chatY).toBeLessThan(videoY)
+	})
+})

@@ -118,25 +118,31 @@ export const storeWorkspaceVideo = async (input: StoreVideoInput): Promise<Store
     }
 }
 
-// Extract frame 0 of an MP4 as a PNG poster using ffmpeg. Best-effort: returns
-// null if ffmpeg is unavailable or extraction fails, so video generation never
-// fails just because a poster could not be produced. The PIXI media layer falls
-// back to decoding the MP4 itself when no poster exists.
+// Extract a single PNG frame from an MP4 using ffmpeg. When `atSeconds` is set
+// the decoder fast-seeks there before grabbing the frame; otherwise it grabs
+// frame 0. Best-effort: returns null if ffmpeg is unavailable or extraction
+// fails (e.g. a seek past the end), so video generation never fails just
+// because a frame could not be produced.
 //
 // ffmpeg needs a seekable input for reliable frame extraction (VEO MP4s are not
 // guaranteed faststart), so the buffer is written to a temp file rather than
 // piped through stdin.
-export const extractPosterFrame = async (videoBuffer: Buffer): Promise<Buffer | null> => {
+const extractFrameFromVideo = async (videoBuffer: Buffer, atSeconds?: number): Promise<Buffer | null> => {
     let dir: string | undefined
     try {
-        dir = await mkdtemp(join(tmpdir(), 'veo-poster-'))
+        dir = await mkdtemp(join(tmpdir(), 'veo-frame-'))
         const inPath = join(dir, 'in.mp4')
-        const outPath = join(dir, 'poster.png')
+        const outPath = join(dir, 'frame.png')
         await writeFile(inPath, videoBuffer)
+
+        const seekArgs = typeof atSeconds === 'number' && atSeconds > 0
+            ? ['-ss', atSeconds.toFixed(3)]
+            : []
 
         await new Promise<void>((resolve, reject) => {
             const ff = spawn('ffmpeg', [
                 '-y',
+                ...seekArgs,
                 '-i', inPath,
                 '-frames:v', '1',
                 '-f', 'image2',
@@ -152,9 +158,21 @@ export const extractPosterFrame = async (videoBuffer: Buffer): Promise<Buffer | 
 
         return await readFile(outPath)
     } catch (e: any) {
-        warn(`extractPosterFrame failed (proceeding without poster): ${e?.message ?? e}`)
+        warn(`extractFrameFromVideo failed (proceeding without frame): ${e?.message ?? e}`)
         return null
     } finally {
         if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {})
     }
 }
+
+// Frame 0 of an MP4, used as the PIXI low-LoD poster. The media layer falls back
+// to decoding the MP4 itself when no poster exists.
+export const extractPosterFrame = async (videoBuffer: Buffer): Promise<Buffer | null> =>
+    extractFrameFromVideo(videoBuffer)
+
+// A frame near the temporal middle of the clip — the still the branch resolver
+// grounds the video against (so the full MP4 never reaches the VLM) and that VEO
+// uses as the image-to-video anchor when continuing the lineage. Falls back to
+// frame-0 semantics when no usable seek point is known.
+export const extractRepresentativeFrame = async (videoBuffer: Buffer, atSeconds?: number): Promise<Buffer | null> =>
+    extractFrameFromVideo(videoBuffer, atSeconds)

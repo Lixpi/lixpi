@@ -113,6 +113,61 @@ const refinedPersonGeneratedNode = {
     },
 } satisfies CanvasNode
 
+const videoGeneratedNode = {
+    nodeId: 'video-generated',
+    type: 'video',
+    fileId: 'video-mp4-file',
+    posterFileId: 'video-poster-file',
+    frameFileId: 'video-frame-file',
+    workspaceId: 'workspace-1',
+    src: '/api/videos/workspace-1/video-mp4-file',
+    posterSrc: '/api/images/workspace-1/video-poster-file',
+    aspectRatio: 1.7777,
+    durationSeconds: 6,
+    hasAudio: true,
+    position: { x: 600, y: 0 },
+    dimensions: { width: 160, height: 90 },
+    generatedBy: {
+        aiChatThreadId: 'thread-1',
+        responseId: 'response-video',
+        videoModel: 'Google:veo-3.0-generate-001' as any,
+        revisedPrompt: 'a calm seaside village at dawn',
+        branchId: 'branch-video',
+        promptText: 'a calm seaside village at dawn',
+        visualEntitySummary: 'seaside village with boats at dawn',
+        entityTags: ['village', 'boats'],
+        styleTags: ['warm', 'cinematic'],
+        createdAt: 4,
+    },
+} satisfies CanvasNode
+
+// Uploaded video: no generation metadata, only a VLM-produced descriptor and a
+// frame-0 poster (no representative mid-frame extracted yet).
+const uploadedVideoNode = {
+    nodeId: 'video-uploaded',
+    type: 'video',
+    fileId: 'uploaded-mp4-file',
+    posterFileId: 'uploaded-poster-file',
+    workspaceId: 'workspace-1',
+    src: '/api/videos/workspace-1/uploaded-mp4-file',
+    posterSrc: '/api/images/workspace-1/uploaded-poster-file',
+    aspectRatio: 1,
+    durationSeconds: 8,
+    hasAudio: false,
+    parentId: 'region-1',
+    position: { x: 760, y: 0 },
+    dimensions: { width: 120, height: 120 },
+    descriptor: {
+        status: 'ready',
+        summary: 'a red sports car drifting on a wet city street at night',
+        entityTags: ['car', 'city'],
+        styleTags: ['neon', 'night'],
+        source: 'analysis',
+        version: 'media-descriptor-v1',
+        updatedAt: 10,
+    },
+} satisfies CanvasNode
+
 function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGeneratedNode]) {
     return buildImageBranchCandidateSnapshot({
         regionNodeId: 'region-1',
@@ -183,7 +238,7 @@ describe('buildImageBranchCandidateSnapshot', () => {
         expect(goatCandidate?.roleHints).toContain('active-target')
         expect(candidateIds.indexOf('person-generated')).toBeLessThan(candidateIds.indexOf('goat-generated'))
         expect(snapshot.transcriptContext).toContain('Active target nodeId: goat-generated')
-        expect(snapshot.transcriptContext).toContain('nodeId=goat-generated | roles=generated-variant,branch-leaf,active-target')
+        expect(snapshot.transcriptContext).toContain('nodeId=goat-generated | kind=image | roles=generated-variant,branch-leaf,active-target')
     })
 
     it('marks generated ancestors and leaves so the API can preserve branch lineage', () => {
@@ -251,5 +306,47 @@ describe('buildImageBranchCandidateSnapshot', () => {
         expect(branchLeaf?.promptText).toContain('make the same man orange monochrome')
         expect(branchLeaf?.promptText).toContain('thread image prompt text')
         expect(branchLeaf?.visualEntitySummary).toBe('orange monochrome portrait of the same man with glasses')
+    })
+})
+
+// =============================================================================
+// VIDEO MEDIA CANDIDATES
+// =============================================================================
+
+describe('buildImageBranchCandidateSnapshot — video media', () => {
+    it('grounds a generated video by its representative frame, never the MP4', () => {
+        const snapshot = buildSnapshot('extend that seaside clip', [videoGeneratedNode])
+        const videoCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-generated')
+
+        expect(videoCandidate?.mediaKind).toBe('video')
+        expect(videoCandidate?.imageUrl).toBe('nats-obj://workspace-workspace-1-files/video-frame-file')
+        expect(videoCandidate?.fileId).toBe('video-frame-file')
+        expect(snapshot.candidates.map((candidate) => candidate.imageUrl)).not.toContain('nats-obj://workspace-workspace-1-files/video-mp4-file')
+    })
+
+    it('keeps a generated video on its branch so an edit continues lineage', () => {
+        const snapshot = buildSnapshot('make the dawn light warmer', [videoGeneratedNode])
+        const videoCandidate = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-generated')
+
+        expect(videoCandidate?.branchId).toBe('branch-video')
+        expect(videoCandidate?.roleHints).toContain('generated-variant')
+        expect(snapshot.transcriptContext).toContain('kind=video')
+    })
+
+    it('falls back to the poster frame and uses the descriptor for uploaded video', () => {
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'region-1',
+            threadId: 'thread-1',
+            nodes: [regionNode, uploadedVideoNode],
+            edges: [],
+            prompt: 'make the car blue',
+        })
+        const uploaded = snapshot.candidates.find((candidate) => candidate.nodeId === 'video-uploaded')
+
+        expect(uploaded?.mediaKind).toBe('video')
+        expect(uploaded?.imageUrl).toBe('nats-obj://workspace-workspace-1-files/uploaded-poster-file')
+        expect(uploaded?.entityTags).toEqual(['car', 'city'])
+        expect(uploaded?.styleTags).toEqual(['neon', 'night'])
+        expect(uploaded?.promptText).toContain('a red sports car drifting on a wet city street at night')
     })
 })

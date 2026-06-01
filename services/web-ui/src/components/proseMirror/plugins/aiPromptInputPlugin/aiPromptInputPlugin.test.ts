@@ -40,6 +40,18 @@ function createMockControlFactories() {
     const imageSizeDropdownDom = document.createElement('div')
     imageSizeDropdownDom.className = 'mock-image-size-dropdown'
 
+    const videoModelDropdownDom = document.createElement('div')
+    videoModelDropdownDom.className = 'mock-video-model-dropdown'
+
+    const videoAspectDropdownDom = document.createElement('div')
+    videoAspectDropdownDom.className = 'mock-video-aspect-dropdown'
+
+    const videoResolutionDropdownDom = document.createElement('div')
+    videoResolutionDropdownDom.className = 'mock-video-resolution-dropdown'
+
+    const videoDurationDropdownDom = document.createElement('div')
+    videoDurationDropdownDom.className = 'mock-video-duration-dropdown'
+
     const submitButtonDom = document.createElement('button')
     submitButtonDom.className = 'mock-submit-button'
 
@@ -59,10 +71,34 @@ function createMockControlFactories() {
             update: vi.fn(),
             destroy: vi.fn(),
         })),
+        createVideoModelDropdown: vi.fn(() => ({
+            dom: videoModelDropdownDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
+        createVideoAspectDropdown: vi.fn(() => ({
+            dom: videoAspectDropdownDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
+        createVideoResolutionDropdown: vi.fn(() => ({
+            dom: videoResolutionDropdownDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
+        createVideoDurationDropdown: vi.fn(() => ({
+            dom: videoDurationDropdownDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
         createSubmitButton: vi.fn(() => submitButtonDom),
         modelDropdownDom,
         imageModelDropdownDom,
         imageSizeDropdownDom,
+        videoModelDropdownDom,
+        videoAspectDropdownDom,
+        videoResolutionDropdownDom,
+        videoDurationDropdownDom,
         submitButtonDom,
     }
 }
@@ -77,6 +113,10 @@ function createPluginOptions(overrides: Partial<Parameters<typeof createAiPrompt
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
             placeholderText: 'Ask anything…',
             ...overrides,
@@ -216,6 +256,10 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(node, mockView, getPos)
 
@@ -276,7 +320,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(controlsEl.contains(factories.submitButtonDom)).toBe(true)
         })
 
-        it('controls are ordered: model dropdown, image model dropdown, image size dropdown, submit', () => {
+        it('controls are ordered: model, image model, image size, video dropdowns, submit', () => {
             const { nv, factories } = createNodeView()
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
             const children = Array.from(controlsEl.children)
@@ -284,7 +328,11 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(children[0]).toBe(factories.modelDropdownDom)
             expect(children[1]).toBe(factories.imageModelDropdownDom)
             expect(children[2]).toBe(factories.imageSizeDropdownDom)
-            expect(children[3]).toBe(factories.submitButtonDom)
+            expect(children[3]).toBe(factories.videoModelDropdownDom)
+            expect(children[4]).toBe(factories.videoAspectDropdownDom)
+            expect(children[5]).toBe(factories.videoResolutionDropdownDom)
+            expect(children[6]).toBe(factories.videoDurationDropdownDom)
+            expect(children[7]).toBe(factories.submitButtonDom)
         })
     })
 })
@@ -314,6 +362,10 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -370,6 +422,10 @@ describe('createAiPromptInputNodeView — stopEvent', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -427,6 +483,10 @@ describe('createAiPromptInputNodeView — ignoreMutation', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -479,6 +539,10 @@ describe('createAiPromptInputNodeView — update', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(inputNode, mockView, () => 0)
 
@@ -534,6 +598,10 @@ describe('createAiPromptInputNodeView — destroy', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -554,6 +622,10 @@ describe('createAiPromptInputNodeView — destroy', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -580,6 +652,10 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -602,6 +678,10 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -626,6 +706,10 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -654,6 +738,10 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
     }
@@ -700,6 +788,10 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -732,16 +824,21 @@ describe('Visual proportions — SCSS sizing expectations', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
     }
 
-    it('controls has exactly 4 child elements for balanced layout', () => {
+    it('controls has exactly 8 child elements for balanced layout', () => {
         const nv = renderNodeView()
         const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        // SCSS expects: model dropdown, image model dropdown, image size dropdown, submit button
+        // SCSS expects: model dropdown, image model dropdown, image size dropdown,
+        // video model/aspect/resolution/duration dropdowns, submit button.
         // The controls use justify-content: flex-end so they sit right
-        expect(controls.children.length).toBe(4)
+        expect(controls.children.length).toBe(8)
     })
 
     it('content area is the first child — gets flex: 1 for vertical fill', () => {
@@ -1237,6 +1334,10 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1268,6 +1369,10 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1295,6 +1400,10 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1322,6 +1431,10 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
@@ -1352,6 +1465,10 @@ describe('createAiPromptInputNodeView — receiving state sync', () => {
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
+            createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoAspectDropdown: factories.createVideoAspectDropdown,
+            createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
+            createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
