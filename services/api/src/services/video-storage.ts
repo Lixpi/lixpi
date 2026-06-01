@@ -1,0 +1,178 @@
+'use strict'
+
+import { v4 as uuid } from 'uuid'
+import { createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import NATS_Service from '@lixpi/nats-service'
+import { type DocumentFile } from '@lixpi/constants'
+import { info, warn, err } from '@lixpi/debug-tools'
+
+import Workspace from '../models/workspace.ts'
+
+const getWorkspaceBucketName = (workspaceId: string): string =>
+    `workspace-${workspaceId}-files`
+
+export type StoreVideoInput = {
+    workspaceId: string
+    buffer: Buffer
+    originalName?: string
+    mimeType?: string
+    useContentHash?: boolean
+}
+
+export type StoreVideoResult = {
+    fileId: string
+    url: string
+    isDuplicate: boolean
+    size: number
+    mimeType: string
+}
+
+// Store a generated video (MP4) in the workspace NATS Object Store and register
+// it in the workspace files array. Mirrors storeWorkspaceImage (same bucket,
+// same SHA-256 content-hash dedup) but serves the bytes through the Range-capable
+// video route rather than the image route.
+export const storeWorkspaceVideo = async (input: StoreVideoInput): Promise<StoreVideoResult> => {
+    const {
+        workspaceId,
+        buffer,
+        originalName = 'generated-video.mp4',
+        mimeType = 'video/mp4',
+        useContentHash = false,
+    } = input
+
+    const workspace = await Workspace.getWorkspaceInternal({ workspaceId })
+    if (!workspace) {
+        throw new Error(`Workspace not found: ${workspaceId}`)
+    }
+
+    const natsService = NATS_Service.getInstance()
+    if (!natsService) {
+        throw new Error('NATS service unavailable')
+    }
+
+    const bucketName = getWorkspaceBucketName(workspaceId)
+
+    let fileId: string
+    if (useContentHash) {
+        const hash = createHash('sha256').update(buffer).digest('hex')
+        fileId = `hash-${hash}`
+
+        const existing = workspace.files?.find((f: DocumentFile) => f.id === fileId)
+        if (existing) {
+            // Only short-circuit as a duplicate if the bytes are ACTUALLY still
+            // in storage. If the object is gone (e.g. lost earlier), fall through
+            // and re-store it so the dangling reference self-heals instead of
+            // staying permanently broken. Mirrors storeWorkspaceImage and keeps
+            // this (hash-deduped) video write path aligned with the object-store
+            // durability fix in PR #208 / LIX-207.
+            const storedInfo = await natsService.getObjectInfo(bucketName, fileId).catch(() => null)
+            if (storedInfo && !storedInfo.deleted) {
+                info(`Duplicate video detected: ${fileId} (skipping upload)`)
+                return {
+                    fileId,
+                    url: `/api/videos/${workspaceId}/${fileId}`,
+                    isDuplicate: true,
+                    size: existing.size,
+                    mimeType: existing.mimeType,
+                }
+            }
+            warn(`Hash ${fileId} is registered in workspace ${workspaceId} but its bytes are missing from storage — re-storing`)
+        }
+    } else {
+        fileId = uuid()
+    }
+
+    try {
+        await natsService.putObject(bucketName, fileId, buffer, {
+            name: fileId,
+            description: originalName,
+        })
+
+        const fileMetadata: DocumentFile = {
+            id: fileId,
+            name: originalName,
+            mimeType,
+            size: buffer.length,
+            uploadedAt: Date.now(),
+        }
+
+        await Workspace.addFile({ workspaceId, file: fileMetadata })
+
+        info(`Video stored: ${bucketName}/${fileId} (${buffer.length} bytes)${useContentHash ? ' [hash-based]' : ''}`)
+
+        return {
+            fileId,
+            url: `/api/videos/${workspaceId}/${fileId}`,
+            isDuplicate: false,
+            size: buffer.length,
+            mimeType,
+        }
+    } catch (e: any) {
+        err(`storeWorkspaceVideo failed for workspace ${workspaceId}:`, e)
+        throw e
+    }
+}
+
+// Extract a single PNG frame from an MP4 using ffmpeg. When `atSeconds` is set
+// the decoder fast-seeks there before grabbing the frame; otherwise it grabs
+// frame 0. Best-effort: returns null if ffmpeg is unavailable or extraction
+// fails (e.g. a seek past the end), so video generation never fails just
+// because a frame could not be produced.
+//
+// ffmpeg needs a seekable input for reliable frame extraction (VEO MP4s are not
+// guaranteed faststart), so the buffer is written to a temp file rather than
+// piped through stdin.
+const extractFrameFromVideo = async (videoBuffer: Buffer, atSeconds?: number): Promise<Buffer | null> => {
+    let dir: string | undefined
+    try {
+        dir = await mkdtemp(join(tmpdir(), 'veo-frame-'))
+        const inPath = join(dir, 'in.mp4')
+        const outPath = join(dir, 'frame.png')
+        await writeFile(inPath, videoBuffer)
+
+        const seekArgs = typeof atSeconds === 'number' && atSeconds > 0
+            ? ['-ss', atSeconds.toFixed(3)]
+            : []
+
+        await new Promise<void>((resolve, reject) => {
+            const ff = spawn('ffmpeg', [
+                '-y',
+                ...seekArgs,
+                '-i', inPath,
+                '-frames:v', '1',
+                '-f', 'image2',
+                '-c:v', 'png',
+                outPath,
+            ], { stdio: ['ignore', 'ignore', 'ignore'] })
+            ff.on('error', reject)
+            ff.on('close', (code) => {
+                if (code === 0) resolve()
+                else reject(new Error(`ffmpeg exited with code ${code}`))
+            })
+        })
+
+        return await readFile(outPath)
+    } catch (e: any) {
+        warn(`extractFrameFromVideo failed (proceeding without frame): ${e?.message ?? e}`)
+        return null
+    } finally {
+        if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {})
+    }
+}
+
+// Frame 0 of an MP4, used as the PIXI low-LoD poster. The media layer falls back
+// to decoding the MP4 itself when no poster exists.
+export const extractPosterFrame = async (videoBuffer: Buffer): Promise<Buffer | null> =>
+    extractFrameFromVideo(videoBuffer)
+
+// A frame near the temporal middle of the clip — the still the branch resolver
+// grounds the video against (so the full MP4 never reaches the VLM) and that VEO
+// uses as the image-to-video anchor when continuing the lineage. Falls back to
+// frame-0 semantics when no usable seek point is known.
+export const extractRepresentativeFrame = async (videoBuffer: Buffer, atSeconds?: number): Promise<Buffer | null> =>
+    extractFrameFromVideo(videoBuffer, atSeconds)

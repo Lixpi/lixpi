@@ -24,7 +24,18 @@ export const aiChatThreadNodeSpec = {
         imageGenerationEnabled: { default: false },
         imageGenerationSize: { default: 'auto' }, // 1024x1024, 1536x1024, 1024x1536, auto
         // Previous response ID for multi-turn image editing
-        previousResponseId: { default: '' }
+        previousResponseId: { default: '' },
+        // Video model for video generation routing (Provider:model format)
+        aiVideoModel: { default: '' },
+        // Video generation parameters (VEO 3)
+        videoAspectRatio: { default: '' },   // e.g. '16:9' | '9:16'
+        videoResolution: { default: '' },    // e.g. '720p' | '1080p' | '4k'
+        videoDuration: { default: '' },      // string seconds: '4' | '6' | '8'
+        // Source VideoCanvasNode id when this thread is "Extend in new thread"
+        // off an existing generated video. Read at submit time so the LLM
+        // request passes VEO's `video` (extension) parameter via the workspace
+        // Object Store URI built from the source node's fileId + workspaceId.
+        sourceVideoNodeId: { default: '' }
     },
     parseDOM: [
         {
@@ -36,7 +47,12 @@ export const aiChatThreadNodeSpec = {
                 aiImageModel: dom.getAttribute('data-ai-image-model') || '',
                 imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
                 imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
-                previousResponseId: dom.getAttribute('data-previous-response-id') || ''
+                previousResponseId: dom.getAttribute('data-previous-response-id') || '',
+                aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
+                videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
+                videoResolution: dom.getAttribute('data-video-resolution') || '',
+                videoDuration: dom.getAttribute('data-video-duration') || '',
+                sourceVideoNodeId: dom.getAttribute('data-source-video-node-id') || ''
             })
         }
     ],
@@ -50,7 +66,12 @@ export const aiChatThreadNodeSpec = {
             'data-ai-image-model': node.attrs.aiImageModel,
             'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
             'data-image-generation-size': node.attrs.imageGenerationSize,
-            'data-previous-response-id': node.attrs.previousResponseId
+            'data-previous-response-id': node.attrs.previousResponseId,
+            'data-ai-video-model': node.attrs.aiVideoModel,
+            'data-video-aspect-ratio': node.attrs.videoAspectRatio,
+            'data-video-resolution': node.attrs.videoResolution,
+            'data-video-duration': node.attrs.videoDuration,
+            'data-source-video-node-id': node.attrs.sourceVideoNodeId
         },
         0
     ]

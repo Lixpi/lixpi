@@ -17,7 +17,7 @@ When a user hits Cmd+Enter or clicks the send button, the plugin:
 3. Shows streaming AI responses as they come in
 4. Handles all the animations and visual feedback
 
-AI chat threads live as independent canvas nodes alongside documents and images. Each thread has its own `AiInteractionService` instance for streaming, with routing based on `workspaceId` + `threadId`.
+AI chat threads live as independent canvas nodes alongside documents, images, and videos. Each thread has its own `AiInteractionService` instance for streaming, with routing based on `workspaceId` + `threadId`.
 
 ## Technical Architecture
 
@@ -111,7 +111,7 @@ sequenceDiagram
   participant AIS as AiInteractionService
   participant NATS as NATS
   participant API as API Service
-  participant LLM as llm-api (Python)
+  participant LLM as API LLM module<br/>(in-process LangGraph)
   participant SR as SegmentsReceiver
   participant SI as StreamingInserter
   Note over AIS: Subscribed to<br/>receiveMessage.{workspaceId}.{threadId}
@@ -144,9 +144,8 @@ sequenceDiagram
     AIS->>NATS: publish(CHAT_SEND_MESSAGE, { workspaceId, aiChatThreadId, messages })
     NATS->>API: Route to handler
     activate API
-    API->>NATS: publish(CHAT_PROCESS, {...})
+    API->>LLM: process(instanceKey, provider, payload)
     deactivate API
-    NATS->>LLM: Route to Python
     activate LLM
   end
 
@@ -212,6 +211,13 @@ sequenceDiagram
 - Empty shells render a horizontal spinner placeholder so the layout keeps height while the first tokens stream in.
 
 **`aiGeneratedImage`** - AI-generated images (from DALL-E, etc.)
+
+**`aiGeneratedVideo`** - AI-generated videos (from VEO, etc.)
+- Renders pending and error states inline in the AI response body
+- On completion, displays a native-controls-disabled `<video>` element with the shared SVG `components/videoControls` bar overlaid at the bottom
+- Uses the same scrub semantics as canvas video nodes: pointer down pauses if needed, drag updates the requested timestamp continuously, and release resumes only when playback was active before the scrub
+- Uses the same authenticated URL resolution path as generated images for `/api/videos/...` and poster `/api/images/...` URLs
+- Emits canvas lifecycle callbacks for pending, generating, complete, error, branch-resolution, and trace events
 
 **`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
 - Content: `(paragraph | block)*`
@@ -366,7 +372,7 @@ sequenceDiagram
   participant E as Editor
   participant P as Plugin
   participant AIS as AiInteractionService
-  participant NATS as NATS → llm-api
+  participant NATS as NATS → API LLM module
   %% ═══════════════════════════════════════════════════════════════
   %% PHASE 1: SUBMIT
   %% ═══════════════════════════════════════════════════════════════
@@ -543,7 +549,7 @@ class ContentExtractor {
 
 **Dual Image Context Paths:**
 - **Canvas edges (primary):** New AI-generated images live as `ImageCanvasNode` on the canvas, connected via `WorkspaceEdge` with `sourceMessageId`. The `ai-chat-thread-service.ts` → `extractConnectedContext()` traverses these edges and includes connected images in AI requests.
-- **Inline nodes (legacy/backwards compat):** Older threads may still contain inline `aiGeneratedImage` ProseMirror nodes. `collectContentWithImages()` extracts these as `nats-obj://` references. Both paths produce the same provider-agnostic format for the LLM API.
+- **Inline nodes (legacy/backwards compat):** Older threads may still contain inline `aiGeneratedImage` ProseMirror nodes. `collectContentWithImages()` extracts these as `nats-obj://` references. Both paths produce the same provider-agnostic format for the API LLM module.
 
 ### PositionFinder
 Document position utilities for content insertion:

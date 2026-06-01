@@ -49,6 +49,21 @@ type ImageModelControls = {
     setImageModel: (aiModel: string) => void
 }
 
+type VideoModelControls = {
+    getCurrentVideoModel: () => string
+    setVideoModel: (aiModel: string) => void
+}
+
+// Shared shape for the three video option dropdowns (aspect / resolution /
+// duration) — same generator pattern as image size but reading a different
+// option list off the selected video model.
+type VideoOptionControls = {
+    getValue: () => string
+    setValue: (value: string) => void
+    getProvider?: () => string
+    getCurrentVideoModel?: () => string
+}
+
 const AI_AVATAR_ICONS: Record<string, string> = {
     gptAvatarIcon,
     claudeIcon,
@@ -78,9 +93,10 @@ function extractAvailableTags(models: any[]) {
 
 function buildDropdownData(models: any[]) {
     const textModels = models.filter((m: any) =>
-        !m.modalities?.some((mod: any) =>
-            (mod.modality || mod) === 'image_generation'
-        )
+        !m.modalities?.some((mod: any) => {
+            const modality = mod.modality || mod
+            return modality === 'image_generation' || modality === 'video_generation'
+        })
     )
     return {
         options: transformModelsToOptions(textModels),
@@ -388,4 +404,192 @@ export function createGenericImageModelDropdown(
         },
         update: updateSelection
     }
+}
+
+// Filters models that expose the `video_generation` modality. Mirrors the
+// image-model dropdown so the prompt input gets a parallel Video selector that
+// can coexist with the image selector — the text model decides between
+// generate_image and generate_video based on user intent.
+export function createGenericVideoModelDropdown(
+    controls: VideoModelControls,
+    dropdownId: string
+) {
+    let aiModelsData: any[] = aiModelsStore.getData()
+
+    const filterVideoModels = (models: any[]) => {
+        return models.filter((m: any) =>
+            m.modalities?.some((mod: any) =>
+                (mod.modality || mod) === 'video_generation'
+            )
+        )
+    }
+
+    let videoModels = filterVideoModels(aiModelsData)
+    const currentVideoModel = controls.getCurrentVideoModel()
+
+    let options = transformModelsToOptions(videoModels)
+
+    const placeholderValue: AiModelDropdownOption = {
+        title: 'Video Model',
+        icon: '',
+        color: '',
+        aiModel: '',
+        provider: '',
+        model: '',
+        tags: []
+    }
+
+    const selectedValue: AiModelDropdownOption =
+        options.find(m => m.aiModel === currentVideoModel)
+        || placeholderValue
+
+    const dropdown = createPureDropdown({
+        id: dropdownId,
+        selectedValue,
+        options,
+        theme: 'dark',
+        buttonIcon: chevronDownIcon,
+        ignoreColorValuesForOptions: true,
+        ignoreColorValuesForSelectedValue: false,
+        renderIconForSelectedValue: false,
+        renderIconForOptions: true,
+        mountToBody: false,
+        disableAutoPositioning: true,
+        onSelect: (option: any) => {
+            const selected = option as AiModelDropdownOption
+            controls.setVideoModel(selected.aiModel)
+        }
+    })
+
+    // Unlike the image model dropdown, do NOT auto-select the first video model.
+    // Video generation is opt-in (a single send with image vs video vs neither
+    // is a user choice), so leaving the placeholder visible until the user picks
+    // keeps `aiVideoModel` empty and `generate_video` un-injected by default.
+
+    let lastProcessedCount = aiModelsData.length
+
+    const updateSelection = () => {
+        const current = controls.getCurrentVideoModel()
+        const matched = options.find(m => m.aiModel === current)
+        if (matched) {
+            dropdown.update(matched)
+        } else if (!current) {
+            dropdown.update(placeholderValue)
+        }
+    }
+
+    const unsubscribe = aiModelsStore.subscribe((storeState: any) => {
+        const newModelsData = storeState.data
+        if (newModelsData.length === 0 || newModelsData.length === lastProcessedCount) return
+
+        lastProcessedCount = newModelsData.length
+        aiModelsData = newModelsData
+
+        videoModels = filterVideoModels(aiModelsData)
+        options = transformModelsToOptions(videoModels)
+
+        dropdown.setOptions({ options })
+
+        updateSelection()
+    })
+
+    return {
+        dom: dropdown.dom,
+        destroy: () => {
+            unsubscribe()
+            dropdown.destroy?.()
+        },
+        update: updateSelection
+    }
+}
+
+// Generic factory for the three video option dropdowns (aspect / resolution /
+// duration). The option list is read off the currently-selected video model's
+// `videoAspectRatios` | `videoResolutions` | `videoDurations` field — the same
+// shape (ImageSizeOption[]) the image size dropdown already consumes.
+type VideoOptionListKey = 'videoAspectRatios' | 'videoResolutions' | 'videoDurations'
+
+function createGenericVideoOptionDropdown(
+    controls: VideoOptionControls,
+    dropdownId: string,
+    listKey: VideoOptionListKey,
+    fallbackLabel: string,
+) {
+    const getOptionsForModel = (videoAiModel: string) => {
+        const [provider, modelId] = (videoAiModel || '').split(':')
+        const models: any[] = aiModelsStore.getData()
+        let model: any = models.find((m: any) => m.provider === provider && m.model === modelId && Array.isArray(m[listKey]) && m[listKey].length > 0)
+        if (!model) {
+            model = models.find((m: any) => m.provider === provider && Array.isArray(m[listKey]) && m[listKey].length > 0)
+        }
+        if (!model) {
+            model = models.find((m: any) => Array.isArray(m[listKey]) && m[listKey].length > 0)
+        }
+        const list = model?.[listKey] ?? [{ value: '', label: fallbackLabel }]
+        return list.map((s: any) => ({ title: s.label, value: s.value }))
+    }
+
+    let lastVideoModel = controls.getCurrentVideoModel?.() || ''
+    let VIDEO_OPTIONS = getOptionsForModel(lastVideoModel)
+
+    const currentValue = controls.getValue()
+    const selectedValue = VIDEO_OPTIONS.find((s: any) => s.value === currentValue) || VIDEO_OPTIONS[0]
+
+    const dropdown = createPureDropdown({
+        id: dropdownId,
+        selectedValue,
+        options: VIDEO_OPTIONS,
+        theme: 'dark',
+        buttonIcon: chevronDownIcon,
+        ignoreColorValuesForOptions: true,
+        ignoreColorValuesForSelectedValue: true,
+        renderIconForSelectedValue: false,
+        renderIconForOptions: false,
+        mountToBody: false,
+        disableAutoPositioning: true,
+        onSelect: (option: any) => {
+            controls.setValue(option.value)
+        }
+    })
+
+    const updateSelection = () => {
+        const nextModel = controls.getCurrentVideoModel?.() || ''
+        if (nextModel !== lastVideoModel) {
+            lastVideoModel = nextModel
+            VIDEO_OPTIONS = getOptionsForModel(nextModel)
+            const currentValue = controls.getValue()
+            const matched = VIDEO_OPTIONS.find((s: any) => s.value === currentValue)
+            if (!matched && VIDEO_OPTIONS[0]) {
+                controls.setValue(VIDEO_OPTIONS[0].value)
+            }
+            dropdown.setOptions({
+                options: VIDEO_OPTIONS,
+                selectedValue: matched || VIDEO_OPTIONS[0],
+            })
+        } else {
+            const currentValue = controls.getValue()
+            const matched = VIDEO_OPTIONS.find((s: any) => s.value === currentValue)
+            if (matched) dropdown.update(matched)
+        }
+    }
+
+    return {
+        dom: dropdown.dom,
+        destroy: () => {
+            dropdown.destroy?.()
+        },
+        update: updateSelection,
+    }
+}
+
+export function createGenericVideoAspectDropdown(controls: VideoOptionControls, dropdownId: string) {
+    return createGenericVideoOptionDropdown(controls, dropdownId, 'videoAspectRatios', 'Aspect')
+}
+
+export function createGenericVideoResolutionDropdown(controls: VideoOptionControls, dropdownId: string) {
+    return createGenericVideoOptionDropdown(controls, dropdownId, 'videoResolutions', 'Resolution')
+}
+
+export function createGenericVideoDurationDropdown(controls: VideoOptionControls, dropdownId: string) {
+    return createGenericVideoOptionDropdown(controls, dropdownId, 'videoDurations', 'Duration')
 }

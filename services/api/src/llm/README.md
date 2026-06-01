@@ -5,21 +5,23 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. Repla
 ## What it does
 
 - Receives a chat request from the NATS gateway handler (`services/api/src/NATS/subscriptions/ai-interaction-subjects.ts`).
-- Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration → calculateUsage → cleanup`.
+- Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration` or `executeVideoGeneration` → `calculateUsage → cleanup`.
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
-- Routes dual-model image generation: text model emits a `generate_image` tool call, the workflow's conditional edge spawns a transient image-model provider (OpenAI gpt-image-*, Google Gemini, Stability) that uploads the final image to NATS Object Store.
-- Publishes an `IMAGE_GENERATION_TRACE` event immediately before invoking the transient image-model provider. The trace contains the text-model tool prompt, the final routed image-model prompt, every reference-image slot sent to the image model, preview-safe image URLs when available, and resolver audit metadata for selected/excluded branch candidates.
-- Reports token + image usage costs via `decimal.js` pricing math against the model's pricing metadata.
+- Routes dual-model image/video generation: text model emits `generate_image` or `generate_video`, then the workflow spawns a transient image-model provider or VEO video provider that stores the generated media in NATS Object Store.
+- Publishes `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` events immediately before invoking transient media providers. These traces contain the text-model tool prompt, routed media prompt, selected/excluded reference candidates, and preview-safe reference URLs when available.
+- Reports token, image, and computed video usage costs via `decimal.js` pricing math against the model's pricing metadata. Video usage is computed per second; publishing the final video usage event is still pending.
 
 ## Public surface
 
 ```typescript
 import { createLlmModule } from './llm/index.ts'
 import { storeWorkspaceImage } from './services/image-storage.ts'
+import { storeWorkspaceVideo } from './services/video-storage.ts'
 
 const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
     storeWorkspaceImage,
+    storeWorkspaceVideo,
 })
 
 // Used by the gateway handler
@@ -38,33 +40,38 @@ The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscri
 
 ```
 src/llm/
-    index.ts                     # createLlmModule({ natsService, storeWorkspaceImage })
-    config.ts                    # LLM_TIMEOUT_MS
+    index.ts                     # createLlmModule({ natsService, storeWorkspaceImage, storeWorkspaceVideo })
+    config.ts                    # LLM_TIMEOUT_MS, VEO_POLL_INTERVAL_MS
     graph/
         state.ts                 # ProviderState type + channel reducers (partial-overlay semantics)
-        stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + tag-aware <image_prompt> buffering
+        stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + image/video trace events
         image-publisher.ts       # IMAGE_PARTIAL, IMAGE_COMPLETE + content-hash deduped storage
-        image-branch-resolver.ts # Structured VLM target/reference resolver for image generation
+        video-publisher.ts       # VIDEO_PENDING, VIDEO_GENERATING, VIDEO_COMPLETE, VIDEO_ERROR
+        image-branch-resolver.ts # Structured VLM target/reference resolver for image and video generation
     providers/
         base-provider.ts         # Abstract BaseProvider — owns the StateGraph, AbortController, workflow nodes
         provider-registry.ts     # Map<instanceKey, provider> + active-task dedupe via Map<string, AbortController>
         openai-provider.ts       # OpenAI Responses API + Image API (gpt-image-*)
         anthropic-provider.ts    # Anthropic messages.stream() + tool_use blocks
-        google-provider.ts       # Google generateContentStream + native image generation
+        google-provider.ts       # Google generateContentStream + native image generation + VEO submit/poll/download
         stability-provider.ts    # Stability v2beta REST (multipart, no streaming)
     tools/
         image-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
         image-generation-trace.ts # Final image-model prompt + reference-image trace payload builder
         image-router.ts          # Spawns transient image-model provider for generate_image tool calls
+        video-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
+        video-generation-trace.ts # Final video-model prompt + reference trace payload builder
+        video-router.ts          # Spawns transient VEO provider for generate_video tool calls
     utils/
         attachments.ts           # nats-obj:// resolver, magic-byte MIME detection, sharp downscaling
     prompts/
         load-prompts.ts          # readFileSync at module load
         system.txt               # Base system prompt
         image_generation_instructions.txt
+        video_generation_instructions.txt
         anthropic_code_block_hack.txt
     usage/
-        usage-reporter.ts        # decimal.js token + image pricing math
+        usage-reporter.ts        # decimal.js token, image, and video pricing math
 ```
 
 ## LangGraph workflow
@@ -72,21 +79,19 @@ src/llm/
 ```
 resolveFeatures
     ↓
-resolveImageBranch (structured VLM; no-op unless an image model is selected)
+resolveImageBranch (structured VLM; no-op unless an image or video model is selected)
     ↓
 validateRequest
     ↓
 streamTokens (provider-specific streamImpl)
     ↓
-shouldGenerateImage? (checks state.generatedImagePrompt)
-    ↓ generate_image                ↓ skip
-validateImagePrompt                  |
-    ↓                                |
-shouldGenerateImage? (post-rewrite)  |
-    ↓ generate_image  ↓ skip         |
-executeImageGeneration               |
-    ↓                                |
-calculateUsage ←─────────────────────┘
+routeAfterStream?
+    ↓ generate_image                 ↓ generate_video          ↓ skip
+validateImagePrompt                  executeVideoGeneration    |
+    ↓                                ↓                         |
+shouldGenerateImage? (post-rewrite)  calculateUsage ←──────────┘
+    ↓ generate_image  ↓ skip         ↑
+executeImageGeneration ──────────────┘
     ↓
 cleanup
     ↓
@@ -95,9 +100,9 @@ END
 
 Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the browser in a receiving state while pre-stream work such as `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. Transient image-model providers spawned by `ImageRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle.
 
-`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, normalizes candidate image URLs once, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. When the snapshot includes `activeTargetNodeId` / an `active-target` role hint, the resolver prompt treats that candidate as a weak UI selection hint for purely deictic edit prompts while still requiring the selected pixels to match any explicit subject named by the user. For example, a selected goat must not win a prompt that says "that man"; the resolver should choose a visible man candidate or return ambiguous. If the selected target/identity reference is an existing generated candidate, the resolver continues that generated branch even for substantial palette or medium changes; targetless `fresh-branch` is reserved for genuinely new subjects with no generated target. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and image router do not downscale the same candidate refs again.
+`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, normalizes candidate media URLs once, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. The same resolver is used for video generation; video candidates contribute a representative still (`frameFileId`, falling back to poster) and the selected result maps to VEO first-frame or reference-image inputs. When the snapshot includes `activeTargetNodeId` / an `active-target` role hint, the resolver prompt treats that candidate as a weak UI selection hint for purely deictic edit prompts while still requiring the selected pixels to match any explicit subject named by the user. For example, a selected goat must not win a prompt that says "that man"; the resolver should choose a visible man candidate or return ambiguous. If the selected target/identity reference is an existing generated candidate, the resolver continues that generated branch even for substantial palette or medium changes; targetless `fresh-branch` is reserved for genuinely new subjects with no generated target. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and media routers do not downscale the same candidate refs again.
 
-When the text provider emits `generate_image`, `BaseProvider.executeImageGeneration()` builds and publishes an `IMAGE_GENERATION_TRACE` payload before calling `ImageRouter`. `ImageRouter` uses the same `buildImageModelPrompt()` helper as the trace builder, so the prompt shown in chat is the exact prompt routed to the image-model provider, including `/use` feature-transfer wrapping when present. The trace must never carry inline image data. Branch references point back to their workspace image object, and `/use` feature sample references point to the authenticated feature sample route, so persisted chat history can render reference thumbnails after a page reload without storing image bytes in NATS stream payloads or ProseMirror state.
+When the text provider emits `generate_image`, `BaseProvider.executeImageGeneration()` builds and publishes an `IMAGE_GENERATION_TRACE` payload before calling `ImageRouter`. When it emits `generate_video`, `BaseProvider.executeVideoGeneration()` builds and publishes `VIDEO_GENERATION_TRACE` before calling `VideoRouter`. The router and trace builders share prompt helpers so the prompt shown in chat is the exact prompt routed to the transient media provider, including `/use` feature-transfer wrapping when present. Traces must never carry inline image data. Branch references point back to workspace media objects, and `/use` feature sample references point to the authenticated feature sample route, so persisted chat history can render reference thumbnails after a page reload without storing image bytes in NATS stream payloads or ProseMirror state.
 
 Each provider subclasses `BaseProvider` and implements `streamImpl(state)` — everything else is shared.
 

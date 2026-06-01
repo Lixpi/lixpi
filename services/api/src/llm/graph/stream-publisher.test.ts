@@ -57,6 +57,42 @@ describe('TagAwareStream', () => {
             .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
             .map(p => p.payload.content.text)
         expect(texts).toEqual(['before', 'inner content', 'after'])
+
+        const collapsibleStart = nats.published.find(p => p.payload.content.status === STREAM_STATUS.COLLAPSIBLE_START)
+        expect(collapsibleStart?.payload.content.collapsibleTitle).toBe('Image generation prompt')
+    })
+
+    it('emits COLLAPSIBLE_START / END around <video_prompt> content with a video title', () => {
+        stream.push('Sure!<video_prompt>Animate the provided reference image as the first frame.</video_prompt>done')
+        stream.flush()
+
+        expect(statuses(nats.published)).toEqual([
+            STREAM_STATUS.STREAMING,           // 'Sure!'
+            STREAM_STATUS.COLLAPSIBLE_START,
+            STREAM_STATUS.STREAMING,           // inner video prompt
+            STREAM_STATUS.COLLAPSIBLE_END,
+            STREAM_STATUS.STREAMING,           // 'done'
+        ])
+        const texts = nats.published
+            .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
+            .map(p => p.payload.content.text)
+        expect(texts).toEqual(['Sure!', 'Animate the provided reference image as the first frame.', 'done'])
+
+        const collapsibleStart = nats.published.find(p => p.payload.content.status === STREAM_STATUS.COLLAPSIBLE_START)
+        expect(collapsibleStart?.payload.content.collapsibleTitle).toBe('Video generation prompt')
+    })
+
+    it('handles a <video_prompt> close tag split across chunk boundaries', () => {
+        stream.push('<video_prompt>inner</video_pr')
+        stream.push('ompt>tail')
+        stream.flush()
+
+        expect(statuses(nats.published)).toEqual([
+            STREAM_STATUS.COLLAPSIBLE_START,
+            STREAM_STATUS.STREAMING,           // 'inner'
+            STREAM_STATUS.COLLAPSIBLE_END,
+            STREAM_STATUS.STREAMING,           // 'tail'
+        ])
     })
 
     it('handles open tag split across chunk boundary', () => {

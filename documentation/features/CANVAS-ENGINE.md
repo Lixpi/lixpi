@@ -1,6 +1,6 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The AI Chat panel can be open with zero tabs and without a context region; its UI state is persisted in canvas state. PIXI v8 owns image pixel rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; the reusable `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` paints traveling progress outlines; `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts` owns context-region CO2-shaped cloud visuals.
+The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The AI Chat panel can be open with zero tabs and without a context region; its UI state is persisted in canvas state. PIXI v8 owns image pixel rendering, video poster/placeholder rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; browser-composited DOM video surfaces own completed video playback and controls in the transformed chrome layer; the reusable `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` paints traveling progress outlines; `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.ts` owns context-region CO2-shaped cloud visuals.
 
 The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. The current path is renderer ownership by workload: DOM owns text-rich controls and interaction structure; PIXI owns high-volume pixels, connector strokes, context-region clouds, and canvas chrome.
 
@@ -29,10 +29,10 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 |------|---------|
 | `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media/context-region sync points |
 | `workspace/aiChatPanelState.ts` | Persisted AI Chat panel defaults, legacy-tab migration, and standalone selected-context filtering |
-| `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved Image browsing, scope filters, and insertion actions |
+| `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved image/video browsing, scope filters, and insertion actions |
 | `workspace/media-library-panel.scss` | Right-side Media Library layout and full-content wrapping rules |
 | `utils/resolveCollisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
-| `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels and generated-image outline synchronization — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
+| `workspace/pixiMediaLayer.ts` | PIXI v8 media layer for image pixels, video posters/placeholders, and generated-image outline synchronization — sprite registry, texture cache, LoD-tier loader, visibility scanner, prefetch scheduler |
 | `workspace/pixiMediaLayerLogic.ts` | Pure helpers: tier ranking, world-position math, src URL building, LoD-size param injection, world-rect math |
 | `utils/animations/gradients/pixiTravelingOutlineRenderer.ts` | Reusable PIXI traveling outline renderer — rounded-path math, track/segment painting, shared easing, active-only animation loop |
 | `workspace/pixiImageDecoder.ts` | Six-worker decode pool: round-robin dispatch with per-worker request tracking |
@@ -41,7 +41,8 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/rendering/pixiContextRegionLayer.ts` | PIXI v8 context-region layer — shared CO2-shaped seafoam textures, cloud sprites, PIXI title text, optional baked border, culling, bounded pulse animation |
 | `workspace/rendering/pixiEdgeRenderer.ts` | PIXI edge renderer (diffed; reuses `Graphics`) |
 | `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to DOM CSS, PIXI media, and PIXI context-region layers |
-| `workspace/rendering/mediaNodeRegistry.ts` | Extension point for future non-image media handlers (video, audio) |
+| `workspace/rendering/mediaNodeRegistry.ts` | Dispatches non-image media nodes to specialized handlers; video nodes are handled by `videoNodeHandler.ts` |
+| `workspace/rendering/videoNodeHandler.ts` | Video node renderer that owns PIXI poster/placeholder sprites and the authenticated `HTMLVideoElement` consumed by DOM video chrome |
 | `workspace/workspaceRenderStatePlan.ts` | Pure render-state reconciliation for pending local visual commits while store acknowledgements arrive |
 | `workspace/workspaceViewportStatePlan.ts` | Pure stale viewport-only render guard; keeps delayed store viewport updates from overriding the live transform |
 | `workspace/WorkspaceConnectionManager.ts` | Edge creation, proximity connect, candidate detection, and the data feed for `pixiEdgeRenderer` |
@@ -109,6 +110,7 @@ flowchart TB
         end
         subgraph ImageChrome[".workspace-image-chrome-viewport (z-index 3, CSS-transformed)"]
             IMG_CHROME[Generated-image provider badge<br/>info button + provenance panel]
+            VIDEO_CHROME[Visible video surface<br/>shared SVG controls]
         end
     end
 
@@ -122,12 +124,12 @@ flowchart TB
     PixiCanvas --> ImageChrome
 ```
 
-The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Generated-image provider badges, info buttons, and full-width provenance panels sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Image-node DOM shells are kept as `<div data-node-id>` elements for two reasons:
+The PIXI image canvas sits **above** the DOM viewport; the PIXI context-region canvas sits **below** it. Generated-image provider badges, info buttons, full-width provenance panels, and completed video DOM surfaces sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform but is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and SVG controls stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
 1. They host core interaction chrome — drag overlay and resize handles.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 
-Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
+Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Completed video nodes are the deliberate exception: PIXI renders the poster/placeholder and stable geometry, while the actual MP4 frames come from the visible DOM `<video>` element in chrome. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
 
 Context-region DOM elements are also kept, but only as transparent geometry proxies for existing drag, selection, connection-manager, and parent-child state paths. Their visible CO2-shaped cloud and title text are drawn by `pixiContextRegionLayer`. Empty-region pointer behavior starts in the pane background handler, calls `contextRegionLayer.hitTest(worldPoint)`, and then reuses the existing drag handler for the matched node.
 
@@ -180,13 +182,14 @@ Regression coverage lives in [workspaceViewportStatePlan.test.ts](../../services
 
 ### Sync Pipeline
 
-`pixiMediaLayer.sync(canvasState)` is called from the canvas orchestration points that actually need visual layer reconciliation: initial create, full DOM node rerenders, local `commitCanvasState`, and incoming store renders whose node/edge visual sync key changed. Viewport-only renders do not resync image entries; they go through the viewport bridge or the stale viewport guard. Each media sync:
+`pixiMediaLayer.sync(canvasState)` is called from the canvas orchestration points that actually need visual layer reconciliation: initial create, full DOM node rerenders, local `commitCanvasState`, and incoming store renders whose node/edge visual sync key changed. Viewport-only renders do not resync media entries; they go through the viewport bridge or the stale viewport guard. Each media sync:
 
 1. Removes deleted entries: `releaseTexture` → `spatialIndex.remove` → destroys sprite + colorRect.
-2. Calls `upsertAllEntries` → for each image node, `upsertEntry` updates only what actually changed:
+2. Calls `upsertAllEntries` → image nodes update directly and video nodes route through `mediaNodeRegistry` to `videoNodeHandler`; each changed entry updates only what actually changed:
    - **Sprite transform** (position + width/height): always updated; cheap matrix update.
    - **Color-rect geometry** (`Graphics.clear()` + `roundRect()` + `fill()`): rebuilt only when width or height changed since last upsert.
    - **Spatial index entry**: removed and re-inserted only when the world rect actually changed.
+   - **Video chrome attachment**: the handler owns the authenticated `HTMLVideoElement`; `WorkspaceCanvas.ts` positions that same element in `.workspace-video-chrome` when the node is complete.
 3. Reconciles `generatingBorderLayer` from the transient generating-node set by synchronizing bounds into `PixiTravelingOutlineRenderer`; each active generated image gets its PIXI track and traveling segment until completion or failure clears it.
 4. Single `updateVisibleImages()` pass to mark renderable flags and fire texture loads for newly-visible entries.
 5. Schedules an idle prefetch tick.
@@ -310,7 +313,8 @@ The PIXI media layer has gone through several rounds of perf hardening. The curr
 | **Progressive `thumb-256`-first** | First-paint loads tiny thumbnails for visible sprites; full-tier upgrades happen in idle. |
 | **Idle prefetch (capped)** | Up to 20 unloaded entries per idle tick get pre-cached at `thumb-256`, sorted by viewport distance. Pan reveals already-loaded images. |
 | **DOM `<img>` pixel surface eliminated** | Canvas image nodes contain no DOM image element; PIXI is the only image pixel renderer for stored, external, and generated-partial sources. |
-| **Visual-state-gated PIXI `sync()`** | Media entries resync on initial create, full DOM rerenders, local commits, and store renders with node/edge visual changes. Viewport-only renders do not upsert image entries. |
+| **DOM video playback split** | Completed videos use PIXI only for poster/placeholder geometry and keep the real `<video>` visible in chrome, so playback and scrubbing do not drive a PIXI video texture loop or interfere with connector rendering. |
+| **Visual-state-gated PIXI `sync()`** | Media entries resync on initial create, full DOM rerenders, local commits, and store renders with node/edge visual changes. Viewport-only renders do not upsert media entries. |
 | **Incremental RBush** | The spatial index is updated per-node (`remove` + `insert`) only when geometry actually changed, avoiding full rebuilds on every sync. |
 | **`drawColorRect` skip-when-unchanged** | Placeholder geometry is only rebuilt when the node's width or height actually changed; transform updates are matrix-only. |
 | **`syncDomOwnership` skip when no-op** | `classList.toggle` only runs for nodes whose ownership state actually changed. |
@@ -406,7 +410,7 @@ When tuning, these are the knobs that exist today (all in `pixiMediaLayer.ts` un
 
 `createPixiMediaLayer` accepts an `onHealthChange(health)` callback for `initializing → ready → destroyed`. PIXI initialization errors are fatal: the app logs the initialization error and rethrows it. Canvas image nodes do not create a DOM pixel fallback.
 
-Stored, external, and generated-image partial sources are resolved and rendered through PIXI only. `WorkspaceCanvas.ts` publishes active generating node IDs to `pixiMediaLayer`, which supplies bounds to `PixiTravelingOutlineRenderer` until completion or failure.
+Stored, external, and generated-image partial sources are resolved and rendered through PIXI only. Video nodes resolve the poster through PIXI, but completed playback uses the browser-composited `<video>` element created by `videoNodeHandler.ts` and hosted by `WorkspaceCanvas.ts`. `WorkspaceCanvas.ts` publishes active generating node IDs to `pixiMediaLayer`, which supplies bounds to `PixiTravelingOutlineRenderer` until completion or failure.
 
 ---
 

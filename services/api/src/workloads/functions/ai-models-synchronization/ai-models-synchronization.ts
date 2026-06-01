@@ -24,7 +24,8 @@ const MODALITY_METADATA = {
     image_generation: { title: 'Image Generation', shortTitle: 'IMG GEN' },
     audio: { title: 'Audio', shortTitle: 'AUDIO' },
     voice: { title: 'Voice', shortTitle: 'VOICE' },
-    video: { title: 'Video', shortTitle: 'VID' }
+    video: { title: 'Video', shortTitle: 'VID' },
+    video_generation: { title: 'Video Generation', shortTitle: 'VID GEN' }
 } as const
 
 // Helper function to generate modalities with metadata from modalities array
@@ -38,6 +39,24 @@ function generateModalitiesWithMetadata(modalities: string[]): Array<{ modality:
         }
     })
 }
+
+// VEO video-generation option lists. Reuse the ImageSizeOption { value, label }
+// shape so the frontend video dropdowns consume them like image sizes.
+const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
+    { value: '16:9', label: '16:9' },
+    { value: '9:16', label: '9:16' },
+]
+const VEO_RESOLUTIONS: ImageSizeOption[] = [
+    { value: '720p', label: '720p' },
+    { value: '1080p', label: '1080p' },
+]
+const VEO_31_RESOLUTIONS: ImageSizeOption[] = [
+    ...VEO_RESOLUTIONS,
+    { value: '4k', label: '4K' },
+]
+const VEO_SAFE_DURATIONS: ImageSizeOption[] = [
+    { value: '8', label: '8s' },
+]
 
 // OpenAI API types (using SDK types)
 type OpenAIModel = OpenAI.Models.Model
@@ -70,6 +89,9 @@ type ModelDefaults = Pick<
 > & {
     imagePromptMaxChars?: number
     imageSizes?: ImageSizeOption[]
+    videoAspectRatios?: ImageSizeOption[]
+    videoResolutions?: ImageSizeOption[]
+    videoDurations?: ImageSizeOption[]
     // Not part of AiModel, used only for provider-grouped sorting
     starSortingPosition: number
     // Transform functions for model properties
@@ -243,7 +265,6 @@ export class AiModelsSync {
                 '-robotics-',
                 '-computer-use-',
                 'imagen',
-                'veo',
                 'lyria',
             ]
         },
@@ -429,6 +450,14 @@ export class AiModelsSync {
                 { prefix: 'gemini-3.1-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
                 // Gemini 3 Flash
                 { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                // VEO 3 / 3.1 video generation models (billed per second of video).
+                // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
+                // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
+                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
+                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
             ],
             contains: [],
             fallback: {
@@ -464,11 +493,16 @@ export class AiModelsSync {
                 starSortingPosition: 150,
                 transforms: {
                     title: (modelId: string) => {
-                        // Map well-known image models to Nano Banana names
+                        // Map well-known image models to Nano Banana names and VEO models to friendly names
                         const nanoBananaNames: Record<string, string> = {
                             'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
                             'gemini-3-pro-image-preview': 'Nano Banana Pro',
                             'gemini-3.1-flash-image-preview': 'Nano Banana 2',
+                            'veo-3.0-generate-001': 'Veo 3',
+                            'veo-3.0-fast-generate-001': 'Veo 3 Fast',
+                            'veo-3.1-generate-preview': 'Veo 3.1',
+                            'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
+                            'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
                         }
                         if (nanoBananaNames[modelId]) return nanoBananaNames[modelId]
 
@@ -486,6 +520,11 @@ export class AiModelsSync {
                             'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
                             'gemini-3-pro-image-preview': 'Nano Banana Pro',
                             'gemini-3.1-flash-image-preview': 'Nano Banana 2',
+                            'veo-3.0-generate-001': 'Veo 3',
+                            'veo-3.0-fast-generate-001': 'Veo 3 Fast',
+                            'veo-3.1-generate-preview': 'Veo 3.1',
+                            'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
+                            'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
                         }
                         if (nanoBananaNames[modelId]) return nanoBananaNames[modelId]
 
@@ -576,6 +615,7 @@ export class AiModelsSync {
         if (p.text || fallback.text) merged.text = p.text || fallback.text
         if (p.audio || (fallback as any).audio) merged.audio = p.audio || (fallback as any).audio
         if (p.image || (fallback as any).image) merged.image = p.image || (fallback as any).image
+        if ((p as any).video || (fallback as any).video) merged.video = (p as any).video || (fallback as any).video
         return merged as AiModel['pricing']
     }
 
@@ -590,6 +630,9 @@ export class AiModelsSync {
             supportsSystemPrompt: typeof p.supportsSystemPrompt === 'boolean' ? p.supportsSystemPrompt : fallback.supportsSystemPrompt,
             modalities: Array.isArray(p.modalities) ? p.modalities : fallback.modalities,
             imageSizes: Array.isArray(p.imageSizes) ? p.imageSizes : fallback.imageSizes,
+            videoAspectRatios: Array.isArray(p.videoAspectRatios) ? p.videoAspectRatios : fallback.videoAspectRatios,
+            videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
+            videoDurations: Array.isArray(p.videoDurations) ? p.videoDurations : fallback.videoDurations,
             pricing: this.mergePricingWithFallback(p.pricing as any, fallback.pricing),
             color: typeof (p as any).color === 'string' ? (p as any).color : fallback.color,
             iconName: typeof (p as any).iconName === 'string' ? (p as any).iconName : fallback.iconName,
@@ -785,6 +828,12 @@ export class AiModelsSync {
                 // Use '-image' to match gemini-*-image* but NOT 'imagen' models
                 if (modelId.includes('-image')) return true
 
+                // VEO video models are always allowed through. Keep preview ids
+                // (e.g. veo-3.1-generate-preview); drop only dated snapshots.
+                if (modelId.includes('veo')) {
+                    return !/\d{4}-\d{2}-\d{2}/.test(modelId) && !/:\d{8}/.test(modelId)
+                }
+
                 if (blacklist.exact.includes(modelId)) return false
                 if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) return false
                 if (blacklist.contains.some(substring => modelId.includes(substring))) return false
@@ -904,6 +953,9 @@ export class AiModelsSync {
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizes: modelDefaults.imageSizes,
+            videoAspectRatios: modelDefaults.videoAspectRatios,
+            videoResolutions: modelDefaults.videoResolutions,
+            videoDurations: modelDefaults.videoDurations,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now

@@ -12,6 +12,7 @@
 		"CHAT_PROCESS": "ai.interaction.chat.process",
 		"CHAT_STOP": "ai.interaction.chat.stop",
 		"CHAT_ERROR": "ai.interaction.chat.error",
+		"MEDIA_DESCRIBE": "ai.interaction.media.describe",
 		"FEATURE_EXTRACT": {
 			"START": "ai.interaction.feature.extract.start",
 			"STOP": "ai.interaction.feature.extract.stop",
@@ -31,6 +32,9 @@
 		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments",
 		"IMAGE_SUBJECTS": {
 			"DELETE_IMAGE": "workspace.image.delete"
+		},
+		"VIDEO_SUBJECTS": {
+			"DELETE_VIDEO": "workspace.video.delete"
 		},
 		"DOCUMENT_SUBJECTS": {
 			"CREATE_DOCUMENT": "workspace.document.create",
@@ -64,9 +68,11 @@
 		},
 		"MEDIA_LIBRARY_SUBJECTS": {
 			"CREATE_FROM_IMAGE": "workspace.mediaLibrary.image.createFromCanvas",
+			"CREATE_FROM_VIDEO": "workspace.mediaLibrary.video.createFromCanvas",
 			"GET": "workspace.mediaLibrary.get",
 			"LIST_AVAILABLE": "workspace.mediaLibrary.listAvailable",
 			"MATERIALIZE_IMAGE_TO_WORKSPACE": "workspace.mediaLibrary.image.materializeToWorkspace",
+			"MATERIALIZE_VIDEO_TO_WORKSPACE": "workspace.mediaLibrary.video.materializeToWorkspace",
 			"CHANGE_SCOPE": "workspace.mediaLibrary.changeScope",
 			"DELETE": "workspace.mediaLibrary.delete",
 			"EVENTS": {

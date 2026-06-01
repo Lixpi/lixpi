@@ -2,8 +2,9 @@
 // CANVAS BUBBLE MENU ITEMS
 //
 // Menu items for the workspace canvas bubble menu. Supports image nodes
-// (Delete, Download, Ask AI, save, Connect) and edge connections (Delete).
-// Framework-agnostic — uses only DOM and callbacks. No ProseMirror imports.
+// (Delete, Download, Ask AI, save, Connect), video nodes (Extend in new
+// thread, Connect, Delete), and edge connections (Delete). Framework-agnostic
+// — uses only DOM and callbacks. No ProseMirror imports.
 // =============================================================================
 
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
@@ -17,6 +18,7 @@ import {
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'
+export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'
 export const CANVAS_EDGE_CONTEXT = 'canvasEdge'
 
 const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>'
@@ -32,6 +34,10 @@ type CanvasBubbleMenuCallbacks = {
     onAddToMediaLibrary: (nodeId: string) => void
     canAddToMediaLibrary: (nodeId: string | null) => boolean
     onTriggerConnection: (nodeId: string) => void
+    // Spawns a new chat thread that consumes the active VideoCanvasNode as
+    // VEO's `video` (extension) input. Mirrors the image "Edit in new thread"
+    // contract but routes through the video extension path.
+    onExtendVideoInNewThread: (nodeId: string) => void
     onHide: () => void
 }
 
@@ -153,6 +159,30 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         },
     })
 
+    const extendVideoButton = createCanvasButton({
+        icon: magicIcon,
+        title: 'Extend video in new thread',
+        iconSize: 17,
+        onClick: () => {
+            if (activeNodeId) {
+                callbacks.onExtendVideoInNewThread(activeNodeId)
+                callbacks.onHide()
+            }
+        },
+    })
+
+    const deleteVideoButton = createCanvasButton({
+        icon: trashBinIcon,
+        title: 'Delete video',
+        iconSize: 16,
+        onClick: () => {
+            if (activeNodeId) {
+                callbacks.onDeleteNode(activeNodeId)
+                callbacks.onHide()
+            }
+        },
+    })
+
     const deleteEdgeButton = createCanvasButton({
         icon: trashBinIcon,
         title: 'Delete connection',
@@ -183,13 +213,17 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
         { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
         {
             element: addToLibraryButton,
-            context: [CANVAS_IMAGE_CONTEXT],
+            context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT],
             update: () => applyStyle(addToLibraryButton, {
                 display: callbacks.canAddToMediaLibrary(activeNodeId) ? '' : 'none',
             }),
         },
-        { element: connectButton, context: [CANVAS_IMAGE_CONTEXT] },
+        // Connect is shared across image + video contexts because both can be
+        // wired into a downstream thread the same way.
+        { element: connectButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
         { element: deleteButton, context: [CANVAS_IMAGE_CONTEXT] },
+        { element: extendVideoButton, context: [CANVAS_VIDEO_CONTEXT] },
+        { element: deleteVideoButton, context: [CANVAS_VIDEO_CONTEXT] },
         { element: changeCurveButton, context: [CANVAS_EDGE_CONTEXT] },
         { element: deleteEdgeButton, context: [CANVAS_EDGE_CONTEXT] },
     ]

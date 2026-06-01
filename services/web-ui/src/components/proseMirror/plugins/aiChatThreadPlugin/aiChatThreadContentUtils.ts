@@ -1,4 +1,4 @@
-import type { ImageGenerationTrace } from '@lixpi/constants'
+import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
 
 export type ProseMirrorJsonNode = {
     type?: string
@@ -7,12 +7,16 @@ export type ProseMirrorJsonNode = {
     content?: ProseMirrorJsonNode[]
 }
 
+// One turn's generated-media context, read back from the thread doc to populate
+// the canvas info panel. Carries whichever generation trace the response holds —
+// image and video write the same collapsible block, differing only in trace attr.
 export type GeneratedImageTurnInfo = {
     userPromptText: string
     responseText: string
     responseMessageId: string
     responseProvider: string
     imageGenerationTrace: ImageGenerationTrace | null
+    videoGenerationTrace: VideoGenerationTrace | null
     imageGenerationPromptText: string
 }
 
@@ -75,20 +79,21 @@ export function collectResponseTextById(root: ProseMirrorJsonNode): Record<strin
     return responseTextById
 }
 
-function getFirstImageGenerationTrace(responseNode: ProseMirrorJsonNode): {
-    trace: ImageGenerationTrace | null
+function getFirstGenerationTrace(responseNode: ProseMirrorJsonNode): {
+    imageTrace: ImageGenerationTrace | null
+    videoTrace: VideoGenerationTrace | null
     promptText: string
 } {
     for (const child of responseNode.content ?? []) {
         if (child.type !== 'aiCollapsibleBlock') continue
-        const trace = child.attrs?.imageGenerationTrace as ImageGenerationTrace | undefined
         return {
-            trace: trace ?? null,
+            imageTrace: (child.attrs?.imageGenerationTrace as ImageGenerationTrace | undefined) ?? null,
+            videoTrace: (child.attrs?.videoGenerationTrace as VideoGenerationTrace | undefined) ?? null,
             promptText: collectProseMirrorText(child).trim(),
         }
     }
 
-    return { trace: null, promptText: '' }
+    return { imageTrace: null, videoTrace: null, promptText: '' }
 }
 
 export function getGeneratedImageTurnInfoFromThreadContent(
@@ -110,7 +115,7 @@ export function getGeneratedImageTurnInfoFromThreadContent(
 
             if (child.type === 'aiResponseMessage') {
                 const responseId = typeof child.attrs?.id === 'string' ? child.attrs.id : ''
-                const { trace, promptText } = getFirstImageGenerationTrace(child)
+                const { imageTrace, videoTrace, promptText } = getFirstGenerationTrace(child)
                 const info: GeneratedImageTurnInfo = {
                     userPromptText: collectProseMirrorText(latestUserMessage ?? undefined).trim(),
                     responseText: collectProseMirrorText(child, {
@@ -118,7 +123,8 @@ export function getGeneratedImageTurnInfoFromThreadContent(
                     }).trim(),
                     responseMessageId: responseId,
                     responseProvider: typeof child.attrs?.aiProvider === 'string' ? child.attrs.aiProvider : '',
-                    imageGenerationTrace: trace,
+                    imageGenerationTrace: imageTrace,
+                    videoGenerationTrace: videoTrace,
                     imageGenerationPromptText: promptText,
                 }
 

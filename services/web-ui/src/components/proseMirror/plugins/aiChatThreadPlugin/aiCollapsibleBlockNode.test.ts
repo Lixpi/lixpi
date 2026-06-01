@@ -8,7 +8,7 @@ import {
     aiCollapsibleBlockNodeView,
     cacheImageGenerationTrace,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
-import type { ImageGenerationTrace } from '@lixpi/constants'
+import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
 
 vi.mock('$src/services/auth-service.ts', () => ({
     default: {
@@ -229,6 +229,58 @@ describe('aiCollapsibleBlockNodeView', () => {
 
         expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-title')?.textContent).toBe('Image generation details')
         expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-meta')?.textContent).toBe('0 references')
+    })
+
+    it('renders a video generation trace through the same collapsible (parity with images)', () => {
+        // The video trace reuses the image trace's reference/excluded/resolver
+        // shape, so the same renderer must surface it — only the title differs.
+        const videoTrace: VideoGenerationTrace = {
+            traceVersion: 'video-generation-trace-v1',
+            chatModelProvider: 'Anthropic',
+            chatModelId: 'claude-sonnet-4-6',
+            videoModelProvider: 'Google',
+            videoModelId: 'veo-3.0-generate-001',
+            aspectRatio: '16:9',
+            resolution: '1080p',
+            durationSeconds: 6,
+            toolPrompt: 'Animate the seaside village at dawn.',
+            finalPrompt: 'Animate the seaside village at dawn.',
+            promptWasChanged: false,
+            referenceImages: [
+                {
+                    id: 'branch:video-generated',
+                    source: 'branch-candidate',
+                    imageUrl: 'nats-obj://workspace-workspace-1-files/video-frame-file',
+                    label: 'seaside village still',
+                    role: 'target',
+                    nodeId: 'video-generated',
+                    fileId: 'video-frame-file',
+                    workspaceId: 'workspace-1',
+                    branchId: 'branch-video',
+                    reason: 'continue the seaside clip',
+                },
+            ],
+            excludedReferences: [],
+            resolver: {
+                resolverKind: 'structured-vlm',
+                resolverVersion: 'image-branch-vlm-v1',
+                resolverModelProvider: 'Anthropic',
+                resolverModelId: 'claude-sonnet-4-6',
+                mode: 'edit-active-branch',
+                operationKind: 'edit_existing',
+                confidence: 0.88,
+                rationale: 'Continue the seaside clip branch.',
+                targetImageNodeId: 'video-generated',
+                parentImageNodeId: 'video-generated',
+                branchId: 'branch-video',
+            },
+        }
+        const { nodeView } = createCollapsibleNodeView({ videoGenerationTrace: videoTrace })
+
+        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-title')?.textContent).toBe('Video generation details')
+        expect(nodeView.dom.querySelector('.ai-collapsible-block-summary-meta')?.textContent).toBe('1 reference')
+        expect(nodeView.dom.querySelector('.ai-image-generation-resolver-summary')?.textContent).toBe('Edit Existing | Edit Active Branch | confidence 88%')
+        expect(nodeView.dom.querySelector('.ai-image-generation-resolver-rationale')?.textContent).toContain('seaside clip branch')
     })
 
 })

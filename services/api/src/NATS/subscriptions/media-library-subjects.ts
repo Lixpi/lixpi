@@ -10,6 +10,7 @@ import {
     MEDIA_LIBRARY_SCOPE,
     type MediaLibraryImageItem,
     type MediaLibraryScope,
+    type MediaLibraryVideoItem,
 } from '@lixpi/constants'
 
 import MediaLibraryItem, {
@@ -20,9 +21,13 @@ import Organization from '../../models/organization.ts'
 import Workspace from '../../models/workspace.ts'
 import {
     copyLibraryImageToScope,
+    copyLibraryVideoToScope,
     copyWorkspaceImageToLibrary,
+    copyWorkspaceVideoToLibrary,
     deleteLibraryImageObject,
+    deleteLibraryVideoObject,
     materializeLibraryImageToWorkspace,
+    materializeLibraryVideoToWorkspace,
 } from '../../services/media-library-storage.ts'
 
 const { MEDIA_LIBRARY_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
@@ -174,7 +179,9 @@ export const mediaLibrarySubjects = [
         },
         handler: async (data: any) => {
             const { user: { userId }, workspaceId, organizationId, itemId } = data
-            return MediaLibraryItem.getImageItem({
+            // Widened to either-kind GET — the client may not know whether a given
+            // itemId is image or video. The item is kind-discriminated.
+            return MediaLibraryItem.getAnyItem({
                 itemId,
                 requesterContext: await getRequesterContext({
                     userId,
@@ -242,6 +249,129 @@ export const mediaLibrarySubjects = [
         },
     },
     {
+        subject: MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_VIDEO,
+        type: 'reply',
+        payloadType: 'json',
+        permissions: {
+            pub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_VIDEO] },
+            sub: { allow: [MEDIA_LIBRARY_SUBJECTS.CREATE_FROM_VIDEO, MEDIA_LIBRARY_SUBJECTS.EVENTS.CREATED] },
+        },
+        handler: async (data: any) => {
+            const {
+                user: { userId },
+                workspaceId,
+                fileId,
+                posterFileId,
+                durationSeconds,
+                aspectRatio,
+                hasAudio,
+            } = data as {
+                user: { userId: string }
+                workspaceId: string
+                fileId: string
+                posterFileId?: string
+                durationSeconds: number
+                aspectRatio: number
+                hasAudio: boolean
+            }
+            if (!workspaceId || !fileId || !(await verifyWorkspaceAccess(userId, workspaceId))) {
+                return { error: 'WORKSPACE_ACCESS_DENIED' }
+            }
+
+            const existing = await MediaLibraryItem.findActiveWorkspaceVideoBySource({ workspaceId, sourceFileId: fileId, userId })
+            if (existing) {
+                return {
+                    success: true,
+                    deduplicated: true,
+                    itemId: existing.itemId,
+                    kind: existing.kind,
+                    displayName: existing.displayName,
+                }
+            }
+
+            const copied = await copyWorkspaceVideoToLibrary({
+                workspaceId,
+                fileId,
+                posterFileId,
+                durationSeconds,
+                aspectRatio,
+                hasAudio,
+                scope: MEDIA_LIBRARY_SCOPE.WORKSPACE,
+                scopeOwnerId: workspaceId,
+            })
+            const now = Date.now()
+            const item: MediaLibraryVideoItem = {
+                itemId: copied.itemId,
+                version: 1,
+                kind: MEDIA_LIBRARY_ITEM_KIND.VIDEO,
+                displayName: copied.displayName,
+                ownerUserId: userId,
+                originWorkspaceId: workspaceId,
+                sourceFileId: fileId,
+                ...(posterFileId ? { sourcePosterFileId: posterFileId } : {}),
+                scope: MEDIA_LIBRARY_SCOPE.WORKSPACE,
+                scopeOwnerId: workspaceId,
+                scopeAndOwner: buildMediaLibraryScopeAndOwnerKey(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId),
+                status: MEDIA_LIBRARY_ITEM_STATUS.ACTIVE,
+                asset: copied.asset,
+                ...(copied.poster ? { poster: copied.poster } : {}),
+                video: copied.video,
+                createdAt: now,
+                updatedAt: now,
+            }
+
+            try {
+                await MediaLibraryItem.createVideoItem(item)
+            } catch (error) {
+                await deleteLibraryVideoObject(item).catch(() => {})
+                throw error
+            }
+
+            NATS_Service.getInstance()?.publish(MEDIA_LIBRARY_SUBJECTS.EVENTS.CREATED, {
+                type: 'created',
+                itemId: item.itemId,
+                kind: item.kind,
+            })
+            return {
+                success: true,
+                itemId: item.itemId,
+                kind: item.kind,
+                displayName: item.displayName,
+            }
+        },
+    },
+    {
+        subject: MEDIA_LIBRARY_SUBJECTS.MATERIALIZE_VIDEO_TO_WORKSPACE,
+        type: 'reply',
+        payloadType: 'json',
+        permissions: {
+            pub: { allow: [MEDIA_LIBRARY_SUBJECTS.MATERIALIZE_VIDEO_TO_WORKSPACE] },
+            sub: { allow: [MEDIA_LIBRARY_SUBJECTS.MATERIALIZE_VIDEO_TO_WORKSPACE] },
+        },
+        handler: async (data: any) => {
+            const { user: { userId }, itemId, workspaceId } = data
+            if (!workspaceId || !(await verifyWorkspaceAccess(userId, workspaceId))) {
+                return { error: 'WORKSPACE_ACCESS_DENIED' }
+            }
+            const item = await MediaLibraryItem.getVideoItem({
+                itemId,
+                requesterContext: await getRequesterContext({ userId, includeAllAvailable: true }),
+            })
+            if ('error' in item) return item
+            const stored = await materializeLibraryVideoToWorkspace({ item, workspaceId })
+            return {
+                itemId,
+                video: stored.video,
+                ...(stored.poster ? { poster: stored.poster } : {}),
+                durationSeconds: item.video.durationSeconds,
+                aspectRatio: item.video.aspectRatio,
+                hasAudio: item.video.hasAudio,
+                ...(typeof item.video.width === 'number' ? { width: item.video.width } : {}),
+                ...(typeof item.video.height === 'number' ? { height: item.video.height } : {}),
+            }
+        },
+    },
+    {
         subject: MEDIA_LIBRARY_SUBJECTS.CHANGE_SCOPE,
         type: 'reply',
         payloadType: 'json',
@@ -252,8 +382,8 @@ export const mediaLibrarySubjects = [
         handler: async (data: any) => {
             const { user: { userId }, itemId, newScope, workspaceId, organizationId } = data
             if (!VALID_SCOPES.includes(newScope as MediaLibraryScope)) return { error: 'INVALID_SCOPE' }
-            const item = await MediaLibraryItem.getOwnedImageItem({ itemId, userId })
-            if ('error' in item) return item
+            const owned = await MediaLibraryItem.getOwnedAnyItem({ itemId, userId })
+            if ('error' in owned) return owned
             const newScopeOwnerId = await getTargetScopeOwnerId({
                 userId,
                 workspaceId,
@@ -262,32 +392,59 @@ export const mediaLibrarySubjects = [
             })
             if (typeof newScopeOwnerId !== 'string') return newScopeOwnerId
 
-            const newAsset = await copyLibraryImageToScope({
-                item,
-                newScope: newScope as MediaLibraryScope,
-                newScopeOwnerId,
-            })
-            let updatedItem: MediaLibraryImageItem
-            try {
-                updatedItem = await MediaLibraryItem.changeScope({
-                    item,
+            let updatedScope: MediaLibraryScope
+            if (owned.kind === 'image') {
+                const newAsset = await copyLibraryImageToScope({
+                    item: owned,
                     newScope: newScope as MediaLibraryScope,
                     newScopeOwnerId,
-                    newAsset,
                 })
-            } catch (error) {
-                warn(`Failed to update Media Library scope for ${item.itemId}; retaining copied object for reconciliation.`)
-                throw error
+                let updatedItem: MediaLibraryImageItem
+                try {
+                    updatedItem = await MediaLibraryItem.changeScope({
+                        item: owned,
+                        newScope: newScope as MediaLibraryScope,
+                        newScopeOwnerId,
+                        newAsset,
+                    })
+                } catch (error) {
+                    warn(`Failed to update Media Library scope for ${owned.itemId}; retaining copied object for reconciliation.`)
+                    throw error
+                }
+                await deleteLibraryImageObject(owned).catch((error) => {
+                    warn(`Failed to delete old Media Library object ${owned.itemId}: ${error.message}`)
+                })
+                updatedScope = updatedItem.scope
+            } else {
+                const { asset: newAsset, poster: newPoster } = await copyLibraryVideoToScope({
+                    item: owned,
+                    newScope: newScope as MediaLibraryScope,
+                    newScopeOwnerId,
+                })
+                let updatedItem: MediaLibraryVideoItem
+                try {
+                    updatedItem = await MediaLibraryItem.changeScopeVideo({
+                        item: owned,
+                        newScope: newScope as MediaLibraryScope,
+                        newScopeOwnerId,
+                        newAsset,
+                        newPoster,
+                    })
+                } catch (error) {
+                    warn(`Failed to update Media Library scope for ${owned.itemId}; retaining copied object for reconciliation.`)
+                    throw error
+                }
+                await deleteLibraryVideoObject(owned).catch((error) => {
+                    warn(`Failed to delete old Media Library object ${owned.itemId}: ${error.message}`)
+                })
+                updatedScope = updatedItem.scope
             }
-            await deleteLibraryImageObject(item).catch((error) => {
-                warn(`Failed to delete old Media Library object ${item.itemId}: ${error.message}`)
-            })
             NATS_Service.getInstance()?.publish(MEDIA_LIBRARY_SUBJECTS.EVENTS.UPDATED, {
                 type: 'scopeChanged',
                 itemId,
                 newScope,
             })
-            return { success: true, itemId, scope: updatedItem.scope }
+            return { success: true, itemId, scope: updatedScope }
         },
     },
     {
@@ -300,13 +457,20 @@ export const mediaLibrarySubjects = [
         },
         handler: async (data: any) => {
             const { user: { userId }, itemId } = data
-            const item = await MediaLibraryItem.getOwnedImageItem({ itemId, userId })
-            if ('error' in item) return item
-            await MediaLibraryItem.deleteImageItem({ item })
-            await deleteLibraryImageObject(item).catch((error) => {
-                warn(`Failed to delete Media Library object ${item.itemId}: ${error.message}`)
-            })
-            info(`Deleted Media Library item ${itemId}`)
+            const owned = await MediaLibraryItem.getOwnedAnyItem({ itemId, userId })
+            if ('error' in owned) return owned
+            if (owned.kind === 'image') {
+                await MediaLibraryItem.deleteImageItem({ item: owned })
+                await deleteLibraryImageObject(owned).catch((error) => {
+                    warn(`Failed to delete Media Library image object ${owned.itemId}: ${error.message}`)
+                })
+            } else {
+                await MediaLibraryItem.deleteVideoItem({ item: owned })
+                await deleteLibraryVideoObject(owned).catch((error) => {
+                    warn(`Failed to delete Media Library video object ${owned.itemId}: ${error.message}`)
+                })
+            }
+            info(`Deleted Media Library item ${itemId} (kind=${owned.kind})`)
             NATS_Service.getInstance()?.publish(MEDIA_LIBRARY_SUBJECTS.EVENTS.DELETED, {
                 type: 'deleted',
                 itemId,

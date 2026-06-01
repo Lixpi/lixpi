@@ -44,7 +44,14 @@
         imageGenerationSize: ImageGenerationSize
     }
 
-    const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions, referencedFeatureIds }: AiChatSendMessagePayload & { imageOptions?: ImageOptions }) => {
+    type VideoOptions = {
+        aiVideoModel?: string
+        videoAspectRatio?: string
+        videoResolution?: string
+        videoDuration?: string
+    }
+
+    const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions, videoOptions, referencedFeatureIds }: AiChatSendMessagePayload & { imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => {
         // console.log('onAiChatSubmit', {messages, aiModel, threadId, aiInteractionInstance})
 
         if (!aiInteractionInstance) {
@@ -59,6 +66,10 @@
             aiModel,
             aiImageModel: imageOptions?.aiImageModel,
             imageSize: imageOptions?.imageGenerationSize,
+            aiVideoModel: videoOptions?.aiVideoModel,
+            videoAspectRatio: videoOptions?.videoAspectRatio,
+            videoResolution: videoOptions?.videoResolution,
+            videoDuration: videoOptions?.videoDuration,
             referencedFeatureIds,
         })
     }

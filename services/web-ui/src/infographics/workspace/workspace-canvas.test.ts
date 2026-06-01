@@ -360,6 +360,183 @@ describe('Workspace canvas — generated image preview rendering', () => {
 	})
 })
 
+describe('Workspace canvas — generated video canvas state', () => {
+	const ts = loadTs()
+
+	it('preserves workspace panel metadata when video workflows write canvas state', () => {
+		// Regression: the video callbacks used to build a fresh { viewport, nodes,
+		// edges } object, dropping aiChatPanel / sidebar tabs and collapsing the
+		// chat panel. Every video write must spread the existing canvas state.
+		const pendingStart = ts.indexOf('onVideoPendingToCanvas:')
+		const generatingStart = ts.indexOf('onVideoGeneratingToCanvas:', pendingStart)
+		const completeStart = ts.indexOf('onVideoCompleteToCanvas:', generatingStart)
+		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
+		const errorEnd = ts.indexOf('// Visibility detection for lazy loading', errorStart)
+
+		expect(pendingStart).toBeGreaterThan(-1)
+		expect(completeStart).toBeGreaterThan(pendingStart)
+		expect(errorStart).toBeGreaterThan(completeStart)
+		expect(errorEnd).toBeGreaterThan(errorStart)
+
+		const pendingHandler = ts.slice(pendingStart, generatingStart)
+		const completeHandler = ts.slice(completeStart, errorStart)
+		const errorHandler = ts.slice(errorStart, errorEnd)
+
+		expectExcerptToContain(pendingHandler, '...(currentCanvasState ?? {})', 'video pending handler')
+		expectExcerptToContain(completeHandler, '...currentCanvasState', 'video complete handler')
+		expectExcerptToContain(errorHandler, '...currentCanvasState', 'video error handler')
+	})
+
+	it('renders shared SVG controls for completed video nodes in the chrome layer', () => {
+		// The controls must live in the z-index-3 chrome layer because PIXI paints
+		// the video pixels above the DOM node shell.
+		expectSourceToContain(ts, 'function createVideoControlsChrome(node: VideoCanvasNode)')
+		expectSourceToContain(ts, 'className="workspace-video-chrome nopan"')
+		expectSourceToContain(ts, 'createVideoControls(svg, {')
+		expectSourceToContain(ts, 'videoNodeHandler?.getVideoElement(node.nodeId)')
+		expectSourceToContain(ts, 'if (!videoEl.currentSrc && !videoEl.src) return null')
+		expectSourceToContain(ts, "chromeEl.addEventListener('mouseenter', () => showVideoControls(node.nodeId))")
+		expectSourceToContain(ts, "chromeEl.addEventListener('mousemove', (event: MouseEvent) => {")
+		expectSourceToContain(ts, 'handleDragStart(event, node.nodeId)')
+		expectSourceToContain(ts, 'handleResizeStart(event, node.nodeId, resizeHandle)')
+		// Only completed videos (with a stored MP4 src) get the controls.
+		expectSourceToContain(ts, "node.type === 'video' && Boolean((node as VideoCanvasNode).src)")
+		// The chrome geometry tracks the node during live drag/resize.
+		expectSourceToContain(ts, 'applyVideoControlsGeometry(videoChromeEl, position, dimensions)')
+	})
+
+	it('syncs video chrome after video handler entries exist', () => {
+		const renderStart = ts.indexOf('render(newCanvasState: CanvasState | null')
+		const pixiSync = ts.indexOf('syncPixiMediaLayer(currentCanvasState)', renderStart)
+		const chromeSync = ts.indexOf('syncGeneratedImageChrome(currentCanvasState)', renderStart)
+
+		expect(renderStart).toBeGreaterThan(-1)
+		expect(pixiSync).toBeGreaterThan(-1)
+		expect(chromeSync).toBeGreaterThan(pixiSync)
+		expectSourceToContain(ts, 'onVideoElementReady: () => scheduleGeneratedMediaChromeSync(),')
+	})
+
+	it('counts prior videos as siblings when positioning a new generated output', () => {
+		// Regression: getGeneratedChildOutputs used to match only images, so a new
+		// video could not see a previously generated video and the two stacked on
+		// the same spot. Both media types must qualify as sibling outputs.
+		expectSourceToContain(ts, "if ((node.type !== 'image' && node.type !== 'video') || node.parentId) return false")
+	})
+
+	it('runs collision resolution when a video completes, mirroring images', () => {
+		const completeStart = ts.indexOf('onVideoCompleteToCanvas:')
+		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
+		const completeHandler = ts.slice(completeStart, errorStart)
+
+		expectExcerptToContain(completeHandler, 'createShapeAwareCollisionPlan(nodes)', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'resolveCollisions(collisionPlan.nodeBoxes', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
+	})
+
+	it('threads the representative mid-frame fileId onto the completed video node', () => {
+		const completeStart = ts.indexOf('onVideoCompleteToCanvas:')
+		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
+		const completeHandler = ts.slice(completeStart, errorStart)
+		expectExcerptToContain(completeHandler, 'frameFileId: frameFileId || videoNode.frameFileId,', 'video complete handler')
+	})
+
+	it('renders the info button + panel in the below-node media chrome (image+video parity)', () => {
+		// The shared media chrome (a strip below the node) carries the info button
+		// and descriptor panel for BOTH images and videos.
+		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		const chromeEnd = ts.indexOf('function createVideoControlsChrome', chromeStart)
+		const mediaChrome = ts.slice(chromeStart, chromeEnd)
+		expect(chromeStart).toBeGreaterThan(-1)
+		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome')
+		expectExcerptToContain(mediaChrome, 'createGeneratedMediaInfoPanel(node)', 'media chrome')
+		expectExcerptToContain(mediaChrome, 'applyGeneratedImageChromeGeometry(', 'media chrome')
+	})
+
+	it('keeps the video controls overlay free of the info button', () => {
+		// Regression: the info button used to share the video overlay, which shoved
+		// both affordances to opposite edges of the node. The video controls overlay
+		// must contain ONLY the controls now; the info button lives in the
+		// below-node media chrome.
+		const chromeStart = ts.indexOf('function createVideoControlsChrome(node: VideoCanvasNode)')
+		const chromeEnd = ts.indexOf('function destroyVideoControlInstances', chromeStart)
+		const controlsChrome = ts.slice(chromeStart, chromeEnd)
+		expectExcerptToContain(controlsChrome, 'workspace-video-controls-host nopan', 'video controls chrome')
+		expectExcerptNotToContain(controlsChrome, 'createMediaInfoButton(node)', 'video controls chrome')
+		expectExcerptNotToContain(controlsChrome, 'workspace-generated-image-actions', 'video controls chrome')
+	})
+
+	it('renders media info chrome for both image and video nodes', () => {
+		expectSourceToContain(ts, '...mediaInfoNodes.map(createGeneratedMediaChrome),')
+		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
+	})
+})
+
+// =============================================================================
+// Video node interaction (drag + resize parity with images)
+// =============================================================================
+
+describe('Workspace canvas — video node interaction', () => {
+	const scss = loadScss()
+
+	it('gives the video node + drag overlay the same box/pointer wiring as images', () => {
+		// Without these the transparent drag overlay has no box, so pointer events
+		// fall through to the canvas and a node drag becomes a canvas pan.
+		const overlay = extractBlock(scss, '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'position: absolute', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'z-index: 15', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'cursor: move', '.video-drag-overlay')
+		const nodeBlock = extractBlock(scss, '.workspace-video-node')
+		expectExcerptToContain(nodeBlock, '&.is-dragging', '.workspace-video-node')
+	})
+
+	it('lets the visible video chrome and controls own hover while preserving pointer interaction', () => {
+		const chrome = extractBlock(scss, '.workspace-video-chrome')
+		const controlsHost = extractBlock(scss, '.workspace-video-controls-host')
+
+		expectExcerptToContain(chrome, 'pointer-events: auto', '.workspace-video-chrome')
+		expectExcerptToContain(controlsHost, 'pointer-events: auto', '.workspace-video-controls-host')
+		expectExcerptToContain(controlsHost, '&.is-visible', '.workspace-video-controls-host')
+	})
+
+	it('shows resize handles on video node hover/selection', () => {
+		expectSourceToContain(scss, '.workspace-video-node:hover .workspace-handle')
+		expectSourceToContain(scss, '.workspace-video-node.is-selected .workspace-handle')
+	})
+})
+
+// =============================================================================
+// Media descriptors
+// =============================================================================
+
+describe('Workspace canvas — media descriptors', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+
+	it('derives a descriptor from generated media metadata for free (no extra model call)', () => {
+		expectSourceToContain(ts, 'function buildDescriptorFromGeneratedBy(')
+		// Generated image and video completion both stamp the descriptor.
+		expectSourceToContain(ts, 'descriptor: buildDescriptorFromGeneratedBy(generatedBy)')
+		expectSourceToContain(ts, "source: 'generation',")
+	})
+
+	it('captions uploaded media from a still (never the MP4) with an analyzing → ready flow', () => {
+		expectSourceToContain(ts, 'async function analyzeUploadedMedia(nodeId: string, stillFileId: string)')
+		expectSourceToContain(ts, 'descriptor: buildAnalyzingDescriptor(),')
+		// Uploaded video is captioned from the poster still, not the MP4.
+		expectSourceToContain(ts, 'void analyzeUploadedMedia(videoNodeId, posterFileId)')
+		expectSourceToContain(ts, 'void analyzeUploadedMedia(imageNodeId, materialized.fileId)')
+	})
+
+	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
+		expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
+		const buttonBlock = extractBlock(scss, '.image-info-button')
+		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.image-info-button')
+		expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
+		const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
+		expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
+	})
+})
+
 // =============================================================================
 // Context-region child world positioning
 // =============================================================================
@@ -1129,13 +1306,17 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
 	})
 
-	it('updateSelectionDrivenUi hides floating input for image and context region selections', () => {
+	it('updateSelectionDrivenUi never shows the detached floating input under any node', () => {
 		const fnMatch = ts.match(/function\s+updateSelectionDrivenUi[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('isContextRegionCanvasNode(node)')
-		expect(fnBody).toContain("selectedNodeType === 'image'")
+		// The deprecated detached prompt-input-below-node must never render for any
+		// node type (documents, threads, images, video).
+		expect(fnBody).not.toContain('showFloatingInput')
 		expect(fnBody).toContain('hideFloatingInput')
+		// Context-region selections still set the docked panel's prompt target.
+		expect(fnBody).toContain('isContextRegionCanvasNode(node)')
+		expect(fnBody).toContain('promptInputController.setTarget')
 	})
 
 	it('bubble menu callbacks include onAskAi', () => {
@@ -2161,5 +2342,91 @@ describe('workspace connectors — PIXI owns visible pixels', () => {
 		expectSourceNotToContain(pixiLayerTs, "setHealth('failed')")
 		expectSourceNotToContain(contextRegionLayerTs, "setHealth('failed')")
 		expectSourceNotToContain(pixiLogicTs, "'failed'")
+	})
+})
+
+// =============================================================================
+// Video generation pipeline — VideoCanvasNode + VEO
+// =============================================================================
+
+describe('video generation — canvas + plugin source shape', () => {
+	const ts = loadTs()
+
+	it('registers the VideoCanvasNode lifecycle alongside images', () => {
+		// Phase 5: video nodes share the same generation tracker pattern as
+		// images, but never live in the PIXI image entries map — they're
+		// dispatched through the mediaNodeRegistry (videoNodeHandler).
+		expectSourceToContain(ts, 'videoGenerationTracker')
+		expectSourceToContain(ts, 'createVideoNodeHandler')
+		expectSourceToContain(ts, 'createCanvasVideoLifecycleTracker')
+		expectSourceToContain(ts, "type: 'video'")
+		expectSourceToContain(ts, 'setAiGeneratedVideoCallbacks({')
+		expectSourceToContain(ts, 'onVideoPendingToCanvas:')
+		expectSourceToContain(ts, 'onVideoCompleteToCanvas:')
+		expectSourceToContain(ts, 'onVideoErrorToCanvas:')
+	})
+
+	it('feeds the PIXI traveling outline with both image and video pending nodes', () => {
+		// Phase 5 v1.1: the snake outline must frame VEO video placeholders
+		// during the 11s–6min wait, not just images. Regression-guards the
+		// merged set returned from syncPixiGeneratingImageNodes.
+		const pixiLayerTs = loadPixiMediaLayer()
+		expectSourceToContain(ts, 'function syncPixiGeneratingImageNodes()')
+		expectSourceToContain(ts, 'for (const partial of partialImageTracker.values())')
+		expectSourceToContain(ts, 'for (const pending of videoGenerationTracker.values())')
+		expectSourceToContain(ts, 'pixiMediaLayer?.setGeneratingImageNodes(generatingIds)')
+		// Video bounds come from the canvas state (no PIXI image entry exists
+		// for them) — the outline renderer reads dimensions directly off the
+		// CanvasNode and feeds them into PixiTravelingOutlineDatum.
+		expectSourceToContain(pixiLayerTs, 'fallbackNode.dimensions.width')
+		expectSourceToContain(pixiLayerTs, 'fallbackNode.dimensions.height')
+	})
+
+	it('keeps no DOM bounce-dot spinner for generating videos either', () => {
+		// PR #202 regression: PIXI outline is the sole canvas indicator for
+		// both kinds. The video placeholder must not reintroduce any of the
+		// removed DOM-spinner CSS classes.
+		expectSourceNotToContain(ts, 'video-generating-spinner')
+		expectSourceNotToContain(ts, 'video-dot-bounce')
+	})
+
+	it('wires the bubble menu for video nodes (Extend + Connect + Delete)', () => {
+		// Phase 6: video nodes share Connect with image, but get a dedicated
+		// Extend-in-new-thread entry and a video-specific Delete.
+		const bubbleMenuTs = readSourceFile('canvasBubbleMenuItems.ts')
+		expectSourceToContain(ts, "import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT")
+		expectSourceToContain(ts, "node.type !== 'image' && node.type !== 'video'")
+		expectSourceToContain(ts, "node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT")
+		expectSourceToContain(ts, 'onExtendVideoInNewThread: async (nodeId) => {')
+		expectSourceToContain(bubbleMenuTs, "export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'")
+		expectSourceToContain(bubbleMenuTs, "title: 'Extend video in new thread'")
+		expectSourceToContain(bubbleMenuTs, "title: 'Delete video'")
+		expectSourceToContain(bubbleMenuTs, 'context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT]')
+	})
+
+	it('resolves sourceVideoNodeId to a workspace Object Store URI at submit time', () => {
+		// Phase 6: the chat plugin forwards `sourceVideoNodeId` only via thread
+		// attrs; WorkspaceCanvas converts it to a `nats-obj://` URI just before
+		// publishing to NATS. VEO's precedence is extension > first-frame >
+		// references > text-only.
+		expectSourceToContain(ts, 'let videoSourceForExtension: string | undefined')
+		expectSourceToContain(ts, "videoOptions?.sourceVideoNodeId")
+		expectSourceToContain(ts, "`nats-obj://workspace-${workspaceId}-files/${sourceVideoNode.fileId}`")
+		expectSourceToContain(ts, 'videoSourceForExtension,')
+	})
+
+	it('emits video context items with poster + metadata for downstream threads', () => {
+		// Phase 7: vision-capable text models can't ingest MP4, so an upstream
+		// video is fed as its ffmpeg poster + a JSON text block describing
+		// duration/aspect/audio.
+		const serviceTs = readSourceFile('../../services/ai-chat-thread-service.ts')
+		expectSourceToContain(serviceTs, "export type ContextItemType = 'document' | 'image' | 'aiChatThread' | 'video'")
+		expectSourceToContain(serviceTs, "node.type === 'video'")
+		expectSourceToContain(serviceTs, 'posterFileId: videoNode.posterFileId')
+		expectSourceToContain(serviceTs, 'durationSeconds: videoNode.durationSeconds')
+		expectSourceToContain(serviceTs, 'aspectRatio: videoNode.aspectRatio')
+		expectSourceToContain(serviceTs, 'hasAudio: videoNode.hasAudio')
+		expectSourceToContain(serviceTs, "type: 'standalone_video'")
+		expectSourceToContain(serviceTs, '`nats-obj://workspace-${item.workspaceId}-files/${item.posterFileId}`')
 	})
 })
