@@ -12,6 +12,7 @@
 		"CHAT_PROCESS": "ai.interaction.chat.process",
 		"CHAT_STOP": "ai.interaction.chat.stop",
 		"CHAT_ERROR": "ai.interaction.chat.error",
+		"MEDIA_DESCRIBE": "ai.interaction.media.describe",
 		"FEATURE_EXTRACT": {
 			"START": "ai.interaction.feature.extract.start",
 			"STOP": "ai.interaction.feature.extract.stop",

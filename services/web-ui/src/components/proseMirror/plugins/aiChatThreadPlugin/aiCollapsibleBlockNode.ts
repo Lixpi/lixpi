@@ -15,6 +15,7 @@ export const aiCollapsibleBlockNodeSpec = {
         isStreaming: { default: true },
         imageGenerationTrace: { default: null },
         imageGenerationTraceId: { default: null },
+        videoGenerationTrace: { default: null },
     },
     content: '(paragraph | block)*',
     group: 'block',
@@ -30,6 +31,7 @@ export const aiCollapsibleBlockNodeSpec = {
                     isStreaming: false,
                     imageGenerationTrace: null,
                     imageGenerationTraceId: null,
+                    videoGenerationTrace: null,
                 }
             },
         },
