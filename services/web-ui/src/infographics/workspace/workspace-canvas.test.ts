@@ -528,6 +528,46 @@ describe('Workspace canvas — media descriptors', () => {
 })
 
 // =============================================================================
+// Content descriptors (documents & threads)
+// =============================================================================
+
+describe('Workspace canvas — content descriptors (documents & threads)', () => {
+	const ts = loadTs()
+
+	it('summarizes a text node from its plain text (no pixels) with an analyzing → ready/failed flow', () => {
+		expectSourceToContain(ts, 'async function analyzeTextNode(nodeId: string, text: string, title?: string)')
+		expectSourceToContain(ts, 'patchTextNodeDescriptor(nodeId, buildAnalyzingDescriptor())')
+		expectSourceToContain(ts, 'const result = await describeText({ workspaceId, text, title, aiModel })')
+		// Same analysis source + version stamp as captioned media.
+		expectSourceToContain(ts, "source: 'analysis',")
+	})
+
+	it('patches the descriptor only on document/thread nodes', () => {
+		expectSourceToContain(ts, 'function patchTextNodeDescriptor(nodeId: string, descriptor: ContentDescriptor)')
+		expectSourceToContain(ts, "node.type !== 'document' && node.type !== 'aiChatThread'")
+	})
+
+	it('debounces descriptor regeneration and skips too-thin content via settings (no magic numbers)', () => {
+		expectSourceToContain(ts, 'function scheduleTextNodeDescriptor(nodeId: string, content: unknown, title?: string)')
+		expectSourceToContain(ts, 'text.trim().length < settings.contentDescriptor.minTextLength')
+		expectSourceToContain(ts, 'settings.contentDescriptor.editDebounceMs')
+	})
+
+	it('triggers a descriptor refresh on document and thread edits, and on node creation', () => {
+		// Edit triggers: document editor + AI chat panel thread editor.
+		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(node.nodeId, value, doc.title)')
+		expectSourceToContain(ts, 'if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)')
+		// Create trigger: a newly inserted document/thread node with existing content.
+		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(positionedNode.nodeId, doc.content, doc.title)')
+		expectSourceToContain(ts, 'scheduleTextNodeDescriptor(positionedNode.nodeId, thread.content)')
+	})
+
+	it('clears pending descriptor timers on destroy', () => {
+		expectSourceToContain(ts, 'for (const timer of textDescriptorTimers.values()) clearTimeout(timer)')
+	})
+})
+
+// =============================================================================
 // Parent-child world positioning
 // =============================================================================
 

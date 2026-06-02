@@ -30,6 +30,7 @@ import {
     type ImageBranchCandidateSnapshot,
     type ImageBranchVlmResolution,
     type MediaDescriptor,
+    type ContentDescriptor,
     MEDIA_DESCRIPTOR_VERSION,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
@@ -75,7 +76,7 @@ import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT,
 import { downloadImage } from '$src/utils/downloadImage.ts'
 import { AiPromptInputController } from '$src/services/ai-prompt-input-controller.ts'
 import MediaLibraryService from '$src/services/media-library-service.ts'
-import { describeMedia } from '$src/services/media-descriptor-service.ts'
+import { describeMedia, describeText } from '$src/services/media-descriptor-service.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     buildImageBranchCandidateSnapshot,
@@ -83,6 +84,8 @@ import {
     getPromptTextFromMessages,
 } from '$src/services/ai-image-branching.ts'
 import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
+import { documentsStore } from '$src/stores/documentsStore.ts'
+import { extractContentFromProseMirror } from '$src/services/ai-chat-thread-service.ts'
 import {
     createGenericAiModelDropdown,
     createGenericSubmitButton,
@@ -265,6 +268,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
     const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
+    // Per-node debounce timers for document/thread descriptor regeneration. Keyed
+    // by canvas nodeId so rapid edits collapse into one describe call once typing
+    // (or a streaming transcript) settles.
+    const textDescriptorTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
     let activeAiChatRootNodeId: string | null = null
     let activeAiChatThreadId: string | null = null
     let activeAiChatPanelThreadId: string | null = null
@@ -2737,6 +2744,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 threadId: panelThreadId,
                 onEditorChange: (value: any) => {
                     onAiChatThreadContentChange?.({ workspaceId, threadId: panelThreadId, content: value })
+                    // The descriptor lives on the canvas thread node (if this thread
+                    // has one); standalone panel-only sessions have no node to patch.
+                    if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)
                 },
                 onProjectTitleChange: () => {},
                 onAiChatSubmit: async ({ messages, aiModel, imageOptions, videoOptions, referencedFeatureIds }: any) => {
@@ -3623,6 +3633,66 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } catch {
             patchMediaNodeDescriptor(nodeId, failed())
         }
+    }
+
+    // Patch a single document/thread node's descriptor and re-commit so the canvas
+    // chrome (analyzing indicator, info panel) re-renders. No-op if the node is gone
+    // or is not a text node.
+    function patchTextNodeDescriptor(nodeId: string, descriptor: ContentDescriptor): void {
+        if (!currentCanvasState) return
+        if (!currentCanvasState.nodes.some((node: CanvasNode) => node.nodeId === nodeId)) return
+        const nodes = currentCanvasState.nodes.map((node: CanvasNode) => {
+            if (node.nodeId !== nodeId || (node.type !== 'document' && node.type !== 'aiChatThread')) return node
+            return { ...node, descriptor }
+        })
+        commitCanvasState({ ...currentCanvasState, nodes })
+    }
+
+    // Summarize a document/thread node from its plain text (no pixels). Mirrors
+    // analyzeUploadedMedia's analyzing → ready/failed flow. Best-effort: any failure
+    // marks the descriptor 'failed' so the analyzing indicator resolves.
+    async function analyzeTextNode(nodeId: string, text: string, title?: string): Promise<void> {
+        const failed = (): ContentDescriptor => ({ ...buildAnalyzingDescriptor(), status: 'failed', updatedAt: Date.now() })
+        const aiModel = pickDescriptorModel()
+        if (!aiModel) {
+            patchTextNodeDescriptor(nodeId, failed())
+            return
+        }
+        patchTextNodeDescriptor(nodeId, buildAnalyzingDescriptor())
+        try {
+            const result = await describeText({ workspaceId, text, title, aiModel })
+            if (result.error || !result.summary) {
+                patchTextNodeDescriptor(nodeId, failed())
+                return
+            }
+            patchTextNodeDescriptor(nodeId, {
+                status: 'ready',
+                summary: result.summary,
+                entityTags: result.entityTags ?? [],
+                styleTags: result.styleTags ?? [],
+                source: 'analysis',
+                version: MEDIA_DESCRIPTOR_VERSION,
+                updatedAt: Date.now(),
+            })
+        } catch {
+            patchTextNodeDescriptor(nodeId, failed())
+        }
+    }
+
+    // Debounce a document/thread descriptor refresh. Called on node create and on
+    // each editor change; flattens the node's ProseMirror content to plain text and,
+    // once there is enough to summarize, regenerates the descriptor after edits
+    // settle. Too-thin content is skipped (no model call, no 'failed').
+    function scheduleTextNodeDescriptor(nodeId: string, content: unknown, title?: string): void {
+        const existing = textDescriptorTimers.get(nodeId)
+        if (existing) clearTimeout(existing)
+        const { text } = extractContentFromProseMirror((content ?? '') as string | object)
+        if (text.trim().length < settings.contentDescriptor.minTextLength) return
+        const timer = setTimeout(() => {
+            textDescriptorTimers.delete(nodeId)
+            void analyzeTextNode(nodeId, text, title)
+        }, settings.contentDescriptor.editDebounceMs)
+        textDescriptorTimers.set(nodeId, timer)
     }
 
     function buildImageSrc(imageUrl: string, apiBaseUrl: string, token: string | false): string {
@@ -5286,6 +5356,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             prevRevision: doc.prevRevision || 1,
                             content: value
                         })
+                        scheduleTextNodeDescriptor(node.nodeId, value, doc.title)
                     },
                     onProjectTitleChange: (title: string) => {
                         onDocumentTitleChange?.({ documentId: node.referenceId, title })
@@ -5790,6 +5861,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         onCanvasStateChange?.(newCanvasState)
+
+        // Newly inserted document/thread nodes get an initial descriptor from any
+        // existing content; a fresh, empty node is skipped until it's edited.
+        if (positionedNode.type === 'document') {
+            const docs = documentsStore.getData() as Document[] | undefined
+            const doc = docs?.find((d) => d.documentId === (positionedNode as DocumentCanvasNode).referenceId)
+            if (doc?.content !== undefined) scheduleTextNodeDescriptor(positionedNode.nodeId, doc.content, doc.title)
+        } else if (positionedNode.type === 'aiChatThread') {
+            const thread = aiChatThreadsStore.getThread((positionedNode as AiChatThreadCanvasNode).referenceId)
+            if (thread?.content !== undefined) scheduleTextNodeDescriptor(positionedNode.nodeId, thread.content)
+        }
+
         return newCanvasState
     }
 
@@ -5934,6 +6017,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             pendingAutoGrowThreadNodeIds.clear()
             hiddenEmptyThreadNodeIds.clear()
+            for (const timer of textDescriptorTimers.values()) clearTimeout(timer)
+            textDescriptorTimers.clear()
             connectionManager?.destroy()
             connectionManager = null
             viewportBridge = null
