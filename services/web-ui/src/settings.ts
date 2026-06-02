@@ -87,6 +87,11 @@ export type MediaLibrarySettings = {
     panelWidthFraction: number
 }
 
+export type ContentDescriptorSettings = {
+    editDebounceMs: number
+    minTextLength: number
+}
+
 export type Settings = {
     modelSelectorDropdown: ModelSelectorDropdownSettings
 
@@ -107,6 +112,8 @@ export type Settings = {
     imageBranchLineage: ImageBranchLineageSettings
 
     mediaLibrary: MediaLibrarySettings
+
+    contentDescriptor: ContentDescriptorSettings
 }
 
 const brandColors = {
@@ -253,5 +260,13 @@ export const settings: Settings = {
         branchToBranchGap: 160,
         // Canvas-unit horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches image-to-image branch spacing.
         imageToImageGap: 192,
+    },
+
+    // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).
+    contentDescriptor: {
+        // Quiet period (ms) after the last edit before a text node's descriptor is regenerated. Increasing it batches more typing into one describe call; decreasing it refreshes the descriptor sooner.
+        editDebounceMs: 2500,
+        // Minimum trimmed plain-text length before a document/thread is worth describing. Below this we skip the model call (nothing meaningful to summarize).
+        minTextLength: 16,
     },
 }

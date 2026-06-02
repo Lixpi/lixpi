@@ -1,7 +1,7 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH, type ProviderName } from '@lixpi/constants'
+import { MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH, CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH, type ProviderName } from '@lixpi/constants'
 
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from './extraction/vlm-client.ts'
 import type { ChatMessage } from './graph/state.ts'
@@ -17,6 +17,11 @@ export type MediaDescriptorResult = {
     entityTags: string[]
     styleTags: string[]
 }
+
+// Document and chat-thread nodes carry the same descriptor shape as media — the
+// relevance engine ranks every node type on summary + tags. The only difference
+// is how it's produced: a text summary (no pixels) instead of a VLM caption.
+export type ContentDescriptorResult = MediaDescriptorResult
 
 type DescribeMediaStillArgs = {
     provider: ProviderName
@@ -81,6 +86,18 @@ const sanitizeTags = (tags: unknown): string[] => {
     ))
 }
 
+// Clamp whatever the model returned into the descriptor contract: trimmed summary
+// capped at the max length, deduped non-empty tag arrays. Shared by the media and
+// text describe paths so both produce an identical, bounded shape.
+const normalizeDescriptorResult = (parsed: MediaDescriptorResult | undefined): MediaDescriptorResult => {
+    const safe = parsed ?? ({} as MediaDescriptorResult)
+    return {
+        summary: typeof safe.summary === 'string' ? safe.summary.trim().slice(0, MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH) : '',
+        entityTags: sanitizeTags(safe.entityTags),
+        styleTags: sanitizeTags(safe.styleTags),
+    }
+}
+
 // Caption a single still (image file, or a video's representative frame/poster).
 // `imageUrl` is a `nats-obj://workspace-{ws}-files/{fileId}` URI that the VLM
 // client resolves to inline image bytes.
@@ -99,10 +116,91 @@ export const describeMediaStill = async (args: DescribeMediaStillArgs): Promise<
         abortSignal: args.abortSignal,
     })
 
-    const parsed = result.parsed ?? ({} as MediaDescriptorResult)
-    return {
-        summary: typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH) : '',
-        entityTags: sanitizeTags(parsed.entityTags),
-        styleTags: sanitizeTags(parsed.styleTags),
-    }
+    return normalizeDescriptorResult(result.parsed)
+}
+
+// ─── Text nodes (documents / chat threads) ──────────────────────────────────────
+
+// Compact description of a document or chat-thread node, summarized from its plain
+// text — no pixels. Lets the relevance engine rank text nodes alongside media on
+// the same summary + tags contract. The caller passes already-extracted plain text
+// (the browser flattens the node's ProseMirror content) so this stays a single
+// text-only structured call regardless of node type.
+type DescribeTextContentArgs = {
+    provider: ProviderName
+    modelVersion: string
+    text: string
+    title?: string
+    natsService: NatsService
+    maxTokens?: number
+    abortSignal?: AbortSignal
+    callVlm?: (args: VlmCallArgs) => Promise<VlmCallResult<MediaDescriptorResult>>
+}
+
+const TEXT_SYSTEM_PROMPT = [
+    'You summarize a text node (a document or an AI chat transcript) for a visual canvas. Produce a compact, neutral description that lets a person or model tell this node apart from others at a glance.',
+    'Return: a one-to-two sentence summary of what the text is about; a few entity tags (key subjects, names, or topics mentioned); a few style tags (the kind/format/tone — e.g. "notes", "spec", "transcript", "outline", "formal").',
+    'Be specific and factual about the content. Do not speculate about intent, do not add commentary, and never invent topics that are not present.',
+    `Keep the summary under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
+].join(' ')
+
+export const buildTextDescriptorSchema = (): VlmJsonSchema => ({
+    name: 'describe_text',
+    description: 'Summarize a text node (document or chat transcript) with a short summary and a few entity/topic and style tags.',
+    schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+            summary: {
+                type: 'string',
+                description: `One to two sentences describing what the text is about. Under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
+            },
+            entityTags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'A few key subjects, names, or topics mentioned in the text (e.g. "budget", "Q3 roadmap", "Acme Corp").',
+            },
+            styleTags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'A few descriptors of the kind/format/tone (e.g. "notes", "spec", "transcript", "formal").',
+            },
+        },
+        required: ['summary', 'entityTags', 'styleTags'],
+    },
+})
+
+const buildTextDescriptorMessages = (text: string, title?: string): ChatMessage[] => {
+    const header = title?.trim() ? `Title: ${title.trim()}\n\n` : ''
+    return [
+        {
+            role: 'user',
+            content: [
+                { type: 'input_text', text: `Summarize this text node.\n\n${header}${text}` },
+            ],
+        },
+    ]
+}
+
+// Summarize a document/thread node from its plain text. Returns empty fields when
+// there is nothing to summarize (caller treats that as "skip", not "failed").
+export const describeTextContent = async (args: DescribeTextContentArgs): Promise<MediaDescriptorResult> => {
+    const text = args.text.trim().slice(0, CONTENT_DESCRIPTOR_TEXT_INPUT_MAX_LENGTH)
+    if (!text) return { summary: '', entityTags: [], styleTags: [] }
+
+    const callVlm = args.callVlm ?? ((vlmArgs: VlmCallArgs) => callStructuredVlm<MediaDescriptorResult>(vlmArgs))
+
+    const result = await callVlm({
+        provider: args.provider,
+        modelVersion: args.modelVersion,
+        systemPrompt: TEXT_SYSTEM_PROMPT,
+        userMessages: buildTextDescriptorMessages(text, args.title),
+        schema: buildTextDescriptorSchema(),
+        natsService: args.natsService,
+        temperature: 0.2,
+        maxTokens: Math.min(args.maxTokens ?? 1024, 1024),
+        abortSignal: args.abortSignal,
+    })
+
+    return normalizeDescriptorResult(result.parsed)
 }

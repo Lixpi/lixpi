@@ -36,3 +36,29 @@ export const describeMedia = async ({
         aiModel,
     }) as Promise<DescribeMediaResult>
 }
+
+// Requests a compact summary of a text node (a document or chat-thread node).
+// The caller passes the node's already-flattened plain text (+ optional title) —
+// no pixels. Shares the MEDIA_DESCRIBE subject and result shape with describeMedia;
+// the server branches on `text` vs `fileId`.
+export const describeText = async ({
+    workspaceId,
+    text,
+    title,
+    aiModel,
+}: {
+    workspaceId: string
+    text: string
+    title?: string
+    aiModel: string
+}): Promise<DescribeMediaResult> => {
+    const nats = servicesStore.getData('nats')
+    if (!nats) return { error: 'OFFLINE' }
+    return nats.request(MEDIA_DESCRIBE, {
+        token: await AuthService.getTokenSilently(),
+        workspaceId,
+        text,
+        title,
+        aiModel,
+    }) as Promise<DescribeMediaResult>
+}

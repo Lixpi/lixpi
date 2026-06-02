@@ -153,7 +153,7 @@ function extractContentFromNode(node: ProseMirrorNode, imageSrcs: string[]): str
     return ''
 }
 
-function extractContentFromProseMirror(content: string | object): ExtractedContent {
+export function extractContentFromProseMirror(content: string | object): ExtractedContent {
     try {
         const doc: ProseMirrorDoc = typeof content === 'string' ? JSON.parse(content) : content
         if (!doc || doc.type !== 'doc' || !doc.content) {

@@ -6,7 +6,7 @@ import { NATS_SUBJECTS, type ProviderName } from '@lixpi/constants'
 
 import Workspace from '../../models/workspace.ts'
 import AiModel from '../../models/ai-model.ts'
-import { describeMediaStill } from '../../llm/media-descriptor.ts'
+import { describeMediaStill, describeTextContent } from '../../llm/media-descriptor.ts'
 
 const { MEDIA_DESCRIBE } = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
 
@@ -15,10 +15,14 @@ const verifyWorkspaceAccess = async (userId: string, workspaceId: string): Promi
     return !('error' in workspace)
 }
 
-// Reply subject: caption a single media still on demand. The client passes the
-// fileId of a representative still (an image's own file, or a video's mid-frame
-// / poster) plus the user's currently-selected aiModel — the same VLM-capable
-// model the chat uses — so we never hardcode a model. The MP4 is never sent.
+// Reply subject: describe a single context-bearing node on demand. Two shapes:
+//   - media: the client passes the `fileId` of a representative still (an image's
+//     own file, or a video's mid-frame / poster) → one VLM caption. The MP4 is
+//     never sent.
+//   - text: the client passes `text` (+ optional `title`) flattened from a
+//     document / chat-thread node → a text summary, no pixels.
+// Either way the client passes its currently-selected `aiModel`, so we never
+// hardcode a model.
 export const mediaDescriptorSubjects = [
     {
         subject: MEDIA_DESCRIBE,
@@ -29,14 +33,18 @@ export const mediaDescriptorSubjects = [
             sub: { allow: [MEDIA_DESCRIBE] },
         },
         handler: async (data: any) => {
-            const { user: { userId }, workspaceId, fileId, aiModel } = data as {
+            const { user: { userId }, workspaceId, fileId, text, title, aiModel } = data as {
                 user: { userId: string }
                 workspaceId: string
-                fileId: string
+                fileId?: string
+                text?: string
+                title?: string
                 aiModel: string
             }
 
-            if (!workspaceId || !fileId || !(await verifyWorkspaceAccess(userId, workspaceId))) {
+            const hasText = typeof text === 'string' && text.trim().length > 0
+
+            if (!workspaceId || (!fileId && !hasText) || !(await verifyWorkspaceAccess(userId, workspaceId))) {
                 return { error: 'WORKSPACE_ACCESS_DENIED' }
             }
             if (!aiModel || !aiModel.includes(':')) {
@@ -55,17 +63,26 @@ export const mediaDescriptorSubjects = [
             }
 
             try {
-                const descriptor = await describeMediaStill({
-                    provider: provider as ProviderName,
-                    modelVersion: modelVersion!,
-                    imageUrl: `nats-obj://workspace-${workspaceId}-files/${fileId}`,
-                    natsService,
-                    maxTokens: aiModelMetaInfo.maxCompletionSize,
-                })
+                const descriptor = hasText
+                    ? await describeTextContent({
+                        provider: provider as ProviderName,
+                        modelVersion: modelVersion!,
+                        text: text!,
+                        title,
+                        natsService,
+                        maxTokens: aiModelMetaInfo.maxCompletionSize,
+                    })
+                    : await describeMediaStill({
+                        provider: provider as ProviderName,
+                        modelVersion: modelVersion!,
+                        imageUrl: `nats-obj://workspace-${workspaceId}-files/${fileId}`,
+                        natsService,
+                        maxTokens: aiModelMetaInfo.maxCompletionSize,
+                    })
                 return { ...descriptor }
             } catch (error: any) {
                 const message = error?.message ?? String(error)
-                err(`media describe failed for workspace ${workspaceId} file ${fileId}: ${message}`)
+                err(`media describe failed for workspace ${workspaceId} ${hasText ? 'text node' : `file ${fileId}`}: ${message}`)
                 return { error: message }
             }
         },

@@ -99,6 +99,8 @@ export type DocumentCanvasNode = CanvasNodeParentingFields & {
     referenceId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+    // Text summary of the document's content for the workspace relevance engine.
+    descriptor?: ContentDescriptor
 }
 
 export type ImageGenerationSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto'
@@ -331,22 +333,31 @@ export type ImageGeneratedByMetadata = {
     createdAt?: number
 }
 
-// A compact, model-friendly description of a media object (image or video)
-// stored on the canvas node so any feature can read it without re-deriving it.
-// AI-generated media composes it for free from the branch resolver's summaries;
-// uploaded media is captioned by a single VLM pass. Deliberately short so it can
-// be fed into model context (e.g. the branch-resolver transcript) without bloat.
-export type MediaDescriptorStatus = 'analyzing' | 'ready' | 'failed'
+// A compact, model-friendly description of a single context-bearing canvas node
+// (image, video, document, or aiChatThread) stored on the node so any feature can
+// read it without re-deriving it. Media descriptors are composed for free from the
+// branch resolver's summaries (generated media) or a single VLM pass (uploads);
+// document/thread descriptors are a text summary of the node's content (no pixels).
+// Deliberately short so it can be fed into model context (e.g. the branch-resolver
+// transcript, the workspace relevance snapshot) without bloat.
+export type ContentDescriptorStatus = 'analyzing' | 'ready' | 'failed'
 
-export type MediaDescriptor = {
-    status: MediaDescriptorStatus
+export type ContentDescriptor = {
+    status: ContentDescriptorStatus
     summary: string
     entityTags: string[]
     styleTags: string[]
+    // 'generation' = composed from generated-media metadata; 'analysis' = a VLM
+    // caption (media) or a text summary (document/thread).
     source: 'generation' | 'analysis'
     version: string
     updatedAt: number
 }
+
+// Back-compat aliases: media kept the MediaDescriptor name before descriptors were
+// generalized to all node types. Identical shape — the media path is unchanged.
+export type MediaDescriptorStatus = ContentDescriptorStatus
+export type MediaDescriptor = ContentDescriptor
 
 export type ImageCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
@@ -430,6 +441,8 @@ export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     referenceId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+    // Text summary of the thread transcript for the workspace relevance engine.
+    descriptor?: ContentDescriptor
 }
 
 export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode
