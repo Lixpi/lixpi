@@ -10,16 +10,66 @@ import type {
 
 import type { ProviderState } from '../graph/state.ts'
 
-// Mirrors tools/image-generation-trace.ts but for VEO. The reference-trace
-// shape is shared with images (selected/excluded by the same structured VLM
-// resolver), so the frontend can render either with the same components.
-//
-// Phase 3 does not apply a feature-transfer wrapping to the video prompt the
-// way the image trace does — /use feature samples are not propagated to video
-// generation in v1.
+export const VEO_NEGATIVE_PROMPT = [
+    'warped anatomy',
+    'distorted faces',
+    'extra limbs',
+    'duplicate limbs',
+    'malformed hands',
+    'melted fingers',
+    'identity drift',
+    'object morphing',
+    'flicker',
+    'jitter',
+    'stutter',
+    'abrupt cuts',
+    'scene reset',
+    'inconsistent scale',
+    'low-resolution noise',
+    'blurry subject',
+    'random text',
+    'subtitles',
+    'captions',
+    'watermarks',
+    'UI overlays',
+    'brand logos',
+].join(', ')
+
+const buildInputModeDirection = (state: ProviderState): string => {
+    if (state.videoSourceForExtension) {
+        return 'EXTENSION CONTINUITY: continue from the final second of the source video. Preserve the existing motion direction, camera momentum, subject identity, lighting, spatial layout, and audio bed. Do not restart the scene or return to the opening composition.'
+    }
+
+    if (state.videoFirstFrameImage) {
+        return 'IMAGE-TO-VIDEO DIRECTION: the attached image is the first frame and already defines the subject, composition, scene, color palette, and visual style. Preserve that starting frame and focus the prompt on motion, camera movement, environmental animation, lighting changes, and synchronized audio.'
+    }
+
+    if (state.videoReferenceImages && state.videoReferenceImages.length > 0) {
+        return 'REFERENCE-IMAGE DIRECTION: use the attached VEO reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.'
+    }
+
+    return 'TEXT-TO-VIDEO DIRECTION: generate one focused short-video moment with a clear subject, coherent physical action, deliberate camera movement, consistent lighting, and synchronized audio.'
+}
 
 export const buildVideoModelPrompt = (state: ProviderState): string => {
-    return state.generatedVideoPrompt ?? ''
+    const prompt = state.generatedVideoPrompt ?? ''
+    if (!prompt) return ''
+
+    const featureReferenceImages = state.featureReferenceImages ?? []
+    const hasFeatureReferences = featureReferenceImages.length > 0
+    const featureUsagePrompt = state.featureUsagePrompt?.trim()
+
+    return [
+        'VEO QUALITY DIRECTION: produce one coherent continuous shot for a short clip, with stable identity, physically plausible motion, consistent scale, clean temporal continuity, and synchronized audio. Keep the subject sharp and materially consistent through the entire motion.',
+        buildInputModeDirection(state),
+        hasFeatureReferences || featureUsagePrompt
+            ? 'MANDATORY /use FEATURE TRANSFER FOR VIDEO: the feature reference image(s) and feature brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the feature sample subject, pose, composition, or layout.'
+            : undefined,
+        featureUsagePrompt ? `FEATURE BRIEF:\n${featureUsagePrompt}` : undefined,
+        'USER VIDEO REQUEST:',
+        prompt,
+        `Negative prompt: ${VEO_NEGATIVE_PROMPT}`,
+    ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
 }
 
 const shortText = (value: string | undefined, fallback: string): string => {
@@ -54,7 +104,7 @@ const getDecisionByNodeId = (
     return new Map((decisions ?? []).map((decision) => [decision.nodeId, decision]))
 }
 
-const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
+const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
     const resolution = state.imageBranchResolution
     if (!resolution) return []
     const candidatesByNodeId = new Map(
@@ -78,6 +128,27 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
             reason: decision?.reason,
         }
     })
+}
+
+const buildFeatureReference = (imageUrl: string, traceImageUrl: string | undefined, index: number): ImageGenerationTraceReference => ({
+    id: `feature:${index + 1}`,
+    imageUrl: traceImageUrl ?? getTraceSafeImageUrl(imageUrl),
+    source: 'feature-reference',
+    label: `Feature reference ${index + 1}`,
+    role: 'feature-reference',
+})
+
+const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
+    const featureReferenceImages = state.featureReferenceImages ?? []
+    const featureReferenceImageTraceUrls = state.featureReferenceImageTraceUrls ?? []
+    return [
+        ...buildBranchReferenceTrace(state),
+        ...featureReferenceImages.map((imageUrl, index) => buildFeatureReference(
+            imageUrl,
+            featureReferenceImageTraceUrls[index],
+            index,
+        )),
+    ]
 }
 
 const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedReference[] => {
