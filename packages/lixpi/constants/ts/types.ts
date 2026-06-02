@@ -157,6 +157,32 @@ export type ImageBranchCandidateSnapshot = {
     transcriptContext: string
 }
 
+// One compact, descriptors-only entry per context-bearing canvas node. The
+// browser builds these for the whole workspace each chat turn so the API
+// relevance stage can rank on text alone (no pixels) — `imageUrl`/`fileId` are
+// nats-obj references the API resolves only for the narrowed, selected set.
+export type WorkspaceContextNode = {
+    nodeId: string
+    type: CanvasNodeType
+    title?: string
+    descriptorSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    fileId?: string
+    imageUrl?: string
+    branchId?: string
+    isExplicitChip: boolean
+    isEdgeForced: boolean
+}
+
+export type WorkspaceContextSnapshot = {
+    resolverVersion: string
+    workspaceId: string
+    threadId: string
+    promptText: string
+    nodes: WorkspaceContextNode[]
+}
+
 export type ImageBranchReferenceRole =
     | 'target'
     | 'base-context'
@@ -979,6 +1005,9 @@ export type AiInteractionChatSendMessagePayload = {
     threadId: string
     referencedFeatureIds?: string[]
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
+    // Whole-workspace, descriptors-only index sent each turn; consumed by the
+    // API `resolveWorkspaceContext` relevance stage (later phase).
+    workspaceContextSnapshot?: WorkspaceContextSnapshot
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {

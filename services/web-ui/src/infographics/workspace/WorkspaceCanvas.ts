@@ -80,6 +80,7 @@ import { describeMedia, describeText } from '$src/services/media-descriptor-serv
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     buildImageBranchCandidateSnapshot,
+    buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
     getPromptTextFromMessages,
 } from '$src/services/ai-image-branching.ts'
@@ -2809,6 +2810,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             ).imageBranchCandidateSnapshot
                             : undefined
 
+                        // Whole-workspace, descriptors-only index for the API relevance stage.
+                        // Built every turn (text-only included); chips + the rooted thread's
+                        // edge-connected nodes are flagged so the API can force-include them.
+                        const workspaceContextSnapshot = currentCanvasState
+                            ? buildWorkspaceContextSnapshot({
+                                workspaceId,
+                                threadId: panelThreadId ?? '',
+                                prompt: getPromptTextFromMessages(messages),
+                                nodes: currentCanvasState.nodes,
+                                edges: currentCanvasState.edges,
+                                rootNodeId: rootNode?.nodeId,
+                                contextChipNodeIds: aiChatPanelState.contextChips,
+                                titlesByNodeId: buildWorkspaceContextTitlesByNodeId(currentCanvasState.nodes),
+                            })
+                            : undefined
+
                         // Resolve `sourceVideoNodeId` (set by the "Extend video in new
                         // thread" action) to a workspace Object Store URI. VEO consumes
                         // this as its `video` (extension) input — see google-provider
@@ -2835,6 +2852,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             videoSourceForExtension,
                             referencedFeatureIds,
                             imageBranchCandidateSnapshot,
+                            workspaceContextSnapshot,
                         })
                     } catch (error) {
                         console.error('Failed to gather AI chat context:', error)
@@ -3500,6 +3518,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (currentCanvasState?.edges.some((edge: WorkspaceEdge) => edge.sourceNodeId === selectedImage.nodeId && edge.targetNodeId === rootNode.nodeId)) return selectedImage.nodeId
 
         return undefined
+    }
+
+    // Doc/thread node titles for the workspace context snapshot. Media nodes
+    // carry their own descriptor, so only document + aiChatThread nodes need a
+    // store lookup; a missing title is simply omitted from the snapshot.
+    function buildWorkspaceContextTitlesByNodeId(nodes: CanvasNode[]): Record<string, string> {
+        const documentTitleById = new Map<string, string>(currentDocuments.map((doc) => [doc.documentId, doc.title]))
+        const threadTitleById = new Map<string, string | undefined>(currentAiChatThreads.map((thread) => [thread.threadId, thread.title]))
+        const titlesByNodeId: Record<string, string> = {}
+        for (const node of nodes) {
+            if (node.type === 'document') {
+                const title = documentTitleById.get(node.referenceId)
+                if (title) titlesByNodeId[node.nodeId] = title
+            } else if (node.type === 'aiChatThread') {
+                const title = threadTitleById.get(node.referenceId)
+                if (title) titlesByNodeId[node.nodeId] = title
+            }
+        }
+        return titlesByNodeId
     }
 
     function rememberGeneratedImagePlacement(threadId: string, rootNode: ChatRootNode, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
