@@ -424,6 +424,8 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 - **Delete** — removes the node and its associated edges from canvas state
 
 ### Video Node Actions
+- **Replace** — uploads a new video through `/api/videos/:workspaceId`, swaps the MP4/poster IDs on the existing node, and keeps the node in place
+- **Download** — downloads the stored MP4 through the Range-capable video route with `download=true`
 - **Add to Media Library** — saves a completed stored video and poster as independent library copies
 - **Connect to node** — starts the same menu-driven graph connection flow as images
 - **Extend video in new thread** — creates a new AI chat thread seeded with the selected video as VEO extension input
