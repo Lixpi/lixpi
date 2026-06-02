@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin'
 
 type CanvasNodePosition = {
     x: number
@@ -500,7 +500,19 @@ export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     descriptor?: ContentDescriptor
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode
+export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'branchOrigin'
+    branchId: string
+    prompt: string
+    referenceNodeIds: string[]
+    referenceFileIds: string[]
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    createdAt: number
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode
 
 export type CanvasViewport = {
     x: number
