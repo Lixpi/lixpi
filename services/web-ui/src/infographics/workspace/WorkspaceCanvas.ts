@@ -101,6 +101,8 @@ import {
     createGenericVideoDurationDropdown,
 } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { createPixiBranchOriginLayer, type PixiBranchOriginLayer } from '$src/infographics/workspace/rendering/pixiBranchOriginLayer.ts'
+import { getBranchOriginReferenceNodes } from '$src/infographics/workspace/rendering/branchOrigins.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
@@ -239,6 +241,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let pixiMediaLayer: PixiMediaLayer | null = null
+    let pixiBranchOriginLayer: PixiBranchOriginLayer | null = null
     let viewportBridge: ViewportBridge | null = null
     let imageChromeViewportEl: HTMLDivElement | null = null
     let generatedMediaChromeSyncRaf: number | null = null
@@ -251,6 +254,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
     const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
+    const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const videoControlsHideTimers: Map<string, number> = new Map()
     const VIDEO_CONTROLS_HEIGHT = 52
@@ -333,6 +337,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         selectionColors: pixiSelectionColors,
         onImageIntrinsicSize: handleImageIntrinsicSize,
     })
+    pixiBranchOriginLayer = createPixiBranchOriginLayer({
+        paneEl,
+        viewportEl,
+    })
 
     // Register the VideoCanvasNode handler with the PIXI media layer's
     // mediaNodeRegistry. The handler owns the poster/placeholder sprite and the
@@ -355,12 +363,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     viewportBridge = createViewportBridge({
         viewportEl,
         viewportOverlayEls: [imageChromeViewportEl],
-        getPixiLayer: () => pixiMediaLayer,
+        getPixiLayers: () => [pixiMediaLayer, pixiBranchOriginLayer],
     })
     if (currentCanvasState?.viewport) {
         viewportBridge.applyViewport(currentCanvasState.viewport)
     }
     syncPixiMediaLayer(currentCanvasState)
+    syncPixiBranchOriginLayer(currentCanvasState)
 
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
@@ -1059,6 +1068,89 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return button
     }
 
+    function getBranchOriginReferenceThumbnailSrc(node: ImageCanvasNode | VideoCanvasNode): string {
+        return node.type === 'video' ? node.posterSrc || node.src : node.src
+    }
+
+    function createBranchOriginInfoPanel(node: BranchOriginCanvasNode): HTMLElement {
+        const panel = html`<div className="canvas-generated-image-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
+        const promptSection = html`
+            <div className="canvas-media-descriptor canvas-branch-origin-prompt">
+                <span className="canvas-media-descriptor-label">Branch prompt</span>
+                <p className="canvas-media-descriptor-summary">${node.prompt || 'Prompt unavailable.'}</p>
+            </div>
+        ` as HTMLElement
+        panel.appendChild(promptSection)
+
+        const referenceNodes = getBranchOriginReferenceNodes(node, currentCanvasState?.nodes ?? [])
+        const referencesSection = html`
+            <div className="canvas-media-descriptor canvas-branch-origin-references">
+                <span className="canvas-media-descriptor-label">References</span>
+            </div>
+        ` as HTMLElement
+        if (referenceNodes.length > 0) {
+            const thumbnailsEl = html`<div className="canvas-branch-origin-reference-thumbnails"></div>` as HTMLDivElement
+            for (const referenceNode of referenceNodes) {
+                const src = getBranchOriginReferenceThumbnailSrc(referenceNode)
+                const label = referenceNode.type === 'video' ? 'Video reference' : 'Image reference'
+                thumbnailsEl.appendChild(html`
+                    <div className="canvas-branch-origin-reference-thumbnail" title=${label}>
+                        <img src=${src} alt=${label} loading="lazy" />
+                    </div>
+                ` as HTMLElement)
+            }
+            referencesSection.appendChild(thumbnailsEl)
+        } else {
+            referencesSection.appendChild(
+                html`<p className="canvas-media-descriptor-summary canvas-generated-image-info-empty">Reference thumbnails unavailable.</p>` as HTMLElement
+            )
+        }
+        panel.appendChild(referencesSection)
+
+        return panel
+    }
+
+    function toggleBranchOriginInfo(nodeId: string): void {
+        if (expandedBranchOriginInfoNodeIds.has(nodeId)) {
+            expandedBranchOriginInfoNodeIds.delete(nodeId)
+        } else {
+            expandedBranchOriginInfoNodeIds.add(nodeId)
+        }
+        const node = currentCanvasState?.nodes.find(
+            (candidate: CanvasNode): candidate is BranchOriginCanvasNode => candidate.nodeId === nodeId && candidate.type === 'branchOrigin'
+        )
+        const existingEl = viewportEl.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
+        if (node && existingEl) {
+            const nextEl = createBranchOriginNode(node)
+            existingEl.replaceWith(nextEl)
+            connectionManager?.registerNodeElement(node.nodeId, nextEl as HTMLDivElement)
+            updateNodeSelectionClasses(new Set(), selectedNodeIds)
+        }
+        syncPixiBranchOriginLayer(currentCanvasState)
+    }
+
+    function createBranchOriginInfoButton(node: BranchOriginCanvasNode): HTMLButtonElement {
+        const isExpanded = expandedBranchOriginInfoNodeIds.has(node.nodeId)
+        const title = 'Branch origin details'
+        const button = html`
+            <button
+                className=${`image-info-button branch-origin-info-button nopan${isExpanded ? ' is-active' : ''}`}
+                type="button"
+                aria-label=${title}
+                aria-expanded=${String(isExpanded)}
+                title=${title}
+            >
+                <span innerHTML=${infoCircleIcon}></span>
+            </button>
+        ` as HTMLButtonElement
+        button.addEventListener('click', (event: MouseEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            toggleBranchOriginInfo(node.nodeId)
+        })
+        return button
+    }
+
     // Provenance/descriptor chrome (provider badge + info button + expandable
     // panel) rendered as a strip BELOW the node — identical placement for image
     // and video so the info affordance is consistent across media. The video
@@ -1272,6 +1364,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncPixiGeneratingImageNodes()
         pixiMediaLayer?.sync(canvasState)
         syncGeneratedImageChrome(canvasState)
+    }
+
+    function syncPixiBranchOriginLayer(canvasState: CanvasState | null = currentCanvasState): void {
+        pixiBranchOriginLayer?.sync(canvasState, selectedNodeIds)
     }
 
     function fitImageDimensionsToAspectRatio(
@@ -1875,6 +1971,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
         pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
+        syncPixiBranchOriginLayer(currentCanvasState)
         scheduleEdgesRender()
         // Selecting canvas nodes while the panel is open force-includes them as
         // explicit context chips. Only newly-selected ids are added so removing a
@@ -2252,7 +2349,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function addContextChips(nodeIds: Iterable<string>): void {
         if (!currentCanvasState) return
-        const eligibleNodeIds = new Set(currentCanvasState.nodes.map((node) => node.nodeId))
+        const eligibleNodeIds = new Set(currentCanvasState.nodes
+            .filter((node: CanvasNode) => node.type !== 'branchOrigin')
+            .map((node) => node.nodeId))
         const chipNodeIds = new Set(aiChatPanelState.contextChips)
         const nextChips = [...aiChatPanelState.contextChips]
         for (const nodeId of nodeIds) {
@@ -2427,6 +2526,69 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         persistAiChatSidebarState()
     }
 
+    function buildAiPromptDraftFromText(promptText: string, attrs: Record<string, string> = {}): object {
+        const text = promptText.trim()
+        const paragraph = text
+            ? { type: 'paragraph', content: [{ type: 'text', text }] }
+            : { type: 'paragraph' }
+        return {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiPromptInput',
+                    attrs: {
+                        aiModel: attrs.aiModel || '',
+                        aiImageModel: attrs.aiImageModel || '',
+                        imageGenerationSize: attrs.imageGenerationSize || 'auto',
+                        aiVideoModel: attrs.aiVideoModel || '',
+                        videoAspectRatio: attrs.videoAspectRatio || '',
+                        videoResolution: attrs.videoResolution || '',
+                        videoDuration: attrs.videoDuration || '',
+                    },
+                    content: [paragraph],
+                },
+            ],
+        }
+    }
+
+    function getActiveAiPromptInputAttrs(): Record<string, string> {
+        const view = activeAiChatPromptEditor?.editorView
+        const attrs: Record<string, string> = {}
+        view?.state.doc.descendants((node: any) => {
+            if (node.type.name !== 'aiPromptInput') return true
+            Object.assign(attrs, node.attrs)
+            return false
+        })
+        return attrs
+    }
+
+    function replaceActiveAiChatPromptDraft(promptText: string): void {
+        const draftKey = getActiveAiChatSidebarTab()?.tabId ?? NEW_CHAT_DRAFT_KEY
+        const view = activeAiChatPromptEditor?.editorView
+        const draft = buildAiPromptDraftFromText(promptText, getActiveAiPromptInputAttrs())
+        persistAiChatPromptDraft(draftKey, draft)
+        if (!view || !activeAiChatPromptEditor?.editorSchema) return
+
+        try {
+            const nextDoc = activeAiChatPromptEditor.editorSchema.nodeFromJSON(draft)
+            let tr = view.state.tr.replaceWith(0, view.state.doc.content.size, nextDoc.content)
+            let inputPos = -1
+            tr.doc.descendants((node: any, pos: number) => {
+                if (node.type.name !== 'aiPromptInput') return true
+                inputPos = pos
+                return false
+            })
+            if (inputPos >= 0) {
+                const cursorPos = Math.max(1, Math.min(inputPos + 2 + promptText.trim().length, tr.doc.content.size))
+                tr = tr.setSelection(TextSelection.create(tr.doc, cursorPos))
+            }
+            view.dispatch(tr.scrollIntoView())
+            view.focus()
+        } catch (error) {
+            console.error('Failed to seed branch-origin prompt draft:', error)
+        }
+    }
+
     function insertFeatureIntoActivePrompt(feature: FeatureMeta): boolean {
         const view = activeAiChatPromptEditor?.editorView
         const featureRefType = view?.state.schema.nodes.feature_reference
@@ -2510,6 +2672,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         persistAiChatSidebarState()
         renderActiveAiChatPanel()
         void loadExtractionSessionHistory()
+    }
+
+    function openBranchOriginInAiChatPanel(node: BranchOriginCanvasNode): void {
+        openAiChatPanel()
+        removeContextChip(node.nodeId)
+        addContextChips(node.referenceNodeIds)
+        replaceActiveAiChatPromptDraft(node.prompt)
+        refreshContextChipTray()
+        pixiBranchOriginLayer?.pulseBranchOrigin(node.nodeId)
     }
 
     function closeAiChatPanel(): void {
@@ -3967,7 +4138,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = createImageNode(imageNode)
         viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(imageNode.nodeId, nodeEl as HTMLDivElement)
+        syncBranchOriginDomProxies(currentCanvasState)
         syncPixiMediaLayer(currentCanvasState)
+        syncPixiBranchOriginLayer(currentCanvasState)
     }
 
     // Sibling of appendImageNodeToDOM for VideoCanvasNode placeholders. The
@@ -3978,7 +4151,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodeEl = createVideoNode(videoNode)
         viewportEl.appendChild(nodeEl)
         connectionManager?.registerNodeElement(videoNode.nodeId, nodeEl as HTMLDivElement)
+        syncBranchOriginDomProxies(currentCanvasState)
         syncPixiMediaLayer(currentCanvasState)
+        syncPixiBranchOriginLayer(currentCanvasState)
     }
 
     // Persist canvas state without triggering a full re-render.
@@ -4829,7 +5004,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createBaseNodeElement(
         node: CanvasNode,
         extraClasses?: string,
-        extraDataAttrs?: Record<string, string>
+        extraDataAttrs?: Record<string, string>,
+        interactionOptions: { renderResizeHandles?: boolean; onClick?: () => void } = {}
     ): { nodeEl: HTMLElement; dragOverlay: HTMLElement } {
         const nodeWorldPosition = getNodeWorldPosition(node)
         const nodeElStyle = {
@@ -4870,12 +5046,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
 
             selectNode(node.nodeId)
+            interactionOptions.onClick?.()
         })
 
-        for (const corner of RESIZE_CORNERS) {
-            // Legacy embedded thread nodes keep bottom handles on the floating input.
-            if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue
-            nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
+        if (interactionOptions.renderResizeHandles !== false) {
+            for (const corner of RESIZE_CORNERS) {
+                // Legacy embedded thread nodes keep bottom handles on the floating input.
+                if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue
+                nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
+            }
         }
 
         const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}></div>` as HTMLDivElement
@@ -4898,7 +5077,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncEdges(nextState.edges)
         connectionManager?.syncNodes(getNodesForConnectionManager(nextState.nodes))
         scheduleEdgesRender()
+        syncBranchOriginDomProxies(nextState)
         syncPixiMediaLayer(nextState)
+        syncPixiBranchOriginLayer(nextState)
         lastVisualSyncKey = getCanvasVisualSyncKey(nextState)
     }
 
@@ -5202,6 +5383,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
+                pixiBranchOriginLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
                 updateGeneratedImageChromeLiveTransform(draggedNodeId, currentPos, currentDims)
 
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
@@ -5249,6 +5431,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             repositionCanvasBubbleMenu()
             updateSelectionGroupOverlayElement()
             pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
+            syncPixiBranchOriginLayer(currentCanvasState)
         }
 
         const handleMouseUp = (upEvent: MouseEvent) => {
@@ -5346,6 +5529,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 applyStyle(movedNodeEl, { left: `${resolvedPosition.x}px`, top: `${resolvedPosition.y}px` })
                             }
                             pixiMediaLayer?.setNodeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
+                            pixiBranchOriginLayer?.setNodeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
                             updateGeneratedImageChromeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
                             const nextPosition = n.parentId
                                 ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(updatedNodes))
@@ -5489,8 +5673,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
 
             pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
+            pixiBranchOriginLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             updateGeneratedImageChromeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
+            syncPixiBranchOriginLayer(currentCanvasState)
             pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds(), { fill: shouldFillSelectionOverlayBounds() })
 
             // If resizing a parented child, visibly grow the parent in real-time.
@@ -5702,6 +5888,48 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    function createBranchOriginNode(node: BranchOriginCanvasNode): HTMLElement {
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-branch-origin-node',
+            { branchId: node.branchId },
+            {
+                renderResizeHandles: false,
+                onClick: () => openBranchOriginInAiChatPanel(node),
+            }
+        )
+        nodeEl.title = node.prompt || 'Branch origin'
+        nodeEl.setAttribute('aria-label', node.prompt ? `Branch origin: ${node.prompt}` : 'Branch origin')
+        dragOverlay.className = 'branch-origin-drag-overlay nopan'
+        nodeEl.appendChild(createBranchOriginInfoButton(node))
+        if (expandedBranchOriginInfoNodeIds.has(node.nodeId)) {
+            nodeEl.appendChild(createBranchOriginInfoPanel(node))
+        }
+
+        return nodeEl
+    }
+
+    function syncBranchOriginDomProxies(canvasState: CanvasState | null = currentCanvasState): void {
+        if (!canvasState) return
+        const branchOriginNodes = canvasState.nodes.filter(
+            (node: CanvasNode): node is BranchOriginCanvasNode => node.type === 'branchOrigin'
+        )
+        const activeBranchOriginNodeIds = new Set(branchOriginNodes.map((node: BranchOriginCanvasNode) => node.nodeId))
+
+        for (const staleEl of Array.from(viewportEl.querySelectorAll<HTMLElement>('.workspace-branch-origin-node'))) {
+            const nodeId = staleEl.dataset.nodeId
+            if (nodeId && activeBranchOriginNodeIds.has(nodeId)) continue
+            staleEl.remove()
+        }
+
+        for (const node of branchOriginNodes) {
+            if (viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`)) continue
+            const nodeEl = createBranchOriginNode(node)
+            viewportEl.appendChild(nodeEl)
+            connectionManager?.registerNodeElement(node.nodeId, nodeEl as HTMLDivElement)
+        }
+    }
+
     function handlePanePointerDown(event: PointerEvent): void {
         if (event.button !== 0 || !event.isPrimary) return
         if (!isCanvasBackgroundTarget(event.target)) return
@@ -5860,7 +6088,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             } else if (node.type === 'video') {
                 nodeEl = createVideoNode(node as VideoCanvasNode)
             } else if (node.type === 'branchOrigin') {
-                continue
+                nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)
             } else {
                 // Inert legacy guard: old workspaces may still contain
                 // `type: 'contextRegion'` nodes. Phase 1 intentionally does not
@@ -6217,7 +6445,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
                 connectionManager.syncEdges(currentCanvasState.edges)
                 scheduleEdgesRender()
+                syncBranchOriginDomProxies(currentCanvasState)
                 syncPixiMediaLayer(currentCanvasState)
+                syncPixiBranchOriginLayer(currentCanvasState)
                 lastVisualSyncKey = nextVisualSyncKey
             }
 
@@ -6289,8 +6519,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             imageChromeViewportEl?.remove()
             imageChromeViewportEl = null
             expandedGeneratedImageInfoNodeIds.clear()
+            expandedBranchOriginInfoNodeIds.clear()
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
+            pixiBranchOriginLayer?.destroy()
+            pixiBranchOriginLayer = null
             if (panZoom) {
                 panZoom.destroy()
             }

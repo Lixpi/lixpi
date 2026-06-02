@@ -44,6 +44,9 @@ describe('settings - grouped configuration', () => {
 		expect(settings.imageBranchLineage.imageToImageGap).toBeGreaterThanOrEqual(0)
 		expect(Object.hasOwn(settings, 'imageBranchLineage')).toBe(true)
 		expect(settings.branchOrigin.nodeSize).toBeGreaterThan(0)
+		expect(settings.branchOrigin.strokeWidth).toBeGreaterThan(0)
+		expect(settings.branchOrigin.pulseDurationMs).toBeGreaterThan(0)
+		expect(settings.branchOrigin.cullingMargin).toBeGreaterThanOrEqual(0)
 		expect(Object.hasOwn(settings, 'branchOrigin')).toBe(true)
 	})
 

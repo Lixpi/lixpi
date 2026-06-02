@@ -85,6 +85,13 @@ export type ImageBranchLineageSettings = {
 
 export type BranchOriginSettings = {
     nodeSize: number
+    fillColor: string
+    strokeColor: string
+    selectedStrokeColor: string
+    strokeWidth: number
+    pulseStrokeColor: string
+    pulseDurationMs: number
+    cullingMargin: number
 }
 
 export type MediaLibrarySettings = {
@@ -268,10 +275,24 @@ export const settings: Settings = {
         imageToImageGap: 192,
     },
 
-    // Branch-origin persisted node settings. Rendering-specific colors and pulse values live with the Phase 9 PIXI layer.
+    // Branch-origin persisted node and PIXI-rendering settings.
     branchOrigin: {
         // Canvas-unit width and height for each branch-origin circle node.
         nodeSize: 64,
+        // Fill color for the persisted provenance circle.
+        fillColor: '#C3DEDD',
+        // Default outline color for an unselected branch-origin circle.
+        strokeColor: '#7BAEAD',
+        // Outline color when the branch-origin node is selected.
+        selectedStrokeColor: '#252B33',
+        // Screen-pixel outline width for the PIXI circle. The renderer zoom-compensates this.
+        strokeWidth: 2,
+        // Pulse ring color used when a newly-created origin is highlighted.
+        pulseStrokeColor: '#D4956A',
+        // Maximum pulse animation length. After this, the PIXI layer stops scheduling frames.
+        pulseDurationMs: 900,
+        // World-coordinate margin around the live viewport before offscreen origins are culled.
+        cullingMargin: 512,
     },
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).

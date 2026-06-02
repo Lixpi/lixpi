@@ -63,6 +63,18 @@ function loadPixiMediaLayer(): string {
 	return readSourceFile('pixiMediaLayer.ts')
 }
 
+function loadPixiBranchOriginLayer(): string {
+	return readSourceFile('rendering/pixiBranchOriginLayer.ts', 'rendering/pixiBranchOriginLayer.ts')
+}
+
+function loadBranchOrigins(): string {
+	return readSourceFile('rendering/branchOrigins.ts', 'rendering/branchOrigins.ts')
+}
+
+function loadViewportBridge(): string {
+	return readSourceFile('rendering/viewportBridge.ts', 'rendering/viewportBridge.ts')
+}
+
 function loadPixiTravelingOutlineRenderer(): string {
 	return readSourceFile('../../utils/animations/gradients/pixiTravelingOutlineRenderer.ts', 'utils/animations/gradients/pixiTravelingOutlineRenderer.ts')
 }
@@ -361,7 +373,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
 	})
 
-	it('persists one branch-origin node for new generated branches before render support lands', () => {
+	it('persists one branch-origin node for new generated branches', () => {
 		expectSourceToContain(ts, 'function shouldCreateBranchOriginForResolution(resolution: ImageBranchVlmResolution): boolean')
 		expectSourceToContain(ts, "resolution.operationKind === 'new_image'")
 		expectSourceToContain(ts, "resolution.operationKind === 'fresh_branch'")
@@ -375,6 +387,52 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, "node.type !== 'branchOrigin' || activeBranchIds.has(node.branchId)")
 		expectSourceToContain(ts, "node.type !== 'branchOrigin'")
 		expectSourceToContain(ts, "node.type === 'branchOrigin'")
+	})
+
+	it('renders branch-origin circles through a dedicated PIXI layer and fixed DOM proxies', () => {
+		const scss = loadScss()
+		const pixiBranchOriginLayer = loadPixiBranchOriginLayer()
+		const branchOrigins = loadBranchOrigins()
+		const viewportBridge = loadViewportBridge()
+
+		expectSourceToContain(ts, "import { createPixiBranchOriginLayer, type PixiBranchOriginLayer }")
+		expectSourceToContain(ts, 'let pixiBranchOriginLayer: PixiBranchOriginLayer | null = null')
+		expectSourceToContain(ts, 'pixiBranchOriginLayer = createPixiBranchOriginLayer({')
+		expectSourceToContain(ts, 'getPixiLayers: () => [pixiMediaLayer, pixiBranchOriginLayer]')
+		expectSourceToContain(ts, 'function syncPixiBranchOriginLayer(canvasState: CanvasState | null = currentCanvasState): void')
+		expectSourceToContain(ts, 'pixiBranchOriginLayer?.sync(canvasState, selectedNodeIds)')
+		expectSourceToContain(ts, 'function syncBranchOriginDomProxies(canvasState: CanvasState | null = currentCanvasState): void')
+		expectSourceToContain(ts, 'nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)')
+		expectSourceToContain(ts, 'renderResizeHandles: false')
+		expectSourceToContain(ts, 'onClick: () => openBranchOriginInAiChatPanel(node)')
+		expectSourceToContain(ts, 'addContextChips(node.referenceNodeIds)')
+		expectSourceToContain(ts, 'replaceActiveAiChatPromptDraft(node.prompt)')
+		expectSourceToContain(ts, 'createBranchOriginInfoPanel(node)')
+		expectSourceToContain(ts, 'getBranchOriginReferenceNodes(node, currentCanvasState?.nodes ?? [])')
+		expectSourceToContain(ts, 'pixiBranchOriginLayer?.setNodeLiveTransform')
+
+		expectSourceToContain(viewportBridge, 'type ViewportAwarePixiLayer = {')
+		expectSourceToContain(viewportBridge, 'getPixiLayers?: () => Array<ViewportAwarePixiLayer | null | undefined>')
+		expectSourceToContain(viewportBridge, 'for (const layer of pixiLayers)')
+
+		expectSourceToContain(branchOrigins, 'export function hitTestBranchOrigin(')
+		expectSourceToContain(branchOrigins, 'radius * radius')
+		expectSourceToContain(branchOrigins, 'export function getBranchOriginReferenceNodes(')
+
+		expectSourceToContain(pixiBranchOriginLayer, 'autoStart: false')
+		expectSourceToContain(pixiBranchOriginLayer, 'sharedTicker: false')
+		expectSourceToContain(pixiBranchOriginLayer, 'world.position.set(currentViewport.x, currentViewport.y)')
+		expectSourceToContain(pixiBranchOriginLayer, 'world.scale.set(currentViewport.zoom, currentViewport.zoom)')
+		expectSourceToContain(pixiBranchOriginLayer, 'getVisibleWorldRect(')
+		expectSourceToContain(pixiBranchOriginLayer, 'settings.branchOrigin.cullingMargin')
+		expectSourceToContain(pixiBranchOriginLayer, 'function pulseBranchOrigin(nodeId: string): void')
+		expectSourceToContain(pixiBranchOriginLayer, 'settings.branchOrigin.pulseDurationMs')
+		expectSourceToContain(pixiBranchOriginLayer, 'requestAnimationFrame')
+
+		expectSourceToContain(scss, '.workspace-pixi-branch-origin-layer')
+		expectSourceToContain(scss, '.workspace-branch-origin-node')
+		expectSourceToContain(scss, '.branch-origin-info-button')
+		expectSourceToContain(scss, '.canvas-branch-origin-reference-thumbnail')
 	})
 })
 
