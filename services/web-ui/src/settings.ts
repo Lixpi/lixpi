@@ -85,6 +85,7 @@ export type ImageBranchLineageSettings = {
 
 export type BranchOriginSettings = {
     nodeSize: number
+    outputGap: number
     fillColor: string
     strokeColor: string
     selectedStrokeColor: string
@@ -279,6 +280,8 @@ export const settings: Settings = {
     branchOrigin: {
         // Canvas-unit width and height for each branch-origin circle node.
         nodeSize: 64,
+        // Canvas-unit gap between a branch-origin circle and the first generated output. Increasing it moves the origin farther left from the output.
+        outputGap: 32,
         // Fill color for the persisted provenance circle.
         fillColor: '#C3DEDD',
         // Default outline color for an unselected branch-origin circle.

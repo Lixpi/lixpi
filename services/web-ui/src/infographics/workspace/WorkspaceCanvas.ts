@@ -299,7 +299,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null
     let nodePointerPanLockNodeId: string | null = null
     let paneNoPanAddedForNodePointer = false
-    const partialImageTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId: string }>()
+    const partialImageTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId?: string }>()
+    const generatingReferenceNodeIdsByThread = new Map<string, Set<string>>()
     // Visibility tracking for lazy loading
     const visibleNodeIds: Set<string> = new Set()
     const loadedNodeIds: Set<string> = new Set()
@@ -321,7 +322,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // VIDEO_COMPLETE (finalize the same node + clear tracker). Source-shape
     // tests guard that this is the ONLY tracker used for video generation —
     // there is no DOM spinner, mirroring PR #202's image pattern.
-    const videoGenerationTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId: string }>()
+    const videoGenerationTracker = new Map<string, { nodeId: string; fileId: string; sourceNodeId?: string }>()
     let videoNodeHandler: VideoNodeHandlerControl | null = null
 
     const pixiSelectionColors: SelectionColors = {
@@ -1350,13 +1351,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function syncPixiGeneratingImageNodes(): void {
         // Feeds the PIXI traveling outline (snake border) renderer with the set
-        // of currently-generating media nodes, both image and video. VEO's
-        // 11s–6min wait would otherwise be visually silent on the canvas after
-        // PR #202 removed the DOM spinner; the snake outline is the sole
-        // generation indicator.
+        // of currently-generating media nodes, both image and video. Before the
+        // first generated variant arrives, selected/reference media also
+        // participate so users can see which source pixels are conditioning the
+        // request. Once pixels arrive, only the generated node keeps animating.
         const generatingIds = new Set<string>()
         for (const partial of partialImageTracker.values()) generatingIds.add(partial.nodeId)
         for (const pending of videoGenerationTracker.values()) generatingIds.add(pending.nodeId)
+        for (const referenceNodeIds of generatingReferenceNodeIdsByThread.values()) {
+            for (const nodeId of referenceNodeIds) generatingIds.add(nodeId)
+        }
         pixiMediaLayer?.setGeneratingImageNodes(generatingIds)
     }
 
@@ -3037,14 +3041,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // VEO image-to-video / reference-image inputs come from the same VLM
                         // resolution, so the snapshot must be built whenever an image OR
                         // video model is selected.
-                        const imageBranchCandidateSnapshot = rootNode
+                        const hasMediaModel = Boolean(imageOptions?.aiImageModel || videoOptions?.aiVideoModel)
+                        const imagePlacement = rootNode
                             ? rememberGeneratedImagePlacement(
                                 rootNode.referenceId,
                                 rootNode,
                                 messages,
-                                Boolean(imageOptions?.aiImageModel || videoOptions?.aiVideoModel)
-                            ).imageBranchCandidateSnapshot
-                            : undefined
+                                hasMediaModel
+                            )
+                            : rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)
+                        const imageBranchCandidateSnapshot = imagePlacement.imageBranchCandidateSnapshot
 
                         // Whole-workspace, descriptors-only index for the API relevance stage.
                         // Built every turn (text-only included); chips + the rooted thread's
@@ -3053,7 +3059,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             ? buildWorkspaceContextSnapshot({
                                 workspaceId,
                                 threadId: panelThreadId ?? '',
-                                prompt: getPromptTextFromMessages(messages),
+                                prompt: imagePlacement.promptText,
                                 nodes: currentCanvasState.nodes,
                                 edges: currentCanvasState.edges,
                                 rootNodeId: rootNode?.nodeId,
@@ -3603,7 +3609,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Set up callbacks for AI-generated images
     type PendingGeneratedImagePlacement = {
-        sourceNodeId: string
+        sourceNodeId?: string
+        placementAnchorNodeId?: string
+        referenceNodeIds?: string[]
         promptText: string
         branchId: string
         imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
@@ -3619,10 +3627,75 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
-    function getGeneratedImageSourceNode(threadId: string, sourceThread: ChatRootNode): CanvasNode {
+    function findCanvasNodeById(nodeId: string | undefined): CanvasNode | undefined {
+        if (!nodeId) return undefined
+        return currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === nodeId)
+    }
+
+    function getFirstExistingMediaNodeId(nodeIds: Iterable<string | null | undefined>): string | undefined {
+        for (const nodeId of nodeIds) {
+            const node = findCanvasNodeById(nodeId ?? undefined)
+            if (node?.type === 'image' || node?.type === 'video') return node.nodeId
+        }
+        return undefined
+    }
+
+    function getExistingMediaNodeIds(nodeIds: Iterable<string | null | undefined>): string[] {
+        const mediaNodeIds: string[] = []
+        const seen = new Set<string>()
+        for (const nodeId of nodeIds) {
+            const node = findCanvasNodeById(nodeId ?? undefined)
+            if (!node || (node.type !== 'image' && node.type !== 'video') || seen.has(node.nodeId)) continue
+            seen.add(node.nodeId)
+            mediaNodeIds.push(node.nodeId)
+        }
+        return mediaNodeIds
+    }
+
+    function getStandaloneGeneratedMediaReferenceNodeIds(): string[] {
+        return getExistingMediaNodeIds([
+            ...aiChatPanelState.contextChips,
+            ...Array.from(selectedNodeIds),
+        ])
+    }
+
+    function getGeneratedMediaLineageSourceNodeIdFromResolution(resolution: ImageBranchVlmResolution): string | undefined {
+        for (const nodeId of [resolution.targetImageNodeId, resolution.parentImageNodeId]) {
+            const node = findCanvasNodeById(nodeId ?? undefined)
+            if (!node || !isGeneratedMediaNode(node)) continue
+            const continuesSelectedBranch = resolution.mode === 'edit-active-branch'
+                || resolution.operationKind === 'edit_existing'
+                || Boolean(resolution.branchId && node.generatedBy?.branchId === resolution.branchId)
+            if (continuesSelectedBranch) return node.nodeId
+        }
+        return undefined
+    }
+
+    function getGeneratedMediaPlacementNode(threadId: string): CanvasNode | undefined {
+        const placement = pendingGeneratedImagePlacements.get(threadId)
+        const anchorNode = findCanvasNodeById(placement?.sourceNodeId)
+            ?? findCanvasNodeById(placement?.placementAnchorNodeId)
+        return anchorNode ?? findSourceThreadNode(threadId)
+    }
+
+    function getGeneratedMediaEdgeSourceNode(threadId: string): CanvasNode | undefined {
         const pendingSourceNodeId = pendingGeneratedImagePlacements.get(threadId)?.sourceNodeId
-        const sourceNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === pendingSourceNodeId)
-        return sourceNode ?? sourceThread
+        return findCanvasNodeById(pendingSourceNodeId) ?? findSourceThreadNode(threadId)
+    }
+
+    function setGeneratingReferenceNodeIds(threadId: string, nodeIds: Iterable<string | null | undefined>): void {
+        const referenceNodeIds = getExistingMediaNodeIds(nodeIds)
+        if (referenceNodeIds.length === 0) {
+            generatingReferenceNodeIdsByThread.delete(threadId)
+        } else {
+            generatingReferenceNodeIdsByThread.set(threadId, new Set(referenceNodeIds))
+        }
+        syncPixiGeneratingImageNodes()
+    }
+
+    function clearGeneratingReferenceNodeIds(threadId: string): void {
+        if (!generatingReferenceNodeIdsByThread.delete(threadId)) return
+        syncPixiGeneratingImageNodes()
     }
 
     function getThreadContentForBranchSnapshot(threadId: string): unknown {
@@ -3658,6 +3731,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (createdAtDelta !== 0) return createdAtDelta
             return a.position.x - b.position.x
         }).at(-1)
+    }
+
+    function getReferenceGroupRectForGeneratedMedia(threadId: string): Rect | undefined {
+        const placement = pendingGeneratedImagePlacements.get(threadId)
+        if (!placement?.referenceNodeIds?.length || !currentCanvasState) return undefined
+
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        const referenceRects = placement.referenceNodeIds
+            .map((nodeId: string) => nodesById.get(nodeId))
+            .filter((node: CanvasNode | undefined): node is ImageCanvasNode | VideoCanvasNode => Boolean(node && (node.type === 'image' || node.type === 'video')))
+            .map((node: ImageCanvasNode | VideoCanvasNode) => getNodeWorldRect(node, nodesById))
+
+        if (referenceRects.length === 0) return undefined
+
+        const minX = Math.min(...referenceRects.map((rect: Rect) => rect.x))
+        const minY = Math.min(...referenceRects.map((rect: Rect) => rect.y))
+        const maxX = Math.max(...referenceRects.map((rect: Rect) => rect.x + rect.width))
+        const maxY = Math.max(...referenceRects.map((rect: Rect) => rect.y + rect.height))
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+    }
+
+    function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number): { x: number; y: number } | undefined {
+        const referenceGroupRect = getReferenceGroupRectForGeneratedMedia(threadId)
+        if (!referenceGroupRect) return undefined
+        return computeLineageContinuationPositionToRightOfRect(
+            referenceGroupRect,
+            mediaHeight,
+            settings.imageBranchLineage.rootOutputGap
+        )
     }
 
     // Generalized lineage anchor lookup for both image AND video continuations.
@@ -3730,6 +3832,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
+    function getGeneratedMediaInsertionPosition(threadId: string, mediaHeight: number): { x: number; y: number } | undefined {
+        const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)
+        if (edgeSourceNode) return getNextGeneratedImagePosition(edgeSourceNode, mediaHeight)
+
+        const placementNode = getGeneratedMediaPlacementNode(threadId)
+        if (placementNode?.type === 'aiChatThread') return getNextGeneratedImagePosition(placementNode, mediaHeight)
+
+        const referenceGroupPosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight)
+        if (referenceGroupPosition) return referenceGroupPosition
+
+        return placementNode ? getNextGeneratedImagePosition(placementNode, mediaHeight) : undefined
+    }
+
     function createGeneratedImageEdge(sourceNode: CanvasNode, imageNodeId: string, responseMessageId?: string): WorkspaceEdge {
         return {
             edgeId: `edge-${sourceNode.nodeId}-${imageNodeId}`,
@@ -3795,11 +3910,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const branchId = `branch-${uuidv4()}`
         pendingGeneratedImagePlacements.set(threadId, {
             sourceNodeId: rootNode.nodeId,
+            placementAnchorNodeId: rootNode.nodeId,
+            referenceNodeIds: imageBranchCandidateSnapshot.candidates.map((candidate: ImageBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId),
             promptText,
             branchId,
             imageBranchCandidateSnapshot,
             createdAt: Date.now(),
         })
+        setGeneratingReferenceNodeIds(threadId, imageBranchCandidateSnapshot.candidates.map((candidate: ImageBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId))
         console.info('[CANVAS] image branch candidate snapshot', {
             threadId,
             candidateCount: imageBranchCandidateSnapshot.candidates.length,
@@ -3810,12 +3928,34 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return { promptText, imageBranchCandidateSnapshot }
     }
 
+    function rememberStandaloneGeneratedImagePlacement(threadId: string, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
+        if (!hasImageModel) {
+            pendingGeneratedImagePlacements.delete(threadId)
+            return { promptText: '' }
+        }
+
+        const promptText = getPromptTextFromMessages(messages)
+        const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()
+        const placementAnchorNodeId = referenceNodeIds[0]
+        pendingGeneratedImagePlacements.set(threadId, {
+            ...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),
+            referenceNodeIds,
+            promptText,
+            branchId: `branch-${uuidv4()}`,
+            createdAt: Date.now(),
+        })
+        setGeneratingReferenceNodeIds(threadId, referenceNodeIds)
+        return { promptText }
+    }
+
     function getPendingGeneratedImageLineage(threadId: string, existingGeneratedBy?: ImageCanvasNode['generatedBy']): Partial<NonNullable<ImageCanvasNode['generatedBy']>> {
         const placement = pendingGeneratedImagePlacements.get(threadId)
         if (!placement) return {}
 
         const resolution = placement.imageBranchResolution
-        const parentImageNodeId = resolution?.targetImageNodeId ?? resolution?.parentImageNodeId
+        const parentImageNodeId = resolution
+            ? getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)
+            : undefined
 
         return {
             branchId: existingGeneratedBy?.branchId ?? resolution?.branchId ?? placement.branchId,
@@ -3873,17 +4013,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return uniqueStringValues(fileIds)
     }
 
-    function getBranchOriginPosition(sourceNode: CanvasNode, outputNode: ImageCanvasNode | VideoCanvasNode, nodes: CanvasNode[]): { x: number; y: number } {
+    function getBranchOriginPosition(_sourceNode: CanvasNode, outputNode: ImageCanvasNode | VideoCanvasNode, nodes: CanvasNode[]): { x: number; y: number } {
         const size = settings.branchOrigin.nodeSize
         const nodesById = getCanvasNodesById(nodes)
-        const sourceRect = getNodeWorldRect(sourceNode, nodesById)
         const outputRect = getNodeWorldRect(outputNode, nodesById)
-        const sourceRight = sourceRect.x + sourceRect.width
-        const originCenterX = sourceRight + Math.max(0, outputRect.x - sourceRight) / 2
-        const originCenterY = outputRect.y + outputRect.height / 2
         return {
-            x: originCenterX - size / 2,
-            y: originCenterY - size / 2,
+            x: outputRect.x - settings.branchOrigin.outputGap - size,
+            y: outputRect.y + outputRect.height / 2 - size / 2,
         }
     }
 
@@ -3896,7 +4032,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const placement = pendingGeneratedImagePlacements.get(threadId)
         const resolution = placement?.imageBranchResolution
         if (!placement || !resolution || !shouldCreateBranchOriginForResolution(resolution) || !resolution.branchId) return undefined
-        if (nodes.some((node: CanvasNode) => node.type === 'branchOrigin' && node.branchId === resolution.branchId)) return undefined
+        const existingOriginNode = nodes.find(
+            (node: CanvasNode): node is BranchOriginCanvasNode => node.type === 'branchOrigin' && node.branchId === resolution.branchId
+        )
+        if (existingOriginNode) return existingOriginNode
 
         const referenceNodeIds = uniqueStringValues(resolution.referenceImageNodeIds)
         const size = settings.branchOrigin.nodeSize
@@ -3913,14 +4052,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function appendBranchOriginNodeForGeneratedMedia(
+    function applyBranchOriginForGeneratedMedia(
         nodes: CanvasNode[],
+        edges: WorkspaceEdge[],
         sourceNode: CanvasNode,
         outputNode: ImageCanvasNode | VideoCanvasNode,
         threadId: string
-    ): CanvasNode[] {
+    ): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
         const branchOriginNode = buildBranchOriginNodeForGeneratedMedia(nodes, sourceNode, outputNode, threadId)
-        return branchOriginNode ? [...nodes, branchOriginNode] : nodes
+        if (!branchOriginNode) return { nodes, edges }
+
+        const hasOriginNode = nodes.some((node: CanvasNode) => node.nodeId === branchOriginNode.nodeId)
+        const nextNodes = hasOriginNode ? nodes : [...nodes, branchOriginNode]
+        const hasOriginEdge = edges.some((edge: WorkspaceEdge) =>
+            edge.sourceNodeId === branchOriginNode.nodeId && edge.targetNodeId === outputNode.nodeId
+        )
+        const nextEdges = hasOriginEdge
+            ? edges
+            : [...edges, createGeneratedImageEdge(branchOriginNode, outputNode.nodeId)]
+
+        return { nodes: nextNodes, edges: nextEdges }
     }
 
     function pruneBranchOriginNodes(nodes: CanvasNode[]): CanvasNode[] {
@@ -4003,8 +4154,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         refreshContextChipTray()
     }
 
-    function handleWorkspaceContextResolution(resolution: WorkspaceContextResolution): void {
+    function updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId: string | undefined, resolution: WorkspaceContextResolution): void {
+        if (!threadId) return
+        const placement = pendingGeneratedImagePlacements.get(threadId)
+        if (!placement) return
+
+        const forcedChipNodeIds = resolution.selections
+            .filter((selection: WorkspaceContextSelection) => selection.role === 'forced-chip')
+            .map((selection: WorkspaceContextSelection) => selection.nodeId)
+        const referenceNodeIds = getExistingMediaNodeIds([
+            ...forcedChipNodeIds,
+            ...resolution.narrowedMediaNodeIds,
+            ...resolution.selections.map((selection: WorkspaceContextSelection) => selection.nodeId),
+        ])
+        if (referenceNodeIds.length === 0) return
+
+        pendingGeneratedImagePlacements.set(threadId, {
+            ...placement,
+            placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0],
+            referenceNodeIds,
+        })
+        setGeneratingReferenceNodeIds(threadId, referenceNodeIds)
+    }
+
+    function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution): void {
         patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)
+        updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)
         autoContextSelections = resolution.selections
         removedAutoContextChipNodeIds.clear()
         refreshContextChipTray()
@@ -4228,7 +4403,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ...(currentCanvasState ?? {}),
                 viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
                 edges: newEdges,
-                nodes: appendBranchOriginNodeForGeneratedMedia([...existingNodes, imageNode], sourceNode, imageNode, threadId)
+                nodes: [...existingNodes, imageNode]
             }
 
             onCanvasStateChange?.(newCanvasState)
@@ -4238,13 +4413,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const placement = pendingGeneratedImagePlacements.get(threadId)
             if (!placement) return
 
-            const sourceNodeId = resolution.targetImageNodeId ?? resolution.parentImageNodeId ?? placement.sourceNodeId
+            const sourceNodeId = getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)
+            const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)
+            const placementAnchorNodeId = sourceNodeId
+                ?? placement.placementAnchorNodeId
+                ?? referenceNodeIds[0]
             pendingGeneratedImagePlacements.set(threadId, {
                 ...placement,
-                sourceNodeId,
+                placementAnchorNodeId,
+                referenceNodeIds,
+                ...(sourceNodeId ? { sourceNodeId } : {}),
                 branchId: resolution.branchId ?? placement.branchId,
                 imageBranchResolution: resolution,
             })
+            setGeneratingReferenceNodeIds(threadId, referenceNodeIds)
 
             console.info('[CANVAS] image branch VLM resolution', {
                 threadId,
@@ -4259,16 +4441,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         },
 
-        onWorkspaceContextResolvedToCanvas: ({ resolution }) => {
-            handleWorkspaceContextResolution(resolution)
+        onWorkspaceContextResolvedToCanvas: ({ threadId, resolution }) => {
+            handleWorkspaceContextResolution(threadId, resolution)
         },
 
         onImageBranchResolutionErrorToCanvas: ({ threadId }) => {
             pendingGeneratedImagePlacements.delete(threadId)
+            clearGeneratingReferenceNodeIds(threadId)
         },
 
         onImageErrorToCanvas: ({ threadId }) => {
             pendingGeneratedImagePlacements.delete(threadId)
+            clearGeneratingReferenceNodeIds(threadId)
             const existing = partialImageTracker.get(threadId)
             if (!existing || !currentCanvasState) return
 
@@ -4304,6 +4488,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (existing) {
                 if (imageUrl && currentCanvasState) {
+                    clearGeneratingReferenceNodeIds(threadId)
                     const imageSrc = buildImageSrc(imageUrl, '', false)
                     const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
                         if (node.nodeId !== existing.nodeId) return node
@@ -4323,19 +4508,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
-            const sourceThread = findSourceThreadNode(threadId)
-            if (!sourceThread) return
-            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)
+            const placementNode = getGeneratedMediaPlacementNode(threadId)
+            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)
             const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
             const nodeId = `node-${fileId || uuidv4()}`
-            partialImageTracker.set(threadId, { nodeId, fileId: fileId || '', sourceNodeId: sourceNode.nodeId })
+            partialImageTracker.set(threadId, { nodeId, fileId: fileId || '', ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })
 
             const imageSrc = buildImageSrc(imageUrl, '', false)
 
             const imageWidth = getGeneratedImageInsertionSize()
             const imageHeight = imageWidth
-            const position = getNextGeneratedImagePosition(sourceNode, imageHeight)
+            const position = getGeneratedMediaInsertionPosition(threadId, imageHeight)
+                ?? getCenteredInsertionPosition({ width: imageWidth, height: imageHeight })
 
             const imageNode: ImageCanvasNode = {
                 nodeId,
@@ -4359,19 +4544,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const existingNodes = currentCanvasState?.nodes || []
             const existingEdges = currentCanvasState?.edges || []
 
-            const newEdges = [
-                ...existingEdges,
-                createGeneratedImageEdge(sourceNode, nodeId),
-            ]
+            const newEdges = edgeSourceNode
+                ? [
+                    ...existingEdges,
+                    createGeneratedImageEdge(edgeSourceNode, nodeId),
+                ]
+                : existingEdges
+
+            const nodesWithImage: CanvasNode[] = [...existingNodes, imageNode]
+            const branchApplied = placementNode
+                ? applyBranchOriginForGeneratedMedia(nodesWithImage, newEdges, placementNode, imageNode, threadId)
+                : { nodes: nodesWithImage, edges: newEdges }
 
             const newCanvasState: CanvasState = {
                 ...(currentCanvasState ?? {}),
                 viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                nodes: appendBranchOriginNodeForGeneratedMedia([...existingNodes, imageNode], sourceNode, imageNode, threadId),
-                edges: newEdges,
+                nodes: branchApplied.nodes,
+                edges: branchApplied.edges,
             }
             commitCanvasStatePreservingEditors(newCanvasState)
             appendImageNodeToDOM(imageNode)
+            if (imageUrl) clearGeneratingReferenceNodeIds(threadId)
         },
 
         onImageCompleteToCanvas: (data) => {
@@ -4417,7 +4610,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 partialImageTracker.delete(threadId)
-                pendingGeneratedImagePlacements.delete(threadId)
 
                 // PIXI removes the progress border when the tracker is cleared and this state commits.
                 const collisionExclusions = new Set<string>()
@@ -4442,17 +4634,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     })
                     : nodes
                 const resolvedImageNode = resolvedNodes.find((node: CanvasNode) => node.nodeId === partial.nodeId) as ImageCanvasNode | undefined
-                const sourceNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === partial.sourceNodeId)
-                const nodesWithBranchOrigin = sourceNode && resolvedImageNode
-                    ? appendBranchOriginNodeForGeneratedMedia(resolvedNodes, sourceNode, resolvedImageNode, threadId)
-                    : resolvedNodes
+                const placementNode = getGeneratedMediaPlacementNode(threadId)
+                const branchApplied = placementNode && resolvedImageNode
+                    ? applyBranchOriginForGeneratedMedia(resolvedNodes, edges, placementNode, resolvedImageNode, threadId)
+                    : { nodes: resolvedNodes, edges }
 
                 commitCanvasState({
                     ...(currentCanvasState ?? {}),
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    nodes: nodesWithBranchOrigin,
-                    edges,
+                    nodes: branchApplied.nodes,
+                    edges: branchApplied.edges,
                 })
+                pendingGeneratedImagePlacements.delete(threadId)
+                clearGeneratingReferenceNodeIds(threadId)
 
             } else {
                 // No partial existed — IMAGE_COMPLETE without prior IMAGE_PARTIAL.
@@ -4461,16 +4655,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     return
                 }
 
-                const sourceThread = findSourceThreadNode(threadId)
-                if (!sourceThread) return
-                const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)
+                const placementNode = getGeneratedMediaPlacementNode(threadId)
+                const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)
                 const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
                 const nodeId = `node-${fileId || uuidv4()}`
 
                 const imageWidth = getGeneratedImageInsertionSize()
                 const imageHeight = imageWidth
-                const position = getNextGeneratedImagePosition(sourceNode, imageHeight)
+                const position = getGeneratedMediaInsertionPosition(threadId, imageHeight)
+                    ?? getCenteredInsertionPosition({ width: imageWidth, height: imageHeight })
 
                 const generatedBy: ImageCanvasNode['generatedBy'] = {
                     aiChatThreadId: threadId,
@@ -4497,10 +4691,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const existingNodes = currentCanvasState?.nodes || []
                 const existingEdges = currentCanvasState?.edges || []
 
-                const newEdges = [
-                    ...existingEdges,
-                    createGeneratedImageEdge(sourceNode, nodeId, responseMessageId || undefined),
-                ]
+                const newEdges = edgeSourceNode
+                    ? [
+                        ...existingEdges,
+                        createGeneratedImageEdge(edgeSourceNode, nodeId, responseMessageId || undefined),
+                    ]
+                    : existingEdges
 
                 const allNodes: CanvasNode[] = [...existingNodes, imageNode]
 
@@ -4529,18 +4725,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const resolvedImageNode = collisionResult.hasChanges
                     ? resolvedNodes.find((node: CanvasNode) => node.nodeId === nodeId) as ImageCanvasNode | undefined ?? imageNode
                     : imageNode
-                const resolvedNodesWithBranchOrigin = appendBranchOriginNodeForGeneratedMedia(resolvedNodes, sourceNode, resolvedImageNode, threadId)
+                const branchApplied = placementNode
+                    ? applyBranchOriginForGeneratedMedia(resolvedNodes, newEdges, placementNode, resolvedImageNode, threadId)
+                    : { nodes: resolvedNodes, edges: newEdges }
 
                 currentCanvasState = {
                     ...(currentCanvasState ?? {}),
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    nodes: resolvedNodesWithBranchOrigin,
-                    edges: newEdges,
+                    nodes: branchApplied.nodes,
+                    edges: branchApplied.edges,
                 }
                 appendImageNodeToDOM(resolvedImageNode)
 
                 commitCanvasStatePreservingEditors(currentCanvasState)
                 pendingGeneratedImagePlacements.delete(threadId)
+                clearGeneratingReferenceNodeIds(threadId)
             }
         },
 
@@ -4674,20 +4873,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (videoGenerationTracker.has(threadId)) return
 
-            const sourceThread = findSourceThreadNode(threadId)
-            if (!sourceThread) return
-            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)
+            const placementNode = getGeneratedMediaPlacementNode(threadId)
+            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)
             const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
             const nodeId = `node-${uuidv4()}`
-            videoGenerationTracker.set(threadId, { nodeId, fileId: '', sourceNodeId: sourceNode.nodeId })
+            videoGenerationTracker.set(threadId, { nodeId, fileId: '', ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })
 
             // Placeholder is square until the attached <video> reports the MP4's
             // intrinsic dimensions (handleVideoIntrinsicSize then re-fits +
             // recenters via computeVerticallyCenteredY, PR #204 pattern).
             const placeholderWidth = getGeneratedImageInsertionSize()
             const placeholderHeight = placeholderWidth
-            const position = getNextGeneratedImagePosition(sourceNode, placeholderHeight)
+            const position = getGeneratedMediaInsertionPosition(threadId, placeholderHeight)
+                ?? getCenteredInsertionPosition({ width: placeholderWidth, height: placeholderHeight })
 
             const videoNode: VideoCanvasNode = {
                 nodeId,
@@ -4713,16 +4912,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const existingNodes = currentCanvasState?.nodes || []
             const existingEdges = currentCanvasState?.edges || []
-            const newEdges = [
-                ...existingEdges,
-                createGeneratedImageEdge(sourceNode, nodeId),
-            ]
+            const newEdges = edgeSourceNode
+                ? [
+                    ...existingEdges,
+                    createGeneratedImageEdge(edgeSourceNode, nodeId),
+                ]
+                : existingEdges
+
+            const nodesWithVideo: CanvasNode[] = [...existingNodes, videoNode]
+            const branchApplied = placementNode
+                ? applyBranchOriginForGeneratedMedia(nodesWithVideo, newEdges, placementNode, videoNode, threadId)
+                : { nodes: nodesWithVideo, edges: newEdges }
 
             const newCanvasState: CanvasState = {
                 ...(currentCanvasState ?? {}),
                 viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                nodes: appendBranchOriginNodeForGeneratedMedia([...existingNodes, videoNode], sourceNode, videoNode, threadId),
-                edges: newEdges,
+                nodes: branchApplied.nodes,
+                edges: branchApplied.edges,
             }
             commitCanvasStatePreservingEditors(newCanvasState)
             appendVideoNodeToDOM(videoNode)
@@ -4796,7 +5002,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Clearing the tracker removes the PIXI traveling outline (the
             // outline lifecycle is tracker-driven, same mechanism as images).
             videoGenerationTracker.delete(threadId)
-            pendingGeneratedImagePlacements.delete(threadId)
 
             // Backstop against overlap, mirroring onImageCompleteToCanvas. The
             // initial placement already accounts for prior media, so this is a
@@ -4823,20 +5028,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
                 : nodes
             const resolvedVideoNode = resolvedNodes.find((node: CanvasNode) => node.nodeId === existing.nodeId) as VideoCanvasNode | undefined
-            const sourceNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === existing.sourceNodeId)
-            const nodesWithBranchOrigin = sourceNode && resolvedVideoNode
-                ? appendBranchOriginNodeForGeneratedMedia(resolvedNodes, sourceNode, resolvedVideoNode, threadId)
-                : resolvedNodes
+            const placementNode = getGeneratedMediaPlacementNode(threadId)
+            const branchApplied = placementNode && resolvedVideoNode
+                ? applyBranchOriginForGeneratedMedia(resolvedNodes, currentCanvasState.edges, placementNode, resolvedVideoNode, threadId)
+                : { nodes: resolvedNodes, edges: currentCanvasState.edges }
 
             commitCanvasState({
                 ...currentCanvasState,
-                nodes: nodesWithBranchOrigin,
+                nodes: branchApplied.nodes,
+                edges: branchApplied.edges,
             })
+            pendingGeneratedImagePlacements.delete(threadId)
+            clearGeneratingReferenceNodeIds(threadId)
         },
 
         onVideoErrorToCanvas: (data) => {
             const { threadId } = data
             pendingGeneratedImagePlacements.delete(threadId)
+            clearGeneratingReferenceNodeIds(threadId)
             const existing = videoGenerationTracker.get(threadId)
             if (!existing || !currentCanvasState) return
 
