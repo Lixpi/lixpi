@@ -188,4 +188,4 @@ describe('buildVideoGenerationTrace', () => {
         expect(buildVideoGenerationTrace(createState({ videoProviderName: undefined }))).toBeUndefined()
         expect(buildVideoGenerationTrace(createState({ videoModelVersion: undefined }))).toBeUndefined()
     })
-}
+})

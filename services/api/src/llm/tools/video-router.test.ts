@@ -65,4 +65,4 @@ describe('VideoRouter', () => {
         expect(requestData.messages[0].content).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
         expect(requestData.videoReferenceImages).toBeUndefined()
     })
-}
+})
