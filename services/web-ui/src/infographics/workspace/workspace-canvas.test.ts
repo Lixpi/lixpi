@@ -378,11 +378,14 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, "resolution.operationKind === 'new_image'")
 		expectSourceToContain(ts, "resolution.operationKind === 'fresh_branch'")
 		expectSourceToContain(ts, '|| !resolution.targetImageNodeId')
-		expectSourceToContain(ts, 'function appendBranchOriginNodeForGeneratedMedia(')
+		expectSourceToContain(ts, 'function applyBranchOriginForGeneratedMedia(')
 		expectSourceToContain(ts, "type: 'branchOrigin'")
 		expectSourceToContain(ts, 'const referenceNodeIds = uniqueStringValues(resolution.referenceImageNodeIds)')
 		expectSourceToContain(ts, 'referenceFileIds: getBranchOriginReferenceFileIds(referenceNodeIds, nodes)')
-		expectSourceToContain(ts, 'nodes: appendBranchOriginNodeForGeneratedMedia(')
+		expectSourceToContain(ts, 'const branchApplied = placementNode && resolvedImageNode')
+		expectSourceToContain(ts, 'applyBranchOriginForGeneratedMedia(resolvedNodes, edges, placementNode, resolvedImageNode, threadId)')
+		expectSourceToContain(ts, 'createGeneratedImageEdge(branchOriginNode, outputNode.nodeId)')
+		expectSourceToContain(ts, 'x: outputRect.x - settings.branchOrigin.outputGap - size,')
 		expectSourceToContain(ts, 'function pruneBranchOriginNodes(nodes: CanvasNode[]): CanvasNode[]')
 		expectSourceToContain(ts, "node.type !== 'branchOrigin' || activeBranchIds.has(node.branchId)")
 		expectSourceToContain(ts, "node.type !== 'branchOrigin'")
@@ -506,7 +509,9 @@ describe('Workspace canvas — generated video canvas state', () => {
 
 		expectExcerptToContain(completeHandler, 'createCollisionPlan(nodes)', 'video complete handler')
 		expectExcerptToContain(completeHandler, 'resolveCollisions(collisionPlan.nodeBoxes', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'nodes: nodesWithBranchOrigin,', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'applyBranchOriginForGeneratedMedia(resolvedNodes, currentCanvasState.edges, placementNode, resolvedVideoNode, threadId)', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'nodes: branchApplied.nodes,', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'edges: branchApplied.edges,', 'video complete handler')
 	})
 
 	it('threads the representative mid-frame fileId onto the completed video node', () => {
@@ -1389,13 +1394,42 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'if (kind === \'auto\')')
 		expectSourceToContain(ts, 'removeAutoContextChip(nodeId)')
 		expectSourceToContain(ts, 'function patchWorkspaceContextImprovedDescriptors(improvedDescriptors: Record<string, ContentDescriptor> | undefined): void')
-		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(resolution: WorkspaceContextResolution): void')
+		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution): void')
 		expectSourceToContain(ts, 'patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)')
+		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)')
+		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
+		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(threadId, referenceNodeIds)')
 		expectSourceToContain(ts, 'autoContextSelections = resolution.selections')
-		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ resolution }) =>')
+		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ threadId, resolution }) =>')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-explicit')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-auto')
 		expectSourceToContain(scss, 'border: 1px dashed rgba(212, 149, 106, 0.72)')
+	})
+
+	it('prepares standalone panel media generations for canvas placeholders and branch origins', () => {
+		expectSourceToContain(ts, 'function rememberStandaloneGeneratedImagePlacement(')
+		expectSourceToContain(ts, 'const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()')
+		expectSourceToContain(ts, '...aiChatPanelState.contextChips,')
+		expectSourceToContain(ts, '...Array.from(selectedNodeIds),')
+		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0]')
+		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
+		expectSourceToContain(ts, 'referenceNodeIds,')
+		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
+		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId)')
+		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)')
+		expectSourceToContain(ts, 'partialImageTracker.set(threadId, { nodeId, fileId: fileId || \'\', ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })')
+		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)')
+		expectSourceToContain(ts, 'getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
+		expectSourceToContain(ts, 'if (!node || !isGeneratedMediaNode(node)) continue')
+		expectSourceToContain(ts, "resolution.mode === 'edit-active-branch'")
+		expectSourceToContain(ts, "resolution.operationKind === 'edit_existing'")
+		expectSourceToContain(ts, 'Boolean(resolution.branchId && node.generatedBy?.branchId === resolution.branchId)')
+		expectSourceToContain(ts, 'const parentImageNodeId = resolution\n            ? getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
+		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string): Rect | undefined')
+		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number): { x: number; y: number } | undefined')
+		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
+		expectSourceToContain(ts, 'const position = getGeneratedMediaInsertionPosition(threadId, imageHeight)')
+		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
 
 	it('routes workspace context relevance events around markdown parsing', () => {
@@ -2335,20 +2369,22 @@ describe('video generation — canvas + plugin source shape', () => {
 		expectSourceToContain(ts, 'onVideoErrorToCanvas:')
 	})
 
-	it('feeds the PIXI traveling outline with both image and video pending nodes', () => {
-		// Phase 5 v1.1: the snake outline must frame VEO video placeholders
-		// during the 11s–6min wait, not just images. Regression-guards the
-		// merged set returned from syncPixiGeneratingImageNodes.
+	it('feeds the PIXI traveling outline with image, video, and reference nodes', () => {
+		// Phase 5 v1.1+: the snake outline must frame VEO video placeholders
+		// plus selected/reference media before the first variant arrives.
+		// Regression-guards both the merged id set and unified canvas-state bounds.
 		const pixiLayerTs = loadPixiMediaLayer()
 		expectSourceToContain(ts, 'function syncPixiGeneratingImageNodes()')
 		expectSourceToContain(ts, 'for (const partial of partialImageTracker.values())')
 		expectSourceToContain(ts, 'for (const pending of videoGenerationTracker.values())')
+		expectSourceToContain(ts, 'for (const referenceNodeIds of generatingReferenceNodeIdsByThread.values())')
 		expectSourceToContain(ts, 'pixiMediaLayer?.setGeneratingImageNodes(generatingIds)')
-		// Video bounds come from the canvas state (no PIXI image entry exists
-		// for them) — the outline renderer reads dimensions directly off the
-		// CanvasNode and feeds them into PixiTravelingOutlineDatum.
-		expectSourceToContain(pixiLayerTs, 'fallbackNode.dimensions.width')
-		expectSourceToContain(pixiLayerTs, 'fallbackNode.dimensions.height')
+		expectSourceToContain(pixiLayerTs, 'const nodesById = lastState ? buildNodesById(lastState.nodes) : new Map()')
+		expectSourceToContain(pixiLayerTs, 'const node = nodesById.get(nodeId)')
+		expectSourceToContain(pixiLayerTs, 'width: node.dimensions.width')
+		expectSourceToContain(pixiLayerTs, 'height: node.dimensions.height')
+		expectSourceToContain(pixiLayerTs, 'visible: true,')
+		expectSourceNotToContain(pixiLayerTs, "if (!fallbackNode || fallbackNode.type === 'image') continue")
 	})
 
 	it('keeps no DOM bounce-dot spinner for generating videos either', () => {

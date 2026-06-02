@@ -152,10 +152,8 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
 
     const updateDisplay = async () => {
         const { imageData, revisedPrompt, responseId, aiModel, isPartial } = node.attrs
-        console.log('🖼️ [IMAGE_NODE] updateDisplay called:', { imageData, isPartial })
 
         if (!imageData) {
-            console.log('🖼️ [IMAGE_NODE] no imageData, showing spinner')
             spinnerElement.classList.add('is-active')
             imageElement.classList.remove('is-visible')
             return
@@ -173,7 +171,6 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
             const token = await AuthService.getTokenSilently()
             const API_BASE_URL = import.meta.env.VITE_API_URL || ''
             imageSrc = `${API_BASE_URL}${imageData}${token ? `?token=${token}` : ''}`
-            console.log('🖼️ [IMAGE_NODE] built image URL:', imageSrc)
         } else if (imageData.startsWith('http')) {
             // Full URL — strip any stale token and re-apply a fresh one
             const stripped = imageData.replace(/[?&]token=[^&]+/, '')
@@ -188,7 +185,6 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
             imageSrc = `data:image/png;base64,${imageData}`
         }
 
-        console.log('🖼️ [IMAGE_NODE] setting imageElement.src to:', imageSrc.substring(0, 100))
         if (imageElement.src !== imageSrc) {
             imageElement.src = imageSrc
         }

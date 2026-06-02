@@ -598,33 +598,17 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function syncGeneratingImageBorders(): void {
         const datums: PixiTravelingOutlineDatum[] = []
+        const nodesById = lastState ? buildNodesById(lastState.nodes) : new Map()
         for (const nodeId of generatingImageNodeIds) {
-            const imageEntry = entries.get(nodeId)
-            if (imageEntry) {
-                datums.push({
-                    id: nodeId,
-                    x: imageEntry.worldRect.minX,
-                    y: imageEntry.worldRect.minY,
-                    width: imageEntry.nodeRef.dimensions.width,
-                    height: imageEntry.nodeRef.dimensions.height,
-                    visible: imageEntry.isVisible,
-                })
-                continue
-            }
-            // Non-image media (currently video) doesn't live in `entries` —
-            // those nodes are dispatched through `mediaNodeRegistry`. Read the
-            // bounds directly from canvas state so the snake outline can frame
-            // VEO placeholders during their long async wait.
-            const fallbackNode = lastState?.nodes.find((n) => n.nodeId === nodeId)
-            if (!fallbackNode || fallbackNode.type === 'image') continue
-            const nodesById = buildNodesById(lastState!.nodes)
-            const worldPosition = computeWorldPosition(fallbackNode, nodesById)
+            const node = nodesById.get(nodeId)
+            if (!node) continue
+            const worldPosition = computeWorldPosition(node, nodesById)
             datums.push({
                 id: nodeId,
                 x: worldPosition.x,
                 y: worldPosition.y,
-                width: fallbackNode.dimensions.width,
-                height: fallbackNode.dimensions.height,
+                width: node.dimensions.width,
+                height: node.dimensions.height,
                 visible: true,
             })
         }

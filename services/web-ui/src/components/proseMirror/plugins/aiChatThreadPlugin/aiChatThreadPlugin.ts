@@ -1018,14 +1018,12 @@ class AiChatThreadPluginClass {
             // Handle text streaming events
             switch (status) {
                 case 'START_STREAM':
-                    console.log('🔴 [PLUGIN] START_STREAM', { effectiveThreadId, aiProvider })
                     this.handleStreamStart(state, dispatch, aiProvider, effectiveThreadId)
                     break
                 case 'STREAMING':
                     if (segment) this.handleStreaming(state, dispatch, segment, effectiveThreadId, aiProvider)
                     break
                 case 'END_STREAM':
-                    console.log('🟢 [PLUGIN] END_STREAM', { effectiveThreadId })
                     this.handleStreamEnd(state, dispatch, effectiveThreadId)
                     break
             }
@@ -1063,7 +1061,7 @@ class AiChatThreadPluginClass {
                 aiProvider: aiProvider || ''
             })
         } catch (error) {
-            console.error('🟥 [PLUGIN] handleImagePartial failed', { event }, error)
+            console.error('[aiChatThreadPlugin] handleImagePartial failed', { event }, error)
         }
     }
 
@@ -1246,8 +1244,6 @@ class AiChatThreadPluginClass {
 
         if (!threadId || !aiImageModel) return
 
-        console.log('🖼️ [PLUGIN] Creating variant for thread:', threadId)
-
         // Use the handler to trigger new generation
         this.sendAiRequestHandler({
             message: `Create a variant of this image: ${revisedPrompt}`,
@@ -1264,17 +1260,7 @@ class AiChatThreadPluginClass {
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
 
-        console.log('🔴 [PLUGIN] handleStreamStart', {
-            threadId,
-            threadInfoFound: !!threadInfo,
-            insertPos: threadInfo?.insertPos,
-            docSize: state.doc.content.size
-        })
-
-        if (!threadInfo) {
-            console.warn('🔴 [PLUGIN] handleStreamStart: thread NOT found in doc, skipping', { threadId })
-            return
-        }
+        if (!threadInfo) return
 
         const { insertPos } = threadInfo
 
@@ -1297,11 +1283,9 @@ class AiChatThreadPluginClass {
             // Set receiving state for this specific thread
             if (threadId) {
                 tr.setMeta('setReceiving', { threadId, receiving: true })
-                console.log('🔴 [PLUGIN] Response node created', { threadId, pos: insertPos, responseMessageId })
             }
             tr.setMeta('skipDispatch', true)
             dispatch(tr)
-            console.log('🔴 [PLUGIN] handleStreamStart dispatch done', { threadId, docSizeAfter: tr.doc.content.size })
         } catch (error) {
             console.error('Error inserting aiResponseMessage:', error)
         }
@@ -1318,10 +1302,7 @@ class AiChatThreadPluginClass {
 
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
-        if (!threadInfo) {
-            console.warn('🟠 [PLUGIN] handleStreaming: thread NOT found in doc, skipping', { threadId })
-            return
-        }
+        if (!threadInfo) return
 
         let tr = state.tr
 
@@ -1344,7 +1325,7 @@ class AiChatThreadPluginClass {
 
         // Create response node if missing in the correct thread
         if (!targetInfo.found) {
-            console.warn('⚠️ [PLUGIN] No response node found, creating one', { threadId })
+            console.warn('[aiChatThreadPlugin] no response node found; creating one', { threadId })
 
             const { insertPos } = threadInfo
             const responseNode = state.schema.nodes[aiResponseMessageNodeType].create({
@@ -1390,8 +1371,6 @@ class AiChatThreadPluginClass {
             // Thread not in this document - event is for a different editor
             return
         }
-
-        console.log('🟢 [PLUGIN] END_STREAM processing for thread', { threadId })
 
         state.doc.descendants((node: ProseMirrorNode, pos: number) => {
             if (node.type.name === aiResponseMessageNodeType && node.attrs.isInitialRenderAnimation) {
@@ -1686,7 +1665,7 @@ class AiChatThreadPluginClass {
 
                     // Thread must have at least one child (a message)
                     if (node.childCount === 0) {
-                        console.warn('🚫 [PLUGIN] filterTransaction: blocking deletion that would empty thread')
+                        console.warn('[aiChatThreadPlugin] filterTransaction: blocking deletion that would empty thread')
                         valid = false
                         return false
                     }
