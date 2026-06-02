@@ -165,6 +165,7 @@ export type WorkspaceContextNode = {
     nodeId: string
     type: CanvasNodeType
     referenceId?: string
+    descriptorStatus?: ContentDescriptorStatus
     title?: string
     descriptorSummary?: string
     entityTags?: string[]
