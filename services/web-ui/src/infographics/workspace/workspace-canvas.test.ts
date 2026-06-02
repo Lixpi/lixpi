@@ -360,6 +360,22 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'const lineageAnchorRect = getGeneratedImageLineageAnchorRect(imageNode, currentCanvasState.nodes, currentCanvasState.edges)')
 		expectSourceToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
 	})
+
+	it('persists one branch-origin node for new generated branches before render support lands', () => {
+		expectSourceToContain(ts, 'function shouldCreateBranchOriginForResolution(resolution: ImageBranchVlmResolution): boolean')
+		expectSourceToContain(ts, "resolution.operationKind === 'new_image'")
+		expectSourceToContain(ts, "resolution.operationKind === 'fresh_branch'")
+		expectSourceToContain(ts, '|| !resolution.targetImageNodeId')
+		expectSourceToContain(ts, 'function appendBranchOriginNodeForGeneratedMedia(')
+		expectSourceToContain(ts, "type: 'branchOrigin'")
+		expectSourceToContain(ts, 'const referenceNodeIds = uniqueStringValues(resolution.referenceImageNodeIds)')
+		expectSourceToContain(ts, 'referenceFileIds: getBranchOriginReferenceFileIds(referenceNodeIds, nodes)')
+		expectSourceToContain(ts, 'nodes: appendBranchOriginNodeForGeneratedMedia(')
+		expectSourceToContain(ts, 'function pruneBranchOriginNodes(nodes: CanvasNode[]): CanvasNode[]')
+		expectSourceToContain(ts, "node.type !== 'branchOrigin' || activeBranchIds.has(node.branchId)")
+		expectSourceToContain(ts, "node.type !== 'branchOrigin'")
+		expectSourceToContain(ts, "node.type === 'branchOrigin'")
+	})
 })
 
 describe('Workspace canvas — generated video canvas state', () => {
@@ -432,7 +448,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 
 		expectExcerptToContain(completeHandler, 'createCollisionPlan(nodes)', 'video complete handler')
 		expectExcerptToContain(completeHandler, 'resolveCollisions(collisionPlan.nodeBoxes', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'nodes: nodesWithBranchOrigin,', 'video complete handler')
 	})
 
 	it('threads the representative mid-frame fileId onto the completed video node', () => {

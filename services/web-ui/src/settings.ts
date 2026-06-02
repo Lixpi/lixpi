@@ -83,6 +83,10 @@ export type ImageBranchLineageSettings = {
     imageToImageGap: number
 }
 
+export type BranchOriginSettings = {
+    nodeSize: number
+}
+
 export type MediaLibrarySettings = {
     panelWidthFraction: number
 }
@@ -110,6 +114,8 @@ export type Settings = {
     imageNode: ImageNodeSettings
 
     imageBranchLineage: ImageBranchLineageSettings
+
+    branchOrigin: BranchOriginSettings
 
     mediaLibrary: MediaLibrarySettings
 
@@ -260,6 +266,12 @@ export const settings: Settings = {
         branchToBranchGap: 160,
         // Canvas-unit horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches image-to-image branch spacing.
         imageToImageGap: 192,
+    },
+
+    // Branch-origin persisted node settings. Rendering-specific colors and pulse values live with the Phase 9 PIXI layer.
+    branchOrigin: {
+        // Canvas-unit width and height for each branch-origin circle node.
+        nodeSize: 64,
     },
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).
