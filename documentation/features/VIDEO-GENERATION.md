@@ -311,7 +311,7 @@ Video reuses the workspace bucket and the same content-hash dedup as images.
 
 **Self-healing dedup (durability).** In line with the NATS Object Store durability work (PR #208 / LIX-207, see [WORKSPACE-EXPORT.md](WORKSPACE-EXPORT.md)), the hash-dedup short-circuit only returns "duplicate" after confirming the bytes are actually present (`getObjectInfo`). If a hash is registered in `workspace.files` but its bytes are missing, `storeWorkspaceVideo` re-stores them so the dangling reference self-heals instead of returning a URL to lost bytes. Object-store reads/deletes are open-only and never auto-create a bucket.
 
-**HTTP route** — `GET /api/videos/:workspaceId/:fileId` (`services/api/src/routes/video-routes.ts`) streams the MP4 with **HTTP Range support** (206 Partial Content) so the HTML `<video>` element can seek and scrub; it returns 404 when the object or bucket is missing. Authentication mirrors the image route (Bearer or `?token=`). The poster reuses `GET /api/images/...`.
+**HTTP routes** — `GET /api/videos/:workspaceId/:fileId` (`services/api/src/routes/video-routes.ts`) streams the MP4 with **HTTP Range support** (206 Partial Content) so the HTML `<video>` element can seek and scrub; it returns 404 when the object or bucket is missing. `POST /api/videos/:workspaceId` accepts a replacement/user-supplied video, stores it through the same workspace-video path, and best-effort extracts a poster as a normal workspace image. Authentication mirrors the image route (Bearer or `?token=`). The poster reuses `GET /api/images/...`.
 
 **Deletion** — `workspace.video.delete` (`video-subjects.ts`) removes the MP4 from the Object Store and its `workspace.files` entry. On the canvas, `canvasVideoLifecycle.ts` tracks `VideoCanvasNode`s across state commits and, when one disappears, fires `deleteVideo(fileId, workspaceId, posterFileId)` — the MP4 via the video subject and the poster via the image-delete subject (the poster is a normal image). Workspace deletion cleans up video Media Library items by branching on `item.kind`.
 
@@ -452,7 +452,7 @@ services/api/src/
 ├── services/
 │   ├── video-storage.ts              # storeWorkspaceVideo (self-healing dedup) + extractPosterFrame (ffmpeg)
 │   └── media-library-storage.ts      # copy/materialize/scope video helpers
-├── routes/video-routes.ts            # GET /api/videos/:ws/:fileId (Range)
+├── routes/video-routes.ts            # POST /api/videos/:ws + GET /api/videos/:ws/:fileId (Range)
 ├── NATS/subscriptions/
 │   ├── video-subjects.ts             # workspace.video.delete
 │   ├── ai-interaction-subjects.ts    # resolve videoModelMetaInfo + forward video params
