@@ -1,6 +1,7 @@
 'use strict'
 
 import { Router } from 'express'
+import multer from 'multer'
 
 import NATS_Service from '@lixpi/nats-service'
 import { type DocumentFile } from '@lixpi/constants'
@@ -8,14 +9,12 @@ import { err } from '@lixpi/debug-tools'
 
 import { jwtVerifier } from '../helpers/auth.ts'
 import Workspace from '../models/workspace.ts'
+import { storeWorkspaceImage } from '../services/image-storage.ts'
+import { extractPosterFrame, storeWorkspaceVideo } from '../services/video-storage.ts'
 
-// Mirrors routes/image-routes.ts but for generated VEO videos. Two important
-// differences from the image route:
-//   1. Videos live in the same workspace Object Store bucket but are served
-//      with HTTP Range support so HTML5 <video> + PIXI VideoSource can seek
-//      without fetching the whole MP4 up front.
-//   2. There is no upload route — videos are produced server-side by the VEO
-//      provider and stored via services/video-storage.ts.
+// Mirrors routes/image-routes.ts for workspace videos. Videos live in the same
+// Object Store bucket as images, but are served with HTTP Range support so HTML5
+// <video> can seek without fetching the whole MP4 up front.
 //
 // Authentication mirrors the image route exactly so a tokenized URL passed to
 // a <video src=...> or PIXI VideoSource works the same way it does for <img>.
@@ -23,6 +22,22 @@ import Workspace from '../models/workspace.ts'
 const router = Router()
 
 const getWorkspaceBucketName = (workspaceId: string) => `workspace-${workspaceId}-files`
+const MAX_VIDEO_FILE_SIZE = 1024 * 1024 * 1024
+const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4']
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: MAX_VIDEO_FILE_SIZE,
+    },
+    fileFilter: (_req, file, cb) => {
+        if (ALLOWED_VIDEO_MIME_TYPES.includes(file.mimetype)) {
+            cb(null, true)
+        } else {
+            cb(new Error(`Invalid content type. Allowed: ${ALLOWED_VIDEO_MIME_TYPES.join(', ')}`))
+        }
+    },
+})
 
 const authenticateRequest = async (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization
@@ -77,6 +92,57 @@ const validateWorkspaceAccess = async (req: any, res: any, next: any) => {
         return res.status(500).json({ error: 'Failed to validate workspace access' })
     }
 }
+
+// POST /api/videos/:workspaceId - Upload a replacement/user-supplied video.
+router.post(
+    '/:workspaceId',
+    authenticateRequest,
+    validateWorkspaceAccess,
+    upload.single('file'),
+    async (req: any, res: any) => {
+        const { workspaceId } = req.params
+        const file = req.file
+
+        if (!file) {
+            return res.status(400).json({ error: 'No file provided' })
+        }
+
+        try {
+            const video = await storeWorkspaceVideo({
+                workspaceId,
+                buffer: file.buffer,
+                originalName: file.originalname,
+                mimeType: file.mimetype,
+            })
+
+            let poster: { fileId: string; url: string } | null = null
+            const posterBuffer = await extractPosterFrame(file.buffer)
+            if (posterBuffer) {
+                poster = await storeWorkspaceImage({
+                    workspaceId,
+                    buffer: posterBuffer,
+                    originalName: `${file.originalname}-poster.png`,
+                    mimeType: 'image/png',
+                })
+            }
+
+            return res.json({
+                ...video,
+                posterFileId: poster?.fileId ?? '',
+                posterUrl: poster?.url ?? '',
+            })
+        } catch (e: any) {
+            err(`Video upload failed for workspace ${workspaceId}:`, e)
+            if (e?.message?.startsWith('Workspace not found')) {
+                return res.status(404).json({ error: 'Workspace not found' })
+            }
+            if (e?.message?.includes('NATS service unavailable')) {
+                return res.status(503).json({ error: 'Storage service unavailable' })
+            }
+            return res.status(500).json({ error: 'Failed to upload video' })
+        }
+    }
+)
 
 // GET /api/videos/:workspaceId/:fileId
 //

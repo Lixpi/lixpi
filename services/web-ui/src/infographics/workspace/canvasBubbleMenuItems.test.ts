@@ -11,11 +11,12 @@ function createCallbacks() {
         onDeleteEdge: vi.fn(),
         onChangeConnectorCurve: vi.fn(),
         onAskAi: vi.fn(),
-        onDownloadImage: vi.fn(),
-        onReplaceImage: vi.fn(),
+        onDownloadMedia: vi.fn(),
+        onReplaceMedia: vi.fn(),
         onAddToMediaLibrary: vi.fn(),
         canAddToMediaLibrary: vi.fn(() => true),
         onTriggerConnection: vi.fn(),
+        onExtendVideoInNewThread: vi.fn(),
         onHide: vi.fn(),
     }
 }
@@ -59,6 +60,12 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[3].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
     })
 
+    it('the Replace and Download buttons are shared between image and video contexts', () => {
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        expect(items[1].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
+        expect(items[2].context).toEqual([CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT])
+    })
+
     it('the two video-only items follow the image items', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
         expect(items[6].context).toEqual([CANVAS_VIDEO_CONTEXT])
@@ -76,14 +83,14 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[0].element.getAttribute('title')).toBe('Ask AI')
     })
 
-    it('second item is Replace image button', () => {
+    it('second item is Replace media button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[1].element.getAttribute('title')).toBe('Replace image')
+        expect(items[1].element.getAttribute('title')).toBe('Replace media')
     })
 
-    it('third item is Download button', () => {
+    it('third item is Download media button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[2].element.getAttribute('title')).toBe('Download image')
+        expect(items[2].element.getAttribute('title')).toBe('Download media')
     })
 
     it('fourth item is Add to Media Library button', () => {
@@ -183,14 +190,14 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         expect(callbacks.onHide).not.toHaveBeenCalled()
     })
 
-    it('Download fires onDownloadImage + onHide with active node', () => {
+    it('Download fires onDownloadMedia + onHide with active node', () => {
         const callbacks = createCallbacks()
         const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
         setActiveNodeId('img-3')
 
         items[2].element.click()
 
-        expect(callbacks.onDownloadImage).toHaveBeenCalledWith('img-3')
+        expect(callbacks.onDownloadMedia).toHaveBeenCalledWith('img-3')
         expect(callbacks.onHide).toHaveBeenCalledOnce()
         expect(callbacks.onDeleteNode).not.toHaveBeenCalled()
     })
@@ -201,8 +208,29 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
 
         items[2].element.click()
 
-        expect(callbacks.onDownloadImage).not.toHaveBeenCalled()
+        expect(callbacks.onDownloadMedia).not.toHaveBeenCalled()
         expect(callbacks.onHide).not.toHaveBeenCalled()
+    })
+
+    it('Replace fires onReplaceMedia + onHide with active node', () => {
+        const callbacks = createCallbacks()
+        const { items, setActiveNodeId } = buildCanvasBubbleMenuItems(callbacks)
+        setActiveNodeId('media-3')
+
+        items[1].element.click()
+
+        expect(callbacks.onReplaceMedia).toHaveBeenCalledWith('media-3')
+        expect(callbacks.onHide).toHaveBeenCalledOnce()
+    })
+
+    it('Video context keeps Replace and Download visible', () => {
+        const callbacks = createCallbacks()
+        const { items } = buildCanvasBubbleMenuItems(callbacks)
+        const videoItems = items.filter((item) => item.context.includes(CANVAS_VIDEO_CONTEXT))
+        const titles = videoItems.map((item) => item.element.getAttribute('title'))
+
+        expect(titles).toContain('Replace media')
+        expect(titles).toContain('Download media')
     })
 
     it('Connect fires onTriggerConnection + onHide on click with active node', () => {

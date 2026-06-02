@@ -447,18 +447,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 selectNode(null)
                 commitCanvasState({ ...currentCanvasState, nodes: updatedNodes, edges: updatedEdges })
             },
-            onDownloadImage: (nodeId) => {
+            onDownloadMedia: (nodeId) => {
                 const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-                if (!node || node.type !== 'image') return
+                if (!node || (node.type !== 'image' && node.type !== 'video')) return
 
                 void (async () => {
                     const API_BASE_URL = import.meta.env.VITE_API_URL || ''
                     const token = await AuthService.getTokenSilently()
                     const strippedSrc = node.src.replace(/[?&]token=[^&]+/, '')
-                    const isStoredImage = strippedSrc.startsWith('/api/') || (strippedSrc.startsWith('http') && strippedSrc.includes('/api/images/'))
-                    const resolvedSrc = isStoredImage ? `/api/images/${workspaceId}/${node.fileId}` : strippedSrc
-                    const imageSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token || false)
-                    await downloadImage(imageSrc, {
+                    const route = node.type === 'video' ? 'videos' : 'images'
+                    const isStoredMedia = strippedSrc.startsWith('/api/') || (strippedSrc.startsWith('http') && strippedSrc.includes(`/api/${route}/`))
+                    const resolvedSrc = isStoredMedia ? `/api/${route}/${workspaceId}/${node.fileId}` : strippedSrc
+                    const mediaSrc = buildImageSrc(resolvedSrc, API_BASE_URL, token || false)
+                    await downloadImage(mediaSrc, {
                         getAuthToken: async () => {
                             const freshToken = await AuthService.getTokenSilently()
                             return freshToken || ''
@@ -466,12 +467,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     })
                 })()
             },
-            onReplaceImage: (nodeId) => {
-                const input = html`<input type="file" accept="image/*" style=${{ display: 'none' }}></input>` as HTMLInputElement
+            onReplaceMedia: (nodeId) => {
+                const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
+                if (!node || (node.type !== 'image' && node.type !== 'video')) return
+
+                const accept = node.type === 'video' ? 'video/mp4' : 'image/*'
+                const expectedMimePrefix = node.type === 'video' ? 'video/' : 'image/'
+                const input = html`<input type="file" accept=${accept} style=${{ display: 'none' }}></input>` as HTMLInputElement
                 input.addEventListener('change', async () => {
                     const file = input.files?.[0]
                     input.remove()
-                    if (!file || !file.type.startsWith('image/')) return
+                    if (!file || !file.type.startsWith(expectedMimePrefix)) return
 
                     const API_BASE_URL = import.meta.env.VITE_API_URL || ''
                     const token = await AuthService.getTokenSilently()
@@ -480,7 +486,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     const formData = new FormData()
                     formData.append('file', file)
 
-                    const response = await fetch(`${API_BASE_URL}/api/images/${workspaceId}`, {
+                    const route = node.type === 'video' ? 'videos' : 'images'
+                    const response = await fetch(`${API_BASE_URL}/api/${route}/${workspaceId}`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}` },
                         body: formData
@@ -488,16 +495,43 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                     if (!response.ok) return
 
-                    const data = await response.json()
+                    const data = await response.json() as {
+                        fileId?: string
+                        url?: string
+                        posterFileId?: string
+                        posterUrl?: string
+                    }
+                    if (!data.fileId || !data.url) return
+
                     const newSrc = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+                    const newPosterSrc = data.posterUrl
+                        ? `${API_BASE_URL}${data.posterUrl}?token=${encodeURIComponent(token)}`
+                        : ''
 
                     // Update canvas state; the PIXI sprite replaces its texture.
                     if (!currentCanvasState) return
                     const updatedNodes = currentCanvasState.nodes.map((n: CanvasNode) => {
-                        if (n.nodeId !== nodeId || n.type !== 'image') return n
-                        return { ...n, fileId: data.fileId, src: newSrc } as ImageCanvasNode
+                        if (n.nodeId !== nodeId) return n
+                        if (n.type === 'image' && node.type === 'image') {
+                            return { ...n, fileId: data.fileId, src: newSrc } as ImageCanvasNode
+                        }
+                        if (n.type === 'video' && node.type === 'video') {
+                            return {
+                                ...n,
+                                fileId: data.fileId,
+                                posterFileId: data.posterFileId ?? '',
+                                frameFileId: undefined,
+                                src: newSrc,
+                                posterSrc: newPosterSrc,
+                                descriptor: data.posterFileId ? buildAnalyzingDescriptor() : n.descriptor,
+                            } as VideoCanvasNode
+                        }
+                        return n
                     })
                     commitCanvasState({ ...currentCanvasState, nodes: updatedNodes })
+                    if (node.type === 'video' && data.posterFileId) {
+                        void analyzeUploadedMedia(nodeId, data.posterFileId)
+                    }
                 })
                 document.body.appendChild(input)
                 input.click()

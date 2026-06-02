@@ -1,10 +1,10 @@
 // =============================================================================
 // CANVAS BUBBLE MENU ITEMS
 //
-// Menu items for the workspace canvas bubble menu. Supports image nodes
-// (Delete, Download, Ask AI, save, Connect), video nodes (Extend in new
-// thread, Connect, Delete), and edge connections (Delete). Framework-agnostic
-// — uses only DOM and callbacks. No ProseMirror imports.
+// Menu items for the workspace canvas bubble menu. Supports image nodes and
+// video nodes (Delete, Download, Replace, save, Connect), plus edge connections
+// (Delete). Framework-agnostic — uses only DOM and callbacks. No ProseMirror
+// imports.
 // =============================================================================
 
 import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
@@ -29,8 +29,8 @@ type CanvasBubbleMenuCallbacks = {
     onDeleteEdge: (edgeId: string) => void
     onChangeConnectorCurve: (edgeId: string) => void
     onAskAi: (nodeId: string) => void
-    onDownloadImage: (nodeId: string) => void
-    onReplaceImage: (nodeId: string) => void
+    onDownloadMedia: (nodeId: string) => void
+    onReplaceMedia: (nodeId: string) => void
     onAddToMediaLibrary: (nodeId: string) => void
     canAddToMediaLibrary: (nodeId: string | null) => boolean
     onTriggerConnection: (nodeId: string) => void
@@ -92,11 +92,11 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
 
     const downloadButton = createCanvasButton({
         icon: downloadIcon,
-        title: 'Download image',
+        title: 'Download media',
         iconSize: 16,
         onClick: () => {
             if (activeNodeId) {
-                callbacks.onDownloadImage(activeNodeId)
+                callbacks.onDownloadMedia(activeNodeId)
                 callbacks.onHide()
             }
         },
@@ -104,11 +104,11 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
 
     const replaceButton = createCanvasButton({
         icon: downloadIcon,
-        title: 'Replace image',
+        title: 'Replace media',
         iconSize: 16,
         onClick: () => {
             if (activeNodeId) {
-                callbacks.onReplaceImage(activeNodeId)
+                callbacks.onReplaceMedia(activeNodeId)
                 callbacks.onHide()
             }
         },
@@ -209,8 +209,8 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
 
     const items: BubbleMenuItem[] = [
         { element: askAiButton, context: [CANVAS_IMAGE_CONTEXT] },
-        { element: replaceButton, context: [CANVAS_IMAGE_CONTEXT] },
-        { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT] },
+        { element: replaceButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
+        { element: downloadButton, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT] },
         {
             element: addToLibraryButton,
             context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT],

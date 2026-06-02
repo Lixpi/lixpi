@@ -2390,15 +2390,19 @@ describe('video generation — canvas + plugin source shape', () => {
 		expectSourceNotToContain(ts, 'video-dot-bounce')
 	})
 
-	it('wires the bubble menu for video nodes (Extend + Connect + Delete)', () => {
-		// Phase 6: video nodes share Connect with image, but get a dedicated
-		// Extend-in-new-thread entry and a video-specific Delete.
+	it('wires the bubble menu for video nodes (Replace + Download + Extend + Connect + Delete)', () => {
+		// Video nodes share Replace, Download, Add to Media Library, and Connect
+		// with images, while keeping dedicated Extend and Delete entries.
 		const bubbleMenuTs = readSourceFile('canvasBubbleMenuItems.ts')
 		expectSourceToContain(ts, "import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT")
 		expectSourceToContain(ts, "node.type !== 'image' && node.type !== 'video'")
 		expectSourceToContain(ts, "node.type === 'video' ? CANVAS_VIDEO_CONTEXT : CANVAS_IMAGE_CONTEXT")
+		expectSourceToContain(ts, 'onDownloadMedia: (nodeId) => {')
+		expectSourceToContain(ts, 'onReplaceMedia: (nodeId) => {')
 		expectSourceToContain(ts, 'onExtendVideoInNewThread: async (nodeId) => {')
 		expectSourceToContain(bubbleMenuTs, "export const CANVAS_VIDEO_CONTEXT = 'canvasVideo'")
+		expectSourceToContain(bubbleMenuTs, "title: 'Replace media'")
+		expectSourceToContain(bubbleMenuTs, "title: 'Download media'")
 		expectSourceToContain(bubbleMenuTs, "title: 'Extend video in new thread'")
 		expectSourceToContain(bubbleMenuTs, "title: 'Delete video'")
 		expectSourceToContain(bubbleMenuTs, 'context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT]')

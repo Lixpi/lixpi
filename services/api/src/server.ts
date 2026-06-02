@@ -184,7 +184,7 @@ app.use(cookieParser())
 // Image upload/download routes
 app.use('/api/images', imageRoutes)
 
-// Video download route (Range-capable for HTML5 <video> + PIXI VideoSource)
+// Video upload/download route (Range-capable for HTML5 <video> + PIXI VideoSource)
 app.use('/api/videos', videoRoutes)
 
 // Workspace export routes
