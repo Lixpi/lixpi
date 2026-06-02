@@ -588,13 +588,14 @@ AI chat threads belonging to the current workspace.
 | `WORKSPACE.MEDIA_LIBRARY.CHANGE_SCOPE` | Copy a library object to a new scope and update metadata |
 | `WORKSPACE.MEDIA_LIBRARY.DELETE` | Delete a saved library item and its stored object(s) |
 
-### Image HTTP Endpoints
+### Media HTTP Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/images/:workspaceId` | POST | Upload image (multipart/form-data) |
 | `/api/images/:workspaceId/import-url` | POST | Fetch a public image URL into workspace Object Store before canvas insertion |
 | `/api/images/:workspaceId/:fileId` | GET | Serve image with auth token |
+| `/api/videos/:workspaceId` | POST | Upload replacement or user-supplied video, store its MP4, and best-effort extract a poster |
 | `/api/videos/:workspaceId/:fileId` | GET | Serve video with auth token and HTTP Range support |
 | `/api/media-library/items/:itemId/content` | GET | Serve an ACL-checked saved Media Library image preview or Range-capable video preview |
 | `/api/media-library/items/:itemId/poster` | GET | Serve an ACL-checked saved Media Library video poster |
