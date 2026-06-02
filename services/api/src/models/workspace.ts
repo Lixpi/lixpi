@@ -9,6 +9,7 @@ import {
     type WorkspaceMeta,
     type WorkspaceAccessList,
     type CanvasState,
+    type ContentDescriptor,
     type DocumentFile
 } from '@lixpi/constants'
 
@@ -216,6 +217,57 @@ export default {
             })
         } catch (error) {
             console.error('Failed to update workspace canvas state:', error)
+        }
+    },
+
+    patchCanvasNodeDescriptor: async ({
+        workspaceId,
+        nodeId,
+        descriptor
+    }: { workspaceId: string; nodeId: string; descriptor: ContentDescriptor }): Promise<boolean> => {
+        const currentDate = new Date().getTime()
+
+        try {
+            const workspace = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                origin: `model::Workspace->patchCanvasNodeDescriptor:get(${workspaceId}:${nodeId})`
+            })
+
+            const nodes = workspace?.canvasState?.nodes ?? []
+            const nodeIndex = nodes.findIndex((node: { nodeId?: string }) => node.nodeId === nodeId)
+            if (nodeIndex < 0) return false
+
+            await dynamoDBService.updateItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                updateExpression: `SET #canvasState.#nodes[${nodeIndex}].#descriptor = :descriptor, #updatedAt = :updatedAt`,
+                expressionAttributeNames: {
+                    '#canvasState': 'canvasState',
+                    '#nodes': 'nodes',
+                    '#descriptor': 'descriptor',
+                    '#updatedAt': 'updatedAt'
+                },
+                expressionAttributeValues: {
+                    ':descriptor': descriptor,
+                    ':updatedAt': currentDate
+                },
+                origin: 'patchWorkspaceCanvasNodeDescriptor'
+            })
+
+            await dynamoDBService.updateItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                key: { workspaceId },
+                updates: {
+                    updatedAt: currentDate
+                },
+                origin: 'patchWorkspaceCanvasNodeDescriptor:meta'
+            })
+
+            return true
+        } catch (error) {
+            console.error('Failed to patch workspace canvas node descriptor:', error)
+            throw error
         }
     },
 

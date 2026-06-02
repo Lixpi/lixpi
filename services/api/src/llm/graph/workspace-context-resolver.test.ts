@@ -26,6 +26,7 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
             type: 'aiChatThread',
             referenceId: 'root-thread-ref',
             title: 'Root chat',
+            descriptorStatus: 'ready',
             descriptorSummary: 'active canvas chat',
             entityTags: [],
             styleTags: [],
@@ -37,6 +38,7 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
             type: 'document',
             referenceId: 'doc-cubist',
             title: 'Cubist Dog',
+            descriptorStatus: 'ready',
             descriptorSummary: 'notes about a cubist dog painting',
             entityTags: ['dog'],
             styleTags: ['cubist'],
@@ -46,6 +48,7 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
         {
             nodeId: 'goat-image',
             type: 'image',
+            descriptorStatus: 'ready',
             descriptorSummary: 'a white goat standing in a field',
             entityTags: ['goat'],
             styleTags: ['photo'],
@@ -58,6 +61,7 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
         {
             nodeId: 'team-video',
             type: 'video',
+            descriptorStatus: 'ready',
             descriptorSummary: 'team walking through a studio',
             entityTags: ['team'],
             styleTags: ['documentary'],
@@ -71,6 +75,7 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
             type: 'aiChatThread',
             referenceId: 'thread-notes',
             title: 'Seaside notes',
+            descriptorStatus: 'ready',
             descriptorSummary: 'chat notes about a seaside village',
             entityTags: ['village'],
             styleTags: [],
@@ -80,6 +85,7 @@ const baseWorkspaceSnapshot: WorkspaceContextSnapshot = {
         {
             nodeId: 'landscape-image',
             type: 'image',
+            descriptorStatus: 'ready',
             descriptorSummary: 'unrelated mountain landscape',
             entityTags: ['mountain'],
             styleTags: ['landscape'],
@@ -151,7 +157,9 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     }
 }
 
-function createDeps(parsed: { selections: Array<Record<string, unknown>> }) {
+function createDeps(parsedInput: { selections: Array<Record<string, unknown>> } | Array<{ selections: Array<Record<string, unknown>> }>) {
+    const parsedRuns = Array.isArray(parsedInput) ? parsedInput : [parsedInput]
+    let callIndex = 0
     const published: Array<{ subject: string; payload: any }> = []
     const natsService = {
         getObject: vi.fn(async () => tinyPngBytes),
@@ -181,13 +189,17 @@ function createDeps(parsed: { selections: Array<Record<string, unknown>> }) {
             })
         }),
     }
-    const callLlm = vi.fn(async (_args: VlmCallArgs): Promise<VlmCallResult<any>> => ({
-        parsed,
-        rawText: JSON.stringify(parsed),
-        modelName: 'gpt-4.1',
-        promptTokens: 10,
-        completionTokens: 20,
-    }))
+    const callLlm = vi.fn(async (_args: VlmCallArgs): Promise<VlmCallResult<any>> => {
+        const parsed = parsedRuns[Math.min(callIndex, parsedRuns.length - 1)]!
+        callIndex++
+        return {
+            parsed,
+            rawText: JSON.stringify(parsed),
+            modelName: 'gpt-4.1',
+            promptTokens: 10,
+            completionTokens: 20,
+        }
+    })
     const getDocument = vi.fn(async () => ({
         documentId: 'doc-cubist',
         workspaceId: 'workspace-1',
@@ -214,6 +226,17 @@ function createDeps(parsed: { selections: Array<Record<string, unknown>> }) {
         createdAt: 1,
         updatedAt: 1,
     }))
+    const describeMediaStill = vi.fn(async () => ({
+        summary: 'A healed goat descriptor with useful visual detail.',
+        entityTags: ['goat'],
+        styleTags: ['field'],
+    }))
+    const describeTextContent = vi.fn(async () => ({
+        summary: 'A healed text descriptor about cubist dog notes.',
+        entityTags: ['dog'],
+        styleTags: ['notes'],
+    }))
+    const patchCanvasNodeDescriptor = vi.fn(async () => true)
 
     return {
         deps: {
@@ -222,12 +245,18 @@ function createDeps(parsed: { selections: Array<Record<string, unknown>> }) {
             callLlm,
             getDocument: getDocument as any,
             getAiChatThread: getAiChatThread as any,
+            describeMediaStill: describeMediaStill as any,
+            describeTextContent: describeTextContent as any,
+            patchCanvasNodeDescriptor: patchCanvasNodeDescriptor as any,
         },
         natsService,
         publisher,
         callLlm,
         getDocument,
         getAiChatThread,
+        describeMediaStill,
+        describeTextContent,
+        patchCanvasNodeDescriptor,
         published,
     }
 }
@@ -314,6 +343,105 @@ describe('resolveWorkspaceContext', () => {
         expect(natsService.getObject).toHaveBeenCalled()
         expect(imageBlock?.image_url).toBe(resolvedTinyPngUrl)
         expect(update.imageBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['team-video', 'goat-image'])
+    })
+
+    it('self-heals a failed media descriptor, persists it, and reranks exactly once', async () => {
+        const weakSnapshot: WorkspaceContextSnapshot = {
+            ...baseWorkspaceSnapshot,
+            nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'goat-image'
+                ? { ...node, descriptorStatus: 'failed' as const, descriptorSummary: 'goat' }
+                : node
+            ),
+        }
+        const { deps, callLlm, describeMediaStill, patchCanvasNodeDescriptor } = createDeps([
+            {
+                selections: [
+                    { nodeId: 'goat-image', rationale: 'The weak goat descriptor is promising.', needsBetterDescriptor: true },
+                ],
+            },
+            {
+                selections: [
+                    { nodeId: 'goat-image', rationale: 'The healed goat descriptor now clearly matches.', needsBetterDescriptor: true },
+                ],
+            },
+        ])
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: weakSnapshot,
+        }), deps)
+
+        expect(callLlm).toHaveBeenCalledTimes(2)
+        expect(describeMediaStill).toHaveBeenCalledOnce()
+        expect(describeMediaStill).toHaveBeenCalledWith(expect.objectContaining({
+            imageUrl: 'nats-obj://workspace-workspace-1-files/goat-file',
+            provider: 'OpenAI',
+            modelVersion: 'gpt-4.1',
+        }))
+        expect(patchCanvasNodeDescriptor).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: 'workspace-1',
+            nodeId: 'goat-image',
+            descriptor: expect.objectContaining({
+                status: 'ready',
+                summary: 'A healed goat descriptor with useful visual detail.',
+            }),
+        }))
+        expect(update.workspaceContextResolution?.improvedDescriptors?.['goat-image']).toEqual(expect.objectContaining({
+            summary: 'A healed goat descriptor with useful visual detail.',
+            entityTags: ['goat'],
+            styleTags: ['field'],
+        }))
+        expect(update.workspaceContextResolution?.selections.find((selection) => selection.nodeId === 'goat-image')?.rationale)
+            .toBe('The healed goat descriptor now clearly matches.')
+        expect(update.workspaceContextSnapshot?.nodes.find((node) => node.nodeId === 'goat-image')?.descriptorSummary)
+            .toBe('A healed goat descriptor with useful visual detail.')
+    })
+
+    it('self-heals a missing text descriptor through the text descriptor path', async () => {
+        const missingTextSnapshot: WorkspaceContextSnapshot = {
+            ...baseWorkspaceSnapshot,
+            nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'cubist-doc'
+                ? {
+                    ...node,
+                    descriptorStatus: undefined,
+                    descriptorSummary: undefined,
+                    entityTags: undefined,
+                    styleTags: undefined,
+                }
+                : node
+            ),
+        }
+        const { deps, describeTextContent, patchCanvasNodeDescriptor } = createDeps([
+            {
+                selections: [
+                    { nodeId: 'cubist-doc', rationale: 'Forced chip lacks descriptor.', needsBetterDescriptor: true },
+                ],
+            },
+            {
+                selections: [
+                    { nodeId: 'cubist-doc', rationale: 'Healed doc descriptor is relevant.', needsBetterDescriptor: false },
+                ],
+            },
+        ])
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: missingTextSnapshot,
+            imageBranchCandidateSnapshot: undefined,
+        }), deps)
+
+        expect(describeTextContent).toHaveBeenCalledOnce()
+        expect(describeTextContent).toHaveBeenCalledWith(expect.objectContaining({
+            text: 'Full cubist dog document text.',
+            title: 'Cubist Dog',
+        }))
+        expect(patchCanvasNodeDescriptor).toHaveBeenCalledWith(expect.objectContaining({
+            nodeId: 'cubist-doc',
+            descriptor: expect.objectContaining({
+                summary: 'A healed text descriptor about cubist dog notes.',
+            }),
+        }))
+        expect(update.workspaceContextResolution?.improvedDescriptors?.['cubist-doc']).toEqual(expect.objectContaining({
+            summary: 'A healed text descriptor about cubist dog notes.',
+        }))
     })
 
     it('publishes context relevance errors and lets the graph error path handle failure', async () => {

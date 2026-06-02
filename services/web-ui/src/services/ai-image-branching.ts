@@ -450,6 +450,7 @@ function toWorkspaceContextNode(
 
     const descriptor = node.descriptor
     if (descriptor) {
+        contextNode.descriptorStatus = descriptor.status
         const summary = descriptor.summary?.trim()
         if (summary) contextNode.descriptorSummary = summary
         if (descriptor.entityTags?.length) contextNode.entityTags = descriptor.entityTags

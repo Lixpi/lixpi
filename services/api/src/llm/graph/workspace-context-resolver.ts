@@ -4,19 +4,27 @@ import * as process from 'process'
 
 import type NatsService from '@lixpi/nats-service'
 import { info } from '@lixpi/debug-tools'
-import type {
-    AiChatThread,
-    Document,
-    ImageBranchCandidateImage,
-    ImageBranchCandidateSnapshot,
-    ProviderName,
-    WorkspaceContextNode,
-    WorkspaceContextResolution,
-    WorkspaceContextSelection,
+import {
+    MEDIA_DESCRIPTOR_VERSION as DESCRIPTOR_VERSION,
+    type AiChatThread,
+    type ContentDescriptor,
+    type Document,
+    type ImageBranchCandidateImage,
+    type ImageBranchCandidateSnapshot,
+    type ProviderName,
+    type WorkspaceContextNode,
+    type WorkspaceContextResolution,
+    type WorkspaceContextSelection,
 } from '@lixpi/constants'
 
+import WorkspaceModel from '../../models/workspace.ts'
 import DocumentModel from '../../models/document.ts'
 import AiChatThreadModel from '../../models/ai-chat-thread.ts'
+import {
+    describeMediaStill as defaultDescribeMediaStill,
+    describeTextContent as defaultDescribeTextContent,
+    type MediaDescriptorResult,
+} from '../media-descriptor.ts'
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
@@ -39,6 +47,9 @@ type ResolveWorkspaceContextDeps = {
     callLlm?: (args: VlmCallArgs) => Promise<VlmCallResult<WorkspaceContextRawResolution>>
     getDocument?: typeof DocumentModel.getDocument
     getAiChatThread?: typeof AiChatThreadModel.getAiChatThread
+    describeMediaStill?: typeof defaultDescribeMediaStill
+    describeTextContent?: typeof defaultDescribeTextContent
+    patchCanvasNodeDescriptor?: typeof WorkspaceModel.patchCanvasNodeDescriptor
 }
 
 type ProseMirrorNode = {
@@ -119,6 +130,7 @@ const compactNodeForPrompt = (node: WorkspaceContextNode): Record<string, unknow
     nodeId: node.nodeId,
     type: node.type,
     title: node.title ?? '',
+    descriptorStatus: node.descriptorStatus ?? 'missing',
     descriptorSummary: node.descriptorSummary ?? '',
     entityTags: node.entityTags ?? [],
     styleTags: node.styleTags ?? [],
@@ -225,6 +237,84 @@ const buildResolution = (
     }
 }
 
+const isDescriptorWeak = (node: WorkspaceContextNode): boolean => {
+    const summary = node.descriptorSummary?.trim() ?? ''
+    if (!node.descriptorStatus || node.descriptorStatus === 'analyzing' || node.descriptorStatus === 'failed') return true
+    if (!summary) return true
+    if (summary.length < 18) return true
+    return summary.split(/\s+/).filter(Boolean).length <= 2
+}
+
+const getSelfHealCandidates = (
+    state: ProviderState,
+    resolution: WorkspaceContextResolution,
+    rawSelections: WorkspaceContextRawSelection[],
+): WorkspaceContextNode[] => {
+    const snapshot = state.workspaceContextSnapshot
+    if (!snapshot) return []
+
+    const nodeById = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
+    const selectedNodeIds = new Set(resolution.selections.map((selection) => selection.nodeId))
+    for (const rawSelection of rawSelections) {
+        if (rawSelection.needsBetterDescriptor) selectedNodeIds.add(rawSelection.nodeId)
+    }
+
+    const flaggedByLlm = new Set(
+        rawSelections
+            .filter((selection) => selection.needsBetterDescriptor)
+            .map((selection) => selection.nodeId)
+    )
+    const candidates: WorkspaceContextNode[] = []
+    for (const nodeId of selectedNodeIds) {
+        const node = nodeById.get(nodeId)
+        if (!node) continue
+        if (flaggedByLlm.has(nodeId) || isDescriptorWeak(node)) {
+            candidates.push(node)
+        }
+    }
+    return candidates
+}
+
+const toContentDescriptor = (result: MediaDescriptorResult, now: number): ContentDescriptor | undefined => {
+    const summary = result.summary.trim()
+    if (!summary) return undefined
+    return {
+        status: 'ready',
+        summary,
+        entityTags: result.entityTags,
+        styleTags: result.styleTags,
+        source: 'analysis',
+        version: DESCRIPTOR_VERSION,
+        updatedAt: now,
+    }
+}
+
+const applyImprovedDescriptorsToSnapshot = (
+    state: ProviderState,
+    improvedDescriptors: Record<string, ContentDescriptor>,
+): ProviderState => {
+    const snapshot = state.workspaceContextSnapshot
+    if (!snapshot) return state
+    const nodes = snapshot.nodes.map((node) => {
+        const descriptor = improvedDescriptors[node.nodeId]
+        if (!descriptor) return node
+        return {
+            ...node,
+            descriptorStatus: descriptor.status,
+            descriptorSummary: descriptor.summary,
+            entityTags: descriptor.entityTags,
+            styleTags: descriptor.styleTags,
+        }
+    })
+    return {
+        ...state,
+        workspaceContextSnapshot: {
+            ...snapshot,
+            nodes,
+        },
+    }
+}
+
 const extractTextFromNode = (node: ProseMirrorNode): string => {
     if (node.type === 'text' && node.text) return node.text
     if (node.type === 'hard_break') return '\n'
@@ -306,6 +396,83 @@ const resolveThreadText = async (
     const chatThread = thread as AiChatThread
     const text = extractTextFromProseMirror(chatThread.content) || getFallbackText(node)
     return text ? { title: chatThread.title || node.title, text } : undefined
+}
+
+const improveDescriptorForNode = async (
+    node: WorkspaceContextNode,
+    state: ProviderState,
+    deps: ResolveWorkspaceContextDeps,
+    resolverModel: { provider: ProviderName; modelVersion: string },
+): Promise<ContentDescriptor | undefined> => {
+    const now = Date.now()
+    if (node.type === 'image' || node.type === 'video') {
+        if (!node.imageUrl) return undefined
+        const describeMediaStill = deps.describeMediaStill ?? defaultDescribeMediaStill
+        const result = await describeMediaStill({
+            provider: resolverModel.provider,
+            modelVersion: resolverModel.modelVersion,
+            imageUrl: node.imageUrl,
+            natsService: deps.natsService,
+            abortSignal: deps.abortSignal,
+        })
+        return toContentDescriptor(result, now)
+    }
+
+    if (node.type === 'document') {
+        const resolved = await resolveDocumentText(node, state, deps)
+        if (!resolved?.text) return undefined
+        const describeTextContent = deps.describeTextContent ?? defaultDescribeTextContent
+        const result = await describeTextContent({
+            provider: resolverModel.provider,
+            modelVersion: resolverModel.modelVersion,
+            text: resolved.text,
+            title: resolved.title,
+            natsService: deps.natsService,
+            abortSignal: deps.abortSignal,
+        })
+        return toContentDescriptor(result, now)
+    }
+
+    if (node.type === 'aiChatThread') {
+        const resolved = await resolveThreadText(node, state, deps)
+        if (!resolved?.text) return undefined
+        const describeTextContent = deps.describeTextContent ?? defaultDescribeTextContent
+        const result = await describeTextContent({
+            provider: resolverModel.provider,
+            modelVersion: resolverModel.modelVersion,
+            text: resolved.text,
+            title: resolved.title,
+            natsService: deps.natsService,
+            abortSignal: deps.abortSignal,
+        })
+        return toContentDescriptor(result, now)
+    }
+
+    return undefined
+}
+
+const improveDescriptors = async (
+    nodes: WorkspaceContextNode[],
+    state: ProviderState,
+    deps: ResolveWorkspaceContextDeps,
+    resolverModel: { provider: ProviderName; modelVersion: string },
+): Promise<Record<string, ContentDescriptor>> => {
+    const improvedDescriptors: Record<string, ContentDescriptor> = {}
+    for (const node of nodes) {
+        try {
+            const descriptor = await improveDescriptorForNode(node, state, deps, resolverModel)
+            if (!descriptor) continue
+            improvedDescriptors[node.nodeId] = descriptor
+            await (deps.patchCanvasNodeDescriptor ?? WorkspaceModel.patchCanvasNodeDescriptor)({
+                workspaceId: state.workspaceId,
+                nodeId: node.nodeId,
+                descriptor,
+            })
+        } catch (error) {
+            console.error(`Failed to self-heal descriptor for ${node.nodeId}:`, error)
+        }
+    }
+    return improvedDescriptors
 }
 
 const buildSelectedContextMessage = async (
@@ -458,34 +625,67 @@ export const resolveWorkspaceContext = async (
     try {
         const { provider, modelVersion } = getResolverModel(state)
         const callLlm = deps.callLlm ?? ((args: VlmCallArgs) => callStructuredVlm<WorkspaceContextRawResolution>(args))
-        const result = await callLlm({
-            provider,
-            modelVersion,
-            systemPrompt: SYSTEM_PROMPT,
-            userMessages: buildResolverMessages(state),
-            schema: RESOLUTION_SCHEMA,
-            natsService: deps.natsService,
-            temperature: 0,
-            maxTokens: Math.min(state.aiModelMetaInfo.maxCompletionSize ?? 2048, 2048),
-            abortSignal: deps.abortSignal,
-        })
+        const rank = async (rankState: ProviderState): Promise<{
+            result: VlmCallResult<WorkspaceContextRawResolution>
+            rawSelections: WorkspaceContextRawSelection[]
+            resolution: WorkspaceContextResolution
+        }> => {
+            const result = await callLlm({
+                provider,
+                modelVersion,
+                systemPrompt: SYSTEM_PROMPT,
+                userMessages: buildResolverMessages(rankState),
+                schema: RESOLUTION_SCHEMA,
+                natsService: deps.natsService,
+                temperature: 0,
+                maxTokens: Math.min(rankState.aiModelMetaInfo.maxCompletionSize ?? 2048, 2048),
+                abortSignal: deps.abortSignal,
+            })
+            const rankSnapshot = rankState.workspaceContextSnapshot
+            if (!rankSnapshot) throw new Error('Workspace context snapshot is required')
+            const nodeById = new Map(rankSnapshot.nodes.map((node) => [node.nodeId, node]))
+            const rawSelections = normalizeRawSelections(result.parsed.selections, nodeById)
+            const resolution = buildResolution(rankState, { selections: rawSelections })
+            return { result, rawSelections, resolution }
+        }
 
-        const resolution = buildResolution(state, result.parsed)
-        const contextMessage = await buildSelectedContextMessage(state, deps, resolution)
-        const imageBranchCandidateSnapshot = buildNarrowedImageBranchSnapshot(state, resolution)
+        const firstRank = await rank(state)
+        let effectiveState = state
+        let result = firstRank.result
+        let resolution = firstRank.resolution
+        let improvedDescriptors: Record<string, ContentDescriptor> = {}
+
+        const selfHealCandidates = getSelfHealCandidates(state, firstRank.resolution, firstRank.rawSelections)
+        if (selfHealCandidates.length > 0) {
+            improvedDescriptors = await improveDescriptors(selfHealCandidates, state, deps, { provider, modelVersion })
+            if (Object.keys(improvedDescriptors).length > 0) {
+                effectiveState = applyImprovedDescriptorsToSnapshot(state, improvedDescriptors)
+                const secondRank = await rank(effectiveState)
+                result = secondRank.result
+                resolution = {
+                    ...secondRank.resolution,
+                    improvedDescriptors,
+                }
+            }
+        }
+
+        const contextMessage = await buildSelectedContextMessage(effectiveState, deps, resolution)
+        const imageBranchCandidateSnapshot = buildNarrowedImageBranchSnapshot(effectiveState, resolution)
 
         deps.publisher.contextRelevanceResolved(resolution)
         info(`[WorkspaceContextResolver] resolved ${JSON.stringify({
-            workspaceId: state.workspaceId,
-            aiChatThreadId: state.aiChatThreadId,
+            workspaceId: effectiveState.workspaceId,
+            aiChatThreadId: effectiveState.aiChatThreadId,
             provider,
             model: result.modelName || modelVersion,
             selectedNodeIds: resolution.selections.map((selection) => selection.nodeId),
             narrowedMediaNodeIds: resolution.narrowedMediaNodeIds,
+            improvedDescriptorNodeIds: Object.keys(improvedDescriptors),
         }, null, 0)}`)
 
         return {
             workspaceContextResolution: resolution,
+            ...(effectiveState.workspaceContextSnapshot !== state.workspaceContextSnapshot ? { workspaceContextSnapshot: effectiveState.workspaceContextSnapshot } : {}),
             ...(contextMessage ? { messages: [contextMessage, ...state.messages] } : {}),
             ...(imageBranchCandidateSnapshot ? { imageBranchCandidateSnapshot } : {}),
         }

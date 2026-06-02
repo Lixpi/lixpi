@@ -434,6 +434,7 @@ describe('buildWorkspaceContextSnapshot', () => {
         const byId = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
 
         const video = byId.get('video-uploaded')
+        expect(video?.descriptorStatus).toBe('ready')
         expect(video?.descriptorSummary).toBe('a red sports car drifting on a wet city street at night')
         expect(video?.entityTags).toEqual(['car', 'city'])
         expect(video?.styleTags).toEqual(['neon', 'night'])
@@ -448,6 +449,7 @@ describe('buildWorkspaceContextSnapshot', () => {
 
         const doc = byId.get('cubist-doc')
         expect(doc?.referenceId).toBe('doc-cubist')
+        expect(doc?.descriptorStatus).toBe('ready')
         expect(doc?.descriptorSummary).toBe('a cubist study of a dog')
         expect(doc?.entityTags).toEqual(['dog'])
         expect(doc?.fileId).toBeUndefined()
