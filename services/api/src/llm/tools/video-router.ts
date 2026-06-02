@@ -4,6 +4,38 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
+import { buildVideoModelPrompt } from './video-generation-trace.ts'
+
+const MAX_VEO_REFERENCE_IMAGES = 3
+
+const fingerprintRef = (url: string): string => {
+    if (!url) return '<empty>'
+    if (url.startsWith('data:')) {
+        const match = /^data:([^;]+);base64,(.+)$/s.exec(url)
+        const mime = match?.[1] ?? 'unknown'
+        const base64 = match?.[2] ?? ''
+        return `data:${mime};base64;len=${base64.length};head=${base64.slice(0, 16)}...`
+    }
+    if (url.startsWith('nats-obj://')) return url.slice(0, 120)
+    if (url.startsWith('https://') || url.startsWith('http://')) return url.slice(0, 120)
+    return `${url.slice(0, 60)}...`
+}
+
+const addUniqueReferenceImages = (target: string[], source: string[]): string[] => {
+    for (const imageUrl of source) {
+        if (target.length >= MAX_VEO_REFERENCE_IMAGES) break
+        if (!target.includes(imageUrl)) target.push(imageUrl)
+    }
+    return target
+}
+
+const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undefined => {
+    const referenceImages = addUniqueReferenceImages([], state.videoReferenceImages ?? [])
+    if (!state.videoSourceForExtension && !state.videoFirstFrameImage) {
+        addUniqueReferenceImages(referenceImages, state.featureReferenceImages ?? [])
+    }
+    return referenceImages.length > 0 ? referenceImages : undefined
+}
 
 // Routes a generate_video tool call from a text model to the configured
 // video-model provider (VEO). Mirrors ImageRouter: it spins up a transient
@@ -18,6 +50,7 @@ export class VideoRouter {
         const videoModel = state.videoModelVersion
         const videoMeta = state.videoModelMetaInfo ?? ({} as any)
         const prompt = state.generatedVideoPrompt ?? ''
+        const videoModelPrompt = buildVideoModelPrompt(state)
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
 
@@ -30,7 +63,10 @@ export class VideoRouter {
         }
 
         const instanceKey = `${workspaceId}:${aiChatThreadId}:video`
-        const referenceCount = state.videoReferenceImages?.length ?? 0
+        const videoReferenceImages = buildRoutedVideoReferenceImages(state)
+        const featureReferenceImages = state.featureReferenceImages ?? []
+        const featureUsagePrompt = state.featureUsagePrompt?.trim()
+        const referenceCount = videoReferenceImages?.length ?? 0
 
         info(`[VideoRouter] invocation chain ${JSON.stringify({
             workspaceId,
@@ -42,18 +78,26 @@ export class VideoRouter {
             aspectRatio: state.videoAspectRatio,
             resolution: state.videoResolution,
             durationSeconds: state.videoDurationSeconds,
-            promptLen: prompt.length,
+            originalPromptLen: prompt.length,
+            routedPromptLen: videoModelPrompt.length,
             hasFirstFrame: !!state.videoFirstFrameImage,
             referenceCount,
+            referenceImageFingerprints: (videoReferenceImages ?? []).map(fingerprintRef),
+            featureReferenceImagesCount: featureReferenceImages.length,
+            featureBriefLen: featureUsagePrompt?.length ?? 0,
             hasSourceVideo: !!state.videoSourceForExtension,
             instanceKey,
         }, null, 0)}`)
+
+        if (featureReferenceImages.length > 0 && (state.videoSourceForExtension || state.videoFirstFrameImage)) {
+            warn(`[VideoRouter] Feature reference images are represented in the prompt only for ${instanceKey}; VEO extension/first-frame inputs are mutually exclusive with referenceImages.`)
+        }
 
         try {
             const provider = this.registry.createTransient(instanceKey, videoProvider)
 
             const requestData = {
-                messages: [{ role: 'user', content: prompt }],
+                messages: [{ role: 'user', content: videoModelPrompt }],
                 aiModelMetaInfo: { ...videoMeta, modelVersion: videoModel },
                 workspaceId,
                 aiChatThreadId,
@@ -62,7 +106,7 @@ export class VideoRouter {
                 videoResolution: state.videoResolution,
                 videoDurationSeconds: state.videoDurationSeconds,
                 videoFirstFrameImage: state.videoFirstFrameImage,
-                videoReferenceImages: state.videoReferenceImages,
+                videoReferenceImages,
                 videoSourceForExtension: state.videoSourceForExtension,
                 eventMeta: state.eventMeta,
             }
