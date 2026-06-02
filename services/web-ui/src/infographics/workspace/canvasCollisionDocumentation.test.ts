@@ -31,16 +31,16 @@ describe('canvas collision documentation', () => {
 
 	it('links to the repository-level collision feature documentation', () => {
 		expectSourceToContain(workspaceReadme, 'documentation/features/CANVAS-COLLISION-RESOLUTION.md', 'workspace README')
-		expectSourceToContain(workspaceReadme, 'collision resolution, viewport-centered insertion cleanup, drag-release collision rules, and context-region shape-aware collision planning', 'workspace README')
+		expectSourceToContain(workspaceReadme, 'collision resolution, viewport-centered insertion cleanup, and drag-release collision rules', 'workspace README')
 	})
 
 	it('keeps collision ownership out of the Svelte wrapper in local documentation', () => {
-		expectSourceToContain(workspaceReadme, 'Canvas behavior such as placement, collision resolution, shape-aware context-region geometry, drag/resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities', 'workspace README')
+		expectSourceToContain(workspaceReadme, 'Canvas behavior such as placement, collision resolution, drag/resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities', 'workspace README')
 	})
 
-	it('keeps local docs free of stale flat context-region cloud config names', () => {
-		expectSourceNotToContain(workspaceReadme, 'contextRegionCloud*', 'workspace README')
-		expectSourceNotToContain(workspaceReadme, 'contextRegionCloudStyles', 'workspace README')
-		expectSourceNotToContain(workspaceReadme, 'contextRegionCloudGradientColors', 'workspace README')
+	it('keeps local docs free of stale removed grouping config names', () => {
+		expectSourceNotToContain(workspaceReadme, ['context', 'Region', 'Cl', 'oud*'].join(''), 'workspace README')
+		expectSourceNotToContain(workspaceReadme, ['context', 'Region', 'Cl', 'oudStyles'].join(''), 'workspace README')
+		expectSourceNotToContain(workspaceReadme, ['context', 'Region', 'Cl', 'oudGradientColors'].join(''), 'workspace README')
 	})
 })

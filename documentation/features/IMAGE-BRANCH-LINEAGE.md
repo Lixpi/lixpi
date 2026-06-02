@@ -12,7 +12,7 @@ This feature is part of Lixpi's artifact-piping architecture described in [PRODU
 
 **Parent Image** - The generated image node selected as the edit parent for a new generated image. It is stored as `generatedBy.parentImageNodeId` and used for canvas edge placement.
 
-**Base Context** - Images, documents, and thread content connected to the current AI thread through workspace edges or contained in its context region. Base context narrows candidates and can also be selected by the VLM as visual reference material.
+**Base Context** - Images, documents, and thread content connected to the current AI thread through workspace edges or selected by the current panel context. Base context narrows candidates and can also be selected by the VLM as visual reference material.
 
 **Candidate Snapshot** - A deterministic browser-built list of labeled media candidates. It includes canvas node IDs, file IDs, branch hints, ancestor hints, source context IDs, prompt snippets, thread transcript labels, and `nats-obj://` image URLs. It is useful context, not a decision. Candidates include both image and **video** nodes; a video contributes its representative still (mid-frame, falling back to the poster) plus a `mediaKind` flag, so an edit to a prior video continues that video's branch at the same per-candidate cost as an image — the MP4 is never sent. See [VIDEO-GENERATION.md](VIDEO-GENERATION.md) and [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md).
 
@@ -318,7 +318,7 @@ The browser builds the candidate snapshot in [ai-image-branching.ts](../../servi
 
 Candidate construction collects:
 
-- Incoming edge context for the target context region or AI chat thread.
+- Incoming edge context for the target AI chat thread.
 - Image nodes contained by or connected to that context.
 - Generated images produced by the current thread.
 - Branch ancestors through generated metadata and workspace edges.

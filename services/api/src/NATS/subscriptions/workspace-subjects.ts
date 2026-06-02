@@ -151,34 +151,6 @@ export const workspaceSubjects = [
     },
 
     {
-        subject: WORKSPACE_SUBJECTS.DELETE_CONTEXT_REGION,
-        type: 'reply',
-        payloadType: 'json',
-        permissions: {
-            pub: { allow: [WORKSPACE_SUBJECTS.DELETE_CONTEXT_REGION] },
-            sub: { allow: [WORKSPACE_SUBJECTS.DELETE_CONTEXT_REGION] }
-        },
-        handler: async (data: any, msg: any) => {
-            const workspace = await Workspace.getWorkspace({
-                userId: data.user.userId,
-                workspaceId: data.workspaceId
-            })
-            if (!workspace || 'error' in workspace) {
-                return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
-            }
-
-            const canvasState = await Workspace.deleteContextRegion({
-                workspaceId: data.workspaceId,
-                canvasState: workspace.canvasState,
-                contextRegionNodeId: data.contextRegionNodeId,
-            })
-            if ('error' in canvasState) return canvasState
-
-            return { success: true, workspaceId: data.workspaceId, canvasState }
-        }
-    },
-
-    {
         subject: WORKSPACE_SUBJECTS.DELETE_WORKSPACE,
         type: 'reply',
         payloadType: 'json',

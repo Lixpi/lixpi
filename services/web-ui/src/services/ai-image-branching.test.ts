@@ -8,9 +8,9 @@ import {
 } from '$src/services/ai-image-branching.ts'
 import type { CanvasNode, WorkspaceEdge } from '@lixpi/constants'
 
-const regionNode = {
-    nodeId: 'region-1',
-    type: 'contextRegion',
+const rootNode = {
+    nodeId: 'thread-node-1',
+    type: 'aiChatThread',
     referenceId: 'thread-1',
     position: { x: 0, y: 0 },
     dimensions: { width: 100, height: 100 },
@@ -23,7 +23,7 @@ const portraitSourceNode = {
     workspaceId: 'workspace-1',
     src: '/api/images/workspace-1/portrait-file',
     aspectRatio: 1,
-    parentId: 'region-1',
+    parentId: 'thread-node-1',
     position: { x: 0, y: 0 },
     dimensions: { width: 100, height: 100 },
 } satisfies CanvasNode
@@ -35,7 +35,7 @@ const landscapeSourceNode = {
     workspaceId: 'workspace-1',
     src: '/api/images/workspace-1/landscape-file',
     aspectRatio: 1,
-    parentId: 'region-1',
+    parentId: 'thread-node-1',
     position: { x: 120, y: 0 },
     dimensions: { width: 100, height: 100 },
 } satisfies CanvasNode
@@ -154,7 +154,7 @@ const uploadedVideoNode = {
     aspectRatio: 1,
     durationSeconds: 8,
     hasAudio: false,
-    parentId: 'region-1',
+    parentId: 'thread-node-1',
     position: { x: 760, y: 0 },
     dimensions: { width: 120, height: 120 },
     descriptor: {
@@ -170,12 +170,12 @@ const uploadedVideoNode = {
 
 function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGeneratedNode]) {
     return buildImageBranchCandidateSnapshot({
-        regionNodeId: 'region-1',
+        regionNodeId: 'thread-node-1',
         threadId: 'thread-1',
-        nodes: [regionNode, portraitSourceNode, landscapeSourceNode, ...generatedNodes],
+        nodes: [rootNode, portraitSourceNode, landscapeSourceNode, ...generatedNodes],
         edges: generatedNodes.map((node) => ({
-            edgeId: `edge-region-${node.nodeId}`,
-            sourceNodeId: 'region-1',
+            edgeId: `edge-root-${node.nodeId}`,
+            sourceNodeId: 'thread-node-1',
             targetNodeId: node.nodeId,
         })) as WorkspaceEdge[],
         prompt,
@@ -220,13 +220,13 @@ describe('buildImageBranchCandidateSnapshot', () => {
 
     it('adds an active-target hint without moving that candidate ahead of other candidates', () => {
         const snapshot = buildImageBranchCandidateSnapshot({
-            regionNodeId: 'region-1',
+            regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
             activeTargetNodeId: 'goat-generated',
-            nodes: [regionNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, goatGeneratedNode],
+            nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, goatGeneratedNode],
             edges: [
-                { edgeId: 'edge-region-person', sourceNodeId: 'region-1', targetNodeId: 'person-generated' },
-                { edgeId: 'edge-region-goat', sourceNodeId: 'region-1', targetNodeId: 'goat-generated' },
+                { edgeId: 'edge-root-person', sourceNodeId: 'thread-node-1', targetNodeId: 'person-generated' },
+                { edgeId: 'edge-root-goat', sourceNodeId: 'thread-node-1', targetNodeId: 'goat-generated' },
             ],
             prompt: 'make that guy orange monochrome',
         })
@@ -243,9 +243,9 @@ describe('buildImageBranchCandidateSnapshot', () => {
 
     it('marks generated ancestors and leaves so the API can preserve branch lineage', () => {
         const snapshot = buildImageBranchCandidateSnapshot({
-            regionNodeId: 'region-1',
+            regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
-            nodes: [regionNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
+            nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
             edges: [
                 { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
             ],
@@ -289,9 +289,9 @@ describe('buildImageBranchCandidateSnapshot', () => {
             'thread-1'
         )
         const snapshot = buildImageBranchCandidateSnapshot({
-            regionNodeId: 'region-1',
+            regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
-            nodes: [regionNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
+            nodes: [rootNode, portraitSourceNode, landscapeSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
             edges: [
                 { edgeId: 'edge-person-refined', sourceNodeId: 'person-generated', targetNodeId: 'person-refined' },
             ],
@@ -335,9 +335,9 @@ describe('buildImageBranchCandidateSnapshot — video media', () => {
 
     it('falls back to the poster frame and uses the descriptor for uploaded video', () => {
         const snapshot = buildImageBranchCandidateSnapshot({
-            regionNodeId: 'region-1',
+            regionNodeId: 'thread-node-1',
             threadId: 'thread-1',
-            nodes: [regionNode, uploadedVideoNode],
+            nodes: [rootNode, uploadedVideoNode],
             edges: [],
             prompt: 'make the car blue',
         })

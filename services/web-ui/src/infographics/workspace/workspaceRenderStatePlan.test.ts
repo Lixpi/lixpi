@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CanvasState, ContextRegionCanvasNode, ImageCanvasNode, WorkspaceEdge } from '@lixpi/constants'
+import type { AiChatThreadCanvasNode, CanvasState, ImageCanvasNode, WorkspaceEdge } from '@lixpi/constants'
 
 import {
     createPendingCanvasVisualCommit,
@@ -8,10 +8,10 @@ import {
     updatePendingCanvasVisualCommitViewport,
 } from '$src/infographics/workspace/workspaceRenderStatePlan.ts'
 
-function makeRegion(overrides: Partial<ContextRegionCanvasNode> & { nodeId: string }): ContextRegionCanvasNode {
+function makeAiChatThread(overrides: Partial<AiChatThreadCanvasNode> & { nodeId: string }): AiChatThreadCanvasNode {
     return {
         nodeId: overrides.nodeId,
-        type: 'contextRegion',
+        type: 'aiChatThread',
         referenceId: overrides.referenceId ?? `thread-${overrides.nodeId}`,
         position: overrides.position ?? { x: 0, y: 0 },
         dimensions: overrides.dimensions ?? { width: 320, height: 240 },
@@ -54,9 +54,9 @@ function makeCanvasState(overrides: Partial<CanvasState>): CanvasState {
 }
 
 describe('workspace render state plan', () => {
-    it('preserves a local active-region drag commit when a stale active-panel metadata render arrives', () => {
-        const oldRegion = makeRegion({ nodeId: 'region-active', referenceId: 'thread-active', position: { x: 100, y: 100 } })
-        const movedRegion = makeRegion({ ...oldRegion, position: { x: 360, y: 140 } })
+    it('preserves a local active-thread drag commit when a stale active-panel metadata render arrives', () => {
+        const oldThread = makeAiChatThread({ nodeId: 'thread-node-active', referenceId: 'thread-active', position: { x: 100, y: 100 } })
+        const movedThread = makeAiChatThread({ ...oldThread, position: { x: 360, y: 140 } })
         const connectedImage = makeImage({
             nodeId: 'connected-image',
             position: { x: 520, y: 120 },
@@ -68,15 +68,15 @@ describe('workspace render state plan', () => {
                 responseMessageId: 'message-1',
             },
         })
-        const edge = makeEdge('region-active', 'connected-image')
+        const edge = makeEdge('thread-node-active', 'connected-image')
 
         const localDragCommit = makeCanvasState({
-            nodes: [movedRegion, connectedImage],
+            nodes: [movedThread, connectedImage],
             edges: [edge],
             lastActiveAiChatThreadId: 'thread-active',
         })
         const stalePanelRender = makeCanvasState({
-            nodes: [oldRegion, connectedImage],
+            nodes: [oldThread, connectedImage],
             edges: [edge],
             lastActiveAiChatThreadId: 'thread-active',
             activeAiChatSidebarTabId: 'chat:thread-active',
@@ -90,14 +90,14 @@ describe('workspace render state plan', () => {
         expect(result.usedPendingVisualState).toBe(true)
         expect(result.pendingVisualCommit).not.toBeNull()
         expect(result.state?.activeAiChatSidebarTabId).toBe('chat:thread-active')
-        expect(result.state?.nodes.find((node) => node.nodeId === 'region-active')?.position).toEqual({ x: 360, y: 140 })
+        expect(result.state?.nodes.find((node) => node.nodeId === 'thread-node-active')?.position).toEqual({ x: 360, y: 140 })
         expect(result.state?.nodes.find((node) => node.nodeId === 'connected-image')?.position).toEqual({ x: 520, y: 120 })
     })
 
     it('clears the pending visual commit when the store acknowledges the same visual state', () => {
-        const region = makeRegion({ nodeId: 'region-active', position: { x: 360, y: 140 } })
-        const committed = makeCanvasState({ nodes: [region], edges: [] })
-        const acknowledged = makeCanvasState({ nodes: [region], edges: [], lastActiveAiChatThreadId: 'thread-active' })
+        const thread = makeAiChatThread({ nodeId: 'thread-node-active', position: { x: 360, y: 140 } })
+        const committed = makeCanvasState({ nodes: [thread], edges: [] })
+        const acknowledged = makeCanvasState({ nodes: [thread], edges: [], lastActiveAiChatThreadId: 'thread-active' })
 
         const result = mergeIncomingCanvasStateWithPendingVisualCommit({
             incomingState: acknowledged,
@@ -110,10 +110,10 @@ describe('workspace render state plan', () => {
     })
 
     it('accepts an incoming structural change instead of masking it with a pending commit', () => {
-        const region = makeRegion({ nodeId: 'region-active', position: { x: 360, y: 140 } })
-        const committed = makeCanvasState({ nodes: [region], edges: [] })
+        const thread = makeAiChatThread({ nodeId: 'thread-node-active', position: { x: 360, y: 140 } })
+        const committed = makeCanvasState({ nodes: [thread], edges: [] })
         const incomingNewImage = makeCanvasState({
-            nodes: [region, makeImage({ nodeId: 'new-image', position: { x: 700, y: 100 } })],
+            nodes: [thread, makeImage({ nodeId: 'new-image', position: { x: 700, y: 100 } })],
             edges: [],
         })
 
@@ -124,14 +124,14 @@ describe('workspace render state plan', () => {
 
         expect(result.usedPendingVisualState).toBe(false)
         expect(result.pendingVisualCommit).toBeNull()
-        expect(result.state?.nodes.map((node) => node.nodeId)).toEqual(['region-active', 'new-image'])
+        expect(result.state?.nodes.map((node) => node.nodeId)).toEqual(['thread-node-active', 'new-image'])
     })
 
     it('updates a pending visual commit viewport without changing its visual acknowledgement key', () => {
-        const region = makeRegion({ nodeId: 'region-active', position: { x: 360, y: 140 } })
+        const thread = makeAiChatThread({ nodeId: 'thread-node-active', position: { x: 360, y: 140 } })
         const committed = makeCanvasState({
             viewport: { x: 663.8041612129193, y: -425.70182866034156, zoom: 0.1 },
-            nodes: [region],
+            nodes: [thread],
             edges: [],
         })
         const pendingCommit = createPendingCanvasVisualCommit(committed)

@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'contextRegion' | 'video'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video'
 
 type CanvasNodePosition = {
     x: number
@@ -432,15 +432,7 @@ export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     dimensions: CanvasNodeDimensions
 }
 
-export type ContextRegionCanvasNode = CanvasNodeParentingFields & {
-    nodeId: string
-    type: 'contextRegion'
-    referenceId: string
-    position: CanvasNodePosition
-    dimensions: CanvasNodeDimensions
-}
-
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | ContextRegionCanvasNode | VideoCanvasNode
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -1148,9 +1140,7 @@ export type FinancialTransaction = {
 
 export type AiChatThreadStatus = 'active' | 'paused' | 'completed'
 
-export type AiChatThreadOwner =
-    | { type: 'standalone' }
-    | { type: 'contextRegion'; contextRegionNodeId: string }
+export type AiChatThreadOwner = { type: 'standalone' }
 
 export type AiChatThread = {
     workspaceId: string

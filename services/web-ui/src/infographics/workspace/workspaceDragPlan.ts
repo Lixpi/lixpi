@@ -9,20 +9,20 @@ type WorkspaceDragPlanInput = {
 type WorkspaceDragPlan = {
     resolvedNodeId: string
     draggedNodeIds: string[]
-    isContextRegionDrag: boolean
+    isParentContainerDrag: boolean
     allowProximityConnection: boolean
     allowCollisionResolution: boolean
 }
 
-function isContextRegionNode(node: CanvasNode | undefined): boolean {
-    return node?.type === 'contextRegion' || node?.type === 'aiChatThread'
+function isParentContainerNode(node: CanvasNode | undefined): boolean {
+    return node?.type === 'aiChatThread'
 }
 
 function isGeneratedOutputImageNode(node: CanvasNode | undefined): boolean {
     return node?.type === 'image' && Boolean(node.generatedBy?.aiChatThreadId)
 }
 
-function includeContextRegionDescendants(nodeIds: string[], nodes: CanvasNode[]): string[] {
+function includeParentContainerDescendants(nodeIds: string[], nodes: CanvasNode[]): string[] {
     const draggableNodeIds = new Set(nodeIds)
     const pendingParentIds = [...nodeIds]
 
@@ -31,7 +31,7 @@ function includeContextRegionDescendants(nodeIds: string[], nodes: CanvasNode[])
         if (!parentId) continue
 
         const parentNode = nodes.find((node: CanvasNode) => node.nodeId === parentId)
-        if (!isContextRegionNode(parentNode)) continue
+        if (!isParentContainerNode(parentNode)) continue
 
         for (const child of nodes) {
             if (child.parentId !== parentId || draggableNodeIds.has(child.nodeId)) continue
@@ -48,27 +48,27 @@ export function computeWorkspaceDragPlan(input: WorkspaceDragPlanInput): Workspa
     const resolvedNodeId = input.primaryNodeId
     const nodesById = new Map(input.nodes.map((node: CanvasNode) => [node.nodeId, node]))
     const primaryNode = nodesById.get(resolvedNodeId)
-    const isContextRegionDrag = isContextRegionNode(primaryNode)
+    const isParentContainerDrag = isParentContainerNode(primaryNode)
 
     let baseDraggedNodeIds: string[]
     if (!input.selectedNodeIds.has(resolvedNodeId)) {
         baseDraggedNodeIds = [resolvedNodeId]
     } else {
         baseDraggedNodeIds = Array.from(input.selectedNodeIds).filter((nodeId) => {
-            if (isContextRegionDrag && isGeneratedOutputImageNode(nodesById.get(nodeId))) return false
+            if (isParentContainerDrag && isGeneratedOutputImageNode(nodesById.get(nodeId))) return false
             return true
         })
         if (baseDraggedNodeIds.length === 0) baseDraggedNodeIds = [resolvedNodeId]
     }
 
-    const draggedNodeIds = includeContextRegionDescendants(baseDraggedNodeIds, input.nodes)
+    const draggedNodeIds = includeParentContainerDescendants(baseDraggedNodeIds, input.nodes)
 
     return {
         resolvedNodeId,
         draggedNodeIds,
-        isContextRegionDrag,
-        allowProximityConnection: !isContextRegionDrag,
-        allowCollisionResolution: draggedNodeIds.length === 1 || isContextRegionDrag,
+        isParentContainerDrag,
+        allowProximityConnection: !isParentContainerDrag,
+        allowCollisionResolution: draggedNodeIds.length === 1 || isParentContainerDrag,
     }
 }
 

@@ -3,7 +3,6 @@
 import type {
     AiChatThreadCanvasNode,
     CanvasNode,
-    ContextRegionCanvasNode,
     ImageBranchCandidateImage,
     ImageBranchCandidateRoleHint,
     ImageBranchCandidateSnapshot,
@@ -24,7 +23,7 @@ const RESOLVER_VERSION = 'image-branch-vlm-v1'
 // still — an image's file, or a video's representative frame — never the MP4.
 type MediaCanvasNode = ImageCanvasNode | VideoCanvasNode
 
-type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
+type ChatRootNode = AiChatThreadCanvasNode
 
 type BuildImageBranchCandidateSnapshotParams = {
     regionNodeId: string
@@ -411,6 +410,6 @@ export function buildImageBranchCandidateSnapshot({
     }
 }
 
-export function isContextRegionNode(node: CanvasNode): node is ContextRegionNode {
-    return node.type === 'contextRegion' || node.type === 'aiChatThread'
+export function isChatRootNode(node: CanvasNode): node is ChatRootNode {
+    return node.type === 'aiChatThread'
 }

@@ -18,7 +18,7 @@ By treating all generated text, images, and video iterations as concrete "nodes"
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing nodes embed ProseMirror editors; media and context nodes use specialized canvas chrome. The canvas supports five node types and directional edges between them.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The canvas supports four node types and directional edges between them.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -28,7 +28,6 @@ graph TB
         Img[Image Node<br/>Uploaded, imported, or AI-generated<br/>PIXI-rendered pixels]
         Vid[Video Node<br/>VEO-generated or library video<br/>DOM playback over PIXI poster]
         Thread[AI Chat Thread Node<br/>ProseMirror editor<br/>documentType: 'aiChatThread']
-        Region[Context Region Node<br/>Spatial grouping + dedicated chat]
     end
 
     subgraph "Connections"
@@ -56,7 +55,6 @@ graph TB
 | **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | NATS JetStream Object Store |
 | **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | NATS JetStream Object Store |
 | **AI Chat Thread** | ProseMirror (`documentType: 'aiChatThread'`) | Free | DynamoDB AI-Chat-Threads table |
-| **Context Region** | None | Free | Workspace `canvasState` |
 
 **Edges** are directional connections stored in `canvasState.edges`. Each edge means "include your content as context for the target." Edges can be created by explicit handle drag or by **Proximity Connect** — dragging a node within range of an AI thread shows a dashed ghost line; dropping commits the connection.
 
@@ -65,8 +63,6 @@ graph TB
 **Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save completed canvas images or videos as independent JetStream Object Store copies. Inserting saved media creates fresh workspace objects and fresh canvas nodes, so library media survives deletion of its source node.
 
 **AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, compact `Follow` / `Pinned` and `With Sources` controls, and whether the history list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
-
-**Context Regions** are spatial context collections with dedicated chat history. `Create Context Region` creates a region and its owned history and opens that history as a panel tab. Activating an existing region opens the same dedicated tab. A context-region history cannot be deleted independently while its region exists; deleting the region removes its dedicated history with it.
 
 ---
 

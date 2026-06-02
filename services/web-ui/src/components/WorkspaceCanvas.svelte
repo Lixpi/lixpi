@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte'
-    import { v4 as uuidv4 } from 'uuid'
     import {
         type Viewport
     } from '@xyflow/system'
@@ -8,12 +7,10 @@
         MAX_IMAGE_FILE_SIZE,
         type CanvasState,
         type DocumentCanvasNode,
-        type ImageCanvasNode,
-        type ContextRegionCanvasNode
+        type ImageCanvasNode
     } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
-    import { getAiChatPanelState } from '$src/infographics/workspace/aiChatPanelState.ts'
     import DocumentService from '$src/services/document-service.ts'
     import AiChatThreadService from '$src/services/ai-chat-thread-service.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
@@ -23,7 +20,7 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, aiChatBubbleIcon, aiChatPanelCollapseIcon, aiChatIcon, mediaLibraryIconFilled } from '$src/svgIcons/index.ts'
+    import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, aiChatIcon, mediaLibraryIconFilled } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
@@ -268,69 +265,6 @@
         img.src = src
     }
 
-    async function handleCreateContextRegion() {
-        if (!workspaceId) {
-            console.error('No workspaceId available!')
-            return
-        }
-
-        try {
-            // Generate threadId on frontend to ensure content and DB record match
-            const threadId = uuidv4()
-
-            // Create empty AI chat thread content with the generated threadId
-            const initialContent = {
-                type: 'doc',
-                content: [
-                    {
-                        type: 'documentTitle',
-                        content: [{ type: 'text', text: 'New AI Chat' }]
-                    },
-                    {
-                        type: 'aiChatThread',
-                        attrs: { threadId },
-                        content: []
-                    }
-                ]
-            }
-
-            const thread = await aiChatThreadService.createAiChatThread({
-                workspaceId,
-                threadId,
-                content: initialContent,
-                aiModel: '',
-                title: 'New AI Chat',
-                owner: { type: 'contextRegion', contextRegionNodeId: `node-${threadId}` }
-            })
-
-            if (thread) {
-                const dimensions = { ...settings.contextRegion.defaultDimensions }
-                const tabId = `thread:${thread.threadId}`
-                const panelState = getAiChatPanelState(canvasState)
-                const threadTab = { tabId, type: 'thread' as const, refId: thread.threadId, title: 'AI Chat' }
-                const tabs = panelState.tabs.some((tab) => tab.tabId === tabId)
-                    ? panelState.tabs
-                    : [threadTab, ...panelState.tabs]
-
-                const contextRegionNode: Omit<ContextRegionCanvasNode, 'position'> = {
-                    nodeId: `node-${thread.threadId}`,
-                    type: 'contextRegion',
-                    referenceId: thread.threadId,
-                    dimensions,
-                }
-
-                renderer?.insertNodeAtViewportCenter(contextRegionNode, {
-                    lastActiveAiChatThreadId: thread.threadId,
-                    aiChatPanel: { ...panelState, isOpen: true, tabs, activeTabId: tabId },
-                    aiChatSidebarTabs: tabs,
-                    activeAiChatSidebarTabId: tabId,
-                })
-            }
-        } catch (error) {
-            console.error('Error creating AI chat thread:', error)
-        }
-    }
-
     onMount(() => {
         if (!paneEl || !viewportEl) return
 
@@ -462,10 +396,6 @@
             onchange={handleFileInputChange}
         />
         <div class="workspace-floating-toolbar-divider"></div>
-        <button class="workspace-floating-toolbar-button" onclick={handleCreateContextRegion}>
-            {@html aiChatBubbleIcon}
-            <span class="workspace-floating-toolbar-tooltip">Create Context Region</span>
-        </button>
     </div>
     <button
         class="workspace-ai-chat-launcher"

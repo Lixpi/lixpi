@@ -1,6 +1,6 @@
 # Gradient Rendering and Animation System
 
-This document is the source of truth for the web UI gradient ecosystem: freeform bitmap gradients, animated shifting backgrounds, context-region cloud gradients, SVG gradient borders, PIXI generated-image progress outlines, and the shared easing curves that animate them. Detailed context-region shape, hit testing, and PIXI layer behavior remains in [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
+This document is the source of truth for the web UI gradient ecosystem: freeform bitmap gradients, animated shifting backgrounds, SVG gradient borders, PIXI generated-image progress outlines, and the shared easing curves that animate them.
 
 ## System Overview
 
@@ -8,11 +8,11 @@ The gradient system has three rendering families:
 
 | Family | Renderer | Output | Consumers |
 |---|---|---|---|
-| Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds, context-region watercolor surface sampling, active thought-circle textures |
+| Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds |
 | SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border |
 | PIXI traveling outline | `PixiTravelingOutlineRenderer` | PIXI `Graphics` track with a colored segment traveling around a rounded perimeter while active | Generated-image progress border and future PIXI outlined progress surfaces |
 
-Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer. `ShiftingGradientRenderer` owns canvas subscription and phase-transition lifecycle; `pixiContextRegionLayer.ts` owns PIXI texture caching and active-region overlay lifecycle; SVG consumers own their D3 element creation while delegating reusable gradient construction and rotation to `SvgGradientRenderer`; `PixiTravelingOutlineRenderer` owns traveling PIXI outline geometry, paint, and bounded animation lifecycle while consumers provide active bounds and style.
+Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer. `ShiftingGradientRenderer` owns canvas subscription and phase-transition lifecycle; SVG consumers own their D3 element creation while delegating reusable gradient construction and rotation to `SvgGradientRenderer`; `PixiTravelingOutlineRenderer` owns traveling PIXI outline geometry, paint, and bounded animation lifecycle while consumers provide active bounds and style.
 
 ## Shared Modules
 
@@ -40,22 +40,7 @@ The system intentionally has separate palettes for different visual roles:
 |---|---|---|
 | `settings.gradient.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
 | `settings.imageNode.generationBorder.snakeColors` | Bright traveling progress path palette | PIXI generated-image progress outline |
-| `settings.contextRegion.cloud.palettes.surfaceGradient` through `contextRegion.cloud.gradientColors` | Translucent seafoam watercolor surface palette | PIXI context-region cloud surface sampling |
-| `settings.contextRegion.cloud.palettes.activeThoughtCircle` through `contextRegion.cloud.activeThoughtCircleGradientColors` | Soft sage active marker palette | PIXI active context-region detached thought circle |
-
-The context-region renderer uses the palette getters rather than hard-coded arrays so cloud surface tuning and active-indicator tuning remain explicit theme configuration. `gradientPositions` controls the cloud surface anchor placement; active thought-circle textures use the shared phase positions from `FreeformGradientRenderer`.
-
 ## Gradient Consumers
-
-### Context Region Cloud Surface
-
-`pixiContextRegionLayer.ts` uses `FreeformGradientRenderer.sampleColor()` while baking the watercolor texture for the full CO2 cloud. This preserves the same soft freeform color language as the animated canvas gradient while still mixing in cloud-specific mask alpha, grain, pools, bloom, border, and local radial/linear highlight overlay passes. Its freeform colors come from `contextRegion.cloud.gradientColors`; its paint overlays remain private to the watercolor texture pipeline because they describe cloud material rather than a reusable gradient surface.
-
-### Active Context Region Thought Circle
-
-The active context-region marker is not a solid fill or a second cloud silhouette. PIXI adds gradient overlay sprites only over the detached thought-circle geometry. The overlay bitmap is generated by `FreeformGradientRenderer.drawBitmap()` from `contextRegion.cloud.activeThoughtCircleGradientColors`, then clipped into the circle.
-
-When active chat context changes, the layer crossfades between adjacent freeform phases with a bounded opacity bloom. This animation uses `Easing.hoverTransition()` and requestAnimationFrame only while a transition is active; it does not introduce a persistent ticker. The full rendering and interaction contract is documented in [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
 
 ### SVG Gradient Borders and Selection
 
@@ -103,7 +88,6 @@ Do not route ordinary CSS background treatments through `FreeformGradientRendere
 | `services/web-ui/src/utils/animations/gradients/svgGradient.test.ts` | Stop creation, repeated stops, rotating transitions, and shared default easing |
 | `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.test.ts` | Rounded perimeter sampling, default eased travel, and colored segment interpolation |
 | `services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.test.ts` | Singleton lifecycle, animation phase changes, pixels, subscriptions, resize redraw, patterns, and teardown |
-| `services/web-ui/src/infographics/workspace/rendering/pixiContextRegionLayer.test.ts` | Active thought-circle-only PIXI integration regression guards |
 
 Run the web UI suite inside its container:
 

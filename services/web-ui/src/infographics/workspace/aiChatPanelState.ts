@@ -86,9 +86,7 @@ export function getStandaloneContextNodeIds(
     const candidateNodeIds = panelState.contextMode === 'followSelection'
         ? Array.from(selectedNodeIds)
         : panelState.contextNodeIds
-    const eligibleNodeIds = new Set(
-        nodes.filter((node) => node.type !== 'contextRegion').map((node) => node.nodeId),
-    )
+    const eligibleNodeIds = new Set(nodes.map((node) => node.nodeId))
 
     return Array.from(new Set(candidateNodeIds.filter((nodeId) => eligibleNodeIds.has(nodeId))))
 }

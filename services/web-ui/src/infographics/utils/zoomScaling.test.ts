@@ -213,7 +213,7 @@ describe('getEdgeScaledSizes', () => {
 		}
 	})
 
-	it('uses the same deterministic bounded curve for context-region title sizes', () => {
+	it('uses the same deterministic bounded curve for canvas title sizes', () => {
 		const baseTitleFontSize = 20
 
 		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
