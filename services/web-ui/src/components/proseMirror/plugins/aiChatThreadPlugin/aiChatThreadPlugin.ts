@@ -31,6 +31,7 @@ import type {
     ImageGenerationSize,
     MarkdownParsedSegment,
     StreamStatus,
+    WorkspaceContextResolution,
 } from '@lixpi/constants'
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
@@ -66,9 +67,10 @@ type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: stri
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
+type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
 type SegmentEvent = {
     status?: StreamStatus
-    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType
+    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType
     aiProvider?: string
     imageModelProvider?: string
     videoModelProvider?: string
@@ -86,6 +88,7 @@ type SegmentEvent = {
     responseId?: string
     revisedPrompt?: string
     imageBranchResolution?: ImageBranchVlmResolution
+    workspaceContextResolution?: WorkspaceContextResolution
     imageGenerationTrace?: ImageGenerationTrace
     // Video segment fields (mirror VideoPublisher payloads)
     videoUrl?: string
@@ -955,6 +958,21 @@ class AiChatThreadPluginClass {
                         resolution: event.imageBranchResolution,
                     })
                 }
+                return
+            }
+
+            if (type === 'context_relevance_resolved') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId && event.workspaceContextResolution) {
+                    callbacks.onWorkspaceContextResolvedToCanvas?.({
+                        threadId: effectiveThreadId,
+                        resolution: event.workspaceContextResolution,
+                    })
+                }
+                return
+            }
+
+            if (type === 'context_relevance_error') {
                 return
             }
 
