@@ -71,6 +71,18 @@ function loadWorkspaceCanvasSvelte(): string {
 	return readSourceFile('../../components/WorkspaceCanvas.svelte', 'components/WorkspaceCanvas.svelte')
 }
 
+function loadAiInteractionService(): string {
+	return readSourceFile('../../services/ai-interaction-service.ts', 'services/ai-interaction-service.ts')
+}
+
+function loadAiChatThreadPlugin(): string {
+	return readSourceFile('../../components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts', 'components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts')
+}
+
+function loadAiGeneratedImageNode(): string {
+	return readSourceFile('../../components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts', 'components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts')
+}
+
 function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
@@ -1287,6 +1299,46 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceNotToContain(ts, 'includeUpstreamContext')
 		expectSourceNotToContain(ts, 'contextMode')
 		expectSourceNotToContain(ts, 'getStandaloneContextNodeIds')
+	})
+
+	it('renders removable automatic context chips and patches improved descriptors', () => {
+		const scss = loadScss()
+
+		expectSourceToContain(ts, 'let autoContextSelections: WorkspaceContextSelection[] = []')
+		expectSourceToContain(ts, 'const removedAutoContextChipNodeIds: Set<string> = new Set()')
+		expectSourceToContain(ts, 'function removeAutoContextChip(nodeId: string): void')
+		expectSourceToContain(ts, 'function clearAutoContextChips(): void')
+		expectSourceToContain(ts, "kind: 'explicit' | 'auto'")
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-${kind}')
+		expectSourceToContain(ts, 'contextKind: kind')
+		expectSourceToContain(ts, "if (selection.role === 'forced-chip') continue")
+		expectSourceToContain(ts, 'if (kind === \'auto\')')
+		expectSourceToContain(ts, 'removeAutoContextChip(nodeId)')
+		expectSourceToContain(ts, 'function patchWorkspaceContextImprovedDescriptors(improvedDescriptors: Record<string, ContentDescriptor> | undefined): void')
+		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(resolution: WorkspaceContextResolution): void')
+		expectSourceToContain(ts, 'patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)')
+		expectSourceToContain(ts, 'autoContextSelections = resolution.selections')
+		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ resolution }) =>')
+		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-explicit')
+		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-auto')
+		expectSourceToContain(scss, 'border: 1px dashed rgba(212, 149, 106, 0.72)')
+	})
+
+	it('routes workspace context relevance events around markdown parsing', () => {
+		const aiInteractionService = loadAiInteractionService()
+		const aiChatThreadPlugin = loadAiChatThreadPlugin()
+		const aiGeneratedImageNode = loadAiGeneratedImageNode()
+
+		expectSourceToContain(aiInteractionService, 'content.status === STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED')
+		expectSourceToContain(aiInteractionService, "type: 'context_relevance_resolved'")
+		expectSourceToContain(aiInteractionService, 'workspaceContextResolution')
+		expectSourceToContain(aiInteractionService, 'content.status === STREAM_STATUS.CONTEXT_RELEVANCE_ERROR')
+		expectSourceToContain(aiInteractionService, "type: 'context_relevance_error'")
+		expectSourceToContain(aiChatThreadPlugin, "type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'")
+		expectSourceToContain(aiChatThreadPlugin, "if (type === 'context_relevance_resolved')")
+		expectSourceToContain(aiChatThreadPlugin, 'callbacks.onWorkspaceContextResolvedToCanvas?.({')
+		expectSourceToContain(aiGeneratedImageNode, 'onWorkspaceContextResolvedToCanvas?: (data: {')
+		expectSourceToContain(aiGeneratedImageNode, 'resolution: WorkspaceContextResolution')
 	})
 
 	it('removes drafts only when a session is deleted, not when its tab is closed', () => {

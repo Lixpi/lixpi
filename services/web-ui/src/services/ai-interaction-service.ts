@@ -6,7 +6,8 @@ import type {
     AiInteractionChatStopMessagePayload,
     ImageGenerationTrace,
     ImageGenerationSize,
-    VideoGenerationTrace
+    VideoGenerationTrace,
+    WorkspaceContextResolution
 } from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
@@ -126,6 +127,33 @@ export default class AiInteractionService {
             // Track current aiProvider for parser callback
             if (content.aiProvider) {
                 this.currentAiProvider = content.aiProvider
+            }
+
+            if (content.status === STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED) {
+                const workspaceContextResolution = content.workspaceContextResolution as WorkspaceContextResolution
+                console.log('[AI_INTERACTION] CONTEXT_RELEVANCE_RESOLVED received:', {
+                    selectionCount: workspaceContextResolution?.selections.length ?? 0,
+                    improvedDescriptorCount: Object.keys(workspaceContextResolution?.improvedDescriptors ?? {}).length,
+                    narrowedMediaCount: workspaceContextResolution?.narrowedMediaNodeIds.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'context_relevance_resolved',
+                    workspaceContextResolution,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.CONTEXT_RELEVANCE_ERROR) {
+                console.log('[AI_INTERACTION] CONTEXT_RELEVANCE_ERROR received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'context_relevance_error',
+                    error: content.error || 'Workspace context relevance failed',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
             }
 
             // Handle image generation events (bypass markdown parser)
@@ -413,4 +441,3 @@ export default class AiInteractionService {
         this.disconnect()
     }
 }
-

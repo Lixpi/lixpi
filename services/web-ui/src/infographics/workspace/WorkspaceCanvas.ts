@@ -31,6 +31,8 @@ import {
     type ImageBranchVlmResolution,
     type MediaDescriptor,
     type ContentDescriptor,
+    type WorkspaceContextResolution,
+    type WorkspaceContextSelection,
     MEDIA_DESCRIPTOR_VERSION,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
@@ -280,6 +282,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
+    let autoContextSelections: WorkspaceContextSelection[] = []
+    const removedAutoContextChipNodeIds: Set<string> = new Set()
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     const mediaLibraryService = new MediaLibraryService()
     let activeAiChatSidebarThreadId: string | null = null
@@ -2270,39 +2274,97 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         refreshContextChipTray()
     }
 
+    function removeAutoContextChip(nodeId: string): void {
+        if (!autoContextSelections.some((selection) => selection.nodeId === nodeId)) return
+        removedAutoContextChipNodeIds.add(nodeId)
+        refreshContextChipTray()
+    }
+
+    function clearAutoContextChips(): void {
+        if (autoContextSelections.length === 0 && removedAutoContextChipNodeIds.size === 0) return
+        autoContextSelections = []
+        removedAutoContextChipNodeIds.clear()
+        refreshContextChipTray()
+    }
+
+    function renderContextChip({
+        nodeId,
+        label,
+        kind,
+        role,
+    }: {
+        nodeId: string
+        label: string
+        kind: 'explicit' | 'auto'
+        role?: WorkspaceContextSelection['role']
+    }): HTMLSpanElement {
+        const removeLabel = kind === 'auto'
+            ? `Remove ${label} from automatic context`
+            : `Remove ${label} from context`
+        const chipEl = html`<span
+            className=${`workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-${kind}`}
+            data=${{ nodeId, contextKind: kind, contextRole: role ?? kind }}
+            title=${label}
+        >
+            <span className="workspace-ai-chat-panel-context-chip-label">${label}</span>
+            <button
+                type="button"
+                className="workspace-ai-chat-panel-context-chip-remove"
+                aria-label=${removeLabel}
+                innerHTML=${xIcon}
+            ></button>
+        </span>` as HTMLSpanElement
+        chipEl.querySelector('.workspace-ai-chat-panel-context-chip-remove')
+            ?.addEventListener('click', () => {
+                if (kind === 'auto') {
+                    removeAutoContextChip(nodeId)
+                    return
+                }
+                removeContextChip(nodeId)
+            })
+        return chipEl
+    }
+
     // Re-render just the chip tray in place (not the whole panel) so adding or
     // removing a chip never tears down the ProseMirror composer or its draft.
     function refreshContextChipTray(): void {
         const trayEl = activeContextChipTrayEl
         if (!trayEl) return
         trayEl.replaceChildren()
-        const chipNodeIds = aiChatPanelState.contextChips
-        if (chipNodeIds.length === 0) {
+        const explicitChipNodeIds = aiChatPanelState.contextChips
+        const explicitChipNodeIdSet = new Set(explicitChipNodeIds)
+        const nodesById = new Map(currentCanvasState?.nodes.map((node): [string, CanvasNode] => [node.nodeId, node]) ?? [])
+        const autoChipSelections: WorkspaceContextSelection[] = []
+        const autoChipNodeIds = new Set<string>()
+        for (const selection of autoContextSelections) {
+            if (selection.role === 'forced-chip') continue
+            if (explicitChipNodeIdSet.has(selection.nodeId)) continue
+            if (removedAutoContextChipNodeIds.has(selection.nodeId)) continue
+            if (!nodesById.has(selection.nodeId)) continue
+            if (autoChipNodeIds.has(selection.nodeId)) continue
+            autoChipNodeIds.add(selection.nodeId)
+            autoChipSelections.push(selection)
+        }
+        if (explicitChipNodeIds.length === 0 && autoChipSelections.length === 0) {
             trayEl.appendChild(
                 html`<span className="workspace-ai-chat-panel-context-chips-empty">Select nodes to add context</span>` as HTMLSpanElement
             )
             return
         }
-        const nodesById = new Map(currentCanvasState?.nodes.map((node): [string, CanvasNode] => [node.nodeId, node]) ?? [])
-        for (const nodeId of chipNodeIds) {
+        for (const nodeId of explicitChipNodeIds) {
             const node = nodesById.get(nodeId)
             const label = node ? getContextChipLabel(node) : 'Node'
-            const chipEl = html`<span
-                className="workspace-ai-chat-panel-context-chip"
-                data=${{ nodeId }}
-                title=${label}
-            >
-                <span className="workspace-ai-chat-panel-context-chip-label">${label}</span>
-                <button
-                    type="button"
-                    className="workspace-ai-chat-panel-context-chip-remove"
-                    aria-label=${`Remove ${label} from context`}
-                    innerHTML=${xIcon}
-                ></button>
-            </span>` as HTMLSpanElement
-            chipEl.querySelector('.workspace-ai-chat-panel-context-chip-remove')
-                ?.addEventListener('click', () => removeContextChip(nodeId))
-            trayEl.appendChild(chipEl)
+            trayEl.appendChild(renderContextChip({ nodeId, label, kind: 'explicit' }))
+        }
+        for (const selection of autoChipSelections) {
+            const node = nodesById.get(selection.nodeId)
+            const label = node ? getContextChipLabel(node) : 'Node'
+            trayEl.appendChild(renderContextChip({
+                nodeId: selection.nodeId,
+                label,
+                kind: 'auto',
+                role: selection.role,
+            }))
         }
     }
 
@@ -2776,6 +2838,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onAiChatSubmit: async ({ messages, aiModel, imageOptions, videoOptions, referencedFeatureIds }: any) => {
                     gradient?.triggerAnimation()
                     activeAiChatPromptGradient?.triggerAnimation()
+                    clearAutoContextChips()
 
                     try {
                         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
@@ -3659,6 +3722,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return `${best.provider}:${best.model}`
     }
 
+    function isDescriptorCanvasNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode | DocumentCanvasNode | AiChatThreadCanvasNode {
+        return node.type === 'image' || node.type === 'video' || node.type === 'document' || node.type === 'aiChatThread'
+    }
+
+    function patchWorkspaceContextImprovedDescriptors(improvedDescriptors: Record<string, ContentDescriptor> | undefined): void {
+        if (!currentCanvasState || !improvedDescriptors || Object.keys(improvedDescriptors).length === 0) return
+        let patched = false
+        const nodes = currentCanvasState.nodes.map((node: CanvasNode): CanvasNode => {
+            const descriptor = improvedDescriptors[node.nodeId]
+            if (!descriptor || !isDescriptorCanvasNode(node)) return node
+            if (JSON.stringify(node.descriptor) === JSON.stringify(descriptor)) return node
+            patched = true
+            return { ...node, descriptor } as CanvasNode
+        })
+        if (!patched) return
+        currentCanvasState = { ...currentCanvasState, nodes }
+        syncPixiMediaLayer(currentCanvasState)
+        refreshContextChipTray()
+    }
+
+    function handleWorkspaceContextResolution(resolution: WorkspaceContextResolution): void {
+        patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)
+        autoContextSelections = resolution.selections
+        removedAutoContextChipNodeIds.clear()
+        refreshContextChipTray()
+    }
+
     // Patch a single media node's descriptor and re-commit so the canvas chrome
     // (analyzing indicator, info panel) re-renders. No-op if the node is gone.
     function patchMediaNodeDescriptor(nodeId: string, descriptor: MediaDescriptor): void {
@@ -3902,6 +3992,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 confidence: resolution.confidence,
                 rationale: resolution.rationale,
             })
+        },
+
+        onWorkspaceContextResolvedToCanvas: ({ resolution }) => {
+            handleWorkspaceContextResolution(resolution)
         },
 
         onImageBranchResolutionErrorToCanvas: ({ threadId }) => {

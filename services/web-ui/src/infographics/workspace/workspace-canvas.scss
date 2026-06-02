@@ -851,11 +851,22 @@
     gap: 4px;
     max-width: 168px;
     padding: 3px 4px 3px 9px;
+    border: 1px solid transparent;
     border-radius: 999px;
     background: rgba(130, 178, 192, 0.18);
     color: #1a3a47;
     font-size: 11px;
     line-height: 1.3;
+}
+
+.workspace-ai-chat-panel-context-chip-explicit {
+    border: 1px solid rgba(130, 178, 192, 0.32);
+}
+
+.workspace-ai-chat-panel-context-chip-auto {
+    border: 1px dashed rgba(212, 149, 106, 0.72);
+    background: rgba(246, 199, 179, 0.22);
+    color: #5a3a2a;
 }
 
 .workspace-ai-chat-panel-context-chip-label {

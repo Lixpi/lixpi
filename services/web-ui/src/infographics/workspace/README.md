@@ -350,7 +350,7 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 
 ### AI Chat Context Extraction
 
-Standalone chat tabs use the panel's context chips as explicit forced context. Chips are resolved through the existing extraction service, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage.
+Standalone chat tabs use the panel's context chips as explicit forced context. Chips are resolved through the existing extraction service, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the panel adds distinct ephemeral auto chips for non-explicit selections and patches any `improvedDescriptors` into local canvas state so descriptor chrome updates without a reload.
 
 ```mermaid
 flowchart LR
@@ -368,8 +368,9 @@ The extraction flow:
 1. **Context source** - Standalone tabs call `extractSelectedContext({ nodeIds })` for explicit context chips
 2. **Content extraction** - Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64; video nodes contribute their representative still (`frameFileId`, falling back to poster) for normal model context
 3. **Workspace snapshot** - `buildWorkspaceContextSnapshot()` indexes all context-bearing nodes by descriptor summary/tags plus media object references and force-include flags; it never embeds pixel data
-4. **Message building** - `buildContextMessage()` formats explicit context as multimodal content blocks (`input_text` for text, `input_image` for images and video stills)
-5. **Submission** - The context message is prepended to the user's messages, and the workspace snapshot is sent alongside the chat request
+4. **Resolution feedback** - `CONTEXT_RELEVANCE_RESOLVED` bypasses markdown parsing, renders removable auto chips for engine selections, and applies improved descriptors to the live canvas
+5. **Message building** - `buildContextMessage()` formats explicit context as multimodal content blocks (`input_text` for text, `input_image` for images and video stills)
+6. **Submission** - The context message is prepended to the user's messages, and the workspace snapshot is sent alongside the chat request
 
 The context extraction logic lives in `AiChatThreadService`, not in the canvas module, since it's business logic rather than rendering.
 

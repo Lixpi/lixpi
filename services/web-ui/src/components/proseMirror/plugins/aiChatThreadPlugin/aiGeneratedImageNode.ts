@@ -2,7 +2,7 @@ import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { ImageBranchVlmResolution } from '@lixpi/constants'
+import type { ImageBranchVlmResolution, WorkspaceContextResolution } from '@lixpi/constants'
 
 export const aiGeneratedImageNodeType = 'aiGeneratedImage'
 
@@ -93,6 +93,10 @@ export type AiGeneratedImageCallbacks = {
     onImageBranchResolvedToCanvas?: (data: {
         threadId: string
         resolution: ImageBranchVlmResolution
+    }) => void
+    onWorkspaceContextResolvedToCanvas?: (data: {
+        threadId: string
+        resolution: WorkspaceContextResolution
     }) => void
     onImageBranchResolutionErrorToCanvas?: (data: {
         threadId: string
