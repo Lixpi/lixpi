@@ -103,11 +103,8 @@ import { setPendingExtractionContext, getPendingExtractionContext, submitExtract
 import {
     NEW_CHAT_DRAFT_KEY,
     getAiChatPanelState,
-    getStandaloneContextNodeIds,
     setAiChatPanelState,
 } from '$src/infographics/workspace/aiChatPanelState.ts'
-import { createSlidingSwitch } from '$src/components/slidingSwitch/index.ts'
-import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'
 import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
@@ -281,6 +278,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatBackdropEl: HTMLDivElement | null = null
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
+    let activeContextChipTrayEl: HTMLDivElement | null = null
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     const mediaLibraryService = new MediaLibraryService()
     let activeAiChatSidebarThreadId: string | null = null
@@ -1871,12 +1869,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateSelectionDrivenUi()
         pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
         scheduleEdgesRender()
-        if (currentCanvasState && aiChatPanelState.isOpen && aiChatPanelState.contextMode === 'followSelection') {
-            const contextNodeIds = getStandaloneContextNodeIds(aiChatPanelState, selectedNodeIds, currentCanvasState.nodes)
-            if (JSON.stringify(contextNodeIds) !== JSON.stringify(aiChatPanelState.contextNodeIds)) {
-                aiChatPanelState = { ...aiChatPanelState, contextNodeIds }
-                persistAiChatSidebarState()
-            }
+        // Selecting canvas nodes while the panel is open force-includes them as
+        // explicit context chips. Only newly-selected ids are added so removing a
+        // chip whose node stays selected doesn't immediately re-add it.
+        if (currentCanvasState && aiChatPanelState.isOpen) {
+            addContextChips(Array.from(selectedNodeIds).filter((nodeId) => !prevSelectedNodeIds.has(nodeId)))
         }
     }
 
@@ -2180,6 +2177,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatBackdropEl = null
         activeAiChatPromptEditor = null
         activeAiChatPromptGradient = null
+        activeContextChipTrayEl = null
 
         if (clearActive) {
             activeAiChatThreadId = null
@@ -2226,6 +2224,85 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             && currentCanvasState.activeAiChatSidebarTabId === persistedState.activeAiChatSidebarTabId) return
 
         commitCanvasMetadataState(persistedState)
+    }
+
+    // A short, human-readable label for a context chip. Prefer the node's ready
+    // descriptor summary (Phase 2) and fall back to a type label so a chip is
+    // never blank while its descriptor is still being generated.
+    function getContextChipLabel(node: CanvasNode): string {
+        const descriptor = node.descriptor
+        const summary = descriptor && descriptor.status === 'ready' ? descriptor.summary : ''
+        const trimmed = summary.trim()
+        if (trimmed) return trimmed
+        switch (node.type) {
+            case 'document': return 'Document'
+            case 'image': return 'Image'
+            case 'video': return 'Video'
+            case 'aiChatThread': return 'Chat'
+            default: return node.type
+        }
+    }
+
+    function addContextChips(nodeIds: Iterable<string>): void {
+        if (!currentCanvasState) return
+        const eligibleNodeIds = new Set(currentCanvasState.nodes.map((node) => node.nodeId))
+        const chipNodeIds = new Set(aiChatPanelState.contextChips)
+        const nextChips = [...aiChatPanelState.contextChips]
+        for (const nodeId of nodeIds) {
+            if (!nodeId || chipNodeIds.has(nodeId) || !eligibleNodeIds.has(nodeId)) continue
+            chipNodeIds.add(nodeId)
+            nextChips.push(nodeId)
+        }
+        if (nextChips.length === aiChatPanelState.contextChips.length) return
+        aiChatPanelState = { ...aiChatPanelState, contextChips: nextChips }
+        persistAiChatSidebarState()
+        refreshContextChipTray()
+    }
+
+    function removeContextChip(nodeId: string): void {
+        if (!aiChatPanelState.contextChips.includes(nodeId)) return
+        aiChatPanelState = {
+            ...aiChatPanelState,
+            contextChips: aiChatPanelState.contextChips.filter((id) => id !== nodeId),
+        }
+        persistAiChatSidebarState()
+        refreshContextChipTray()
+    }
+
+    // Re-render just the chip tray in place (not the whole panel) so adding or
+    // removing a chip never tears down the ProseMirror composer or its draft.
+    function refreshContextChipTray(): void {
+        const trayEl = activeContextChipTrayEl
+        if (!trayEl) return
+        trayEl.replaceChildren()
+        const chipNodeIds = aiChatPanelState.contextChips
+        if (chipNodeIds.length === 0) {
+            trayEl.appendChild(
+                html`<span className="workspace-ai-chat-panel-context-chips-empty">Select nodes to add context</span>` as HTMLSpanElement
+            )
+            return
+        }
+        const nodesById = new Map(currentCanvasState?.nodes.map((node): [string, CanvasNode] => [node.nodeId, node]) ?? [])
+        for (const nodeId of chipNodeIds) {
+            const node = nodesById.get(nodeId)
+            const label = node ? getContextChipLabel(node) : 'Node'
+            const chipEl = html`<span
+                className="workspace-ai-chat-panel-context-chip"
+                data=${{ nodeId }}
+                title=${label}
+            >
+                <span className="workspace-ai-chat-panel-context-chip-label">${label}</span>
+                <button
+                    type="button"
+                    className="workspace-ai-chat-panel-context-chip-remove"
+                    aria-label=${`Remove ${label} from context`}
+                    innerHTML=${xIcon}
+                ></button>
+            </span>` as HTMLSpanElement
+            chipEl.querySelector('.workspace-ai-chat-panel-context-chip-remove')
+                ?.addEventListener('click', () => removeContextChip(nodeId))
+            trayEl.appendChild(chipEl)
+        }
     }
 
     function getPersistedFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
@@ -2362,12 +2439,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function openAiChatPanel(): void {
         syncActiveAiChatPanelFromState()
         aiChatPanelState = { ...aiChatPanelState, isOpen: true }
-        if (aiChatPanelState.contextMode === 'followSelection' && currentCanvasState) {
-            aiChatPanelState = {
-                ...aiChatPanelState,
-                contextNodeIds: getStandaloneContextNodeIds(aiChatPanelState, selectedNodeIds, currentCanvasState.nodes),
-            }
-        }
+        // Seed chips from whatever is selected when the panel opens, mirroring the
+        // old follow-selection behavior — now as persistent, removable chips.
+        addContextChips(selectedNodeIds)
         persistAiChatSidebarState()
         renderActiveAiChatPanel()
         void loadExtractionSessionHistory()
@@ -2547,17 +2621,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? createShiftingGradientBackground(panelEl)
             : null
 
-        const lineageSwitchMarkup = `<svg class="workspace-ai-chat-panel-lineage-switch-svg" viewBox="0 0 26.4 14.4" role="switch" aria-label="Include Upstream Context" aria-checked="${String(aiChatPanelState.includeUpstreamContext)}" tabindex="0"></svg>`
-        const slidingSwitchMarkup = `<svg class="workspace-ai-chat-panel-context-selector-svg" viewBox="0 0 120 26" role="radiogroup" aria-label="Standalone chat context mode"></svg>`
         const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">
             <div className="workspace-ai-chat-panel-context-mode">
                 <span className="workspace-ai-chat-panel-context-heading">Context</span>
-                <div className="workspace-ai-chat-panel-context-selector" innerHTML=${slidingSwitchMarkup}></div>
-                <span className="workspace-ai-chat-panel-context-divider" aria-hidden="true"></span>
-                <div className="workspace-ai-chat-panel-lineage-control">
-                    <span className="workspace-ai-chat-panel-lineage-label">With Sources</span>
-                    <span className="workspace-ai-chat-panel-lineage-switch" innerHTML=${lineageSwitchMarkup}></span>
-                </div>
+                <div className="workspace-ai-chat-panel-context-chips" role="list" aria-label="Chat context chips"></div>
                 <div className="workspace-ai-chat-panel-history-control">
                     <span className="workspace-ai-chat-panel-context-divider" aria-hidden="true"></span>
                     <button
@@ -2571,52 +2638,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 </div>
             </div>
         </div>` as HTMLDivElement
-        const selectContextMode = (contextMode: CanvasAiChatPanelState['contextMode']): void => {
-            aiChatPanelState = { ...aiChatPanelState, contextMode }
-            if (contextMode === 'followSelection' && currentCanvasState) {
-                aiChatPanelState = {
-                    ...aiChatPanelState,
-                    contextNodeIds: getStandaloneContextNodeIds(aiChatPanelState, selectedNodeIds, currentCanvasState.nodes),
-                }
-            }
-            persistAiChatSidebarState()
-        }
-        const contextSelectorSvg = controlsEl.querySelector<SVGSVGElement>('.workspace-ai-chat-panel-context-selector-svg')!
-        const contextSelector = createSlidingSwitch<CanvasAiChatPanelState['contextMode']>(select(contextSelectorSvg), {
-            id: 'workspace-ai-chat-context-selector',
-            x: 0,
-            y: 0,
-            width: 120,
-            height: 26,
-            options: [
-                { label: 'Follow', value: 'followSelection' },
-                { label: 'Pinned', value: 'pinnedContext' },
-            ],
-            selectedValue: aiChatPanelState.contextMode,
-            onChange: selectContextMode,
-        })
-        const lineageSwitchSvg = controlsEl.querySelector<SVGSVGElement>('.workspace-ai-chat-panel-lineage-switch-svg')!
-        const saveIncludeUpstreamContext = (checked: boolean): void => {
-            select(lineageSwitchSvg).attr('aria-checked', String(checked))
-            aiChatPanelState = { ...aiChatPanelState, includeUpstreamContext: checked }
-            persistAiChatSidebarState()
-        }
-        const lineageSwitch = createToggleSwitch(select(lineageSwitchSvg), {
-            id: 'ai-chat-include-upstream-context',
-            x: 0,
-            y: 0,
-            size: 14.4,
-            checked: aiChatPanelState.includeUpstreamContext,
-            onChange: saveIncludeUpstreamContext,
-        })
-        lineageSwitchSvg.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return
-
-            event.preventDefault()
-            const checked = !lineageSwitch.getChecked()
-            lineageSwitch.setChecked(checked)
-            saveIncludeUpstreamContext(checked)
-        })
+        activeContextChipTrayEl = controlsEl.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-context-chips')
+        refreshContextChipTray()
         panelEl.appendChild(controlsEl)
         const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-history-toggle')!
 
@@ -2755,16 +2778,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                     try {
                         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
-                        const context = rootNode
+                        // Explicit context chips are always force-included. For a canvas
+                        // thread node we also pull its edge-connected context; chip and
+                        // edge items are deduped by nodeId so an overlapping node isn't sent twice.
+                        const chipNodeIds = aiChatPanelState.contextChips
+                        const edgeContext = rootNode
                             ? await aiChatThreadService.extractConnectedContext(rootNode.nodeId)
-                            : await aiChatThreadService.extractSelectedContext({
-                                nodeIds: getStandaloneContextNodeIds(
-                                    { ...aiChatPanelState, contextMode: 'pinnedContext' },
-                                    aiChatPanelState.contextNodeIds,
-                                    currentCanvasState?.nodes ?? [],
-                                ),
-                                includeUpstream: aiChatPanelState.includeUpstreamContext,
-                            })
+                            : []
+                        const chipContext = chipNodeIds.length
+                            ? await aiChatThreadService.extractSelectedContext({ nodeIds: chipNodeIds, includeUpstream: false })
+                            : []
+                        const seenContextNodeIds = new Set<string>()
+                        const context = [...edgeContext, ...chipContext].filter((item) => {
+                            if (seenContextNodeIds.has(item.nodeId)) return false
+                            seenContextNodeIds.add(item.nodeId)
+                            return true
+                        })
                         const contextMessage = aiChatThreadService.buildContextMessage(context)
                         const messagesWithContext = contextMessage ? [contextMessage, ...messages] : messages
                         // The branch-resolver snapshot is reused for video generation too —

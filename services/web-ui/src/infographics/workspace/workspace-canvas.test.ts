@@ -1260,31 +1260,33 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-close')
 	})
 
-	it('provides persisted selection-context controls for standalone chat sends', () => {
-		expectSourceToContain(ts, "{ label: 'Follow', value: 'followSelection' }")
-		expectSourceToContain(ts, "{ label: 'Pinned', value: 'pinnedContext' }")
-		expectSourceToContain(ts, '>With Sources</span>')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-divider')
-		expectSourceToContain(ts, 'aria-label="Include Upstream Context"')
+	it('renders a removable context chip tray and sends chip context for standalone chats', () => {
+		// The chip tray replaces the old Follow / Pinned / With Sources controls.
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chips')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-label')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
+		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
+		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
+		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
+		expectSourceToContain(ts, 'removeContextChip(nodeId)')
+		// Submitting a standalone chat force-includes the explicit chips.
+		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips')
+		expectSourceToContain(ts, 'extractSelectedContext({ nodeIds: chipNodeIds, includeUpstream: false })')
+		// The session-history toggle is retained.
 		expectSourceToContain(ts, 'aiChatPanelToggleHistoryIcon')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-control')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
 		expectSourceToContain(ts, 'const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-sessions-hidden')
-		expectSourceToContain(ts, "import { select } from 'd3-selection'")
-		expectSourceToContain(ts, "import { createSlidingSwitch } from '$src/components/slidingSwitch/index.ts'")
-		expectSourceToContain(ts, "import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'")
-		expectSourceToContain(ts, "const contextSelector = createSlidingSwitch<CanvasAiChatPanelState['contextMode']>(select(contextSelectorSvg), {")
-		expectSourceToContain(ts, 'const slidingSwitchMarkup = `<svg class="workspace-ai-chat-panel-context-selector-svg"')
-		expectSourceToContain(ts, 'const lineageSwitch = createToggleSwitch(select(lineageSwitchSvg), {')
-		expectSourceToContain(ts, 'const lineageSwitchMarkup = `<svg class="workspace-ai-chat-panel-lineage-switch-svg"')
-		expectSourceToContain(ts, 'innerHTML=${lineageSwitchMarkup}')
-		expectSourceNotToContain(ts, 'const lineageSwitchSvg = html`<svg')
-		expectSourceNotToContain(ts, 'type="checkbox"')
-		expectSourceNotToContain(ts, '<select>')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-selector')
-		expectSourceToContain(ts, 'extractSelectedContext({')
-		expectSourceToContain(ts, 'includeUpstream: aiChatPanelState.includeUpstreamContext')
+		// The removed context-mode controls must leave no dangling code.
+		expectSourceNotToContain(ts, "value: 'followSelection'")
+		expectSourceNotToContain(ts, "value: 'pinnedContext'")
+		expectSourceNotToContain(ts, '>With Sources</span>')
+		expectSourceNotToContain(ts, 'createSlidingSwitch')
+		expectSourceNotToContain(ts, 'createToggleSwitch')
+		expectSourceNotToContain(ts, 'includeUpstreamContext')
+		expectSourceNotToContain(ts, 'contextMode')
+		expectSourceNotToContain(ts, 'getStandaloneContextNodeIds')
 	})
 
 	it('removes drafts only when a session is deleted, not when its tab is closed', () => {

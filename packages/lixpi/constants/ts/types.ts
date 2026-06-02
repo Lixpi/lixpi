@@ -858,8 +858,6 @@ export type CanvasAiChatSidebarTab = {
     title: string
 }
 
-export type AiChatPanelContextMode = 'followSelection' | 'pinnedContext'
-
 export type CanvasAiChatPromptDraft = {
     content?: object
 }
@@ -869,9 +867,10 @@ export type CanvasAiChatPanelState = {
     isSessionHistoryOpen: boolean
     tabs: CanvasAiChatSidebarTab[]
     activeTabId?: string
-    contextMode: AiChatPanelContextMode
-    includeUpstreamContext: boolean
-    contextNodeIds: string[]
+    // Explicit force-included canvas node ids, shown as removable chips in the
+    // panel's context tray. The workspace relevance engine (later phases) unions
+    // these with its automatic picks — it may add, never drop them.
+    contextChips: string[]
     width?: number
     drafts?: Record<string, CanvasAiChatPromptDraft>
 }
