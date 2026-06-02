@@ -26,7 +26,6 @@
 		"GET_WORKSPACE": "workspace.get",
 		"UPDATE_WORKSPACE": "workspace.update",
 		"DELETE_WORKSPACE": "workspace.delete",
-		"DELETE_CONTEXT_REGION": "workspace.contextRegion.delete",
 		"GET_USER_WORKSPACES": "workspace.getUserWorkspaces",
 		"UPDATE_CANVAS_STATE": "workspace.updateCanvasState",
 		"GET_WORKSPACE_DOCUMENTS": "workspace.getDocuments",

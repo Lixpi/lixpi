@@ -351,14 +351,6 @@
     contain: layout paint;
 }
 
-.workspace-pixi-context-region-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    contain: layout paint;
-}
-
 .workspace-image-chrome-viewport {
     position: absolute;
     top: 0;
@@ -706,23 +698,6 @@
         top: 0;
         right: 0;
     }
-}
-
-/* Context regions are rendered by PIXI; the DOM node remains as a geometry proxy. */
-.workspace-context-region-node,
-.workspace-ai-chat-thread-node-region {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    isolation: auto;
-    overflow: visible;
-    pointer-events: none;
-
-    &[data-thread-empty="true"] {
-        visibility: visible;
-    }
-
 }
 
 .workspace-ai-chat-thread-node .ai-chat-thread-node-editor {
@@ -1214,18 +1189,11 @@
         cursor: move;
     }
 
-    &.workspace-image-node-context-region-child {
-        background: var(--workspace-image-context-region-child-image-frame-color);
-        border-radius: 8px;
-        box-shadow: 0 0 0 8px var(--workspace-image-context-region-child-image-frame-color), var(--workspace-image-context-region-child-image-drop-shadow);
-    }
-
     // The PIXI media layer owns all image pixels and the generating-image border.
     // The DOM node still owns interaction chrome: drag overlay and resize handles.
     // The node shadow/frame may sit behind the PIXI sprite.
 
-    &.is-selected,
-    &.workspace-image-node-context-region-child.is-selected {
+    &.is-selected {
         box-shadow: var(--workspace-image-selected-box-shadow);
     }
 

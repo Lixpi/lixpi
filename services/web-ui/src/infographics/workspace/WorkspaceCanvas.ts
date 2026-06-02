@@ -19,7 +19,6 @@ import {
     type ImageCanvasNode,
     type VideoCanvasNode,
     type AiChatThreadCanvasNode,
-    type ContextRegionCanvasNode,
     type AiChatThread,
     type WorkspaceEdge,
     type CanvasAiChatSidebarTab,
@@ -59,9 +58,6 @@ import {
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
 import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceDragPlan.ts'
 import {
-    canAdoptNodeIntoContextRegion,
-} from '$src/infographics/workspace/workspaceImageNodePlan.ts'
-import {
     createPendingCanvasVisualCommit,
     getCanvasVisualSyncKey,
     getNodeStructureKey,
@@ -99,14 +95,6 @@ import {
 } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
-import { createPixiContextRegionLayer, type PixiContextRegionLayer } from '$src/infographics/workspace/rendering/pixiContextRegionLayer.ts'
-import * as contextRegionCloudGeometry from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
-import {
-    getContextRegionCloudBounds,
-    scoreRectAgainstContextRegionCloud,
-    type ContextRegionCloudDatum,
-    type ContextRegionCloudResizeHandle,
-} from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
 import {
@@ -120,7 +108,7 @@ import { createToggleSwitch } from '$src/components/toggleSwitch/index.ts'
 import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-type ResizeHandle = ResizeCorner | ContextRegionCloudResizeHandle
+type ResizeHandle = ResizeCorner
 type CollisionBox = { id: string; x: number; y: number; width: number; height: number }
 type CollisionEntry = { node: CanvasNode; offset: { x: number; y: number } }
 type CollisionPlan = {
@@ -130,7 +118,6 @@ type CollisionPlan = {
 }
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-const CONTEXT_REGION_IMAGE_CLASS = 'workspace-image-node-context-region-child'
 const NODE_DRAG_START_THRESHOLD_PX = 6
 type DocumentEditorEntry = {
     editor: any
@@ -146,7 +133,7 @@ type AiChatThreadEditorEntry = {
     triggerGradientAnimation?: () => void
 }
 
-type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
+type ChatRootNode = AiChatThreadCanvasNode
 
 type MarqueeSelectionState = {
     start: { x: number; y: number }
@@ -172,7 +159,6 @@ type WorkspaceCanvasNodeInsertion =
     | Omit<DocumentCanvasNode, 'position'>
     | Omit<ImageCanvasNode, 'position'>
     | Omit<AiChatThreadCanvasNode, 'position'>
-    | Omit<ContextRegionCanvasNode, 'position'>
 
 type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nodes' | 'edges' | 'viewport'>
 
@@ -239,8 +225,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-image-default-box-shadow', settings.imageNode.defaultBoxShadow)
     paneEl.style.setProperty('--workspace-image-selected-box-shadow', settings.imageNode.selectedBoxShadow)
     paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)
-    paneEl.style.setProperty('--workspace-image-context-region-child-image-frame-color', settings.imageNode.contextRegionChildImageFrameColor)
-    paneEl.style.setProperty('--workspace-image-context-region-child-image-drop-shadow', settings.imageNode.contextRegionChildImageDropShadow)
     paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)
 
     let currentCanvasState: CanvasState | null = options.canvasState
@@ -251,7 +235,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     let connectionManager: WorkspaceConnectionManager | null = null
     let pixiMediaLayer: PixiMediaLayer | null = null
-    let contextRegionLayer: PixiContextRegionLayer | null = null
     let viewportBridge: ViewportBridge | null = null
     let imageChromeViewportEl: HTMLDivElement | null = null
     let generatedMediaChromeSyncRaf: number | null = null
@@ -282,10 +265,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const nodeLayerManager = createNodeLayerManager()
     const documentEditors: Map<string, DocumentEditorEntry> = new Map()
     const threadEditors: Map<string, AiChatThreadEditorEntry> = new Map()
-    let activeAiChatRegionNodeId: string | null = null
+    let activeAiChatRootNodeId: string | null = null
     let activeAiChatThreadId: string | null = null
     let activeAiChatPanelThreadId: string | null = null
-    let activeAiChatPanelRegionNodeId: string | null = null
+    let activeAiChatPanelRootNodeId: string | null = null
     let activeAiChatPanelHadContent = false
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatBackdropEl: HTMLDivElement | null = null
@@ -357,22 +340,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaRegistry.register(videoNodeHandler)
         }
     }
-    contextRegionLayer = createPixiContextRegionLayer({
-        paneEl,
-        viewportEl,
-    })
     imageChromeViewportEl = createImageChromeViewport()
     viewportBridge = createViewportBridge({
         viewportEl,
         viewportOverlayEls: [imageChromeViewportEl],
         getPixiLayer: () => pixiMediaLayer,
-        getContextRegionLayer: () => contextRegionLayer,
     })
     if (currentCanvasState?.viewport) {
         viewportBridge.applyViewport(currentCanvasState.viewport)
     }
     syncPixiMediaLayer(currentCanvasState)
-    syncContextRegionLayer(currentCanvasState)
 
     // Canvas bubble menu for image nodes (delete, create variant)
     let canvasBubbleMenu: BubbleMenu | null = null
@@ -420,24 +397,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             },
             onDeleteNode: async (nodeId) => {
                 if (!currentCanvasState) return
-
-                const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-                if (node && isContextRegionCanvasNode(node)) {
-                    const response = await servicesStore.getData('nats')?.request(
-                        NATS_SUBJECTS.WORKSPACE_SUBJECTS.DELETE_CONTEXT_REGION,
-                        {
-                            token: await AuthService.getTokenSilently(),
-                            workspaceId,
-                            contextRegionNodeId: nodeId,
-                        },
-                    )
-                    if (response?.error || !response?.canvasState) return
-                    aiChatThreadsStore.removeThread(node.referenceId)
-                    selectNode(null)
-                    commitCanvasState(response.canvasState)
-                    syncActiveAiChatPanelFromState()
-                    return
-                }
 
                 const updatedNodes = currentCanvasState.nodes.filter((n: CanvasNode) => n.nodeId !== nodeId)
                 const updatedEdges = currentCanvasState.edges.filter(
@@ -721,16 +680,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     if (!thread) return
 
                     const existingNodes = currentCanvasState?.nodes || []
-                    const threadDimensions = { ...settings.contextRegion.defaultDimensions }
+                    const threadDimensions = { ...settings.aiChatThread.defaultDimensions }
                     const fallbackPosition = getCenteredInsertionPosition(threadDimensions)
                     const sourceVideoRect = getNodeWorldRect(sourceVideoNode)
                     const threadPosition = sourceVideoRect
-                        ? { x: sourceVideoRect.x + sourceVideoRect.width + settings.contextRegion.adjacentNodeGap, y: sourceVideoRect.y }
+                        ? { x: sourceVideoRect.x + sourceVideoRect.width + settings.aiChatThread.adjacentNodeGap, y: sourceVideoRect.y }
                         : fallbackPosition
 
-                    const threadNode: ContextRegionCanvasNode = {
+                    const threadNode: AiChatThreadCanvasNode = {
                         nodeId: `node-${thread.threadId}`,
-                        type: 'contextRegion',
+                        type: 'aiChatThread',
                         referenceId: thread.threadId,
                         position: threadPosition,
                         dimensions: threadDimensions,
@@ -753,7 +712,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                     onCanvasStateChange?.(newCanvasState)
                     activeAiChatThreadId = thread.threadId
-                    activeAiChatRegionNodeId = threadNode.nodeId
+                    activeAiChatRootNodeId = threadNode.nodeId
                     requestAnimationFrame(() => {
                         renderActiveAiChatPanel(threadNode, thread)
                     })
@@ -786,25 +745,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return selectedNodeIds.has(nodeId)
     }
 
-    function isContextRegionNodeElement(nodeEl: HTMLElement): boolean {
-        return nodeEl.classList.contains('workspace-context-region-node')
-            || nodeEl.classList.contains('workspace-ai-chat-thread-node-region')
-    }
-
-    function isContextRegionCanvasNode(node: CanvasNode): node is ContextRegionNode {
-        return node.type === 'contextRegion' || node.type === 'aiChatThread'
-    }
-
-    function isImageInsideContextRegion(node: ImageCanvasNode, nodes: CanvasNode[] = currentCanvasState?.nodes ?? []): boolean {
-        if (!node.parentId) return false
-        return nodes.some((candidate: CanvasNode) => candidate.nodeId === node.parentId && isContextRegionCanvasNode(candidate))
-    }
-
-    function syncContextRegionImageFrame(nodeEl: HTMLElement, node: CanvasNode, nodes: CanvasNode[] = currentCanvasState?.nodes ?? []): void {
-        const hasContextRegionFrame = node.type === 'image' && isImageInsideContextRegion(node as ImageCanvasNode, nodes)
-        nodeEl.classList.toggle(CONTEXT_REGION_IMAGE_CLASS, hasContextRegionFrame)
-    }
-
     function getCanvasRectFromSelection(state: MarqueeSelectionState): Rect {
         const left = Math.min(state.start.x, state.current.x)
         const top = Math.min(state.start.y, state.current.y)
@@ -824,39 +764,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height
     }
 
-    function getNodeHitBeforeContextRegion(point: { x: number; y: number }): CanvasNode | null {
+    function getForegroundNodeHit(point: { x: number; y: number }): CanvasNode | null {
         if (!currentCanvasState) return null
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         for (let i = currentCanvasState.nodes.length - 1; i >= 0; i--) {
             const node = currentCanvasState.nodes[i]
-            if (node.type !== 'image' && node.type !== 'document') continue
+            if (node.type !== 'image' && node.type !== 'video' && node.type !== 'document' && node.type !== 'aiChatThread') continue
             const rect = getNodeWorldRect(node, nodesById)
             if (rectContainsCanvasPoint(rect, point)) return node
         }
         return null
-    }
-
-    function getContextRegionBoundsHit(point: { x: number; y: number }): ContextRegionNode | null {
-        if (!currentCanvasState) return null
-        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
-        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
-        for (let i = currentCanvasState.nodes.length - 1; i >= 0; i--) {
-            const node = currentCanvasState.nodes[i]
-            if (!isContextRegionCanvasNode(node)) continue
-            const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)
-            if (rectContainsCanvasPoint(rect, point)) return node
-        }
-        return null
-    }
-
-    function getConnectedNodeIds(nodeId: string, canvasState: CanvasState | null = currentCanvasState): string[] {
-        if (!canvasState) return []
-        const connectedNodeIds = new Set<string>()
-        for (const edge of canvasState.edges) {
-            if (edge.sourceNodeId === nodeId) connectedNodeIds.add(edge.targetNodeId)
-            if (edge.targetNodeId === nodeId) connectedNodeIds.add(edge.sourceNodeId)
-        }
-        return Array.from(connectedNodeIds)
     }
 
     function clampInsideRange(value: number, min: number, max: number): number {
@@ -900,41 +817,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             width: dimensions.width,
             height: dimensions.height,
         }
-    }
-
-    function getAiChatThreadTitle(thread: AiChatThread | undefined): string {
-        const docTitleNode = thread?.content?.content?.find?.((n: any) => n.type === 'documentTitle')
-        return docTitleNode?.content?.[0]?.text ?? 'AI Chat'
-    }
-
-    function getContextRegionCloudDatum(
-        node: ContextRegionNode,
-        thread: AiChatThread | undefined,
-        nodesById: Map<string, CanvasNode>
-    ): ContextRegionCloudDatum {
-        const override = liveNodeOverrides.get(node.nodeId)
-        const position = override?.position ?? getNodeWorldPosition(node, nodesById)
-        const dimensions = override?.dimensions ?? node.dimensions
-        return {
-            nodeId: node.nodeId,
-            referenceId: node.referenceId,
-            x: position.x,
-            y: position.y,
-            width: dimensions.width,
-            height: dimensions.height,
-            title: getAiChatThreadTitle(thread),
-            selected: selectedNodeIds.has(node.nodeId),
-            active: activeAiChatRegionNodeId === node.nodeId,
-        }
-    }
-
-    function getContextRegionCloudDatums(canvasState: CanvasState | null = currentCanvasState): ContextRegionCloudDatum[] {
-        if (!canvasState) return []
-        const nodesById = getCanvasNodesById(canvasState.nodes)
-        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
-        return canvasState.nodes
-            .filter((node: CanvasNode): node is ContextRegionNode => isContextRegionCanvasNode(node))
-            .map((node: ContextRegionNode) => getContextRegionCloudDatum(node, threadMap.get(node.referenceId), nodesById))
     }
 
     function createImageChromeViewport(): HTMLDivElement {
@@ -1363,11 +1245,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
-    function syncContextRegionLayer(canvasState: CanvasState | null = currentCanvasState): void {
-        const datums = getContextRegionCloudDatums(canvasState)
-        contextRegionLayer?.sync(datums)
-    }
-
     function syncPixiGeneratingImageNodes(): void {
         // Feeds the PIXI traveling outline (snake border) renderer with the set
         // of currently-generating media nodes, both image and video. VEO's
@@ -1540,7 +1417,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function expandRegionsToFitChildren(nodes: CanvasNode[]): CanvasNode[] {
+    function expandParentContainersToFitChildren(nodes: CanvasNode[]): CanvasNode[] {
         const inset = 48
         const childrenByParentId = new Map<string, CanvasNode[]>()
         for (const node of nodes) {
@@ -1553,10 +1430,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         return nodes.map((node: CanvasNode) => {
-            if (!isContextRegionCanvasNode(node)) return node
+            if (node.type !== 'aiChatThread') return node
             const children = childrenByParentId.get(node.nodeId)
 
-            // Empty regions keep their persisted size so manual resize is stable.
+            // Empty parent containers keep their persisted size so manual resize is stable.
             // Only repair invalid legacy dimensions that cannot render usefully.
             if (!children?.length) {
                 if (node.dimensions.width <= 0 || node.dimensions.height <= 0) {
@@ -1569,9 +1446,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return node
             }
 
-            // Regions grow to fit children, but never shrink below the user's
+            // Parent containers grow to fit children, but never shrink below the user's
             // current size. Dropping a small image into a manually enlarged
-            // empty region must preserve the larger region dimensions.
+            // empty container must preserve the larger dimensions.
             let width = Math.max(200, node.dimensions.width)
             let height = Math.max(120, node.dimensions.height)
             for (const child of children) {
@@ -1597,33 +1474,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return settings.imageBranchLineage.generatedImageSize
     }
 
-    function getNextRegionChildPosition(region: CanvasNode, childWidth: number, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
-        const inset = 48
-        const labelClearance = 48
-        const gap = 16
-        const existingChildren = nodes.filter((node: CanvasNode) => node.parentId === region.nodeId)
-        const availableWidth = Math.max(childWidth, region.dimensions.width - inset * 2)
-        const columns = Math.max(1, Math.floor((availableWidth + gap) / (childWidth + gap)))
-        const index = existingChildren.length
-        return {
-            x: inset + (index % columns) * (childWidth + gap),
-            y: labelClearance + Math.floor(index / columns) * (childHeight + gap),
-        }
-    }
-
-    function getNextRegionOutputPosition(region: ContextRegionNode, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
+    function getNextChatRootOutputPosition(rootNode: ChatRootNode, childHeight: number, nodes: CanvasNode[]): { x: number; y: number } {
         const nodesById = getCanvasNodesById(nodes)
-        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
-        const regionDatum = getContextRegionCloudDatum(region, threadMap.get(region.referenceId), nodesById)
-        const cloudBounds = getContextRegionCloudBounds(regionDatum)
-        const horizontalGap = settings.imageBranchLineage.contextRegionOutputGap
+        const rootBounds = getSelectionBoundsForNode(rootNode)
+        const horizontalGap = settings.imageBranchLineage.rootOutputGap
         const verticalGap = settings.imageBranchLineage.branchToBranchGap
-        const existingBranchRoots = getGeneratedChildOutputs(region, nodes, currentCanvasState?.edges ?? [])
-            .filter((node: ImageCanvasNode | VideoCanvasNode) => node.generatedBy?.aiChatThreadId === region.referenceId)
+        const existingBranchRoots = getGeneratedChildOutputs(rootNode, nodes, currentCanvasState?.edges ?? [])
+            .filter((node: ImageCanvasNode | VideoCanvasNode) => node.generatedBy?.aiChatThreadId === rootNode.referenceId)
         const previousBranchRoot = getMostRecentGeneratedChildOutput(existingBranchRoots)
         const previousBranchRect = previousBranchRoot ? getNodeWorldRect(previousBranchRoot, nodesById) : undefined
 
-        return computeNextBranchRowPositionToRightOfRect(cloudBounds, previousBranchRect, childHeight, horizontalGap, verticalGap)
+        return computeNextBranchRowPositionToRightOfRect(rootBounds, previousBranchRect, childHeight, horizontalGap, verticalGap)
     }
 
     function getInsertionPaneSize(): { width: number; height: number } {
@@ -1635,36 +1496,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return computeViewportCenterInsertionPosition(dimensions, getLiveViewport(), getInsertionPaneSize())
     }
 
-    function getContextRegionCollisionDatum(
-        node: ContextRegionNode,
-        position: { x: number; y: number },
-        threadMap: Map<string, AiChatThread>
-    ): ContextRegionCloudDatum {
-        return {
-            nodeId: node.nodeId,
-            referenceId: node.referenceId,
-            x: position.x,
-            y: position.y,
-            width: node.dimensions.width,
-            height: node.dimensions.height,
-            title: getAiChatThreadTitle(threadMap.get(node.referenceId)),
-            selected: selectedNodeIds.has(node.nodeId),
-            active: activeAiChatRegionNodeId === node.nodeId,
-        }
-    }
-
-    function getContextRegionCollisionDatumFromBox(
-        entry: CollisionEntry,
-        box: CollisionBox,
-        threadMap: Map<string, AiChatThread>
-    ): ContextRegionCloudDatum | null {
-        if (!isContextRegionCanvasNode(entry.node)) return null
-        return getContextRegionCollisionDatum(entry.node, {
-            x: box.x + entry.offset.x,
-            y: box.y + entry.offset.y,
-        }, threadMap)
-    }
-
     function getResolvedNodePositionFromCollisionBox(node: CanvasNode, box: { x: number; y: number }, entries: Map<string, CollisionEntry>): { x: number; y: number } {
         const entry = entries.get(node.nodeId)
         if (!entry) return box
@@ -1674,29 +1505,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function createShapeAwareCollisionPlan(nodes: CanvasNode[], topLevelOnly = false): CollisionPlan {
+    function createCollisionPlan(nodes: CanvasNode[], topLevelOnly = false): CollisionPlan {
         const collisionNodes = topLevelOnly
             ? nodes.filter((node: CanvasNode) => !node.parentId)
             : nodes
         const nodesById = getCanvasNodesById(nodes)
-        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
         const entries = new Map<string, CollisionEntry>()
 
         const nodeBoxes = collisionNodes.map((node: CanvasNode) => {
             const worldPosition = getNodeWorldPosition(node, nodesById)
-            if (isContextRegionCanvasNode(node)) {
-                const datum = getContextRegionCollisionDatum(node, worldPosition, threadMap)
-                const cloudBounds = getContextRegionCloudBounds(datum)
-                entries.set(node.nodeId, {
-                    node,
-                    offset: {
-                        x: worldPosition.x - cloudBounds.x,
-                        y: worldPosition.y - cloudBounds.y,
-                    },
-                })
-                return { id: node.nodeId, ...cloudBounds }
-            }
-
             entries.set(node.nodeId, { node, offset: { x: 0, y: 0 } })
             return {
                 id: node.nodeId,
@@ -1707,24 +1524,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         })
 
-        const shouldResolvePair = (a: CollisionBox, b: CollisionBox): boolean => {
-            const entryA = entries.get(a.id)
-            const entryB = entries.get(b.id)
-            if (!entryA || !entryB) return true
-
-            const datumA = getContextRegionCollisionDatumFromBox(entryA, a, threadMap)
-            const datumB = getContextRegionCollisionDatumFromBox(entryB, b, threadMap)
-            if (datumA && datumB) return contextRegionCloudGeometry.contextRegionCloudsIntersect(datumA, datumB)
-            if (datumA) return contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datumA, b)
-            if (datumB) return contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datumB, a)
-            return true
-        }
+        const shouldResolvePair = (): boolean => true
 
         return { nodeBoxes, entries, shouldResolvePair }
     }
 
     function resolveTopLevelNodeCollisions(nodes: CanvasNode[]): CanvasNode[] {
-        const collisionPlan = createShapeAwareCollisionPlan(nodes, true)
+        const collisionPlan = createCollisionPlan(nodes, true)
         const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
             iterations: 50,
             overlapThreshold: 0.5,
@@ -1822,49 +1628,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function getSelectionOverlayBoundsForNode(
-        node: CanvasNode,
-        nodesById: Map<string, CanvasNode>,
-        threadMap: Map<string, AiChatThread>
-    ): Rect {
-        if (!isContextRegionCanvasNode(node)) return getSelectionBoundsForNode(node)
-
-        const datum = getContextRegionCloudDatum(node, threadMap.get(node.referenceId), nodesById)
-        return getContextRegionCloudBounds(datum)
+    function getSelectionOverlayBoundsForNode(node: CanvasNode): Rect {
+        return getSelectionBoundsForNode(node)
     }
 
-    function selectionRectIntersectsNode(
-        rect: Rect,
-        node: CanvasNode,
-        nodesById: Map<string, CanvasNode>,
-        threadMap: Map<string, AiChatThread>
-    ): boolean {
-        if (!isContextRegionCanvasNode(node)) return rectsOverlap(rect, getSelectionBoundsForNode(node))
-
-        if (node.type === 'aiChatThread' && hiddenEmptyThreadNodeIds.has(node.nodeId) && rectsOverlap(rect, getSelectionBoundsForNode(node))) {
-            return true
-        }
-
-        const datum = getContextRegionCloudDatum(node, threadMap.get(node.referenceId), nodesById)
-        if (typeof contextRegionCloudGeometry.rectIntersectsContextRegionCloud === 'function') {
-            return contextRegionCloudGeometry.rectIntersectsContextRegionCloud(datum, rect)
-        }
-
-        return scoreRectAgainstContextRegionCloud(datum, rect, {
-            x: rect.x + rect.width / 2,
-            y: rect.y + rect.height / 2,
-        }) > 0
+    function selectionRectIntersectsNode(rect: Rect, node: CanvasNode): boolean {
+        return rectsOverlap(rect, getSelectionBoundsForNode(node))
     }
 
     function getSelectableNodeIdsInRect(rect: Rect): string[] {
         if (!currentCanvasState) return []
 
         const selectedNodeIdsInRect = new Set<string>()
-        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
-        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
-
         currentCanvasState.nodes
-            .filter((node: CanvasNode) => selectionRectIntersectsNode(rect, node, nodesById, threadMap))
+            .filter((node: CanvasNode) => selectionRectIntersectsNode(rect, node))
             .forEach((node: CanvasNode) => {
                 selectedNodeIdsInRect.add(node.nodeId)
             })
@@ -1985,24 +1762,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function shouldUseSelectionGroupOverlayHitTarget(): boolean {
         if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return false
-        if (selectedNodeIds.size > 1) return true
-
-        for (const nodeId of selectedNodeIds) {
-            const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-            if (node && !isContextRegionCanvasNode(node)) return true
-        }
-
-        return false
+        return selectedNodeIds.size > 0
     }
 
     function shouldFillSelectionOverlayBounds(): boolean {
-        if (!currentCanvasState) return true
-        if (selectedNodeIds.size !== 1) return true
-        if (selectionIsFromMarquee) return true
-
-        const selectedNodeId = getSingleSelectedNodeId()
-        const selectedNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === selectedNodeId)
-        return !(selectedNode && isContextRegionCanvasNode(selectedNode))
+        return Boolean(currentCanvasState)
     }
 
     function updateSelectionGroupOverlayElement(): void {
@@ -2049,14 +1813,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const nextNode = viewportEl?.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
             nextNode?.classList.add('is-selected')
             threadFloatingInputs.get(nodeId)?.el.classList.add('is-selected')
-
-            if (nextNode) {
-                if (isContextRegionNodeElement(nextNode)) {
-                    nodeLayerManager.sendToBackground(nextNode)
-                } else {
-                    nodeLayerManager.bringToFront(nextNode)
-                }
-            }
+            if (nextNode) nodeLayerManager.bringToFront(nextNode)
 
             threadRails.get(nodeId)?.classList.add('is-selected')
         }
@@ -2083,11 +1840,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return
         }
 
-        const selectedNodeIsContextRegion = isContextRegionCanvasNode(node)
-        if (selectedNodeIsContextRegion) {
-            const refId = node.referenceId || singleSelectedNodeId
-            promptInputController.setTarget({ nodeId: singleSelectedNodeId, type: node.type, referenceId: refId })
-        }
         // The detached prompt input that used to appear below a selected node is
         // deprecated — the docked AI chat panel is the only composer. It must
         // NEVER render under any node type (documents, threads, images, video).
@@ -2111,7 +1863,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
         pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
-        syncContextRegionLayer(undefined)
         scheduleEdgesRender()
         if (currentCanvasState && aiChatPanelState.isOpen && aiChatPanelState.contextMode === 'followSelection') {
             const contextNodeIds = getStandaloneContextNodeIds(aiChatPanelState, selectedNodeIds, currentCanvasState.nodes)
@@ -2119,11 +1870,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 aiChatPanelState = { ...aiChatPanelState, contextNodeIds }
                 persistAiChatSidebarState()
             }
-        }
-        for (const nodeId of nextSelectedNodeIds) {
-            if (prevSelectedNodeIds.has(nodeId)) continue
-            const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-            if (node && isContextRegionCanvasNode(node)) contextRegionLayer?.pulseRegion(nodeId)
         }
     }
 
@@ -2147,22 +1893,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         setSelectedNodes(new Set())
     }
 
-    function getContextRegionTargetNodeId(target: EventTarget | null): string | null {
-        if (!(target instanceof Element)) return null
-        if (!paneEl.contains(target)) return null
-        const nodeEl = target.closest('[data-node-id]') as HTMLElement | null
-        const nodeId = nodeEl?.dataset.nodeId
-        if (!nodeId || !currentCanvasState) return null
-
-        const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
-        return node && isContextRegionCanvasNode(node) ? nodeId : null
-    }
-
     function isCanvasBackgroundTarget(target: EventTarget | null): boolean {
         if (!(target instanceof Element)) return false
         if (!paneEl.contains(target)) return false
         if (selectionGroupOverlayEl?.contains(target)) return false
-        if (getContextRegionTargetNodeId(target)) return true
 
         return !target.closest([
             '[data-node-id]',
@@ -2291,11 +2025,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         onAiChatThreadCreated: ({ threadId, nodeId }) => {
             aiChatPanelState = { ...aiChatPanelState, isOpen: true }
             activeAiChatThreadId = threadId
-            activeAiChatRegionNodeId = nodeId
+            activeAiChatRootNodeId = nodeId
             ensureAiChatSidebarThreadTab(threadId)
             activeAiChatSidebarTabId = `thread:${threadId}`
             persistAiChatSidebarState()
-            syncContextRegionLayer(currentCanvasState)
             requestAnimationFrame(() => {
                 renderActiveAiChatPanel()
             })
@@ -2434,7 +2167,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelEl?.remove()
         activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
-        activeAiChatPanelRegionNodeId = null
+        activeAiChatPanelRootNodeId = null
         activeAiChatPanelHadContent = false
         activeAiChatPanelEl = null
         activeAiChatBackdropEl = null
@@ -2443,23 +2176,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (clearActive) {
             activeAiChatThreadId = null
-            activeAiChatRegionNodeId = null
+            activeAiChatRootNodeId = null
             activeAiChatSidebarThreadId = null
             promptInputController.setTarget(null)
-            syncContextRegionLayer(currentCanvasState)
         }
     }
 
-    function activateAiChatPanel(regionNode: ContextRegionNode, thread: AiChatThread | undefined): void {
+    function activateAiChatPanel(rootNode: ChatRootNode, thread: AiChatThread | undefined): void {
         aiChatPanelState = { ...aiChatPanelState, isOpen: true }
-        activeAiChatRegionNodeId = regionNode.nodeId
-        activeAiChatThreadId = regionNode.referenceId
-        syncContextRegionLayer(currentCanvasState)
-        contextRegionLayer?.pulseRegion(regionNode.nodeId)
-        ensureAiChatSidebarThreadTab(regionNode.referenceId)
-        activeAiChatSidebarTabId = `thread:${regionNode.referenceId}`
+        activeAiChatRootNodeId = rootNode.nodeId
+        activeAiChatThreadId = rootNode.referenceId
+        ensureAiChatSidebarThreadTab(rootNode.referenceId)
+        activeAiChatSidebarTabId = `thread:${rootNode.referenceId}`
         persistAiChatSidebarState()
-        renderActiveAiChatPanel(regionNode, thread)
+        renderActiveAiChatPanel(rootNode, thread)
     }
 
     function createAiChatThreadSidebarTab(threadId: string): CanvasAiChatSidebarTab {
@@ -2517,14 +2247,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (aiChatPanelState.width !== undefined) activeAiChatPanelWidth = aiChatPanelState.width
         const activeTab = getActiveAiChatSidebarTab()
         activeAiChatThreadId = activeTab?.type === 'thread' ? activeTab.refId : null
-        const activeRegion = activeAiChatThreadId
+        const activeRootNode = activeAiChatThreadId
             ? currentCanvasState?.nodes.find(
-                (node: CanvasNode): node is ContextRegionNode => isContextRegionCanvasNode(node)
-                    && node.referenceId === activeAiChatThreadId
+                (node: CanvasNode): node is ChatRootNode => node.type === 'aiChatThread' && node.referenceId === activeAiChatThreadId
             )
             : undefined
-        activeAiChatRegionNodeId = activeRegion?.nodeId ?? null
-        syncContextRegionLayer(currentCanvasState)
+        activeAiChatRootNodeId = activeRootNode?.nodeId ?? null
     }
 
     function ensureAiChatSidebarThreadTab(threadId: string): void {
@@ -2617,10 +2345,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         renderActiveAiChatPanel()
     }
 
-    function getContextRegionForThread(threadId: string | null): ContextRegionNode | undefined {
+    function getChatRootNodeForThread(threadId: string | null): ChatRootNode | undefined {
         if (!threadId) return undefined
         return currentCanvasState?.nodes.find(
-            (node: CanvasNode): node is ContextRegionNode => isContextRegionCanvasNode(node) && node.referenceId === threadId
+            (node: CanvasNode): node is ChatRootNode => node.type === 'aiChatThread' && node.referenceId === threadId
         )
     }
 
@@ -2755,7 +2483,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ensureAiChatSidebarThreadTab(threadId)
         activeAiChatSidebarTabId = `thread:${threadId}`
         activeAiChatThreadId = threadId
-        activeAiChatRegionNodeId = null
+        activeAiChatRootNodeId = null
         aiChatPanelState = { ...aiChatPanelState, isOpen: true }
         persistAiChatSidebarState()
         renderActiveAiChatPanel(undefined, thread)
@@ -2772,7 +2500,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function renderActiveAiChatPanel(regionNodeOverride?: ContextRegionNode, threadOverride?: AiChatThread): void {
+    function renderActiveAiChatPanel(rootNodeOverride?: ChatRootNode, threadOverride?: AiChatThread): void {
         if (!aiChatPanelState.isOpen) {
             destroyActiveAiChatPanel(false)
             return
@@ -2781,22 +2509,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const activeSidebarTab = getActiveAiChatSidebarTab()
         const panelThreadId = activeSidebarTab?.type === 'thread' ? activeSidebarTab.refId : null
-        const regionNode = regionNodeOverride && regionNodeOverride.referenceId === panelThreadId
-            ? regionNodeOverride
-            : getContextRegionForThread(panelThreadId)
+        const rootNode = rootNodeOverride && rootNodeOverride.referenceId === panelThreadId
+            ? rootNodeOverride
+            : getChatRootNodeForThread(panelThreadId)
         const thread = panelThreadId
             ? threadOverride?.threadId === panelThreadId
                 ? threadOverride
                 : currentAiChatThreads.find((candidate) => candidate.threadId === panelThreadId)
             : undefined
         activeAiChatThreadId = panelThreadId
-        activeAiChatRegionNodeId = regionNode?.nodeId ?? null
-        syncContextRegionLayer(currentCanvasState)
+        activeAiChatRootNodeId = rootNode?.nodeId ?? null
         destroyActiveAiChatPanel(false)
 
         const panelEl = html`<div
             className="workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel"
-            data=${{ threadId: panelThreadId ?? '', regionNodeId: regionNode?.nodeId ?? '' }}
+            data=${{ threadId: panelThreadId ?? '', rootNodeId: rootNode?.nodeId ?? '' }}
             onmousedown=${(event: Event) => event.stopPropagation()}
             onclick=${(event: Event) => event.stopPropagation()}
         ></div>` as HTMLDivElement
@@ -2932,8 +2659,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const sessionsListEl = sessionsEl.querySelector('.workspace-ai-chat-panel-sessions-list') as HTMLDivElement
         const sessions = [...currentAiChatThreads].sort((a, b) => b.updatedAt - a.updatedAt)
         for (const session of sessions) {
-            const sessionRegion = getContextRegionForThread(session.threadId)
-            const sessionTitle = session.title ?? (sessionRegion ? 'Context Region' : 'AI Chat')
+            const sessionTitle = session.title ?? 'AI Chat'
             const sessionEl = html`<div className="workspace-ai-chat-panel-session">
                 <button type="button" className="workspace-ai-chat-panel-session-open">${sessionTitle}</button>
             </div>` as HTMLDivElement
@@ -2943,13 +2669,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 aiChatPanelState = { ...aiChatPanelState, isOpen: true }
                 persistAiChatSidebarState()
                 syncActiveAiChatPanelFromState()
-                renderActiveAiChatPanel(sessionRegion, session)
+                renderActiveAiChatPanel(getChatRootNodeForThread(session.threadId), session)
             })
-            if (!sessionRegion) {
-                const deleteEl = html`<button type="button" className="workspace-ai-chat-panel-session-delete" aria-label="Delete session" innerHTML=${trashBinIcon}></button>` as HTMLButtonElement
-                deleteEl.addEventListener('click', () => void deleteAiChatSession(session.threadId))
-                sessionEl.appendChild(deleteEl)
-            }
+            const deleteEl = html`<button type="button" className="workspace-ai-chat-panel-session-delete" aria-label="Delete session" innerHTML=${trashBinIcon}></button>` as HTMLButtonElement
+            deleteEl.addEventListener('click', () => void deleteAiChatSession(session.threadId))
+            sessionEl.appendChild(deleteEl)
             sessionsListEl.appendChild(sessionEl)
         }
         const extractionSessions = Object.values(currentCanvasState?.featureExtractionRuns ?? {})
@@ -3018,12 +2742,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onAiChatSubmit: async ({ messages, aiModel, imageOptions, videoOptions, referencedFeatureIds }: any) => {
                     gradient?.triggerAnimation()
                     activeAiChatPromptGradient?.triggerAnimation()
-                    if (regionNode) contextRegionLayer?.pulseRegion(regionNode.nodeId)
 
                     try {
                         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
-                        const context = regionNode
-                            ? await aiChatThreadService.extractConnectedContext(regionNode.nodeId)
+                        const context = rootNode
+                            ? await aiChatThreadService.extractConnectedContext(rootNode.nodeId)
                             : await aiChatThreadService.extractSelectedContext({
                                 nodeIds: getStandaloneContextNodeIds(
                                     { ...aiChatPanelState, contextMode: 'pinnedContext' },
@@ -3038,10 +2761,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // VEO image-to-video / reference-image inputs come from the same VLM
                         // resolution, so the snapshot must be built whenever an image OR
                         // video model is selected.
-                        const imageBranchCandidateSnapshot = regionNode
+                        const imageBranchCandidateSnapshot = rootNode
                             ? rememberGeneratedImagePlacement(
-                                regionNode.referenceId,
-                                regionNode,
+                                rootNode.referenceId,
+                                rootNode,
                                 messages,
                                 Boolean(imageOptions?.aiImageModel || videoOptions?.aiVideoModel)
                             ).imageBranchCandidateSnapshot
@@ -3155,8 +2878,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     void createStandaloneThreadAndSubmit(data)
                     return
                 }
-                promptInputController.setTarget(regionNode
-                    ? { nodeId: regionNode.nodeId, type: regionNode.type, referenceId: panelThreadId }
+                promptInputController.setTarget(rootNode
+                    ? { nodeId: rootNode.nodeId, type: rootNode.type, referenceId: panelThreadId }
                     : { nodeId: `standalone:${panelThreadId}`, type: 'aiChatThread', referenceId: panelThreadId })
                 void promptInputController.submitMessage({
                     contentJSON: data.contentJSON,
@@ -3185,7 +2908,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const rail = html`<div
             className="workspace-thread-rail workspace-ai-chat-floating-panel-rail nopan"
             style=${railStyle}
-            data=${{ threadNodeId: regionNode?.nodeId ?? 'ai-chat-panel' }}
+            data=${{ threadNodeId: rootNode?.nodeId ?? 'ai-chat-panel' }}
         ></div>` as HTMLDivElement
         rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.gradient)
         rail.style.setProperty('--rail-width', settings.aiChatThread.rail.width)
@@ -3206,7 +2929,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatPanelEl = panelEl
         activeAiChatPanelThreadId = panelThreadId
-        activeAiChatPanelRegionNodeId = regionNode?.nodeId ?? null
+        activeAiChatPanelRootNodeId = rootNode?.nodeId ?? null
         activeAiChatPanelHadContent = hasContent
         activeAiChatBackdropEl = backdropEl
         paneEl.appendChild(backdropEl)
@@ -3568,10 +3291,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function autoGrowThreadNode(threadNodeId: string): void {
-        // Disabled for context region nodes.
-        // Region height is driven entirely by its absolute-positioned
-        // children via `expandRegionsToFitChildren()`. Setting height='auto' here
-        // would collapse regions to 0 (or min-height) because their content is abs-pos.
+        // Disabled. The canvas keeps thread node dimensions explicit so drag,
+        // resize, connector, and floating-input geometry stay stable.
     }
 
     function scheduleThreadAutoGrow(threadNodeId: string): void {
@@ -3599,13 +3320,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     const pendingGeneratedImagePlacements = new Map<string, PendingGeneratedImagePlacement>()
 
-    function findSourceThreadNode(threadId: string): ContextRegionNode | undefined {
+    function findSourceThreadNode(threadId: string): ChatRootNode | undefined {
         return currentCanvasState?.nodes.find(
-            (n: CanvasNode): n is ContextRegionNode => isContextRegionCanvasNode(n) && n.referenceId === threadId
+            (n: CanvasNode): n is ChatRootNode => n.type === 'aiChatThread' && n.referenceId === threadId
         )
     }
 
-    function getGeneratedImageSourceNode(threadId: string, sourceThread: ContextRegionNode): CanvasNode {
+    function getGeneratedImageSourceNode(threadId: string, sourceThread: ChatRootNode): CanvasNode {
         const pendingSourceNodeId = pendingGeneratedImagePlacements.get(threadId)?.sourceNodeId
         const sourceNode = currentCanvasState?.nodes.find((node: CanvasNode) => node.nodeId === pendingSourceNodeId)
         return sourceNode ?? sourceThread
@@ -3700,8 +3421,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getNextGeneratedImagePosition(sourceNode: CanvasNode, imageHeight: number): { x: number; y: number } {
         const nodes = currentCanvasState?.nodes || []
-        if (isContextRegionCanvasNode(sourceNode)) {
-            return getNextRegionOutputPosition(sourceNode, imageHeight, nodes)
+        if (sourceNode.type === 'aiChatThread') {
+            return getNextChatRootOutputPosition(sourceNode, imageHeight, nodes)
         }
 
         const edges = currentCanvasState?.edges ?? []
@@ -3723,11 +3444,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             targetNodeId: imageNodeId,
             sourceHandle: 'right',
             targetHandle: 'left',
-            ...(isContextRegionCanvasNode(sourceNode) && responseMessageId ? { sourceMessageId: responseMessageId } : {}),
+            ...(sourceNode.type === 'aiChatThread' && responseMessageId ? { sourceMessageId: responseMessageId } : {}),
         }
     }
 
-    function getActiveImageTargetNodeIdForThread(threadId: string, regionNode: ContextRegionNode): string | undefined {
+    function getActiveImageTargetNodeIdForThread(threadId: string, rootNode: ChatRootNode): string | undefined {
         const selectedNodeId = getSingleSelectedNodeId()
         if (!selectedNodeId) return undefined
 
@@ -3736,32 +3457,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const selectedImage = selectedNode as ImageCanvasNode
         if (selectedImage.generatedBy?.aiChatThreadId === threadId) return selectedImage.nodeId
-        if (selectedImage.parentId === regionNode.nodeId) return selectedImage.nodeId
-        if (currentCanvasState?.edges.some((edge: WorkspaceEdge) => edge.sourceNodeId === selectedImage.nodeId && edge.targetNodeId === regionNode.nodeId)) return selectedImage.nodeId
+        if (selectedImage.parentId === rootNode.nodeId) return selectedImage.nodeId
+        if (currentCanvasState?.edges.some((edge: WorkspaceEdge) => edge.sourceNodeId === selectedImage.nodeId && edge.targetNodeId === rootNode.nodeId)) return selectedImage.nodeId
 
         return undefined
     }
 
-    function rememberGeneratedImagePlacement(threadId: string, regionNode: ContextRegionNode, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
+    function rememberGeneratedImagePlacement(threadId: string, rootNode: ChatRootNode, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
         if (!hasImageModel) {
             pendingGeneratedImagePlacements.delete(threadId)
             return { promptText: '' }
         }
 
         const promptText = getPromptTextFromMessages(messages)
-        const activeTargetNodeId = getActiveImageTargetNodeIdForThread(regionNode.referenceId, regionNode)
+        const activeTargetNodeId = getActiveImageTargetNodeIdForThread(rootNode.referenceId, rootNode)
         const imageBranchCandidateSnapshot = buildImageBranchCandidateSnapshot({
-            regionNodeId: regionNode.nodeId,
-            threadId: regionNode.referenceId,
+            regionNodeId: rootNode.nodeId,
+            threadId: rootNode.referenceId,
             activeTargetNodeId,
             nodes: currentCanvasState?.nodes ?? [],
             edges: currentCanvasState?.edges ?? [],
             prompt: promptText,
-            generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(regionNode.referenceId),
+            generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(rootNode.referenceId),
         })
         const branchId = `branch-${uuidv4()}`
         pendingGeneratedImagePlacements.set(threadId, {
-            sourceNodeId: regionNode.nodeId,
+            sourceNodeId: rootNode.nodeId,
             promptText,
             branchId,
             imageBranchCandidateSnapshot,
@@ -3967,9 +3688,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const existingNodes = currentCanvasState?.nodes || []
             // Try to find the specific source thread (best effort — legacy path doesn't have threadId)
-            let sourceThreadNode: ContextRegionNode | undefined
+            let sourceThreadNode: ChatRootNode | undefined
             for (const n of existingNodes) {
-                if (isContextRegionCanvasNode(n)) {
+                if (n.type === 'aiChatThread') {
                     sourceThreadNode = n
                     break
                 }
@@ -3978,7 +3699,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const width = getGeneratedImageInsertionSize()
             const height = width
             const position = sourceThreadNode
-                ? getNextRegionOutputPosition(sourceThreadNode, height, existingNodes)
+                ? getNextChatRootOutputPosition(sourceThreadNode, height, existingNodes)
                 : getCenteredInsertionPosition({ width, height })
 
             const imageNode: ImageCanvasNode = {
@@ -4193,7 +3914,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const edges = (currentCanvasState?.edges || []).map((e: WorkspaceEdge) => {
                     if (e.targetNodeId !== partial.nodeId) return e
                     const sourceNode = (currentCanvasState?.nodes || []).find((node: CanvasNode) => node.nodeId === e.sourceNodeId)
-                    if (sourceNode && isContextRegionCanvasNode(sourceNode)) {
+                    if (sourceNode?.type === 'aiChatThread') {
                         return { ...e, sourceMessageId: responseMessageId || undefined }
                     }
                     const { sourceMessageId: _sourceMessageId, ...edgeWithoutSourceMessageId } = e
@@ -4208,7 +3929,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 for (const child of nodes) {
                     if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
                 }
-                const collisionPlan = createShapeAwareCollisionPlan(nodes)
+                const collisionPlan = createCollisionPlan(nodes)
                 const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
                     excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
                     shouldResolvePair: collisionPlan.shouldResolvePair,
@@ -4287,7 +4008,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 for (const child of allNodes) {
                     if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
                 }
-                const collisionPlan = createShapeAwareCollisionPlan(allNodes)
+                const collisionPlan = createCollisionPlan(allNodes)
                 const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
                     excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
                     shouldResolvePair: collisionPlan.shouldResolvePair,
@@ -4371,7 +4092,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     content: initialContent,
                     aiModel: 'openai:gpt-4o', // Default to OpenAI for image editing
                     title: 'Edit Image',
-                    owner: { type: 'contextRegion', contextRegionNodeId: `node-${threadId}` },
+                    owner: { type: 'standalone' },
                 })
 
                 if (thread) {
@@ -4385,16 +4106,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         }
                     }
 
-                    const threadDimensions = { ...settings.contextRegion.defaultDimensions }
+                    const threadDimensions = { ...settings.aiChatThread.defaultDimensions }
                     const fallbackPosition = getCenteredInsertionPosition(threadDimensions)
                     const sourceImageRect = sourceImageNode ? getNodeWorldRect(sourceImageNode) : null
                     const threadPosition = sourceImageRect
-                        ? { x: sourceImageRect.x + sourceImageRect.width + settings.contextRegion.adjacentNodeGap, y: sourceImageRect.y }
+                        ? { x: sourceImageRect.x + sourceImageRect.width + settings.aiChatThread.adjacentNodeGap, y: sourceImageRect.y }
                         : fallbackPosition
 
-                    const threadNode: ContextRegionCanvasNode = {
+                    const threadNode: AiChatThreadCanvasNode = {
                         nodeId: `node-${thread.threadId}`,
-                        type: 'contextRegion',
+                        type: 'aiChatThread',
                         referenceId: thread.threadId,
                         position: threadPosition,
                         dimensions: threadDimensions,
@@ -4423,7 +4144,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     currentCanvasState = newCanvasState
                     aiChatPanelState = { ...aiChatPanelState, isOpen: true }
                     activeAiChatThreadId = thread.threadId
-                    activeAiChatRegionNodeId = threadNode.nodeId
+                    activeAiChatRootNodeId = threadNode.nodeId
                     ensureAiChatSidebarThreadTab(thread.threadId)
                     activeAiChatSidebarTabId = `thread:${thread.threadId}`
                     persistAiChatSidebarState()
@@ -4583,7 +4304,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             for (const child of nodes) {
                 if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
             }
-            const collisionPlan = createShapeAwareCollisionPlan(nodes)
+            const collisionPlan = createCollisionPlan(nodes)
             const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
                 excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
                 shouldResolvePair: collisionPlan.shouldResolvePair,
@@ -4779,7 +4500,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         extraClasses?: string,
         extraDataAttrs?: Record<string, string>
     ): { nodeEl: HTMLElement; dragOverlay: HTMLElement } {
-        const isContextRegion = isContextRegionCanvasNode(node) && Boolean(extraClasses?.includes('workspace-context-region-node'))
         const nodeWorldPosition = getNodeWorldPosition(node)
         const nodeElStyle = {
             position: 'absolute' as const,
@@ -4787,9 +4507,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             top: `${nodeWorldPosition.y}px`,
             width: `${node.dimensions.width}px`,
             height: `${node.dimensions.height}px`,
-            zIndex: isContextRegion
-                ? String(nodeLayerManager.backgroundIndex())
-                : String(nodeLayerManager.currentTopIndex()),
+            zIndex: String(nodeLayerManager.currentTopIndex()),
         }
         const nodeEl = html`<div
             className=${`workspace-document-node${extraClasses ? ` ${extraClasses}` : ''}`}
@@ -4815,8 +4533,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
-            if (isContextRegion) return
-
             if (isModSelectionEvent(e)) {
                 toggleNodeSelection(node.nodeId)
                 return
@@ -4825,15 +4541,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectNode(node.nodeId)
         })
 
-        if (!isContextRegion) {
-            for (const corner of RESIZE_CORNERS) {
-                // Legacy embedded thread nodes keep bottom handles on the floating input.
-                if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue
-                nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
-            }
+        for (const corner of RESIZE_CORNERS) {
+            // Legacy embedded thread nodes keep bottom handles on the floating input.
+            if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue
+            nodeEl.appendChild(createResizeHandle(node.nodeId, corner))
         }
 
-        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId, isContextRegion ? { suppressPaneClick: true } : {})}></div>` as HTMLDivElement
+        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}></div>` as HTMLDivElement
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -4854,7 +4568,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncNodes(getNodesForConnectionManager(nextState.nodes))
         scheduleEdgesRender()
         syncPixiMediaLayer(nextState)
-        syncContextRegionLayer(nextState)
         lastVisualSyncKey = getCanvasVisualSyncKey(nextState)
     }
 
@@ -4920,7 +4633,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     hideEdgeBubbleMenu()
                 }
             },
-            isContextRegionNode: isContextRegionCanvasNode,
             onPixiEdgesReady: (edges) => {
                 pixiMediaLayer?.setPixiEdges(edges)
             },
@@ -5104,9 +4816,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             draggingNodeId = resolvedNodeId
             for (const [draggedNodeId, entry] of draggedNodeEntries) {
                 entry.el.classList.add('is-dragging')
-                if (isContextRegionNodeElement(entry.el)) {
-                    nodeLayerManager.sendToBackground(entry.el)
-                } else if (draggedNodeId !== resolvedNodeId) {
+                if (draggedNodeId !== resolvedNodeId) {
                     nodeLayerManager.bringToFront(entry.el)
                 }
             }
@@ -5161,7 +4871,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
-                contextRegionLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
                 updateGeneratedImageChromeLiveTransform(draggedNodeId, currentPos, currentDims)
 
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
@@ -5228,9 +4937,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             releasePanZoomForNodePointer()
 
             if (!dragDidMove) {
-                // No drag occurred — this was a click. Do not run drag-release
-                // adoption or collision logic; those paths can legitimately move
-                // connected/nearby nodes and must only run after actual movement.
+                // No drag occurred — this was a click. Collision logic can
+                // legitimately move nearby nodes and must only run after movement.
                 if (allowSelection) selectNode(nodeId)
                 if (options.suppressPaneClick) suppressNextPaneClick = true
                 options.onClick?.()
@@ -5255,19 +4963,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
             }
 
-            const dropPoint = getCanvasPointFromClient(upEvent.clientX, upEvent.clientY)
             let updatedNodes = currentCanvasState.nodes
-            const originalNodesById = getCanvasNodesById(updatedNodes)
-            const regionNodes = updatedNodes.filter(isContextRegionCanvasNode)
-            const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
-
             updatedNodes = updatedNodes.map((node: CanvasNode) => {
                 const finalWorldPosition = finalDraggedPositions.get(node.nodeId)
                 if (!finalWorldPosition) return node
-
-                if (isContextRegionCanvasNode(node)) {
-                    return { ...node, position: finalWorldPosition }
-                }
 
                 if (node.parentId && finalDraggedPositions.has(node.parentId)) {
                     // Parent and child moved together as one selected group. The
@@ -5278,86 +4977,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     return node
                 }
 
-                const draggedRect: Rect = {
-                    x: finalWorldPosition.x,
-                    y: finalWorldPosition.y,
-                    width: node.dimensions.width,
-                    height: node.dimensions.height,
-                }
-
-                // Pick the best cloud region to adopt this dragged node into.
-                // The score uses the same CO2 cloud mask as region clicks so
-                // transparent corners do not behave like drop targets.
-                let containingRegion: ContextRegionNode | null = null
-                let bestRegionScore = 0
-                if (canAdoptNodeIntoContextRegion(node)) {
-                    for (const region of regionNodes) {
-                        if (region.nodeId === node.nodeId) continue
-                        const regionDatum = getContextRegionCloudDatum(region, threadMap.get(region.referenceId), originalNodesById)
-                        const score = scoreRectAgainstContextRegionCloud(regionDatum, draggedRect, dropPoint)
-                        if (score > bestRegionScore) {
-                            bestRegionScore = score
-                            containingRegion = region
-                        }
-                    }
-                }
-
-                if (containingRegion) {
-                    // Snap the child to the inner inset (so it never overlaps
-                    // the title pill / left edge) but DO NOT clamp to the
-                    // region's current right/bottom — `expandRegionsToFitChildren`
-                    // grows the region to fit, matching the mockup.
-                    const inset = 48
-                    const relative = toParentRelativePosition(finalWorldPosition, containingRegion.nodeId, originalNodesById)
-                    const snappedRelative = {
-                        x: Math.max(inset, relative.x),
-                        y: Math.max(inset, relative.y),
-                    }
-                    const regionPos = getNodeWorldPosition(containingRegion, originalNodesById)
-                    const snappedWorld = {
-                        x: regionPos.x + snappedRelative.x,
-                        y: regionPos.y + snappedRelative.y,
-                    }
-                    const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
-                    if (nodeEl) {
-                        applyStyle(nodeEl, { left: `${snappedWorld.x}px`, top: `${snappedWorld.y}px` })
-                        syncContextRegionImageFrame(nodeEl, { ...node, parentId: containingRegion.nodeId }, currentCanvasState.nodes)
-                    }
-                    pixiMediaLayer?.setNodeLiveTransform(node.nodeId, snappedWorld, node.dimensions)
-                    updateGeneratedImageChromeLiveTransform(node.nodeId, snappedWorld, node.dimensions)
-
-                    return {
-                        ...node,
-                        parentId: containingRegion.nodeId,
-                        expandParent: true,
-                        position: snappedRelative,
-                    }
-                }
-
                 const releasedNode: CanvasNode = { ...node, position: finalWorldPosition }
                 delete releasedNode.parentId
                 delete releasedNode.expandParent
                 delete releasedNode.extent
-                const nodeEl = viewportEl?.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
-                if (nodeEl) syncContextRegionImageFrame(nodeEl, releasedNode, currentCanvasState.nodes)
                 return releasedNode
             })
 
-            updatedNodes = expandRegionsToFitChildren(updatedNodes)
+            updatedNodes = expandParentContainersToFitChildren(updatedNodes)
 
             if (dragPlan.allowCollisionResolution) {
                 const collisionExclusions = new Set<string>()
 
-                // Region containers and their children must not collide. Without
-                // this, the resolver would push children back out of the region
-                // they were just adopted into.
                 for (const child of updatedNodes) {
                     if (child.parentId) {
                         collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
                     }
                 }
 
-                const collisionPlan = createShapeAwareCollisionPlan(updatedNodes, dragPlan.isContextRegionDrag)
+                const collisionPlan = createCollisionPlan(updatedNodes, dragPlan.isParentContainerDrag)
 
                 const { nodes: movedNodes, hasChanges } = resolveCollisions(collisionPlan.nodeBoxes, {
                     iterations: 50,
@@ -5386,9 +5024,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         return n
                     })
 
-                    // Run region expansion again in case collision resolution pushed
-                    // a child further out than its initial dropped position.
-                    updatedNodes = expandRegionsToFitChildren(updatedNodes)
+                    updatedNodes = expandParentContainersToFitChildren(updatedNodes)
                 }
             }
 
@@ -5430,7 +5066,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Find the node to check if it's an image (for aspect ratio locking)
         const node = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
         const isImageNode = node?.type === 'image'
-        const isContextRegionResize = isContextRegionNodeElement(nodeEl)
 
         // PIXI owns image pixels, so resize behavior uses the persisted
         // canvas-node aspect ratio instead of a rendered surface.
@@ -5523,37 +5158,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
 
             pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
-            contextRegionLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             updateGeneratedImageChromeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
             pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
             pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds(), { fill: shouldFillSelectionOverlayBounds() })
 
-            // If resizing a region child, visibly grow the region in real-time.
+            // If resizing a parented child, visibly grow the parent in real-time.
             // `nodeEl.style.left/top` is in world coordinates; convert to parent-
-            // relative before computing the needed region dimensions.
+            // relative before computing the needed parent dimensions.
             if (node?.parentId) {
-                const regionEl = viewportEl?.querySelector(`[data-node-id="${node.parentId}"]`) as HTMLElement | null
-                if (regionEl) {
+                const parentEl = viewportEl?.querySelector(`[data-node-id="${node.parentId}"]`) as HTMLElement | null
+                if (parentEl) {
                     const worldLeft = parseFloat(nodeEl.style.left) || 0
                     const worldTop = parseFloat(nodeEl.style.top) || 0
-                    const regionWorldLeft = parseFloat(regionEl.style.left) || 0
-                    const regionWorldTop = parseFloat(regionEl.style.top) || 0
-                    const relativeLeft = worldLeft - regionWorldLeft
-                    const relativeTop = worldTop - regionWorldTop
+                    const parentWorldLeft = parseFloat(parentEl.style.left) || 0
+                    const parentWorldTop = parseFloat(parentEl.style.top) || 0
+                    const relativeLeft = worldLeft - parentWorldLeft
+                    const relativeTop = worldTop - parentWorldTop
                     const neededWidth = relativeLeft + newWidth + 48
                     const neededHeight = relativeTop + newHeight + 48
-                    const currentRegionWidth = parseFloat(regionEl.style.width) || 200
-                    const currentRegionHeight = parseFloat(regionEl.style.height) || 120
-                    if (neededWidth > currentRegionWidth) applyStyle(regionEl, { width: `${neededWidth}px` })
-                    if (neededHeight > currentRegionHeight) applyStyle(regionEl, { height: `${neededHeight}px` })
-                    contextRegionLayer?.setNodeLiveTransform(
-                        node.parentId,
-                        { x: regionWorldLeft, y: regionWorldTop },
-                        {
-                            width: parseFloat(regionEl.style.width) || currentRegionWidth,
-                            height: parseFloat(regionEl.style.height) || currentRegionHeight,
-                        }
-                    )
+                    const currentParentWidth = parseFloat(parentEl.style.width) || 200
+                    const currentParentHeight = parseFloat(parentEl.style.height) || 120
+                    if (neededWidth > currentParentWidth) applyStyle(parentEl, { width: `${neededWidth}px` })
+                    if (neededHeight > currentParentHeight) applyStyle(parentEl, { height: `${neededHeight}px` })
                 }
             }
 
@@ -5607,8 +5233,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             // `nodeEl.style.left/top` is always in viewport-relative world
             // coordinates (set by `createBaseNodeElement` via `getNodeWorldPosition`).
-            // Context-region children persist `position` as parent-relative, so
-            // convert back before committing.
+            // Parented children persist `position` as parent-relative, so convert
+            // back before committing.
             const newWorldPosition = {
                 x: parseFloat(nodeEl.style.left),
                 y: parseFloat(nodeEl.style.top)
@@ -5622,8 +5248,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 n.nodeId === nodeId ? { ...n, dimensions: newDimensions, position: newPosition } : n
             )
 
-            // Grow regions if we resized a child of a region
-            updatedNodes = expandRegionsToFitChildren(updatedNodes)
+            updatedNodes = expandParentContainersToFitChildren(updatedNodes)
 
             currentCanvasState = { ...currentCanvasState, nodes: updatedNodes }
 
@@ -5700,27 +5325,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
-    function createContextRegionNode(node: ContextRegionNode, thread: AiChatThread | undefined): HTMLElement {
-        const { nodeEl } = createBaseNodeElement(
-            node,
-            'workspace-context-region-node workspace-context-region-node-pixi-owned workspace-ai-chat-thread-node workspace-ai-chat-thread-node-region',
-            { threadId: node.referenceId }
-        )
-
-        nodeEl.dataset.regionTitle = getAiChatThreadTitle(thread)
-
-        loadedNodeIds.add(node.nodeId)
-
-        return nodeEl
-    }
-
     function createImageNode(node: ImageCanvasNode): HTMLElement {
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
             'workspace-image-node',
             { fileId: node.fileId }
         )
-        syncContextRegionImageFrame(nodeEl, node)
         dragOverlay.className = 'image-drag-overlay nopan'
 
         return nodeEl
@@ -5766,10 +5376,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!currentCanvasState) return
 
         const start = getCanvasPointFromClient(event.clientX, event.clientY)
-        const nodeHit = getNodeHitBeforeContextRegion(start)
-        const regionHit = nodeHit ? { kind: 'none' as const } : contextRegionLayer?.hitTest(start) ?? { kind: 'none' as const }
-        const regionBoundsHit = nodeHit || regionHit.kind !== 'none' ? null : getContextRegionBoundsHit(start)
-        const hitNodeId = nodeHit?.nodeId ?? (regionHit.kind !== 'none' ? regionHit.nodeId : regionBoundsHit?.nodeId ?? null)
+        const hitNodeId = getForegroundNodeHit(start)?.nodeId ?? null
         if (!hitNodeId) return
 
         suspendPanZoomForNodePointer(hitNodeId)
@@ -5789,18 +5396,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         const point = getCanvasPointFromClient(event.clientX, event.clientY)
-        const nodeHit = getNodeHitBeforeContextRegion(point)
-        if (nodeHit) {
-            paneEl.style.cursor = ''
-            return
-        }
-
-        const regionHit = contextRegionLayer?.hitTest(point) ?? { kind: 'none' as const }
-        if (regionHit.kind === 'none' && getContextRegionBoundsHit(point)) {
-            paneEl.style.cursor = ''
-            return
-        }
-        paneEl.style.cursor = regionHit.kind === 'resize' ? regionHit.cursor : ''
+        paneEl.style.cursor = getForegroundNodeHit(point) ? '' : ''
     }
 
     function handlePaneMouseLeave(): void {
@@ -5814,39 +5410,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!currentCanvasState) return
 
         const start = getCanvasPointFromClient(event.clientX, event.clientY)
-        const nodeHit = getNodeHitBeforeContextRegion(start)
+        const nodeHit = getForegroundNodeHit(start)
         if (nodeHit) {
             handleDragStart(event, nodeHit.nodeId, { suppressPaneClick: true })
-            return
-        }
-
-        const regionHit = contextRegionLayer?.hitTest(start) ?? { kind: 'none' as const }
-        if (regionHit.kind !== 'none') {
-            if (regionHit.kind === 'resize') {
-                handleResizeStart(event, regionHit.nodeId, regionHit.handle)
-                return
-            }
-
-            const regionNode = currentCanvasState.nodes.find((node: CanvasNode) => node.nodeId === regionHit.nodeId)
-            const thread = regionNode && isContextRegionCanvasNode(regionNode)
-                ? currentAiChatThreads.find((candidate) => candidate.threadId === regionNode.referenceId)
-                : undefined
-            handleDragStart(event, regionHit.nodeId, {
-                suppressPaneClick: true,
-                onClick: () => {
-                    if (regionNode && isContextRegionCanvasNode(regionNode)) activateAiChatPanel(regionNode, thread)
-                },
-            })
-            return
-        }
-
-        const regionBoundsHit = getContextRegionBoundsHit(start)
-        if (regionBoundsHit) {
-            const thread = currentAiChatThreads.find((candidate) => candidate.threadId === regionBoundsHit.referenceId)
-            handleDragStart(event, regionBoundsHit.nodeId, {
-                suppressPaneClick: true,
-                onClick: () => activateAiChatPanel(regionBoundsHit, thread),
-            })
             return
         }
 
@@ -5950,8 +5516,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         hiddenEmptyThreadNodeIds.clear()
 
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
-        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((t) => [t.threadId, t]))
-
         for (const node of currentCanvasState.nodes) {
             let nodeEl: HTMLElement
 
@@ -5963,11 +5527,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createImageNode(node as ImageCanvasNode)
             } else if (node.type === 'video') {
                 nodeEl = createVideoNode(node as VideoCanvasNode)
-            } else if (isContextRegionCanvasNode(node)) {
-                const thread = threadMap.get(node.referenceId)
-                nodeEl = createContextRegionNode(node, thread)
             } else {
-                // Unknown node type, skip
+                // Inert legacy guard: old workspaces may still contain
+                // `type: 'contextRegion'` nodes. Phase 1 intentionally does not
+                // migrate or render them.
                 console.warn(`Unknown canvas node type: ${(node as CanvasNode).type}`)
                 continue
             }
@@ -5993,7 +5556,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         connectionManager?.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
         connectionManager?.syncEdges(currentCanvasState.edges)
         scheduleEdgesRender()
-        syncContextRegionLayer(currentCanvasState)
 
         renderActiveAiChatPanel()
 
@@ -6310,10 +5872,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 connectionManager.syncEdges(currentCanvasState.edges)
                 scheduleEdgesRender()
                 syncPixiMediaLayer(currentCanvasState)
-                syncContextRegionLayer(currentCanvasState)
                 lastVisualSyncKey = nextVisualSyncKey
-            } else if (currentCanvasState) {
-                syncContextRegionLayer(currentCanvasState)
             }
 
             // Video controls need videoNodeHandler entries. Those entries are
@@ -6384,8 +5943,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedGeneratedImageInfoNodeIds.clear()
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
-            contextRegionLayer?.destroy()
-            contextRegionLayer = null
             if (panZoom) {
                 panZoom.destroy()
             }

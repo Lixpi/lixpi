@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { CanvasNode, ContextRegionCanvasNode, ImageCanvasNode, DocumentCanvasNode } from '@lixpi/constants'
+import type { AiChatThreadCanvasNode, CanvasNode, ImageCanvasNode, DocumentCanvasNode } from '@lixpi/constants'
 
 import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceDragPlan.ts'
 
@@ -7,10 +7,10 @@ import { computeWorkspaceDragPlan } from '$src/infographics/workspace/workspaceD
 // HELPERS
 // =============================================================================
 
-function makeRegion(overrides: Partial<ContextRegionCanvasNode> & { nodeId: string }): ContextRegionCanvasNode {
+function makeThread(overrides: Partial<AiChatThreadCanvasNode> & { nodeId: string }): AiChatThreadCanvasNode {
     return {
         nodeId: overrides.nodeId,
-        type: 'contextRegion',
+        type: 'aiChatThread',
         referenceId: overrides.referenceId ?? `thread-${overrides.nodeId}`,
         position: overrides.position ?? { x: 0, y: 0 },
         dimensions: overrides.dimensions ?? { width: 320, height: 240 },
@@ -56,45 +56,45 @@ function plan(overrides: {
 }
 
 // =============================================================================
-// CONTEXT REGION DRAG PLANNING
+// AI CHAT THREAD DRAG PLANNING
 // =============================================================================
 
-describe('computeWorkspaceDragPlan — context region drags', () => {
-    it('ignores stale selection from another activated context region', () => {
-        const regionA = makeRegion({ nodeId: 'region-a' })
-        const regionB = makeRegion({ nodeId: 'region-b' })
+describe('computeWorkspaceDragPlan — AI chat thread drags', () => {
+    it('ignores stale selection from another activated chat thread', () => {
+        const threadA = makeThread({ nodeId: 'thread-a' })
+        const threadB = makeThread({ nodeId: 'thread-b' })
 
         const result = plan({
-            nodes: [regionA, regionB],
-            primaryNodeId: 'region-b',
-            selectedNodeIds: new Set(['region-a']),
+            nodes: [threadA, threadB],
+            primaryNodeId: 'thread-b',
+            selectedNodeIds: new Set(['thread-a']),
         })
 
-        expect(result.resolvedNodeId).toBe('region-b')
-        expect(result.draggedNodeIds).toEqual(['region-b'])
+        expect(result.resolvedNodeId).toBe('thread-b')
+        expect(result.draggedNodeIds).toEqual(['thread-b'])
     })
 
-    it('moves only the context region and its real parented descendants', () => {
-        const region = makeRegion({ nodeId: 'region-1' })
-        const childImage = makeImage({ nodeId: 'child-image', parentId: 'region-1', position: { x: 48, y: 64 } })
+    it('moves only the chat thread and its real parented descendants', () => {
+        const thread = makeThread({ nodeId: 'thread-1' })
+        const childImage = makeImage({ nodeId: 'child-image', parentId: 'thread-1', position: { x: 48, y: 64 } })
         const connectedImage = makeImage({ nodeId: 'connected-image', position: { x: 800, y: 100 } })
 
         const result = plan({
-            nodes: [region, childImage, connectedImage],
-            primaryNodeId: 'region-1',
+            nodes: [thread, childImage, connectedImage],
+            primaryNodeId: 'thread-1',
         })
 
-        expect(result.draggedNodeIds).toEqual(['region-1', 'child-image'])
+        expect(result.draggedNodeIds).toEqual(['thread-1', 'child-image'])
         expect(result.draggedNodeIds).not.toContain('connected-image')
     })
 
-    it('does not move generated output images with context regions', () => {
-        const region = makeRegion({ nodeId: 'region-1' })
+    it('does not move generated output images with chat threads', () => {
+        const thread = makeThread({ nodeId: 'thread-1' })
         const outputImage = makeImage({
             nodeId: 'output-image',
             position: { x: 640, y: 100 },
             generatedBy: {
-                aiChatThreadId: 'thread-region-1',
+                aiChatThreadId: 'thread-1',
                 responseId: 'response-1',
                 aiModel: 'openai:gpt-4o' as any,
                 responseMessageId: 'message-1',
@@ -102,18 +102,18 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         })
 
         const result = plan({
-            nodes: [region, outputImage],
-            primaryNodeId: 'region-1',
+            nodes: [thread, outputImage],
+            primaryNodeId: 'thread-1',
         })
 
-        expect(result.draggedNodeIds).toEqual(['region-1'])
+        expect(result.draggedNodeIds).toEqual(['thread-1'])
     })
 
-    it('does not move generated output images even if stale parentId says they are region children', () => {
-        const region = makeRegion({ nodeId: 'region-1', referenceId: 'thread-1' })
+    it('does not move generated output images even if stale parentId says they are chat-thread children', () => {
+        const thread = makeThread({ nodeId: 'thread-node-1', referenceId: 'thread-1' })
         const generatedOutput = makeImage({
             nodeId: 'generated-output',
-            parentId: 'region-1',
+            parentId: 'thread-node-1',
             position: { x: 96, y: 120 },
             generatedBy: {
                 aiChatThreadId: 'thread-1',
@@ -125,15 +125,15 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         })
 
         const result = plan({
-            nodes: [region, generatedOutput],
-            primaryNodeId: 'region-1',
+            nodes: [thread, generatedOutput],
+            primaryNodeId: 'thread-node-1',
         })
 
-        expect(result.draggedNodeIds).toEqual(['region-1'])
+        expect(result.draggedNodeIds).toEqual(['thread-node-1'])
     })
 
-    it('does not let active-region selection pull edge-connected generated outputs into the drag set', () => {
-        const activeRegion = makeRegion({ nodeId: 'active-region', referenceId: 'thread-active' })
+    it('does not let active-thread selection pull edge-connected generated outputs into the drag set', () => {
+        const activeThread = makeThread({ nodeId: 'active-thread', referenceId: 'thread-active' })
         const generatedOutput = makeImage({
             nodeId: 'generated-output',
             position: { x: 720, y: 120 },
@@ -146,50 +146,50 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         })
 
         const result = plan({
-            nodes: [activeRegion, generatedOutput],
-            primaryNodeId: 'active-region',
-            selectedNodeIds: new Set(['active-region', 'generated-output']),
+            nodes: [activeThread, generatedOutput],
+            primaryNodeId: 'active-thread',
+            selectedNodeIds: new Set(['active-thread', 'generated-output']),
         })
 
-        expect(result.draggedNodeIds).toEqual(['active-region'])
+        expect(result.draggedNodeIds).toEqual(['active-thread'])
         expect(result.allowCollisionResolution).toBe(true)
     })
 
-    it('moves every selected context region as one group', () => {
-        const regionA = makeRegion({ nodeId: 'region-a' })
-        const regionB = makeRegion({ nodeId: 'region-b' })
+    it('moves every selected chat thread as one group', () => {
+        const threadA = makeThread({ nodeId: 'thread-a' })
+        const threadB = makeThread({ nodeId: 'thread-b' })
 
         const result = plan({
-            nodes: [regionA, regionB],
-            primaryNodeId: 'region-b',
-            selectedNodeIds: new Set(['region-a', 'region-b']),
+            nodes: [threadA, threadB],
+            primaryNodeId: 'thread-b',
+            selectedNodeIds: new Set(['thread-a', 'thread-b']),
         })
 
-        expect(result.resolvedNodeId).toBe('region-b')
-        expect(result.draggedNodeIds).toEqual(['region-a', 'region-b'])
+        expect(result.resolvedNodeId).toBe('thread-b')
+        expect(result.draggedNodeIds).toEqual(['thread-a', 'thread-b'])
         expect(result.allowProximityConnection).toBe(false)
         expect(result.allowCollisionResolution).toBe(true)
     })
 
-    it('moves selected regions with their real children but not unrelated leaves', () => {
-        const regionA = makeRegion({ nodeId: 'region-a' })
-        const regionB = makeRegion({ nodeId: 'region-b' })
-        const childA = makeImage({ nodeId: 'child-a', parentId: 'region-a', position: { x: 48, y: 72 } })
-        const childB = makeImage({ nodeId: 'child-b', parentId: 'region-b', position: { x: 64, y: 80 } })
+    it('moves selected chat threads with their real children but not unrelated leaves', () => {
+        const threadA = makeThread({ nodeId: 'thread-a' })
+        const threadB = makeThread({ nodeId: 'thread-b' })
+        const childA = makeImage({ nodeId: 'child-a', parentId: 'thread-a', position: { x: 48, y: 72 } })
+        const childB = makeImage({ nodeId: 'child-b', parentId: 'thread-b', position: { x: 64, y: 80 } })
         const unrelatedLeaf = makeImage({ nodeId: 'unrelated-leaf', position: { x: 900, y: 240 } })
 
         const result = plan({
-            nodes: [regionA, childA, regionB, childB, unrelatedLeaf],
-            primaryNodeId: 'region-a',
-            selectedNodeIds: new Set(['region-a', 'region-b']),
+            nodes: [threadA, childA, threadB, childB, unrelatedLeaf],
+            primaryNodeId: 'thread-a',
+            selectedNodeIds: new Set(['thread-a', 'thread-b']),
         })
 
-        expect(result.draggedNodeIds).toEqual(['region-a', 'region-b', 'child-b', 'child-a'])
+        expect(result.draggedNodeIds).toEqual(['thread-a', 'thread-b', 'child-b', 'child-a'])
         expect(result.draggedNodeIds).not.toContain('unrelated-leaf')
     })
 
-    it('moves mixed selected groups that include a context region without pulling generated outputs', () => {
-        const region = makeRegion({ nodeId: 'region-1', referenceId: 'thread-1' })
+    it('moves mixed selected groups that include a chat thread without pulling generated outputs', () => {
+        const thread = makeThread({ nodeId: 'thread-node-1', referenceId: 'thread-1' })
         const document = makeDocument({ nodeId: 'doc-1' })
         const generatedOutput = makeImage({
             nodeId: 'generated-output',
@@ -203,34 +203,34 @@ describe('computeWorkspaceDragPlan — context region drags', () => {
         })
 
         const result = plan({
-            nodes: [region, document, generatedOutput],
-            primaryNodeId: 'region-1',
-            selectedNodeIds: new Set(['region-1', 'doc-1', 'generated-output']),
+            nodes: [thread, document, generatedOutput],
+            primaryNodeId: 'thread-node-1',
+            selectedNodeIds: new Set(['thread-node-1', 'doc-1', 'generated-output']),
         })
 
-        expect(result.draggedNodeIds).toEqual(['region-1', 'doc-1'])
+        expect(result.draggedNodeIds).toEqual(['thread-node-1', 'doc-1'])
         expect(result.draggedNodeIds).not.toContain('generated-output')
         expect(result.allowCollisionResolution).toBe(true)
     })
 
-    it('enables top-level collision resolution for context region release', () => {
+    it('enables top-level collision resolution for chat-thread release', () => {
         const result = plan({
-            nodes: [makeRegion({ nodeId: 'region-1' })],
-            primaryNodeId: 'region-1',
+            nodes: [makeThread({ nodeId: 'thread-1' })],
+            primaryNodeId: 'thread-1',
         })
 
-        expect(result.isContextRegionDrag).toBe(true)
+        expect(result.isParentContainerDrag).toBe(true)
         expect(result.allowProximityConnection).toBe(false)
         expect(result.allowCollisionResolution).toBe(true)
     })
 })
 
 // =============================================================================
-// NON-REGION DRAG PLANNING
+// ORDINARY DRAG PLANNING
 // =============================================================================
 
-describe('computeWorkspaceDragPlan — non-region drags', () => {
-    it('moves only the selected non-region node by default', () => {
+describe('computeWorkspaceDragPlan — ordinary drags', () => {
+    it('moves only the selected ordinary node by default', () => {
         const doc = makeDocument({ nodeId: 'doc-1' })
         const image = makeImage({ nodeId: 'image-1' })
 

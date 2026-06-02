@@ -4,21 +4,19 @@ A workspace is the primary container where users organize and edit their documen
 
 > **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels, video posters/placeholders, and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`, and delegates generated-image progress painting to the reusable PIXI `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Canvas image nodes have no DOM `<img>` pixel surface: stored images, generated partials, and their animated in-progress outline are visible only through PIXI. Completed videos are the exception to pure PIXI pixels: a visible DOM `<video>` element owns playback and shared SVG controls above the PIXI poster. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
 >
-> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For collision resolution, placement cleanup, drag-release collision rules, and context-region shape-aware collision planning, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md). For the CO2-shaped seafoam context-region cloud system specifically, see [CONTEXT-REGION-CLOUDS.md](CONTEXT-REGION-CLOUDS.md).
+> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For collision resolution, placement cleanup, and drag-release collision rules, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md).
 
 ## Core Concepts
 
 **Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents, AI chat threads, and uploaded files.
 
-**Canvas Node** — A positioned item on the canvas. It can be a document node, an image node, a video node, an AI chat thread node, or a context region. Stores position, dimensions, and type-specific data.
+**Canvas Node** — A positioned item on the canvas. It can be a document node, an image node, a video node, or an AI chat thread node. Stores position, dimensions, and type-specific data.
 
 **Document** — The actual text content (ProseMirror JSON). Lives separately from its canvas representation so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'` and contain block-level content (paragraphs, headings, lists, etc.).
 
-**AI Chat Thread** — A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread can be standalone or owned by one context region; its ProseMirror history is rendered in an AI Chat panel tab and streamed through its own `AiInteractionService`.
+**AI Chat Thread** — A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread is standalone; its ProseMirror history is rendered in an AI Chat panel tab and streamed through its own `AiInteractionService`.
 
 **AI Chat Panel** — A workspace-owned right-side surface that can be opened without selecting a region or creating a chat session. It persists visibility, tabs, active tab, width, prompt drafts, and standalone context settings. A standalone `AiChatThread` is created only when the first prompt is submitted.
-
-**Context Region** — A canvas collection of contextual items with one dedicated chat history. Creating or activating a region opens that history in an AI Chat tab. The owned history remains visible in Sessions but cannot be deleted independently while its region exists.
 
 **Image** — An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas. A user can explicitly save a separate Media Library copy that is not deleted with the source node.
 
@@ -167,7 +165,7 @@ The `WorkspaceConnectionManager` handles the visual rendering logic for edges.
 
 When an AI thread generates images, the workspace manages their placement automatically to maintain a clean layout:
 
-- **Positioning**: First outputs are placed to the right of the context-region cloud's visual bounds using the spacing configured in `settings.imageBranchLineage`. Image-to-image continuations use the latest image in the branch as the anchor.
+- **Positioning**: First outputs are placed to the right of the source thread root using the spacing configured in `settings.imageBranchLineage`. Image-to-image continuations use the latest image in the branch as the anchor.
 - **Scale**: Generated image nodes use the configured canvas-unit size regardless of the current zoom level.
 - **Stacking and alignment**: Multiple first-generation outputs stack next to the source region using the configured branch-lineage spacing. Image-to-image continuations stay vertically aligned with the previous image in the branch lineage.
 - **Race Condition Handling**: The layout engine tracks synchronous "partial" image states to ensure that simultaneous updates (e.g., partial stream + final completion) do not cause images to overlap or skip positional slots.
@@ -563,7 +561,6 @@ AI chat threads belonging to the current workspace.
 | `WORKSPACE.CREATE_WORKSPACE` | Create new workspace |
 | `WORKSPACE.UPDATE_WORKSPACE` | Update name |
 | `WORKSPACE.UPDATE_CANVAS_STATE` | Persist viewport and node positions |
-| `WORKSPACE.DELETE_CONTEXT_REGION` | Atomically delete a context region and its owned chat history |
 | `WORKSPACE.DELETE_WORKSPACE` | Delete workspace |
 | `WORKSPACE.GET_WORKSPACE_DOCUMENTS` | Get documents in workspace |
 | `DOCUMENT.CREATE_DOCUMENT` | Create document |
@@ -674,7 +671,7 @@ flowchart LR
     PML --> FG
 ```
 
-The DOM viewport hosts every interactive element. PIXI uses two visual layers: the context-region layer below the DOM viewport owns CO2-shaped region cloud surfaces, while the media layer above the DOM viewport owns image pixels, image-node selection outlines, marquee rectangles, group-overlay highlights, and edge stroke geometry. All layers are kept aligned by `viewportBridge.applyViewport()`, which is the single call site that updates the DOM CSS transform and both PIXI world containers in the same tick.
+The DOM viewport hosts every interactive element. PIXI uses the media layer above the DOM viewport to own image pixels, image-node selection outlines, marquee rectangles, group-overlay highlights, and edge stroke geometry. The DOM and PIXI layer are kept aligned by `viewportBridge.applyViewport()`, which is the single call site that updates the DOM CSS transform and PIXI world container in the same tick.
 
 For the texture cache, LoD-tier loader, decode worker pool, eviction strategy, and the list of remaining performance issues (notably: the API does not actually serve resized thumbnails today), see [CANVAS-ENGINE.md](CANVAS-ENGINE.md).
 
@@ -686,9 +683,9 @@ Document content changes are handled by `DocumentService.updateDocument()` which
 
 AI chat thread content changes are handled by `AiChatThreadService.updateAiChatThread()` with similar debouncing.
 
-AI Chat panel state is stored inside `canvasState.aiChatPanel`. Opening or closing the panel, expanding or collapsing Sessions, opening or closing tabs, resizing it, changing context controls, and editing prompt drafts persist workspace UI state but do not create a conversation entity. Submitting from an empty panel creates a standalone chat session; creating a context region creates its region-owned session.
+AI Chat panel state is stored inside `canvasState.aiChatPanel`. Opening or closing the panel, expanding or collapsing Sessions, opening or closing tabs, resizing it, changing context controls, and editing prompt drafts persist workspace UI state but do not create a conversation entity. Submitting from an empty panel creates a standalone chat session.
 
-Sessions is collapsed by default and toggled from the history icon in the panel control row. When expanded it lists standalone chats, context-region histories, and extraction sessions. Closing a tab only changes panel presentation and the session remains reopenable. Explicit standalone or extraction deletion removes that session and its saved prompt draft. Region-owned chat deletion is blocked while its context region exists; deleting the region removes its owned history atomically. A saved Feature remains independent when its extraction session is deleted.
+Sessions is collapsed by default and toggled from the history icon in the panel control row. When expanded it lists standalone chats and extraction sessions. Closing a tab only changes panel presentation and the session remains reopenable. Explicit standalone or extraction deletion removes that session and its saved prompt draft. A saved Feature remains independent when its extraction session is deleted.
 
 Position and dimension changes after drag/resize are persisted immediately via `onCanvasStateChange`.
 
@@ -800,7 +797,7 @@ sequenceDiagram
     end
 ```
 
-Each open AI chat thread tab has its own `AiInteractionService` instance, enabling concurrent AI streams across multiple threads in the same workspace. A context-region tab and a standalone tab use the same streaming path; the difference is context ownership and deletion rules.
+Each open AI chat thread tab has its own `AiInteractionService` instance, enabling concurrent AI streams across multiple threads in the same workspace.
 
 ---
 
@@ -1073,16 +1070,15 @@ sequenceDiagram
 
 ## AI Chat Context
 
-Context-region chats and standalone chats deliberately use different context sources.
+Standalone chats use panel-selected context.
 
-- A context-region chat extracts content from the region and its incoming graph exactly as before. Activating a region always opens its owned history, regardless of the standalone context control.
 - A standalone chat may include the selected eligible canvas items directly. In the `Follow` mode (`followSelection`), later selection changes update the loaded standalone context. In the `Pinned` mode (`pinnedContext`), later selection changes do not alter it.
 - `With Sources` (`includeUpstreamContext`) applies in both standalone modes: off submits only the loaded direct items; on also traverses their upstream lineage using the existing graph extraction rules.
 - No selected item means no automatically attached standalone context.
 
 ### How It Works
 
-1. **Context selection** — A region-owned send uses `extractConnectedContext(regionNodeId)`. A standalone send uses `extractSelectedContext({ nodeIds, includeUpstream })`.
+1. **Context selection** — A standalone send uses `extractSelectedContext({ nodeIds, includeUpstream })`.
 2. **Content Extraction** — Documents and AI threads have their ProseMirror content parsed for text; embedded images are also extracted. Standalone image nodes are fetched and converted to base64. Video nodes contribute a representative still (`frameFileId`, falling back to poster) for normal model context.
 3. **Message Building** — `buildContextMessage()` formats the extracted context as a multimodal message with interleaved text, images, and video stills
 4. **API Format** — All content uses the OpenAI Responses API format (`input_text`, `input_image` blocks) as the canonical format. The API LLM module converts to provider-specific formats (e.g., Anthropic) as needed
@@ -1246,7 +1242,7 @@ When the AI generates an image:
 
 When "Edit in New Thread" is clicked on a canvas image node:
 
-1. A new AI chat thread context region is created to the right of the source image using `settings.contextRegion.defaultDimensions` and `settings.contextRegion.adjacentNodeGap`; shape-aware collision resolution then pushes conflicting top-level nodes apart
+1. A new AI chat thread node is created to the right of the source image using `settings.aiChatThread.defaultDimensions` and `settings.aiChatThread.adjacentNodeGap`; collision resolution then pushes conflicting top-level nodes apart
 2. An edge connects the image (right) to the new thread (left)
 3. The connected image is automatically included in the new thread's context via `extractConnectedContext()`
 4. This forms a horizontal chain: `[Original Thread] → [Image] → [Edit Thread]`

@@ -143,13 +143,6 @@ export const aiChatThreadSubjects = [
                 return { error: workspace?.error || 'WORKSPACE_NOT_FOUND' }
             }
 
-            const hasContextRegionOwner = workspace.canvasState?.nodes?.some(
-                (node: any) => node.type === 'contextRegion' && node.referenceId === threadId
-            )
-            if (hasContextRegionOwner) {
-                return { error: 'CONTEXT_REGION_HISTORY_CANNOT_BE_DELETED' }
-            }
-
             await AiChatThread.delete({
                 workspaceId,
                 threadId

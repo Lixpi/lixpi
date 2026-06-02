@@ -484,7 +484,7 @@ class AiChatThreadService {
 
         for (const nodeId of nodeIds) {
             const node = nodes.find((candidate) => candidate.nodeId === nodeId)
-            if (!node || node.type === 'contextRegion') continue
+            if (!node) continue
             directItems.push({
                 node,
                 edge: {

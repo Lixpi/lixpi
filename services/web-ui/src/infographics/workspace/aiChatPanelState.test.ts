@@ -38,13 +38,13 @@ describe('AI chat panel persisted state', () => {
         })
     })
 
-    it('migrates a legacy context-region active thread into an open tab', () => {
-        const state = getAiChatPanelState(makeCanvasState({ lastActiveAiChatThreadId: 'region-thread' }))
+    it('migrates a legacy active thread into an open tab', () => {
+        const state = getAiChatPanelState(makeCanvasState({ lastActiveAiChatThreadId: 'thread-1' }))
 
         expect(state.isOpen).toBe(true)
-        expect(state.activeTabId).toBe('thread:region-thread')
+        expect(state.activeTabId).toBe('thread:thread-1')
         expect(state.tabs).toEqual([
-            { tabId: 'thread:region-thread', type: 'thread', refId: 'region-thread', title: 'AI Chat' },
+            { tabId: 'thread:thread-1', type: 'thread', refId: 'thread-1', title: 'AI Chat' },
         ])
     })
 
@@ -75,7 +75,7 @@ describe('AI chat panel persisted state', () => {
         const nodes = [
             makeNode('image-a', 'image'),
             makeNode('document-b', 'document'),
-            makeNode('region-c', 'contextRegion'),
+            makeNode('thread-c', 'aiChatThread'),
         ]
         const follow = {
             ...createDefaultAiChatPanelState(),
@@ -84,10 +84,10 @@ describe('AI chat panel persisted state', () => {
         const pinned = {
             ...follow,
             contextMode: 'pinnedContext' as const,
-            contextNodeIds: ['document-b', 'region-c', 'missing'],
+            contextNodeIds: ['document-b', 'thread-c', 'missing'],
         }
 
-        expect(getStandaloneContextNodeIds(follow, ['image-a', 'region-c'], nodes)).toEqual(['image-a'])
-        expect(getStandaloneContextNodeIds(pinned, ['image-a'], nodes)).toEqual(['document-b'])
+        expect(getStandaloneContextNodeIds(follow, ['image-a', 'thread-c'], nodes)).toEqual(['image-a', 'thread-c'])
+        expect(getStandaloneContextNodeIds(pinned, ['image-a'], nodes)).toEqual(['document-b', 'thread-c'])
     })
 })

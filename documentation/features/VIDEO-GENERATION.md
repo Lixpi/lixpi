@@ -16,7 +16,7 @@ Video **extends** the image pipeline rather than replacing it. It adds a sibling
 
 **Browser-Composited Playback** — A finished video plays inline on the canvas through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer. PIXI still owns the frame-0 poster/placeholder behind the node for stable canvas geometry and initial paint, but completed playback, seeking, PiP, fullscreen, and scrubbing are driven by the browser-composited element. This avoids a PIXI `VideoSource` frame loop fighting the edge renderer and connector canvas.
 
-**New `VideoCanvasNode` Type** — Generated videos persist as a new discriminated member of the `CanvasNode` union (`type: 'video'`), alongside `image`, `document`, `aiChatThread`, and `contextRegion`. There is no new database table — like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
+**New `VideoCanvasNode` Type** — Generated videos persist as a new discriminated member of the `CanvasNode` union (`type: 'video'`), alongside `image`, `document`, and `aiChatThread`. There is no new database table — like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
 
 ## System Architecture
 
@@ -422,7 +422,7 @@ A completed `VideoCanvasNode` can be continued: the bubble-menu **Extend video i
 | Canvas playback | static texture | PIXI poster behind browser-composited `<video>` + SVG controls |
 | Model selection | auto-selects a default | opt-in (placeholder until chosen) |
 
-Branch lineage, canvas positioning/collision, the generation-trace meta-info (in-chat collapsible + canvas info panel), and media descriptors are **shared**, not differences: video reuses the same candidate snapshot, `getGeneratedChildOutputs` positioning, shape-aware collision pass, `createImageGenerationTraceDetails` renderer, and `MediaDescriptor` as images. A video candidate simply contributes its mid-frame still instead of a full image. See [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md), [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md), and [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md).
+Branch lineage, canvas positioning/collision, the generation-trace meta-info (in-chat collapsible + canvas info panel), and media descriptors are **shared**, not differences: video reuses the same candidate snapshot, `getGeneratedChildOutputs` positioning, collision cleanup pass, `createImageGenerationTraceDetails` renderer, and `MediaDescriptor` as images. A video candidate simply contributes its mid-frame still instead of a full image. See [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md), [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md), and [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md).
 
 ## File Structure
 

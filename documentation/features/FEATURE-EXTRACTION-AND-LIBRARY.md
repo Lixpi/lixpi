@@ -6,7 +6,7 @@ Extraction runs through a six-stage modular pipeline implemented under [`service
 
 Features are applied later via `/use loose-watercolor` in any prompt; the server resolves the reference at send time and injects the feature's instructions, samples, and **deterministically-extracted content-free source crops** as system context. The downstream model sees pixel evidence of the medium — but never the full source frame, so subject layout cannot leak. The architecture is the FIBO-schema axis decomposition + FaceScanPaliGemma parallel per-axis-extractor pattern + Art-Historians dominance-weighting, lifted to VLM orchestration against closed-API image models. See ["Research foundations"](#research-foundations) for the prior-art mapping.
 
-The image bubble's "Ask AI" handler (in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) `initCanvasBubbleMenu`) is wired to feature extraction rather than the older `contextRegion` thread-node flow. Extracted Features are now displayed in the `Features` category of the canvas-owned Media Library panel; their persistence, subjects, extraction stages, and `/use` resolution remain unchanged. `/use` and `/extract` are first-class slash commands, the AI chat panel is tabbed (so extraction never displaces a user's current thread), and the chat graph carries a `resolveFeatures` pre-stage that resolves `/use` chips at send time.
+The image bubble's "Ask AI" handler (in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) `initCanvasBubbleMenu`) is wired directly to feature extraction. Extracted Features are displayed in the `Features` category of the canvas-owned Media Library panel; their persistence, subjects, extraction stages, and `/use` resolution remain unchanged. `/use` and `/extract` are first-class slash commands, the AI chat panel is tabbed (so extraction never displaces a user's current thread), and the chat graph carries a `resolveFeatures` pre-stage that resolves `/use` chips at send time.
 
 ## Why this exists
 
@@ -380,14 +380,10 @@ All three converge on the same dedicated 6-stage extraction LangGraph and produc
 
 ### 1. Image bubble's "Ask AI" button (rewired)
 
-The current handler creates a `contextRegion` thread node + edge — see [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) `initCanvasBubbleMenu` ~lines 359–425. The user explicitly: *"The functionality of this ask ai button is changed. It must not create another context region."*
-
-New handler:
-
 1. Creates an `ExtractionRun` record via NATS request (`AI_INTERACTION_SUBJECTS.FEATURE_EXTRACT.START`).
 2. Opens a new `extraction` tab in the AI chat panel referencing the new `extractionRunId`.
 3. Starts the LangGraph extraction with the source image's `nats-obj://` URL as input — plus any directly upstream connected nodes via the existing `findConnectedNodes` traversal so wired docs / threads are also factored in.
-4. Source canvas state is otherwise untouched — no new region appears, no new edge is drawn, no thread node is created.
+4. Source canvas state is otherwise untouched — no new canvas node or edge is created.
 
 The bubble menu definition file [`canvasBubbleMenuItems.ts`](../../services/web-ui/src/infographics/workspace/canvasBubbleMenuItems.ts) does not change — it just re-fires `callbacks.onAskAi(activeNodeId)`. The behavior swap is entirely in the callback body. We keep the `magicIcon` and the "Ask AI" label (the UX intent — invoke AI on this artifact — is unchanged); the tooltip becomes "Ask AI · Extract feature."
 
@@ -584,7 +580,7 @@ type CanvasAiChatSidebarTab = {
 
 `CanvasNodeType` is **not** extended — features are library-only per the canvas-presence decision.
 
-Extraction runs appear in the AI Chat panel Sessions list alongside normal chats and context-region histories. Sessions is collapsed by default and expanded from the panel history toggle, whose state persists in `CanvasAiChatPanelState.isSessionHistoryOpen`. Closing an extraction tab keeps the run reopenable. Deleting an extraction session deletes only its `ExtractionRun` history and persisted panel draft; any saved `Feature` produced by that run remains a separate library entity.
+Extraction runs appear in the AI Chat panel Sessions list alongside normal chats. Sessions is collapsed by default and expanded from the panel history toggle, whose state persists in `CanvasAiChatPanelState.isSessionHistoryOpen`. Closing an extraction tab keeps the run reopenable. Deleting an extraction session deletes only its `ExtractionRun` history and persisted panel draft; any saved `Feature` produced by that run remains a separate library entity.
 
 ### Extension to `AiInteractionChatSendMessagePayload`
 

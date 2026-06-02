@@ -17,11 +17,11 @@ beforeEach(() => {
 })
 
 // =============================================================================
-// createAiChatThread — ownership + title metadata
+// createAiChatThread — title metadata
 // =============================================================================
 
 describe('AiChatThread.createAiChatThread', () => {
-    it('persists owner and title when provided and marks the thread active', async () => {
+    it('persists standalone owner and title when provided and marks the thread active', async () => {
         dynamo.putItem.mockResolvedValue(undefined)
 
         const thread = await AiChatThread.createAiChatThread({
@@ -30,17 +30,17 @@ describe('AiChatThread.createAiChatThread', () => {
             content: {},
             aiModel: 'openai:test',
             title: 'AI Chat',
-            owner: { type: 'contextRegion', contextRegionNodeId: 'node-1' },
+            owner: { type: 'standalone' },
         })
 
         expect(thread).toMatchObject({
             threadId: 'thread-1',
             status: 'active',
             title: 'AI Chat',
-            owner: { type: 'contextRegion', contextRegionNodeId: 'node-1' },
+            owner: { type: 'standalone' },
         })
         expect(dynamo.putItem).toHaveBeenCalledWith(expect.objectContaining({
-            item: expect.objectContaining({ owner: { type: 'contextRegion', contextRegionNodeId: 'node-1' }, title: 'AI Chat' }),
+            item: expect.objectContaining({ owner: { type: 'standalone' }, title: 'AI Chat' }),
         }))
     })
 
