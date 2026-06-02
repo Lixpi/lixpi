@@ -1,6 +1,12 @@
 'use strict'
 
-import type { ImageBranchCandidateSnapshot, ImageBranchVlmResolution, ProviderName } from '@lixpi/constants'
+import type {
+    ImageBranchCandidateSnapshot,
+    ImageBranchVlmResolution,
+    ProviderName,
+    WorkspaceContextResolution,
+    WorkspaceContextSnapshot,
+} from '@lixpi/constants'
 
 export type Usage = {
     promptTokens: number
@@ -93,6 +99,8 @@ export type ProviderState = {
     featureReferenceImageTraceUrls?: string[] | undefined
     imagePromptRetryCount?: number | undefined
     generatedImages?: string[] | undefined
+    workspaceContextSnapshot?: WorkspaceContextSnapshot | undefined
+    workspaceContextResolution?: WorkspaceContextResolution | undefined
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot | undefined
     imageBranchResolution?: ImageBranchVlmResolution | undefined
 
@@ -157,6 +165,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     featureReferenceImageTraceUrls: { reducer: keep },
     imagePromptRetryCount: { reducer: keep, default: () => 0 },
     generatedImages: { reducer: keep },
+    workspaceContextSnapshot: { reducer: keep },
+    workspaceContextResolution: { reducer: keep },
     imageBranchCandidateSnapshot: { reducer: keep },
     imageBranchResolution: { reducer: keep },
     enableVideoGeneration: { reducer: keep, default: () => false },

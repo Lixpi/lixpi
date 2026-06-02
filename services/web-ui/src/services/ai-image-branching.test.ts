@@ -447,11 +447,15 @@ describe('buildWorkspaceContextSnapshot', () => {
         expect(generated?.descriptorSummary).toBeUndefined()
 
         const doc = byId.get('cubist-doc')
+        expect(doc?.referenceId).toBe('doc-cubist')
         expect(doc?.descriptorSummary).toBe('a cubist study of a dog')
         expect(doc?.entityTags).toEqual(['dog'])
         expect(doc?.fileId).toBeUndefined()
         expect(doc?.imageUrl).toBeUndefined()
         expect(doc?.branchId).toBeUndefined()
+
+        const thread = byId.get('thread-context')
+        expect(thread?.referenceId).toBe('thread-context-ref')
     })
 
     it('flags explicit chips and edge-forced nodes (edges + parent children)', () => {

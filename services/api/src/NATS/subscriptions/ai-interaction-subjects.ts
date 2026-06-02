@@ -70,6 +70,7 @@ export const aiInteractionSubjects = [
                 videoSourceForExtension,
                 referencedFeatureIds,
                 imageBranchCandidateSnapshot,
+                workspaceContextSnapshot,
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
                 workspaceId: string
@@ -168,6 +169,7 @@ export const aiInteractionSubjects = [
                         videoSourceForExtension,
                         referencedFeatureIds,
                         imageBranchCandidateSnapshot,
+                        workspaceContextSnapshot,
                         eventMeta: {
                             userId,
                             stripeCustomerId,

@@ -164,6 +164,7 @@ export type ImageBranchCandidateSnapshot = {
 export type WorkspaceContextNode = {
     nodeId: string
     type: CanvasNodeType
+    referenceId?: string
     title?: string
     descriptorSummary?: string
     entityTags?: string[]
@@ -181,6 +182,21 @@ export type WorkspaceContextSnapshot = {
     threadId: string
     promptText: string
     nodes: WorkspaceContextNode[]
+}
+
+export type WorkspaceContextSelectionRole = 'forced-chip' | 'forced-edge' | 'auto'
+
+export type WorkspaceContextSelection = {
+    nodeId: string
+    role: WorkspaceContextSelectionRole
+    rationale?: string
+}
+
+export type WorkspaceContextResolution = {
+    resolverVersion: string
+    selections: WorkspaceContextSelection[]
+    improvedDescriptors?: Record<string, ContentDescriptor>
+    narrowedMediaNodeIds: string[]
 }
 
 export type ImageBranchReferenceRole =
@@ -228,6 +244,18 @@ export type ImageBranchResolvedStreamPayload = {
 
 export type ImageBranchResolutionErrorStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
+    aiProvider: string
+    error: string
+}
+
+export type ContextRelevanceResolvedStreamPayload = {
+    status: 'CONTEXT_RELEVANCE_RESOLVED'
+    aiProvider: string
+    workspaceContextResolution: WorkspaceContextResolution
+}
+
+export type ContextRelevanceErrorStreamPayload = {
+    status: 'CONTEXT_RELEVANCE_ERROR'
     aiProvider: string
     error: string
 }
