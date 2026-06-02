@@ -9,6 +9,7 @@ import {
     type StageTraceEvent,
     type StreamStatus,
     type VideoGenerationTrace,
+    type WorkspaceContextResolution,
 } from '@lixpi/constants'
 
 const subject = (workspaceId: string, aiChatThreadId: string): string =>
@@ -28,6 +29,7 @@ export type ChunkPayload = {
         imageModelProvider?: string
         imageModelId?: string
         resolution?: ImageBranchVlmResolution
+        workspaceContextResolution?: WorkspaceContextResolution
         imageGenerationTrace?: ImageGenerationTrace
         videoGenerationTrace?: VideoGenerationTrace
         error?: string
@@ -279,6 +281,28 @@ export class StreamPublisher {
                 status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
                 aiProvider: this.provider,
                 resolution,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
+                aiProvider: this.provider,
+                workspaceContextResolution,
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    contextRelevanceError(message: string): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
+                aiProvider: this.provider,
+                error: message,
             },
             aiChatThreadId: this.aiChatThreadId,
         })

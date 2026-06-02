@@ -441,6 +441,10 @@ function toWorkspaceContextNode(
         isEdgeForced: edgeForcedNodeIds.has(node.nodeId),
     }
 
+    if (node.type === 'document' || node.type === 'aiChatThread') {
+        contextNode.referenceId = node.referenceId
+    }
+
     const title = titlesByNodeId[node.nodeId]?.trim()
     if (title) contextNode.title = title
 
