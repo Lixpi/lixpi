@@ -1,0 +1,14 @@
+{
+    "name": "lixpi-docs-site",
+    "private": true,
+    "type": "module",
+    "version": "0.0.0",
+    "description": "Standalone Markdoc -> HTML renderer for Lixpi documentation. No UI framework; the only runtime dependency is @markdoc/markdoc.",
+    "scripts": {
+        "build": "node build.mjs",
+        "serve": "node build.mjs && node serve.mjs"
+    },
+    "dependencies": {
+        "@markdoc/markdoc": "^0.4.0"
+    }
+}

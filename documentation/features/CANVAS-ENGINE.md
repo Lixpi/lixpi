@@ -1,6 +1,6 @@
 # Canvas Engine
 
-The workspace canvas is a **DOM interaction shell with a PIXI v8 media layer**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The AI Chat panel can be open with zero tabs; its UI state is persisted in canvas state. PIXI v8 owns image pixel rendering, video poster/placeholder rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`; browser-composited DOM video surfaces own completed video playback and controls in the transformed chrome layer; the reusable `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` paints traveling progress outlines.
+The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. The `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack owns rich UI and stateful interactions: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, branch-origin DOM proxies, and handles. The AI Chat panel can be open with zero tabs; its UI state is persisted in canvas state. PIXI v8 owns image pixel rendering, video poster/placeholder rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, marquee/group overlays through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`, and branch-origin circle rendering through `services/web-ui/src/infographics/workspace/rendering/pixiBranchOriginLayer.ts`; browser-composited DOM video surfaces own completed video playback and controls in the transformed chrome layer; the reusable `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts` paints traveling progress outlines.
 
 The canonical architectural rationale lives in `documentation/knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md`. The current path is renderer ownership by workload: DOM owns text-rich controls and interaction structure; PIXI owns high-volume pixels, connector strokes, and canvas chrome.
 
@@ -17,7 +17,7 @@ When working on canvas code, you need to know two libraries:
 
 For the workspace feature itself — node types, stores, services, data flow, architecture diagrams — see `documentation/features/WORKSPACE-FEATURE.md`.
 
-For workspace collision resolution, placement cleanup, and drag-release collision rules, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md).
+For workspace collision resolution, placement cleanup, and drag-release collision rules, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md). For video playback controls, see [VIDEO-PLAYER-CONTROLS.md](VIDEO-PLAYER-CONTROLS.md). For context chips, automatic workspace relevance, and branch-origin provenance, see [WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md](WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md).
 
 ### Canvas implementation code
 
@@ -26,7 +26,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | File | Purpose |
 |------|---------|
 | `workspace/WorkspaceCanvas.ts` | Main canvas orchestrator: DOM nodes, ProseMirror integration, drag/resize/selection, viewport, and PIXI media sync points |
-| `workspace/aiChatPanelState.ts` | Persisted AI Chat panel defaults, legacy-tab migration, and standalone selected-context filtering |
+| `workspace/aiChatPanelState.ts` | Persisted AI Chat panel defaults and context-chip sanitization |
 | `workspace/mediaLibraryPanel.ts` | Framework-agnostic Media Library surface: Feature adapter, saved image/video browsing, scope filters, and insertion actions |
 | `workspace/media-library-panel.scss` | Right-side Media Library layout and full-content wrapping rules |
 | `utils/resolveCollisions.ts` | Shared geometry-agnostic rectangle collision resolver used by workspace insertion, generated image commit, and drag-release cleanup paths |
@@ -37,6 +37,8 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/pixiImageDecodeWorker.ts` | Worker body: `fetch` → `createImageBitmap` and post the bitmap back |
 | `workspace/rendering/pixiEdgeRenderer.ts` | PIXI edge renderer (diffed; reuses `Graphics`) |
 | `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to DOM CSS and PIXI media |
+| `workspace/rendering/branchOrigins.ts` | Pure branch-origin render data, reference lookup, circular hit testing, and culling predicates |
+| `workspace/rendering/pixiBranchOriginLayer.ts` | Pointerless PIXI branch-origin circle layer with viewport-synced world transform, culling, and bounded pulse animation |
 | `workspace/rendering/mediaNodeRegistry.ts` | Dispatches non-image media nodes to specialized handlers; video nodes are handled by `videoNodeHandler.ts` |
 | `workspace/rendering/videoNodeHandler.ts` | Video node renderer that owns PIXI poster/placeholder sprites and the authenticated `HTMLVideoElement` consumed by DOM video chrome |
 | `workspace/workspaceRenderStatePlan.ts` | Pure render-state reconciliation for pending local visual commits while store acknowledgements arrive |
@@ -90,7 +92,12 @@ flowchart TB
             DOC[Document Nodes]
             THR[AI Chat Thread Nodes]
             IMG_DOM[Image Node DOM shells<br/>data-node-id + interaction chrome]
+            BO_DOM[Branch-origin DOM proxies<br/>selection + drag + info]
             HANDLE[Handles, drag overlays, resize handles]
+        end
+        subgraph BranchOriginCanvas[".workspace-pixi-branch-origin-layer (z-index 1, PIXI canvas)"]
+            BO_WORLD[Branch-origin world Container<br/>scale = viewport.zoom<br/>position = viewport.x, y]
+            BO_PIXI[branchOriginLayer<br/>circle strokes + bounded pulse]
         end
         subgraph PixiCanvas[".workspace-pixi-media-layer (z-index 2, PIXI canvas)"]
             WORLD[Pixi world Container<br/>scale = viewport.zoom<br/>position = viewport.x, y]
@@ -106,6 +113,8 @@ flowchart TB
     end
 
     Viewport --> PixiCanvas
+    Viewport --> BranchOriginCanvas
+    BO_WORLD --> BO_PIXI
     WORLD --> EDGE_PIXI
     WORLD --> IMG_SPR
     WORLD --> GEN_BORDER
@@ -113,12 +122,14 @@ flowchart TB
     PixiCanvas --> ImageChrome
 ```
 
-The PIXI media canvas sits **above** the DOM viewport. Generated-image provider badges, info buttons, full-width provenance panels, and completed video DOM surfaces sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform but is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and SVG controls stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
+The PIXI media canvas sits **above** the DOM viewport. Generated-image provider badges, info buttons, full-width provenance panels, and completed video DOM surfaces sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform but is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [VIDEO-PLAYER-CONTROLS.md](VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
 1. They host core interaction chrome — drag overlay and resize handles.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
 
 Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Completed video nodes are the deliberate exception: PIXI renders the poster/placeholder and stable geometry, while the actual MP4 frames come from the visible DOM `<video>` element in chrome. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
+
+Branch-origin nodes split the same way by workload. The visible circle is drawn by `pixiBranchOriginLayer.ts` in a pointerless PIXI layer with its own world container; selection, dragging, info affordance, and click-to-seed-chat behavior use transparent DOM proxies in the viewport.
 
 ### Viewport Bridge
 
@@ -132,13 +143,15 @@ flowchart LR
     VB --> CSS[viewport CSS transform<br/>translate + scale]
     VB --> CHROME[image chrome overlay CSS transform<br/>translate + scale]
     VB --> PIXI[pixiMediaLayer.setViewport]
+    VB --> BO[branchOriginLayer.setViewport]
     PIXI --> WORLD[world.position / world.scale]
+    BO --> BO_WORLD[branch-origin world.position / world.scale]
     PIXI --> VIS[scheduleVisibilityUpdate<br/>rAF-coalesced]
     PIXI --> PRE[schedulePrefetch<br/>idle-coalesced]
     PIXI --> RND[scheduleRender<br/>rAF-coalesced]
 ```
 
-This gives DOM and PIXI a single, consistent transform every frame. There is no second `app.render()` call from elsewhere in the codebase.
+This gives DOM, the media PIXI world, and the branch-origin PIXI world a single, consistent transform every frame. PIXI renders stay owned by their layer schedulers instead of being triggered from unrelated viewport acknowledgement paths.
 
 ### Viewport State Ownership
 
@@ -178,6 +191,8 @@ Regression coverage lives in [workspaceViewportStatePlan.test.ts](../../services
 4. Single `updateVisibleImages()` pass to mark renderable flags and fire texture loads for newly-visible entries.
 5. Schedules an idle prefetch tick.
 6. Schedules a render via rAF.
+
+`pixiBranchOriginLayer.sync(...)` is driven from the same canvas reconciliation points for persisted `branchOrigin` nodes. It receives pure render datums from `branchOrigins.ts`, culls against the current viewport with `settings.branchOrigin.cullingMargin`, and schedules a bounded pulse render only while a circle is active or selected.
 
 ### Render Scheduling
 

@@ -1,0 +1,428 @@
+---
+title: Infrastructure Overview
+description: How Lixpi is deployed to AWS — the Pulumi program, the high-level topology, network layout, the api ECS service, Web UI hosting, and DynamoDB.
+---
+
+# Infrastructure Overview
+
+This page explains how Lixpi is deployed to AWS: how Pulumi provisions the infrastructure, how the topology fits together, how the network is laid out, and how each piece — the `api` service, the Web UI, and DynamoDB — lives inside AWS.
+
+It is the entry point for the deployment domain. The NATS cluster has enough moving parts to deserve its own page; see [NATS Cluster](./NATS-CLUSTER.md). Scaling, environments, and day-to-day operations live in [Scaling & Operations](./SCALING-AND-OPERATIONS.md). For the runtime architecture and service responsibilities, see [System Architecture](../SYSTEM-ARCHITECTURE.md).
+
+## Core Concepts
+
+A handful of building blocks recur throughout the deployment. Understanding them first makes the rest of this domain read quickly.
+
+| Concept | What it is |
+|---------|------------|
+| **Pulumi** | Infrastructure-as-Code tool. Lixpi uses the Pulumi **TypeScript** SDK to describe every AWS resource (VPC, ECS, DynamoDB, CloudFront, Route53, Lambda, IAM, ACM, CloudMap). The Pulumi program itself runs inside a Docker container so developers don't need Pulumi installed locally. |
+| **Stack** | A named Pulumi environment (for example `shelby-dev` or `production`). Each stack has its own state and its own AWS resources. One stack = one full copy of Lixpi. |
+| **ECS on Fargate** | AWS's serverless container runtime. Every Lixpi backend service runs as a Fargate task; there are no EC2 instances to manage. |
+| **CloudMap** | AWS service discovery. NATS servers use a **private** CloudMap namespace to find each other inside the VPC, and a Route53 **public** DNS record (managed by a small Lambda sidecar) so browsers can reach them over the internet. |
+| **CloudFront + S3** | The Web UI is a static SPA built into an S3 bucket and served through a global CloudFront distribution. |
+
+{% callout type="note" %}
+**NATS auth callout.** Instead of storing NATS user credentials, the `api` service acts as a live authorization service: NATS asks the API "can this JWT connect?", the API answers, and NATS enforces the answer. This page only names the mechanism — the conceptual model lives in [Authentication](../AUTHENTICATION.md), and the AWS-specific wiring lives in [NATS Cluster](./NATS-CLUSTER.md).
+{% /callout %}
+
+## High-Level AWS Topology
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
+flowchart TB
+    Browser["🌐 Browser"]
+
+    subgraph Edge["AWS Edge"]
+        CF["CloudFront<br/>(HTTP/3, global CDN)"]
+        R53["Route53<br/>(Hosted Zone)"]
+        ACM["ACM<br/>(TLS for CloudFront)"]
+    end
+
+    subgraph VPC["VPC — 10.0.0.0/16 — 2 AZs"]
+        subgraph Public["Public Subnets"]
+            NATS1["NATS node 1<br/>Fargate"]
+            NATS2["NATS node 2<br/>Fargate"]
+            NATS3["NATS node 3<br/>Fargate"]
+            NAT["NAT Gateway"]
+        end
+
+        subgraph Private["Private Subnets"]
+            API["api service + LLM workflow<br/>Fargate"]
+            CertLambda["cert-manager<br/>Lambda (Caddy)"]
+            Sidecar["nats-sidecar<br/>Lambda"]
+        end
+
+        CM["CloudMap<br/>(private DNS)"]
+    end
+
+    subgraph Storage["AWS Storage & Secrets"]
+        S3["S3<br/>(Web UI bundle)"]
+        DDB[("DynamoDB<br/>14 tables")]
+        SM["Secrets Manager<br/>(TLS certs)"]
+        SSM["SSM Parameter Store"]
+    end
+
+    subgraph External["External"]
+        Auth0["Auth0"]
+        AIProv["AI Providers<br/>OpenAI / Anthropic / Google"]
+    end
+
+    Browser -->|HTTPS| CF
+    CF --> S3
+    R53 -.->|alias| CF
+    ACM -.->|cert| CF
+
+    Browser -->|WSS :443| NATS1
+    Browser -->|WSS :443| NATS2
+    Browser -->|WSS :443| NATS3
+    R53 -.->|A record| NATS1
+    R53 -.->|A record| NATS2
+    R53 -.->|A record| NATS3
+
+    NATS1 <-->|cluster :6222| NATS2
+    NATS2 <-->|cluster :6222| NATS3
+    NATS1 <-->|cluster :6222| NATS3
+    NATS1 -.->|register| CM
+    NATS2 -.->|register| CM
+    NATS3 -.->|register| CM
+
+    API -->|auth callout| NATS1
+    API -->|pub/sub| NATS1
+    API --> DDB
+    API -->|verify JWT| Auth0
+    API --> AIProv
+
+    CertLambda --> SM
+    NATS1 -.->|read cert| SM
+    Sidecar -.->|update A records| R53
+
+    Private --> NAT
+    NAT --> Auth0
+    NAT --> AIProv
+```
+
+| Component | AWS Resource | Purpose |
+|-----------|--------------|---------|
+| `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
+| `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (token streaming, image generation, vendor SDK egress) |
+| `nats` | ECS/Fargate (public subnets, 3 tasks) | Message bus — clients connect directly |
+| `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
+| `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |
+| `DynamoDB` | 14 tables (on-demand) | Application data, with streams on selected tables |
+| `Route53` | Hosted zone | DNS for web UI, API, NATS |
+| `ACM` | Certificate | TLS for CloudFront (web UI) |
+| `Secrets Manager` | Secrets | Stores NATS TLS certs issued by cert-manager |
+| `SSM` | Parameter Store | Cross-stack parameters and config |
+| `CloudMap` | Private namespace | Internal NATS cluster discovery |
+
+## Pulumi: How Infrastructure is Described
+
+The Pulumi program lives in [`infrastructure/pulumi/src/`](../../../infrastructure/pulumi/src/). The entry point is [`pulumiProgram.ts`](../../../infrastructure/pulumi/src/pulumiProgram.ts), which calls resource factories in order.
+
+### Project Layout
+
+```
+infrastructure/pulumi/src/
+  cli.ts                  # yargs CLI: init | up | preview | destroy | ...
+  stackManager.ts         # Wraps @pulumi/pulumi automation API
+  workspace.ts            # Pulumi workspace + AWS config
+  pulumiProgram.ts        # The actual infra program (top-level orchestrator)
+  local-dynamodb-init.ts  # DynamoDB Local bootstrap for dev
+  resources/
+    network.ts            # VPC, subnets, IGW, NAT, route tables
+    ECS-cluster.ts        # Shared Fargate cluster
+    NATS-cluster/         # 3-node NATS cluster + service discovery sidecar
+    main-api-service.ts   # api service (ECS task) — also hosts the LLM workflow in-process
+    web-ui.ts             # S3 + CloudFront distribution
+    db/DynamoDB-tables.ts # 14 DynamoDB tables (shared definitions)
+    dns-records.ts        # Route53 records + hosted zone
+    certificate.ts        # ACM certificate for the web domain
+    certificate-manager/  # Lambda-based Caddy TLS issuer for NATS
+    SSM-parameters.ts     # Cross-stack SSM parameters
+```
+
+### Dockerized Pulumi Runner
+
+Developers never run `pulumi` directly. [`infrastructure/pulumi/Dockerfile`](../../../infrastructure/pulumi/Dockerfile) packages the CLI, AWS tools, and Node runtime. The image mounts the repo, reads the `.env.<name>-<environment>` file, and runs a single command:
+
+```bash
+# Triggered by the top-level shell scripts
+docker run ... lixpi/pulumi up
+```
+
+The CLI supports `init`, `up`, `preview`, `destroy`, `force-destroy`, `clean-ecr`, `refresh`, `outputs`, `list-stacks`, `create-stack`, `remove-stack`, `cancel` — see [`cli.ts`](../../../infrastructure/pulumi/src/cli.ts).
+
+### Local vs AWS Mode
+
+The program inspects `ENVIRONMENT`. When it's `local`, only the DynamoDB tables are created (against DynamoDB Local through a custom provider), and the program returns early. Everything else — VPC, ECS, NATS, certs, CloudFront — is created only when `ENVIRONMENT !== 'local'`.
+
+```typescript
+const DEPLOY_TO_AWS = process.env.ENVIRONMENT !== 'local'
+const USE_LOCAL_DYNAMODB = !DEPLOY_TO_AWS
+// ... create DynamoDB tables (always)
+if (!DEPLOY_TO_AWS) return { dynamoDBtables }
+// ... everything else runs only for real AWS stacks
+```
+
+### Deployment Order
+
+Pulumi figures out the dependency graph automatically, but the program is written in the order that matches the dependency chain. A few edges are explicit via `dependsOn`:
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
+flowchart TB
+    DDB[DynamoDB tables]
+    SSM[SSM parameters]
+    NET[VPC + subnets + NAT + IGW]
+    HZ[Route53 hosted zone]
+    CERT[ACM cert for web domain]
+    CM[CloudMap private namespace]
+    ECS[ECS cluster]
+    PLACE[NATS DNS placeholder 8.8.8.8]
+    CERTMGR[Lambda cert-manager<br/>issues NATS TLS cert]
+    NATS[NATS cluster 3x Fargate]
+    API[api service + LLM workflow]
+    WEB[Web UI — S3 + CloudFront]
+    DNS[Web + www A records]
+
+    DDB --> ECS
+    SSM --> ECS
+    NET --> ECS
+    NET --> CM
+    HZ --> CERT
+    HZ --> PLACE
+    PLACE --> CERTMGR
+    CERTMGR -->|dependsOn| NATS
+    CM --> NATS
+    ECS --> NATS
+    ECS --> API
+    DDB --> API
+    CERT --> WEB
+    WEB --> DNS
+```
+
+The explicit `dependsOn` relationship worth highlighting:
+
+- **NATS depends on cert-manager** — NATS must not start until Caddy has written a valid TLS cert to Secrets Manager, otherwise the cluster boots with self-signed certs and browsers reject the WebSocket handshake.
+
+## Network Layout
+
+[`network.ts`](../../../infrastructure/pulumi/src/resources/network.ts) builds a classic two-AZ VPC:
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
+flowchart LR
+    IGW["Internet Gateway"]
+
+    subgraph AZ1["Availability Zone 1"]
+        PUB1["Public Subnet<br/>10.0.0.0/24"]
+        PRIV1["Private Subnet<br/>10.0.2.0/24"]
+    end
+
+    subgraph AZ2["Availability Zone 2"]
+        PUB2["Public Subnet<br/>10.0.1.0/24"]
+        PRIV2["Private Subnet<br/>10.0.3.0/24"]
+    end
+
+    NAT["NAT Gateway<br/>(in AZ1 public)"]
+
+    IGW --> PUB1
+    IGW --> PUB2
+    PUB1 --> NAT
+    NAT --> PRIV1
+    NAT --> PRIV2
+```
+
+| Subnet | CIDR | What runs there |
+|--------|------|-----------------|
+| Public AZ1 | `10.0.0.0/24` | NATS task, NAT Gateway |
+| Public AZ2 | `10.0.1.0/24` | NATS task |
+| Private AZ1 | `10.0.2.0/24` | api, Lambdas |
+| Private AZ2 | `10.0.3.0/24` | api, Lambdas |
+
+**Why NATS sits in public subnets.** Browsers connect directly to NATS over WebSocket-Secure. Putting NATS tasks in public subnets means each Fargate task gets a routable public IP, and the Lambda sidecar can publish those IPs to Route53.
+
+**Why api sits in private subnets.** It doesn't accept inbound traffic from the internet at all — the only inbound channel is NATS. Outbound traffic (Auth0, OpenAI, Anthropic, Google, Stability) goes through the single NAT Gateway.
+
+## ECS Services: api
+
+The `api` service follows the standard pattern: a Docker image pushed to ECR, a Fargate task definition, an IAM role scoped to the exact resources it needs, CloudWatch logs, and a security group with zero ingress (it only receives work through NATS). It is defined in [`main-api-service.ts`](../../../infrastructure/pulumi/src/resources/main-api-service.ts).
+
+| Service | CPU | Memory | Subnets | Public IP | Inbound | Scale |
+|---------|-----|--------|---------|-----------|---------|-------|
+| `api` | 512 | 1024 MB | Private | no | none | 1 task (configurable) |
+
+The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM workflow (token streaming + image generation + vendor SDK egress) that previously ran in the separate `llm-api` Fargate task.
+
+### Why No Load Balancer?
+
+Because there is nothing to route *to*. The service pulls work off NATS subjects using **queue groups**. When you add a second `api` task, it joins the same queue group, NATS starts distributing messages round-robin across both tasks, and no configuration anywhere else needs to change. This is the "NATS as the backbone" design from [System Architecture](../SYSTEM-ARCHITECTURE.md) taken to its logical conclusion: the load balancer is the message bus.
+
+### Deployment Strategy
+
+The service uses standard rolling deploy settings:
+
+- `deploymentMinimumHealthyPercent: 50` — at least half the desired tasks stay up during a deploy.
+- `deploymentMaximumPercent: 200` — ECS may double the task count briefly to swap in new images.
+- `deploymentCircuitBreaker.enable: true, rollback: true` — if new tasks fail health checks, ECS rolls back automatically.
+- `forceNewDeployment: true` — every `pulumi up` replaces running tasks so new code actually ships.
+
+### IAM Bindings — Principle of Least Privilege
+
+Each service gets a `taskRole` with only the permissions it actually needs:
+
+- `api` — DynamoDB R/W on its bound tables, SSM read, CloudWatch Logs write. AI provider keys (OpenAI, Anthropic, Google, Stability) are passed via env vars; egress to vendor APIs flows through the NAT Gateway.
+- `nats` — CloudWatch Logs + Secrets Manager read (for the TLS cert). Nothing else.
+
+{% callout type="note" %}
+**Historical note.** The previous architecture split AI orchestration into a separate `llm-api` Fargate task with its own narrower IAM role (no DynamoDB) so a compromise of the LLM container couldn't touch user data. After the migration to in-process LangGraph TS, the API container is the trust boundary for both. If that trade-off becomes a concern, the LLM module's `getSubscriptions()` surface lets it be hosted by a separate `llm-workers` ECS service running the same image with a narrower IAM role; the in-process auth callout would register `svc:llm-workers` as a NATS internal service. See [`services/api/src/llm/README.md`](../../../services/api/src/llm/README.md).
+{% /callout %}
+
+## Web UI Deployment
+
+[`web-ui.ts`](../../../infrastructure/pulumi/src/resources/web-ui.ts) treats the SPA as static assets, not a running service:
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
+sequenceDiagram
+    participant Pulumi
+    participant Docker
+    participant S3
+    participant CF as CloudFront
+    participant R53 as Route53
+
+    rect rgb(220, 236, 233)
+        Note over Pulumi, R53: PHASE 1 - BUILD — Run Vite build in a container
+        Pulumi->>Docker: docker build web-ui image with VITE_* env
+        activate Docker
+        Docker->>Docker: pnpm run build → dist/
+        Docker-->>Pulumi: dist/ extracted
+        deactivate Docker
+    end
+
+    rect rgb(195, 222, 221)
+        Note over Pulumi, R53: PHASE 2 - UPLOAD
+        Pulumi->>S3: aws s3 sync dist/ s3://bucket --delete
+        activate S3
+        S3-->>Pulumi: ok
+        deactivate S3
+    end
+
+    rect rgb(242, 234, 224)
+        Note over Pulumi, R53: PHASE 3 - PUBLISH
+        Pulumi->>CF: Distribution (HTTP/3, global edge, SPA fallback)
+        activate CF
+        Pulumi->>R53: Alias A records for apex + www
+        Pulumi->>CF: create-invalidation /*
+        CF-->>Pulumi: propagated
+        deactivate CF
+    end
+```
+
+Some things to note:
+
+- **403 and 404 → index.html with 200** — this turns CloudFront into a proper SPA host; client-side routing handles deep links.
+- **HTTP/3 + `PriceClass_All`** — edge locations worldwide, with the latest protocol for low-latency connections.
+- **`VITE_NATS_SERVER` is baked at build time** — the SPA knows which NATS cluster to connect to from the HTML it was served.
+
+## DynamoDB
+
+[`db/DynamoDB-tables.ts`](../../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) defines 14 tables through a single shared table-definition function (`getTableDefinitions()`). The same definitions are reused by [`local-dynamodb-init.ts`](../../../infrastructure/pulumi/src/local-dynamodb-init.ts) to bootstrap DynamoDB Local for development, so local and cloud schemas can never drift.
+
+Highlights:
+
+| Table | Hash / Range | Indexes | Notes |
+|-------|--------------|---------|-------|
+| `USERS` | `userId` | — | |
+| `WORKSPACES` / `WORKSPACES_META` | `workspaceId` | — | Split for hot canvas state vs cold meta |
+| `WORKSPACES_ACCESS_LIST` | `userId / workspaceId` | LSI on createdAt, updatedAt | |
+| `DOCUMENTS` | `documentId / revision` | GSI on `workspaceId`, TTL `revisionExpiresAt` | Versioned documents |
+| `AI_CHAT_THREADS` | `workspaceId / threadId` | LSI on createdAt | Threads scoped per workspace |
+| `AI_TOKENS_USAGE_TRANSACTIONS` | `userId / transactionProcessedAt` | LSI x4 (document, model, org, formatted date) | Usage ledger |
+| `FINANCIAL_TRANSACTIONS` | `userId / transactionId` | LSI on status, createdAt, provider | Billing |
+| `AI_MODELS_LIST` | `provider / model` | — | Provider/model registry |
+
+All real-AWS stacks enable DynamoDB **streams** with `NEW_AND_OLD_IMAGES` (skipped only for local DynamoDB). **Deletion protection** is additionally enabled on production stacks only.
+
+## How Services Communicate — End to End
+
+This is the per-request picture for an AI chat message, showing every hop on AWS. It's a concrete version of the abstract diagram in [System Architecture](../SYSTEM-ARCHITECTURE.md), with the infrastructure pieces filled in.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
+sequenceDiagram
+    participant Browser
+    participant CF as CloudFront
+    participant R53 as Route53
+    participant NATS as NATS (Fargate)
+    participant API as api + LLM workflow (Fargate)
+    participant DDB as DynamoDB
+    participant AI as AI Provider
+
+    rect rgb(220, 236, 233)
+        Note over Browser, AI: PHASE 1 - BOOTSTRAP — Load the SPA
+        Browser->>CF: GET {domain} (or www.{domain})
+        activate CF
+        CF-->>Browser: index.html + JS bundle (edge cached)
+        deactivate CF
+    end
+
+    rect rgb(195, 222, 221)
+        Note over Browser, AI: PHASE 2 - AUTH + CONNECT
+        Browser->>R53: Resolve nats.{domain}
+        activate R53
+        R53-->>Browser: public IPs of NATS tasks
+        deactivate R53
+        Browser->>NATS: WSS :443 with JWT
+        activate NATS
+        NATS->>API: Auth callout over $SYS.REQ.USER.AUTH
+        activate API
+        API-->>NATS: Signed permissions
+        deactivate API
+        NATS-->>Browser: Connected
+    end
+
+    rect rgb(242, 234, 224)
+        Note over Browser, AI: PHASE 3 - REQUEST — Send a chat message
+        Browser->>NATS: publish ai.interaction.chat.sendMessage
+        NATS->>API: route to api queue group
+        activate API
+        API->>DDB: Load AI model metadata + workspace context
+        activate DDB
+        DDB-->>API: records
+        deactivate DDB
+        API->>API: llmModule.process() — invoke LangGraph workflow in-process
+    end
+
+    rect rgb(246, 199, 179)
+        Note over Browser, AI: PHASE 4 - LLM WORK
+        API->>AI: Streamed completion request via vendor SDK
+        activate AI
+    end
+
+    rect rgb(200, 220, 228)
+        Note over Browser, AI: PHASE 5 - STREAM BACK
+        loop Token Streaming
+            AI-->>API: chunk
+            API->>NATS: publish receiveMessage.{workspaceId}.{threadId}
+            NATS-->>Browser: chunk
+        end
+        deactivate AI
+        deactivate API
+        deactivate NATS
+    end
+```
+
+Two things to note:
+
+1. **Stream tokens flow directly from API to NATS.** The API does the setup work (DynamoDB lookup, context enrichment, auth) then runs the LangGraph workflow in-process and publishes tokens to a subject the browser is already subscribed to. Streaming latency is dominated by the AI provider, not by Lixpi's infrastructure.
+2. **Scale-out is drop-in.** Add a second `api` task and NATS starts splitting `ai.interaction.chat.sendMessage` messages between the two workers automatically. No load balancer config to update.
+
+## Related Pages
+
+| Page | What it covers |
+|------|----------------|
+| [NATS Cluster](./NATS-CLUSTER.md) | The NATS cluster internals: ports, CloudMap discovery, the Lambda sidecar for public access, Caddy-in-Lambda TLS, and the auth-callout security boundary |
+| [Scaling & Operations](./SCALING-AND-OPERATIONS.md) | Horizontal scaling, capacity ceilings, failure modes, environments and stacks, operational workflow, and observability |
+| [System Architecture](../SYSTEM-ARCHITECTURE.md) | The runtime architecture, queue groups, subject conventions, and design decisions |
+| [Authentication](../AUTHENTICATION.md) | The conceptual dual-auth model and the NATS auth callout |
