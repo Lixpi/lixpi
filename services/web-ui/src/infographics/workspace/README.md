@@ -7,6 +7,8 @@ This module renders the main workspace view-a zoomable, pannable canvas where do
 > - For the rendering architecture (DOM interaction layer + PIXI v8 media/edge layers), the LoD-tier loader, the texture cache, the 6-worker decode pool, and the list of remaining performance issues, read [`documentation/features/CANVAS-ENGINE.md`](../../../../../documentation/features/CANVAS-ENGINE.md). That document is the source of truth for any rendering or perf work.
 > - For collision resolution, viewport-centered insertion cleanup, and drag-release collision rules, read [`documentation/features/CANVAS-COLLISION-RESOLUTION.md`](../../../../../documentation/features/CANVAS-COLLISION-RESOLUTION.md).
 > - For workspace data flow (stores, services, NATS subjects, AI chat context extraction, image generation, and video generation), read [`documentation/features/WORKSPACE-FEATURE.md`](../../../../../documentation/features/WORKSPACE-FEATURE.md).
+> - For the shared canvas and in-chat video control bar, read [`documentation/features/VIDEO-PLAYER-CONTROLS.md`](../../../../../documentation/features/VIDEO-PLAYER-CONTROLS.md).
+> - For context chips, automatic workspace relevance, reference-vs-lineage rules, and branch-origin provenance, read [`documentation/features/WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md`](../../../../../documentation/features/WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md).
 > - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
 
 > **Configuration rule.** Workspace-canvas values that are meant to be tuned - colors, shadows, dimensions, gaps, hit radii, resize cursor activation areas, animation timing, behavior flags, and generated-image placement spacing - belong in [`settings.ts`](../../settings.ts). Keep them in logical top-level subsections such as `aiChatThread`, `connector`, `imageNode`, and `imageBranchLineage`; use nested subsections for child domains such as `aiChatThread.rail`; separate every group with a blank line before and after; and document every key with what changing it does. Use getters only when a setting needs to self-reference sibling settings through `this`; keep ordinary static values as plain properties.
@@ -362,9 +364,10 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 Standalone chat tabs use the panel's context chips as explicit forced context. Chips are resolved through the existing extraction service, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the panel adds distinct ephemeral auto chips for non-explicit selections and patches any `improvedDescriptors` into local canvas state so descriptor chrome updates without a reload.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-    DOC[Document Node] -->|selected or upstream| CTX[ExtractedContext]
-    IMG[Image Node] -->|selected or upstream| CTX
+    DOC[Document Node] -->|explicit chip| CTX[ExtractedContext]
+    IMG[Image Node] -->|explicit chip| CTX
     VID[Video Node] -->|representative still| CTX
     CHAT[Canvas AI Chat Panel] -->|context chips| CTX
     CHAT -->|WorkspaceContextSnapshot| SNAP[Descriptor Index]

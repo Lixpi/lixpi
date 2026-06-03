@@ -1,6 +1,6 @@
 # Video Generation (Google VEO 3)
 
-The platform generates short video clips with synchronized audio using the same dual-model architecture that powers [image generation](IMAGE-GENERATION.md). A **text model** (Claude, GPT, Gemini) analyzes the request, writes a cinematic enhanced prompt, and emits a `generate_video` tool call; the workflow routes that prompt to a selected **video model** (Google VEO 3 / 3.1) which produces an MP4. The finished clip lands on the workspace canvas as a new, playable `VideoCanvasNode` that can be piped into downstream AI threads as context — the same "artifact piping" the canvas provides for images.
+The platform generates short video clips with synchronized audio using the same dual-model architecture that powers [image generation](IMAGE-GENERATION.md). A **text model** (Claude, GPT, Gemini) analyzes the request, writes a cinematic enhanced prompt, and emits a `generate_video` tool call; the workflow routes that prompt to a selected **video model** (Google VEO 3 / 3.1) which produces an MP4. The finished clip lands on the workspace canvas as a new, playable `VideoCanvasNode` that can be piped into downstream AI threads as context, participate in workspace relevance, and continue generated branch lineage.
 
 Video **extends** the image pipeline rather than replacing it. It adds a sibling branch to the shared LangGraph workflow, a `generate_video` tool mirroring `generate_image`, a `VideoRouter` mirroring `ImageRouter`, and a `VideoPublisher` mirroring `ImagePublisher`. The one place it cannot mirror image generation is **execution**: VEO is long-running and asynchronous (submit → poll an operation until done, ≈11s–6min, with no partial frames), so the progressive `IMAGE_PARTIAL` streaming model is replaced by a placeholder + keepalive + `VIDEO_COMPLETE` model.
 
@@ -12,11 +12,13 @@ Video **extends** the image pipeline rather than replacing it. It adds a sibling
 
 **Asynchronous Execution, Run In-Request** — `client.models.generateVideos(...)` returns an operation; the provider polls `client.operations.getVideosOperation(...)` until `operation.done`, then downloads the MP4. This submit+poll loop runs **synchronously inside the existing LangGraph request**, reusing the in-process model + `AbortController` + circuit breaker (`LLM_TIMEOUT_MS`, default 20 min). Because the request now occupies a worker for minutes with no token traffic, the poll loop publishes a `VIDEO_GENERATING` keepalive every `VEO_POLL_INTERVAL_MS` (default 10s) so the browser never looks frozen.
 
+**Descriptor-First Workspace Relevance** — Video turns run `resolveWorkspaceContext` before feature resolution and branch routing. Explicit chips and edge-connected nodes are force-included, automatic selections appear as auto chips, and the narrowed media set is what the VLM branch resolver sees.
+
 **VLM-Grounded References** — VEO's headline capability is character consistency via image-to-video. Video reuses the structured VLM resolver (`resolveImageBranch`) that image generation uses to answer "which connected pixels does *that character* mean?" The resolver's gate is generalized to run whenever an image **or** video model is selected, and its output is mapped onto VEO inputs.
 
-**Browser-Composited Playback** — A finished video plays inline on the canvas through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer. PIXI still owns the frame-0 poster/placeholder behind the node for stable canvas geometry and initial paint, but completed playback, seeking, PiP, fullscreen, and scrubbing are driven by the browser-composited element. This avoids a PIXI `VideoSource` frame loop fighting the edge renderer and connector canvas.
+**Browser-Composited Playback** — A finished video plays inline on the canvas through a visible DOM `<video>` element that `WorkspaceCanvas.ts` moves into the transformed video chrome layer. PIXI still owns the frame-0 poster/placeholder behind the node for stable canvas geometry and initial paint, but completed playback, seeking, PiP, fullscreen, and scrubbing are driven by the browser-composited element. This avoids a PIXI `VideoSource` frame loop fighting the edge renderer and connector canvas. See [VIDEO-PLAYER-CONTROLS.md](VIDEO-PLAYER-CONTROLS.md) for the shared SVG control bar.
 
-**New `VideoCanvasNode` Type** — Generated videos persist as a new discriminated member of the `CanvasNode` union (`type: 'video'`), alongside `image`, `document`, and `aiChatThread`. There is no new database table — like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
+**New `VideoCanvasNode` Type** — Generated videos persist as a discriminated member of the `CanvasNode` union (`type: 'video'`), alongside `image`, `document`, `aiChatThread`, and `branchOrigin`. There is no new database table; like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
 
 ## System Architecture
 
@@ -34,6 +36,7 @@ flowchart TB
     subgraph Backend["API Service (in-process LLM)"]
         Gateway[ai-interaction-subjects<br/>resolve videoModelMetaInfo]
         Graph[BaseProvider<br/>LangGraph workflow]
+        Relevance[resolveWorkspaceContext<br/>descriptor relevance]
         Resolver[image-branch-resolver<br/>structured VLM]
         TextModel[Text Model Provider<br/>generate_video tool call]
         VRouter[VideoRouter<br/>transient VEO provider]
@@ -54,7 +57,8 @@ flowchart TB
 
     Input -->|NATS: CHAT_SEND_MESSAGE + aiVideoModel| Gateway
     Gateway --> Graph
-    Graph --> Resolver
+    Graph --> Relevance
+    Relevance --> Resolver
     Resolver --> TextModel
     TextModel -->|generatedVideoPrompt| VRouter
     VRouter --> VEO
@@ -73,12 +77,15 @@ flowchart TB
 
 ## LangGraph State Machine
 
-Every provider (Anthropic, OpenAI, Google) shares the same LangGraph workflow defined in `BaseProvider` (`services/api/src/llm/providers/base-provider.ts`). Image generation already added one conditional branch; video adds a second. After `streamTokens`, a single 3-way router (`routeAfterStream`) sends the request down the image branch, the video branch, or straight to usage.
+Every provider (Anthropic, OpenAI, Google) shares the same LangGraph workflow defined in `BaseProvider` (`services/api/src/llm/providers/base-provider.ts`). Workspace relevance, feature resolution, and branch resolution run before the text model streams. Image generation already added one conditional branch; video adds a second. After `streamTokens`, a single 3-way router (`routeAfterStream`) sends the request down the image branch, the video branch, or straight to usage.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 stateDiagram-v2
-    [*] --> validateRequest
+    [*] --> resolveWorkspaceContext
+    resolveWorkspaceContext --> resolveFeatures
+    resolveFeatures --> resolveImageBranch
+    resolveImageBranch --> validateRequest
     validateRequest --> streamTokens
 
     streamTokens --> executeVideoGeneration: generatedVideoPrompt is set
@@ -95,11 +102,21 @@ stateDiagram-v2
     cleanup --> [*]
 ```
 
-`resolveFeatures` and `resolveImageBranch` run ahead of `streamTokens` (omitted above for clarity). Note that the video branch has **no** validate-prompt node — VEO prompts have no strict character limit, so unlike images there is no prompt-rewrite/validation step.
+The video branch has **no** validate-prompt node; VEO prompts have no strict character limit, so unlike images there is no prompt-rewrite/validation step.
 
 ### State (`ProviderState`)
 
 The video fields mirror the image fields and use the same "keep if undefined" channel reducers (`services/api/src/llm/graph/state.ts`). The VLM branch resolution is **shared** with image generation, so there is no separate video resolution field.
+
+Shared fields used by video turns:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `workspaceContextSnapshot` | `WorkspaceContextSnapshot?` | Descriptors-only workspace index used to rank relevant nodes and narrow media candidates |
+| `workspaceContextResolution` | `WorkspaceContextResolution?` | Selected context nodes, improved descriptors, and narrowed media IDs |
+| `imageBranchCandidateSnapshot` | `ImageBranchCandidateSnapshot?` | Image/video still candidates consumed by the shared structured VLM resolver |
+
+Video-specific fields:
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -119,6 +136,12 @@ The video fields mirror the image fields and use the same "keep if undefined" ch
 
 ### Workflow Nodes
 
+**`resolveWorkspaceContext`** — Ranks the descriptors-only workspace snapshot, force-includes explicit chips and edge-connected nodes, repairs weak descriptors once, streams context relevance feedback, and narrows the media set for VLM branch routing.
+
+**`resolveFeatures`** — Resolves `/use` feature references before branch routing.
+
+**`resolveImageBranch`** — Uses the shared structured VLM resolver to choose first-frame, reference, style, comparison, and excluded media roles from the narrowed image/video still candidates.
+
 **`streamTokens`** — Runs the text model. When a video model is selected, the `generate_video` tool is injected and `video_generation_instructions.txt` is appended to the system prompt. If the model emits a `generate_video` tool call, the provider sets `state.generatedVideoPrompt`.
 
 **`routeAfterStream`** — The post-stream conditional. `generatedVideoPrompt` → `generate_video`; else `generatedImagePrompt` → `generate_image`; else `skip`. A video tool call takes precedence; the model normally emits at most one media tool call per turn.
@@ -137,6 +160,7 @@ sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas
     participant NATS
+    participant Graph as LangGraph Workflow
     participant TextModel as Text Model Provider
     participant Router as VideoRouter
     participant VEO as GoogleProvider (VEO)
@@ -146,14 +170,18 @@ sequenceDiagram
     %% PHASE 1: REQUEST + VLM RESOLUTION
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
-        Note over User, VeoApi: PHASE 1 - REQUEST — User submits with a video model; gateway resolves it, VLM grounds references
+        Note over User, VeoApi: PHASE 1 - REQUEST + RELEVANCE — User submits with a video model; workspace relevance narrows context, VLM grounds references
         User->>Canvas: "animate this fox…" + Veo 3, 16:9 / 720p / 8s
         activate Canvas
-        Canvas->>NATS: CHAT_SEND_MESSAGE { aiVideoModel, video params, candidate snapshot }
+        Canvas->>NATS: CHAT_SEND_MESSAGE { aiVideoModel, video params, workspace + candidate snapshots }
         deactivate Canvas
-        NATS->>TextModel: resolve videoModelMetaInfo, run resolveImageBranch (VLM)
-        activate TextModel
-        Note over TextModel: VLM picks the fox as first frame<br/>IMAGE_BRANCH_RESOLVED streamed to browser
+        NATS->>Graph: resolve videoModelMetaInfo, invoke workflow
+        activate Graph
+        Graph->>Graph: resolveWorkspaceContext
+        Graph->>NATS: CONTEXT_RELEVANCE_RESOLVED
+        Graph->>Graph: resolveFeatures + resolveImageBranch
+        Graph->>NATS: IMAGE_BRANCH_RESOLVED
+        Note over Graph: VLM picks the fox as first frame
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -161,10 +189,13 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
         Note over User, VeoApi: PHASE 2 - TEXT MODEL — Writes a cinematic prompt and emits the generate_video tool call
+        Graph->>TextModel: streamTokens with selected references
+        activate TextModel
         TextModel->>NATS: text chunks (enhanced prompt in <video_prompt> tags)
         TextModel->>TextModel: detect generate_video tool call → generatedVideoPrompt
-        TextModel->>Router: executeVideoGeneration → runVideoRouter(state)
+        TextModel-->>Graph: generatedVideoPrompt
         deactivate TextModel
+        Graph->>Router: executeVideoGeneration → runVideoRouter(state)
         activate Router
         Router->>NATS: VIDEO_GENERATION_TRACE
     end
@@ -197,6 +228,8 @@ sequenceDiagram
         VEO->>NATS: store MP4 + poster (Object Store), then VIDEO_COMPLETE
         deactivate VEO
         deactivate Router
+        Graph->>Graph: calculateUsage + cleanup
+        deactivate Graph
         NATS->>Canvas: upgrade node → poster + MP4; remove outline
     end
 
@@ -356,9 +389,11 @@ A new member of the `CanvasNode` union (`packages/lixpi/constants/ts/types.ts`).
 | `hasAudio` | `boolean` | VEO 3 generates audio by default |
 | `position` / `dimensions` | `{x,y}` / `{w,h}` | Canvas geometry |
 | `generatedBy` | `VideoGeneratedByMetadata?` | Provenance + branch lineage (mirrors `ImageGeneratedByMetadata`, adds `videoModel`, `resolution`, `durationSeconds`, `veoOperationName`, `sourceVideoNodeId`) |
-| `descriptor` | `MediaDescriptor?` | Compact summary + entity/style tags (see [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md)); derived for free from `generatedBy` for generated video |
+| `descriptor` | `MediaDescriptor?` (`ContentDescriptor` alias) | Compact summary + entity/style tags (see [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md)); derived for free from `generatedBy` for generated video |
 
 ### Playback (`videoNodeHandler.ts` + `WorkspaceCanvas.ts`)
+
+The shared player-control surface is documented in [VIDEO-PLAYER-CONTROLS.md](VIDEO-PLAYER-CONTROLS.md). This section covers how video generation hands completed MP4s to that playback stack.
 
 The handler is registered through the `mediaNodeRegistry` and dispatched by `pixiMediaLayer`, but playback is split by renderer responsibility:
 
@@ -373,7 +408,7 @@ This split is deliberate. Hidden video elements can be throttled by the browser,
 
 ### Lifecycle & bubble menu
 
-On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a placeholder `VideoCanvasNode` near the source region with a traveling progress outline; on `VIDEO_COMPLETE` it upgrades the node to poster + MP4 with `generatedBy` lineage and removes the outline; on `VIDEO_ERROR` it cleans up. The in-chat `aiGeneratedVideoNode` mirrors the generated-image node, showing pending / keepalive / playable / error states while the `<video_prompt>` text streams. The canvas bubble menu exposes a `CANVAS_VIDEO_CONTEXT` with **Add to Media Library**, **Extend video in new thread**, **Connect** (shared with images), and **Delete video**.
+On `VIDEO_PENDING`, `WorkspaceCanvas` (`setAiGeneratedVideoCallbacks`) drops a placeholder `VideoCanvasNode` near the verified lineage source or reference group with a traveling progress outline; on `VIDEO_COMPLETE` it upgrades the node to poster + MP4 with `generatedBy` lineage and removes the outline; on `VIDEO_ERROR` it cleans up. Reference/style media can anchor placement and animate while generation prepares, but they do not become connector parents unless the resolver verified a real branch continuation. The in-chat `aiGeneratedVideoNode` mirrors the generated-image node, showing pending / keepalive / playable / error states while the `<video_prompt>` text streams. The canvas bubble menu exposes a `CANVAS_VIDEO_CONTEXT` with **Add to Media Library**, **Extend video in new thread**, **Connect** (shared with images), and **Delete video**.
 
 ## Model Sync & Pricing
 
@@ -422,7 +457,7 @@ A completed `VideoCanvasNode` can be continued: the bubble-menu **Extend video i
 | Canvas playback | static texture | PIXI poster behind browser-composited `<video>` + SVG controls |
 | Model selection | auto-selects a default | opt-in (placeholder until chosen) |
 
-Branch lineage, canvas positioning/collision, the generation-trace meta-info (in-chat collapsible + canvas info panel), and media descriptors are **shared**, not differences: video reuses the same candidate snapshot, `getGeneratedChildOutputs` positioning, collision cleanup pass, `createImageGenerationTraceDetails` renderer, and `MediaDescriptor` as images. A video candidate simply contributes its mid-frame still instead of a full image. See [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md), [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md), and [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md).
+Branch lineage, branch-origin provenance, canvas positioning/collision, the generation-trace meta-info (in-chat collapsible + canvas info panel), playback controls, and descriptors are **shared**, not differences: video reuses workspace relevance, the same candidate snapshot path, `getGeneratedChildOutputs` positioning, collision cleanup pass, `createImageGenerationTraceDetails` renderer, `components/videoControls`, and the `MediaDescriptor`/`ContentDescriptor` shape used by images. A video candidate simply contributes its mid-frame still instead of a full image. See [WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md](WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md), [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md), [VIDEO-PLAYER-CONTROLS.md](VIDEO-PLAYER-CONTROLS.md), [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md), and [MEDIA-DESCRIPTORS.md](MEDIA-DESCRIPTORS.md).
 
 ## File Structure
 
@@ -441,6 +476,7 @@ services/api/src/
 │   │   └── video-generation-trace.ts # VIDEO_GENERATION_TRACE builder
 │   ├── graph/
 │   │   ├── state.ts                  # ProviderState video fields + VideoUsage
+│   │   ├── workspace-context-resolver.ts # descriptor relevance + self-heal
 │   │   ├── video-publisher.ts        # VIDEO_PENDING/GENERATING/COMPLETE/ERROR, MP4 validation
 │   │   ├── image-branch-resolver.ts  # VLM gate generalized to video; VEO ref mapping
 │   │   └── stream-publisher.ts       # videoGenerationTrace()

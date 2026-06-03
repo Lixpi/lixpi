@@ -130,7 +130,7 @@ graph LR
 
 **Progressive streaming**: An animated placeholder appears immediately when generation starts (`IMAGE_PARTIAL` with empty data). Up to 3 progressively sharper partial previews update the canvas node in real-time. The final high-resolution image replaces them (`IMAGE_COMPLETE`). All images are stored in NATS JetStream Object Store with SHA-256 content-hash deduplication.
 
-**Placement**: Generated images appear as separate canvas nodes connected back to the source thread/response by an edge. The retired overlapping-thread placement prototype is archived in [ANCHORED-GENERATED-IMAGES.md](unused-but-learned-lessons/ANCHORED-GENERATED-IMAGES.md).
+**Placement**: Generated images appear as separate canvas nodes connected back to the source thread/response by an edge. The retired overlapping-thread placement prototype is archived in [ANCHORED-GENERATED-IMAGES.md](knowledge/archive/ANCHORED-GENERATED-IMAGES.md).
 
 **Multi-turn editing**: "Edit in New Thread" creates a fresh AI thread pre-linked to the image, carrying OpenAI's `previousResponseId` for fidelity continuity. The AI remembers the exact image it generated and can make targeted modifications without regenerating from scratch. Users can branch at any point — editing the same image in multiple directions simultaneously.
 

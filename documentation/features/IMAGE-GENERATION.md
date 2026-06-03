@@ -8,11 +8,13 @@ The platform supports AI-powered image generation through a dual-model architect
 
 **Tool Calling** — The text model doesn't generate images directly. Instead, it calls a `generate_image` function tool with its enhanced prompt. LangGraph's conditional edges detect this tool call and route execution to the ImageRouter.
 
-**Reference Images** — When users attach photos to their message, these reference images are extracted from the conversation and forwarded to the image model. For OpenAI GPT Image models, this means using `images.edit()` (which accepts reference images) instead of `images.generate()` (text-only).
+**Reference Images** — When users attach photos, add context chips, or rely on automatic workspace relevance, selected media can become references for the image model. Workspace relevance narrows the media set first, then the structured VLM branch resolver decides which media are target, base-context, style-reference, comparison-target, or excluded. For OpenAI GPT Image models, references use `images.edit()` (which accepts reference images) instead of `images.generate()` (text-only).
 
 **System Prompt Enhancement** — When an image model is selected, the text model's system prompt is augmented with detailed instructions on how to craft image prompts, how to describe reference images, and the requirement to show the enhanced prompt to the user in a quote block.
 
 **Stream Lifecycle Management** — When the image model is called via ImageRouter, it must not emit its own `START_STREAM`/`END_STREAM` events — the text model already manages the stream lifecycle. The image model only publishes `IMAGE_PARTIAL` and `IMAGE_COMPLETE` events.
+
+**Canvas Placement and Provenance** — Generated image placeholders and final nodes are placed through the branch-lineage path documented in [IMAGE-BRANCH-LINEAGE.md](IMAGE-BRANCH-LINEAGE.md). New branches persist one branch-origin circle with the starting prompt and references; reference/style images are context and placement anchors, not lineage parents by themselves. See [WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md](WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md).
 
 ## System Architecture
 
@@ -34,6 +36,9 @@ flowchart TB
         end
 
         subgraph Workflow["LangGraph Workflow"]
+            Relevance[resolveWorkspaceContext]
+            Features[resolveFeatures]
+            Branch[resolveImageBranch]
             Validate[validate_request]
             Stream[stream_tokens]
             Condition{generated_image_prompt?}
@@ -60,7 +65,10 @@ flowchart TB
 
     Input -->|NATS: CHAT_SEND_MESSAGE| Backend
     Backend --> Providers
-    Providers --> Validate
+    Providers --> Relevance
+    Relevance --> Features
+    Features --> Branch
+    Branch --> Validate
     Validate --> Stream
     Prompts -.-> Stream
     ToolDef -.-> Stream
@@ -82,12 +90,15 @@ flowchart TB
 
 ## LangGraph State Machine
 
-Every provider (Anthropic, OpenAI, Google) shares the same LangGraph workflow defined in `BaseProvider`. The workflow is a state machine that processes each request through shared resolver, streaming, media-routing, usage, and cleanup nodes. This page focuses on the image branch.
+Every provider (Anthropic, OpenAI, Google) shares the same LangGraph workflow defined in `BaseProvider`. The workflow is a state machine that processes each request through workspace context relevance, feature resolution, branch resolution, streaming, media routing, usage, and cleanup nodes. This page focuses on the image branch.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 stateDiagram-v2
-    [*] --> validate_request
+    [*] --> resolveWorkspaceContext
+    resolveWorkspaceContext --> resolveFeatures
+    resolveFeatures --> resolveImageBranch
+    resolveImageBranch --> validate_request
     validate_request --> stream_tokens
 
     stream_tokens --> execute_image_generation: generated_image_prompt is set
@@ -106,6 +117,9 @@ The LangGraph state is a `TypedDict` that flows through every node. Key fields f
 | Field | Type | Purpose |
 |-------|------|---------|
 | `messages` | `list` | Raw conversation messages from frontend (OpenAI-like `input_image` blocks) |
+| `workspaceContextSnapshot` | `WorkspaceContextSnapshot?` | Descriptors-only workspace index used by `resolveWorkspaceContext` |
+| `workspaceContextResolution` | `WorkspaceContextResolution?` | Selected context nodes, improved descriptors, and narrowed media IDs |
+| `imageBranchCandidateSnapshot` | `ImageBranchCandidateSnapshot?` | Media candidates narrowed by workspace relevance before structured VLM role assignment |
 | `model_version` | `str` | Text model ID (e.g., `claude-sonnet-4-20250514`) |
 | `enable_image_generation` | `bool` | `True` when called as image model by ImageRouter |
 | `image_model_version` | `str` | Selected image model ID (e.g., `gpt-image-1.5`) |
@@ -117,6 +131,12 @@ The LangGraph state is a `TypedDict` that flows through every node. Key fields f
 | `image_usage` | `dict` | Image generation usage stats for billing |
 
 ### Workflow Nodes
+
+**`resolveWorkspaceContext`** — Ranks the descriptors-only workspace snapshot, force-includes explicit chips and edge-connected nodes, repairs weak descriptors once, streams context relevance feedback, and narrows the media set for branch resolution.
+
+**`resolveFeatures`** — Resolves `/use` feature references before branch routing.
+
+**`resolveImageBranch`** — Uses the structured VLM resolver to assign visual roles to the narrowed candidate media set.
 
 **`validate_request`** — Validates required fields, extracts model metadata.
 
@@ -146,10 +166,10 @@ sequenceDiagram
     %% PHASE 1: USER REQUEST
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
-        Note over User, ImgModel: PHASE 1 - USER REQUEST — User sends message with optional reference images
+        Note over User, ImgModel: PHASE 1 - USER REQUEST — User sends message with optional references or context chips
         User->>Frontend: "Draw a watercolor of my friend" + photo attachments
         activate Frontend
-        Frontend->>NATS: CHAT_SEND_MESSAGE { messages, aiModel, imageModel }
+        Frontend->>NATS: CHAT_SEND_MESSAGE { messages, aiModel, imageModel, context snapshots }
         deactivate Frontend
     end
 
@@ -157,8 +177,13 @@ sequenceDiagram
     %% PHASE 2: TEXT MODEL GENERATES ENHANCED PROMPT
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
-        Note over User, ImgModel: PHASE 2 - TEXT MODEL — Analyzes request + reference images, crafts detailed prompt
-        NATS->>TextModel: Route to provider
+        Note over User, ImgModel: PHASE 2 - RELEVANCE + TEXT MODEL — Narrows workspace context, then crafts enhanced prompt
+        NATS->>LangGraph: Route to provider workflow
+        activate LangGraph
+        LangGraph->>LangGraph: resolveWorkspaceContext
+        LangGraph->>LangGraph: resolveFeatures
+        LangGraph->>LangGraph: resolveImageBranch
+        LangGraph->>TextModel: streamTokens with selected references
         activate TextModel
         TextModel->>TextModel: Inject generate_image tool definition
         TextModel->>TextModel: Augment system prompt with image instructions
@@ -207,6 +232,7 @@ sequenceDiagram
         Note over User, ImgModel: PHASE 5 - COMPLETION — Finalize stream and report usage
         TextModel->>NATS: Publish END_STREAM
         LangGraph->>LangGraph: calculate_usage → cleanup
+        deactivate LangGraph
     end
 ```
 
@@ -338,6 +364,8 @@ Image generation publishes these event types through the standard `receiveMessag
 | Event | Status | Payload | Purpose |
 |-------|--------|---------|---------|
 | Stream start | `START_STREAM` | — | Begin streaming (text model only) |
+| Context relevance | `CONTEXT_RELEVANCE_RESOLVED` | `{ workspaceContextResolution }` | Show auto chips, patch improved descriptors, narrow media candidates |
+| Branch resolution | `IMAGE_BRANCH_RESOLVED` | `{ resolution }` | Report VLM-selected image/video references and branch lineage |
 | Text chunk | `STREAMING` | `{ content }` | Streaming text delta |
 | Image placeholder | `IMAGE_PARTIAL` | `{ imageBase64: "", partialIndex: 0 }` | Trigger PIXI animated border |
 | Partial image | `IMAGE_PARTIAL` | `{ imageBase64: "...", partialIndex: N }` | Replace PIXI preview texture |
@@ -365,6 +393,10 @@ services/api/src/llm/
 │   ├── openai-provider.ts         # OpenAI Responses API + Image API
 │   ├── anthropic-provider.ts      # Tool injection + extraction for Claude
 │   └── google-provider.ts         # Native image gen + tool injection
+├── graph/
+│   ├── workspace-context-resolver.ts # Descriptor relevance + self-heal
+│   ├── image-branch-resolver.ts   # Structured VLM media role assignment
+│   └── stream-publisher.ts        # Context, branch, token, and image events
 ├── tools/
 │   ├── image-generation.ts        # Tool definitions and tool-call extractors
 │   └── image-router.ts            # ImageRouter — bridges text model → image model

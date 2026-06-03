@@ -430,7 +430,7 @@ This is **server-resolved by ID**, not client-injected text. Three reasons (per 
 
 ## The tabbed AI chat panel
 
-The current panel in `renderActiveAiChatPanel` (~lines 1328–1533 of [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts)) renders exactly one thread at a time, driven by `lastActiveAiChatThreadId`. To host the new `extraction` UX without displacing the user's current thread, we replace this with a tabbed panel.
+The current AI Chat panel persists tabs in `canvasState.aiChatPanel.tabs` and can host normal standalone chat tabs plus extraction tabs without displacing the user's current thread. It also persists explicit context chips for normal chat turns; extraction source context remains stored on the extraction run.
 
 Researched against Cursor IDE / Linear AI / Claude.ai / VS Code conventions (per user request to confirm the tab system design):
 
@@ -438,16 +438,14 @@ Researched against Cursor IDE / Linear AI / Claude.ai / VS Code conventions (per
 - **Each tab**: small icon (thread vs extraction), truncated 24-char title, streaming dot when the tab is actively receiving tokens, close X visible on hover.
 - **Click a thread node on canvas** → if the tab exists, activate; else add a new tab. (This is the interaction model from VS Code editor tabs and Cursor's chat tabs.)
 - **All extraction triggers** → open a new `extraction` tab.
-- **Closing the last tab** collapses the panel, preserving today's behavior driven by `lastActiveAiChatThreadId`.
+- **Closing the last tab** leaves the durable session reopenable from Sessions; panel visibility is controlled by `CanvasAiChatPanelState.isOpen`.
 - **Overflow**: horizontal scroll on the strip with edge fades. Not an overflow dropdown — keeps things predictable, matches Cursor.
 - **Keyboard shortcuts** (window-level when panel has focus):
   - `Cmd/Ctrl + W` — close active tab.
   - `Cmd/Ctrl + 1..9` — jump to tab by index.
   - `Cmd/Ctrl + Shift + [` / `]` — previous / next tab.
 
-**State model**: tabs persist in `canvasState` server-side as `panelTabs: PanelTab[]` and `activePanelTabId?: string`, where `PanelTab = { tabId; type: 'thread' | 'extraction'; refId; pinned?; openedAt }`. Persistence flows through the existing `onCanvasStateChange?.()` hook (already used at WorkspaceCanvas.ts ~line 418), plus the existing `WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE` channel for cross-device sync.
-
-**Migration**: if `panelTabs` is undefined but `lastActiveAiChatThreadId` is set, on first render we synthesize a single `thread` tab and persist. Existing workspaces upgrade silently.
+**State model**: tabs persist under `canvasState.aiChatPanel.tabs`, with `activeTabId`, `isSessionHistoryOpen`, `contextChips`, `width`, and `drafts` on the same panel object. Persistence flows through the existing `onCanvasStateChange?.()` hook plus the existing `WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE` channel for cross-device sync.
 
 ## Extraction tab UX
 
@@ -552,9 +550,9 @@ Extend [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/t
 type CanvasState = {
   nodes: CanvasNode[]
   edges: WorkspaceEdge[]
-  lastActiveAiChatThreadId?: string   // existing — kept for migration
+  lastActiveAiChatThreadId?: string   // legacy field; not used by current panel state
 
-  aiChatPanel?: CanvasAiChatPanelState // panel visibility, tabs, drafts, and context controls
+  aiChatPanel?: CanvasAiChatPanelState // panel visibility, tabs, drafts, and context chips
   featureExtractionRuns?: Record<string, CanvasFeatureExtractionState>
 }
 
@@ -563,9 +561,7 @@ type CanvasAiChatPanelState = {
   isSessionHistoryOpen: boolean
   tabs: CanvasAiChatSidebarTab[]
   activeTabId?: string
-  contextMode: 'followSelection' | 'pinnedContext'
-  includeUpstreamContext: boolean
-  contextNodeIds: string[]
+  contextChips: string[]
   width?: number
   drafts?: Record<string, { content?: object }>
 }
@@ -1087,7 +1083,7 @@ Phase 4 is the heart of the rewrite. It is split into 4 independently-shippable 
   - Persistence via existing `onCanvasStateChange?.()` hook in `canvasState.aiChatPanel`.
   - Reactive bridge: subscribe to `WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE` for cross-device tab sync.
   - Window-level keyboard listener: `Cmd/Ctrl+W`, `Cmd/Ctrl+1..9`, `Cmd/Ctrl+Shift+[`/`]` — only active when panel is focused.
-  - Migration: if `aiChatPanel` is undefined and `lastActiveAiChatThreadId` is set, synthesize a single thread tab from legacy state and persist on the next panel-state write.
+  - Panel state writes use `canvasState.aiChatPanel`; current chat context uses explicit `contextChips`.
 
 **Tests**: jsdom test of tab-state reducers; manual visual QA pass.
 

@@ -4,23 +4,25 @@ A workspace is the primary container where users organize and edit their documen
 
 > **Renderer architecture note.** The workspace canvas uses the `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` stack for DOM interactions and PIXI v8 for high-volume visual layers. The media layer renders image pixels, video posters/placeholders, and workspace connector pixels through `services/web-ui/src/infographics/workspace/pixiMediaLayer.ts`, and delegates generated-image progress painting to the reusable PIXI `services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`; document nodes, AI chat thread nodes, prompt inputs, bubble menus, resize/drag/selection chrome, and handles stay in the DOM implementation. Canvas image nodes have no DOM `<img>` pixel surface: stored images, generated partials, and their animated in-progress outline are visible only through PIXI. Completed videos are the exception to pure PIXI pixels: a visible DOM `<video>` element owns playback and shared SVG controls above the PIXI poster. Workspace connector hit testing and bubble-menu anchoring use cached PIXI path data.
 >
-> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For collision resolution, placement cleanup, and drag-release collision rules, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md).
+> For the rendering pipeline, LoD strategy, texture cache, decode pool, edge diffing, and the list of remaining performance issues, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md). For collision resolution, placement cleanup, and drag-release collision rules, see [CANVAS-COLLISION-RESOLUTION.md](CANVAS-COLLISION-RESOLUTION.md). For context chips, automatic workspace relevance, and branch-origin provenance, see [WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md](WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md).
 
 ## Core Concepts
 
 **Workspace** — A named container owned by a user. Has a canvas state (viewport position, zoom level, and node positions) plus references to documents, AI chat threads, and uploaded files.
 
-**Canvas Node** — A positioned item on the canvas. It can be a document node, an image node, a video node, or an AI chat thread node. Stores position, dimensions, and type-specific data.
+**Canvas Node** — A positioned item on the canvas. It can be a document node, an image node, a video node, an AI chat thread node, or a branch-origin node. Stores position, dimensions, and type-specific data.
 
 **Document** — The actual text content (ProseMirror JSON). Lives separately from its canvas representation so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'` and contain block-level content (paragraphs, headings, lists, etc.).
 
 **AI Chat Thread** — A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread is standalone; its ProseMirror history is rendered in an AI Chat panel tab and streamed through its own `AiInteractionService`.
 
-**AI Chat Panel** — A workspace-owned right-side surface that can be opened without selecting a region or creating a chat session. It persists visibility, tabs, active tab, width, prompt drafts, and standalone context settings. A standalone `AiChatThread` is created only when the first prompt is submitted.
+**AI Chat Panel** — A workspace-owned right-side surface that can be opened without creating a chat session. It persists visibility, tabs, active tab, width, prompt drafts, and explicit context chips. A standalone `AiChatThread` is created only when the first prompt is submitted. Automatic workspace relevance runs per turn and reports auto chips through stream events.
 
 **Image** — An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas. A user can explicitly save a separate Media Library copy that is not deleted with the source node.
 
-**Video** — A generated or restored MP4 stored in NATS Object Store with a poster and optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, PiP, and fullscreen do not depend on a PIXI video texture loop.
+**Video** — A generated or restored MP4 stored in NATS Object Store with a poster and optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, PiP, fullscreen, and shared SVG controls do not depend on a PIXI video texture loop. See [VIDEO-PLAYER-CONTROLS.md](VIDEO-PLAYER-CONTROLS.md).
+
+**Branch Origin** — A small persisted circle that records the prompt and reference media that started a generated media branch. It is an entry point and provenance marker, not a chat owner.
 
 **Viewport** — The current view: x/y offset and zoom level. Persisted so users return to where they left off. While a workspace is open, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform.
 
@@ -119,9 +121,7 @@ type CanvasState = {
         isSessionHistoryOpen: boolean
         tabs: Array<{ tabId: string; type: 'thread' | 'extraction'; refId: string; title: string }>
         activeTabId?: string
-        contextMode: 'followSelection' | 'pinnedContext'
-        includeUpstreamContext: boolean
-        contextNodeIds: string[]
+        contextChips: string[]
         width?: number
         drafts?: Record<string, { content?: object }>
     }
@@ -165,18 +165,20 @@ The `WorkspaceConnectionManager` handles the visual rendering logic for edges.
 
 When an AI thread generates images, the workspace manages their placement automatically to maintain a clean layout:
 
-- **Positioning**: First outputs are placed to the right of the source thread root using the spacing configured in `settings.imageBranchLineage`. Image-to-image continuations use the latest image in the branch as the anchor.
+- **Positioning**: First outputs are placed to the right of the source thread root or the combined bounds of selected/reference media using the spacing configured in `settings.imageBranchLineage`. Image-to-image continuations use the verified generated branch parent as the anchor.
 - **Scale**: Generated image nodes use the configured canvas-unit size regardless of the current zoom level.
-- **Stacking and alignment**: Multiple first-generation outputs stack next to the source region using the configured branch-lineage spacing. Image-to-image continuations stay vertically aligned with the previous image in the branch lineage.
+- **Stacking and alignment**: Multiple first-generation outputs stack near their real source or reference group using the configured branch-lineage spacing. Image-to-image continuations stay vertically aligned with the previous image in the branch lineage.
 - **Race Condition Handling**: The layout engine tracks synchronous "partial" image states to ensure that simultaneous updates (e.g., partial stream + final completion) do not cause images to overlap or skip positional slots.
+- **Reference and lineage split**: Reference/style media can anchor placement and animate while generation prepares, but they do not become connector parents unless the branch resolver verifies a real generated branch continuation.
 - **Generated-image provenance chrome**: AI-generated image nodes render provider badges and an info button in a dedicated DOM overlay above the PIXI media canvas. The info panel opens at the exact image-node width, expands to its full content height without cropping long prompts or metadata, and uses the image node's `generatedBy.responseMessageId` to reconstruct the originating user prompt and AI response from the chat thread. It reuses the same chat message shells and `ImageGenerationTrace` detail renderer used by the AI chat history.
+- **Branch origins**: New branch births persist one `branchOrigin` node with the starting prompt and references, then connect that origin to the first generated output. Continuations attach to the existing branch origin and add no new circle.
 
 ### CanvasNode
 
 Canvas nodes use a discriminated union based on the `type` field:
 
 ```typescript
-type CanvasNodeType = 'document' | 'image' | 'aiChatThread'
+type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin'
 
 // Document node - contains a ProseMirror editor
 type DocumentCanvasNode = {
@@ -199,6 +201,23 @@ type ImageCanvasNode = {
     dimensions: { width: number; height: number }
 }
 
+// Video node - displays a generated or restored MP4
+type VideoCanvasNode = {
+    nodeId: string
+    type: 'video'
+    fileId: string
+    posterFileId: string
+    frameFileId?: string
+    workspaceId: string
+    src: string
+    posterSrc: string
+    aspectRatio: number
+    durationSeconds: number
+    hasAudio: boolean
+    position: { x: number; y: number }
+    dimensions: { width: number; height: number }
+}
+
 // AI Chat Thread node - contains an AI conversation
 type AiChatThreadCanvasNode = {
     nodeId: string
@@ -208,7 +227,25 @@ type AiChatThreadCanvasNode = {
     dimensions: { width: number; height: number }
 }
 
-type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode
+// Branch-origin node - records the birth of a generated media branch
+type BranchOriginCanvasNode = {
+    nodeId: string
+    type: 'branchOrigin'
+    branchId: string
+    prompt: string
+    referenceNodeIds: string[]
+    referenceFileIds: string[]
+    position: { x: number; y: number }
+    dimensions: { width: number; height: number }
+    createdAt: number
+}
+
+type CanvasNode =
+    | DocumentCanvasNode
+    | ImageCanvasNode
+    | VideoCanvasNode
+    | AiChatThreadCanvasNode
+    | BranchOriginCanvasNode
 ```
 
 ## User Flows
@@ -1070,18 +1107,42 @@ sequenceDiagram
 
 ## AI Chat Context
 
-Standalone chats use panel-selected context.
+Standalone chats use explicit panel context chips plus automatic workspace
+relevance. The panel does not own a spatial container and does not create a chat
+record until the first prompt is submitted.
 
-- A standalone chat may include the selected eligible canvas items directly. In the `Follow` mode (`followSelection`), later selection changes update the loaded standalone context. In the `Pinned` mode (`pinnedContext`), later selection changes do not alter it.
-- `With Sources` (`includeUpstreamContext`) applies in both standalone modes: off submits only the loaded direct items; on also traverses their upstream lineage using the existing graph extraction rules.
-- No selected item means no automatically attached standalone context.
+- Explicit chips are stored in `CanvasState.aiChatPanel.contextChips`.
+- Chip nodes are force-included in the outgoing context message.
+- Edge-connected nodes are force-included by the API relevance stage.
+- A descriptors-only `WorkspaceContextSnapshot` is sent with each chat turn so the API can rank all context-bearing nodes without sending pixels for the whole workspace.
+- `CONTEXT_RELEVANCE_RESOLVED` adds removable auto chips and patches improved descriptors into local canvas state.
 
 ### How It Works
 
-1. **Context selection** — A standalone send uses `extractSelectedContext({ nodeIds, includeUpstream })`.
-2. **Content Extraction** — Documents and AI threads have their ProseMirror content parsed for text; embedded images are also extracted. Standalone image nodes are fetched and converted to base64. Video nodes contribute a representative still (`frameFileId`, falling back to poster) for normal model context.
-3. **Message Building** — `buildContextMessage()` formats the extracted context as a multimodal message with interleaved text, images, and video stills
-4. **API Format** — All content uses the OpenAI Responses API format (`input_text`, `input_image` blocks) as the canonical format. The API LLM module converts to provider-specific formats (e.g., Anthropic) as needed
+1. **Explicit context extraction** — A standalone send resolves chip nodes with `extractSelectedContext({ nodeIds })`.
+2. **Workspace snapshot** — `buildWorkspaceContextSnapshot()` indexes context-bearing nodes by descriptor status, summary/tags, media object references, branch IDs, and force-include flags. It never embeds pixel data.
+3. **API relevance** — `resolveWorkspaceContext` ranks descriptors, repairs weak descriptors once, force-includes chip and edge nodes, streams `CONTEXT_RELEVANCE_RESOLVED`, and assembles selected full content into `state.messages`.
+4. **Image/video branch routing** — `resolveImageBranch` receives only the narrowed media candidates and remains the structured VLM authority for visual roles.
+5. **Message building** — `buildContextMessage()` formats explicit context as multimodal content blocks (`input_text` for text, `input_image` for images and video stills). The API LLM module converts to provider-specific formats as needed.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
+flowchart TB
+    Chips[Context Chips]
+    Snapshot[WorkspaceContextSnapshot]
+    Relevance[resolveWorkspaceContext]
+    Auto[Auto Chips<br/>improved descriptors]
+    Features[resolveFeatures]
+    Branch[resolveImageBranch]
+    Stream[Text or Media Stream]
+
+    Chips --> Relevance
+    Snapshot --> Relevance
+    Relevance --> Auto
+    Relevance --> Features
+    Features --> Branch
+    Branch --> Stream
+```
 
 ### Multimodal Content Format
 
@@ -1097,10 +1158,12 @@ Standalone chats use panel-selected context.
 
 | File | Purpose |
 |------|---------|
-| `services/web-ui/src/services/ai-chat-thread-service.ts` | Context extraction (`extractConnectedContext`, `buildContextMessage`) |
-| `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` | Integration point (`onAiChatSubmit` calls context extraction) |
+| `services/web-ui/src/services/ai-chat-thread-service.ts` | Explicit context extraction and `buildContextMessage` |
+| `services/web-ui/src/services/ai-image-branching.ts` | `buildWorkspaceContextSnapshot` and image/video branch candidate snapshots |
+| `services/api/src/llm/graph/workspace-context-resolver.ts` | Descriptor ranking, self-heal, force-include, and selected-content assembly |
+| `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` | Panel context chip integration, auto-chip feedback, and generated-media placement |
 | `services/api/src/llm/utils/attachments.ts` | Attachment format conversion for LLM providers |
-| `packages/lixpi/constants/ts/types.ts` | Shared multimodal types (`TextContentBlock`, `ImageContentBlock`) |
+| `packages/lixpi/constants/ts/types.ts` | Shared multimodal, workspace context, descriptor, and canvas-node types |
 
 ---
 
