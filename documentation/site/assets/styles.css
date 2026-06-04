@@ -1,0 +1,179 @@
+/* Lixpi docs — minimal, dependency-free stylesheet.
+   Palette echoes the "In the Sunshine" theme used by the Mermaid diagrams. */
+
+:root {
+    --peach: #f6c7b3;
+    --terracotta: #d4956a;
+    --dark-brown: #5a3a2a;
+    --teal: #82b2c0;
+    --dark-teal: #1a3a47;
+    --mint: #dcece9;
+    --light-teal: #c3dedd;
+    --cream: #f2eae0;
+    --ink: #25303a;
+    --muted: #6b7785;
+    --bg: #ffffff;
+    --sidebar-bg: #f7f4ef;
+    --border: #e7e2d8;
+    --code-bg: #f4f1ea;
+    --link: #b06a3f;
+    --sidebar-width: 19rem;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--bg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.layout { display: flex; align-items: flex-start; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+    position: sticky;
+    top: 0;
+    width: var(--sidebar-width);
+    flex: 0 0 var(--sidebar-width);
+    height: 100vh;
+    overflow-y: auto;
+    padding: 1.5rem 1rem 3rem;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+}
+.brand {
+    display: block;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--dark-brown);
+    text-decoration: none;
+    margin-bottom: 1.25rem;
+    letter-spacing: 0.01em;
+}
+.sidebar-nav .nav-list { list-style: none; margin: 0; padding: 0 0 0 0.25rem; }
+.sidebar-nav .nav-list .nav-list { padding-left: 0.75rem; border-left: 1px solid var(--border); margin: 0.15rem 0 0.5rem; }
+.nav-group-label {
+    display: block;
+    margin: 0.85rem 0 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+.nav-link {
+    display: block;
+    padding: 0.18rem 0.4rem;
+    margin: 0.05rem 0;
+    border-radius: 0.35rem;
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 0.92rem;
+}
+.nav-link:hover { background: var(--mint); }
+.nav-link.is-active { background: var(--peach); color: var(--dark-brown); font-weight: 600; }
+
+/* Content */
+.content {
+    flex: 1 1 auto;
+    max-width: 52rem;
+    padding: 2.25rem 2.5rem 6rem;
+    margin: 0 auto;
+}
+.content h1, .content h2, .content h3, .content h4 { color: var(--dark-brown); line-height: 1.25; }
+.content h1 { font-size: 2rem; margin: 0 0 1rem; }
+.content h2 { font-size: 1.45rem; margin: 2.25rem 0 0.75rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+.content h3 { font-size: 1.15rem; margin: 1.75rem 0 0.5rem; }
+.content h4 { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+.content p { margin: 0.75rem 0; }
+.content a { color: var(--link); text-decoration: none; }
+.content a:hover { text-decoration: underline; }
+.content ul, .content ol { padding-left: 1.4rem; }
+.content li { margin: 0.2rem 0; }
+.content hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+.content img { max-width: 100%; height: auto; }
+blockquote {
+    margin: 1rem 0;
+    padding: 0.4rem 1rem;
+    border-left: 4px solid var(--teal);
+    background: var(--mint);
+    color: var(--dark-teal);
+    border-radius: 0 0.35rem 0.35rem 0;
+}
+
+/* Inline + block code */
+code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+}
+:not(pre) > code {
+    background: var(--code-bg);
+    padding: 0.12em 0.36em;
+    border-radius: 0.3rem;
+    color: #8a4b2c;
+}
+pre.code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.9rem 1.1rem;
+    overflow-x: auto;
+    line-height: 1.5;
+}
+pre.code-block code { color: #2c3640; background: none; }
+
+/* Mermaid placeholder (rendering hydrated in a future step) */
+pre.mermaid {
+    background: #fbf7ef;
+    border: 1px dashed var(--terracotta);
+    border-radius: 0.5rem;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+}
+
+/* Tables */
+.content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+    display: block;
+    overflow-x: auto;
+}
+.content th, .content td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+}
+.content th { background: var(--cream); color: var(--dark-brown); font-weight: 600; }
+.content tbody tr:nth-child(even) { background: #faf8f3; }
+
+/* Callouts */
+.callout {
+    margin: 1.25rem 0;
+    padding: 0.85rem 1.1rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    background: #fbf9f4;
+}
+.callout .callout-title { margin: 0 0 0.35rem; font-weight: 700; }
+.callout > :last-child { margin-bottom: 0; }
+.callout-note { border-left-color: var(--teal); background: var(--mint); }
+.callout-tip { border-left-color: #6fae8e; background: #e7f3ec; }
+.callout-warning { border-left-color: var(--terracotta); background: #fbeee3; }
+.callout-important { border-left-color: #c0566a; background: #fbe9ec; }
+
+@media (max-width: 60rem) {
+    .layout { flex-direction: column; }
+    .sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+    .content { padding: 1.5rem 1.25rem 4rem; }
+}

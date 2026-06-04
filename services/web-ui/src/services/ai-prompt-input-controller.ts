@@ -5,7 +5,7 @@ import { Fragment } from 'prosemirror-model'
 import type {
     CanvasState,
     CanvasNode,
-    ContextRegionCanvasNode,
+    AiChatThreadCanvasNode,
     WorkspaceEdge,
     ImageGenerationSize,
 } from '@lixpi/constants'
@@ -62,7 +62,7 @@ type AiPromptInputControllerOptions = {
         threadId: string
         content: any
         aiModel: string
-        owner?: { type: 'contextRegion'; contextRegionNodeId: string } | { type: 'standalone' }
+        owner?: { type: 'standalone' }
     }) => Promise<any>
     onAiSubmit: (threadId: string, payload: AiSubmitPayload) => void
     onAiStop: (threadId: string) => void
@@ -134,7 +134,7 @@ export class AiPromptInputController {
 
     getTargetThreadId(): string | null {
         if (!this.target) return null
-        if (this.target.type === 'aiChatThread' || this.target.type === 'contextRegion') {
+        if (this.target.type === 'aiChatThread') {
             return this.target.referenceId
         }
         // For non-thread targets, there's no existing thread until one is auto-created
@@ -162,7 +162,7 @@ export class AiPromptInputController {
             return
         }
 
-        if (this.target.type === 'aiChatThread' || this.target.type === 'contextRegion') {
+        if (this.target.type === 'aiChatThread') {
             // Target is an existing AI chat thread — inject message directly
             const threadId = this.target.referenceId
             this.injectMessageAndSubmit(threadId, { content: contentJSON, aiModel, imageOptions, videoOptions })
@@ -313,13 +313,13 @@ export class AiPromptInputController {
 
         // Create the thread on the backend
         try {
-            const contextRegionNodeId = `node-${threadId}`
+            const threadNodeId = `node-${threadId}`
             const thread = await this.createAiChatThread({
                 workspaceId: this.workspaceId,
                 threadId,
                 content: initialContent,
                 aiModel,
-                owner: { type: 'contextRegion', contextRegionNodeId }
+                owner: { type: 'standalone' }
             })
 
             if (!thread) {
@@ -334,17 +334,17 @@ export class AiPromptInputController {
             const targetCanvasNode = canvasState.nodes.find((n: CanvasNode) => n.nodeId === targetNodeId)
             if (!targetCanvasNode) return
 
-            const threadDimensions = { ...settings.contextRegion.defaultDimensions }
+            const threadDimensions = { ...settings.aiChatThread.defaultDimensions }
 
             // Position the new thread to the right of the target node
             const threadPosition = {
-                x: targetCanvasNode.position.x + (targetCanvasNode.dimensions?.width ?? 400) + settings.contextRegion.adjacentNodeGap,
+                x: targetCanvasNode.position.x + (targetCanvasNode.dimensions?.width ?? 400) + settings.aiChatThread.adjacentNodeGap,
                 y: targetCanvasNode.position.y
             }
 
-            const threadCanvasNode: ContextRegionCanvasNode = {
-                nodeId: contextRegionNodeId,
-                type: 'contextRegion',
+            const threadCanvasNode: AiChatThreadCanvasNode = {
+                nodeId: threadNodeId,
+                type: 'aiChatThread',
                 referenceId: threadId,
                 position: threadPosition,
                 dimensions: threadDimensions,
@@ -371,7 +371,7 @@ export class AiPromptInputController {
             // Update target to point to the new thread
             this.target = {
                 nodeId: threadCanvasNode.nodeId,
-                type: 'contextRegion',
+                type: 'aiChatThread',
                 referenceId: threadId
             }
             this.onAiChatThreadCreated?.({ threadId, nodeId: threadCanvasNode.nodeId })

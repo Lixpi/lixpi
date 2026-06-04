@@ -213,4 +213,37 @@ describe('StreamPublisher extraction progress', () => {
         }))
     })
 
+    it('publishes workspace context relevance resolution on the chat stream', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'OpenAI')
+        const resolution = {
+            resolverVersion: 'workspace-context-v1',
+            selections: [{ nodeId: 'doc-1', role: 'forced-chip' as const }],
+            narrowedMediaNodeIds: [],
+        }
+
+        publisher.contextRelevanceResolved(resolution)
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toEqual(expect.objectContaining({
+            status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
+            aiProvider: 'OpenAI',
+            workspaceContextResolution: resolution,
+        }))
+    })
+
+    it('publishes workspace context relevance errors on the chat stream', () => {
+        const nats = makeFakeNats()
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'OpenAI')
+
+        publisher.contextRelevanceError('bad context')
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toEqual(expect.objectContaining({
+            status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
+            aiProvider: 'OpenAI',
+            error: 'bad context',
+        }))
+    })
+
 })

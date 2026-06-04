@@ -25,11 +25,6 @@ import {
 	type NodeConfig,
 	type AnchorPosition,
 } from '$src/infographics/connectors/index.ts'
-import {
-	getContextRegionCloudAnchorPoint,
-	getContextRegionCloudBounds,
-	type ContextRegionCloudDatum,
-} from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
@@ -67,7 +62,6 @@ type ConnectionManagerConfig = {
 	panBy: ({ x, y }: { x: number; y: number }) => Promise<boolean>
 	onEdgesChange: (edges: WorkspaceEdge[]) => void
 	onSelectedEdgeChange?: (edgeId: string | null) => void
-	isContextRegionNode?: (node: CanvasNode) => boolean
 	railOffset?: number
 	onPixiEdgesReady?: (edges: PixiEdgeRenderDatum[]) => void
 }
@@ -88,20 +82,6 @@ function toRendererPoint(point: { x: number; y: number }, transform: Transform) 
 	return {
 		x: (point.x - transform[0]) / transform[2],
 		y: (point.y - transform[1]) / transform[2]
-	}
-}
-
-function toContextRegionCloudDatum(node: CanvasNode): ContextRegionCloudDatum {
-	return {
-		nodeId: node.nodeId,
-		referenceId: node.referenceId,
-		x: node.position.x,
-		y: node.position.y,
-		width: node.dimensions.width,
-		height: node.dimensions.height,
-		title: '',
-		selected: false,
-		active: false,
 	}
 }
 
@@ -676,21 +656,7 @@ export class WorkspaceConnectionManager {
 		})
 	}
 
-	private isContextRegionEdgeNode(node: CanvasNode | undefined): boolean {
-		return Boolean(node && this.config.isContextRegionNode?.(node))
-	}
-
 	private getEdgeNodeGeometry(node: CanvasNode): EdgeNodeGeometry {
-		if (this.isContextRegionEdgeNode(node)) {
-			const bounds = getContextRegionCloudBounds(toContextRegionCloudDatum(node))
-			return {
-				x: bounds.x,
-				y: bounds.y,
-				width: bounds.width,
-				height: bounds.height,
-			}
-		}
-
 		const railOffset = this.config.railOffset ?? 0
 		const xShift = node.type === 'aiChatThread' ? railOffset : 0
 		const railHeight = node.type === 'aiChatThread' ? this.railHeights.get(node.nodeId) : undefined
@@ -703,40 +669,19 @@ export class WorkspaceConnectionManager {
 		}
 	}
 
-	private getContextRegionAnchorOffset(
-		node: CanvasNode | undefined,
-		nodeConfig: NodeConfig | undefined,
-		position: AnchorPosition,
-		t: number
-	): { x: number; y: number } | undefined {
-		if (!this.isContextRegionEdgeNode(node) || !nodeConfig) return undefined
-
-		const rawAnchor = computeWorldAnchorPoint(position, t, nodeConfig)
-		const cloudAnchor = getContextRegionCloudAnchorPoint(toContextRegionCloudDatum(node), position, t)
-
-		return {
-			x: cloudAnchor.x - rawAnchor.x,
-			y: cloudAnchor.y - rawAnchor.y,
-		}
-	}
-
 	private buildEdgeAnchor(
 		nodeId: string,
 		position: AnchorPosition,
 		t: number | undefined,
-		nodeById: Map<string, CanvasNode>,
-		worldNodeMap: Map<string, NodeConfig>
+		nodeById: Map<string, CanvasNode>
 	): EdgeAnchor {
 		const node = nodeById.get(nodeId)
 		const resolvedT = resolveEdgeAnchorT(node, t)
-		const nodeConfig = worldNodeMap.get(nodeId)
-		const offset = this.getContextRegionAnchorOffset(node, nodeConfig, position, resolvedT)
 
 		return {
 			nodeId,
 			position,
 			t: resolvedT,
-			...(offset ? { offset } : {}),
 		}
 	}
 
@@ -1454,8 +1399,8 @@ export class WorkspaceConnectionManager {
 
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
-				source: this.buildEdgeAnchor(e.sourceNodeId, source, sourceT, nodeById, worldNodeMap),
-				target: this.buildEdgeAnchor(e.targetNodeId, target, targetT, nodeById, worldNodeMap),
+				source: this.buildEdgeAnchor(e.sourceNodeId, source, sourceT, nodeById),
+				target: this.buildEdgeAnchor(e.targetNodeId, target, targetT, nodeById),
 				pathType: e.pathType ?? settings.connector.lineCurve,
 				marker: isSelected ? 'arrowhead-selected' : 'arrowhead',
 				laneIndex: tValues?.laneIndex ?? 0,
@@ -1529,9 +1474,7 @@ export class WorkspaceConnectionManager {
 				? computeTFromPointerPosition(
 					this.connectionInProgress.toHandle.y,
 					snappedTargetNode.position.y,
-					this.isContextRegionEdgeNode(snappedTargetNode)
-						? snappedTargetNode.dimensions.height
-						: snappedTargetNode.type === 'aiChatThread'
+					snappedTargetNode.type === 'aiChatThread'
 						? (this.railHeights.get(snappedTargetNode.nodeId) ?? snappedTargetNode.dimensions.height)
 						: snappedTargetNode.dimensions.height,
 				)
@@ -1539,9 +1482,9 @@ export class WorkspaceConnectionManager {
 
 			const tempEdge: EdgeConfig = {
 				id: '__workspace-temp-edge',
-				source: this.buildEdgeAnchor(sourceNodeId, sourcePosition, undefined, nodeById, worldNodeMap),
+				source: this.buildEdgeAnchor(sourceNodeId, sourcePosition, undefined, nodeById),
 				target: snappedTargetNode && snappedTargetPosition && this.connectionInProgress.toHandle
-					? this.buildEdgeAnchor(snappedTargetNode.nodeId, snappedTargetPosition, snappedTargetT, nodeById, worldNodeMap)
+					? this.buildEdgeAnchor(snappedTargetNode.nodeId, snappedTargetPosition, snappedTargetT, nodeById)
 					: { nodeId: tempNodeId, position: 'center' },
 				pathType: settings.connector.lineCurve,
 				marker: 'arrowhead',
@@ -1559,8 +1502,8 @@ export class WorkspaceConnectionManager {
 
 			const ghostEdge: EdgeConfig = {
 				id: '__workspace-proximity-edge',
-				source: this.buildEdgeAnchor(this.proximityCandidate.sourceNodeId, this.proximityCandidate.sourceHandle, sourceT, nodeById, worldNodeMap),
-				target: this.buildEdgeAnchor(this.proximityCandidate.targetNodeId, this.proximityCandidate.targetHandle, targetT, nodeById, worldNodeMap),
+				source: this.buildEdgeAnchor(this.proximityCandidate.sourceNodeId, this.proximityCandidate.sourceHandle, sourceT, nodeById),
+				target: this.buildEdgeAnchor(this.proximityCandidate.targetNodeId, this.proximityCandidate.targetHandle, targetT, nodeById),
 				pathType: settings.connector.lineCurve,
 				marker: 'arrowhead',
 				lineStyle: 'dashed'
@@ -1725,10 +1668,6 @@ export class WorkspaceConnectionManager {
 		if (!draggedNode) {
 			return
 		}
-		if (this.config.isContextRegionNode?.(draggedNode)) {
-			this.proximityCandidate = null
-			return
-		}
 
 		let closestCandidate: ProximityCandidate | null = null
 		let minDistance = settings.connector.proximityConnectThreshold
@@ -1741,7 +1680,6 @@ export class WorkspaceConnectionManager {
 			const proxRailOff = this.config.railOffset ?? 0
 			for (const other of this.nodes) {
 				if (other.nodeId === nodeId) continue
-				if (this.config.isContextRegionNode?.(other)) continue
 
 				// Calculate handles for the dragged node.
 				const draggedRight = { x: position.x + dimensions.width, y: position.y + dimensions.height / 2 }

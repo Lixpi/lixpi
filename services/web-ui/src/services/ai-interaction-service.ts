@@ -6,7 +6,8 @@ import type {
     AiInteractionChatStopMessagePayload,
     ImageGenerationTrace,
     ImageGenerationSize,
-    VideoGenerationTrace
+    VideoGenerationTrace,
+    WorkspaceContextResolution
 } from '@lixpi/constants'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
@@ -126,6 +127,33 @@ export default class AiInteractionService {
             // Track current aiProvider for parser callback
             if (content.aiProvider) {
                 this.currentAiProvider = content.aiProvider
+            }
+
+            if (content.status === STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED) {
+                const workspaceContextResolution = content.workspaceContextResolution as WorkspaceContextResolution
+                console.log('[AI_INTERACTION] CONTEXT_RELEVANCE_RESOLVED received:', {
+                    selectionCount: workspaceContextResolution?.selections.length ?? 0,
+                    improvedDescriptorCount: Object.keys(workspaceContextResolution?.improvedDescriptors ?? {}).length,
+                    narrowedMediaCount: workspaceContextResolution?.narrowedMediaNodeIds.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'context_relevance_resolved',
+                    workspaceContextResolution,
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.CONTEXT_RELEVANCE_ERROR) {
+                console.log('[AI_INTERACTION] CONTEXT_RELEVANCE_ERROR received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'context_relevance_error',
+                    error: content.error || 'Workspace context relevance failed',
+                    aiProvider: this.currentAiProvider,
+                    aiChatThreadId: this.aiChatThreadId
+                })
+                return
             }
 
             // Handle image generation events (bypass markdown parser)
@@ -331,6 +359,7 @@ export default class AiInteractionService {
         videoSourceForExtension,
         referencedFeatureIds,
         imageBranchCandidateSnapshot,
+        workspaceContextSnapshot,
     }: SendChatMessageOptions) {
         const organizationId = organizationStore.getData('organizationId')
         const user = userStore.getData()
@@ -350,6 +379,12 @@ export default class AiInteractionService {
 
         if (imageBranchCandidateSnapshot) {
             payload.imageBranchCandidateSnapshot = imageBranchCandidateSnapshot
+        }
+
+        // Whole-workspace descriptors index for the API relevance stage. Sent on
+        // every turn (text-only included); the API consumes it in a later phase.
+        if (workspaceContextSnapshot) {
+            payload.workspaceContextSnapshot = workspaceContextSnapshot
         }
 
         // Add image model routing options if an image model is selected
@@ -378,6 +413,7 @@ export default class AiInteractionService {
             hasVideoModel: !!aiVideoModel,
             referencedFeatureCount: referencedFeatureIds?.length ?? 0,
             imageBranchCandidateCount: imageBranchCandidateSnapshot?.candidates.length ?? 0,
+            workspaceContextNodeCount: workspaceContextSnapshot?.nodes.length ?? 0,
         })
 
         servicesStore.getData('nats')!.publish(AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE, payload)
@@ -405,4 +441,3 @@ export default class AiInteractionService {
         this.disconnect()
     }
 }
-

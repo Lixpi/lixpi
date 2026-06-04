@@ -12,9 +12,7 @@ export function createDefaultAiChatPanelState(): CanvasAiChatPanelState {
         isOpen: false,
         isSessionHistoryOpen: false,
         tabs: [],
-        contextMode: 'followSelection',
-        includeUpstreamContext: false,
-        contextNodeIds: [],
+        contextChips: [],
     }
 }
 
@@ -32,8 +30,11 @@ function sanitizeTabs(tabs: CanvasAiChatSidebarTab[] | undefined): CanvasAiChatS
     return sanitizedTabs
 }
 
-function sanitizeContextNodeIds(nodeIds: string[] | undefined): string[] {
-    return Array.from(new Set((nodeIds ?? []).filter(Boolean)))
+// Context chips reference canvas nodes; drop blanks, duplicates, and ids whose
+// node no longer exists so a deleted node can't linger as a force-include.
+export function sanitizeContextChips(nodeIds: string[] | undefined, nodes: CanvasNode[]): string[] {
+    const eligibleNodeIds = new Set(nodes.map((node) => node.nodeId))
+    return Array.from(new Set((nodeIds ?? []).filter((nodeId) => Boolean(nodeId) && eligibleNodeIds.has(nodeId))))
 }
 
 export function getAiChatPanelState(canvasState: CanvasState | null | undefined): CanvasAiChatPanelState {
@@ -41,27 +42,18 @@ export function getAiChatPanelState(canvasState: CanvasState | null | undefined)
     if (!canvasState) return defaults
 
     const persisted = canvasState.aiChatPanel
-    const legacyThreadId = canvasState.lastActiveAiChatThreadId
-    const legacyTabs = sanitizeTabs(canvasState.aiChatSidebarTabs)
-    const migratedTabs = legacyTabs.length > 0
-        ? legacyTabs
-        : legacyThreadId
-            ? [{ tabId: `thread:${legacyThreadId}`, type: 'thread', refId: legacyThreadId, title: 'AI Chat' }]
-            : []
-    const tabs = sanitizeTabs(persisted?.tabs ?? migratedTabs)
-    const candidateActiveTabId = persisted?.activeTabId ?? canvasState.activeAiChatSidebarTabId
+    const tabs = sanitizeTabs(persisted?.tabs)
+    const candidateActiveTabId = persisted?.activeTabId
     const activeTabId = candidateActiveTabId && tabs.some((tab) => tab.tabId === candidateActiveTabId)
         ? candidateActiveTabId
         : tabs[0]?.tabId
 
     return {
-        isOpen: persisted?.isOpen ?? Boolean(legacyThreadId),
+        isOpen: persisted?.isOpen === true,
         isSessionHistoryOpen: persisted?.isSessionHistoryOpen === true,
         tabs,
         ...(activeTabId ? { activeTabId } : {}),
-        contextMode: persisted?.contextMode === 'pinnedContext' ? 'pinnedContext' : 'followSelection',
-        includeUpstreamContext: persisted?.includeUpstreamContext === true,
-        contextNodeIds: sanitizeContextNodeIds(persisted?.contextNodeIds),
+        contextChips: sanitizeContextChips(persisted?.contextChips, canvasState.nodes),
         ...(persisted?.width !== undefined ? { width: persisted.width } : {}),
         ...(persisted?.drafts ? { drafts: persisted.drafts } : {}),
     }
@@ -76,19 +68,4 @@ export function setAiChatPanelState(canvasState: CanvasState, panelState: Canvas
         aiChatSidebarTabs: normalized.tabs,
         ...(normalized.activeTabId ? { activeAiChatSidebarTabId: normalized.activeTabId } : {}),
     }
-}
-
-export function getStandaloneContextNodeIds(
-    panelState: CanvasAiChatPanelState,
-    selectedNodeIds: Iterable<string>,
-    nodes: CanvasNode[],
-): string[] {
-    const candidateNodeIds = panelState.contextMode === 'followSelection'
-        ? Array.from(selectedNodeIds)
-        : panelState.contextNodeIds
-    const eligibleNodeIds = new Set(
-        nodes.filter((node) => node.type !== 'contextRegion').map((node) => node.nodeId),
-    )
-
-    return Array.from(new Set(candidateNodeIds.filter((nodeId) => eligibleNodeIds.has(nodeId))))
 }

@@ -1,15 +1,15 @@
 # LLM Module
 
-The in-process LangGraph workflow that orchestrates AI provider streaming. Replaces the standalone Python `services/llm-api/` Fargate service that previously did this work — it became unnecessary once `@langchain/langgraph` reached parity with the Python LangGraph package.
+The in-process LangGraph workflow that orchestrates AI provider streaming. It replaces the standalone Python `services/llm-api/` Fargate service that previously did this work; the TypeScript LangGraph package now covers the workflow features Lixpi needs.
 
 ## What it does
 
 - Receives a chat request from the NATS gateway handler (`services/api/src/NATS/subscriptions/ai-interaction-subjects.ts`).
-- Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration` or `executeVideoGeneration` → `calculateUsage → cleanup`.
+- Starts the top-level chat stream immediately, then runs a LangGraph state machine per provider: `resolveWorkspaceContext → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional] validateImagePrompt → executeImageGeneration` or `executeVideoGeneration` → `calculateUsage → cleanup`.
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
 - Routes dual-model image/video generation: text model emits `generate_image` or `generate_video`, then the workflow spawns a transient image-model provider or VEO video provider that stores the generated media in NATS Object Store.
 - Publishes `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` events immediately before invoking transient media providers. These traces contain the text-model tool prompt, routed media prompt, selected/excluded reference candidates, and preview-safe reference URLs when available.
-- Reports token, image, and computed video usage costs via `decimal.js` pricing math against the model's pricing metadata. Video usage is computed per second; publishing the final video usage event is still pending.
+- Computes token, image, and video usage costs via `decimal.js` pricing math against the model's pricing metadata. The reporter currently logs/returns the calculations; publishing usage events is still pending.
 
 ## Public surface
 
@@ -34,7 +34,7 @@ await llmModule.stop(instanceKey)
 await llmModule.shutdown()
 ```
 
-The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscriptions()` is currently `[]` because the gateway invokes `process()` in-process; it exists so a future split into a separate `llm-workers` ECS service could register the same subscriptions on a different NATS connection without code changes.
+The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscriptions()` is currently `[]` because the gateway invokes `process()` in-process. It marks the intended boundary for a future worker split, but the worker subscriptions still need to be implemented before a separate `llm-workers` service can run.
 
 ## File layout
 
@@ -47,6 +47,7 @@ src/llm/
         stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + image/video trace events
         image-publisher.ts       # IMAGE_PARTIAL, IMAGE_COMPLETE + content-hash deduped storage
         video-publisher.ts       # VIDEO_PENDING, VIDEO_GENERATING, VIDEO_COMPLETE, VIDEO_ERROR
+        workspace-context-resolver.ts # Descriptor-first workspace relevance resolver
         image-branch-resolver.ts # Structured VLM target/reference resolver for image and video generation
     providers/
         base-provider.ts         # Abstract BaseProvider — owns the StateGraph, AbortController, workflow nodes
@@ -77,6 +78,8 @@ src/llm/
 ## LangGraph workflow
 
 ```
+resolveWorkspaceContext
+    ↓
 resolveFeatures
     ↓
 resolveImageBranch (structured VLM; no-op unless an image or video model is selected)
@@ -98,9 +101,11 @@ cleanup
 END
 ```
 
-Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the browser in a receiving state while pre-stream work such as `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. Transient image-model providers spawned by `ImageRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle.
+Top-level chat requests publish `START_STREAM` before graph invocation. This keeps the browser in a receiving state while pre-stream work such as workspace relevance, `/use` resolution, branch VLM resolution, image URL fetches, and image downscaling runs. Transient image-model providers spawned by `ImageRouter` still skip their own `START_STREAM`/`END_STREAM`; the parent chat stream owns that lifecycle.
 
-`resolveImageBranch` runs after `/use` feature resolution and before the chat provider streams. It consumes the browser-built `imageBranchCandidateSnapshot`, normalizes candidate media URLs once, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. The same resolver is used for video generation; video candidates contribute a representative still (`frameFileId`, falling back to poster) and the selected result maps to VEO first-frame or reference-image inputs. When the snapshot includes `activeTargetNodeId` / an `active-target` role hint, the resolver prompt treats that candidate as a weak UI selection hint for purely deictic edit prompts while still requiring the selected pixels to match any explicit subject named by the user. For example, a selected goat must not win a prompt that says "that man"; the resolver should choose a visible man candidate or return ambiguous. If the selected target/identity reference is an existing generated candidate, the resolver continues that generated branch even for substantial palette or medium changes; targetless `fresh-branch` is reserved for genuinely new subjects with no generated target. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and media routers do not downscale the same candidate refs again.
+`resolveWorkspaceContext` runs first on every request carrying a `WorkspaceContextSnapshot`. It ranks compact node descriptors with the resolver model config (falling back to the chat text model), force-includes explicit chips and edge-forced nodes, and runs one bounded self-heal round for selected nodes whose descriptors are missing, failed, analyzing, thin, or explicitly flagged by the ranker. Improved descriptors are persisted through a targeted `canvasState.nodes[index].descriptor` patch, emitted on `CONTEXT_RELEVANCE_RESOLVED`, and used for one rerank before selected document/thread/media context is prepended to `state.messages` and `imageBranchCandidateSnapshot` is narrowed to the selected media set. Missing snapshots no-op so older call sites do not crash.
+
+`resolveImageBranch` runs after workspace relevance and `/use` feature resolution, before the chat provider streams. It consumes the narrowed `imageBranchCandidateSnapshot`, normalizes candidate media URLs once, calls the structured VLM client, publishes `IMAGE_BRANCH_RESOLVED`, and rewrites `state.messages` so only VLM-selected candidate images reach provider `extractReferenceImages()`. The same resolver is used for video generation; video candidates contribute a representative still (`frameFileId`, falling back to poster) and the selected result maps to VEO first-frame or reference-image inputs. When the snapshot includes `activeTargetNodeId` / an `active-target` role hint, the resolver prompt treats that candidate as a weak UI selection hint for purely deictic edit prompts while still requiring the selected pixels to match any explicit subject named by the user. For example, a selected goat must not win a prompt that says "that man"; the resolver should choose a visible man candidate or return ambiguous. If the selected target/identity reference is an existing generated candidate, the resolver continues that generated branch even for substantial palette or medium changes; targetless `fresh-branch` is reserved for genuinely new subjects with no generated target. Feature sample references injected by `resolveFeatures` are preserved; only candidate image blocks from the workspace snapshot are stripped/replaced. The selected reference message reuses the resolver-normalized image URLs so the chat provider and media routers do not downscale the same candidate refs again.
 
 When the text provider emits `generate_image`, `BaseProvider.executeImageGeneration()` builds and publishes an `IMAGE_GENERATION_TRACE` payload before calling `ImageRouter`. When it emits `generate_video`, `BaseProvider.executeVideoGeneration()` builds and publishes `VIDEO_GENERATION_TRACE` before calling `VideoRouter`. The router and trace builders share prompt helpers so the prompt shown in chat is the exact prompt routed to the transient media provider, including `/use` feature-transfer wrapping when present. Traces must never carry inline image data. Branch references point back to workspace media objects, and `/use` feature sample references point to the authenticated feature sample route, so persisted chat history can render reference thumbnails after a page reload without storing image bytes in NATS stream payloads or ProseMirror state.
 
@@ -115,14 +120,16 @@ Every `process(...)` call gets an `AbortController`. The 20-minute circuit break
 ## Future split
 
 If LLM streaming workload grows enough to want deployment isolation from the gateway:
-1. Deploy the same Docker image as `llm-workers` with a different CMD that subscribes to NATS via `getSubscriptions()` instead of running the Express server.
-2. Update Pulumi to add the `llm-workers` ECS service with the broader CPU/memory and AI provider env vars.
-3. Restore a `serviceAuthConfigs` entry in the auth callout for `svc:llm-workers` (see `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`).
+1. Implement the `getSubscriptions()` entries that route chat and stop subjects to `process()` / `stop()` from a worker process.
+2. Deploy the same Docker image as `llm-workers` with a different CMD that subscribes to NATS via those entries instead of running the Express server.
+3. Update Pulumi to add the `llm-workers` ECS service with the broader CPU/memory and AI provider env vars.
+4. Restore a `serviceAuthConfigs` entry in the auth callout for `svc:llm-workers` (see `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`).
 
-The LLM module's `index.ts` and the rest of `src/llm/` would not change — they'd just be hosted by a different process that registers `getSubscriptions()` on a NATS connection.
+Most of the workflow code can stay in `src/llm/`; the missing piece is the worker-facing subscription layer.
 
 ## Reference
 
-- [`documentation/ARCHITECTURE.md`](../../../documentation/ARCHITECTURE.md) — system-wide architecture overview.
+- [`documentation/platform/SYSTEM-ARCHITECTURE.md`](../../../documentation/platform/SYSTEM-ARCHITECTURE.md) — system-wide architecture overview.
+- [`documentation/platform/AI-GENERATION-PIPELINE.md`](../../../documentation/platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow this module implements.
 - [`documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`](../../../documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md) — auth pattern preserved from the original Python service.
 - [`@langchain/langgraph` JS docs](https://github.com/langchain-ai/langgraphjs).

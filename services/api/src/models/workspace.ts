@@ -9,6 +9,7 @@ import {
     type WorkspaceMeta,
     type WorkspaceAccessList,
     type CanvasState,
+    type ContentDescriptor,
     type DocumentFile
 } from '@lixpi/constants'
 
@@ -219,88 +220,55 @@ export default {
         }
     },
 
-    deleteContextRegion: async ({
+    patchCanvasNodeDescriptor: async ({
         workspaceId,
-        canvasState,
-        contextRegionNodeId,
-    }: {
-        workspaceId: string
-        canvasState: CanvasState
-        contextRegionNodeId: string
-    }): Promise<CanvasState | { error: string }> => {
-        const regionNode = canvasState.nodes.find(
-            (node) => node.nodeId === contextRegionNodeId && node.type === 'contextRegion'
-        )
-        if (!regionNode || regionNode.type !== 'contextRegion') return { error: 'CONTEXT_REGION_NOT_FOUND' }
+        nodeId,
+        descriptor
+    }: { workspaceId: string; nodeId: string; descriptor: ContentDescriptor }): Promise<boolean> => {
+        const currentDate = new Date().getTime()
 
-        const threadId = regionNode.referenceId
-        const nextPanelTabs = canvasState.aiChatPanel?.tabs.filter((tab) => tab.refId !== threadId) ?? []
-        const nextPanelActiveTabId = canvasState.aiChatPanel?.activeTabId
-            && nextPanelTabs.some((tab) => tab.tabId === canvasState.aiChatPanel?.activeTabId)
-            ? canvasState.aiChatPanel.activeTabId
-            : nextPanelTabs[0]?.tabId
-        const nextPanelDrafts = canvasState.aiChatPanel?.drafts
-            ? Object.fromEntries(
-                Object.entries(canvasState.aiChatPanel.drafts).filter(([draftId]) => draftId !== `thread:${threadId}`)
-            )
-            : undefined
-        const nextAiChatPanel = canvasState.aiChatPanel
-            ? {
-                ...canvasState.aiChatPanel,
-                tabs: nextPanelTabs,
-                ...(nextPanelDrafts ? { drafts: nextPanelDrafts } : {}),
-                ...(nextPanelActiveTabId ? { activeTabId: nextPanelActiveTabId } : {}),
-            }
-            : undefined
-        if (nextAiChatPanel && !nextPanelActiveTabId) delete nextAiChatPanel.activeTabId
-        const nextCanvasState: CanvasState = {
-            ...canvasState,
-            nodes: canvasState.nodes.filter((node) => node.nodeId !== contextRegionNodeId),
-            edges: canvasState.edges.filter(
-                (edge) => edge.sourceNodeId !== contextRegionNodeId && edge.targetNodeId !== contextRegionNodeId
-            ),
-            aiChatSidebarTabs: (canvasState.aiChatSidebarTabs ?? []).filter((tab) => tab.refId !== threadId),
-            ...(nextAiChatPanel ? { aiChatPanel: nextAiChatPanel } : {}),
-        }
-        if (nextCanvasState.activeAiChatSidebarTabId === `thread:${threadId}`) {
-            delete nextCanvasState.activeAiChatSidebarTabId
-        }
-        if (nextCanvasState.lastActiveAiChatThreadId === threadId) {
-            delete nextCanvasState.lastActiveAiChatThreadId
-        }
+        try {
+            const workspace = await dynamoDBService.getItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                origin: `model::Workspace->patchCanvasNodeDescriptor:get(${workspaceId}:${nodeId})`
+            })
 
-        const currentDate = Date.now()
-        await dynamoDBService.transactWriteItems({
-            transactItems: [
-                {
-                    Update: {
-                        TableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                        Key: { workspaceId },
-                        UpdateExpression: 'SET #canvasState = :canvasState, #updatedAt = :updatedAt',
-                        ExpressionAttributeNames: { '#canvasState': 'canvasState', '#updatedAt': 'updatedAt' },
-                        ExpressionAttributeValues: { ':canvasState': nextCanvasState, ':updatedAt': currentDate },
-                    },
-                },
-                {
-                    Update: {
-                        TableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
-                        Key: { workspaceId },
-                        UpdateExpression: 'SET #updatedAt = :updatedAt',
-                        ExpressionAttributeNames: { '#updatedAt': 'updatedAt' },
-                        ExpressionAttributeValues: { ':updatedAt': currentDate },
-                    },
-                },
-                {
-                    Delete: {
-                        TableName: getDynamoDbTableStageName('AI_CHAT_THREADS', ORG_NAME, STAGE),
-                        Key: { workspaceId, threadId },
-                    },
-                },
-            ],
-            origin: 'deleteContextRegion',
-        })
+            const nodes = workspace?.canvasState?.nodes ?? []
+            const nodeIndex = nodes.findIndex((node: { nodeId?: string }) => node.nodeId === nodeId)
+            if (nodeIndex < 0) return false
 
-        return nextCanvasState
+            await dynamoDBService.updateItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                key: { workspaceId },
+                updateExpression: `SET #canvasState.#nodes[${nodeIndex}].#descriptor = :descriptor, #updatedAt = :updatedAt`,
+                expressionAttributeNames: {
+                    '#canvasState': 'canvasState',
+                    '#nodes': 'nodes',
+                    '#descriptor': 'descriptor',
+                    '#updatedAt': 'updatedAt'
+                },
+                expressionAttributeValues: {
+                    ':descriptor': descriptor,
+                    ':updatedAt': currentDate
+                },
+                origin: 'patchWorkspaceCanvasNodeDescriptor'
+            })
+
+            await dynamoDBService.updateItem({
+                tableName: getDynamoDbTableStageName('WORKSPACES_META', ORG_NAME, STAGE),
+                key: { workspaceId },
+                updates: {
+                    updatedAt: currentDate
+                },
+                origin: 'patchWorkspaceCanvasNodeDescriptor:meta'
+            })
+
+            return true
+        } catch (error) {
+            console.error('Failed to patch workspace canvas node descriptor:', error)
+            throw error
+        }
     },
 
     delete: async ({

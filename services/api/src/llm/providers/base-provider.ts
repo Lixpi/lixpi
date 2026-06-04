@@ -18,6 +18,7 @@ import {
 } from '../tools/image-generation.ts'
 import { buildImageGenerationTrace } from '../tools/image-generation-trace.ts'
 import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
+import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 
@@ -40,7 +41,7 @@ export type BaseProviderDeps = {
 // chat stream owns it.
 //
 // Topology:
-//   START → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional]
+//   START → resolveWorkspaceContext → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -67,6 +68,11 @@ export abstract class BaseProvider {
 
     private buildWorkflow() {
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
+            .addNode('resolveWorkspaceContext', async (s: ProviderState) => resolveWorkspaceContext(s, {
+                natsService: this.nats,
+                publisher: this.publisher,
+                abortSignal: this.signal,
+            }))
             .addNode('resolveFeatures', async (s: ProviderState) => resolveFeatures(s))
             .addNode('resolveImageBranch', async (s: ProviderState) => resolveImageBranch(s, {
                 natsService: this.nats,
@@ -81,7 +87,8 @@ export abstract class BaseProvider {
             .addNode('calculateUsage', async (s: ProviderState) => this.calculateUsage(s))
             .addNode('cleanup', async (s: ProviderState) => this.cleanup(s))
 
-        graph.addEdge(START, 'resolveFeatures' as any)
+        graph.addEdge(START, 'resolveWorkspaceContext' as any)
+        graph.addEdge('resolveWorkspaceContext' as any, 'resolveFeatures' as any)
         graph.addEdge('resolveFeatures' as any, 'resolveImageBranch' as any)
         graph.addEdge('resolveImageBranch' as any, 'validateRequest' as any)
         graph.addEdge('validateRequest' as any, 'streamTokens' as any)
@@ -150,6 +157,7 @@ export abstract class BaseProvider {
             imageModelVersion: requestData.imageModelMetaInfo?.modelVersion,
             imageProviderName: requestData.imageModelMetaInfo?.provider,
             imagePromptRetryCount: 0,
+            workspaceContextSnapshot: requestData.workspaceContextSnapshot,
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
             referencedFeatureIds: requestData.referencedFeatureIds,
             enableVideoGeneration: requestData.enableVideoGeneration ?? false,

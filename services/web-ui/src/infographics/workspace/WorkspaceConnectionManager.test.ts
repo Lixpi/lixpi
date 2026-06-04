@@ -8,7 +8,6 @@ import {
 	getEdgeAnchorPositions,
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getContextRegionCloudAnchorPoint } from '$src/infographics/workspace/rendering/contextRegionClouds.ts'
 import { settings } from '$src/settings.ts'
 
 // =============================================================================
@@ -199,42 +198,6 @@ describe('WorkspaceConnectionManager — checkProximity', () => {
 		const edges = config.onEdgesChange.mock.calls[0][0] as WorkspaceEdge[]
 		expect(edges[0].sourceNodeId).toBe('doc-1')
 		expect(edges[0].targetNodeId).toBe('chat-1')
-	})
-
-	it('does NOT trigger proximity when the target is a context region', () => {
-		const contextConfig = {
-			...createMockConfig(),
-			isContextRegionNode: (node: CanvasNode) => node.nodeId === 'region-1',
-		}
-		const regionManager = new WorkspaceConnectionManager(contextConfig)
-		const imageNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
-		const regionNode = makeNode({ nodeId: 'region-1', type: 'contextRegion', position: { x: 300, y: 50 }, dimensions: { width: 260, height: 180 } })
-
-		regionManager.syncNodes([imageNode, regionNode])
-		regionManager.syncEdges([])
-
-		regionManager.checkProximity('img-1', { x: 150, y: 50 }, { width: 200, height: 100 })
-		regionManager.commitProximityConnection()
-
-		expect(contextConfig.onEdgesChange).not.toHaveBeenCalled()
-	})
-
-	it('does NOT trigger proximity when the dragged node is a context region', () => {
-		const contextConfig = {
-			...createMockConfig(),
-			isContextRegionNode: (node: CanvasNode) => node.nodeId === 'region-1',
-		}
-		const regionManager = new WorkspaceConnectionManager(contextConfig)
-		const imageNode = makeNode({ nodeId: 'img-1', type: 'image', position: { x: 0, y: 50 }, dimensions: { width: 200, height: 100 } })
-		const regionNode = makeNode({ nodeId: 'region-1', type: 'contextRegion', position: { x: 300, y: 50 }, dimensions: { width: 260, height: 180 } })
-
-		regionManager.syncNodes([imageNode, regionNode])
-		regionManager.syncEdges([])
-
-		regionManager.checkProximity('region-1', { x: 250, y: 50 }, { width: 260, height: 180 })
-		regionManager.commitProximityConnection()
-
-		expect(contextConfig.onEdgesChange).not.toHaveBeenCalled()
 	})
 
 	// -------------------------------------------------------------------------
@@ -547,10 +510,10 @@ describe('WorkspaceConnectionManager — menu connections', () => {
 })
 
 // =============================================================================
-// RENDERING — context region cloud anchors
+// RENDERING — edge anchors
 // =============================================================================
 
-describe('WorkspaceConnectionManager — context region edge anchors', () => {
+describe('WorkspaceConnectionManager — edge anchors', () => {
 	it('renders workspace connector data through PIXI only at screenshot zoom levels', () => {
 		let zoom = 1
 		const onPixiEdgesReady = vi.fn()
@@ -581,17 +544,16 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 		}
 	})
 
-	it('renders context-region edge endpoints from the cloud outline and recomputes them after resize', () => {
+	it('renders rectangular node edge endpoints and recomputes them after resize', () => {
 		const onPixiEdgesReady = vi.fn()
 		const config = {
 			...createMockConfig(),
-			isContextRegionNode: (node: CanvasNode) => node.type === 'contextRegion',
 			onPixiEdgesReady,
 		}
 		const manager = new WorkspaceConnectionManager(config)
-		const regionNode = makeNode({
-			nodeId: 'region-1',
-			type: 'contextRegion',
+		const chatNode = makeNode({
+			nodeId: 'chat-1',
+			type: 'aiChatThread',
 			position: { x: 100, y: 80 },
 			dimensions: { width: 400, height: 260 },
 		})
@@ -603,58 +565,34 @@ describe('WorkspaceConnectionManager — context region edge anchors', () => {
 		})
 		const edge = makeEdge({
 			edgeId: 'e-1',
-			sourceNodeId: regionNode.nodeId,
+			sourceNodeId: chatNode.nodeId,
 			targetNodeId: imageNode.nodeId,
 			sourceT: 0.5,
 			targetT: 0.5,
 		})
 
-		manager.syncNodes([regionNode, imageNode])
+		manager.syncNodes([chatNode, imageNode])
 		manager.syncEdges([edge])
 		manager.render()
 
 		const sourceMarkerOffset = 6
 		const start = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
-		const anchor = getContextRegionCloudAnchorPoint({
-			nodeId: regionNode.nodeId,
-			referenceId: regionNode.referenceId,
-			x: regionNode.position.x,
-			y: regionNode.position.y,
-			width: regionNode.dimensions.width,
-			height: regionNode.dimensions.height,
-			title: '',
-			selected: false,
-			active: false,
-		}, 'right', 0.5)
-		const rectangularStartX = regionNode.position.x + regionNode.dimensions.width + sourceMarkerOffset
 
-		expect(start.x).toBeCloseTo(anchor.x + sourceMarkerOffset, 2)
-		expect(start.y).toBeCloseTo(anchor.y, 2)
-		expect(start.x).toBeGreaterThan(rectangularStartX + 1)
+		expect(start.x).toBeCloseTo(chatNode.position.x + chatNode.dimensions.width + sourceMarkerOffset, 2)
+		expect(start.y).toBeCloseTo(chatNode.position.y + chatNode.dimensions.height / 2, 2)
 
-		const resizedRegionNode = {
-			...regionNode,
+		const resizedChatNode = {
+			...chatNode,
 			dimensions: { width: 620, height: 360 },
 		}
-		manager.syncNodes([resizedRegionNode, imageNode])
+		manager.syncNodes([resizedChatNode, imageNode])
 		manager.render()
 
 		const resizedStart = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
-		const resizedAnchor = getContextRegionCloudAnchorPoint({
-			nodeId: resizedRegionNode.nodeId,
-			referenceId: resizedRegionNode.referenceId,
-			x: resizedRegionNode.position.x,
-			y: resizedRegionNode.position.y,
-			width: resizedRegionNode.dimensions.width,
-			height: resizedRegionNode.dimensions.height,
-			title: '',
-			selected: false,
-			active: false,
-		}, 'right', 0.5)
 
-		expect(resizedStart.x).toBeCloseTo(resizedAnchor.x + sourceMarkerOffset, 2)
-		expect(resizedStart.y).toBeCloseTo(resizedAnchor.y, 2)
-		expect(resizedAnchor.x).toBeGreaterThan(anchor.x)
+		expect(resizedStart.x).toBeCloseTo(resizedChatNode.position.x + resizedChatNode.dimensions.width + sourceMarkerOffset, 2)
+		expect(resizedStart.y).toBeCloseTo(resizedChatNode.position.y + resizedChatNode.dimensions.height / 2, 2)
+		expect(resizedStart.x).toBeGreaterThan(start.x)
 	})
 })
 

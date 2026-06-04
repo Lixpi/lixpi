@@ -351,11 +351,11 @@
     contain: layout paint;
 }
 
-.workspace-pixi-context-region-layer {
+.workspace-pixi-branch-origin-layer {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: 0;
+    z-index: 1;
     contain: layout paint;
 }
 
@@ -625,6 +625,41 @@
     }
 }
 
+.canvas-branch-origin-info-panel {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 0;
+    width: 284px;
+    z-index: 25;
+
+    .canvas-media-descriptor:first-child {
+        margin-top: 0;
+    }
+}
+
+.canvas-branch-origin-reference-thumbnails {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 0.35rem;
+}
+
+.canvas-branch-origin-reference-thumbnail {
+    width: 46px;
+    height: 46px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(34, 40, 49, 0.06);
+    border: 1px solid rgba(34, 40, 49, 0.08);
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+}
+
 .workspace-selection-rect {
     position: absolute;
     z-index: 10001;
@@ -706,23 +741,6 @@
         top: 0;
         right: 0;
     }
-}
-
-/* Context regions are rendered by PIXI; the DOM node remains as a geometry proxy. */
-.workspace-context-region-node,
-.workspace-ai-chat-thread-node-region {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    isolation: auto;
-    overflow: visible;
-    pointer-events: none;
-
-    &[data-thread-empty="true"] {
-        visibility: visible;
-    }
-
 }
 
 .workspace-ai-chat-thread-node .ai-chat-thread-node-editor {
@@ -855,18 +873,77 @@
     flex: 0 0 auto;
 }
 
-.workspace-ai-chat-panel-context-selector {
-    flex: 0 1 120px;
-    width: 120px;
-    min-width: 0;
+.workspace-ai-chat-panel-context-chips {
     display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
 }
 
-.workspace-ai-chat-panel-context-selector-svg {
-    display: block;
-    width: 100%;
-    height: 26px;
-    overflow: visible;
+.workspace-ai-chat-panel-context-chips-empty {
+    color: #8a93a6;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.workspace-ai-chat-panel-context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 168px;
+    padding: 3px 4px 3px 9px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: rgba(130, 178, 192, 0.18);
+    color: #1a3a47;
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.workspace-ai-chat-panel-context-chip-explicit {
+    border: 1px solid rgba(130, 178, 192, 0.32);
+}
+
+.workspace-ai-chat-panel-context-chip-auto {
+    border: 1px dashed rgba(212, 149, 106, 0.72);
+    background: rgba(246, 199, 179, 0.22);
+    color: #5a3a2a;
+}
+
+.workspace-ai-chat-panel-context-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-ai-chat-panel-context-chip-remove {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.workspace-ai-chat-panel-context-chip-remove:hover,
+.workspace-ai-chat-panel-context-chip-remove:focus-visible {
+    background: rgba(26, 58, 71, 0.16);
+    opacity: 1;
+    outline: none;
+}
+
+.workspace-ai-chat-panel-context-chip-remove svg {
+    width: 8px;
+    height: 8px;
+    fill: currentColor;
 }
 
 .workspace-ai-chat-panel-context-divider {
@@ -876,29 +953,6 @@
     height: 20px;
     margin: 0 1px;
     background: rgba(57, 69, 93, 0.17);
-}
-
-.workspace-ai-chat-panel-lineage-control {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.workspace-ai-chat-panel-lineage-label {
-    color: #39455d;
-    white-space: nowrap;
-}
-
-.workspace-ai-chat-panel-lineage-switch {
-    display: inline-flex;
-    align-items: center;
-}
-
-.workspace-ai-chat-panel-lineage-switch-svg {
-    display: block;
-    width: 26.4px;
-    height: 14.4px;
-    overflow: visible;
 }
 
 .workspace-ai-chat-panel-history-control {
@@ -1214,18 +1268,11 @@
         cursor: move;
     }
 
-    &.workspace-image-node-context-region-child {
-        background: var(--workspace-image-context-region-child-image-frame-color);
-        border-radius: 8px;
-        box-shadow: 0 0 0 8px var(--workspace-image-context-region-child-image-frame-color), var(--workspace-image-context-region-child-image-drop-shadow);
-    }
-
     // The PIXI media layer owns all image pixels and the generating-image border.
     // The DOM node still owns interaction chrome: drag overlay and resize handles.
     // The node shadow/frame may sit behind the PIXI sprite.
 
-    &.is-selected,
-    &.workspace-image-node-context-region-child.is-selected {
+    &.is-selected {
         box-shadow: var(--workspace-image-selected-box-shadow);
     }
 
@@ -1274,6 +1321,42 @@
     cursor: move;
     z-index: 15;
     background: transparent;
+}
+
+.workspace-branch-origin-node {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+    padding: 0;
+    border-radius: 50%;
+
+    &.is-selected {
+        box-shadow: none;
+    }
+}
+
+.branch-origin-drag-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: move;
+    z-index: 14;
+    border-radius: 50%;
+    background: transparent;
+}
+
+.branch-origin-info-button {
+    position: absolute;
+    right: -8px;
+    top: -8px;
+    width: 28px;
+    height: 28px;
+    z-index: 24;
+
+    svg {
+        width: 17px;
+        height: 17px;
+    }
 }
 
 .image-error {

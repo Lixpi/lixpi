@@ -1,6 +1,6 @@
 # Lixpi NATS Service
 
-Shared NATS client implementation for both Python and TypeScript services.
+Shared NATS client implementations for Lixpi services. The TypeScript package is used by the live app; the Python package is preserved for legacy tooling and future internal-service splits.
 
 Provides a unified API for NATS messaging with support for:
 - Connection management with automatic reconnection
@@ -10,19 +10,7 @@ Provides a unified API for NATS messaging with support for:
 - JetStream Object Store for file/blob storage
 - Optional self-issued JWT authentication via NKeys
 
-## ⚠️ CRITICAL: Keeping TypeScript and Python Versions in Sync
-
-**THIS IS EXTREMELY IMPORTANT!** Both the TypeScript (`ts/nats-service.ts`) and Python (`python/nats_service.py`) implementations **MUST** remain synchronized.
-
-### Why This Matters
-
-Both versions are used across different services in the Lixpi ecosystem:
-- **TypeScript version**: Used by `lixpi-api` and other Node.js services
-- **Python version**: Used by `lixpi-llm-api` and other Python services
-
-Any bug fix, feature addition, or behavioral change in one version **MUST** be replicated in the other version to maintain consistency across the entire system.
-
-### Synchronization Rules
+## Maintenance Rules
 
 1. **Structure Alignment**: Both implementations follow the same structure:
    - Same class/method organization
@@ -48,13 +36,11 @@ Any bug fix, feature addition, or behavioral change in one version **MUST** be r
    - Log messages in the same format
 
 4. **When Making Changes**:
-   - ✅ **DO**: Update both TypeScript AND Python versions
-   - ✅ **DO**: Test both implementations after changes
-   - ✅ **DO**: Keep comments and documentation in sync
-   - ✅ **DO**: Match error messages across both versions
-   - ❌ **DON'T**: Change one version without updating the other
-   - ❌ **DON'T**: Add features to only one implementation
-   - ❌ **DON'T**: Fix bugs in only one version
+   - Update both TypeScript and Python versions when changing shared behavior
+   - Test both implementations when the change touches both packages
+   - Keep comments and documentation in sync
+   - Match error messages across both versions when practical
+   - Do not change one version and leave the other silently stale
 
 5. **Known Acceptable Differences**:
    - **Async/Sync**: Python NATS is fully async, TypeScript allows sync methods for publish/subscribe
@@ -65,7 +51,7 @@ Any bug fix, feature addition, or behavioral change in one version **MUST** be r
 
 6. **Validation Checklist** (use this when making changes):
    ```
-   [ ] Updated TypeScript version (js/nats-service.ts)
+   [ ] Updated TypeScript version (ts/nats-service.ts)
    [ ] Updated Python version (python/nats_service.py)
    [ ] Connection retry works identically in both
    [ ] Authentication flow matches
@@ -113,9 +99,9 @@ const config: NatsServiceConfig = {
 // Or with self-issued JWT (for services that require it)
 const configWithJWT: NatsServiceConfig = {
     servers: ['nats://nats.example.com:4222'],
-    name: 'llm-service',
+    name: 'llm-workers',
     nkeySeed: process.env.NATS_NKEY_SEED,
-    userId: 'svc:llm-service'
+    userId: 'svc:llm-workers'
 }
 
 // Initialize and connect
@@ -202,9 +188,9 @@ config = NatsServiceConfig(
 # Or with self-issued JWT (for services that require it)
 config_with_jwt = NatsServiceConfig(
     servers=["nats://nats.example.com:4222"],
-    name="llm-service",
+    name="llm-workers",
     nkey_seed=os.environ["NATS_NKEY_SEED"],
-    user_id="svc:llm-service",
+    user_id="svc:llm-workers",
     tls_ca_cert="/path/to/ca.crt"  # Optional TLS CA certificate
 )
 
@@ -284,13 +270,13 @@ await nats_service.delete_object_store("my-bucket")
 
 ## Self-Issued JWT Authentication
 
-Some services (like `llm-api`) use self-issued JWT authentication with NKeys for enhanced security. This is optional and only needed for specific deployment scenarios.
+Self-issued JWT authentication with NKeys is optional. No current service uses this path in the default deployment because the LLM workflow runs inside `services/api`; the pattern is preserved for future internal services such as a split-out `llm-workers` process.
 
 ### How it works:
 
 1. Service has an NKey seed (secret key)
 2. On connection, service generates a JWT signed with its NKey
-3. JWT includes service identity (e.g., `svc:llm-service`)
+3. JWT includes service identity (e.g., `svc:llm-workers`)
 4. NATS server validates the JWT using the service's public key
 
 ### TypeScript Example:
@@ -390,4 +376,4 @@ config = NatsServiceConfig(
 
 See the respective service implementations for real-world usage:
 - TypeScript: `services/api/src/NATS/`
-- Python: `services/llm-api/src/` (uses self-issued JWT)
+- Future internal-service auth pattern: `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`

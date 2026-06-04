@@ -1,6 +1,6 @@
 # Lixpi Constants
 
-Shared constants for NATS subjects, AWS resources, and types across Python and TypeScript services.
+Shared constants for NATS subjects, AWS resources, and service types. The TypeScript package is used by the live app; the Python package is preserved for legacy tooling and future internal-service splits.
 
 All NATS subjects are defined once in `nats-subjects.json` and accessed through language-specific wrappers.
 
@@ -8,7 +8,7 @@ All NATS subjects are defined once in `nats-subjects.json` and accessed through 
 
 ```
 packages/lixpi/constants/
-├── nats-subjects.json        # Single source of truth
+├── nats-subjects.json        # Shared subject definitions
 ├── ai-interaction-constants.json
 ├── python/                   # Python package
 └── ts/                       # TypeScript/JavaScript package
@@ -26,7 +26,7 @@ const { AI_INTERACTION_SUBJECTS, WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 
 // Access AI interaction subjects
 const subject = AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE
-const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${documentId}`
+const responseSubject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${threadId}`
 
 // Access workspace-related subjects (nested under WORKSPACE_SUBJECTS)
 const { DOCUMENT_SUBJECTS, AI_CHAT_THREAD_SUBJECTS, IMAGE_SUBJECTS } = WORKSPACE_SUBJECTS
@@ -36,6 +36,8 @@ const deleteImageSubject = IMAGE_SUBJECTS.DELETE_IMAGE
 
 // Use types
 const payload: AiInteractionChatSendMessagePayload = { messages, aiModel, threadId }
+
+// CanvasNode includes document, image, video, AI chat thread, and branch-origin provenance nodes.
 
 // AiModel includes imageSizes for image generation providers
 // ImageSizeOption: { value: string; label: string }

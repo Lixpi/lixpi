@@ -30,7 +30,7 @@ Web UI and API clients authenticate via Auth0 OAuth2 flow. The auth callout veri
 
 ### NKey JWTs (Internal Services)
 
-Services like `llm-api` authenticate using self-signed JWTs with Ed25519 NKey signatures.
+Future internal services, such as a split-out `llm-workers` process, can authenticate using self-signed JWTs with Ed25519 NKey signatures. No internal service is registered in the default `services/api` configuration today.
 
 **Why NKeys instead of Auth0 for services?**
 - Zero external dependency for internal communication
@@ -57,7 +57,7 @@ await startNatsAuthCalloutService({
     serviceAuthConfigs: [
         {
             publicKey: process.env.NATS_LLM_SERVICE_NKEY_PUBLIC,
-            userId: 'svc:llm-api',
+            userId: 'svc:llm-workers',
             permissions: {
                 pub: { allow: ['ai.interaction.chat.receiveMessage.*'] },
                 sub: { allow: ['ai.interaction.chat.process'] }
@@ -97,7 +97,7 @@ await startNatsAuthCalloutService({
 
 4. **Service creates JWT:**
    ```python
-   # Python example (see llm-api for reference)
+   # Python example for a future internal service
    jwt_payload = {
        "sub": "svc:my-service",
        "iss": public_key,  # Must match registered public key
@@ -130,7 +130,7 @@ For **services**, permissions are defined in `serviceAuthConfigs`:
 ```typescript
 {
     publicKey: 'UA...',
-    userId: 'svc:llm-api',
+    userId: 'svc:llm-workers',
     permissions: {
         pub: { allow: ['ai.interaction.chat.receiveMessage.*'] },
         sub: { allow: ['ai.interaction.chat.process'] }

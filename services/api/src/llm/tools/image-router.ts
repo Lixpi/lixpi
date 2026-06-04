@@ -80,7 +80,7 @@ export class ImageRouter {
         }, null, 0)}`)
 
         if (referenceImages.length === 0) {
-            warn(`[ImageRouter] No reference images attached for ${instanceKey}. If you expected the model to see context-region images, check the upstream extractReferenceImages() / messages payload.`)
+            warn(`[ImageRouter] No reference images attached for ${instanceKey}. If you expected the model to see workspace reference images, check the upstream extractReferenceImages() / messages payload.`)
         }
 
         try {

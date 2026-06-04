@@ -48,23 +48,6 @@ describe('AI chat thread session ownership', () => {
         }))
     })
 
-    it('blocks Sessions deletion while a context region still owns the history', async () => {
-        mocks.workspace.getWorkspace.mockResolvedValueOnce({
-            canvasState: {
-                nodes: [{ nodeId: 'region-1', type: 'contextRegion', referenceId: 'thread-1' }],
-            },
-        })
-
-        const result = await getHandler(SUBJECTS.DELETE_AI_CHAT_THREAD)({
-            user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            threadId: 'thread-1',
-        })
-
-        expect(result).toEqual({ error: 'CONTEXT_REGION_HISTORY_CANNOT_BE_DELETED' })
-        expect(mocks.aiChatThread.delete).not.toHaveBeenCalled()
-    })
-
     it('deletes an ordinary standalone session', async () => {
         const result = await getHandler(SUBJECTS.DELETE_AI_CHAT_THREAD)({
             user: { userId: 'user-1' },

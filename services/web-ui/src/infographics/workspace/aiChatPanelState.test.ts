@@ -3,7 +3,7 @@ import type { CanvasAiChatPanelState, CanvasNode, CanvasState } from '@lixpi/con
 import {
     createDefaultAiChatPanelState,
     getAiChatPanelState,
-    getStandaloneContextNodeIds,
+    sanitizeContextChips,
     setAiChatPanelState,
 } from '$src/infographics/workspace/aiChatPanelState.ts'
 
@@ -27,25 +27,25 @@ function makeNode(nodeId: string, type: CanvasNode['type']): CanvasNode {
 }
 
 describe('AI chat panel persisted state', () => {
-    it('starts closed without creating tabs or domain state', () => {
+    it('starts closed with an empty chip tray and no tabs', () => {
         expect(createDefaultAiChatPanelState()).toEqual({
             isOpen: false,
             isSessionHistoryOpen: false,
             tabs: [],
-            contextMode: 'followSelection',
-            includeUpstreamContext: false,
-            contextNodeIds: [],
+            contextChips: [],
         })
     })
 
-    it('migrates a legacy context-region active thread into an open tab', () => {
-        const state = getAiChatPanelState(makeCanvasState({ lastActiveAiChatThreadId: 'region-thread' }))
+    it('does not migrate legacy tab fields into the panel state', () => {
+        const state = getAiChatPanelState(makeCanvasState({
+            lastActiveAiChatThreadId: 'thread-1',
+            aiChatSidebarTabs: [{ tabId: 'thread:thread-1', type: 'thread', refId: 'thread-1', title: 'AI Chat' }],
+            activeAiChatSidebarTabId: 'thread:thread-1',
+        }))
 
-        expect(state.isOpen).toBe(true)
-        expect(state.activeTabId).toBe('thread:region-thread')
-        expect(state.tabs).toEqual([
-            { tabId: 'thread:region-thread', type: 'thread', refId: 'region-thread', title: 'AI Chat' },
-        ])
+        expect(state.isOpen).toBe(false)
+        expect(state.tabs).toEqual([])
+        expect(state.activeTabId).toBeUndefined()
     })
 
     it('preserves an open empty panel with no selected tab', () => {
@@ -71,23 +71,32 @@ describe('AI chat panel persisted state', () => {
         expect(state.isSessionHistoryOpen).toBe(true)
     })
 
-    it('uses live selection in Follow Selection and pinned IDs in Pinned Context', () => {
-        const nodes = [
-            makeNode('image-a', 'image'),
-            makeNode('document-b', 'document'),
-            makeNode('region-c', 'contextRegion'),
-        ]
-        const follow = {
+    it('persists context chips across a set/get round-trip', () => {
+        const nodes = [makeNode('image-a', 'image'), makeNode('document-b', 'document')]
+        const persisted = setAiChatPanelState(makeCanvasState({ nodes }), {
             ...createDefaultAiChatPanelState(),
-            contextMode: 'followSelection' as const,
-        }
-        const pinned = {
-            ...follow,
-            contextMode: 'pinnedContext' as const,
-            contextNodeIds: ['document-b', 'region-c', 'missing'],
-        }
+            contextChips: ['image-a', 'document-b'],
+        })
 
-        expect(getStandaloneContextNodeIds(follow, ['image-a', 'region-c'], nodes)).toEqual(['image-a'])
-        expect(getStandaloneContextNodeIds(pinned, ['image-a'], nodes)).toEqual(['document-b'])
+        expect(getAiChatPanelState(persisted).contextChips).toEqual(['image-a', 'document-b'])
+    })
+
+    it('drops chips for deleted nodes and de-duplicates on read', () => {
+        const nodes = [makeNode('image-a', 'image'), makeNode('thread-c', 'aiChatThread')]
+        const state = getAiChatPanelState(makeCanvasState({
+            nodes,
+            aiChatPanel: {
+                ...createDefaultAiChatPanelState(),
+                contextChips: ['image-a', 'image-a', 'thread-c', 'deleted-node', ''],
+            },
+        }))
+
+        expect(state.contextChips).toEqual(['image-a', 'thread-c'])
+    })
+
+    it('sanitizeContextChips filters blanks, duplicates, and unknown nodes', () => {
+        const nodes = [makeNode('a', 'image'), makeNode('b', 'document')]
+        expect(sanitizeContextChips(['a', 'a', '', 'b', 'ghost'], nodes)).toEqual(['a', 'b'])
+        expect(sanitizeContextChips(undefined, nodes)).toEqual([])
     })
 })

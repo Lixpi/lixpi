@@ -10,6 +10,7 @@
         "deploy": "sst deploy",
         "remove-stack": "sst remove",
         "console": "sst console",
+        "docs:build": "pnpm --filter lixpi-docs-site build",
         "typecheck": "tsc --noEmit"
     },
     "devDependencies": {

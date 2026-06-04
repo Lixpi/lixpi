@@ -3,12 +3,14 @@
 import type {
     AiChatThreadCanvasNode,
     CanvasNode,
-    ContextRegionCanvasNode,
+    DocumentCanvasNode,
     ImageBranchCandidateImage,
     ImageBranchCandidateRoleHint,
     ImageBranchCandidateSnapshot,
     ImageCanvasNode,
     VideoCanvasNode,
+    WorkspaceContextNode,
+    WorkspaceContextSnapshot,
     WorkspaceEdge,
 } from '@lixpi/constants'
 import {
@@ -23,8 +25,9 @@ const RESOLVER_VERSION = 'image-branch-vlm-v1'
 // parent and vice versa. The snapshot grounds every media object by a single
 // still — an image's file, or a video's representative frame — never the MP4.
 type MediaCanvasNode = ImageCanvasNode | VideoCanvasNode
+type WorkspaceContextCanvasNode = MediaCanvasNode | DocumentCanvasNode | AiChatThreadCanvasNode
 
-type ContextRegionNode = ContextRegionCanvasNode | AiChatThreadCanvasNode
+type ChatRootNode = AiChatThreadCanvasNode
 
 type BuildImageBranchCandidateSnapshotParams = {
     regionNodeId: string
@@ -43,6 +46,10 @@ type ChatMessageLike = {
 
 function isMediaCanvasNode(node: CanvasNode): node is MediaCanvasNode {
     return node.type === 'image' || node.type === 'video'
+}
+
+function isWorkspaceContextCanvasNode(node: CanvasNode): node is WorkspaceContextCanvasNode {
+    return node.type === 'image' || node.type === 'video' || node.type === 'document' || node.type === 'aiChatThread'
 }
 
 function isGeneratedMediaForThread(node: CanvasNode, threadId: string): node is MediaCanvasNode {
@@ -411,6 +418,96 @@ export function buildImageBranchCandidateSnapshot({
     }
 }
 
-export function isContextRegionNode(node: CanvasNode): node is ContextRegionNode {
-    return node.type === 'contextRegion' || node.type === 'aiChatThread'
+const WORKSPACE_CONTEXT_RESOLVER_VERSION = 'workspace-context-v1'
+
+type BuildWorkspaceContextSnapshotParams = {
+    workspaceId: string
+    threadId: string
+    prompt: string
+    nodes: CanvasNode[]
+    edges: WorkspaceEdge[]
+    // The active canvas thread node, when the chat is rooted on the canvas. Its
+    // edge-connected nodes are flagged `isEdgeForced`; a standalone panel chat
+    // (no root) simply has no edge-forced nodes.
+    rootNodeId?: string
+    contextChipNodeIds?: string[]
+    titlesByNodeId?: Record<string, string>
+}
+
+function toWorkspaceContextNode(
+    node: WorkspaceContextCanvasNode,
+    chipNodeIds: Set<string>,
+    edgeForcedNodeIds: Set<string>,
+    titlesByNodeId: Record<string, string>
+): WorkspaceContextNode {
+    const contextNode: WorkspaceContextNode = {
+        nodeId: node.nodeId,
+        type: node.type,
+        isExplicitChip: chipNodeIds.has(node.nodeId),
+        isEdgeForced: edgeForcedNodeIds.has(node.nodeId),
+    }
+
+    if (node.type === 'document' || node.type === 'aiChatThread') {
+        contextNode.referenceId = node.referenceId
+    }
+
+    const title = titlesByNodeId[node.nodeId]?.trim()
+    if (title) contextNode.title = title
+
+    const descriptor = node.descriptor
+    if (descriptor) {
+        contextNode.descriptorStatus = descriptor.status
+        const summary = descriptor.summary?.trim()
+        if (summary) contextNode.descriptorSummary = summary
+        if (descriptor.entityTags?.length) contextNode.entityTags = descriptor.entityTags
+        if (descriptor.styleTags?.length) contextNode.styleTags = descriptor.styleTags
+    }
+
+    // Media carry a still reference (an image file, or a video's representative
+    // frame — never the MP4) + branch lineage so the API can resolve the
+    // narrowed set's pixels later; the snapshot itself stays descriptors-only.
+    if (isMediaCanvasNode(node)) {
+        const fileId = getCandidateStillFileId(node)
+        if (fileId) contextNode.fileId = fileId
+        const imageUrl = getMediaUrl(node)
+        if (imageUrl) contextNode.imageUrl = imageUrl
+        const branchId = node.generatedBy?.branchId
+        if (branchId) contextNode.branchId = branchId
+    }
+
+    return contextNode
+}
+
+// Whole-workspace, descriptors-only index built each chat turn. Generalizes
+// buildImageBranchCandidateSnapshot from "media candidates for one thread" to
+// "every context-bearing node in the workspace", tagging explicit chips and
+// edge-forced nodes so the API relevance stage can force-include them.
+export function buildWorkspaceContextSnapshot({
+    workspaceId,
+    threadId,
+    prompt,
+    nodes,
+    edges,
+    rootNodeId,
+    contextChipNodeIds = [],
+    titlesByNodeId = {},
+}: BuildWorkspaceContextSnapshotParams): WorkspaceContextSnapshot {
+    const chipNodeIds = new Set(contextChipNodeIds)
+    const edgeForcedNodeIds = rootNodeId
+        ? new Set(getSourceContextNodeIds(nodes, edges, rootNodeId))
+        : new Set<string>()
+
+    return {
+        resolverVersion: WORKSPACE_CONTEXT_RESOLVER_VERSION,
+        workspaceId,
+        threadId,
+        promptText: prompt,
+        nodes: nodes
+            .filter(isWorkspaceContextCanvasNode)
+            .map((node) => toWorkspaceContextNode(node, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
+    }
+}
+
+export function isChatRootNode(node: CanvasNode): node is ChatRootNode {
+    return node.type === 'aiChatThread'
 }

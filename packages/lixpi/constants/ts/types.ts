@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'contextRegion' | 'video'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin'
 
 type CanvasNodePosition = {
     x: number
@@ -99,6 +99,8 @@ export type DocumentCanvasNode = CanvasNodeParentingFields & {
     referenceId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+    // Text summary of the document's content for the workspace relevance engine.
+    descriptor?: ContentDescriptor
 }
 
 export type ImageGenerationSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto'
@@ -155,6 +157,49 @@ export type ImageBranchCandidateSnapshot = {
     transcriptContext: string
 }
 
+// One compact, descriptors-only entry per context-bearing canvas node. The
+// browser builds these for the whole workspace each chat turn so the API
+// relevance stage can rank on text alone (no pixels) — `imageUrl`/`fileId` are
+// nats-obj references the API resolves only for the narrowed, selected set.
+export type WorkspaceContextNode = {
+    nodeId: string
+    type: CanvasNodeType
+    referenceId?: string
+    descriptorStatus?: ContentDescriptorStatus
+    title?: string
+    descriptorSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    fileId?: string
+    imageUrl?: string
+    branchId?: string
+    isExplicitChip: boolean
+    isEdgeForced: boolean
+}
+
+export type WorkspaceContextSnapshot = {
+    resolverVersion: string
+    workspaceId: string
+    threadId: string
+    promptText: string
+    nodes: WorkspaceContextNode[]
+}
+
+export type WorkspaceContextSelectionRole = 'forced-chip' | 'forced-edge' | 'auto'
+
+export type WorkspaceContextSelection = {
+    nodeId: string
+    role: WorkspaceContextSelectionRole
+    rationale?: string
+}
+
+export type WorkspaceContextResolution = {
+    resolverVersion: string
+    selections: WorkspaceContextSelection[]
+    improvedDescriptors?: Record<string, ContentDescriptor>
+    narrowedMediaNodeIds: string[]
+}
+
 export type ImageBranchReferenceRole =
     | 'target'
     | 'base-context'
@@ -200,6 +245,18 @@ export type ImageBranchResolvedStreamPayload = {
 
 export type ImageBranchResolutionErrorStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
+    aiProvider: string
+    error: string
+}
+
+export type ContextRelevanceResolvedStreamPayload = {
+    status: 'CONTEXT_RELEVANCE_RESOLVED'
+    aiProvider: string
+    workspaceContextResolution: WorkspaceContextResolution
+}
+
+export type ContextRelevanceErrorStreamPayload = {
+    status: 'CONTEXT_RELEVANCE_ERROR'
     aiProvider: string
     error: string
 }
@@ -331,22 +388,31 @@ export type ImageGeneratedByMetadata = {
     createdAt?: number
 }
 
-// A compact, model-friendly description of a media object (image or video)
-// stored on the canvas node so any feature can read it without re-deriving it.
-// AI-generated media composes it for free from the branch resolver's summaries;
-// uploaded media is captioned by a single VLM pass. Deliberately short so it can
-// be fed into model context (e.g. the branch-resolver transcript) without bloat.
-export type MediaDescriptorStatus = 'analyzing' | 'ready' | 'failed'
+// A compact, model-friendly description of a single context-bearing canvas node
+// (image, video, document, or aiChatThread) stored on the node so any feature can
+// read it without re-deriving it. Media descriptors are composed for free from the
+// branch resolver's summaries (generated media) or a single VLM pass (uploads);
+// document/thread descriptors are a text summary of the node's content (no pixels).
+// Deliberately short so it can be fed into model context (e.g. the branch-resolver
+// transcript, the workspace relevance snapshot) without bloat.
+export type ContentDescriptorStatus = 'analyzing' | 'ready' | 'failed'
 
-export type MediaDescriptor = {
-    status: MediaDescriptorStatus
+export type ContentDescriptor = {
+    status: ContentDescriptorStatus
     summary: string
     entityTags: string[]
     styleTags: string[]
+    // 'generation' = composed from generated-media metadata; 'analysis' = a VLM
+    // caption (media) or a text summary (document/thread).
     source: 'generation' | 'analysis'
     version: string
     updatedAt: number
 }
+
+// Back-compat aliases: media kept the MediaDescriptor name before descriptors were
+// generalized to all node types. Identical shape — the media path is unchanged.
+export type MediaDescriptorStatus = ContentDescriptorStatus
+export type MediaDescriptor = ContentDescriptor
 
 export type ImageCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
@@ -430,17 +496,23 @@ export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     referenceId: string
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+    // Text summary of the thread transcript for the workspace relevance engine.
+    descriptor?: ContentDescriptor
 }
 
-export type ContextRegionCanvasNode = CanvasNodeParentingFields & {
+export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     nodeId: string
-    type: 'contextRegion'
-    referenceId: string
+    type: 'branchOrigin'
+    branchId: string
+    prompt: string
+    referenceNodeIds: string[]
+    referenceFileIds: string[]
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
+    createdAt: number
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | ContextRegionCanvasNode | VideoCanvasNode
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -584,7 +656,7 @@ export type StageTraceEvent = {
 // segment types. Once that version is released, delete these definitions and import the types
 // directly from @lixpi/markdown-stream-parser instead.
 //
-// See documentation/features/MARKDOWN-RENDERING.md.
+// See documentation/conventions/MARKDOWN-RENDERING.md.
 export type MarkdownParsedSegment = {
     segment: string
     styles: string[]
@@ -853,8 +925,6 @@ export type CanvasAiChatSidebarTab = {
     title: string
 }
 
-export type AiChatPanelContextMode = 'followSelection' | 'pinnedContext'
-
 export type CanvasAiChatPromptDraft = {
     content?: object
 }
@@ -864,9 +934,10 @@ export type CanvasAiChatPanelState = {
     isSessionHistoryOpen: boolean
     tabs: CanvasAiChatSidebarTab[]
     activeTabId?: string
-    contextMode: AiChatPanelContextMode
-    includeUpstreamContext: boolean
-    contextNodeIds: string[]
+    // Explicit force-included canvas node ids, shown as removable chips in the
+    // panel's context tray. The workspace relevance engine (later phases) unions
+    // these with its automatic picks — it may add, never drop them.
+    contextChips: string[]
     width?: number
     drafts?: Record<string, CanvasAiChatPromptDraft>
 }
@@ -975,6 +1046,9 @@ export type AiInteractionChatSendMessagePayload = {
     threadId: string
     referencedFeatureIds?: string[]
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
+    // Whole-workspace, descriptors-only index sent each turn; consumed by the
+    // API `resolveWorkspaceContext` relevance stage (later phase).
+    workspaceContextSnapshot?: WorkspaceContextSnapshot
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
@@ -1148,9 +1222,7 @@ export type FinancialTransaction = {
 
 export type AiChatThreadStatus = 'active' | 'paused' | 'completed'
 
-export type AiChatThreadOwner =
-    | { type: 'standalone' }
-    | { type: 'contextRegion'; contextRegionNodeId: string }
+export type AiChatThreadOwner = { type: 'standalone' }
 
 export type AiChatThread = {
     workspaceId: string

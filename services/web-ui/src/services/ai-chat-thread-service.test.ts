@@ -32,16 +32,6 @@ function imageNode(nodeId: string, fileId: string): CanvasNode {
     } as CanvasNode
 }
 
-function regionNode(nodeId: string): CanvasNode {
-    return {
-        nodeId,
-        type: 'contextRegion',
-        referenceId: `thread-${nodeId}`,
-        position: { x: 0, y: 0 },
-        dimensions: { width: 10, height: 10 },
-    } as CanvasNode
-}
-
 function setCanvasState(nodes: CanvasNode[], edges: WorkspaceEdge[] = []): void {
     workspaceGetData.mockReturnValue({ nodes, edges } as unknown as CanvasState)
 }
@@ -58,11 +48,11 @@ beforeEach(() => {
 // =============================================================================
 
 describe('AiChatThreadService.extractSelectedContext', () => {
-    it('resolves each selected node and excludes context regions', async () => {
-        setCanvasState([imageNode('img-a', 'file-a'), imageNode('img-b', 'file-b'), regionNode('region-c')])
+    it('resolves each selected image node and ignores missing ids', async () => {
+        setCanvasState([imageNode('img-a', 'file-a'), imageNode('img-b', 'file-b')])
 
         const context = await service.extractSelectedContext({
-            nodeIds: ['img-a', 'region-c', 'img-b'],
+            nodeIds: ['img-a', 'missing', 'img-b'],
             includeUpstream: false,
         })
 
