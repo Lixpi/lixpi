@@ -1,25 +1,30 @@
+---
+title: Video Player Controls
+description: The one shared SVG video control bar used for generated and saved videos — its two mount points, control set, component API, the browser-composited canvas playback split, scrubbing behavior, accessibility/capability handling, and the deliberately ephemeral playback state.
+---
+
 # Video Player Controls
 
-Lixpi uses one shared SVG video control bar for generated and saved videos. The control bar is a framework-agnostic D3 primitive in `services/web-ui/src/components/videoControls/`, mounted in two places:
+Lixpi uses **one shared SVG video control bar** for generated and saved videos. The control bar is a framework-agnostic D3 primitive in [`services/web-ui/src/components/videoControls/`](../../services/web-ui/src/components/videoControls/videoControls.ts), mounted in two places:
 
 - over canvas `VideoCanvasNode`s in the transformed workspace chrome layer
 - inside in-chat generated video nodes in the ProseMirror AI chat history
 
-The bar controls an `HTMLVideoElement`; it does not render video frames. The host surface owns pixels. On the canvas, PIXI owns the poster/placeholder behind the node and the browser-composited `<video>` element owns completed playback. In chat, the same component controls the visible DOM `<video>`.
+The bar controls an `HTMLVideoElement`; **it does not render video frames**. The host surface owns pixels. On the canvas, PIXI owns the poster/placeholder behind the node and the browser-composited `<video>` element owns completed playback. In chat, the same component controls the visible DOM `<video>`.
 
-For video generation, storage, VEO polling, and branch lineage, see [VIDEO-GENERATION.md](VIDEO-GENERATION.md). For canvas renderer ownership, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md).
+For video generation, storage, VEO polling, and branch lineage, see [Video Generation](./VIDEO-GENERATION.md). For canvas renderer ownership (the PIXI media layer and the DOM chrome split), see [Rendering Engine](../canvas/RENDERING-ENGINE.md).
 
 ## Core Concepts
 
-**Shared SVG Control Bar** - `createVideoControls(parent, config)` appends an SVG `<g>` into a D3 selection and returns `{ render, resize, destroy }`. It follows the same framework-agnostic pattern as `slidingSwitch.ts` and `toggleSwitch.ts`.
+**Shared SVG Control Bar** — `createVideoControls(parent, config)` appends an SVG `<g>` into a D3 selection and returns `{ render, resize, destroy }`. It follows the same framework-agnostic pattern as `slidingSwitch.ts` and `toggleSwitch.ts`.
 
-**Single Source of Truth** - The supplied `HTMLVideoElement` is the state authority. The control bar reads media events and writes element properties such as `currentTime`, `playbackRate`, `volume`, and `muted`.
+**Single Source of Truth** — The supplied `HTMLVideoElement` is the state authority. The control bar reads media events and writes element properties such as `currentTime`, `playbackRate`, `volume`, and `muted`.
 
-**Two Mount Points** - `WorkspaceCanvas.ts` mounts the bar in `.workspace-video-controls-host` for canvas videos. `aiGeneratedVideoNode.ts` mounts the same bar in `.ai-generated-video-controls-host` for chat-history videos.
+**Two Mount Points** — `WorkspaceCanvas.ts` mounts the bar in `.workspace-video-controls-host` for canvas videos. `aiGeneratedVideoNode.ts` mounts the same bar in `.ai-generated-video-controls-host` for chat-history videos.
 
-**Browser-Composited Canvas Playback** - The canvas does not sample a live video texture into PIXI. `videoNodeHandler.ts` creates the authenticated video element and loads the PIXI poster. `WorkspaceCanvas.ts` moves that same element into `.workspace-video-chrome`, above the poster, so browser playback, seeking, PiP, and fullscreen work normally.
+**Browser-Composited Canvas Playback** — The canvas does not sample a live video texture into PIXI. `videoNodeHandler.ts` creates the authenticated video element and loads the PIXI poster. `WorkspaceCanvas.ts` moves that same element into `.workspace-video-chrome`, above the poster, so browser playback, seeking, PiP, and fullscreen work normally.
 
-**Ephemeral Playback State** - Playback position, speed, volume, PiP, fullscreen, hover visibility, and scrubbing state are not persisted to `canvasState`.
+**Ephemeral Playback State** — Playback position, speed, volume, PiP, fullscreen, hover visibility, and scrubbing state are **not** persisted to `canvasState`.
 
 ## Control Set
 
@@ -109,13 +114,15 @@ The chrome mirrors normal node interactions:
 - pointer down outside the controls starts node drag or corner resize
 - pointer events inside `.workspace-video-controls-host` are isolated from drag/resize/selection
 
-This is why the video element must be visibly composited. Browser playback and native APIs are reliable only when the real element is rendered; a hidden element sampled into a PIXI texture can be throttled or blank.
+{% callout type="important" %}
+This is why the video element must be **visibly composited**. Browser playback and native APIs are reliable only when the real element is rendered; a hidden element sampled into a PIXI texture can be throttled or blank, and a PIXI video-frame loop caused connector lines to disappear during playback. The full renderer-ownership rationale lives in [Rendering Engine](../canvas/RENDERING-ENGINE.md).
+{% /callout %}
 
 ## Chat Playback Flow
 
-`aiGeneratedVideoNode.ts` keeps its pending, keepalive, complete, and error states. On completion it renders a native-controls-disabled `<video>` and overlays the same `createVideoControls(...)` bar at the bottom. A `ResizeObserver` keeps the SVG `viewBox` and control geometry in sync with the chat card width.
+`aiGeneratedVideoNode.ts` keeps its pending, keepalive, complete, and error states (see [Video Generation](./VIDEO-GENERATION.md) for the lifecycle that drives them). On completion it renders a native-controls-disabled `<video>` and overlays the same `createVideoControls(...)` bar at the bottom. A `ResizeObserver` keeps the SVG `viewBox` and control geometry in sync with the chat card width.
 
-The chat video has no PIXI involvement. The same component still works because all state lives on the supplied `HTMLVideoElement`.
+The chat video has **no PIXI involvement**. The same component still works because all state lives on the supplied `HTMLVideoElement`.
 
 ## Scrubbing Behavior
 
@@ -156,9 +163,9 @@ Canvas visibility and positioning are controlled by host elements:
 
 ## Data, Storage, and Transport
 
-Video controls add no persisted data model, NATS subject, API route, Object Store object, or LangGraph state. They operate entirely on an already-loaded `HTMLVideoElement`.
+Video controls add **no** persisted data model, NATS subject, API route, Object Store object, or LangGraph state. They operate entirely on an already-loaded `HTMLVideoElement`.
 
-`VideoCanvasNode` remains the persisted canvas data for videos. Playback UI state is deliberately ephemeral.
+`VideoCanvasNode` remains the persisted canvas data for videos (defined in the canvas data model — see [Workspace Model](../canvas/WORKSPACE-MODEL.md) and the field table in [Video Generation](./VIDEO-GENERATION.md)). Playback UI state is deliberately ephemeral.
 
 ## Implementation Map
 
@@ -174,9 +181,9 @@ Video controls add no persisted data model, NATS subject, API route, Object Stor
 | Canvas source-shape coverage | [workspace-canvas.test.ts](../../services/web-ui/src/infographics/workspace/workspace-canvas.test.ts) |
 | Local canvas README | [README.md](../../services/web-ui/src/infographics/workspace/README.md) |
 
-## References
+## Related Pages
 
-- [VIDEO-GENERATION.md](VIDEO-GENERATION.md) - generated video lifecycle and playback surface
-- [CANVAS-ENGINE.md](CANVAS-ENGINE.md) - DOM/PIXI renderer ownership
-- [WORKSPACE-FEATURE.md](WORKSPACE-FEATURE.md) - video canvas nodes
-- [MEDIA-LIBRARY.md](MEDIA-LIBRARY.md) - saved videos and materialization
+- [Video Generation](./VIDEO-GENERATION.md) — generated video lifecycle and the playback surface this bar controls.
+- [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the DOM/PIXI renderer-ownership split behind the visible video element.
+- [Workspace Model](../canvas/WORKSPACE-MODEL.md) — the `VideoCanvasNode` canvas data model.
+- [Media Library](../library/MEDIA-LIBRARY.md) — saved videos and materialization back to the canvas.

@@ -128,6 +128,7 @@ The LLM module's `index.ts` and the rest of `src/llm/` would not change — they
 
 ## Reference
 
-- [`documentation/ARCHITECTURE.md`](../../../documentation/ARCHITECTURE.md) — system-wide architecture overview.
+- [`documentation/platform/SYSTEM-ARCHITECTURE.md`](../../../documentation/platform/SYSTEM-ARCHITECTURE.md) — system-wide architecture overview.
+- [`documentation/platform/AI-GENERATION-PIPELINE.md`](../../../documentation/platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow this module implements.
 - [`documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`](../../../documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md) — auth pattern preserved from the original Python service.
 - [`@langchain/langgraph` JS docs](https://github.com/langchain-ai/langgraphjs).

@@ -142,7 +142,7 @@ Video generation is powered by Google VEO through the same dual-model architectu
 
 VEO generation is asynchronous: the API submits a `generateVideos` operation, polls until completion, publishes keepalive events while no partial frames exist, downloads and validates the MP4, extracts a frame-0 poster and representative mid-frame with `ffmpeg`, and stores the result in NATS Object Store. The completed clip becomes a `VideoCanvasNode`.
 
-On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, PiP, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](features/VIDEO-GENERATION.md) for the full architecture.
+On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, PiP, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](media-generation/VIDEO-GENERATION.md) for the full architecture.
 
 ---
 
@@ -195,7 +195,7 @@ graph TB
 | **web-ui** | Svelte / TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction |
 | **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — JWT auth, CRUD operations, DynamoDB persistence, NATS bridge, token streaming, image generation, video generation |
 | **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream Object Store for image and video storage |
-| **localauth0** | Node.js | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
+| **localauth0** | Rust (vendored `primait/localauth0`) | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 
 ### Key Architecture Decisions
 
@@ -220,7 +220,7 @@ Each AI thread has a model selector dropdown. Users can switch models between me
 | **Anthropic** | Claude 4 Opus, Claude Sonnet 4 | Text generation |
 | **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash | Text generation |
 | **Google** | Nano Banana, Nano Banana Pro, Nano Banana 2 | Image generation (progressive streaming via Thinking) |
-| **Google** | Veo 3, Veo 3 Fast, Veo 3.1 | Video generation with audio (async submit/poll) — see [Video Generation](features/VIDEO-GENERATION.md) |
+| **Google** | Veo 3, Veo 3 Fast, Veo 3.1 | Video generation with audio (async submit/poll) — see [Video Generation](media-generation/VIDEO-GENERATION.md) |
 
 Each model carries metadata: context window size, max completion, supported modalities, and detailed pricing (input/output token rates, cached rates, image tiers by resolution, per-second video rates). Five modalities are defined in the type system: `text`, `image`, `audio`, `voice`, `video` — **image and video are implemented** (the latter via Google VEO 3); `audio` and `voice` remain infrastructure-ready.
 
@@ -376,3 +376,15 @@ Shared packages keep service contracts in sync:
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by API and NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
 | `@xyflow/system` (vendored) | Framework-agnostic pan/zoom/coordinate math — used at the low-level API, not React Flow or Svelte Flow |
+
+---
+
+## Further Reading
+
+This page is the product-level picture. For the technical deep dives, start at the [documentation index](README.md):
+
+- **Platform** — [System Architecture](platform/SYSTEM-ARCHITECTURE.md), [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md), [Streaming & Events](platform/STREAMING-AND-EVENTS.md), [Authentication](platform/AUTHENTICATION.md).
+- **Canvas** — [Workspace Model](canvas/WORKSPACE-MODEL.md), [Rendering Engine](canvas/RENDERING-ENGINE.md).
+- **AI chat** — [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md), [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md).
+- **Media generation** — [Image Generation](media-generation/IMAGE-GENERATION.md), [Video Generation](media-generation/VIDEO-GENERATION.md), [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md).
+- **Library** — [Feature Extraction](library/FEATURE-EXTRACTION-OVERVIEW.md), [Media Library](library/MEDIA-LIBRARY.md), [Workspace Export & Import](library/WORKSPACE-EXPORT-IMPORT.md).

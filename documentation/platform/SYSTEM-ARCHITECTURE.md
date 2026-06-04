@@ -22,7 +22,7 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction |
 | **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (token streaming, image generation, video generation, usage tracking) |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, JetStream Object Store for image and video storage |
-| **localauth0** | Mock Auth0 | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
+| **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 | **DynamoDB** | AWS (local via Docker) | — | Document storage, user data, AI chat threads, AI model metadata |
 
 {% callout type="note" %}

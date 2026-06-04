@@ -1,28 +1,30 @@
+---
+title: Media Library
+description: The canvas-owned panel for media a user keeps for reuse — saved images and videos as independent Object Store copies, the ownership boundary that decouples them from canvas nodes, scopes & access, the data model, the NATS/HTTP service surface, lifecycle & failure handling, and the implementation map.
+---
+
 # Media Library
 
 The Media Library is the right-side canvas panel for media a user has chosen to keep. It has three categories: **Features**, which exposes the existing extracted-feature library, **Images**, which stores reusable copies of finished canvas images, and **Videos**, which stores reusable copies of finished canvas videos.
 
 The important detail is ownership. A saved image or video is not a bookmark to a canvas node and is not an alias to the workspace object. Saving makes a separate Object Store copy. Adding it back to a canvas makes another workspace copy. A user can therefore tidy or delete the original canvas media without losing the asset they saved for reuse.
 
-For the larger canvas rendering and placement architecture, see [CANVAS-ENGINE.md](CANVAS-ENGINE.md) and [WORKSPACE-FEATURE.md](WORKSPACE-FEATURE.md). For feature extraction, sample images, and `/use` prompt references, see [FEATURE-EXTRACTION-AND-LIBRARY.md](FEATURE-EXTRACTION-AND-LIBRARY.md).
+{% callout type="note" %}
+This page is part of the feature library domain. For the larger canvas rendering and placement architecture, see [Rendering Engine](../canvas/RENDERING-ENGINE.md) and [Workspace Model](../canvas/WORKSPACE-MODEL.md). For feature extraction, sample images, and `/use` prompt references, see [Feature Extraction — Overview](./FEATURE-EXTRACTION-OVERVIEW.md) and [Using Features](./USING-FEATURES.md). Saved videos depend on the generated-video model in [Video Generation](../media-generation/VIDEO-GENERATION.md). To move a whole workspace's media between workspaces, see [Workspace Export & Import](./WORKSPACE-EXPORT-IMPORT.md).
+{% /callout %}
 
 ## Core Concepts
 
-**Media Library** — A canvas-owned panel rendered by [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts). The first time it is opened for a canvas instance, it starts on `Features` with the current `Workspace` scope selected.
-
-**Feature** — An extracted reusable feature such as a palette or style instruction. Features appear inside the Media Library, but they still use the established Feature model, NATS subjects, samples, extraction workflow, and `/use` resolution. They are not `MediaLibraryItem` records.
-
-**Saved Image** — A library-owned copy of a stored canvas image. It has its own item ID, scope, metadata record, preview route, and Object Store object.
-
-**Saved Video** — A library-owned copy of a stored canvas video. It has its own item ID, scope, metadata record, Range-capable MP4 content route, optional poster route, and Object Store object.
-
-**Canvas Image** — An image node whose bytes belong to a workspace. Uploaded images, imported URL images, completed generated images, and images restored from the library all become normal stored canvas images.
-
-**Canvas Video** — A video node whose MP4 and poster bytes belong to a workspace. Completed VEO generations and videos restored from the library become normal stored canvas videos.
-
-**Materialization** — Copying a saved library image or video into the active workspace so it can be inserted as a new normal canvas node. The new node does not inherit AI-generation lineage or the deleted state of any earlier canvas node.
-
-**Scope** — The visibility and storage owner of a saved media item: `Workspace`, `Mine`, `Organization`, or `Public`. Media is first saved to the active workspace. Moving scope moves the canonical library copy as well as its browse metadata.
+| Concept | Definition |
+|---------|------------|
+| **Media Library** | A canvas-owned panel rendered by [`mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts). The first time it is opened for a canvas instance, it starts on `Features` with the current `Workspace` scope selected. |
+| **Feature** | An extracted reusable feature such as a palette or style instruction. Features appear inside the Media Library, but they still use the established Feature model, NATS subjects, samples, extraction workflow, and `/use` resolution. They are **not** `MediaLibraryItem` records. |
+| **Saved Image** | A library-owned copy of a stored canvas image. It has its own item ID, scope, metadata record, preview route, and Object Store object. |
+| **Saved Video** | A library-owned copy of a stored canvas video. It has its own item ID, scope, metadata record, Range-capable MP4 content route, optional poster route, and Object Store object. |
+| **Canvas Image** | An image node whose bytes belong to a workspace. Uploaded images, imported URL images, completed generated images, and images restored from the library all become normal stored canvas images. |
+| **Canvas Video** | A video node whose MP4 and poster bytes belong to a workspace. Completed VEO generations and videos restored from the library become normal stored canvas videos. |
+| **Materialization** | Copying a saved library image or video into the active workspace so it can be inserted as a new normal canvas node. The new node does not inherit AI-generation lineage or the deleted state of any earlier canvas node. |
+| **Scope** | The visibility and storage owner of a saved media item: `Workspace`, `Mine`, `Organization`, or `Public`. Media is first saved to the active workspace. Moving scope moves the canonical library copy as well as its browse metadata. |
 
 ## What Users Can Do
 
@@ -34,7 +36,9 @@ For the larger canvas rendering and placement architecture, see [CANVAS-ENGINE.m
 - Move a media item they own into another available scope or delete it from the library.
 - Inspect extracted Features, use them in a prompt, change sharing for Features they own, delete owned Features, or report public Features.
 
+{% callout type="important" %}
 The panel does not collect every generated asset automatically. It contains images and videos only after an explicit save action.
+{% /callout %}
 
 ## Architecture
 
@@ -174,6 +178,9 @@ sequenceDiagram
     participant LS as Library Store
     participant DB as Media Records
 
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 1: SAVE A COMPLETED CANVAS MEDIA NODE
+    %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
         Note over User, DB: PHASE 1 - SAVE A COMPLETED CANVAS MEDIA NODE
         User->>Canvas: Choose Add to Media Library
@@ -206,6 +213,9 @@ sequenceDiagram
         deactivate Canvas
     end
 
+    %% ═══════════════════════════════════════════════════════════════
+    %% PHASE 2: ADD SAVED MEDIA TO THE ACTIVE CANVAS
+    %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
         Note over User, DB: PHASE 2 - ADD SAVED MEDIA TO THE ACTIVE CANVAS
         User->>Canvas: Choose Add to canvas
@@ -249,6 +259,10 @@ An image inserted from a URL must be a real workspace image before it can behave
 - Fetches time out after 15 seconds.
 - The response must use an allowed image MIME type and fit within the shared image-size limit.
 - `sharp` must be able to read intrinsic width and height before the image is stored.
+
+{% callout type="warning" %}
+These import rules are an SSRF defense: a server-side fetch of a user-supplied URL must never be coerced into reaching an internal/private address. The address check is applied to the literal URL, every DNS result, and every redirect hop — not just once at the start.
+{% /callout %}
 
 On success, the image goes through [`image-storage.ts`](../../services/api/src/services/image-storage.ts), receives a workspace `fileId`, and becomes eligible for normal canvas lifecycle and Media Library saving. On failure, no canvas image node is created.
 

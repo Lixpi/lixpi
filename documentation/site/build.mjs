@@ -27,7 +27,10 @@ const DOCS_ROOT = path.resolve(SITE_DIR, '..')
 const DIST = path.join(SITE_DIR, 'dist')
 const ASSETS_OUT = path.join(DIST, '_assets')
 
-const EXCLUDE_DIRS = new Set(['site', 'node_modules', '.git'])
+// `dist` is the build output; `node_modules` is dependencies. Everything else
+// under documentation/ (including site/README.md, which documents this build)
+// is rendered so its cross-links resolve.
+const EXCLUDE_DIRS = new Set(['node_modules', '.git', 'dist'])
 
 // Sidebar ordering: lower weight sorts first; unknown names get 0; README/index
 // are pinned to the top. Tunable without touching logic.
