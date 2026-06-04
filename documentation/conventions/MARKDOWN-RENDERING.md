@@ -1,6 +1,15 @@
+---
+title: Markdown Rendering
+description: The one-parser rule for runtime markdown in the web UI — every piece of markdown is tokenized by @lixpi/markdown-stream-parser, and exactly two renderers (the editable ProseMirror StreamingInserter and the non-editable MarkdownStreamRenderer) turn segments into UI. Covers the parser contract, usage, global styles, the forbidden list, and current consumers.
+---
+
 # Markdown Rendering
 
 Markdown shows up in many places in the web UI — AI chat responses, the feature-extraction tab (prompt previews and streamed model output), the Media Library (saved feature instructions), and any future surface that displays model text. To keep all of it consistent and to avoid scattering markdown parsers across the codebase, Lixpi has **one rule**: every piece of markdown is tokenized by the same parser, and there are exactly two renderers that turn those tokens into UI.
+
+{% callout type="note" %}
+This convention governs **runtime markdown in the web UI** (model output, feature instructions, and similar surfaces). It is distinct from the documentation site's own **build-time Markdoc renderer** in [`documentation/site/`](../site/README.md), which turns these `.md` docs into static HTML. The two do not share code or this rule.
+{% /callout %}
 
 ## The rule
 
@@ -72,7 +81,9 @@ Instance lifecycle: `MarkdownStreamParser.getInstance(id)` → `subscribeToToken
 
 The segment/token TypeScript shapes (`MarkdownParsedSegment`, `MarkdownStreamToken`) currently live in [`@lixpi/constants`](../../packages/lixpi/constants/ts/types.ts) because the published parser version defines its segment internally but does not export it (`subscribeToTokenParse` is typed `any`).
 
-> **Note:** a newer version of `@lixpi/markdown-stream-parser` is in development that **exports proper segment types**. Once it is released, drop the `@lixpi/constants` copies and import the types directly from the package.
+{% callout type="note" %}
+A newer version of `@lixpi/markdown-stream-parser` is in development that **exports proper segment types**. Once it is released, drop the `@lixpi/constants` copies and import the types directly from the package.
+{% /callout %}
 
 ## Non-editable rendering: `MarkdownStreamRenderer`
 
@@ -121,4 +132,4 @@ Markdown element styles are **global** and live in [`src/sass/_markdown.scss`](.
 | Feature-extraction tab | Stage prompt previews, streamed model output | `MarkdownStreamRenderer` / `renderMarkdownStatic` |
 | Media Library | Saved feature instructions ("Application notes") | `renderMarkdownStatic` |
 
-See also: [FEATURE-EXTRACTION-AND-LIBRARY.md](FEATURE-EXTRACTION-AND-LIBRARY.md), [MEDIA-LIBRARY.md](MEDIA-LIBRARY.md), and the coding-style pointer at [`documentation/coding-style-guides/MARKDOWN-RENDERING.md`](../coding-style-guides/MARKDOWN-RENDERING.md).
+See also: [Feature Extraction — Overview](../library/FEATURE-EXTRACTION-OVERVIEW.md), [Using Features](../library/USING-FEATURES.md), [Media Library](../library/MEDIA-LIBRARY.md), and the coding-style pointer at [`documentation/coding-style-guides/MARKDOWN-RENDERING.md`](../coding-style-guides/MARKDOWN-RENDERING.md).
