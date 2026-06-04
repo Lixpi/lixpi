@@ -1,19 +1,21 @@
 # Workspace Canvas
 
-This module renders the main workspace view-a zoomable, pannable canvas where documents, images, videos, and AI chat threads appear as draggable, resizable canvas nodes.
+This module renders the main workspace view: a zoomable, pannable canvas where documents, images, videos, and branch-origin provenance nodes appear as draggable, resizable canvas nodes. AI chat sessions live in the right-side panel; older workspaces may still contain `aiChatThread` canvas data, but the current renderer does not draw those nodes.
 
 > **Where to look first.**
 >
-> - For the rendering architecture (DOM interaction layer + PIXI v8 media/edge layers), the LoD-tier loader, the texture cache, the 6-worker decode pool, and the list of remaining performance issues, read [`documentation/features/CANVAS-ENGINE.md`](../../../../../documentation/features/CANVAS-ENGINE.md). That document is the source of truth for any rendering or perf work.
-> - For collision resolution, viewport-centered insertion cleanup, and drag-release collision rules, read [`documentation/features/CANVAS-COLLISION-RESOLUTION.md`](../../../../../documentation/features/CANVAS-COLLISION-RESOLUTION.md).
-> - For workspace data flow (stores, services, NATS subjects, AI chat context extraction, image generation, and video generation), read [`documentation/features/WORKSPACE-FEATURE.md`](../../../../../documentation/features/WORKSPACE-FEATURE.md).
+> - For the rendering architecture (DOM interaction layer + PIXI v8 media/edge layers), the LoD-tier loader, texture cache, decode pool, and remaining performance work, read [`documentation/canvas/RENDERING-ENGINE.md`](../../../../../documentation/canvas/RENDERING-ENGINE.md).
+> - For collision resolution, viewport-centered insertion cleanup, and drag-release collision rules, read [`documentation/canvas/COLLISION-RESOLUTION.md`](../../../../../documentation/canvas/COLLISION-RESOLUTION.md).
+> - For workspace data flow, persisted canvas shape, and workspace subjects, read [`documentation/canvas/WORKSPACE-MODEL.md`](../../../../../documentation/canvas/WORKSPACE-MODEL.md) and [`documentation/platform/SYSTEM-ARCHITECTURE.md`](../../../../../documentation/platform/SYSTEM-ARCHITECTURE.md).
+> - For the shared canvas and in-chat video control bar, read [`documentation/media-generation/VIDEO-PLAYER-CONTROLS.md`](../../../../../documentation/media-generation/VIDEO-PLAYER-CONTROLS.md).
+> - For context chips, automatic workspace relevance, reference-vs-lineage rules, and branch-origin provenance, read [`documentation/ai-chat/CONTEXT-RELEVANCE.md`](../../../../../documentation/ai-chat/CONTEXT-RELEVANCE.md) and [`documentation/media-generation/BRANCH-LINEAGE.md`](../../../../../documentation/media-generation/BRANCH-LINEAGE.md).
 > - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
 
 > **Configuration rule.** Workspace-canvas values that are meant to be tuned - colors, shadows, dimensions, gaps, hit radii, resize cursor activation areas, animation timing, behavior flags, and generated-image placement spacing - belong in [`settings.ts`](../../settings.ts). Keep them in logical top-level subsections such as `aiChatThread`, `connector`, `imageNode`, and `imageBranchLineage`; use nested subsections for child domains such as `aiChatThread.rail`; separate every group with a blank line before and after; and document every key with what changing it does. Use getters only when a setting needs to self-reference sibling settings through `this`; keep ordinary static values as plain properties.
 
 ## What It Does
 
-When you open a workspace, you see a canvas. On that canvas are nodes (documents, images, or AI chat threads). You can:
+When you open a workspace, you see a canvas. On that canvas are nodes (documents, images, videos, or branch-origin provenance nodes). You can:
 
 - **Pan** the canvas by clicking and dragging empty space (or two-finger scroll on trackpad)
 - **Zoom** with pinch gestures or Ctrl+scroll
@@ -27,9 +29,9 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Add images** via the toolbar button which opens an upload modal
 - **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
-- **Connect nodes** by dragging from a handle OR by dragging a node close to an AI Chat Thread ("Proximity Connect")
+- **Connect nodes** by dragging from a handle, then use the AI Chat panel context tray and workspace relevance to decide what the next prompt sees
 - **Provide AI context** from explicit context chips while also sending a compact workspace descriptor snapshot with each chat turn
-- **Use the floating prompt input** to send prompts to the currently selected node; for non-thread nodes, the input appears on selection and hides on deselect
+- **Use the AI Chat panel composer** to send prompts with explicit context chips and workspace relevance
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
@@ -81,6 +83,8 @@ The canvas owns a singleton right-side AI Chat panel. The outside top-right togg
 The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the context-control row; its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
 
 ### Legacy AI Chat Thread Nodes
+This section documents the older canvas-thread implementation that still has code and persisted data types in the repository. The current workspace renderer does not create or draw `aiChatThread` canvas nodes; active chat sessions live in the right-side AI Chat panel.
+
 - Contain embedded ProseMirror editors with `documentType: 'aiChatThread'`
 - Have a drag overlay at the top (20px)
 - Free resize (no aspect ratio constraint)
@@ -225,7 +229,7 @@ Image nodes have a simpler structure:
 
 Generated-image provider badges, info buttons, and expanded provenance panels do not live inside the image node shell. They render in `.workspace-image-chrome-viewport`, above the PIXI media layer, so stored image sprites cannot cover them.
 
-Image pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [CANVAS-ENGINE.md](../../../../../documentation/features/CANVAS-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. Completed video playback is the exception: `videoNodeHandler.ts` still loads the poster into PIXI for stable canvas geometry, but `WorkspaceCanvas.ts` moves the attached `<video>` into `.workspace-video-chrome` for visible playback and controls. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the media sprite. Image/video corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask or chrome surface.
+Image pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [Rendering Engine](../../../../../documentation/canvas/RENDERING-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. Completed video playback is the exception: `videoNodeHandler.ts` still loads the poster into PIXI for stable canvas geometry, but `WorkspaceCanvas.ts` moves the attached `<video>` into `.workspace-video-chrome` for visible playback and controls. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the media sprite. Image/video corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask or chrome surface.
 
 Branch-origin circles are drawn by `rendering/pixiBranchOriginLayer.ts`, a separate pointerless PIXI layer with `autoStart:false`. `rendering/viewportBridge.ts` applies each viewport change to both PIXI worlds in one call. The branch-origin layer culls offscreen circles using `settings.branchOrigin.cullingMargin`, keeps pulse animation bounded by `settings.branchOrigin.pulseDurationMs`, and leaves all hit testing to transparent DOM proxies.
 
@@ -297,7 +301,7 @@ Node selection is runtime-only UI state and is not persisted into `canvasState`.
 
 Empty-space drag draws a marquee rectangle and selects all overlapping nodes.
 
-**Empty AI chat threads** (no messages yet) are included in marquee selection. Although the thread node itself is hidden, its floating input is visible and the selection bounds for hidden threads use only the floating input's dimensions — not the invisible thread area. This prevents phantom selection over areas the user cannot see.
+Legacy empty AI chat thread nodes used special marquee-selection bounds so hidden thread shells did not create phantom selection areas. Current visible workspace nodes use their own DOM bounds directly.
 
 #### Selection Overlay Rules
 
@@ -327,7 +331,7 @@ The drag overlay passes `node.nodeId` (not pre-resolved) to `handleDragStart` so
 
 Dragging any selected draggable node moves the entire selection together. During group drag:
 
-- AI chat thread companion UI (vertical rail and floating input) stays attached to its thread
+- Legacy AI chat thread companion UI (vertical rail and floating input) stays attached to its thread when those old nodes are present
 - Collision resolution is skipped for multi-node moves to preserve rigid spacing
 - The follow-up click event is suppressed so multi-selection is not collapsed to a single node after drag
 
@@ -336,8 +340,8 @@ Dragging any selected draggable node moves the entire selection together. During
 Single-target canvas UI stays single-target:
 
 - The image bubble menu appears only when exactly one image node is selected
-- The single floating prompt input appears only when exactly one document node is selected
-- Per-thread floating inputs remain attached to AI chat thread nodes regardless of selection state
+- The detached prompt input is deprecated; the active composer lives in the AI Chat panel
+- Legacy per-thread floating inputs remain attached only to old AI chat thread nodes if those nodes are ever rendered again
 
 Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `settings.selection` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
 
@@ -362,9 +366,10 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 Standalone chat tabs use the panel's context chips as explicit forced context. Chips are resolved through the existing extraction service, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the panel adds distinct ephemeral auto chips for non-explicit selections and patches any `improvedDescriptors` into local canvas state so descriptor chrome updates without a reload.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-    DOC[Document Node] -->|selected or upstream| CTX[ExtractedContext]
-    IMG[Image Node] -->|selected or upstream| CTX
+    DOC[Document Node] -->|explicit chip| CTX[ExtractedContext]
+    IMG[Image Node] -->|explicit chip| CTX
     VID[Video Node] -->|representative still| CTX
     CHAT[Canvas AI Chat Panel] -->|context chips| CTX
     CHAT -->|WorkspaceContextSnapshot| SNAP[Descriptor Index]
@@ -485,17 +490,17 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.nopan` | Prevents panning when interacting |
 | `.is-dragging` / `.is-resizing` | State classes during interaction |
 
-## AI Chat Thread Background
+## Legacy AI Chat Thread Background
 
-AI chat thread nodes display an animated shifting gradient background. The gradient is rendered to a small 60×80 pixel bitmap and scaled up with bilinear interpolation for smooth, low-cost rendering. The canvas element is injected as the first child of `.workspace-ai-chat-thread-node` with class `.shifting-gradient-canvas`.
+Legacy AI chat thread nodes can display an animated shifting gradient background. The gradient is rendered to a small 60×80 pixel bitmap and scaled up with bilinear interpolation for smooth, low-cost rendering. The canvas element is injected as the first child of `.workspace-ai-chat-thread-node` with class `.shifting-gradient-canvas`.
 
 The gradient uses 4 color points with inverse distance weighting and a subtle swirl distortion for an organic feel. When sending a message, the gradient animates to the next phase position.
 
 During thread resizing, the gradient canvas keeps the existing bitmap visible while its CSS box changes. When the backing-store size really changes, the renderer redraws immediately; unchanged `ResizeObserver` callbacks are ignored so the canvas is not cleared unnecessarily.
 
-Both the thread node gradient and the floating user-input gradient are controlled by feature flags in `settings.ts`:
+The legacy thread node gradient and the panel composer gradient are controlled by feature flags in `settings.ts`:
 
-- `settings.aiChatThread.useShiftingGradientBackground` (default `false`) — gradient on the AI chat thread canvas node itself.
-- `settings.aiPromptInput.useShiftingGradientBackground` (default `true`) — gradient on the floating AI prompt input nodes.
+- `settings.aiChatThread.useShiftingGradientBackground` (default `false`) — gradient on legacy AI chat thread canvas nodes.
+- `settings.aiPromptInput.useShiftingGradientBackground` (default `true`) — gradient on AI prompt input surfaces, including the AI Chat panel composer.
 
-For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Gradient Rendering and Animation System](../../../documentation/features/GRADIENTS.md).
+For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md).

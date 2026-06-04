@@ -1,0 +1,620 @@
+---
+title: Branch Lineage & Provenance
+description: How AI-generated media — images and videos — get their parentage, branch identity, canvas placement, and provenance. The structured VLM resolver, candidate snapshots, persisted metadata, the placement/lineage split, and branch-origin circles.
+---
+
+# Branch Lineage & Provenance
+
+Branch Lineage makes AI-generated **images and videos** first-class canvas artifacts with explicit parentage, branch identity, visual summaries, canvas placement, and resolver audit metadata. It is the machinery that lets Lixpi answer visual follow-up prompts such as *"that guy,"* *"the goat,"* *"this one,"* or *"in the style of that landscape painting"* without guessing from text alone — and that decides where each new artifact lands on the canvas and which prior artifact (if any) it descends from.
+
+The one rule everything else follows: when a media model is selected, generated-media reference routing is always resolved by a structured **vision-language model (VLM)** call in the API *before* the text model writes the generation prompt. The browser builds a candidate snapshot, but the browser never decides which references reach the image or video model. The API-side VLM resolution is the routing authority.
+
+{% callout type="important" %}
+**This page is modality-agnostic.** Everything here — candidate snapshots, the `resolveImageBranch` resolver, the references-vs-lineage distinction, canvas placement, branch-origin circles, and progress outlines — applies to **both image and video generation**. The resolver gate runs when an image **or** a video model is selected. A video participates by contributing a **single representative still** (its mid-frame, falling back to the poster); the MP4 is never sent to the resolver. The per-modality deltas live in [Image Generation](./IMAGE-GENERATION.md) and [Video Generation](./VIDEO-GENERATION.md); the shared LangGraph workflow lives in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
+{% /callout %}
+
+This feature is part of Lixpi's artifact-piping architecture (see [Product Overview](../PRODUCT-OVERVIEW.md)): generated media become persistent canvas nodes that can be piped into later threads, reused as exact visual context, and branched into multiple edit directions.
+
+## Core Concepts
+
+**Branch** — A lineage of generated media nodes that represent edits or variants of the same visual artifact. Descendants share a `branchId` when the VLM resolves a prompt as continuing an existing target.
+
+**Parent Image** — The generated media node selected as the edit parent for a new generation. Stored as `generatedBy.parentImageNodeId` and used for canvas edge placement.
+
+**Base Context** — Images, videos, documents, and thread content force-included through workspace edges, explicit panel context chips, or automatic workspace relevance. Base context narrows candidates and can also be selected by the VLM as visual reference material. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
+
+**Candidate Snapshot** — A deterministic, browser-built list of labeled media candidates. It carries canvas node IDs, file IDs, branch hints, ancestor hints, source-context IDs, prompt snippets, thread-transcript labels, and `nats-obj://` still-image URLs. It is *useful context, not a decision.* Candidates include both image and video nodes; a video contributes its representative still plus a `mediaKind` flag, so an edit to a prior video continues that video's branch at the same per-candidate cost as an image.
+
+**Structured VLM Resolver** — The API-side `resolveImageBranch` LangGraph node. It shows the user prompt plus labeled candidate stills to a vision-language model and requires strict JSON describing target, base-context, style-reference, comparison-target, and excluded roles.
+
+**Reference Image Set** — The exact `referenceImageNodeIds` returned by the VLM. These are the only candidate references inserted into the provider message that downstream `extractReferenceImages()` and the media routers use.
+
+**Resolver Audit Metadata** — The resolver model provider, model ID, confidence, rationale, excluded node IDs, operation kind, visual summaries, and schema version, persisted on generated-media metadata for later candidate labeling and debugging.
+
+**Branch Origin** — A persisted `branchOrigin` canvas node created once per new `branchId`. It records the starting prompt and reference media and connects to the first generated output. It is provenance and an entry point, not a chat owner.
+
+**Lineage Source** — A *verified connector parent.* References, style images, and workspace-relevance selections can guide routing or placement, but they do not become connector parents unless the resolver is continuing an existing generated branch, or the output is rooted on a chat thread.
+
+**Placement Anchor** — A media node used only to *position* a fresh/reference-only generation on the canvas. Placement anchors and reference IDs are context; they never create connector parentage.
+
+## Why This Exists
+
+Branch routing is a **visual reference-grounding problem, not a string-parsing problem.** A user can create a portrait branch, create or reference a landscape painting, and then ask:
+
+```text
+draw a goat in the style of that landscape painting
+```
+
+The system must understand several visual roles at once:
+
+- The goat is the requested new subject.
+- The landscape painting is style evidence.
+- Any existing generated portrait branch is unrelated and should not condition the model.
+
+Regexes, latest-leaf heuristics, and prompt-derived tags all fail this class of problem because they do not inspect the pixels. A generated image can diverge from the original prompt, provider revised prompts may be empty, and natural-language references are often ambiguous until grounded against the visible candidates.
+
+The earlier context-region "cloud" primitive bundled three jobs — visual grouping, chat ownership, and generation provenance — into one cage: a user had to gather items into a region or pin them before the AI could use them, even when another canvas item was obviously relevant. Sending the whole canvas as pixels does not scale either, because the VLM resolver is intentionally pixel-grounded and expensive per candidate.
+
+Lixpi solves this by combining deterministic graph narrowing with VLM role assignment: **the graph determines which artifacts are plausible candidates; the VLM decides their visual roles.** Workspace relevance does the cheap descriptor-first narrowing first; `resolveImageBranch` remains the visual authority for media that actually reaches the model.
+
+## Product Principles
+
+- **VLM-grounded beats text-inferred.** If a reference decision affects pixels, a vision-language model must see the labeled visual candidates.
+- **Graph narrows candidates; VLM assigns roles.** Deterministic code collects and labels candidate artifacts but does not select the target branch.
+- **Context is selective.** Base context and generated variants have different roles. Only VLM-selected candidates become model references.
+- **References are context, not lineage.** Reference/style media can anchor placement and progress outlines, but only verified lineage sources draw connector edges into generated outputs.
+- **One decision feeds routing and provenance.** The references sent to the model, the generated metadata, and branch-origin provenance all come from the resolver result.
+- **No silent guessing.** Resolver failure is user-visible and *stops* generation instead of falling back to regexes, recency, or all-variant injection.
+- **Feature extraction stays independent.** `/use` feature references resolve before branch resolution, and their injected feature image blocks are preserved by the branch resolver.
+- **Branch origins record births only.** A branch-origin circle stores prompt and references for a *new* branch. Continuations attach to the existing branch and create no second origin.
+
+## System Architecture
+
+The browser builds non-authoritative candidate and workspace-context snapshots and sends them with the chat request. The API resolves visual roles, rewrites the provider messages with only the approved references, streams the generation, and publishes branch + media events back. The browser then places the artifact and persists its lineage.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
+flowchart TB
+    subgraph Browser["Browser"]
+        Prompt[Prompt Input]
+        Snapshot[ImageBranchCandidateSnapshot<br/>non-authoritative media candidates]
+        WContext[WorkspaceContextSnapshot<br/>descriptor index]
+        Context[AI Chat Thread Service<br/>explicit chip context]
+        AIS[AiInteractionService]
+        Canvas[WorkspaceCanvas<br/>placement + lineage + branch origins]
+        BranchLayer[pixiBranchOriginLayer<br/>circle renderer]
+    end
+
+    subgraph API["API Service — LangGraph"]
+        Relevance[resolveWorkspaceContext<br/>descriptor relevance]
+        Features[resolveFeatures<br/>/use feature context]
+        Resolver[resolveImageBranch<br/>structured VLM]
+        Provider[Text Model Provider<br/>tool-call stream]
+        Router[ImageRouter / VideoRouter]
+        MediaModel[Image / Video Model Provider]
+        Publisher[StreamPublisher]
+    end
+
+    subgraph Storage["Storage"]
+        DDB[(DynamoDB<br/>canvas + chat state)]
+        Obj[(NATS Object Store<br/>workspace files)]
+    end
+
+    Prompt --> Snapshot
+    Prompt --> WContext
+    Prompt --> Context
+    Snapshot --> AIS
+    WContext --> AIS
+    Context --> AIS
+    AIS -->|CHAT_SEND_MESSAGE| Relevance
+    Relevance --> Features
+    Features --> Resolver
+    Resolver --> Provider
+    Provider --> Router
+    Router --> MediaModel
+    MediaModel --> Obj
+    Publisher -->|branch + media events| AIS
+    AIS --> Canvas
+    Canvas --> BranchLayer
+    Canvas --> DDB
+    Obj --> Canvas
+```
+
+| Component | Responsibility |
+|-----------|----------------|
+| `ImageBranchCandidateSnapshot` | Browser-built, labeled, non-authoritative list of image/video-still candidates. |
+| `WorkspaceContextSnapshot` | Browser-built descriptors-only index used to narrow candidates before resolution. |
+| `resolveWorkspaceContext` | Ranks descriptors, force-includes chips/edges, narrows the media candidate set. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md). |
+| `resolveImageBranch` | The structured VLM resolver — the routing authority for media references and branch identity. |
+| `ImageRouter` / `VideoRouter` | Route the enhanced prompt + approved references to a transient media provider. See [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). |
+| `WorkspaceCanvas` | Places the artifact, draws lineage edges, persists `generatedBy`, mints branch origins. |
+| `pixiBranchOriginLayer` | Renders branch-origin circles. See [Rendering Engine](../canvas/RENDERING-ENGINE.md). |
+
+## Where This Runs in the Pipeline
+
+`resolveImageBranch` is one node in the shared, provider-agnostic LangGraph workflow that every AI request flows through. It runs **after** workspace-context relevance and feature resolution, and **before** the text model streams — so the text model writes its generation prompt against the exact VLM-approved reference set.
+
+{% callout type="note" %}
+The full graph (node order, `ProviderState`, the post-stream 3-way router, the routers, and the stream lifecycle) is documented once in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). The wire-level event catalog (`IMAGE_BRANCH_RESOLVED`, `IMAGE_BRANCH_RESOLUTION_ERROR`, `CONTEXT_RELEVANCE_RESOLVED`, and all `IMAGE_*` / `VIDEO_*` events) with payloads and browser handling is documented once in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). This page does **not** duplicate them — it covers only the resolver's own behavior and what the browser does with the result.
+{% /callout %}
+
+The node's gate behavior:
+
+- It is a **no-op** when no media model is selected.
+- When an image **or** video model is selected, it **requires** `imageBranchCandidateSnapshot`. A missing snapshot publishes `IMAGE_BRANCH_RESOLUTION_ERROR` and fails the graph visibly rather than guessing.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
+graph LR
+    Relevance[resolveWorkspaceContext] --> Features[resolveFeatures]
+    Features --> Branch[resolveImageBranch<br/>THIS PAGE]
+    Branch --> Stream[streamTokens<br/>writes prompt vs approved refs]
+    Stream -.->|generate_image / generate_video| Media[media branch]
+```
+
+## Data Model
+
+The shared contracts live in [`types.ts`](../../packages/lixpi/constants/ts/types.ts). The representation is intentionally split into **browser-built candidates**, **API-built resolutions**, and **persisted generated-media metadata**.
+
+```typescript
+export type ImageGenerationOperationKind =
+    | 'new_image'
+    | 'edit_existing'
+    | 'style_transfer'
+    | 'compare_branches'
+    | 'fresh_branch'
+
+export type ImageBranchSelectionMode =
+    | 'context-only'
+    | 'edit-active-branch'
+    | 'all-branches'
+    | 'fresh-branch'
+    | 'ambiguous'
+
+export type ImageBranchCandidateRoleHint =
+    | 'base-context'
+    | 'generated-variant'
+    | 'branch-leaf'
+    | 'branch-ancestor'
+    | 'embedded-thread-image'
+```
+
+| Operation kind | Meaning |
+|----------------|---------|
+| `new_image` | A new subject, not a continuation of any existing branch. |
+| `edit_existing` | An edit of a resolved target — continues that target's branch. |
+| `style_transfer` | Applies style evidence; may or may not continue a branch. |
+| `compare_branches` | Two or more existing leaves selected as comparison targets. |
+| `fresh_branch` | A deliberately new, unrelated branch even when variants exist. |
+
+| Selection mode | Meaning |
+|----------------|---------|
+| `context-only` | Only base/reference context is selected; no generated target. |
+| `edit-active-branch` | Continues the active generated branch — a verified continuation signal. |
+| `all-branches` | Multiple generated branches are in play (e.g. comparison). |
+| `fresh-branch` | A new branch is minted. |
+| `ambiguous` | The resolver could not decide — fails the request rather than guessing. |
+
+| Role hint | Meaning |
+|-----------|---------|
+| `base-context` | Force-included context media (chip/edge/relevance). |
+| `generated-variant` | A previously generated artifact. |
+| `branch-leaf` | The latest tip of a generated branch. |
+| `branch-ancestor` | An older node in a generated branch's lineage. |
+| `embedded-thread-image` | An image recovered from the chat transcript. |
+
+### Candidate Snapshot
+
+`ImageBranchCandidateSnapshot` is created by [`ai-image-branching.ts`](../../services/web-ui/src/services/ai-image-branching.ts). It carries enough context for the VLM to inspect candidates, but it is not routing authority.
+
+```typescript
+export type ImageBranchCandidateImage = {
+    nodeId: string
+    fileId?: string
+    workspaceId?: string
+    imageUrl: string
+    mediaKind?: 'image' | 'video'
+    roleHints: ImageBranchCandidateRoleHint[]
+    branchId?: string
+    parentImageNodeId?: string
+    ancestorNodeIds: string[]
+    sourceContextNodeIds: string[]
+    sourceMessageId?: string
+    promptText?: string
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags?: string[]
+    styleTags?: string[]
+    createdAt?: number
+}
+
+export type ImageBranchCandidateSnapshot = {
+    resolverVersion: string
+    threadId: string
+    regionNodeId: string // legacy field name: current root/request anchor node id
+    promptText: string
+    promptFingerprint: string
+    candidates: ImageBranchCandidateImage[]
+    transcriptContext: string
+}
+```
+
+{% callout type="note" %}
+A **video candidate** sets `mediaKind: 'video'` and uses its representative mid-frame still (falling back to the frame-0 poster) as `imageUrl`. This is what lets an edit of a prior video continue that video's branch — the resolver can finally *see* it — while keeping the VLM cost identical to an image: one frame, never the clip. See [Video Generation](./VIDEO-GENERATION.md) and [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md).
+{% /callout %}
+
+### VLM Resolution
+
+`ImageBranchVlmResolution` is produced only by the API resolver. It is streamed to the browser (as the `IMAGE_BRANCH_RESOLVED` payload) and used to rewrite provider messages.
+
+```typescript
+export type ImageBranchVlmResolution = {
+    resolverKind: 'structured-vlm'
+    resolverVersion: string
+    resolverModelProvider: string
+    resolverModelId: string
+    mode: ImageBranchSelectionMode
+    operationKind: ImageGenerationOperationKind
+    targetImageNodeId: string | null
+    parentImageNodeId?: string
+    branchId: string | null
+    includeGeneratedNodeIds: string[]
+    referenceImageNodeIds: string[]
+    sourceContextNodeIds: string[]
+    styleReferenceNodeIds: string[]
+    excludedNodeIds: string[]
+    visualEntitySummary?: string
+    visualStyleSummary?: string
+    entityTags: string[]
+    styleTags: string[]
+    confidence: number
+    rationale: string
+    decisions: ImageBranchVlmReferenceDecision[]
+}
+```
+
+### Persisted Generated Metadata
+
+Generated media nodes store resolver output in `ImageGeneratedByMetadata` so future snapshots can label candidates with branch and visual-summary context. (Video generation persists a `VideoGeneratedByMetadata` that mirrors this and adds `videoModel`, `resolution`, `durationSeconds`, `veoOperationName`, and `sourceVideoNodeId` — see [Video Generation](./VIDEO-GENERATION.md).)
+
+| Field | Meaning |
+|-------|---------|
+| `branchId` | Stable ID for one generated-media lineage. |
+| `parentImageNodeId` | Media node selected as edit parent or placement parent. |
+| `sourceContextNodeIds` | Context nodes relevant to generation. |
+| `referenceImageNodeIds` | Exact candidate node IDs sent as model references. |
+| `operationKind` | VLM-classified operation, e.g. `new_image`, `edit_existing`, `style_transfer`. |
+| `promptText` | User-authored prompt text, for audit. |
+| `promptFingerprint` | Stable browser fingerprint of normalized prompt text. |
+| `visualEntitySummary` | VLM visible-subject summary for future candidate labels. |
+| `visualStyleSummary` | VLM visible-style or medium summary for future candidate labels. |
+| `entityTags` | VLM-derived visible-subject tags. |
+| `styleTags` | VLM-derived visible-style tags. |
+| `targetImageNodeId` | Candidate selected as the edit target. |
+| `styleReferenceNodeIds` | Candidates selected as style, palette, medium, composition, or mood evidence. |
+| `excludedNodeIds` | Candidates rejected by the resolver. |
+| `resolverKind` | `structured-vlm`. |
+| `resolverModelProvider` | Provider used for branch resolution. |
+| `resolverModelId` | Exact resolver model ID. |
+| `resolverRationale` | Short VLM-grounded explanation. |
+| `resolverConfidence` | Sanitized confidence from `0` to `1`. |
+| `resolverVersion` | Schema version, currently `image-branch-vlm-v1`. |
+| `createdAt` | Generation placement timestamp. |
+
+### Branch-Origin Node
+
+A `branchOrigin` is a normal canvas node persisted inside `canvasState.nodes[]` — one per generated-branch birth.
+
+```typescript
+export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'branchOrigin'
+    branchId: string
+    prompt: string
+    referenceNodeIds: string[]
+    referenceFileIds: string[]
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    createdAt: number
+}
+```
+
+## Candidate Snapshot Construction
+
+The browser builds the candidate snapshot in [`ai-image-branching.ts`](../../services/web-ui/src/services/ai-image-branching.ts); the entry point is `buildImageBranchCandidateSnapshot()`. Candidate construction collects:
+
+- Incoming edge context for the target AI chat thread.
+- Image and video nodes contained by or connected to that context.
+- Generated media produced by the current thread.
+- Branch ancestors, through generated metadata and workspace edges.
+- Leaf generated media, so the VLM can distinguish latest branch tips from older ancestors.
+- Prompt text, revised prompts, VLM summaries, entity/style tags, and transcript text recovered from ProseMirror response messages.
+- Stable `nats-obj://workspace-{workspaceId}-files/{fileId}` URLs when file IDs are available. A video contributes its representative mid-frame still.
+
+The snapshot builder merges duplicate candidate sources by `nodeId`, unions role hints, unions ancestor and source-context IDs, and combines prompt text with separators. **It does not rank or select a winner.**
+
+When workspace relevance runs, the API rebuilds or filters the effective `imageBranchCandidateSnapshot` from `WorkspaceContextResolution.narrowedMediaNodeIds` before `resolveImageBranch` executes. Existing browser candidates are reused when available; relevance-selected workspace media can also become candidates from their descriptor-snapshot entries.
+
+## Resolver Behavior
+
+The authoritative resolver lives in [`image-branch-resolver.ts`](../../services/api/src/llm/graph/image-branch-resolver.ts). It runs only for media-enabled requests and does the following work:
+
+1. **Choose a resolver provider and model.** `IMAGE_BRANCH_RESOLVER_PROVIDER` and `IMAGE_BRANCH_RESOLVER_MODEL_VERSION` can override the chat provider; otherwise the chat provider/model is used when it is VLM-capable. Anthropic, OpenAI, and Google are supported.
+2. **Normalize candidate image URLs once** through `resolveImageUrls()` — NATS Object Store fetch, MIME normalization, and downscaling.
+3. **Build a VLM prompt** containing the user prompt, prompt fingerprint, thread ID, root/request anchor node ID, compact candidate-metadata JSON, transcript context, and each labeled candidate still.
+4. **Call `callStructuredVlm()`** with the `resolve_image_branch` schema at low temperature.
+5. **Sanitize the output** — validate all returned node IDs against the candidate set, clamp confidence, reject invalid roles, and fail `mode: "ambiguous"` or confidence below `0.2`.
+6. **Build or reuse a `branchId`.** Existing target branch IDs are preserved; otherwise a new `branch-{uuid}` is minted.
+7. **Strip original candidate image blocks** from `state.messages`, while preserving non-candidate image blocks such as `/use` feature references.
+8. **Prepend a new `image_branch_vlm_resolution` message** containing only the selected `referenceImageNodeIds`, reusing the already-normalized candidate image URLs.
+9. **Publish `IMAGE_BRANCH_RESOLVED`** with the sanitized resolution.
+
+The selected normalized URLs are reused by the downstream text provider and media router. This prevents repeated NATS fetches and repeated downscaling of the same candidate references.
+
+### Provider and Router Interaction
+
+Branch resolution happens *before* the text provider streams, deliberately: the text provider must write the generation prompt against the exact reference set the VLM selected. After the provider emits a `generate_image` (or `generate_video`) tool call:
+
+- `extractReferenceImages()` reads the selected `input_image` blocks from `state.messages`.
+- The router (`ImageRouter` / `VideoRouter`) logs the invocation chain — chat provider/model, media provider/model, routed prompt length, selected reference count, and short reference fingerprints.
+- The transient media provider runs with `enableImageGeneration` / `enableVideoGeneration` set, so it publishes media events but does not start or end a second text stream.
+
+The router's reference fingerprints should match the resolution's `referenceImageNodeIds`. If the resolver excludes a distractor, that distractor must not appear in the routed reference count or the logged fingerprints. (For the tool mechanism and routers in full, see [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).)
+
+## Canvas Placement and Provenance
+
+This is where one resolver decision becomes a positioned, parented, provenance-bearing canvas artifact. The rules below are **shared by image and video**; the only modality difference is the event names that drive each step (progressive `IMAGE_PARTIAL` for images vs. `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` for video).
+
+[`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) stores pending generation placement by thread ID. Standalone AI Chat panel generations no longer require a source `aiChatThread` canvas node.
+
+### The Three-Field Pending-Placement Split
+
+Pending placement keeps three concepts strictly separate. This split is what prevents relevance-selected or style/reference media from drawing false parent edges into generated outputs.
+
+| Field | Meaning |
+|-------|---------|
+| `sourceNodeId` | **Verified connector and lineage source only.** |
+| `placementAnchorNodeId` | **Canvas placement helper only** — positions the output without parenting it. |
+| `referenceNodeIds` | **Context/reference media** for prompt routing, progress outlines, and branch-origin provenance. |
+
+### On Submit
+
+When a media model is selected, the canvas:
+
+1. Calls `rememberGeneratedImagePlacement()`, extracting prompt text from the outgoing messages.
+2. Builds `ImageBranchCandidateSnapshot` from the current canvas state and thread-transcript labels.
+3. Sends the snapshot plus `WorkspaceContextSnapshot` through `AiInteractionService` with the chat request.
+4. Stores pending-placement state for the thread, including standalone panel generations that have no source `aiChatThread` canvas node.
+
+### When the Branch Resolution Arrives (`IMAGE_BRANCH_RESOLVED`)
+
+1. `onImageBranchResolvedToCanvas` finds the pending placement.
+2. It stores the full VLM resolution in the placement.
+3. It sets a lineage `sourceNodeId` **only** when the resolver selected a real generated branch target/parent, or the generation is rooted on a chat thread.
+4. It updates `placementAnchorNodeId` and `referenceNodeIds` from the selected references and narrowed workspace media — *without* treating those references as lineage parents.
+
+**Verified continuation signals.** A connector edge into a generated output is allowed only when the resolver is continuing an existing generated branch. The accepted signals are:
+
+- `mode === 'edit-active-branch'`, or
+- `operationKind === 'edit_existing'`, or
+- a resolver `branchId` that matches the generated target node's `generatedBy.branchId`.
+
+Style-transfer continuations can still continue a branch through these same signals.
+
+### Placeholder and Partial Painting
+
+For images, an empty `IMAGE_PARTIAL` creates a transparent placeholder canvas node; non-empty partials update that same node in place. (Video drops its placeholder on `VIDEO_PENDING` and upgrades it on `VIDEO_COMPLETE` — there are no partial frames.) In both cases:
+
+1. The placeholder edge uses **only** the verified lineage source, if one was resolved.
+2. The node's `generatedBy` metadata includes `getPendingGeneratedImageLineage()` output.
+3. **Placement geometry:**
+   - If placement continues from a generated media node, the placeholder is **vertically centered** on that preceding artifact.
+   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.imageBranchLineage.rootOutputGap` breathing room.
+4. Reference media animate with the same PIXI traveling outline as the generated placeholder while generation prepares (see [Progress Outlines](#progress-outlines)).
+
+PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels load. For generated media-to-media continuations, each intrinsic-size correction recomputes the node's vertical position from its lineage-anchor center — so a square placeholder, a landscape partial, and a portrait final all stay on one branch center line even as their rectangles change size.
+
+### Completion (`IMAGE_COMPLETE` / `VIDEO_COMPLETE`)
+
+1. The placeholder/partial node is upgraded with the final file ID, media URL, response ID, revised prompt, provider badge, and response message ID.
+2. The edge `sourceMessageId` is set to the AI response message ID when applicable.
+3. Resolver metadata is persisted onto `generatedBy`.
+4. If the resolver minted a **new** `branchId`, `applyBranchOriginForGeneratedMedia(...)` persists one `branchOrigin` node and connects it to the first generated output (see [Branch-Origin Circles](#branch-origin-circles)).
+5. Pending placement is cleared **only after** completion state, branch-origin state, and generated metadata have all been committed.
+
+### Generated-Media Provenance Chrome
+
+The finalized generated node also gets canvas provenance chrome rendered in a dedicated DOM overlay above the PIXI media canvas:
+
+- The **provider badge** and **info button** render in the media chrome overlay.
+- The **info panel** opens at the exact media-node width and expands to its full content height without cropping long prompts or reference metadata. It uses `generatedBy.responseMessageId` plus the persisted chat thread to reconstruct the original user prompt, the producing AI response, and the same generation-trace metadata shown in chat history. It reuses the same chat message shells and the `ImageGenerationTrace` / generation-trace detail renderer used by the AI chat history.
+
+(The DOM-overlay-vs-PIXI ownership split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md); the post-placement de-overlap pass is owned by [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).)
+
+### Placement Summary
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
+flowchart TB
+    Resolved[IMAGE_BRANCH_RESOLVED] --> Decide{Verified<br/>continuation?}
+    Decide -->|edit-active-branch /<br/>edit_existing /<br/>matching branchId| Lineage[set sourceNodeId<br/>= verified parent]
+    Decide -->|fresh / reference-only| NoLineage[no lineage edge<br/>placementAnchor + referenceNodeIds only]
+    Lineage --> PlaceL[center on preceding<br/>media in branch]
+    NoLineage --> PlaceR[place right of combined<br/>reference bounds + rootOutputGap]
+    PlaceL --> Complete[on COMPLETE: persist generatedBy]
+    PlaceR --> Complete
+    Complete --> NewBranch{new branchId<br/>minted?}
+    NewBranch -->|yes| Origin[persist one branchOrigin<br/>+ edge to first output]
+    NewBranch -->|no| Attach[attach to existing branch]
+```
+
+## Branch-Origin Circles
+
+When a new `branchId` is minted, the canvas persists **exactly one** `branchOrigin` node and creates an edge from that origin to the first generated output. Continuations attach to the existing branch and create no new origin.
+
+- The circle is placed at the start of the generated output using `settings.branchOrigin.outputGap`.
+- It is rendered by [`pixiBranchOriginLayer.ts`](../../services/web-ui/src/infographics/workspace/rendering/pixiBranchOriginLayer.ts) with viewport-synced PIXI world transforms, offscreen culling, and a bounded pulse animation. A transparent DOM proxy handles hit testing, selection, dragging, and the click action. (Renderer ownership: [Rendering Engine](../canvas/RENDERING-ENGINE.md).)
+- **Clicking** the circle opens the AI Chat panel, adds its stored references as explicit context chips, and seeds the composer draft with the stored starting prompt. `branchOrigin` nodes are themselves *not* eligible as context chips; clicking one seeds the panel with its stored references instead.
+- The **info affordance** shows the prompt and reference thumbnails using the same provenance/info-panel styling family as media nodes.
+
+A branch-origin circle is provenance and an entry point — **not a chat owner.** It replaced the generation-provenance job of the removed context-region cloud (see [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) for the rest of that removal).
+
+## Progress Outlines
+
+While a generation is preparing, the selected/reference media can animate with the same PIXI traveling outline used by the generated placeholder. This makes the active context visible before the first real output arrives.
+
+- **Reference outlines** clear as soon as the first real partial arrives (for video, when the node upgrades to its poster/MP4).
+- The **generated-output outline** clears on completion or on error.
+
+Video follows these same outline rules, using `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` instead of progressive image partials.
+
+## Failure Handling
+
+The resolver fails **visibly** instead of silently guessing. Failure cases:
+
+- A media model is selected but no `imageBranchCandidateSnapshot` was sent.
+- The resolver provider/model is missing or not VLM-capable.
+- The VLM returns unknown node IDs.
+- The VLM returns an invalid role or invalid operation kind.
+- The VLM excludes its own target.
+- The VLM target is missing from `referenceImageNodeIds`.
+- The VLM returns `mode: "ambiguous"`.
+- Confidence is below `0.2`.
+
+On failure the API publishes `IMAGE_BRANCH_RESOLUTION_ERROR`, then the graph error path publishes `ERROR` and closes the stream. The browser clears pending placement, removes any partial media state, and ends the receiving UI state. When a later media error arrives after a partial already exists, the canvas briefly shows an error placeholder and then removes the failed node from canvas state.
+
+## Examples
+
+| User Request | Existing State | VLM Resolver Decision | References Sent |
+|--------------|----------------|-----------------------|-----------------|
+| `make a painting of that guy look like cubist oil painting` | Base portrait, base painting, portrait branch, goat branch | Target is the visible person/portrait generated branch; goat branch excluded | Selected portrait target and any selected style/base context |
+| `make the goat wearing sunglasses` | Portrait branch and goat branch | Target is goat branch; portrait branch excluded | Selected goat branch target |
+| `draw a goat in the style of that landscape painting` | Base portrait, base landscape painting, portrait branch | New goat subject; landscape is style reference; portrait branch excluded | Selected base/style images, no portrait variant |
+| `make it more expressive` | Multiple generated branches in one thread | VLM resolves `it` against visible candidate pixels and transcript context | Selected target branch only |
+| `compare both variants side by side` | Two visible generated leaf variants | Both leaf variants are comparison targets | Both selected generated leaves |
+| `go back to the first portrait and make it noir` | Multiple portrait descendants | Earlier portrait candidate selected by ordinal and visual identity | Selected earlier portrait target |
+| `make a new unrelated robot in this style` | Several generated branches exist | Fresh subject; style source resolved separately; unrelated branches excluded | Selected style reference only |
+| `animate this fox trotting through snow` | A fox image on the canvas, a video model selected | Fox is the first-frame target; resolver gate runs because a video model is selected | Fox still as image-to-video first frame |
+
+## Storage Architecture
+
+No new table or bucket exists for this feature.
+
+- **DynamoDB** stores richer generated-media metadata and `branchOrigin` nodes inside the existing workspace `canvasState.nodes[]`. The AI chat transcript stays in the existing AI chat thread item. Workspace context and candidate snapshots are **request payloads, not persisted records.**
+- **NATS Object Store** remains the file storage layer for candidate and generated media. Candidate URLs use the existing `nats-obj://workspace-{workspaceId}-files/{fileId}` convention.
+- **IAM and service access** do not change. The API already has Object Store access, model-provider credentials, and workspace persistence access.
+
+## Observability
+
+The implementation emits enough logs to compare frontend candidate construction, resolver output, and router input:
+
+- The browser logs `[CANVAS] image branch candidate snapshot` with thread ID, candidate count, prompt fingerprint, and candidate node IDs.
+- The API logs `[ImageBranchResolver] resolved` with workspace ID, thread ID, resolver provider/model, mode, operation kind, selected references, excluded nodes, and confidence.
+- The browser logs `[CANVAS] image branch VLM resolution` with placement source, branch ID, reference IDs, excluded IDs, confidence, and rationale.
+- The router logs the invocation chain with the selected reference count and reference fingerprints.
+
+For a correct run, the resolver's `referenceImageNodeIds` should correspond to the router's reference fingerprints, and excluded nodes should not appear in the routed references.
+
+## Alternative Evaluation
+
+### Expanding Regexes
+
+Regexes are fast and transparent. They can annotate candidate labels (ordinal phrases, rough prompt hints). They cannot be routing authority because they cannot see pixels, resolve pronouns, or separate target identity from style evidence.
+
+### Latest-Leaf Selection
+
+Choosing the newest generated leaf works in single-branch sessions and fails in parallel branches. Chronology is useful metadata for the VLM, not identity.
+
+### Including Every Generated Variant
+
+Maximizes recall but contaminates generation. Generated variants are strong visual conditions; unrelated portrait, goat, landscape, and style variants must not all reach the model together.
+
+### Text-Only LLM Resolver
+
+A text-only LLM can read labels and prompts but still cannot inspect generated pixels. Since artifacts can differ from prompt text, a text-only resolver repeats the same failure class with a more expensive model.
+
+### LangGraph Checkpointing
+
+Useful for run continuity, replay, and debugging. It does not solve visual reference grounding, because branch decisions depend on the canvas artifact graph and the actual candidate stills.
+
+### Separate Artifact Table
+
+A dedicated `IMAGE_ARTIFACTS` table would help cross-workspace lineage queries and artifact-library use cases. It is not required today because workspace canvas state already persists nodes, edges, files, and generated metadata.
+
+## Operational Constraints
+
+- The resolver is intentionally **in front of** text-provider streaming. Starting real tokens before branch resolution would let the text model see an unapproved reference set and could reintroduce wrong-media contamination.
+- The early `START_STREAM` event is UI-lifecycle plumbing, not semantic text. It keeps the UI from appearing frozen while pre-stream VLM work runs. (See the stream-lifecycle reasoning in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).)
+- Workspace-context and candidate snapshots should remain compact. Dense workspaces grow candidate counts quickly, so descriptor-first narrowing, browser candidate construction, and transcript compaction all matter.
+- Feature-extraction image blocks are **not** candidate branch blocks and must remain in `state.messages` after branch cleanup.
+
+## Current Implementation Map
+
+| Area | File |
+|------|------|
+| Shared branch contracts | [`types.ts`](../../packages/lixpi/constants/ts/types.ts) |
+| Stream status constants | [`ai-interaction-constants.json`](../../packages/lixpi/constants/ai-interaction-constants.json), [`index.ts`](../../packages/lixpi/constants/ts/index.ts) |
+| Browser workspace context + candidate snapshots | [`ai-image-branching.ts`](../../services/web-ui/src/services/ai-image-branching.ts) |
+| Candidate snapshot tests | [`ai-image-branching.test.ts`](../../services/web-ui/src/services/ai-image-branching.test.ts) |
+| NATS request forwarding | [`ai-interaction-subjects.ts`](../../services/api/src/NATS/subscriptions/ai-interaction-subjects.ts) |
+| Shared LangGraph workflow | [`base-provider.ts`](../../services/api/src/llm/providers/base-provider.ts) |
+| Provider state channels | [`state.ts`](../../services/api/src/llm/graph/state.ts) |
+| Workspace context relevance | [`workspace-context-resolver.ts`](../../services/api/src/llm/graph/workspace-context-resolver.ts) |
+| Structured VLM resolver | [`image-branch-resolver.ts`](../../services/api/src/llm/graph/image-branch-resolver.ts) |
+| Resolver tests | [`image-branch-resolver.test.ts`](../../services/api/src/llm/graph/image-branch-resolver.test.ts) |
+| Stream publisher events | [`stream-publisher.ts`](../../services/api/src/llm/graph/stream-publisher.ts) |
+| Browser stream handling | [`ai-interaction-service.ts`](../../services/web-ui/src/services/ai-interaction-service.ts) |
+| ProseMirror event delegation | [`aiChatThreadPlugin.ts`](../../services/web-ui/src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts) |
+| Canvas placement + lineage + branch origins | [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) |
+| Branch-origin rendering | [`branchOrigins.ts`](../../services/web-ui/src/infographics/workspace/rendering/branchOrigins.ts), [`pixiBranchOriginLayer.ts`](../../services/web-ui/src/infographics/workspace/rendering/pixiBranchOriginLayer.ts) |
+| Image routing | [`image-router.ts`](../../services/api/src/llm/tools/image-router.ts) |
+| Image-reference extraction | [`image-generation.ts`](../../services/api/src/llm/tools/image-generation.ts) |
+| Image URL normalization/downscaling | [`attachments.ts`](../../services/api/src/llm/utils/attachments.ts) |
+
+## Future Extensions
+
+- Manual disambiguation picker when the resolver returns `ambiguous`.
+- Cross-workspace artifact registry for reusable generated assets.
+- Dedicated image-artifact table for independent lineage queries.
+- Branch contact-sheet candidates when a thread contains many historical variants.
+- Graph-checkpoint review UI for resolver replay and debugging.
+- Provider-specific edit-session hints as fidelity metadata, while keeping VLM role resolution as routing authority.
+
+## Related Pages
+
+### Lixpi docs
+
+- [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, `ProviderState`, routers, tool mechanism, and stream lifecycle that host `resolveImageBranch`.
+- [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the wire-level event catalog (`IMAGE_BRANCH_RESOLVED`, `CONTEXT_RELEVANCE_RESOLVED`, `IMAGE_*` / `VIDEO_*`) with payloads.
+- [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — descriptor-first workspace relevance that narrows candidates before this resolver runs; context-region removal.
+- [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the `ContentDescriptor` shape that labels candidates and is composed for free from resolver summaries.
+- [Image Generation](./IMAGE-GENERATION.md) — image-branch deltas: the `generate_image` tool, provider paths, partial streaming.
+- [Video Generation](./VIDEO-GENERATION.md) — video-branch deltas: VEO submit/poll, the mid-frame still, VEO input mapping.
+- [Rendering Engine](../canvas/RENDERING-ENGINE.md) — DOM/PIXI ownership for the media chrome overlay and `pixiBranchOriginLayer`.
+- [Collision Resolution](../canvas/COLLISION-RESOLUTION.md) — the post-placement de-overlap pass.
+- [Product Overview](../PRODUCT-OVERVIEW.md) — the artifact-piping thesis.
+
+### Standards and provenance
+
+- W3C PROV overview: https://www.w3.org/TR/prov-overview/
+- YesWorkflow: https://arxiv.org/abs/1502.02403
+
+### Dialogue and reference resolution
+
+- Visual Dialog: https://arxiv.org/abs/1611.08669
+- MultiWOZ: https://arxiv.org/abs/1810.00278
+- Scaling Multi-Domain Dialogue State Tracking via Query Reformulation: https://arxiv.org/abs/1903.05164
+- Visual Pronoun Coreference Resolution in Dialogues: https://arxiv.org/abs/1909.00421
+- DialoGLUE: https://arxiv.org/abs/2009.13570
+- Disambiguating Reference in Visually Grounded Dialogues: https://arxiv.org/abs/2505.11726
+- Generative Agents: https://arxiv.org/abs/2304.03442
+- MemGPT: https://arxiv.org/abs/2310.08560
+
+### Image editing and image conditioning
+
+- SDEdit: https://arxiv.org/abs/2108.01073
+- Prompt-to-Prompt: https://arxiv.org/abs/2208.01626
+- Imagic: https://arxiv.org/abs/2210.09276
+- InstructPix2Pix: https://arxiv.org/abs/2211.09800
+- IP-Adapter: https://arxiv.org/abs/2308.06721
+- StyleBrush: https://arxiv.org/abs/2408.09496

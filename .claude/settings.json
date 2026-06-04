@@ -1,0 +1,67 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/shallbee/.claude/hooks/argos-fake-done-watcher.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|NotebookEdit"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/shallbee/.claude/hooks/argos-pre-compact-capture.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "manual|auto"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/shallbee/.claude/hooks/argos-companion.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Grep|Read|Glob|Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "argosbrain hook preflight",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/shallbee/.claude/hooks/argos-post-compact-injector.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/shallbee/.claude/hooks/argos-first-prompt-injector.sh",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

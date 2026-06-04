@@ -127,7 +127,7 @@ type NKeyVerificationResult = {
 
 type ServiceAuthConfig = {
     publicKey: string    // NKey public key (UA...)
-    userId: string       // Expected sub claim (e.g., 'svc:llm-api')
+    userId: string       // Expected sub claim (e.g., 'svc:llm-workers')
     permissions: {
         pub: { allow: string[] }
         sub: { allow: string[] }
