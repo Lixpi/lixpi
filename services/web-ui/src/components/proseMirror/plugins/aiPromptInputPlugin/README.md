@@ -1,10 +1,10 @@
 # AI Prompt Input Plugin
 
-Provides the floating ProseMirror editor used for composing and sending messages to AI chat threads (or any canvas node) on the workspace. This is a **separate, standalone editor** with its own `documentType: 'aiPromptInput'`, independent from the `aiChatThreadPlugin`. It renders as a floating element below whichever canvas node is currently selected.
+Provides the ProseMirror editor used by AI prompt input surfaces. It is a **separate, standalone editor** with its own `documentType: 'aiPromptInput'`, independent from the `aiChatThreadPlugin`. The active workspace composer lives in the AI Chat panel; the older detached canvas-node input path is deprecated.
 
 ## What it does
 
-This plugin powers the floating input field that appears below canvas nodes. It provides:
+This plugin powers prompt input editors. It provides:
 - A rich-text ProseMirror editor for composing messages
 - An AI model selector dropdown
 - An image model selector dropdown (with size selector)
@@ -238,16 +238,15 @@ SCSS renders the placeholder via `::before` pseudo-element using `content: attr(
 
 The workspace creates two types of floating input editors:
 
-### Single Floating Input (for document/image nodes)
-When a user selects a document or image canvas node, a single shared floating input appears below it. On submit, the `AiPromptInputController` auto-creates a new AI chat thread canvas node, positions it to the right of the target node (with a `WorkspaceEdge` connection), and queues the message for delivery once the thread editor mounts.
+### AI Chat Panel Composer
+The active composer lives in the workspace AI Chat panel. The detached prompt input that used to appear below selected canvas nodes is deprecated and hidden by `WorkspaceCanvas.ts`.
 
-### Per-Thread Floating Inputs (for AI chat thread nodes)
-Each AI chat thread canvas node gets its own dedicated floating input. On submit, the `AiPromptInputController` injects the user message directly into the thread's ProseMirror editor and dispatches `USE_AI_CHAT_META` to trigger the AI request.
+Legacy `aiPromptInput` schema and controller code still exists because older editor flows and tests depend on it, but current workspace chat sends from the panel composer rather than creating a new AI chat thread canvas node.
 
-Both types:
-- Use `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
-- Receive the same control factories (`createGenericAiModelDropdown`, `createGenericImageModelDropdown`, `createGenericImageSizeDropdown`, `createGenericSubmitButton`) from `primitives/aiControls/`
-- Render inside a `.ai-prompt-input-floating` container with optional shifting gradient background (controlled by `settings.aiPromptInput.useShiftingGradientBackground`; see [GRADIENTS.md](../../../../../../../documentation/features/GRADIENTS.md))
+The active panel composer:
+- Uses `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
+- Receives the shared model, image, video, and submit controls from `primitives/aiControls/`
+- Renders inside a `.ai-prompt-input-floating.workspace-ai-chat-floating-panel-prompt` container with optional shifting gradient background (controlled by `settings.aiPromptInput.useShiftingGradientBackground`; see [Visual Effects](../../../../../../../documentation/canvas/VISUAL-EFFECTS.md))
 
 ## Styling
 
@@ -289,7 +288,7 @@ SCSS lives in `ai-prompt-input.scss`. Key class hierarchy:
 
 - **`aiPromptInputPlugin.ts`** — Plugin orchestration:
   - Exports `createAiPromptInputPlugin`
-  - Keyboard handler (Cmd/Ctrl + Enter)
+  - Keyboard handler for prompt submission
   - Content extraction, attribute reading, and input clearing
   - Placeholder decoration system
   - Meta-driven submit/stop via `appendTransaction`

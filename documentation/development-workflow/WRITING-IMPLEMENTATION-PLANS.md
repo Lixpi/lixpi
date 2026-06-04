@@ -30,7 +30,7 @@ If the request is small enough to fit in a one-line commit message, you don't ne
 
 All proposals and implementation plans live in `documentation/memory/<NAME>.md`.
 
-- **Naming**: ALL-CAPS-DASH-SEPARATED, matching the parent `documentation/` convention (`ARCHITECTURE.md`, `INFRASTRUCTURE-AND-DEPLOYMENT.md`, `PRODUCT-OVERVIEW.md`, etc.). Do not invent a different naming style.
+- **Naming**: ALL-CAPS-DASH-SEPARATED, matching the parent `documentation/` convention (`PRODUCT-OVERVIEW.md`, `SYSTEM-ARCHITECTURE.md`, `WORKSPACE-MODEL.md`, etc.). Do not invent a different naming style.
 - **Lifecycle**: a file is created when planning begins, lives there during implementation, and is deleted when the feature has fully landed. The `documentation/memory/` directory is **not** a historical archive — it is live planning context for in-flight work. Treat it that way.
 - **GitHub sync**: every plan must also exist as a GitHub issue with the identical body. The issue is where reviewers comment; the markdown file is where the plan is iterated on locally. Both are kept in sync until the file is deleted; once the feature ships, the issue is closed and the file is removed.
 

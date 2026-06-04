@@ -20,7 +20,7 @@ For the architecture and service map, start with [`documentation/PRODUCT-OVERVIE
 | Topic | Location |
 |-------|----------|
 | Architecture overview | `documentation/PRODUCT-OVERVIEW.md` |
-| Feature specifications | `documentation/features/` |
+| Product and implementation docs | `documentation/platform/`, `documentation/canvas/`, `documentation/ai-chat/`, `documentation/media-generation/`, `documentation/library/` |
 | Testing conventions | `documentation/testing/` |
 | Code style | `documentation/coding-style-guides/` |
 | Documentation style | `documentation/documentation-style-guides/` |

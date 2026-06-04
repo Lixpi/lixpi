@@ -30,7 +30,7 @@ describe('canvas collision documentation', () => {
 	const workspaceReadme = readWorkspaceReadme()
 
 	it('links to the repository-level collision feature documentation', () => {
-		expectSourceToContain(workspaceReadme, 'documentation/features/CANVAS-COLLISION-RESOLUTION.md', 'workspace README')
+		expectSourceToContain(workspaceReadme, 'documentation/canvas/COLLISION-RESOLUTION.md', 'workspace README')
 		expectSourceToContain(workspaceReadme, 'collision resolution, viewport-centered insertion cleanup, and drag-release collision rules', 'workspace README')
 	})
 

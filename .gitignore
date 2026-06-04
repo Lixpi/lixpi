@@ -45,3 +45,6 @@ documentation/memory/*
 .vscode/
 .aws/
 documentation/Media-Posts/
+
+# ArgosBrain — repo-anchored brain (per-machine, not portable across machines)
+.argosbrain/

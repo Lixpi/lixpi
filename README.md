@@ -76,19 +76,19 @@ Features are first-class library entries that capture the essence of any visual 
 
 Extraction runs as a multi-stage pipeline: scene assessment and routing → parallel per-axis extractors (palette, lighting, character design, line quality, medium signature, composition, mood, texture, etc.) → deterministic source-pixel crops → dominance-weighted synthesis → sample generation → persistence. The result is a reusable entry with structured parameters, a written instruction body, and content-free sample artifacts that preserve the medium without leaking the source subject. Features apply via `/use <name>` in any prompt; the server resolves the reference at send time and injects the instructions and samples as system context — the original reference content is never forwarded to the downstream model.
 
-See [Feature Extraction & Library](documentation/features/FEATURE-EXTRACTION-AND-LIBRARY.md).
+See [Feature Extraction & Library](documentation/library/FEATURE-EXTRACTION-OVERVIEW.md).
 
 ### Media Library
 
 A canvas-owned panel for media a user has explicitly chosen to keep. Saved images are independent copies — not bookmarks to a canvas node — so users can reorganize or delete the original canvas image without losing what they saved for reuse. Items are scoped per-workspace, per-user, per-organization, or public; the same panel hosts the extracted Features library.
 
-See [Media Library](documentation/features/MEDIA-LIBRARY.md).
+See [Media Library](documentation/library/MEDIA-LIBRARY.md).
 
 ### Image Branch Lineage
 
 Every AI-generated image is a first-class canvas artifact with explicit parentage, branch identity, visual summaries, and resolver audit metadata. When you say "draw a goat in the style of that landscape painting," a structured VLM resolver inspects the labeled candidate images on the canvas and decides which are the subject reference, which are style references, and which are unrelated — without parsing strings or guessing from recency. Pixels make the decision, not regex.
 
-See [Image Branch Lineage](documentation/features/IMAGE-BRANCH-LINEAGE.md).
+See [Image Branch Lineage](documentation/media-generation/BRANCH-LINEAGE.md).
 
 ### Artifact Piping & Character Consistency
 
@@ -128,18 +128,21 @@ An animated placeholder appears immediately when generation starts; up to three 
 - **Main API** handles authentication, CRUD, DynamoDB persistence, and **all LLM orchestration in-process** as a TypeScript LangGraph module — validation, token streaming, image generation, feature extraction, branch resolution, and usage tracking. (Earlier releases ran a separate Python `llm-api` service; that has been absorbed into the main API.)
 - **AI tokens stream directly** through per-thread NATS subjects to the browser, so token delivery is not gated by any extra service hop.
 
-For the full architecture deep-dive — including AI chat request/response flow, streaming, scalability via NATS queue groups, and authentication — see [Architecture](documentation/ARCHITECTURE.md). For image generation specifics, see [Image Generation](documentation/features/IMAGE-GENERATION.md).
+For the full architecture deep-dive — including AI chat request/response flow, streaming, scalability via NATS queue groups, and authentication — see [Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md). For image generation specifics, see [Image Generation](documentation/media-generation/IMAGE-GENERATION.md).
 
 ---
 
 ## Documentation
 
+- [Documentation index](documentation/README.md) — the full map of all docs
 - [Product Overview](documentation/PRODUCT-OVERVIEW.md) — capabilities, canvas primitives, artifact piping, image generation
-- [Architecture](documentation/ARCHITECTURE.md) — system design, NATS messaging, AI chat flow, scalability
-- [Development Guide](documentation/DEVELOPMENT.md) — building services, local auth, Pulumi
-- [Feature Extraction & Library](documentation/features/FEATURE-EXTRACTION-AND-LIBRARY.md)
-- [Media Library](documentation/features/MEDIA-LIBRARY.md)
-- [Image Branch Lineage](documentation/features/IMAGE-BRANCH-LINEAGE.md)
-- [Canvas Engine](documentation/features/CANVAS-ENGINE.md) — rendering, pan/zoom, node interactions
-- [Image Generation](documentation/features/IMAGE-GENERATION.md) — streaming, placement, multi-turn editing
+- [System Architecture](documentation/platform/SYSTEM-ARCHITECTURE.md) — services, NATS backbone, design decisions, scalability
+- [AI Generation Pipeline](documentation/platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, routing, streaming, usage
+- [Development Guide](documentation/platform/DEVELOPMENT.md) — building services, local auth, Pulumi
+- [Feature Extraction & Library](documentation/library/FEATURE-EXTRACTION-OVERVIEW.md)
+- [Media Library](documentation/library/MEDIA-LIBRARY.md)
+- [Branch Lineage & Provenance](documentation/media-generation/BRANCH-LINEAGE.md)
+- [Canvas Rendering Engine](documentation/canvas/RENDERING-ENGINE.md) — DOM/PIXI rendering, pan/zoom, node interactions
+- [Image Generation](documentation/media-generation/IMAGE-GENERATION.md) — streaming, placement, multi-turn editing
+- [Video Generation](documentation/media-generation/VIDEO-GENERATION.md) — Google VEO, async submit/poll, inline playback
 - [Why Different Model Combinations Produce Different Styles](documentation/knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md)
