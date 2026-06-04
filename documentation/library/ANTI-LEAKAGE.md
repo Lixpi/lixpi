@@ -24,7 +24,7 @@ An earlier Lixpi iteration tried the opposite extreme: **withhold the source pix
 
 ## What the literature converges on
 
-The 2026 disentanglement literature converges on a single answer: **the source pixels are the only ground truth for what a style looks like, and every cited approach operates on them at inference time.** Leakage is prevented in the model architecture or via reference-image augmentation — never by replacing the reference with text.
+The disentanglement work surveyed here points in the same practical direction: **style fidelity depends on source pixels, not only on a prose reconstruction of those pixels.** Leakage is usually handled in the model architecture or through reference-image augmentation, rather than by throwing the image away and keeping only text.
 
 | Approach | Mechanism |
 |---|---|
@@ -34,7 +34,7 @@ The 2026 disentanglement literature converges on a single answer: **the source p
 | **UniCSG** ([arXiv:2604.17850](https://arxiv.org/html/2604.17850v1)) | Staged training combining latent-space semantic disentanglement with frequency-aware detail reconstruction on the actual reference; explicitly engineered to prevent reference-content leakage. |
 | **StyleBrush** ([arXiv:2408.09496](https://arxiv.org/html/2408.09496v1)) | Dual-branch (ReferenceNet extracts style; Structure Guider extracts structure). Leakage is prevented by a **random cropping strategy** that stops ReferenceNet from learning the content image's structure. |
 
-The cited industry products do the same. Recraft custom styles ingest up to 5 reference images at style-creation time and use them at every generation downstream; Magnific custom styles do the same. There is no production style-transfer system in 2026 that operates from a text reconstruction of the style.
+The product references surveyed for this design follow the same pattern: custom styles are grounded in uploaded reference images. That does not prove every product works this way forever, but it is the safer assumption for Lixpi's design than relying on a text-only reconstruction.
 
 These SOTA approaches require **model-architecture or training access that is not available against closed model APIs**. The closest practical equivalent — and what Lixpi implements — is **pixel-grounded anti-leakage via deterministic content-free cropping of the source, combined with prompt-level subject suppression: StyleBrush's training-time random-crop strategy lifted to inference time.**
 
@@ -61,7 +61,7 @@ graph LR
 
 4. **When the feature is later applied via `/use`**, the `resolveFeatures` pre-stage (see [Feature Storage](./FEATURE-STORAGE.md)) fetches the feature record and forwards to the downstream image-gen call: the feature `instructions` + `parameters`, the texture-specimen sample, 1–2 model-generated applied-medium probes, **and 2–3 of the original content-free source crops** (downscaled to ≤ 512 px on the longest edge). The strict anti-leakage instruction is included verbatim. The downstream model has pixel evidence of what the medium looks like — both as crops of the original and as applied probes — without ever receiving the full source layout, the source subject's pose, or the source composition.
 
-This bar is **stronger than the early "withhold all pixels" approach** (which produced text-only reconstruction and lost all textural fidelity) and **weaker than the SOTA latent-space disentanglement** (which cannot run against closed model APIs). It is exactly what the cited research recommends given API-only access, and exactly what Recraft and Magnific ship in production.
+This bar is **stronger than the early "withhold all pixels" approach** (which produced text-only reconstruction and lost all textural fidelity) and **weaker than latent-space disentanglement** (which cannot run against closed model APIs). It is Lixpi's API-only approximation of the same idea: keep pixel evidence of style while stripping the source subject, pose, and composition as aggressively as possible.
 
 ## Why content-free cropping works
 

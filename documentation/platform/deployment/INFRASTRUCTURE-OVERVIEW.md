@@ -57,7 +57,7 @@ flowchart TB
 
     subgraph Storage["AWS Storage & Secrets"]
         S3["S3<br/>(Web UI bundle)"]
-        DDB[("DynamoDB<br/>14 tables")]
+        DDB[("DynamoDB<br/>application tables")]
         SM["Secrets Manager<br/>(TLS certs)"]
         SSM["SSM Parameter Store"]
     end
@@ -108,7 +108,7 @@ flowchart TB
 | `nats` | ECS/Fargate (public subnets, 3 tasks) | Message bus — clients connect directly |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
 | `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |
-| `DynamoDB` | 14 tables (on-demand) | Application data, with streams on selected tables |
+| `DynamoDB` | On-demand application tables | Application data, with streams on selected tables |
 | `Route53` | Hosted zone | DNS for web UI, API, NATS |
 | `ACM` | Certificate | TLS for CloudFront (web UI) |
 | `Secrets Manager` | Secrets | Stores NATS TLS certs issued by cert-manager |
@@ -134,7 +134,7 @@ infrastructure/pulumi/src/
     NATS-cluster/         # 3-node NATS cluster + service discovery sidecar
     main-api-service.ts   # api service (ECS task) — also hosts the LLM workflow in-process
     web-ui.ts             # S3 + CloudFront distribution
-    db/DynamoDB-tables.ts # 14 DynamoDB tables (shared definitions)
+    db/DynamoDB-tables.ts # DynamoDB table definitions
     dns-records.ts        # Route53 records + hosted zone
     certificate.ts        # ACM certificate for the web domain
     certificate-manager/  # Lambda-based Caddy TLS issuer for NATS
@@ -242,21 +242,25 @@ flowchart LR
 
 **Why NATS sits in public subnets.** Browsers connect directly to NATS over WebSocket-Secure. Putting NATS tasks in public subnets means each Fargate task gets a routable public IP, and the Lambda sidecar can publish those IPs to Route53.
 
-**Why api sits in private subnets.** It doesn't accept inbound traffic from the internet at all — the only inbound channel is NATS. Outbound traffic (Auth0, OpenAI, Anthropic, Google, Stability) goes through the single NAT Gateway.
+**Why api sits in private subnets.** The main app-command path reaches the API through NATS subjects, so the Fargate service does not need public ingress for normal workspace/document/thread operations or AI streaming. Outbound traffic (Auth0, OpenAI, Anthropic, Google, Stability) goes through the single NAT Gateway.
+
+The API process also defines HTTP routes for media bytes, feature/media-library previews, workspace export/import, and health checks. Local development calls those routes directly through `VITE_API_URL`. The current AWS topology shown here does not create a public `api.*` route or a CloudFront API origin, so any production feature that depends on those HTTP routes needs an explicit front door before it can work from the hosted SPA.
 
 ## ECS Services: api
 
-The `api` service follows the standard pattern: a Docker image pushed to ECR, a Fargate task definition, an IAM role scoped to the exact resources it needs, CloudWatch logs, and a security group with zero ingress (it only receives work through NATS). It is defined in [`main-api-service.ts`](../../../infrastructure/pulumi/src/resources/main-api-service.ts).
+The `api` service follows the standard pattern: a Docker image pushed to ECR, a Fargate task definition, an IAM role scoped to the resources it needs, CloudWatch logs, and a security group with no public ingress in the current Pulumi topology. It is defined in [`main-api-service.ts`](../../../infrastructure/pulumi/src/resources/main-api-service.ts).
 
 | Service | CPU | Memory | Subnets | Public IP | Inbound | Scale |
 |---------|-----|--------|---------|-----------|---------|-------|
-| `api` | 512 | 1024 MB | Private | no | none | 1 task (configurable) |
+| `api` | 512 | 1024 MB | Private | no | none in current AWS topology | configurable |
 
 The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM workflow (token streaming + image generation + vendor SDK egress) that previously ran in the separate `llm-api` Fargate task.
 
-### Why No Load Balancer?
+### Why No Load Balancer for NATS Subjects?
 
-Because there is nothing to route *to*. The service pulls work off NATS subjects using **queue groups**. When you add a second `api` task, it joins the same queue group, NATS starts distributing messages round-robin across both tasks, and no configuration anywhere else needs to change. This is the "NATS as the backbone" design from [System Architecture](../SYSTEM-ARCHITECTURE.md) taken to its logical conclusion: the load balancer is the message bus.
+For NATS request/reply subjects, there is nothing HTTP-shaped to route. The service pulls work off NATS subjects using **queue groups**. When you add another `api` task, it joins the same queue group, NATS starts distributing messages across the tasks, and no external load balancer needs to know about that subject.
+
+That does not remove the need for an HTTP front door for byte routes. The Express routes under `/api/images`, `/api/videos`, `/api/workspaces`, `/api/features`, and `/api/media-library` exist in the API service; exposing them from the hosted SPA is a separate deployment concern.
 
 ### Deployment Strategy
 
@@ -275,7 +279,7 @@ Each service gets a `taskRole` with only the permissions it actually needs:
 - `nats` — CloudWatch Logs + Secrets Manager read (for the TLS cert). Nothing else.
 
 {% callout type="note" %}
-**Historical note.** The previous architecture split AI orchestration into a separate `llm-api` Fargate task with its own narrower IAM role (no DynamoDB) so a compromise of the LLM container couldn't touch user data. After the migration to in-process LangGraph TS, the API container is the trust boundary for both. If that trade-off becomes a concern, the LLM module's `getSubscriptions()` surface lets it be hosted by a separate `llm-workers` ECS service running the same image with a narrower IAM role; the in-process auth callout would register `svc:llm-workers` as a NATS internal service. See [`services/api/src/llm/README.md`](../../../services/api/src/llm/README.md).
+**Historical note.** The previous architecture split AI orchestration into a separate `llm-api` Fargate task with its own narrower IAM role (no DynamoDB) so a compromise of the LLM container couldn't touch user data. After the migration to in-process LangGraph TS, the API container is the trust boundary for both. If that trade-off becomes a concern, the LLM module can be split into a separate `llm-workers` ECS service, but the worker subscriptions and internal-service auth registration still need to be implemented. See [`services/api/src/llm/README.md`](../../../services/api/src/llm/README.md).
 {% /callout %}
 
 ## Web UI Deployment
@@ -327,7 +331,7 @@ Some things to note:
 
 ## DynamoDB
 
-[`db/DynamoDB-tables.ts`](../../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) defines 14 tables through a single shared table-definition function (`getTableDefinitions()`). The same definitions are reused by [`local-dynamodb-init.ts`](../../../infrastructure/pulumi/src/local-dynamodb-init.ts) to bootstrap DynamoDB Local for development, so local and cloud schemas can never drift.
+[`db/DynamoDB-tables.ts`](../../../infrastructure/pulumi/src/resources/db/DynamoDB-tables.ts) defines the application tables through a shared table-definition function (`getTableDefinitions()`). The same definitions are reused by [`local-dynamodb-init.ts`](../../../infrastructure/pulumi/src/local-dynamodb-init.ts) to bootstrap DynamoDB Local for development, so local and cloud schemas stay aligned.
 
 Highlights:
 

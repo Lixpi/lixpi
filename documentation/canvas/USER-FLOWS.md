@@ -62,7 +62,7 @@ sequenceDiagram
     end
 ```
 
-Documents and AI chat threads are not all fetched up front — only their placeholders are positioned from persisted dimensions, and content is loaded lazily as nodes enter the viewport (see [Lazy Content Loading](./WORKSPACE-MODEL.md#lazy-content-loading)).
+The workspace route loads the workspace record, documents, and AI chat threads before rendering. The canvas still tracks visible nodes for render/performance decisions, but document/thread data is not fetched lazily today.
 
 ## Creating a Document
 

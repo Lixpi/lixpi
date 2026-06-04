@@ -5,12 +5,12 @@ description: The web UI visual-effects ecosystem — freeform bitmap gradients, 
 
 # Visual Effects
 
-This page is the source of truth for the web UI visual-effects ecosystem: gradients (freeform bitmap gradients, animated shifting backgrounds, SVG gradient borders), the PIXI traveling outline used for generation progress, and the shared easing curves that animate all of them.
+This page covers the web UI visual-effects ecosystem: gradients (freeform bitmap gradients, animated shifting backgrounds, SVG gradient borders), the PIXI traveling outline used for generation progress, and the shared easing curves that animate all of them.
 
 The system is organized so that **reusable rendering math lives in shared renderer classes, the palette lives in `settings.ts`, and each consumer owns only its own lifecycle**. The bulk of this page is reference material — the families and shared modules up front, then a deep dive into the animated shifting-gradient background, the color-analysis workflow, and troubleshooting.
 
 {% callout type="note" %}
-This page is part of the canvas domain. The shifting gradient is the background for AI chat thread nodes; the PIXI traveling outline is the generated-image progress border. For how those nodes are placed and rendered see [Rendering Engine](./RENDERING-ENGINE.md) and [Image Rendering Performance](./IMAGE-RENDERING-PERFORMANCE.md).
+This page is part of the canvas domain. The shifting gradient is used by legacy AI chat thread node surfaces and the current AI Chat panel composer; the PIXI traveling outline is the generated-image progress border. For how visible canvas nodes are placed and rendered see [Rendering Engine](./RENDERING-ENGINE.md) and [Image Rendering Performance](./IMAGE-RENDERING-PERFORMANCE.md).
 {% /callout %}
 
 ## System Overview
@@ -115,7 +115,7 @@ docker exec lixpi-web-ui pnpm test:run
 
 ## Shifting Gradient Background
 
-AI chat thread nodes in the workspace use an animated freeform gradient background that smoothly shifts between color positions. This creates a living, breathing feel for the AI conversation space. Floating AI prompt inputs can use the same renderer through their feature flag.
+Legacy AI chat thread nodes and current AI prompt input surfaces can use an animated freeform gradient background that smoothly shifts between color positions.
 
 The remainder of this section preserves the implementation details for that background: its algorithm, singleton lifecycle, color-analysis workflow, performance characteristics, customization, CSS integration, optional pattern overlay, and troubleshooting.
 
@@ -206,7 +206,7 @@ graph TB
     STATE -->|"drawImage"| C3
 ```
 
-The renderer caches one singleton instance per configured color set. In ordinary workspace usage, all AI chat thread nodes and floating prompt inputs use the default color set, subscribe to one shared renderer, and share its single 60×80 offscreen canvas. This is efficient — the gradient is not recalculated for every node.
+The renderer caches one singleton instance per configured color set. In ordinary workspace usage, prompt input surfaces using the same color set subscribe to one shared renderer and share its single 60×80 offscreen canvas. This is efficient — the gradient is not recalculated for every surface.
 
 #### Shifting Background Components
 
@@ -402,9 +402,9 @@ The tool uses CIE LAB color space for optimization because it's perceptually uni
 
 Many gradient wallpapers have decorative pattern overlays (icons, doodles, etc.). The tool applies Gaussian blur to remove these high-frequency patterns before analysis, so you're measuring the underlying gradient colors, not the overlay. The blur removes small texture — it does **not** remove large foreground UI such as cards, screenshots, labels, borders, or shadows, which will still bias the result. Crop or mask large foreground content before running the tool.
 
-### Integration with AI Chat Threads
+### Integration with Prompt Surfaces
 
-When an AI chat thread node is created on the workspace canvas, it subscribes to the gradient renderer:
+When an AI prompt surface uses the shifting-gradient background, it subscribes to the gradient renderer:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%

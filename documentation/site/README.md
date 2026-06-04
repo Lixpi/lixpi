@@ -6,15 +6,19 @@ A zero-framework static renderer that turns every `.md` file under
 no SSG. Rendering uses Markdoc's built-in HTML string renderer
 (`Markdoc.renderers.html`).
 
-## Build (in Docker — never on the host)
+## Build
 
-Everything runs in containers. `documentation/` is not bind-mounted into the
-running `lixpi-web-ui` container, so build with a one-off `docker run` that
-reuses the same `lixpi/web-ui` image (node 23 + pnpm 9) and mounts only
-`documentation/`. This does not disturb the running dev container.
+From the repo root:
 
 ```bash
-# from the repo root
+pnpm docs:build
+```
+
+If you need to run it in Docker instead, use a one-off container that mounts
+`documentation/`. Do not use the running `lixpi-web-ui` container for this,
+because the docs directory is not bind-mounted there.
+
+```bash
 docker run --rm --entrypoint sh \
   -v "$PWD/documentation:/docs" -w /docs/site \
   lixpi/web-ui -lc 'pnpm install && node build.mjs'
@@ -36,18 +40,18 @@ docker run --rm --entrypoint sh -p 8080:8080 \
 
 ## What the build does
 
-1. Walks `documentation/` for `.md` files (skips `site/`, `node_modules`, `.git`).
+1. Walks `documentation/` for `.md` files (skips `node_modules`, `.git`, and `dist/`; this README is rendered too).
 2. Parses YAML frontmatter (`title`, `description`) with a tiny built-in reader.
 3. `Markdoc.parse` → `Markdoc.validate` → `Markdoc.transform` → `Markdoc.renderers.html`.
 4. Wraps the HTML in a page shell with a sidebar nav generated from the folder tree.
-5. Mirrors the tree into `dist/`, rewriting intra-doc `*.md` links to `*.html`.
+5. Mirrors the tree into `dist/`, rewriting docs `*.md` links to `*.html` and repo-source links to GitHub source URLs.
 
 The build **fails (exit 1)** on any Markdoc parse/validate error or any dangling
-intra-doc `.md` link, so it also works as a docs linter in CI.
+intra-doc `.md` link, missing heading fragment, or missing repo-source file, so it also works as a docs linter in CI.
 
 ## Authoring conventions (Markdoc-friendly)
 
-- Start each page with YAML frontmatter: `title:` and `description:`.
+- Prefer YAML frontmatter with `title:` and `description:`. The build derives a title if frontmatter is missing, but human-facing pages should set both fields.
 - Put all code/JSON/TS in fenced blocks; Markdoc does not parse `{` inside fences.
 - Mermaid stays as ` ```mermaid ` fenced blocks — they currently render as a
   `<pre class="mermaid">` placeholder (client-side hydration is a future step).

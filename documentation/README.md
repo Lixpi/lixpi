@@ -5,7 +5,7 @@ description: Map of the Lixpi documentation — product, platform, canvas, AI ch
 
 # Lixpi Documentation
 
-Lixpi is a visual, node-based AI workspace for image and video generation pipelines — **the spatial arrangement of nodes _is_ the workflow**. This is the documentation map. Start with the [Product Overview](PRODUCT-OVERVIEW.md), then dive into the domain you care about.
+Lixpi is a visual, node-based AI workspace for image and video generation pipelines — **the spatial arrangement of nodes _is_ the workflow**. This is the documentation map. Start with the [Product Overview](PRODUCT-OVERVIEW.md), then dive into the domain you care about. The generated site sidebar provides the full current inventory; this page is only the human starting map.
 
 {% callout type="note" %}
 These docs are authored as Markdoc-friendly Markdown and render to a static HTML site via a standalone, single-dependency renderer in [`site/`](site/README.md). They also read fine as plain Markdown on GitHub.
@@ -18,6 +18,18 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [Product Overview](PRODUCT-OVERVIEW.md) | The product thesis: canvas primitives, artifact piping, character consistency, the image/video pipelines, multi-model support |
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
+| [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to keep docs accurate, flexible, Markdoc-compatible, and readable as the architecture changes |
+
+## Finding the Right Guide
+
+Do not rely on tiny routing files or stale folder names. To find the right guidance:
+
+1. Use this index for the main product and platform entry points.
+2. Use the generated docs-site sidebar for the complete current file list.
+3. Search by the concept you are changing, then read nearby pages before editing.
+4. For implementation work, read the relevant coding, testing, and source README guidance that matches the files being touched.
+
+When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
 
 ## Platform
 
@@ -80,6 +92,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
+| [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation structure, migration workflow, Markdoc compatibility, link hygiene, and tone |
 | [Markdown Rendering](conventions/MARKDOWN-RENDERING.md) | The one-parser rule and the two renderers |
 | [Rendering Architecture for a Media-Heavy Canvas](knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md) | Why the DOM/PIXI split; what the leading canvases use |
 | [Why Model Combinations Produce Different Styles](knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md) | Model chaining and visual signatures |
@@ -87,4 +100,10 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 ## Building these docs
 
-The docs render to HTML with a zero-framework Markdoc renderer. See [`site/README.md`](site/README.md). Everything runs in Docker — never on the host.
+The docs render to HTML with a zero-framework Markdoc renderer:
+
+```bash
+pnpm docs:build
+```
+
+See [`site/README.md`](site/README.md) for the renderer details.

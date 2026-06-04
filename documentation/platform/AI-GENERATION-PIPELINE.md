@@ -9,10 +9,10 @@ Every AI request in Lixpi — a plain text answer, an image generation, or a vid
 
 The headline design is **dual-model routing**. A user picks a *text model* and, independently, an optional *media model* (image and/or video). The text model never paints pixels or renders frames; it understands intent, writes a rich enhanced prompt, and emits a `generate_image` or `generate_video` tool call. The workflow then routes that enhanced prompt to a transient media provider through an `ImageRouter` or `VideoRouter`. This separation lets each model do what it is best at: language models excel at reading the conversation and writing exhaustive descriptions; image and video models excel at visual synthesis.
 
-This page is the source of truth for the workflow itself: its nodes, its shared state, the tool mechanism, the media routers, the stream lifecycle, and usage metering. It deliberately does **not** re-list the stream-event catalog — see [Streaming and Events](./STREAMING-AND-EVENTS.md) for the wire-level events these nodes emit. For the system-wide picture of how the API hosts this workflow, see [System Architecture](./SYSTEM-ARCHITECTURE.md).
+This page covers the workflow itself: its nodes, shared state, tool mechanism, media routers, stream lifecycle, and usage metering. It deliberately does **not** re-list the stream-event catalog — see [Streaming and Events](./STREAMING-AND-EVENTS.md) for the wire-level events these nodes emit. For the system-wide picture of how the API hosts this workflow, see [System Architecture](./SYSTEM-ARCHITECTURE.md).
 
 {% callout type="note" %}
-LLM orchestration previously lived in a separate Python `services/llm-api/` task. It was absorbed into `services/api` once `@langchain/langgraph` (TypeScript) reached parity. The workflow is stateless and scales horizontally with the rest of the API service.
+LLM orchestration previously lived in a separate Python `services/llm-api/` task. It was absorbed into `services/api` once the TypeScript LangGraph package covered Lixpi's workflow needs. The workflow is stateless and scales horizontally with the rest of the API service.
 {% /callout %}
 
 ## The Shared Workflow
@@ -304,7 +304,7 @@ sequenceDiagram
         Note over WebUI, AI: PHASE 4 - COMPLETION — route after stream, then meter + finalize
         LLM->>LLM: routeAfterStream (video / image / skip)
         LLM->>LLM: calculateUsage → cleanup
-        LLM->>NATS: END_STREAM { usage }
+        LLM->>NATS: END_STREAM
         NATS-->>WebUI: finalize response
         deactivate LLM
     end
@@ -316,10 +316,10 @@ sequenceDiagram
 
 - **Text** — per-token cost from the streamed token counts.
 - **Image** — per-image-tier cost from `image_usage` (tier by resolution/quality).
-- **Video** — `reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) computes per-second cost: `pricePerSecond = pricing.video.price`, `resale = pricePerSecond × resaleMargin`, and `purchasedFor` / `soldToClientFor` over `durationSeconds`, returning a `VideoUsageReport`.
+- **Video** — `reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) computes per-second cost from the model's video pricing metadata and returns a `VideoUsageReport`.
 
 {% callout type="warning" %}
-**Video usage is computed but not yet published to NATS.** Token and image usage already publish; the video report is built and returned with a `TODO` to wire a `usage.videos.ai` subject. Per-second billing reconciliation also depends on finalizing the current placeholder VEO prices.
+Usage is computed and logged, but the current reporter does not publish token, image, or video usage events to NATS and `END_STREAM` does not carry usage. The reporter methods are shaped so publishing can be wired later.
 {% /callout %}
 
 ## Adding a Provider

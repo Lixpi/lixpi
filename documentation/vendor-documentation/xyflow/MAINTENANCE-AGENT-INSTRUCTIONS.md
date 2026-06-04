@@ -35,7 +35,7 @@ The source modules map 1:1 to documentation files:
 
 If a new top-level directory appears in the source (e.g., a new `xysomething/`), a new documentation file is needed in `src/`.
 
-If a source directory is removed, the corresponding doc file should be deleted and references in `overview.md` and `documentation/features/CANVAS-ENGINE.md` removed.
+If a source directory is removed, the corresponding doc file should be deleted and references in `overview.md` and `documentation/canvas/RENDERING-ENGINE.md` removed.
 
 ### 3. Scan for Behavioral Changes
 
@@ -91,7 +91,7 @@ Search for `XYPanZoom`, `XYDrag`, `XYHandle`, `XYResizer`, `getBezierPath`, `ado
 5. If a concept that previously existed has been removed, remove it from the doc (don't leave stale sections)
 6. If a new concept has been added, add a new section explaining it conceptually
 7. Update `overview.md` if the change affects the high-level picture (new primitives, changed limitations, new wrapper features)
-8. Update `documentation/features/CANVAS-ENGINE.md` if file names or the directory structure changes
+8. Update `documentation/canvas/RENDERING-ENGINE.md` if file names or the directory structure changes
 
 ### Adding a New Module
 
@@ -99,17 +99,17 @@ If xyflow adds a new top-level module:
 
 1. Create `src/{module-name}.md` following the same style as existing files — mental model, lifecycle, behavior, gotchas, Lixpi usage
 2. Add it to the Documentation Index table in `overview.md`
-3. Add it to the directory tree in `documentation/features/CANVAS-ENGINE.md`
+3. Add it to the directory tree in `documentation/canvas/RENDERING-ENGINE.md`
 
 ### Removing a Module
 
 1. Delete the corresponding file from `src/`
 2. Remove it from the Documentation Index table in `overview.md`
-3. Remove it from the directory tree in `documentation/features/CANVAS-ENGINE.md`
+3. Remove it from the directory tree in `documentation/canvas/RENDERING-ENGINE.md`
 
 ## Files That Reference This Documentation
 
 These files link to the xyflow docs and need updating if file names or structure change:
 
-- `documentation/features/CANVAS-ENGINE.md` — Directory tree listing all xyflow doc files
+- `documentation/canvas/RENDERING-ENGINE.md` — Directory tree listing all xyflow doc files
 - `documentation/vendor-documentation/xyflow/overview.md` — Documentation Index table with relative links to `src/` files

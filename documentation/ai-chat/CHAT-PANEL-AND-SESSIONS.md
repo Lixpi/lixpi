@@ -117,24 +117,13 @@ flowchart TB
 - **Each tab** shows a small icon (thread vs extraction), a truncated 24-char
   title, a streaming dot when the tab is actively receiving tokens, and a close
   X visible on hover.
-- **Clicking a thread node on canvas** activates its tab if it exists, else adds
-  a new tab — the VS Code / Cursor editor-tab interaction model.
+- **Selecting canvas nodes** can add explicit context chips while the panel is
+  open; it does not create or activate a canvas thread node.
 - **All extraction triggers** open a new `extraction` tab.
 - **Closing the last tab** leaves the durable session reopenable from Sessions;
   panel visibility is controlled by `aiChatPanel.isOpen`.
 - **Overflow** is a horizontal scroll on the strip with edge fades — not an
   overflow dropdown. This keeps tab positions predictable, matching Cursor.
-
-### Keyboard Shortcuts
-
-Shortcuts are window-level and active only when the panel has focus.
-
-| Shortcut | Action |
-|----------|--------|
-| `Cmd/Ctrl + W` | Close the active tab |
-| `Cmd/Ctrl + 1..9` | Jump to the tab at that index |
-| `Cmd/Ctrl + Shift + [` | Previous tab |
-| `Cmd/Ctrl + Shift + ]` | Next tab |
 
 ## Context Tray
 
