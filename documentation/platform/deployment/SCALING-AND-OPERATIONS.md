@@ -25,23 +25,23 @@ The NATS cluster template already contains a full auto-scaling block (`appautosc
 
 ### NATS Cluster Sizing
 
-The default deployment runs **three** Fargate tasks with `256 CPU units / 512 MB` each. That is deliberately modest — it's the smallest valid Fargate shape — and it is more than enough for small-to-medium workloads because NATS is astonishingly efficient:
+The default deployment runs a small NATS cluster on modest Fargate tasks. That is a reasonable starting point because NATS is lightweight, but capacity should be validated with Lixpi-shaped payloads before making promises about production traffic.
 
 - The NATS server is a single Go binary that typically uses **under 20 MB of RAM** per node (per [nats.io/about](https://nats.io/about/)).
-- A single NATS node can sustain **millions of messages per second with sub-millisecond latencies** on commodity hardware.
-- Unlike RabbitMQ, Kafka, or a traditional ALB, message routing in NATS is zero-copy and runs in a single-threaded I/O loop, which means throughput scales linearly with nodes and CPU cores.
+- Published NATS benchmarks are high, but Lixpi's real ceiling depends on WebSocket clients, payload size, JetStream/Object Store use, auth middleware, and API task concurrency.
+- Unlike a traditional HTTP load balancer, NATS queue groups distribute subject work directly to connected subscribers.
 
 ### Realistic Traffic Ceiling of the Default Setup
 
-Using published NATS performance characteristics and the default Fargate sizing, a back-of-envelope capacity picture for the default three-node cluster looks like this:
+Use load tests rather than hardcoded estimates. The dimensions to measure are:
 
-| Dimension | Default setup | Approximate ceiling |
-|-----------|---------------|---------------------|
-| Concurrent WebSocket clients | 3 nodes × 0.5 vCPU | **10,000–30,000 idle connections** per cluster (connections are cheap in NATS) |
-| Messages/sec, cluster total | 3 nodes × 0.5 vCPU | **~500k–1M msgs/sec** for small payloads — far more than any chat workload needs |
-| Latency (p50) | Same-region, intra-VPC | **< 1 ms** for NATS itself; end-to-end latency is dominated by the AI provider (seconds) |
-| Concurrent in-flight AI streams | 1 × `api` @ 0.5 vCPU | ~25–50 concurrent streams per task; add tasks for more |
-| DynamoDB throughput | On-demand | Scales automatically to table-level limits (40k RCU/WCU per table by default) |
+| Dimension | What to watch |
+|-----------|---------------|
+| WebSocket clients | Connection count, reconnect behavior, auth-callout latency |
+| Message throughput | Subject mix, payload size, queue-group distribution, dropped/error responses |
+| AI streams | API CPU/memory, vendor latency, cancellation behavior, long-running stream overlap |
+| Media traffic | Object Store reads/writes, HTTP byte routes, video range requests |
+| DynamoDB | Hot partitions, throttling, stream/cleanup lag |
 
 In practice the **first bottleneck is `api` CPU** (token streaming parsing in the LangGraph workflow), not NATS. The second is **AI provider rate limits**, not AWS. NATS itself won't be the limiting factor until the cluster is pushed into the hundreds of thousands of simultaneous active users per region.
 

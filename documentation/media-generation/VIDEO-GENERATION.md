@@ -9,10 +9,10 @@ Video generation is the **video branch** of Lixpi's shared AI generation pipelin
 
 Structurally, video adds a sibling to every image primitive: a `generate_video` tool mirroring `generate_image`, a `VideoRouter` mirroring `ImageRouter`, a `VideoPublisher` mirroring the image publisher, and a second post-stream branch in the shared graph. The one place it **cannot** mirror image generation is **execution**. VEO is long-running and asynchronous — submit an operation, poll it until done (≈11s–6min), with no partial frames — so the progressive `IMAGE_PARTIAL` streaming model is replaced by a *placeholder + keepalive + `VIDEO_COMPLETE`* model.
 
-This page is the **video-specific delta**. It does not re-explain the shared LangGraph workflow, the dual-model architecture, the post-stream 3-way router, the shared tool injection/extraction mechanism, `ImageRouter`/`VideoRouter`, the stream lifecycle, or the shared `ProviderState` — those are owned by [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
+This page covers what is specific to video generation. The shared LangGraph workflow, dual-model architecture, post-stream 3-way router, tool injection/extraction mechanism, routers, stream lifecycle, and shared `ProviderState` are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 {% callout type="note" %}
-**What this page does *not* own.** The shared workflow, dual-model routing, the `generate_video` tool schema, the 3-way `routeAfterStream` router, and the routers live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-origin circles, and VLM reference selection (including which prior video continues a branch) live in [Branch Lineage](./BRANCH-LINEAGE.md). The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The playback control bar lives in [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md).
+The shared workflow, dual-model routing, the `generate_video` tool schema, the 3-way `routeAfterStream` router, and the routers live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-origin circles, and VLM reference selection (including which prior video continues a branch) live in [Branch Lineage](./BRANCH-LINEAGE.md). The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The playback control bar lives in [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md).
 {% /callout %}
 
 ## Opt-In Video Model
@@ -230,10 +230,10 @@ The three frontend video dropdowns (`createGenericVideoAspectDropdown` / `…Res
 
 ## Usage Metering
 
-`reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) computes per-second cost: `pricePerSecond = pricing.video.price`, `resale = pricePerSecond × resaleMargin`, and `purchasedFor` / `soldToClientFor` over `durationSeconds`. It returns a `VideoUsageReport`.
+`reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) computes per-second video cost from the selected model's pricing metadata and returns a `VideoUsageReport`.
 
 {% callout type="warning" %}
-**Video usage is computed but not yet published to NATS.** The report is built and returned, with a `TODO` to wire a `usage.videos.ai` subject (token and image usage already publish). Per-second billing reconciliation also depends on finalizing the placeholder VEO prices.
+Usage reports are computed and logged today; they are not published to NATS yet. Per-second billing reconciliation also depends on finalizing the placeholder VEO prices.
 {% /callout %}
 
 ## Media Library for Video

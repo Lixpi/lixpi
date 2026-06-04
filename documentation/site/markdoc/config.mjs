@@ -6,31 +6,96 @@
 // has no concept of React/Svelte components.
 
 import Markdoc from '@markdoc/markdoc'
+import path from 'node:path'
 
 const { Tag } = Markdoc
+const DEFAULT_REPO_BLOB_URL = 'https://github.com/Lixpi/lixpi/blob/main'
 
-// Rewrite intra-doc links from authoring form (.md) to rendered form (.html).
-// Leaves external links (scheme present), pure anchors, and non-.md targets
-// untouched. Kept relative so links work both on GitHub and in the built site.
-export function rewriteHref(href) {
+function textFromChildren(children = []) {
+    return children.map((child) => {
+        if (typeof child === 'string') return child
+        if (child?.children) return textFromChildren(child.children)
+        if (child?.attributes?.content) return child.attributes.content
+        return ''
+    }).join('')
+}
+
+export function slugifyHeading(value) {
+    return String(value)
+        .trim()
+        .toLowerCase()
+        .replace(/[`*_~[\](){}:;"'.,!?]/g, '')
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+}
+
+export function createHeadingIdFactory() {
+    const seen = new Map()
+
+    return (text) => {
+        const base = slugifyHeading(text) || 'section'
+        const count = seen.get(base) || 0
+        seen.set(base, count + 1)
+        return count === 0 ? base : `${base}-${count}`
+    }
+}
+
+// Rewrite links from authoring form to rendered-site form.
+// - docs-to-docs links become relative .html links
+// - links that escape documentation/ become explicit GitHub source links
+// - external links, pure anchors, and non-.md targets are left alone
+export function rewriteHref(href, pageRelMd = '', repoBlobUrl = DEFAULT_REPO_BLOB_URL) {
     if (!href) return href
     if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) return href // http:, https:, mailto:, etc.
     if (href.startsWith('#')) return href
-    return href.replace(/\.md(#.*)?$/i, '.html$1')
+
+    const [target, fragment] = href.split('#')
+    const suffix = fragment ? `#${fragment}` : ''
+    const pageDir = pageRelMd ? path.posix.dirname(pageRelMd) : ''
+    const resolvedFromDocs = pageRelMd
+        ? path.posix.normalize(path.posix.join(pageDir, target))
+        : target
+
+    if (resolvedFromDocs.startsWith('..')) {
+        const repoRel = path.posix.normalize(path.posix.join('documentation', pageDir, target))
+        if (repoRel.startsWith('..')) return href
+        return `${repoBlobUrl.replace(/\/$/, '')}/${repoRel}${suffix}`
+    }
+
+    return `${target.replace(/\.md$/i, '.html')}${suffix}`
 }
 
 // <a> — same as the default link node, but with .md -> .html rewriting.
-const link = {
-    render: 'a',
-    attributes: {
-        href: { type: String },
-        title: { type: String },
-    },
-    transform(node, config) {
-        const attributes = node.transformAttributes(config)
-        const children = node.transformChildren(config)
-        return new Tag('a', { ...attributes, href: rewriteHref(attributes.href) }, children)
-    },
+function createLink(pageRelMd, repoBlobUrl) {
+    return {
+        render: 'a',
+        attributes: {
+            href: { type: String },
+            title: { type: String },
+        },
+        transform(node, config) {
+            const attributes = node.transformAttributes(config)
+            const children = node.transformChildren(config)
+            return new Tag('a', { ...attributes, href: rewriteHref(attributes.href, pageRelMd, repoBlobUrl) }, children)
+        },
+    }
+}
+
+function createHeading() {
+    const headingId = createHeadingIdFactory()
+
+    return {
+        attributes: {
+            level: { type: Number, required: true },
+        },
+        transform(node, config) {
+            const attributes = node.transformAttributes(config)
+            const children = node.transformChildren(config)
+            const level = Math.min(Math.max(Number(attributes.level) || 2, 1), 6)
+            return new Tag(`h${level}`, { id: headingId(textFromChildren(children)) }, children)
+        },
+    }
 }
 
 // Fenced code blocks. Mermaid blocks are passed through as a placeholder
@@ -82,9 +147,11 @@ const callout = {
     },
 }
 
-export function createConfig() {
+export function createConfig(options = {}) {
+    const { pageRelMd = '', repoBlobUrl = DEFAULT_REPO_BLOB_URL } = options
+
     return {
-        nodes: { link, fence },
+        nodes: { link: createLink(pageRelMd, repoBlobUrl), fence, heading: createHeading() },
         tags: { callout },
         variables: {},
     }

@@ -84,7 +84,7 @@ Several user actions can produce overlapping nodes. Each routes through the reso
 | Toolbar document/image insertion | Svelte creates the node data and calls `renderer.insertNodeAtViewportCenter(...)`. The renderer computes viewport-centered placement and resolves top-level collisions. |
 | Image or video generation commit | The generated media node is added to the canvas, parent/child pairs are excluded, and the resolver can move colliding nodes. |
 | Image-to-image branch continuation | The new media node is placed from the latest branch node, then the resolver can move colliding nodes. |
-| Edit-in-new-thread creation beside source media | The new AI chat thread node is placed next to the source media, then top-level collisions are resolved. |
+| Generated output placement beside source media | The new generated media node or branch-origin node is placed near the source/reference bounds, then top-level collisions are resolved. |
 | Drag release | `computeWorkspaceDragPlan(...)` decides whether collision resolution is allowed. Single-node drags can resolve; rigid group drags preserve spacing; parent-container drags can resolve against top-level peers. |
 
 For generated-media commit placement specifically, the new node is positioned by the branch-lineage layout **first**, and collision resolution is only a cleanup pass afterward. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) for how lineage placement is computed.

@@ -5,9 +5,11 @@ description: Lixpi's dual authentication model — Auth0/LocalAuth0 RS256 JWTs f
 
 # Authentication
 
-Authentication in Lixpi is centralized on the NATS message bus. Because every component connects through NATS (see [System Architecture](./SYSTEM-ARCHITECTURE.md)), NATS is also the single place where identity is checked and permissions are enforced. NATS itself stores no passwords or credentials; it delegates the question "can this connection happen, and what may it publish or subscribe to?" to the API service through a mechanism called the **auth callout**.
+Authentication in Lixpi is split across two checks that work together. NATS handles connection-level permissions through an auth callout. The API also verifies the user JWT on each browser-originated NATS request before running the subject handler.
 
-This page is the single source of truth for the conceptual auth model. The AWS-specific certificate and TLS wiring lives in [NATS Cluster](./deployment/NATS-CLUSTER.md) and is linked where relevant.
+NATS does keep static credentials for trusted backend connections such as the system user and the API service. Browser users and future internal-service JWT clients are the ones delegated to the auth callout.
+
+This page explains the conceptual auth model. The AWS-specific certificate and TLS wiring lives in [NATS Cluster](./deployment/NATS-CLUSTER.md) and is linked where relevant.
 
 ## The Dual Authentication Model
 
@@ -22,7 +24,7 @@ Both paths converge on `@lixpi/auth-service`, the shared verifier described belo
 
 ## Authentication Flow
 
-The end-to-end flow for a browser user is: obtain a token from the identity provider, connect to NATS presenting that token, let the auth callout verify it, and from then on operate under the permissions NATS was told to enforce.
+The end-to-end flow for a browser user is: obtain a token from the identity provider, connect to NATS presenting that token, let the auth callout verify the connection and subject permissions, then include the current JWT in each request payload so the API handler can verify the user again before touching data.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -31,6 +33,7 @@ sequenceDiagram
     participant Auth0 as Auth0 / LocalAuth0
     participant NATS as NATS
     participant AuthCallout as Auth Callout
+    participant API as API NATS middleware
     participant AuthSvc as @lixpi/auth-service
 
     %% ═══════════════════════════════════════════════════════════════
@@ -70,10 +73,13 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(242, 234, 224)
         Note over WebUI, AuthSvc: PHASE 3 - MAKE REQUESTS
-        WebUI->>NATS: Request on an allowed subject
+        WebUI->>NATS: Request on an allowed subject with { token }
         activate NATS
         NATS->>NATS: Enforce subject permissions
-        Note over NATS: Routed to the API queue group<br/>(in-process LLM workflow runs there)
+        NATS->>API: Route to API queue group
+        API->>AuthSvc: Verify request token
+        AuthSvc-->>API: User context
+        Note over NATS: Handler receives data.user<br/>(in-process LLM workflow runs there)
         deactivate NATS
     end
 ```
@@ -82,8 +88,9 @@ sequenceDiagram
 
 All token verification is handled by `@lixpi/auth-service`, a shared package consumed by both entry points into the system:
 
-- **NATS Auth Callout** — validates tokens during NATS connection (both user and service JWTs).
-- **API HTTP endpoints** — validates Bearer tokens on REST calls.
+- **NATS Auth Callout** — validates tokens during NATS connection for browser users and registered service JWTs.
+- **API NATS middleware** — validates `data.token` on browser-originated NATS request payloads before subject handlers run.
+- **API HTTP endpoints** — validates Bearer tokens or route tokens on REST calls.
 
 It exposes two verifiers, one per credential type:
 
@@ -116,9 +123,11 @@ flowchart TB
     NKV --> AC
 ```
 
-## The NATS Auth Callout: The Security Boundary
+## Connection Auth: The NATS Auth Callout
 
-NATS does not store user credentials. Instead, the API service **is** the authority. When a client connects, NATS does not decide the outcome itself — it asks the API: "is this JWT valid, and what subjects may this connection publish and subscribe to?" The API answers with a signed NATS user JWT containing allow/deny subject lists, and NATS enforces that answer for the lifetime of the connection. This is the security boundary of the whole system.
+For browser users, NATS does not store user credentials. When a user connects, NATS asks the API: "is this JWT valid, and what subjects may this connection publish and subscribe to?" The API answers with a signed NATS user JWT containing allow/deny subject lists, and NATS enforces that answer for the lifetime of the connection.
+
+Trusted backend clients are different: the NATS config includes static users for system/API connections. Those credentials are infrastructure secrets, not end-user credentials.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
@@ -147,7 +156,7 @@ sequenceDiagram
         activate API
         API->>Auth0: Verify JWT signature + claims
         activate Auth0
-        Auth0-->>API: { user, scopes }
+        Auth0-->>API: verified user claims
         deactivate Auth0
         API->>API: Build NATS user JWT with allow/deny subjects
         API-->>NATS: msg.respond(encrypted response)
@@ -169,7 +178,7 @@ sequenceDiagram
 |------|--------------|
 | Connect | The client opens a connection presenting its JWT as the auth token |
 | Encrypt | NATS encrypts the callout request with an **XKey** so the token is never exposed in transit on the bus |
-| Verify | The API decrypts the request, verifies the JWT via `@lixpi/auth-service`, and resolves the principal's scopes |
+| Verify | The API decrypts the request and verifies the JWT via `@lixpi/auth-service` |
 | Build | The API constructs a NATS user JWT with explicit allow/deny subject permissions for that principal |
 | Respond | The API returns the signed, XKey-encrypted response on the callout reply subject |
 | Enforce | NATS validates the response, applies the permissions, and accepts (or rejects) the connection |
@@ -182,6 +191,19 @@ sequenceDiagram
 The XKey encryption keys, the TLS certificates, and the AWS wiring that makes the callout reply path work in production are covered in [NATS Cluster](./deployment/NATS-CLUSTER.md) and the [NATS cluster README](../../infrastructure/pulumi/src/resources/NATS-cluster/README.md). This page stays at the conceptual level.
 {% /callout %}
 
+## Request Auth: API NATS Middleware
+
+Connection permissions answer "may this client publish to this subject at all?" Subject handlers still need the concrete user identity for each request. Browser requests therefore include the current Auth0/LocalAuth0 JWT in the message payload as `token`.
+
+The API installs `natsAuthMiddleware` when it registers its NATS subscriptions. The middleware verifies `data.token`, injects the verified user as `data.user`, and removes the raw token before the handler runs. Workspace handlers then authorize with that user context, for example by calling `Workspace.getWorkspace({ userId, workspaceId })` before returning data or mutating canvas state.
+
+This means a workspace request has two checks:
+
+| Layer | What it checks |
+|-------|----------------|
+| NATS connection permissions | The connection is allowed to publish/request on that subject shape. |
+| API handler middleware | The specific request carries a valid user JWT, and the handler can authorize that user against the requested workspace/document/thread. |
+
 ## Two Authentication Modes
 
 The same callout, the same shared verifier, and the same allow/deny enforcement serve two distinct credential types.
@@ -192,7 +214,7 @@ For browser users authenticating through an identity provider:
 
 - **OAuth2 flow** issuing RS256 JWTs.
 - **JWKS endpoint validation** via `@lixpi/auth-service` (`createJwtVerifier()`) — the provider's public keys verify the token signature.
-- **Permissions derived from subscription configurations** — what a user may publish or subscribe to is computed from their account, then encoded into the allow/deny lists in the NATS user JWT.
+- **Permissions derived from subscription configurations** — the auth callout builds allow/deny subject lists from the registered subscription configs, while each handler still authorizes the specific workspace/document/thread request.
 
 ### Mode 2 — Service Authentication (NKey-signed JWTs)
 

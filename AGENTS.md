@@ -9,7 +9,7 @@ Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm mono
 | **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas, ProseMirror editors, AI chat UI |
 | **api** | Node.js / TypeScript | `services/api/` | Gateway + in-process LLM orchestration (LangGraph), JWT auth, CRUD, DynamoDB |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, JetStream Object Store |
-| **localauth0** | Node.js | `services/localauth0/` | Mock Auth0 for local dev |
+| **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for local dev |
 
 The LLM orchestration workflow (validate → stream → image gen → usage → cleanup) lives at `services/api/src/llm/` and uses [`@langchain/langgraph`](https://github.com/langchain-ai/langgraphjs). It used to be a separate Python `services/llm-api/` Fargate task; for the internal-service NATS auth pattern that Python service used, see [`documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`](documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
 
@@ -17,13 +17,11 @@ Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in 
 
 ## Code Style
 
-Language-specific coding conventions are in `documentation/coding-style-guides/`. Find the guide for the language you're working in and follow it.
+Use the documentation index to find the current coding guidance for the files you are changing. Read the guide that matches the language, styling layer, framework, or runtime surface you are touching.
 
 ## Documentation
 
-Each folder may contain a separate `README.md`. When working on code, look for and read nearby README files. If you update a component, also update the README in that directory (or the parent if changes affect parent code). Do not create README files that don't already exist.
-
-Documentation style guides are in `documentation/documentation-style-guides/`. Find the relevant guide before writing or updating documentation.
+Start at the documentation index, then read [Maintaining Documentation](documentation/MAINTAINING-DOCUMENTATION.md) before reorganizing, moving, deleting, or adding developer docs. Each folder may contain a separate `README.md`. When working on code, look for and read nearby README files. If you update a component, also update the README in that directory (or the parent if changes affect parent code). Do not create README files that don't already exist.
 
 ## Conventions
 

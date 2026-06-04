@@ -5,7 +5,7 @@ description: The workspace connection system — handles, drag-to-connect, the W
 
 # Edges & Connections
 
-Visual connections (edges/arrows) between canvas nodes let users show relationships, context flows, and dependencies between workspace entities. A user drags from a handle on one node to another to create a relationship line. Edges are not purely cosmetic: an edge-connected node is force-included in the AI context for a chat turn, and an edge with a `sourceMessageId` records which AI response produced a generated image. That data shape is defined in [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge); this page is the source of truth for how connections are made, routed, drawn, selected, and persisted.
+Visual connections (edges/arrows) between canvas nodes let users show relationships, context flows, and dependencies between workspace entities. A user drags from a handle on one node to another to create a relationship line. Edges are not purely cosmetic: an edge-connected node is force-included in the AI context for a chat turn, and an edge with a `sourceMessageId` records which AI response produced a generated image. That data shape is defined in [Workspace Model](./WORKSPACE-MODEL.md#workspaceedge); this page covers how connections are made, routed, drawn, selected, and persisted.
 
 {% callout type="note" %}
 This page is part of the canvas domain. For the `WorkspaceEdge` schema and the surrounding data model see [Workspace Model](./WORKSPACE-MODEL.md). For how edge geometry is painted into the PIXI layer and kept aligned with the DOM see [Rendering Engine](./RENDERING-ENGINE.md). For how `sourceMessageId` feeds AI context resolution see [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
@@ -217,7 +217,7 @@ Edge styling:
 
 ## Routing
 
-`WorkspaceConnectionManager` handles the visual rendering logic for edges. The routing style is configured via the `CONNECTION_STYLE` constant, defaulting to `'orthogonal'` (circuit-board style) but switchable to `'horizontal-bezier'` (smooth curves).
+`WorkspaceConnectionManager` handles edge state and path planning, while `pixiEdgeRenderer.ts` draws committed edges as PIXI graphics. The routing style is configured in `settings.connector.connectionStyle`; the current default is `horizontal-bezier`.
 
 | Behavior | Rule |
 |----------|------|

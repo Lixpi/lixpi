@@ -132,4 +132,4 @@ Markdown element styles are **global** and live in [`src/sass/_markdown.scss`](.
 | Feature-extraction tab | Stage prompt previews, streamed model output | `MarkdownStreamRenderer` / `renderMarkdownStatic` |
 | Media Library | Saved feature instructions ("Application notes") | `renderMarkdownStatic` |
 
-See also: [Feature Extraction — Overview](../library/FEATURE-EXTRACTION-OVERVIEW.md), [Using Features](../library/USING-FEATURES.md), [Media Library](../library/MEDIA-LIBRARY.md), and the coding-style pointer at [`documentation/coding-style-guides/MARKDOWN-RENDERING.md`](../coding-style-guides/MARKDOWN-RENDERING.md).
+See also: [Feature Extraction — Overview](../library/FEATURE-EXTRACTION-OVERVIEW.md), [Using Features](../library/USING-FEATURES.md), and [Media Library](../library/MEDIA-LIBRARY.md).

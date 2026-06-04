@@ -1,13 +1,13 @@
 ---
 title: Workspace Model
-description: The core concepts, data model, and backend surface of the Lixpi canvas — the Workspace, CanvasState, WorkspaceEdge, and the five-type CanvasNode union, plus stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, and lazy loading.
+description: The core concepts, data model, and backend surface of the Lixpi canvas — the Workspace, CanvasState, WorkspaceEdge, and the CanvasNode union, plus stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, and visibility tracking.
 ---
 
 # Workspace Model
 
 A **workspace** is the primary container where users organize and edit their documents, images, videos, and AI context. It is an infinite canvas where cards float, can be arranged freely, resized, and edited in place. The spatial arrangement is not decoration — connections between nodes carry context to the AI, and the layout of generated media records its provenance.
 
-This page is the source of truth for **what a workspace is made of**: the core concepts a user manipulates, the persisted data model behind them, the frontend stores that hold live state, and the backend NATS/HTTP surface that reads and writes it. It deliberately does **not** cover *how* the canvas is drawn or *how* users interact with it turn by turn — those live in sibling pages.
+This page explains **what a workspace is made of**: the core concepts a user manipulates, the persisted data model behind them, the frontend stores that hold live state, and the backend NATS/HTTP surface that reads and writes it. It does **not** cover *how* the canvas is drawn or *how* users interact with it turn by turn — those live in sibling pages.
 
 {% callout type="note" %}
 This page is part of the canvas domain. For the DOM/PIXI rendering architecture, the layer stack, and canvas configuration ownership see [Rendering Engine](./RENDERING-ENGINE.md). For texture caching, level-of-detail tiers, and the decode pool see [Image Rendering Performance](./IMAGE-RENDERING-PERFORMANCE.md). For drag-release and insertion overlap rules see [Collision Resolution](./COLLISION-RESOLUTION.md). For step-by-step interaction flows see [User Flows](./USER-FLOWS.md), and for the connection system see [Edges & Connections](./EDGES-AND-CONNECTIONS.md).
@@ -167,11 +167,11 @@ The `sourceMessageId` property enables precise per-response-message tracking for
 
 ### Connection Routing
 
-Edges are routed and drawn by `WorkspaceConnectionManager`: an orthogonal (circuit-board) style by default with optional smooth beziers, auto-alignment to straight lines, message-level anchoring to a specific AI response bubble, corner snapping to reduce diagonal clutter, dashed drag/proximity previews, and proximity-connect suggestions when a node is dragged near a thread. The full routing rules, handle DOM, selection/deletion, and persistence are documented in [Edges & Connections](./EDGES-AND-CONNECTIONS.md).
+Edges are planned by `WorkspaceConnectionManager` and drawn by the PIXI edge renderer. The current default routing style is `horizontal-bezier`, with auto-alignment to straight lines where possible, message-level anchoring to a specific AI response bubble, dashed drag previews, and selection/deletion behavior documented in [Edges & Connections](./EDGES-AND-CONNECTIONS.md).
 
 ### AI Generated Content Layout
 
-When an AI thread generates images or videos, the workspace places them automatically to keep a clean layout: first outputs sit to the right of the source thread root or the combined bounds of selected/reference media, image-to-image continuations stay vertically aligned with the previous image in the branch, generated nodes use a fixed canvas-unit size regardless of zoom, and a synchronous partial tracker prevents overlapping or skipped slots during simultaneous stream updates. Reference/style media can anchor and animate placement without becoming a connector parent unless the branch resolver verifies a real generated continuation, and each branch birth persists exactly one `branchOrigin` circle. The complete placement, spacing, provenance-chrome, and references-vs-lineage rules live in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
+When an AI chat session generates images or videos, the workspace places them automatically to keep a clean layout: first outputs sit near the active chat context or the combined bounds of selected/reference media, image-to-image continuations stay vertically aligned with the previous image in the branch, generated nodes use a fixed canvas-unit size regardless of zoom, and a synchronous partial tracker prevents overlapping or skipped slots during simultaneous stream updates. Reference/style media can anchor and animate placement without becoming a connector parent unless the branch resolver verifies a real generated continuation, and each branch birth persists one `branchOrigin` circle. The complete placement, spacing, provenance chrome, and references-vs-lineage rules live in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
 
 ### CanvasNode
 
@@ -390,47 +390,41 @@ Images on the canvas are tracked by [`canvasImageLifecycle.ts`](../../services/w
 
 This ensures orphaned workspace-node images do not accumulate in storage. Video nodes use the parallel `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` path. Neither path deletes Media Library items — those are intentionally independent saved copies with their own scope and deletion lifecycle (see [Media Library](../library/MEDIA-LIBRARY.md)).
 
-## Lazy Content Loading
+## Workspace Load and Visibility Tracking
 
-Canvas nodes store dimensions in `canvasState`, but content is fetched only when a node enters the viewport. This optimizes initial workspace load and memory usage for large workspaces: empty shells are positioned from persisted dimensions, and the editor or media for a node is instantiated only once it becomes visible.
+Canvas nodes store dimensions in `canvasState`, and the workspace route currently loads the workspace record, documents, and AI chat threads up front. Visibility tracking still matters for rendering work: the canvas can decide which node shells, media sprites, outlines, and overlays should be active around the viewport.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Initialization
-        WS[Workspace Load] --> CS[Fetch canvasState]
-        CS --> RN[Render Node Placeholders]
-        RN --> |dimensions from canvasState| DOM[Position Empty Shells]
+        WS[Workspace Route Load] --> W[Fetch workspace]
+        WS --> D[Fetch documents]
+        WS --> T[Fetch AI chat threads]
+        W --> CS[canvasState]
+        D --> STORE[Document store]
+        T --> THREADS[Thread store]
+        CS --> RN[Render visible node shells]
     end
 
     subgraph Viewport Detection
         PZ[Pan/Zoom Event] --> VIS{isNodeInViewport?}
-        VIS -->|Yes, not loaded| FETCH[Fetch Content]
-        VIS -->|Yes, already loaded| SKIP[Skip]
+        VIS -->|Yes| ACTIVE[Activate overlays/media sync]
         VIS -->|No| SKIP
     end
 
-    subgraph Content Loading
-        FETCH --> |document| DSVC[DocumentService.getDocument]
-        FETCH --> |aiChatThread| ASVC[AiChatThreadService.getAiChatThread]
-        DSVC --> STORE[Update Store]
-        ASVC --> STORE
-        STORE --> EDITOR[Instantiate ProseMirror]
-        EDITOR --> REPLACE[Replace Placeholder with Editor]
-    end
-
-    subgraph Error Handling
-        FETCH --> |error| ERR[Show Error State]
-        ERR --> RETRY[Retry Button]
-        RETRY --> FETCH
+    subgraph Rendering Work
+        ACTIVE --> MEDIA[PIXI media layers]
+        ACTIVE --> CHROME[DOM chrome and handles]
+        ACTIVE --> EDGES[Edge sync]
     end
 ```
 
-### Content Fetching Strategy
+### Loading Strategy
 
-- **No debouncing** — Content is fetched immediately when a node enters the viewport for responsive UX.
-- **No unloading** — Once loaded, content remains in memory to avoid a re-fetch on pan back.
-- **Parallel fetching** — Multiple nodes entering the viewport simultaneously trigger parallel fetch requests.
+- **Route-level fetch** — The workspace route loads workspace metadata, canvas state, documents, and AI chat threads before render.
+- **No viewport fetch path today** — Visibility tracking does not fetch document/thread records lazily.
+- **No unloading** — Once route data is loaded, it remains in the stores until navigation or refresh.
 - **ResizeObserver** — Pane bounds are tracked for accurate visibility detection during window resizes.
 
 ## Related Pages

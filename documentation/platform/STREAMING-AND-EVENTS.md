@@ -7,7 +7,7 @@ description: How AI generation events flow from the in-process API workflow to t
 
 Lixpi streams every AI response — text tokens, image partials, video lifecycle, context-relevance feedback, and branch-resolution results — from the API straight to the browser over **NATS**. There is no polling and no separate streaming server: the in-process LangGraph workflow publishes events onto a per-thread subject, and the browser is already subscribed to that subject through a WebSocket connection. Streaming latency is therefore dominated by the AI provider, not by Lixpi infrastructure.
 
-This page is the source of truth for **how events move and what each event means**. It documents the per-thread subject, the complete catalog of stream-event statuses (payload, browser handling, purpose), and the browser render path that turns a token stream into rendered ProseMirror content. For *which workflow nodes emit* these events and *why the lifecycle is shaped this way*, see [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md). For the system-wide messaging picture, see [System Architecture](./SYSTEM-ARCHITECTURE.md).
+This page documents **how events move and what each event means**: the per-thread subject, the stream-event statuses, and the browser render path that turns a token stream into rendered ProseMirror content. For *which workflow nodes emit* these events and *why the lifecycle is shaped this way*, see [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md). For the system-wide messaging picture, see [System Architecture](./SYSTEM-ARCHITECTURE.md).
 
 ## The Per-Thread Subject
 
@@ -44,15 +44,15 @@ Every message on the per-thread subject carries a `status` from `STREAM_STATUS`.
 |--------|---------|----------------------------|---------|
 | `START_STREAM` | — | Open the empty assistant-response shell | Begin streaming. Published by the top-level request before pre-stream work, so the UI is not frozen. Idempotent. |
 | `STREAMING` | `{ content }` | `MarkdownStreamParser` → ProseMirror | A streaming text delta. |
-| `END_STREAM` | `{ usage }` | Finalize the response | End streaming. Ignored if it arrives before `START_STREAM`. |
+| `END_STREAM` | `{ text: '', aiProvider }` | Finalize the response | End streaming. Ignored if it arrives before `START_STREAM`. Usage is computed separately and is not currently included in the stream event. |
 | `ERROR` | `{ error }` | Surface the error; end receiving state | Stream-level failure (including pre-stream errors). |
 | `CONTEXT_RELEVANCE_RESOLVED` | `{ workspaceContextResolution }` | Panel/canvas: show auto chips, patch improved descriptors, narrow media candidates | Result of `resolveWorkspaceContext`. Bypasses the markdown parser. |
 | `CONTEXT_RELEVANCE_ERROR` | `{ error }` | Surface relevance failure; the graph error path closes the stream | Relevance resolution failed. |
 | `IMAGE_BRANCH_RESOLVED` | `{ resolution }` | Canvas: apply VLM-selected references and branch lineage | Result of `resolveImageBranch` (image and video). Forwarded as an `image_branch_resolved` segment. |
 | `IMAGE_BRANCH_RESOLUTION_ERROR` | `{ error }` | Surface branch failure; clear pending placement | Branch resolution failed (e.g. missing candidate snapshot). |
 | `IMAGE_GENERATION_TRACE` | `{ imageGenerationTrace }` | `image_generation_trace` segment | Audit trace: image tool prompt + selected/excluded references, published before the transient image provider runs. |
-| `IMAGE_PARTIAL` | `{ imageBase64, partialIndex }` | Canvas media layer (bypasses markdown) | An empty `imageBase64` triggers the PIXI animated-border placeholder; non-empty partials replace the same preview sprite in place. |
-| `IMAGE_COMPLETE` | `{ imageBase64, revisedPrompt }` | Canvas media layer | The finished image; PIXI renders it and clears the traveling outline. |
+| `IMAGE_PARTIAL` | `{ imageUrl, fileId, partialIndex }` | Canvas media layer (bypasses markdown) | Empty `imageUrl`/`fileId` triggers the PIXI animated-border placeholder; non-empty partials have already been stored in the workspace Object Store and replace the same preview sprite in place. |
+| `IMAGE_COMPLETE` | `{ imageUrl, fileId, responseId, revisedPrompt, imageModelId, imageModelProvider }` | Canvas media layer | The finished image; PIXI renders it from the stored URL and clears the traveling outline. |
 | `VIDEO_GENERATION_TRACE` | `{ videoGenerationTrace }` | `video_generation_trace` segment | Audit trace: video tool prompt + selected/excluded references, published before VEO runs (so the trace survives a later VEO failure). |
 | `VIDEO_PENDING` | — | `video_pending` segment + placeholder node | Create the placeholder `VideoCanvasNode` and start the traveling outline. |
 | `VIDEO_GENERATING` | — | `video_generating` segment | Keepalive ping during the VEO poll loop, so the browser never looks frozen. |

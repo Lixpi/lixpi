@@ -10,7 +10,7 @@ The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. 
 - **DOM** owns text-rich controls and interaction structure: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, branch-origin DOM proxies, and handles. The AI Chat panel can be open with zero tabs; its UI state is persisted in canvas state.
 - **PIXI v8** owns high-volume pixels, connector strokes, and canvas chrome: image pixel rendering, video poster/placeholder rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays.
 
-This page is the single source of truth for that ownership split and for the machinery that keeps DOM and PIXI in lockstep: the layer stack, the viewport bridge, viewport state ownership, the sync pipeline, render scheduling, and the PIXI initialization contract. Other canvas pages link here instead of restating it.
+This page covers that split and the machinery that keeps DOM and PIXI in lockstep: the layer stack, the viewport bridge, viewport state ownership, the sync pipeline, render scheduling, and the PIXI initialization contract.
 
 {% callout type="note" %}
 The canonical architectural rationale — *why* the canvas splits work between DOM and PIXI, and what the leading media-heavy canvases do — lives in [Rendering Architecture for a Media-Heavy Canvas](../knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md). This page documents the *current implementation*; that page documents the *decision*.
@@ -61,7 +61,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/workspaceRenderStatePlan.ts` | Pure render-state reconciliation for pending local visual commits while store acknowledgements arrive |
 | `workspace/workspaceViewportStatePlan.ts` | Pure stale viewport-only render guard; keeps delayed store viewport updates from overriding the live transform |
 | `workspace/WorkspaceConnectionManager.ts` | Edge creation, proximity connect, candidate detection, and the data feed for `pixiEdgeRenderer` |
-| `connectors/renderer.ts` | SVG connector rendering (still authoritative for hit testing) |
+| `connectors/index.ts` | Connector exports for path helpers and connection utilities |
 | `utils/zoomScaling.ts` | Zoom-compensated handle scaling |
 
 Use the incremental canvas architecture documented here as the implementation recipe: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.

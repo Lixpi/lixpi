@@ -1,13 +1,15 @@
 ---
 title: System Architecture
-description: The conceptual overview of Lixpi's NATS-native, message-driven service architecture — services, design decisions, subjects, scaling, and shared packages.
+description: The conceptual overview of Lixpi's NATS-first, message-driven service architecture — services, design decisions, subjects, scaling, HTTP media routes, and shared packages.
 ---
 
 # System Architecture
 
-Lixpi is a highly decoupled, message-driven system. Every component — the browser, the API, the LLM workflow, file storage, and authentication — communicates over a single [NATS](https://nats.io/) message bus. There is no REST polling for real-time data and no traditional API gateway or load balancer in the request path.
+Lixpi is a message-driven system built around [NATS](https://nats.io/). The browser uses NATS over WebSocket for normal app commands, workspace CRUD, canvas-state saves, document/thread operations, and AI stream events. The API service handles those subjects, persists data in DynamoDB, and hosts the LangGraph workflow in-process.
 
-This page is the conceptual map of how the running system fits together: which services exist, how they talk, the design decisions that shaped them, and how the system scales. It is the spine that other documentation links back to instead of re-explaining the architecture.
+There are still HTTP routes where HTTP is the right tool: image/video upload and download, Media Library previews, feature sample previews, health checks, and workspace export/import archives. Those routes move browser-friendly bytes or ZIP files; they are not the primary app command path.
+
+This page maps how the running system fits together: which services exist, how they talk, the design decisions that shaped them, and how the system scales.
 
 {% callout type="note" %}
 This page covers the **runtime architecture**. For the AWS deployment topology (Pulumi, ECS/Fargate, CloudFront, the NATS cluster wiring), see [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md).
@@ -26,7 +28,7 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | **DynamoDB** | AWS (local via Docker) | — | Document storage, user data, AI chat threads, AI model metadata |
 
 {% callout type="note" %}
-**Historical note.** LLM orchestration used to live in a separate Python `services/llm-api/` Fargate task using the Python LangGraph package. It was absorbed into `services/api` once `@langchain/langgraph` (TypeScript) reached parity. The in-process LangGraph workflow now runs alongside the gateway logic in the `api` container. For the internal-service NATS auth pattern that the former Python service used — and that a future split would reuse — see [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
+**Historical note.** LLM orchestration used to live in a separate Python `services/llm-api/` Fargate task using the Python LangGraph package. It was absorbed into `services/api` once the TypeScript LangGraph package covered Lixpi's workflow needs. The in-process LangGraph workflow now runs alongside the gateway logic in the `api` container. For the internal-service NATS auth pattern that the former Python service used — and that a future split would reuse — see [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
 {% /callout %}
 
 ### High-Level Architecture
@@ -58,10 +60,12 @@ graph TB
         Provider(("AI Providers<br/>OpenAI · Anthropic · Google"))
     end
 
-    UI <-->|WebSocket| NATS
+    UI <-->|WebSocket app commands + AI stream events| NATS
+    UI -->|HTTPS media bytes + workspace export/import| API
     NATS <-->|Publish / Subscribe| API
     API --> LLM
     API --> DDB
+    API <-->|Object Store API| NATS
     LLM -->|Stream events direct| NATS
     LLM <-->|Vendor SDK calls| Provider
     API -.->|JWT verify| Auth
@@ -70,8 +74,8 @@ graph TB
 | Tier | Component | Responsibility |
 |------|-----------|----------------|
 | Client | Web UI | Renders the canvas, hosts ProseMirror editors, extracts context from the node graph, and connects to NATS over WebSocket |
-| Broker | NATS Cluster | Carries every message: auth callouts, CRUD requests, and AI stream events; stores media in JetStream Object Store |
-| API | api service | Validates tokens, performs CRUD against DynamoDB, and bridges browser requests to the in-process workflow |
+| Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, and AI stream events; stores media in JetStream Object Store |
+| API | api service | Validates tokens, performs CRUD against DynamoDB, hosts byte-oriented HTTP routes, and bridges browser requests to the in-process workflow |
 | API | LangGraph workflow | Resolves features, streams the text model, routes image/video tool calls, and publishes results directly to NATS |
 | Identity | Auth0 / LocalAuth0 | Issues RS256 user JWTs and exposes a JWKS endpoint for verification |
 | Storage | DynamoDB | Persists documents, AI chat threads, users, and AI model metadata |
@@ -79,12 +83,21 @@ graph TB
 
 ## NATS as the Backbone
 
-All communication in Lixpi flows through NATS. This single decision shapes everything else:
+Most application behavior in Lixpi flows through NATS. This decision shapes the system:
 
 - **End-to-end messaging** — Browser ↔ NATS ↔ backend services. The same bus carries browser requests and inter-service traffic.
 - **Real-time streaming** — AI tokens, image partials, and video events stream directly to clients on per-thread subjects, with no intermediate buffering layer.
 - **Centralized auth** — The NATS `auth_callout` delegates "can this connection happen, and what may it do?" to the API service. See [Authentication](./AUTHENTICATION.md).
 - **Queue groups** — Multiple instances of a service subscribe under a shared queue-group name, and NATS load-balances messages across them automatically. No external load balancer required.
+
+HTTP remains in the system for payloads that are better served as HTTP responses:
+
+| HTTP route family | Why it is HTTP |
+|-------------------|----------------|
+| `/api/images/*` and `/api/videos/*` | Browser upload, download, range requests, and `<video>` playback need ordinary HTTP semantics. The bytes are stored in NATS Object Store. |
+| `/api/workspaces/:workspaceId/export` and `/api/workspaces/:workspaceId/import` | Workspace portability uses ZIP archives and multipart uploads. Normal workspace reads, writes, canvas-state updates, and deletion are still NATS subjects. |
+| `/api/features/*` and `/api/media-library/*` previews | Authenticated thumbnail/asset previews are browser media requests, while feature and library metadata flows over NATS subjects. |
+| `/health-check` | ECS needs a simple health endpoint. |
 
 For the full token path from AI provider to rendered DOM, and the catalog of stream event types, see [Streaming & Events](./STREAMING-AND-EVENTS.md).
 
@@ -106,16 +119,18 @@ domain.entity.action[.qualifier]
 The trailing `{workspaceId}.{threadId}` qualifiers are what let the LLM workflow publish a stream straight to the one browser subscription that needs it, keeping streaming latency dominated by the AI provider rather than by Lixpi infrastructure.
 
 {% callout type="important" %}
-Subjects are **not** ad-hoc strings scattered across the codebase. They are defined once in `packages/lixpi/constants/nats-subjects.json` — the single JSON source of truth consumed by both the browser and the API through `@lixpi/constants`. Adding or renaming a subject means editing that file, which keeps every producer and consumer in sync.
+Subjects are **not** ad-hoc strings scattered across the codebase. They are defined in `packages/lixpi/constants/nats-subjects.json` and consumed by both the browser and the API through `@lixpi/constants`. Adding or renaming a subject means editing that file, which keeps every producer and consumer in sync.
 {% /callout %}
 
 ## Key Design Decisions
 
 Four decisions define the shape of the system. Each is intentional and each is what makes a given subsystem replaceable without rippling through the rest.
 
-### NATS-Native
+### NATS-First
 
-The entire system runs through NATS — auth, messaging, file storage (JetStream Object Store), and streaming. The browser connects to NATS via WebSocket. Because the LLM workflow publishes streaming events directly onto the per-thread subjects the browser is already subscribed to, there is no extra hop between "token produced" and "token rendered." The message bus *is* the integration layer.
+App commands, auth callouts, workspace/document/thread CRUD, canvas-state saves, file storage (JetStream Object Store), and AI streaming all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes streaming events directly onto the per-thread subjects the browser is already subscribed to, there is no extra hop between "token produced" and "token rendered."
+
+The exception is byte transport: media upload/download, video range reads, authenticated previews, and workspace import/export use HTTP because browsers and archives already speak HTTP well.
 
 ### Framework-Agnostic Canvas
 
@@ -162,7 +177,7 @@ flowchart LR
 
 ### Future Split: `llm-workers`
 
-If LLM streaming workload grows enough to warrant deployment isolation from the gateway — so that an API deploy does not interrupt long-running streams — the LLM module's `getSubscriptions()` surface lets it be hosted by a separate `llm-workers` service. That service runs the **same Docker image** with a different CMD, joins the same NATS subjects, and authenticates as an internal service. See [`services/api/src/llm/README.md`](../../services/api/src/llm/README.md) for the future-split path, and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md) for how it maps onto AWS.
+If LLM streaming workload grows enough to warrant deployment isolation from the gateway — so that an API deploy does not interrupt long-running streams — the LLM module is shaped so it can be split into a separate `llm-workers` service. That split still needs implementation work: `getSubscriptions()` is currently empty, the worker command would need to register real NATS subscriptions, and the auth callout would need an internal-service entry for the worker. See [`services/api/src/llm/README.md`](../../services/api/src/llm/README.md) for the future-split path, and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md) for how it maps onto AWS.
 
 ## Shared Infrastructure Packages
 
@@ -170,7 +185,7 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 
 | Package | Purpose |
 |---------|---------|
-| `@lixpi/constants` | NATS subjects (single JSON source of truth), shared types, AI model metadata with pricing |
+| `@lixpi/constants` | Shared NATS subjects, shared types, AI model metadata with pricing |
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by both the API and the NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |

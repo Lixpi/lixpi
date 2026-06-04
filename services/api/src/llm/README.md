@@ -1,6 +1,6 @@
 # LLM Module
 
-The in-process LangGraph workflow that orchestrates AI provider streaming. Replaces the standalone Python `services/llm-api/` Fargate service that previously did this work — it became unnecessary once `@langchain/langgraph` reached parity with the Python LangGraph package.
+The in-process LangGraph workflow that orchestrates AI provider streaming. It replaces the standalone Python `services/llm-api/` Fargate service that previously did this work; the TypeScript LangGraph package now covers the workflow features Lixpi needs.
 
 ## What it does
 
@@ -9,7 +9,7 @@ The in-process LangGraph workflow that orchestrates AI provider streaming. Repla
 - Streams tokens to the browser via NATS (`ai.interaction.chat.receiveMessage.{ws}.{thread}`) — the API HTTP server is not in the streaming path.
 - Routes dual-model image/video generation: text model emits `generate_image` or `generate_video`, then the workflow spawns a transient image-model provider or VEO video provider that stores the generated media in NATS Object Store.
 - Publishes `IMAGE_GENERATION_TRACE` and `VIDEO_GENERATION_TRACE` events immediately before invoking transient media providers. These traces contain the text-model tool prompt, routed media prompt, selected/excluded reference candidates, and preview-safe reference URLs when available.
-- Reports token, image, and computed video usage costs via `decimal.js` pricing math against the model's pricing metadata. Video usage is computed per second; publishing the final video usage event is still pending.
+- Computes token, image, and video usage costs via `decimal.js` pricing math against the model's pricing metadata. The reporter currently logs/returns the calculations; publishing usage events is still pending.
 
 ## Public surface
 
@@ -34,7 +34,7 @@ await llmModule.stop(instanceKey)
 await llmModule.shutdown()
 ```
 
-The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscriptions()` is currently `[]` because the gateway invokes `process()` in-process; it exists so a future split into a separate `llm-workers` ECS service could register the same subscriptions on a different NATS connection without code changes.
+The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscriptions()` is currently `[]` because the gateway invokes `process()` in-process. It marks the intended boundary for a future worker split, but the worker subscriptions still need to be implemented before a separate `llm-workers` service can run.
 
 ## File layout
 
@@ -120,11 +120,12 @@ Every `process(...)` call gets an `AbortController`. The 20-minute circuit break
 ## Future split
 
 If LLM streaming workload grows enough to want deployment isolation from the gateway:
-1. Deploy the same Docker image as `llm-workers` with a different CMD that subscribes to NATS via `getSubscriptions()` instead of running the Express server.
-2. Update Pulumi to add the `llm-workers` ECS service with the broader CPU/memory and AI provider env vars.
-3. Restore a `serviceAuthConfigs` entry in the auth callout for `svc:llm-workers` (see `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`).
+1. Implement the `getSubscriptions()` entries that route chat and stop subjects to `process()` / `stop()` from a worker process.
+2. Deploy the same Docker image as `llm-workers` with a different CMD that subscribes to NATS via those entries instead of running the Express server.
+3. Update Pulumi to add the `llm-workers` ECS service with the broader CPU/memory and AI provider env vars.
+4. Restore a `serviceAuthConfigs` entry in the auth callout for `svc:llm-workers` (see `documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md`).
 
-The LLM module's `index.ts` and the rest of `src/llm/` would not change — they'd just be hosted by a different process that registers `getSubscriptions()` on a NATS connection.
+Most of the workflow code can stay in `src/llm/`; the missing piece is the worker-facing subscription layer.
 
 ## Reference
 

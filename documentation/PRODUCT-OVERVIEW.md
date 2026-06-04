@@ -371,7 +371,7 @@ Shared packages keep service contracts in sync:
 
 | Package | Purpose |
 |---------|---------|
-| `@lixpi/constants` | NATS subjects (single JSON source of truth), shared types, AI model metadata with pricing |
+| `@lixpi/constants` | Shared NATS subjects, shared types, AI model metadata with pricing |
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by API and NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |

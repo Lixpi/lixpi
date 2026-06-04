@@ -19,7 +19,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createConfig, rewriteHref } from './markdoc/config.mjs'
+import { createConfig, createHeadingIdFactory, slugifyHeading } from './markdoc/config.mjs'
 import { renderNav, renderPage } from './markdoc/template.mjs'
 
 const SITE_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -39,7 +39,7 @@ const NAV_ORDER = {
     'PRODUCT-OVERVIEW': -90,
     platform: 10, canvas: 20, 'ai-chat': 30, 'media-generation': 40, library: 50, conventions: 60,
     'documentation-style-guides': 70, 'coding-style-guides': 71, 'development-workflow': 72, testing: 73,
-    knowledge: 80, roadmap: 85, 'vendor-documentation': 90, 'Media-Posts': 95, memory: 96, 'tech-debt': 97,
+    knowledge: 80, roadmap: 85, 'vendor-documentation': 90, 'Media-Posts': 95, memory: 96, 'tech-debt': 97, site: 98,
     features: 5,
 }
 
@@ -75,6 +75,17 @@ function deriveTitle(body, relMd) {
     const heading = body.match(/^#\s+(.+?)\s*$/m)
     if (heading) return heading[1].replace(/[`*_]/g, '').trim()
     return prettifyLabel(path.basename(relMd))
+}
+
+function collectHeadingIds(body) {
+    const headingId = createHeadingIdFactory()
+    const ids = new Set()
+
+    for (const match of body.matchAll(/^#{1,6}\s+(.+?)\s*$/gm)) {
+        ids.add(headingId(match[1].replace(/[`*_]/g, '').trim()))
+    }
+
+    return ids
 }
 
 // --- filesystem walk --------------------------------------------------------
@@ -174,12 +185,13 @@ async function main() {
             body,
             title: data.title || deriveTitle(body, relMd),
             description: data.description || '',
+            headingIds: collectHeadingIds(body),
         })
     }
 
     const outputSet = new Set(pages.map((p) => p.relHtml))
+    const pageByRelHtml = new Map(pages.map((p) => [p.relHtml, p]))
     const navTree = buildNavTree(pages)
-    const config = createConfig()
 
     await fs.rm(DIST, { recursive: true, force: true })
     await fs.mkdir(ASSETS_OUT, { recursive: true })
@@ -199,6 +211,8 @@ async function main() {
             continue
         }
 
+        const config = createConfig({ pageRelMd: page.relMd })
+
         for (const item of Markdoc.validate(ast, config)) {
             const level = item.error?.level || 'error'
             if (level === 'error' || level === 'critical') {
@@ -206,20 +220,46 @@ async function main() {
             }
         }
 
-        // Dangling-link gate (intra-doc .md links must resolve to a built page).
+        // Dangling-link gate:
+        // - intra-doc .md links must resolve to a built page
+        // - heading fragments must resolve to a rendered heading id
+        // - links that escape documentation/ must point at a real repo file
         for (const href of collectLinks(ast)) {
-            if (!href || isExternal(href) || href.startsWith('#')) continue
-            const [target] = href.split('#')
+            if (!href || isExternal(href)) continue
+            const [target, rawFragment] = href.split('#')
+            const fragment = rawFragment ? decodeURIComponent(rawFragment) : ''
+            const pageDir = path.posix.dirname(page.relMd)
+
+            if (!target && fragment) {
+                if (!page.headingIds.has(fragment) && !page.headingIds.has(slugifyHeading(fragment))) {
+                    danglingLinks.push(`${page.relMd} -> ${href} (missing heading #${fragment})`)
+                }
+                continue
+            }
+
             if (!target) continue
             const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page.relMd), target))
-            // Links that escape documentation/ point at repo source files or
-            // external READMEs (valid on GitHub), not at rendered site pages.
-            // They are intentional; don't treat them as site links.
-            if (resolved.startsWith('..')) continue
+            if (resolved.startsWith('..')) {
+                const repoRel = path.posix.normalize(path.posix.join('documentation', pageDir, target))
+                if (repoRel.startsWith('..')) {
+                    danglingLinks.push(`${page.relMd} -> ${href} (escapes repository root)`)
+                    continue
+                }
+                if (!existsSync(path.resolve(DOCS_ROOT, '..', repoRel))) {
+                    danglingLinks.push(`${page.relMd} -> ${href} (missing repo file ${repoRel})`)
+                }
+                continue
+            }
+
             if (/\.md$/i.test(target)) {
                 const resolvedHtml = resolved.replace(/\.md$/i, '.html')
                 if (!outputSet.has(resolvedHtml)) {
                     danglingLinks.push(`${page.relMd} -> ${href} (expected ${resolvedHtml})`)
+                } else if (fragment) {
+                    const targetPage = pageByRelHtml.get(resolvedHtml)
+                    if (!targetPage.headingIds.has(fragment) && !targetPage.headingIds.has(slugifyHeading(fragment))) {
+                        danglingLinks.push(`${page.relMd} -> ${href} (missing heading #${fragment})`)
+                    }
                 }
             } else {
                 // intra-doc asset/image: warn if missing on disk

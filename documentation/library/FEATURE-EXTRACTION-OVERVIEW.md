@@ -24,9 +24,9 @@ Extracted features are surfaced in the `Features` category of the
 
 Lixpi is a node-based visual canvas for AI image and video generation
 pipelines. Its defining win is **artifact piping for character consistency** —
-the same image node piped into multiple threads via directional edges
-guarantees identical character/object reproduction downstream (see
-[Product Overview](../PRODUCT-OVERVIEW.md)).
+the same image node piped into multiple threads via directional edges gives
+later generations a stable visual reference for the same character or object
+(see [Product Overview](../PRODUCT-OVERVIEW.md)).
 
 Feature extraction addresses a parallel problem: **stylistic and aesthetic
 consistency without subject leakage**. When an artist, art director, or brand
