@@ -35,7 +35,48 @@ export const VEO_NEGATIVE_PROMPT = [
     'brand logos',
 ].join(', ')
 
-const buildInputModeDirection = (state: ProviderState): string => {
+// A video model's prompt profile: the provider-specific wording the shared
+// wrapper composes around the user's request. VEO and Seedance share the same
+// pipeline (buildVideoModelPrompt) but differ in three places: the headline
+// quality/cinematography direction, the reference-image input-mode wording
+// (VEO names its inputs "VEO reference images"), and how negatives are handled.
+// VEO appends an inline `Negative prompt:` line; Seedance 2.0 has no reliable
+// native negative field and negative phrasing backfires (the model renders the
+// tokens), so its profile omits the line entirely and relies on positive
+// phrasing. Provider differences live here, never in the shared routing.
+export type VideoModelProfileName = 'veo' | 'seedance'
+
+export type VideoModelProfile = {
+    qualityDirection: string
+    referenceImageDirection: string
+    // null => omit the trailing `Negative prompt: …` line (positive phrasing only).
+    negativePrompt: string | null
+}
+
+export const VIDEO_MODEL_PROFILES: Record<VideoModelProfileName, VideoModelProfile> = {
+    veo: {
+        qualityDirection: 'VEO QUALITY DIRECTION: produce one coherent continuous shot for a short clip, with stable identity, physically plausible motion, consistent scale, clean temporal continuity, and synchronized audio. Keep the subject sharp and materially consistent through the entire motion.',
+        referenceImageDirection: 'REFERENCE-IMAGE DIRECTION: use the attached VEO reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.',
+        negativePrompt: VEO_NEGATIVE_PROMPT,
+    },
+    seedance: {
+        qualityDirection: 'SEEDANCE QUALITY DIRECTION: produce one cohesive cinematic shot with a clear subject, physically natural motion, stable identity, consistent scale, smooth temporal continuity, deliberate camera movement, filmic lighting, and synchronized audio. Keep the subject crisp and materially consistent throughout the motion, and render every described element affirmatively.',
+        referenceImageDirection: 'REFERENCE-IMAGE DIRECTION: use the attached reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.',
+        negativePrompt: null,
+    },
+}
+
+// Selects the prompt profile from the SELECTED video model. Keyed off the model
+// version (the same `/seedance/i` vs `/veo/i` signal the providers gate on) so
+// the wrapper stays provider-agnostic and VEO output is byte-identical for every
+// non-Seedance model.
+export const getVideoModelProfile = (state: ProviderState): VideoModelProfile => {
+    const modelVersion = state.videoModelVersion ?? ''
+    if (/seedance/i.test(modelVersion)) return VIDEO_MODEL_PROFILES.seedance
+    return VIDEO_MODEL_PROFILES.veo
+}
+
+const buildInputModeDirection = (state: ProviderState, profile: VideoModelProfile): string => {
     if (state.videoSourceForExtension) {
         return 'EXTENSION CONTINUITY: continue from the final second of the source video. Preserve the existing motion direction, camera momentum, subject identity, lighting, spatial layout, and audio bed. Do not restart the scene or return to the opening composition.'
     }
@@ -45,7 +86,7 @@ const buildInputModeDirection = (state: ProviderState): string => {
     }
 
     if (state.videoReferenceImages && state.videoReferenceImages.length > 0) {
-        return 'REFERENCE-IMAGE DIRECTION: use the attached VEO reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.'
+        return profile.referenceImageDirection
     }
 
     return 'TEXT-TO-VIDEO DIRECTION: generate one focused short-video moment with a clear subject, coherent physical action, deliberate camera movement, consistent lighting, and synchronized audio.'
@@ -55,20 +96,21 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
     const prompt = state.generatedVideoPrompt ?? ''
     if (!prompt) return ''
 
+    const profile = getVideoModelProfile(state)
     const featureReferenceImages = state.featureReferenceImages ?? []
     const hasFeatureReferences = featureReferenceImages.length > 0
     const featureUsagePrompt = state.featureUsagePrompt?.trim()
 
     return [
-        'VEO QUALITY DIRECTION: produce one coherent continuous shot for a short clip, with stable identity, physically plausible motion, consistent scale, clean temporal continuity, and synchronized audio. Keep the subject sharp and materially consistent through the entire motion.',
-        buildInputModeDirection(state),
+        profile.qualityDirection,
+        buildInputModeDirection(state, profile),
         hasFeatureReferences || featureUsagePrompt
             ? 'MANDATORY /use FEATURE TRANSFER FOR VIDEO: the feature reference image(s) and feature brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the feature sample subject, pose, composition, or layout.'
             : undefined,
         featureUsagePrompt ? `FEATURE BRIEF:\n${featureUsagePrompt}` : undefined,
         'USER VIDEO REQUEST:',
         prompt,
-        `Negative prompt: ${VEO_NEGATIVE_PROMPT}`,
+        profile.negativePrompt ? `Negative prompt: ${profile.negativePrompt}` : undefined,
     ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
 }
 
