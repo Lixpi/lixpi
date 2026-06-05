@@ -28,6 +28,11 @@ export type VideoUsage = {
     durationSeconds: number
     resolution: string
     aspectRatio: string
+    // Vendor token usage for token-metered video providers (e.g. Seedance via
+    // ModelArk). Absent for per-second providers like VEO. Billing branches on
+    // pricing.video.measuringUnit (see usage-reporter.reportVideoUsage).
+    completionTokens?: number
+    totalTokens?: number
 }
 
 export type EventMeta = {
