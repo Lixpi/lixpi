@@ -391,6 +391,8 @@ export abstract class BaseProvider {
                 durationSeconds: state.videoUsage.durationSeconds,
                 resolution: state.videoUsage.resolution,
                 aspectRatio: state.videoUsage.aspectRatio,
+                totalTokens: state.videoUsage.totalTokens,
+                completionTokens: state.videoUsage.completionTokens,
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })

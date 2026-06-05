@@ -67,11 +67,18 @@ export type VideoUsageReport = {
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number
     video: {
+        measuringUnit: string
         durationSeconds: number
         resolution: string
         aspectRatio: string
-        pricePerSecond: string
-        pricePerSecondResale: string
+        // Per-second metered (VEO).
+        pricePerSecond?: string
+        pricePerSecondResale?: string
+        // Token metered (Seedance via ModelArk).
+        totalTokens?: number
+        completionTokens?: number
+        pricePer?: string
+        price?: string
         purchasedFor: string
         soldToClientFor: string
     }
@@ -199,7 +206,10 @@ export class UsageReporter {
         }
     }
 
-    // Video models (VEO) are billed per second of generated video.
+    // Video models are billed either per second (VEO) or per vendor token
+    // (Seedance via ModelArk). The branch is driven by pricing.video.measuringUnit
+    // so a token-metered provider needs no new call-site — VEO's per-second math
+    // is byte-identical to before.
     reportVideoUsage(args: {
         eventMeta: EventMeta
         aiModelMetaInfo: AiModelMetaInfo
@@ -207,19 +217,52 @@ export class UsageReporter {
         durationSeconds: number
         resolution: string
         aspectRatio: string
+        totalTokens?: number
+        completionTokens?: number
         aiRequestReceivedAt: number
         aiRequestFinishedAt: number
     }): VideoUsageReport | undefined {
         try {
-            const { eventMeta, aiModelMetaInfo, aiVendorRequestId, durationSeconds, resolution, aspectRatio, aiRequestReceivedAt, aiRequestFinishedAt } = args
+            const { eventMeta, aiModelMetaInfo, aiVendorRequestId, durationSeconds, resolution, aspectRatio, totalTokens, completionTokens, aiRequestReceivedAt, aiRequestFinishedAt } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
             const resaleMargin = dec(pricing.resaleMargin, '1.0')
             const videoPricing = (pricing as any).video ?? {}
-            const pricePerSecond = dec(videoPricing.price, '0')
-            const pricePerSecondResale = pricePerSecond.mul(resaleMargin)
-            const seconds = dec(durationSeconds, '0')
-            const purchased = pricePerSecond.mul(seconds)
-            const sold = pricePerSecondResale.mul(seconds)
+            const measuringUnit = videoPricing.measuringUnit ?? 'seconds'
+            const price = dec(videoPricing.price, '0')
+            const priceResale = price.mul(resaleMargin)
+
+            const video: VideoUsageReport['video'] = {
+                measuringUnit,
+                durationSeconds: Number(durationSeconds) || 0,
+                resolution,
+                aspectRatio,
+                purchasedFor: '0',
+                soldToClientFor: '0',
+            }
+
+            let purchased: Decimal
+            let sold: Decimal
+            if (measuringUnit === 'tokens') {
+                // total_tokens × price / pricePer (per-1M-token resource packs).
+                const pricePer = dec(videoPricing.pricePer, '1000000')
+                const tokens = dec(totalTokens, '0')
+                purchased = price.div(pricePer).mul(tokens)
+                sold = priceResale.div(pricePer).mul(tokens)
+                video.totalTokens = Number(totalTokens) || 0
+                video.completionTokens = Number(completionTokens) || 0
+                video.price = price.toString()
+                video.pricePer = pricePer.toString()
+            } else {
+                // seconds (VEO) — unchanged: price-per-second × duration.
+                const seconds = dec(durationSeconds, '0')
+                purchased = price.mul(seconds)
+                sold = priceResale.mul(seconds)
+                video.pricePerSecond = price.toString()
+                video.pricePerSecondResale = priceResale.toString()
+            }
+
+            video.purchasedFor = purchased.toString()
+            video.soldToClientFor = sold.toString()
 
             const report: VideoUsageReport = {
                 eventMeta,
@@ -227,15 +270,7 @@ export class UsageReporter {
                 aiVendorRequestId,
                 aiRequestReceivedAt,
                 aiRequestFinishedAt,
-                video: {
-                    durationSeconds: Number(durationSeconds) || 0,
-                    resolution,
-                    aspectRatio,
-                    pricePerSecond: pricePerSecond.toString(),
-                    pricePerSecondResale: pricePerSecondResale.toString(),
-                    purchasedFor: purchased.toString(),
-                    soldToClientFor: sold.toString(),
-                },
+                video,
             }
 
             // TODO: publish to NATS once usage.videos.ai subject is wired up.
