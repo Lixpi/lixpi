@@ -16,6 +16,7 @@ import type {
 import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../extraction/vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
+import { getVideoMaxReferenceImages } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
 type ResolveImageBranchDeps = {
@@ -592,10 +593,11 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             rationale: resolution.rationale,
         }, null, 0)}`)
 
-        // For video generation, map the VLM-selected references onto VEO inputs.
-        // VEO's `image` (first frame, image-to-video) and `referenceImages`
-        // (up to 3 style/content guides) are MUTUALLY EXCLUSIVE in the API,
-        // so we pick one path based on whether the resolver identified a target:
+        // For video generation, map the VLM-selected references onto the video
+        // provider's inputs. The first-frame (image-to-video) and reference-image
+        // (up to the provider's reference cap) paths are MUTUALLY EXCLUSIVE in
+        // both VEO and Seedance, so we pick one based on whether the resolver
+        // identified a target:
         //   - target set (edit / style_transfer / continuation) -> first-frame mode
         //   - no target, refs present                            -> referenceImages mode
         //   - no refs at all                                     -> text-to-video (both undefined)
@@ -610,7 +612,7 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             if (resolution.targetImageNodeId) {
                 videoFirstFrameImage = urlByNodeId.get(resolution.targetImageNodeId) ?? orderedUrls[0]
             } else if (orderedUrls.length > 0) {
-                videoReferenceImages = orderedUrls.slice(0, 3)
+                videoReferenceImages = orderedUrls.slice(0, getVideoMaxReferenceImages(state.videoModelMetaInfo))
             }
         }
 

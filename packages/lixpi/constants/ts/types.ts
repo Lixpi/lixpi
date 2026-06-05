@@ -1082,6 +1082,8 @@ export type AiModel = {
     videoAspectRatios?: ImageSizeOption[]
     videoResolutions?: ImageSizeOption[]
     videoDurations?: ImageSizeOption[]
+    // Max reference images this video model accepts (VEO 3, Seedance 9). Absent => 3.
+    videoMaxReferenceImages?: number
     pricing: {
         currency: string
         resaleMargin: string
