@@ -58,6 +58,37 @@ const VEO_SAFE_DURATIONS: ImageSizeOption[] = [
     { value: '8', label: '8s' },
 ]
 
+// Seedance 2.0 (BytePlus ModelArk) option lists. Same ImageSizeOption { value,
+// label } shape as VEO so the frontend video dropdowns consume them identically.
+// v1 ships 480p/720p only — 1080p/2k are reported only by aggregators; the
+// official ceiling is unconfirmed (see proposal Risks). No adaptive/auto values.
+const SEEDANCE_ASPECT_RATIOS: ImageSizeOption[] = [
+    { value: '16:9', label: '16:9' },
+    { value: '4:3', label: '4:3' },
+    { value: '1:1', label: '1:1' },
+    { value: '3:4', label: '3:4' },
+    { value: '9:16', label: '9:16' },
+    { value: '21:9', label: '21:9' },
+]
+const SEEDANCE_RESOLUTIONS: ImageSizeOption[] = [
+    { value: '480p', label: '480p' },
+    { value: '720p', label: '720p' },
+]
+const SEEDANCE_DURATIONS: ImageSizeOption[] = [
+    { value: '4', label: '4s' },
+    { value: '5', label: '5s' },
+    { value: '6', label: '6s' },
+    { value: '7', label: '7s' },
+    { value: '8', label: '8s' },
+    { value: '9', label: '9s' },
+    { value: '10', label: '10s' },
+    { value: '11', label: '11s' },
+    { value: '12', label: '12s' },
+    { value: '13', label: '13s' },
+    { value: '14', label: '14s' },
+    { value: '15', label: '15s' },
+]
+
 // OpenAI API types (using SDK types)
 type OpenAIModel = OpenAI.Models.Model
 type AnthropicModel = {
@@ -92,6 +123,7 @@ type ModelDefaults = Pick<
     videoAspectRatios?: ImageSizeOption[]
     videoResolutions?: ImageSizeOption[]
     videoDurations?: ImageSizeOption[]
+    videoMaxReferenceImages?: number
     // Not part of AiModel, used only for provider-grouped sorting
     starSortingPosition: number
     // Transform functions for model properties
@@ -140,6 +172,12 @@ export interface AiModelsSyncResult {
         updatedModels: number
         deletedModels: number
     }
+    byteplus: {
+        processed: number
+        newModels: number
+        updatedModels: number
+        deletedModels: number
+    }
     totalProcessed: number
     totalNew: number
     totalUpdated: number
@@ -181,7 +219,7 @@ export class AiModelsSync {
     }
 
     // Blacklist rules per provider: exact, prefix, and contains (partial-name) patterns
-    private static readonly MODELS_BLACKLIST: { OpenAI: ProviderBlacklist; Anthropic: ProviderBlacklist; Google: ProviderBlacklist; Stability: ProviderBlacklist } = {
+    private static readonly MODELS_BLACKLIST: { OpenAI: ProviderBlacklist; Anthropic: ProviderBlacklist; Google: ProviderBlacklist; Stability: ProviderBlacklist; BytePlus: ProviderBlacklist } = {
         OpenAI: {
             // Exact matches (use for cases like 'gpt-4' to avoid excluding 'gpt-4o')
             exact: [
@@ -272,11 +310,18 @@ export class AiModelsSync {
             exact: [],
             prefix: [],
             contains: []
+        },
+        // BytePlus models are a fixed static list (no list-models API), so nothing
+        // needs blacklisting — kept for shape parity with the other providers.
+        BytePlus: {
+            exact: [],
+            prefix: [],
+            contains: []
         }
     }
 
     // Default model capability/settings per provider.
-    private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults; Google: ProviderModelDefaults; Stability: ProviderModelDefaults } = {
+    private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults; Google: ProviderModelDefaults; Stability: ProviderModelDefaults; BytePlus: ProviderModelDefaults } = {
         // OpenAI model defaults sourced from offline docs provided in temp-openai-models-info/.
         // Only differences from fallback are specified; remaining fields inherit via mergeWithFallback.
         OpenAI: {
@@ -602,6 +647,60 @@ export class AiModelsSync {
                     }
                 }
             }
+        },
+        // BytePlus ModelArk — Seedance 2.0 video generation. Static entries (no
+        // model-list API in the repo); token-metered per the Dreamina resource
+        // packs ($4.30/1M tokens, Fast $3.30/1M). videoMaxReferenceImages=9 lets
+        // the provider-aware cap (Phase 2) pass up to 9 references.
+        BytePlus: {
+            exact: {
+                'dreamina-seedance-2-0-260128': {
+                    pricing: { video: { measuringUnit: 'tokens', pricePer: '1000000', price: '4.30' } },
+                },
+                'dreamina-seedance-2-0-fast-260128': {
+                    pricing: { video: { measuringUnit: 'tokens', pricePer: '1000000', price: '3.30' } },
+                },
+            },
+            prefix: [],
+            contains: [],
+            fallback: {
+                contextWindow: 0,
+                maxCompletionSize: 0,
+                defaultTemperature: 0.7,
+                supportsSystemPrompt: false,
+                modalities: ['video', 'video_generation'],
+                videoAspectRatios: SEEDANCE_ASPECT_RATIOS,
+                videoResolutions: SEEDANCE_RESOLUTIONS,
+                videoDurations: SEEDANCE_DURATIONS,
+                videoMaxReferenceImages: 9,
+                pricing: {
+                    currency: 'USD',
+                    resaleMargin: '1',
+                    video: { measuringUnit: 'tokens', pricePer: '1000000', price: '4.30' }
+                },
+                // Brand color is a reasonable default; iconName 'seedanceIcon' is a
+                // forward-compatible key (AI_AVATAR_ICONS lookup degrades to no icon
+                // until an SVG is registered under it) — cosmetic, confirm asset.
+                color: '#1664FF',
+                iconName: 'seedanceIcon',
+                starSortingPosition: 250,
+                transforms: {
+                    title: (modelId: string) => {
+                        const names: Record<string, string> = {
+                            'dreamina-seedance-2-0-260128': 'Seedance 2.0',
+                            'dreamina-seedance-2-0-fast-260128': 'Seedance 2.0 Fast',
+                        }
+                        return names[modelId] || modelId
+                    },
+                    shortTitle: (modelId: string) => {
+                        const names: Record<string, string> = {
+                            'dreamina-seedance-2-0-260128': 'Seedance 2.0',
+                            'dreamina-seedance-2-0-fast-260128': 'Seedance 2.0 Fast',
+                        }
+                        return names[modelId] || modelId
+                    }
+                }
+            }
         }
     }
 
@@ -633,6 +732,7 @@ export class AiModelsSync {
             videoAspectRatios: Array.isArray(p.videoAspectRatios) ? p.videoAspectRatios : fallback.videoAspectRatios,
             videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
             videoDurations: Array.isArray(p.videoDurations) ? p.videoDurations : fallback.videoDurations,
+            videoMaxReferenceImages: typeof p.videoMaxReferenceImages === 'number' ? p.videoMaxReferenceImages : fallback.videoMaxReferenceImages,
             pricing: this.mergePricingWithFallback(p.pricing as any, fallback.pricing),
             color: typeof (p as any).color === 'string' ? (p as any).color : fallback.color,
             iconName: typeof (p as any).iconName === 'string' ? (p as any).iconName : fallback.iconName,
@@ -956,6 +1056,7 @@ export class AiModelsSync {
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
+            videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1438,6 +1539,150 @@ export class AiModelsSync {
         }
     }
 
+    // BytePlus ModelArk models (hardcoded — no list-models API in the repo).
+    // Seedance 2.0 video generation; mirrors the Stability static-injection path.
+    private getBytePlusModels(): Array<{ id: string; displayName: string }> {
+        return [
+            { id: 'dreamina-seedance-2-0-260128', displayName: 'Seedance 2.0' },
+            { id: 'dreamina-seedance-2-0-fast-260128', displayName: 'Seedance 2.0 Fast' },
+        ]
+    }
+
+    // Map a BytePlus model to our AiModel format. Mirrors mapStabilityModelToAiModel
+    // but carries the video option lists + reference cap (Seedance is video-only).
+    private mapBytePlusModelToAiModel(model: { id: string; displayName: string }, sortingPosition: number): AiModel {
+        const modelDefaults = this.resolveModelDefaults('BytePlus', model.id)
+
+        const now = Date.now()
+
+        const aiModel: AiModel = {
+            provider: 'BytePlus',
+            model: model.id,
+            title: model.displayName,
+            shortTitle: model.displayName,
+            modelVersion: model.id,
+            imagePromptMaxChars: modelDefaults.imagePromptMaxChars,
+            contextWindow: modelDefaults.contextWindow,
+            maxCompletionSize: modelDefaults.maxCompletionSize,
+            defaultTemperature: modelDefaults.defaultTemperature,
+            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            color: modelDefaults.color,
+            iconName: modelDefaults.iconName,
+            sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
+            modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizes: modelDefaults.imageSizes,
+            videoAspectRatios: modelDefaults.videoAspectRatios,
+            videoResolutions: modelDefaults.videoResolutions,
+            videoDurations: modelDefaults.videoDurations,
+            videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
+            pricing: modelDefaults.pricing,
+            createdAt: now,
+            updatedAt: now
+        }
+
+        // Apply transforms to model properties
+        if (modelDefaults.transforms) {
+            for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
+                if (transformFn) {
+                    (aiModel as any)[key] = transformFn(model.id)
+                }
+            }
+        }
+
+        return aiModel
+    }
+
+    // Synchronize BytePlus (Seedance) models with database. Mirrors the Stability
+    // path exactly (static list -> map -> diff against DB -> delete/insert/update).
+    private async synchronizeBytePlusModels() {
+        if (!this.aiModelsListTableName) {
+            throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
+        }
+
+        info('🔄 Starting BytePlus models synchronization')
+
+        try {
+            const bytePlusModels = this.getBytePlusModels()
+            info(`📡 Using ${bytePlusModels.length} hardcoded BytePlus models`)
+
+            const mappedModels: AiModel[] = bytePlusModels.map((model, index) =>
+                this.mapBytePlusModelToAiModel(model, index + 1)
+            )
+
+            info(`🔧 Mapped ${mappedModels.length} BytePlus models to our format:`)
+            mappedModels.forEach((model, index) => {
+                info(`  ${index + 1}. ${model.model} - ${model.title}`)
+            })
+
+            const existingModelsResult = await this.dynamoDBService.queryItems({
+                tableName: this.aiModelsListTableName,
+                keyConditions: { provider: 'BytePlus' },
+                fetchAllItems: true,
+                origin: `Service::${this.serviceName}`
+            })
+
+            const existingModels = existingModelsResult.items
+            const existingModelIds: string[] = existingModels.map((model: any) => model.model)
+            const fetchedModelIds: string[] = mappedModels.map(model => model.model)
+
+            info(`Found ${existingModels.length} existing BytePlus models in database`)
+
+            const modelsToDelete = existingModels.filter((existingModel: any) =>
+                fetchedModelIds.indexOf(existingModel.model) === -1
+            )
+
+            const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
+            const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
+
+            info(`Processing ${newModels.length} new BytePlus models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+
+            if (modelsToDelete.length > 0) {
+                info(`🗑️ Deleting ${modelsToDelete.length} obsolete BytePlus models`)
+
+                for (const modelToDelete of modelsToDelete) {
+                    try {
+                        await this.dynamoDBService.deleteItems({
+                            tableName: this.aiModelsListTableName,
+                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            origin: `Service::${this.serviceName}`
+                        })
+                        info(`Deleted obsolete BytePlus model: ${(modelToDelete as any).model}`)
+                    } catch (error) {
+                        err(`Failed to delete BytePlus model ${(modelToDelete as any).model}:`, error)
+                        throw error
+                    }
+                }
+                info(`✅ Successfully deleted ${modelsToDelete.length} obsolete BytePlus models`)
+            }
+
+            if (newModels.length > 0) {
+                await this.dynamoDBService.batchWriteItems({
+                    tableName: this.aiModelsListTableName,
+                    items: newModels,
+                    origin: `Service::${this.serviceName}`
+                })
+                info(`Inserted ${newModels.length} new BytePlus models`)
+            }
+
+            if (modelsToUpdate.length > 0) {
+                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
+            }
+
+            info('✅ BytePlus models synchronization completed successfully')
+
+            return {
+                processed: mappedModels.length,
+                newModels: newModels.length,
+                updatedModels: modelsToUpdate.length,
+                deletedModels: modelsToDelete.length
+            }
+
+        } catch (error) {
+            err('❌ BytePlus models synchronization failed:', error)
+            throw error
+        }
+    }
+
     // Main synchronization method
     async synchronizeModels(): Promise<AiModelsSyncResult> {
         info(`🚀 Starting AI models synchronization - Service: ${this.serviceName}`)
@@ -1459,15 +1704,20 @@ export class AiModelsSync {
             const stabilityResult = await this.synchronizeStabilityModels()
             info(`Stability AI synchronization completed: ${JSON.stringify(stabilityResult)}`)
 
+            // Synchronize BytePlus (Seedance) models
+            const bytePlusResult = await this.synchronizeBytePlusModels()
+            info(`BytePlus synchronization completed: ${JSON.stringify(bytePlusResult)}`)
+
             const totalResult = {
                 openAI: openAIResult,
                 anthropic: anthropicResult,
                 google: googleResult,
                 stability: stabilityResult,
-                totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed + stabilityResult.processed,
-                totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels + stabilityResult.newModels,
-                totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels + stabilityResult.updatedModels,
-                totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels + stabilityResult.deletedModels
+                byteplus: bytePlusResult,
+                totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed + stabilityResult.processed + bytePlusResult.processed,
+                totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels + stabilityResult.newModels + bytePlusResult.newModels,
+                totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels + stabilityResult.updatedModels + bytePlusResult.updatedModels,
+                totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels + stabilityResult.deletedModels + bytePlusResult.deletedModels
             }
 
             info('✅ AI models synchronization completed successfully')

@@ -27,7 +27,10 @@ export class ProviderRegistry {
         private readonly natsService: NatsService,
         private readonly storeWorkspaceImage: StoreWorkspaceImageFn,
         private readonly storeWorkspaceVideo: StoreWorkspaceVideoFn,
-        ctors: Record<ProviderName, ProviderConstructor>,
+        // Partial: not every ProviderName must have a registered constructor
+        // (e.g. a video-only provider added before its class lands). Unregistered
+        // providers throw "Unsupported provider" on lookup in getOrCreate/createTransient.
+        ctors: Partial<Record<ProviderName, ProviderConstructor>>,
     ) {
         this.providerCtors = new Map(Object.entries(ctors) as Array<[ProviderName, ProviderConstructor]>)
         this.usageReporter = new UsageReporter()

@@ -2,7 +2,7 @@
 
 import type { Merge, Except } from 'type-fest'
 
-export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability'] as const
+export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability', 'BytePlus'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
 
 // Shared image upload/import validation limits (API routes, remote URL import, web-ui uploader).
