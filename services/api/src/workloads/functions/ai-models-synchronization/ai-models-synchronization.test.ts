@@ -2,6 +2,8 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 
+import { PROVIDER_NAMES } from '@lixpi/constants'
+
 import { AiModelsSync } from './ai-models-synchronization.ts'
 
 // =============================================================================
@@ -98,5 +100,69 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(modalities).toContain('image_generation')
         expect(modalities).not.toContain('video_generation')
         expect(nano.title).toBe('Nano Banana 2')
+    })
+
+    it('does NOT give VEO models a reference cap (absent => provider-aware default of 3)', () => {
+        const veo = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-generate-preview' }, 8)
+        expect(veo.videoMaxReferenceImages).toBeUndefined()
+    })
+})
+
+// =============================================================================
+// BYTEPLUS / SEEDANCE 2.0 VIDEO MODEL SYNC — static injection (mirrors VEO)
+// =============================================================================
+
+describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
+    let sync: any
+
+    beforeAll(() => {
+        process.env.ORG_NAME = process.env.ORG_NAME || 'test-org'
+        process.env.STAGE = process.env.STAGE || 'test'
+        sync = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+    })
+
+    it('registers BytePlus as a provider name', () => {
+        expect(PROVIDER_NAMES).toContain('BytePlus')
+    })
+
+    it('exposes both Seedance models in the static list', () => {
+        const ids = sync.getBytePlusModels().map((m: any) => m.id)
+        expect(ids).toEqual(['dreamina-seedance-2-0-260128', 'dreamina-seedance-2-0-fast-260128'])
+    })
+
+    it('maps dreamina-seedance-2-0-260128 with video modalities, token pricing, option lists, and a 9-image reference cap', () => {
+        const model = sync.mapBytePlusModelToAiModel({ id: 'dreamina-seedance-2-0-260128', displayName: 'Seedance 2.0' }, 1)
+        const modalities = model.modalities.map((m: any) => m.modality)
+
+        expect(model.provider).toBe('BytePlus')
+        expect(modalities).toContain('video_generation')
+        expect(modalities).toContain('video')
+        expect(modalities).not.toContain('image_generation')
+
+        expect(model.pricing.video?.measuringUnit).toBe('tokens')
+        expect(model.pricing.video?.pricePer).toBe('1000000')
+        expect(model.pricing.video?.price).toBe('4.30')
+
+        expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
+        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['480p', '720p'])
+        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'])
+        expect(model.videoMaxReferenceImages).toBe(9)
+
+        expect(model.title).toBe('Seedance 2.0')
+        expect(model.shortTitle).toBe('Seedance 2.0')
+    })
+
+    it('maps the fast variant to the cheaper per-1M-token price and a Fast title', () => {
+        const model = sync.mapBytePlusModelToAiModel({ id: 'dreamina-seedance-2-0-fast-260128', displayName: 'Seedance 2.0 Fast' }, 2)
+        expect(model.pricing.video?.measuringUnit).toBe('tokens')
+        expect(model.pricing.video?.price).toBe('3.30')
+        expect(model.videoMaxReferenceImages).toBe(9)
+        expect(model.title).toBe('Seedance 2.0 Fast')
+        expect(model.shortTitle).toBe('Seedance 2.0 Fast')
     })
 })

@@ -28,6 +28,11 @@ export type VideoUsage = {
     durationSeconds: number
     resolution: string
     aspectRatio: string
+    // Vendor token usage for token-metered video providers (e.g. Seedance via
+    // ModelArk). Absent for per-second providers like VEO. Billing branches on
+    // pricing.video.measuringUnit (see usage-reporter.reportVideoUsage).
+    completionTokens?: number
+    totalTokens?: number
 }
 
 export type EventMeta = {
@@ -47,8 +52,21 @@ export type AiModelMetaInfo = {
     defaultTemperature?: number
     supportsSystemPrompt?: boolean
     imagePromptMaxChars?: number
+    videoMaxReferenceImages?: number
     pricing?: Record<string, any>
     [key: string]: unknown
+}
+
+// Reference-image cap for the selected video model. VEO accepts 3, Seedance 9.
+// Reads from the video model's metadata and falls back to the VEO baseline when
+// the field is absent, so existing video models stay capped at 3. Single source
+// of truth shared by the VideoRouter and the image-branch resolver (the two
+// places the cap is applied) so the value is never duplicated.
+export const DEFAULT_VIDEO_MAX_REFERENCE_IMAGES = 3
+
+export const getVideoMaxReferenceImages = (meta: AiModelMetaInfo | undefined): number => {
+    const raw = meta?.videoMaxReferenceImages
+    return typeof raw === 'number' && raw > 0 ? raw : DEFAULT_VIDEO_MAX_REFERENCE_IMAGES
 }
 
 export type ChatMessage = {

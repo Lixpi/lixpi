@@ -8,6 +8,7 @@ import { OpenAIProvider } from './providers/openai-provider.ts'
 import { AnthropicProvider } from './providers/anthropic-provider.ts'
 import { GoogleProvider } from './providers/google-provider.ts'
 import { StabilityProvider } from './providers/stability-provider.ts'
+import { BytePlusProvider } from './providers/byteplus-provider.ts'
 import { ImageRouter } from './tools/image-router.ts'
 import { VideoRouter } from './tools/video-router.ts'
 import { ExtractionOrchestrator } from './extraction/orchestrator.ts'
@@ -42,6 +43,7 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
             Anthropic: AnthropicProvider,
             Google: GoogleProvider,
             Stability: StabilityProvider,
+            BytePlus: BytePlusProvider,
         },
     )
 

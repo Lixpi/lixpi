@@ -129,6 +129,59 @@ describe('buildVideoModelPrompt', () => {
         expect(prompt).toContain('Negative prompt:')
         expect(prompt).not.toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
     })
+
+    // Locks in VEO's reference-mode wording after it moved into the profile, so
+    // the generalization stays byte-identical for VEO in every input mode.
+    it('keeps the literal "VEO reference images" wording in VEO reference mode (byte-identical)', () => {
+        const prompt = buildVideoModelPrompt(createState({
+            videoFirstFrameImage: undefined,
+            videoReferenceImages: ['data:image/png;base64,ref-a', 'data:image/png;base64,ref-b'],
+            featureReferenceImages: [],
+            featureUsagePrompt: undefined,
+        }))
+
+        expect(prompt).toContain('VEO QUALITY DIRECTION')
+        expect(prompt).toContain('REFERENCE-IMAGE DIRECTION: use the attached VEO reference images')
+        expect(prompt).toContain(`Negative prompt: ${VEO_NEGATIVE_PROMPT}`)
+    })
+})
+
+describe('buildVideoModelPrompt — Seedance profile', () => {
+    // The /seedance/i model version selects the Seedance profile; provider name
+    // is irrelevant to prompt shaping (the providers gate on the same signal).
+    const seedanceOverrides = {
+        videoModelMetaInfo: { provider: 'Google', model: 'Seedance', modelVersion: 'dreamina-seedance-2-0-260128' },
+        videoModelVersion: 'dreamina-seedance-2-0-260128',
+    } as const
+
+    it('uses the Seedance quality direction and omits the negative-prompt line (positive phrasing only)', () => {
+        const prompt = buildVideoModelPrompt(createState(seedanceOverrides))
+
+        expect(prompt).toContain('SEEDANCE QUALITY DIRECTION')
+        expect(prompt).not.toContain('VEO QUALITY DIRECTION')
+        // Seedance backfires on negative phrasing — the wrapper must not append it.
+        expect(prompt).not.toContain('Negative prompt:')
+        expect(prompt).not.toContain(VEO_NEGATIVE_PROMPT)
+        // Shared core is preserved across providers.
+        expect(prompt).toContain('IMAGE-TO-VIDEO DIRECTION')
+        expect(prompt).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
+        expect(prompt).toContain('USER VIDEO REQUEST:')
+        expect(prompt).toContain('Animate the portrait with a slow push-in')
+    })
+
+    it('drops the literal "VEO" from the reference-image direction for Seedance', () => {
+        const prompt = buildVideoModelPrompt(createState({
+            ...seedanceOverrides,
+            videoFirstFrameImage: undefined,
+            videoReferenceImages: ['data:image/png;base64,ref-a', 'data:image/png;base64,ref-b'],
+            featureReferenceImages: [],
+            featureUsagePrompt: undefined,
+        }))
+
+        expect(prompt).toContain('REFERENCE-IMAGE DIRECTION')
+        expect(prompt).not.toContain('VEO reference images')
+        expect(prompt).not.toContain('Negative prompt:')
+    })
 })
 
 describe('buildVideoGenerationTrace', () => {

@@ -110,7 +110,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 | `videoReferenceImages` | `string[]` | VLM-selected style/content references (≤3). |
 | `videoSourceForExtension` | `string` | `nats-obj://…` URI of a source MP4 to extend (multi-turn). |
 | `generatedVideos` | `string[]` | Resulting video URLs/ids. |
-| `videoUsage` | `VideoUsage` | `{ durationSeconds, resolution, aspectRatio }` for billing. |
+| `videoUsage` | `VideoUsage` | `{ durationSeconds, resolution, aspectRatio }` for billing, plus optional `completionTokens` / `totalTokens` for token-metered providers (Seedance). |
 
 ## The VEO Provider Path
 
@@ -130,6 +130,34 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 **Submit + poll.** `client.models.generateVideos(...)` returns an operation; the provider loops on `client.operations.getVideosOperation(...)` every `VEO_POLL_INTERVAL_MS`, publishing a `VIDEO_GENERATING` keepalive each tick and honoring the abort signal, until `operation.done`.
 
 **Download.** `fetchVideoBytes` uses inline `videoBytes` (base64) when present, otherwise `client.files.download(...)` to a temp file. `VideoPublisher.complete` validates the MP4 (`ftyp` box) before storing; non-MP4 bytes throw.
+
+## Seedance 2.0 via BytePlus ModelArk
+
+`BytePlusProvider` ([`byteplus-provider.ts`](../../services/api/src/llm/providers/byteplus-provider.ts)) is a first-party peer of `GoogleProvider` that produces video through **BytePlus ModelArk's** official Seedance 2.0 API. It is **video-only** — text streaming throws a capability error — and runs **only** when `enableVideoGeneration && /seedance/i.test(modelVersion)`. Everything else is reused unchanged: the same `generate_video` tool, post-stream router, VLM resolver, video NATS lifecycle, workspace storage, ffmpeg posters, and `VideoCanvasNode`. The router selects it exactly like VEO (`createTransient(instanceKey, 'BytePlus')`).
+
+**Official route** (overridable via `BYTEPLUS_ARK_BASE_URL`):
+
+- Create: `POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks`
+- Retrieve: `GET …/contents/generations/tasks/{id}`
+- Auth: `Authorization: Bearer $ARK_API_KEY` (or `BYTEPLUS_ARK_API_KEY`)
+- Model ids: `dreamina-seedance-2-0-260128`, `dreamina-seedance-2-0-fast-260128` (China/Volcengine Ark uses `doubao-*` ids instead).
+
+The typed REST client lives in [`byteplus-video-types.ts`](../../services/api/src/llm/providers/byteplus-video-types.ts) (`createVideoGenerationTask` / `retrieveVideoGenerationTask` / `downloadVideo` over `fetch` + `AbortSignal`, preserving ModelArk `error.code`), with pure `buildSeedanceContent` and an injectable `pollVideoGenerationTask`.
+
+**Input precedence.** `content[]` is text-first, then ONE input family — first-frame and reference are mutually exclusive in Seedance, matching VEO:
+
+| Priority | Input (state field) | ModelArk `content[]` item | Notes |
+|----------|--------------------|---------------------------|-------|
+| 1 | Extension (`videoSourceForExtension`) | — | **Rejected** with a capability error — no provider-fetchable asset handoff yet. Use VEO for extension. |
+| 2 | First frame (`videoFirstFrameImage`) | `image_url` `role: first_frame` | Image-to-video. |
+| 3 | Reference images (`videoReferenceImages`, ≤9) | `image_url` `role: reference_image` | Already capped to the provider budget by the router. |
+| 4 | Text-to-video | — | None of the above set. |
+
+Inputs are base64 data URLs (the resolver already supplies them); private `nats-obj://` URIs are refused before submit so they never reach ModelArk.
+
+**Submit + poll + store.** Publish `VIDEO_PENDING` on accept; poll `GET …/tasks/{id}` every `BYTEPLUS_VIDEO_POLL_INTERVAL_MS` (default = `VEO_POLL_INTERVAL_MS`, 10s), publishing a `VIDEO_GENERATING` keepalive on each non-terminal poll, until `succeeded`/`failed`/`cancelled`/`expired`. On success, **download `content.video_url` immediately** — ModelArk output URLs are cleaned after 24 hours — then `VideoPublisher.complete` validates the MP4 (`ftyp`), extracts a poster + mid-frame, stores, and publishes `VIDEO_COMPLETE`. Vendor token usage (`usage.total_tokens`) flows into `videoUsage` for billing.
+
+**Prompt phrasing.** The shared final-prompt wrapper (`buildVideoModelPrompt`) selects a per-provider profile: Seedance uses positive/affirmative phrasing and **omits VEO's inline `Negative prompt:` line** (negative tokens backfire on Seedance — the model renders them). VEO's emitted prompt is byte-identical. The shared wrapper + profiles are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 ## VLM Reference Mapping
 
@@ -228,12 +256,14 @@ Completed playback is **browser-composited**: a finished video plays inline thro
 
 The three frontend video dropdowns (`createGenericVideoAspectDropdown` / `…Resolution…` / `…Duration…` in `aiControls.ts`) read their options straight off the selected model's `videoAspectRatios` / `videoResolutions` / `videoDurations`. The video-model dropdown filters models by the `video_generation` modality and is excluded from the text-model list. Because the current dropdown model is flat, synchronization publishes conservative VEO options that avoid invalid combinations instead of letting the provider silently rewrite the request.
 
+**BytePlus (Seedance) static injection.** BytePlus has no model-list API in the repo, so `synchronizeBytePlusModels` injects two **static** entries (mirroring the Stability path): `dreamina-seedance-2-0-260128` and `dreamina-seedance-2-0-fast-260128`, with `SEEDANCE_*` option lists (ratios `16:9`/`4:3`/`1:1`/`3:4`/`9:16`/`21:9`, resolutions `480p`/`720p`, durations `4s`–`15s`), `videoMaxReferenceImages: 9`, and **token pricing** (`{ measuringUnit: 'tokens', pricePer: '1000000', price }` — `$4.30`/1M standard, `$3.30`/1M fast). `videoMaxReferenceImages` is a new `AiModel` field read by the router and the branch resolver to cap references per provider (VEO 3, Seedance 9; absent → 3). v1 ships 480p/720p only — the official ceiling above 720p is unconfirmed.
+
 ## Usage Metering
 
-`reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) computes per-second video cost from the selected model's pricing metadata and returns a `VideoUsageReport`.
+`reportVideoUsage` ([`usage-reporter.ts`](../../services/api/src/llm/usage/usage-reporter.ts)) branches on `pricing.video.measuringUnit`: `'seconds'` computes per-second cost (VEO, byte-identical to before), `'tokens'` computes `total_tokens × price / pricePer` (Seedance — `total_tokens` threaded from the ModelArk task response through `videoUsage`). It returns a `VideoUsageReport`.
 
 {% callout type="warning" %}
-Usage reports are computed and logged today; they are not published to NATS yet. Per-second billing reconciliation also depends on finalizing the placeholder VEO prices.
+Usage reports are computed and logged today; they are not published to NATS yet. Per-second VEO prices are still placeholders to reconcile; Seedance token pricing follows the Dreamina resource packs.
 {% /callout %}
 
 ## Media Library for Video
@@ -260,7 +290,7 @@ A completed `VideoCanvasNode` can be continued: the bubble-menu **Extend video i
 | Payload | base64 PNG/JPEG | multi-MB MP4 (validated by `ftyp`) |
 | Prompt display | `>` quote block | `<video_prompt>…</video_prompt>` XML tags |
 | Workflow node | `validateImagePrompt` → `executeImageGeneration` | `executeVideoGeneration` (no validate step) |
-| Pricing | per-image tiers | per-second of video |
+| Pricing | per-image tiers | per-second (VEO) or per-token (Seedance), via `pricing.video.measuringUnit` |
 | HTTP route | whole-object GET | Range-capable GET (seeking) |
 | Canvas playback | static texture | PIXI poster behind browser-composited `<video>` + SVG controls |
 | Model selection | auto-selects a default | opt-in (placeholder until chosen) |
@@ -277,9 +307,11 @@ services/api/src/
 │   ├── providers/
 │   │   ├── base-provider.ts          # routeAfterStream, executeVideoGeneration, VideoPublisher wiring
 │   │   ├── google-provider.ts        # runVeoGeneration (submit/poll/download), VEO config + input precedence
+│   │   ├── byteplus-provider.ts      # runSeedanceGeneration (ModelArk create/poll/download), video-only
+│   │   ├── byteplus-video-types.ts   # typed ModelArk REST client + buildSeedanceContent + pollVideoGenerationTask
 │   │   ├── anthropic-provider.ts     # generate_video injection + extraction
 │   │   ├── openai-provider.ts        # generate_video injection + extraction
-│   │   └── provider-registry.ts      # runVideoRouter dep, storeWorkspaceVideo
+│   │   └── provider-registry.ts      # runVideoRouter dep, storeWorkspaceVideo, Partial provider-ctor map
 │   ├── tools/
 │   │   ├── video-generation.ts       # generate_video tool def + per-provider extractors
 │   │   ├── video-router.ts           # VideoRouter — text model → transient VEO provider
@@ -289,8 +321,8 @@ services/api/src/
 │   │   ├── video-publisher.ts        # VIDEO_PENDING/GENERATING/COMPLETE/ERROR, MP4 validation
 │   │   ├── image-branch-resolver.ts  # VLM gate generalized to video; VEO ref mapping
 │   │   └── stream-publisher.ts       # videoGenerationTrace()
-│   ├── usage/usage-reporter.ts       # reportVideoUsage (per-second)
-│   ├── config.ts                     # VEO_POLL_INTERVAL_MS
+│   ├── usage/usage-reporter.ts       # reportVideoUsage (per-second VEO / per-token Seedance)
+│   ├── config.ts                     # VEO_POLL_INTERVAL_MS, BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS
 │   └── prompts/
 │       ├── load-prompts.ts           # getSystemPrompt(includeVideoGeneration)
 │       └── video_generation_instructions.txt
@@ -327,6 +359,14 @@ packages/lixpi/constants/
 - VEO dialogue example: https://ai.google.dev/gemini-api/docs/video?example=dialogue
 - Veo 3.1 announcement: https://developers.googleblog.com/introducing-veo-3-1-and-new-creative-capabilities-in-the-gemini-api/
 - Gemini API pricing: https://ai.google.dev/gemini-api/docs/pricing
+
+### Vendor docs (BytePlus ModelArk — Seedance)
+
+- Create video generation task: https://docs.byteplus.com/en/docs/ModelArk/1520757
+- Retrieve video generation task: https://docs.byteplus.com/en/docs/ModelArk/1521309
+- Dreamina Seedance 2.0 tutorial: https://docs.byteplus.com/en/docs/ModelArk/2291680
+- Seedance 2.0 prompt guide: https://docs.byteplus.com/en/docs/ModelArk/2222480
+- Resource packs (pricing): https://docs.byteplus.com/en/docs/ModelArk/2191775
 
 ## Related Pages
 

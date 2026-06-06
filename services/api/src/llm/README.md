@@ -41,7 +41,7 @@ The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscri
 ```
 src/llm/
     index.ts                     # createLlmModule({ natsService, storeWorkspaceImage, storeWorkspaceVideo })
-    config.ts                    # LLM_TIMEOUT_MS, VEO_POLL_INTERVAL_MS
+    config.ts                    # LLM_TIMEOUT_MS, VEO_POLL_INTERVAL_MS, BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS
     graph/
         state.ts                 # ProviderState type + channel reducers (partial-overlay semantics)
         stream-publisher.ts      # START_STREAM, STREAMING, END_STREAM + image/video trace events
@@ -55,14 +55,16 @@ src/llm/
         openai-provider.ts       # OpenAI Responses API + Image API (gpt-image-*)
         anthropic-provider.ts    # Anthropic messages.stream() + tool_use blocks
         google-provider.ts       # Google generateContentStream + native image generation + VEO submit/poll/download
+        byteplus-provider.ts     # BytePlus ModelArk Seedance 2.0 (video-only: create/poll/download)
+        byteplus-video-types.ts  # Typed ModelArk REST client + buildSeedanceContent + pollVideoGenerationTask
         stability-provider.ts    # Stability v2beta REST (multipart, no streaming)
     tools/
         image-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
         image-generation-trace.ts # Final image-model prompt + reference-image trace payload builder
         image-router.ts          # Spawns transient image-model provider for generate_image tool calls
         video-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
-        video-generation-trace.ts # Final video-model prompt + reference trace payload builder
-        video-router.ts          # Spawns transient VEO provider for generate_video tool calls
+        video-generation-trace.ts # Final video-model prompt (shared core + VEO/Seedance profiles) + reference trace builder
+        video-router.ts          # Spawns transient video provider (VEO or BytePlus/Seedance) for generate_video tool calls; provider-aware reference cap
     utils/
         attachments.ts           # nats-obj:// resolver, magic-byte MIME detection, sharp downscaling
     prompts/

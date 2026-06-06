@@ -4,9 +4,8 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
+import { getVideoMaxReferenceImages } from '../graph/state.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
-
-const MAX_VEO_REFERENCE_IMAGES = 3
 
 const fingerprintRef = (url: string): string => {
     if (!url) return '<empty>'
@@ -21,18 +20,22 @@ const fingerprintRef = (url: string): string => {
     return `${url.slice(0, 60)}...`
 }
 
-const addUniqueReferenceImages = (target: string[], source: string[]): string[] => {
+const addUniqueReferenceImages = (target: string[], source: string[], max: number): string[] => {
     for (const imageUrl of source) {
-        if (target.length >= MAX_VEO_REFERENCE_IMAGES) break
+        if (target.length >= max) break
         if (!target.includes(imageUrl)) target.push(imageUrl)
     }
     return target
 }
 
 const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undefined => {
-    const referenceImages = addUniqueReferenceImages([], state.videoReferenceImages ?? [])
+    // Provider-aware cap from the selected video model's metadata (VEO 3,
+    // Seedance 9); defaults to 3 so VEO and any model without the field are
+    // unchanged. Without this, Seedance would silently receive at most 3 refs.
+    const max = getVideoMaxReferenceImages(state.videoModelMetaInfo)
+    const referenceImages = addUniqueReferenceImages([], state.videoReferenceImages ?? [], max)
     if (!state.videoSourceForExtension && !state.videoFirstFrameImage) {
-        addUniqueReferenceImages(referenceImages, state.featureReferenceImages ?? [])
+        addUniqueReferenceImages(referenceImages, state.featureReferenceImages ?? [], max)
     }
     return referenceImages.length > 0 ? referenceImages : undefined
 }

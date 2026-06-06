@@ -66,6 +66,7 @@ type EnvConfig = {
     anthropicApiKey: string
     googleApiKey: string
     stableDiffusionApiKey: string
+    arkApiKey: string
     stripePublicKey: string
 }
 
@@ -613,6 +614,15 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         return null
     }
 
+    const arkApiKey = await prompts.text({
+        message: 'BytePlus ModelArk API Key (ARK_API_KEY — for Seedance video; leave blank to skip)',
+        placeholder: '...',
+    })
+    if (prompts.isCancel(arkApiKey)) {
+        prompts.cancel('Setup cancelled')
+        return null
+    }
+
     // Only ask for Stripe key if not using LocalAuth0 mock (real Auth0 = real payments)
     let stripePublicKey = ''
     if (!useLocalAuth0Mock) {
@@ -664,6 +674,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         anthropicApiKey: (anthropicApiKey as string) || '',
         googleApiKey: (googleApiKey as string) || '',
         stableDiffusionApiKey: (stableDiffusionApiKey as string) || '',
+        arkApiKey: (arkApiKey as string) || '',
         stripePublicKey: (stripePublicKey as string) || '',
     }
 }
@@ -712,6 +723,7 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{ANTHROPIC_API_KEY}}': config.anthropicApiKey,
         '{{GOOGLE_API_KEY}}': config.googleApiKey,
         '{{STABLE_DIFFUSION_API_KEY}}': config.stableDiffusionApiKey,
+        '{{ARK_API_KEY}}': config.arkApiKey,
         '{{VITE_MOCK_AUTH}}': String(config.useLocalAuth0Mock),
         '{{VITE_MOCK_AUTH0_DOMAIN}}': config.useLocalAuth0Mock ? 'localhost:3000' : '',
         '{{VITE_API_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
@@ -868,6 +880,7 @@ async function main(): Promise<void> {
             anthropicApiKey: '',
             googleApiKey: '',
             stableDiffusionApiKey: '',
+            arkApiKey: '',
             stripePublicKey: '',
         }
 

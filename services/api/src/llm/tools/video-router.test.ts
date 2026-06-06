@@ -65,4 +65,35 @@ describe('VideoRouter', () => {
         expect(requestData.messages[0].content).toContain('MANDATORY /use FEATURE TRANSFER FOR VIDEO')
         expect(requestData.videoReferenceImages).toBeUndefined()
     })
+
+    it('caps routed reference images at 3 for VEO (default cap when metadata is absent)', async () => {
+        const { router, process } = createRouter()
+        const refs = Array.from({ length: 5 }, (_, i) => `data:image/png;base64,ref-${i}`)
+
+        await router.execute(createState({
+            videoReferenceImages: refs,
+            featureReferenceImages: [],
+            featureUsagePrompt: undefined,
+        }))
+
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData.videoReferenceImages).toEqual(refs.slice(0, 3))
+    })
+
+    it('allows up to the Seedance 9-image cap when the model metadata sets videoMaxReferenceImages', async () => {
+        const { router, process } = createRouter()
+        const refs = Array.from({ length: 12 }, (_, i) => `data:image/png;base64,ref-${i}`)
+
+        await router.execute(createState({
+            videoModelMetaInfo: { provider: 'Google', model: 'Seedance', modelVersion: 'dreamina-seedance-2-0-260128', videoMaxReferenceImages: 9 },
+            videoModelVersion: 'dreamina-seedance-2-0-260128',
+            videoReferenceImages: refs,
+            featureReferenceImages: [],
+            featureUsagePrompt: undefined,
+        }))
+
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData.videoReferenceImages).toHaveLength(9)
+        expect(requestData.videoReferenceImages).toEqual(refs.slice(0, 9))
+    })
 })

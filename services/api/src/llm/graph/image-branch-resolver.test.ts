@@ -78,6 +78,22 @@ const goatCandidate: NonNullable<ProviderState['imageBranchCandidateSnapshot']>[
     entityTags: ['goat'],
 }
 
+// Five plain base-context references for exercising the provider-aware video
+// reference cap (which replaced the old hardcoded .slice(0, 3)).
+function buildCapReferenceCandidates(): NonNullable<ProviderState['imageBranchCandidateSnapshot']>['candidates'] {
+    return Array.from({ length: 5 }, (_, i) => ({
+        nodeId: `cap-src-${i}`,
+        fileId: `cap-file-${i}`,
+        workspaceId: 'workspace-1',
+        imageUrl: `nats-obj://workspace-workspace-1-files/cap-file-${i}`,
+        roleHints: ['base-context'],
+        ancestorNodeIds: [`cap-src-${i}`],
+        sourceContextNodeIds: [`cap-src-${i}`],
+        visualStyleSummary: `reference ${i}`,
+        styleTags: ['ref'],
+    }))
+}
+
 function createState(overrides: {
     promptText?: string
     activeTargetNodeId?: string
@@ -497,5 +513,47 @@ describe('resolveImageBranch', () => {
         expect(update.imageBranchResolution?.targetImageNodeId).toBeNull()
         expect(update.videoReferenceImages).toEqual([resolvedTinyPngUrl])
         expect(update.videoFirstFrameImage).toBeUndefined()
+    })
+
+    it('caps videoReferenceImages at 3 for a default (VEO) video model', async () => {
+        const capCandidates = buildCapReferenceCandidates()
+        const refNodeIds = capCandidates.map((candidate) => candidate.nodeId)
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'context-only',
+            operationKind: 'new_image',
+            referenceImageNodeIds: refNodeIds,
+            sourceContextNodeIds: refNodeIds,
+            styleReferenceNodeIds: refNodeIds,
+            decisions: refNodeIds.map((nodeId) => ({ nodeId, role: 'style-reference', reason: 'cap test reference' })),
+        }))
+
+        const update = await resolveImageBranch(createVideoState({ candidates: capCandidates }), deps)
+
+        // No videoModelMetaInfo on state => default cap of 3 (VEO baseline preserved).
+        expect(update.videoFirstFrameImage).toBeUndefined()
+        expect(update.videoReferenceImages).toHaveLength(3)
+    })
+
+    it('raises the videoReferenceImages cap to the model metadata value (Seedance 9)', async () => {
+        const capCandidates = buildCapReferenceCandidates()
+        const refNodeIds = capCandidates.map((candidate) => candidate.nodeId)
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'context-only',
+            operationKind: 'new_image',
+            referenceImageNodeIds: refNodeIds,
+            sourceContextNodeIds: refNodeIds,
+            styleReferenceNodeIds: refNodeIds,
+            decisions: refNodeIds.map((nodeId) => ({ nodeId, role: 'style-reference', reason: 'cap test reference' })),
+        }))
+
+        const state: ProviderState = {
+            ...createVideoState({ candidates: capCandidates }),
+            videoModelMetaInfo: { provider: 'Google', model: 'Seedance', modelVersion: 'dreamina-seedance-2-0-260128', videoMaxReferenceImages: 9 },
+        }
+        const update = await resolveImageBranch(state, deps)
+
+        // 5 references all pass because the cap is raised to 9 (was 3).
+        expect(update.videoFirstFrameImage).toBeUndefined()
+        expect(update.videoReferenceImages).toHaveLength(5)
     })
 })
