@@ -1593,6 +1593,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return rebalanceBranchTreesAndResolve(nodes, edges, {
             depthGap: settings.imageBranchLineage.imageToImageGap,
             siblingGap: settings.imageBranchLineage.branchToBranchGap,
+            branchFanoutDepthGap: settings.imageBranchLineage.branchFanoutDepthGap,
         })
     }
 

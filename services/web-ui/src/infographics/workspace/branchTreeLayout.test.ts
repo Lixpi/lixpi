@@ -14,6 +14,7 @@ import {
 
 const SIZE = 800
 const OPTS = { depthGap: 192, siblingGap: 160 }
+const FANOUT_OPTS = { ...OPTS, branchFanoutDepthGap: 96 }
 
 type GenOpts = {
     branchId?: string
@@ -151,6 +152,25 @@ describe('applyBranchTreeLayout', () => {
         expect(aCenter).toBeLessThan(rCenter)
         expect(bCenter).toBeGreaterThan(rCenter)
         expect((aCenter + bCenter) / 2).toBeCloseTo(rCenter, 6)
+    })
+
+    it('pushes a whole child column farther right when a parent has a large fork', () => {
+        const children = Array.from({ length: 10 }, (_, index) =>
+            genMedia(`C${index + 1}`, index + 1, index + 1, {
+                parentImageNodeId: 'R',
+                createdAt: index + 2,
+            })
+        )
+        const nodes = [
+            genMedia('R', 0, 0, { createdAt: 1 }),
+            ...children,
+            genMedia('C1A', 20, 20, { parentImageNodeId: 'C1', createdAt: 20 }),
+        ]
+        const out = applyBranchTreeLayout(nodes, [], FANOUT_OPTS)
+        const forkGap = FANOUT_OPTS.depthGap + FANOUT_OPTS.branchFanoutDepthGap * (children.length - 1)
+
+        for (const child of children) expect(posOf(out, child.nodeId).x).toBe(SIZE + forkGap)
+        expect(posOf(out, 'C1A').x).toBe(SIZE + forkGap + SIZE + FANOUT_OPTS.depthGap)
     })
 
     it('keeps a fork balanced after children resolve to non-square final frames', () => {

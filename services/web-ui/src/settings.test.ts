@@ -41,7 +41,8 @@ describe('settings - grouped configuration', () => {
 		expect(settings.imageBranchLineage.generatedImageSize).toBeGreaterThan(0)
 		expect(settings.imageBranchLineage.rootOutputGap).toBeGreaterThanOrEqual(0)
 		expect(settings.imageBranchLineage.branchToBranchGap).toBeGreaterThanOrEqual(0)
-		expect(settings.imageBranchLineage.imageToImageGap).toBe(320)
+		expect(settings.imageBranchLineage.imageToImageGap).toBe(512)
+		expect(settings.imageBranchLineage.branchFanoutDepthGap).toBe(96)
 		expect(Object.hasOwn(settings, 'imageBranchLineage')).toBe(true)
 	})
 

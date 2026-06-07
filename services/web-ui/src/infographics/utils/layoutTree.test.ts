@@ -140,6 +140,28 @@ describe('layoutTree', () => {
         expect(positions.get('B')!.x).toBe(400 + OPTS.depthGap + 1000 + OPTS.depthGap)
     })
 
+    it('adds horizontal gap for each additional child of a large branching parent', () => {
+        const children: TreeLayoutNode[] = Array.from({ length: 10 }, (_, index) => ({
+            id: `C${index + 1}`,
+            parentId: 'R',
+            width: 800,
+            height: 800,
+        }))
+        const nodes: TreeLayoutNode[] = [
+            { id: 'R', parentId: null, width: 800, height: 800 },
+            ...children,
+            { id: 'C1A', parentId: 'C1', width: 800, height: 800 },
+        ]
+        const { positions } = layoutTree(nodes, {
+            ...OPTS,
+            branchFanoutDepthGap: 25,
+        })
+
+        const branchGap = OPTS.depthGap + 25 * (children.length - 1)
+        for (const child of children) expect(positions.get(child.id)!.x).toBe(800 + branchGap)
+        expect(positions.get('C1A')!.x).toBe(800 + branchGap + 800 + OPTS.depthGap)
+    })
+
     it('keeps a single-child chain collinear even when sizes differ', () => {
         const nodes: TreeLayoutNode[] = [
             { id: 'R', parentId: null, width: 800, height: 1000 },

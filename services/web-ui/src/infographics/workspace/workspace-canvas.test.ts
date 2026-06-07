@@ -377,6 +377,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'return rebalanceBranchTreesAndResolve(nodes, edges, {')
 		expectSourceToContain(ts, 'depthGap: settings.imageBranchLineage.imageToImageGap,')
 		expectSourceToContain(ts, 'siblingGap: settings.imageBranchLineage.branchToBranchGap,')
+		expectSourceToContain(ts, 'branchFanoutDepthGap: settings.imageBranchLineage.branchFanoutDepthGap,')
 		// Wired into every generated-media add path (image partial + complete, video).
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')

@@ -8,8 +8,9 @@
 // the relative result back onto world positions.
 //
 // Orientation is left-to-right: depth grows along +X, siblings stack along +Y.
-//   - depthGap   → horizontal gap between a parent's right edge and its children
-//   - siblingGap → vertical gap between adjacent sibling subtrees
+//   - depthGap              → horizontal gap between a parent's right edge and its children
+//   - branchFanoutDepthGap  → extra horizontal gap per additional child of a branching parent
+//   - siblingGap            → vertical gap between adjacent sibling subtrees
 //
 // Two passes, O(n):
 //   1. Post-order band height — each subtree reserves a disjoint vertical band
@@ -26,8 +27,9 @@ export type TreeLayoutNode = {
 }
 
 export type LayoutTreeOptions = {
-    depthGap: number   // LR: horizontal gap between depth columns
-    siblingGap: number // LR: vertical gap between sibling bands
+    depthGap: number              // LR: horizontal gap between depth columns
+    siblingGap: number            // LR: vertical gap between sibling bands
+    branchFanoutDepthGap?: number // LR: extra depth gap for each child after the first
 }
 
 export type LayoutTreeResult = {
@@ -48,6 +50,9 @@ export function layoutTree(
     }
 
     const { depthGap, siblingGap } = options
+    const branchFanoutDepthGap = Math.max(0, options.branchFanoutDepthGap ?? 0)
+    const depthGapForChildCount = (childCount: number): number =>
+        depthGap + branchFanoutDepthGap * Math.max(0, childCount - 1)
 
     // Index nodes and build child lists, preserving input order so sibling
     // stacking is deterministic.
@@ -117,7 +122,7 @@ export function layoutTree(
         // Center the children stack within the parent's band, then lay each
         // child subtree into its own slice of that stack.
         let cursor = bandTop + (band - stack) / 2
-        const childX = depthX + node.width + depthGap
+        const childX = depthX + node.width + depthGapForChildCount(children.length)
         for (const child of children) {
             place(child, cursor, childX)
             cursor += (bandHeight.get(child.id) ?? child.height) + siblingGap

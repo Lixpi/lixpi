@@ -36,9 +36,10 @@ export type BranchTree = {
 }
 
 export type BranchTreeLayoutOptions = {
-    depthGap: number             // LR horizontal gap — imageBranchLineage.imageToImageGap
-    siblingGap: number           // LR vertical gap — imageBranchLineage.branchToBranchGap
-    collisionMargin?: number     // resolver breathing room; defaults to the resolver's own 20
+    depthGap: number                  // LR horizontal gap — imageBranchLineage.imageToImageGap
+    siblingGap: number                // LR vertical gap — imageBranchLineage.branchToBranchGap
+    branchFanoutDepthGap?: number     // LR extra depth gap for each child after the first
+    collisionMargin?: number          // resolver breathing room; defaults to the resolver's own 20
 }
 
 // Matches the resolver's default margin so callers that omit it get the exact
@@ -173,6 +174,7 @@ export function applyBranchTreeLayout(
         const result = layoutTree(layoutNodes, {
             depthGap: options.depthGap,
             siblingGap: options.siblingGap,
+            branchFanoutDepthGap: options.branchFanoutDepthGap,
         })
 
         // Anchor the relative layout (root at 0,0) onto the root's current world

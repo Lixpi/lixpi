@@ -81,6 +81,7 @@ export type ImageBranchLineageSettings = {
     rootOutputGap: number
     branchToBranchGap: number
     imageToImageGap: number
+    branchFanoutDepthGap: number
 }
 
 export type MediaLibrarySettings = {
@@ -258,8 +259,10 @@ export const settings: Settings = {
         rootOutputGap: 384,
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
         branchToBranchGap: 160,
-        // Canvas-unit horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches image-to-image branch spacing.
-        imageToImageGap: 320,
+        // Canvas-unit base horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches every image-to-image branch step.
+        imageToImageGap: 512,
+        // Canvas-unit extra horizontal gap added for each child after the first when a generated-media node forks. Increasing it gives large branch fans more curve room.
+        branchFanoutDepthGap: 96,
     },
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).
