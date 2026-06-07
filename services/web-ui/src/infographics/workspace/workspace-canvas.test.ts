@@ -359,10 +359,14 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'const nextState: CanvasState = {\n                    ...currentCanvasState,')
 	})
 
-	it('keeps image-to-image lineage continuations on their predecessor center line as image proportions resolve', () => {
+	it('re-tidies generated-media trees when final image proportions resolve', () => {
 		expectSourceToContain(ts, 'computeLineageContinuationPositionToRightOfRect(')
-		expectSourceToContain(ts, 'const lineageAnchorRect = getGeneratedImageLineageAnchorRect(imageNode, currentCanvasState.nodes, currentCanvasState.edges)')
-		expectSourceToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
+		expectSourceToContain(ts, 'const resolvedNodes = isGeneratedMediaNode(imageNode)')
+		expectSourceToContain(ts, 'const resolvedNodes = isGeneratedMediaNode(videoNode)')
+		expectSourceToContain(ts, '? rebalanceGeneratedMediaTrees(updatedNodes, currentCanvasState.edges)')
+		expectSourceToContain(ts, 'syncCanvasNodeDomGeometry(nextState.nodes)')
+		expectSourceNotToContain(ts, 'getGeneratedImageLineageAnchorRect(')
+		expectSourceNotToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
 	})
 
 	it('routes generated-media add/remove through the centralized tree rebalance', () => {

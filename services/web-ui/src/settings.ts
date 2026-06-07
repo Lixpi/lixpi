@@ -259,7 +259,7 @@ export const settings: Settings = {
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
         branchToBranchGap: 160,
         // Canvas-unit horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches image-to-image branch spacing.
-        imageToImageGap: 192,
+        imageToImageGap: 320,
     },
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).

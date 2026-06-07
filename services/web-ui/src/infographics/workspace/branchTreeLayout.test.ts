@@ -152,6 +152,23 @@ describe('applyBranchTreeLayout', () => {
         expect(bCenter).toBeGreaterThan(rCenter)
         expect((aCenter + bCenter) / 2).toBeCloseTo(rCenter, 6)
     })
+
+    it('keeps a fork balanced after children resolve to non-square final frames', () => {
+        const nodes = [
+            genMedia('R', 0, 0, { createdAt: 1 }),
+            genMedia('A', 1, 1, { parentImageNodeId: 'R', createdAt: 2, height: 450 }),
+            genMedia('B', 2, 2, { parentImageNodeId: 'R', createdAt: 3, height: 450 }),
+        ]
+        const out = applyBranchTreeLayout(nodes, [], OPTS)
+        const rCenter = posOf(out, 'R').y + SIZE / 2
+        const aCenter = posOf(out, 'A').y + 225
+        const bCenter = posOf(out, 'B').y + 225
+
+        expect(aCenter).toBeLessThan(rCenter)
+        expect(bCenter).toBeGreaterThan(rCenter)
+        expect((aCenter + bCenter) / 2).toBeCloseTo(rCenter, 6)
+        expect(posOf(out, 'B').y - (posOf(out, 'A').y + 450)).toBe(OPTS.siblingGap)
+    })
 })
 
 describe('rebalanceBranchTreesAndResolve', () => {

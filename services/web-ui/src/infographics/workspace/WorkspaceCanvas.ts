@@ -56,7 +56,6 @@ import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/bran
 import {
     computeLineageContinuationPositionToRightOfRect,
     computeNextBranchRowPositionToRightOfRect,
-    computeVerticallyCenteredY,
     computeViewportCenterInsertionPosition,
 } from '$src/infographics/workspace/imagePositioning.ts'
 import { createNodeLayerManager } from '$src/infographics/workspace/nodeLayering.ts'
@@ -859,6 +858,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function syncCanvasNodeDomGeometry(nodes: CanvasNode[]): void {
+        if (!viewportEl) return
+
+        const nodesById = getCanvasNodesById(nodes)
+        for (const node of nodes) {
+            const position = getNodeWorldPosition(node, nodesById)
+            const nodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+            if (nodeEl) {
+                applyStyle(nodeEl, {
+                    left: `${position.x}px`,
+                    top: `${position.y}px`,
+                    width: `${node.dimensions.width}px`,
+                    height: `${node.dimensions.height}px`,
+                })
+            }
+            updateGeneratedImageChromeLiveTransform(node.nodeId, position, node.dimensions)
+        }
+
+        repositionAllThreadFloatingInputs()
+        updateSelectionGroupOverlayElement()
+        repositionCanvasBubbleMenu()
+    }
+
     function createImageChromeViewport(): HTMLDivElement {
         const chromeViewportStyle = {
             position: 'absolute' as const,
@@ -1319,10 +1341,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Mirror of handleImageIntrinsicSize, fired when the attached <video>
     // reports the MP4's intrinsic width/height via loadedmetadata. Re-fits the
-    // canvas node dimensions to the real aspect and re-centers the Y position on
-    // the lineage anchor's center line
-    // (PR #204 pattern) so a 16:9 video placed below a 1:1 placeholder slides
-    // up to share the predecessor's horizontal axis.
+    // canvas node dimensions to the real aspect, preserves the node's current
+    // center, then lets branch-tree layout re-tidy generated lineages. This
+    // prevents final aspect-ratio updates from collapsing forked children back
+    // onto the old predecessor center line.
     function handleVideoIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
         if (!currentCanvasState) return
         if (draggingNodeId === size.nodeId || resizingNodeId === size.nodeId) return
@@ -1344,16 +1366,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         const worldPosition = getNodeWorldPosition(videoNode, nodesById)
-        const positionOffset = {
-            x: (videoNode.dimensions.width - fittedDimensions.width) / 2,
-            y: (videoNode.dimensions.height - fittedDimensions.height) / 2,
-        }
-        const lineageAnchorRect = getGeneratedMediaLineageAnchorRect(videoNode, currentCanvasState.nodes, currentCanvasState.edges)
         const nextWorldPosition = {
-            x: worldPosition.x + positionOffset.x,
-            y: lineageAnchorRect
-                ? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)
-                : worldPosition.y + positionOffset.y,
+            x: worldPosition.x + (videoNode.dimensions.width - fittedDimensions.width) / 2,
+            y: worldPosition.y + (videoNode.dimensions.height - fittedDimensions.height) / 2,
         }
         const nextPosition = videoNode.parentId
             ? toParentRelativePosition(nextWorldPosition, videoNode.parentId, nodesById)
@@ -1369,17 +1384,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         })
 
-        const nodeEl = viewportEl?.querySelector(`[data-node-id="${videoNode.nodeId}"]`) as HTMLElement | null
-        if (nodeEl) {
-            applyStyle(nodeEl, {
-                left: `${nextWorldPosition.x}px`,
-                top: `${nextWorldPosition.y}px`,
-                width: `${fittedDimensions.width}px`,
-                height: `${fittedDimensions.height}px`,
-            })
-        }
+        const resolvedNodes = isGeneratedMediaNode(videoNode)
+            ? rebalanceGeneratedMediaTrees(updatedNodes, currentCanvasState.edges)
+            : updatedNodes
 
-        commitCanvasState({ ...currentCanvasState, nodes: updatedNodes })
+        commitCanvasState({ ...currentCanvasState, nodes: resolvedNodes })
     }
 
     function handleImageIntrinsicSize(size: { nodeId: string; width: number; height: number }): void {
@@ -1403,16 +1412,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         const worldPosition = getNodeWorldPosition(imageNode, nodesById)
-        const positionOffset = {
-            x: (imageNode.dimensions.width - fittedDimensions.width) / 2,
-            y: (imageNode.dimensions.height - fittedDimensions.height) / 2,
-        }
-        const lineageAnchorRect = getGeneratedImageLineageAnchorRect(imageNode, currentCanvasState.nodes, currentCanvasState.edges)
         const nextWorldPosition = {
-            x: worldPosition.x + positionOffset.x,
-            y: lineageAnchorRect
-                ? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)
-                : worldPosition.y + positionOffset.y,
+            x: worldPosition.x + (imageNode.dimensions.width - fittedDimensions.width) / 2,
+            y: worldPosition.y + (imageNode.dimensions.height - fittedDimensions.height) / 2,
         }
         const nextPosition = imageNode.parentId
             ? toParentRelativePosition(nextWorldPosition, imageNode.parentId, nodesById)
@@ -1428,22 +1430,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         })
 
-        const nodeEl = viewportEl?.querySelector(`[data-node-id="${imageNode.nodeId}"]`) as HTMLElement | null
-        if (nodeEl) {
-            applyStyle(nodeEl, {
-                left: `${nextWorldPosition.x}px`,
-                top: `${nextWorldPosition.y}px`,
-                width: `${fittedDimensions.width}px`,
-                height: `${fittedDimensions.height}px`,
-            })
-        }
+        const resolvedNodes = isGeneratedMediaNode(imageNode)
+            ? rebalanceGeneratedMediaTrees(updatedNodes, currentCanvasState.edges)
+            : updatedNodes
 
         commitCanvasStatePreservingEditors({
             ...currentCanvasState,
-            nodes: updatedNodes,
+            nodes: resolvedNodes,
         })
-        repositionCanvasBubbleMenu()
-        updateSelectionGroupOverlayElement()
     }
 
     function toParentRelativePosition(
@@ -3694,58 +3688,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
-    // Generalized lineage anchor lookup for both image AND video continuations.
-    // The resolver populates generatedBy.parentImageNodeId regardless of which
-    // media type the parent is, so a video-to-video continuation, an image-to-
-    // video continuation, and an image-to-image continuation all share the same
-    // anchor-lookup logic. This is what keeps the vertical-center alignment
-    // (PR #204) working across mixed-media lineages.
-    function getGeneratedMediaLineageAnchorRect(
-        mediaNode: ImageCanvasNode | VideoCanvasNode,
-        nodes: CanvasNode[],
-        edges: WorkspaceEdge[]
-    ): Rect | undefined {
-        if (!mediaNode.generatedBy) return undefined
-
-        const nodesById = getCanvasNodesById(nodes)
-        const metadataParent = mediaNode.generatedBy.parentImageNodeId
-            ? nodesById.get(mediaNode.generatedBy.parentImageNodeId)
-            : undefined
-        const edgeSourceNodeId = edges.find((edge: WorkspaceEdge) => edge.targetNodeId === mediaNode.nodeId)?.sourceNodeId
-        const edgeSource = edgeSourceNodeId ? nodesById.get(edgeSourceNodeId) : undefined
-        const isMedia = (n: CanvasNode | undefined): n is ImageCanvasNode | VideoCanvasNode =>
-            !!n && (n.type === 'image' || n.type === 'video')
-        const anchorNode = isMedia(metadataParent)
-            ? metadataParent
-            : isMedia(edgeSource)
-                ? edgeSource
-                : undefined
-
-        return anchorNode ? getNodeWorldRect(anchorNode, nodesById) : undefined
-    }
-
-    function getGeneratedImageLineageAnchorRect(
-        imageNode: ImageCanvasNode,
-        nodes: CanvasNode[],
-        edges: WorkspaceEdge[]
-    ): Rect | undefined {
-        if (!imageNode.generatedBy) return undefined
-
-        const nodesById = getCanvasNodesById(nodes)
-        const metadataParent = imageNode.generatedBy.parentImageNodeId
-            ? nodesById.get(imageNode.generatedBy.parentImageNodeId)
-            : undefined
-        const edgeSourceNodeId = edges.find((edge: WorkspaceEdge) => edge.targetNodeId === imageNode.nodeId)?.sourceNodeId
-        const edgeSource = edgeSourceNodeId ? nodesById.get(edgeSourceNodeId) : undefined
-        const anchorNode = metadataParent?.type === 'image'
-            ? metadataParent
-            : edgeSource?.type === 'image'
-                ? edgeSource
-                : undefined
-
-        return anchorNode ? getNodeWorldRect(anchorNode, nodesById) : undefined
-    }
-
     function getNextGeneratedImagePosition(sourceNode: CanvasNode, imageHeight: number): { x: number; y: number } {
         const nodes = currentCanvasState?.nodes || []
         if (sourceNode.type === 'aiChatThread') {
@@ -4445,6 +4387,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 partialImageTracker.delete(threadId)
+                syncPixiGeneratingImageNodes()
 
                 // PIXI removes the progress border when the tracker is cleared and this state commits.
                 // Re-tidy the lineage tree the finalized node belongs to and
@@ -4665,8 +4608,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             videoGenerationTracker.set(threadId, { nodeId, fileId: '', ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })
 
             // Placeholder is square until the attached <video> reports the MP4's
-            // intrinsic dimensions (handleVideoIntrinsicSize then re-fits +
-            // recenters via computeVerticallyCenteredY, PR #204 pattern).
+            // intrinsic dimensions; handleVideoIntrinsicSize re-fits the node,
+            // then re-tidies the generated-media tree around the final frame.
             const placeholderWidth = getGeneratedImageInsertionSize()
             const placeholderHeight = placeholderWidth
             const position = getGeneratedMediaInsertionPosition(threadId, placeholderHeight)
@@ -4785,6 +4728,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Clearing the tracker removes the PIXI traveling outline (the
             // outline lifecycle is tracker-driven, same mechanism as images).
             videoGenerationTracker.delete(threadId)
+            syncPixiGeneratingImageNodes()
 
             // Backstop against overlap, mirroring onImageCompleteToCanvas. Re-tidy
             // the lineage tree and rigid-separate it from neighbors; the initial
@@ -4809,6 +4753,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!existing || !currentCanvasState) return
 
             videoGenerationTracker.delete(threadId)
+            syncPixiGeneratingImageNodes()
 
             const errorNodeId = existing.nodeId
             setTimeout(() => {
@@ -5042,6 +4987,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)
         onCanvasStateChange?.(nextState)
 
+        syncCanvasNodeDomGeometry(nextState.nodes)
         connectionManager?.syncEdges(nextState.edges)
         connectionManager?.syncNodes(getNodesForConnectionManager(nextState.nodes))
         scheduleEdgesRender()
@@ -6359,6 +6305,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             //    `upsertAllImages(OLD_STATE)`, spawning async texture fetches for
             //    the old workspace's images that arrive and overwrite new sprites.
             if (currentCanvasState && connectionManager && visualStateChanged) {
+                if (!needsRerender) syncCanvasNodeDomGeometry(currentCanvasState.nodes)
                 connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
                 connectionManager.syncEdges(currentCanvasState.edges)
                 scheduleEdgesRender()

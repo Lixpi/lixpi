@@ -433,7 +433,7 @@ On every generated-media add/remove the affected tree is laid out deterministica
 
 - [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) is a pure, geometry-agnostic block-allocation **tidy-tree** algorithm (left-to-right). The root keeps its anchor; children fan out symmetrically around the parent's vertical center; linear chains stay collinear; sibling subtrees occupy disjoint vertical bands, so the layout is provably overlap-free.
 - [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) builds the generated-media forest from canvas nodes + lineage edges, runs the tidy layout per tree, then feeds **one rigid bounding box per tree** (plus one box per loose node) into the **unchanged** `resolveCollisions`. A pushed tree translates as a single block, so it never loses its internal balance because an unrelated node moved nearby.
-- Depth spacing reuses `settings.imageBranchLineage.imageToImageGap`; sibling spacing reuses `branchToBranchGap`.
+- Depth spacing reuses `settings.imageBranchLineage.imageToImageGap`; sibling spacing reuses `branchToBranchGap`. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked children back onto the old predecessor center line.
 
 Dragging a tree node runs only the existing per-node overlap cleanup and is not snapped back; the next add/remove re-tidies deterministically. The renderer/resolver split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
 
@@ -444,7 +444,7 @@ Old workspaces that still contain a persisted `branchOrigin` node have it (and a
 While a generation is preparing, the selected/reference media can animate with the same PIXI traveling outline used by the generated placeholder. This makes the active context visible before the first real output arrives.
 
 - **Reference outlines** clear as soon as the first real partial arrives (for video, when the node upgrades to its poster/MP4).
-- The **generated-output outline** clears on completion or on error.
+- The **generated-output outline** clears on completion or on error. Canvas DOM node shells are geometry-synced after visual-only commits so a moved PIXI media node does not leave a stale interaction border at its old position.
 
 Video follows these same outline rules, using `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` instead of progressive image partials.
 
