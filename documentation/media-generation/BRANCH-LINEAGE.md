@@ -435,7 +435,68 @@ On every generated-media add/remove the affected tree is laid out deterministica
 - [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) builds the generated-media forest from canvas nodes + lineage edges, runs the tidy layout per tree, then feeds **one rigid bounding box per tree** (plus one box per loose node) into the **unchanged** `resolveCollisions`. A pushed tree translates as a single block, so it never loses its internal balance because an unrelated node moved nearby.
 - Depth spacing starts with `settings.imageBranchLineage.imageToImageGap`, then adds `branchFanoutDepthGap` for every child after the first when a parent forks; sibling spacing reuses `branchToBranchGap`. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked children back onto the old predecessor center line.
 
-Dragging a tree node runs only the existing per-node overlap cleanup and is not snapped back; the next add/remove re-tidies deterministically. The renderer/resolver split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
+### What Counts as a Branch Tree
+
+A branch tree is a connected component of **top-level generated media**: `type: 'image' | 'video'`, with `generatedBy.branchId`, and no `parentId`. A node's in-tree parent is resolved from `generatedBy.parentImageNodeId` first, then from an incoming lineage edge whose source is generated media. If neither exists, the node is a root. This lets one tree mix images and videos and lets a single branch fork into multiple children without inventing another persisted node type.
+
+Reference/style media and workspace-relevance selections can anchor placement and become model references, but they are not tree members unless they are themselves generated media in the lineage. Parented nodes are also excluded from tree layout, matching the canvas rule that containment is handled separately from top-level branch placement.
+
+### Layout Data Contract
+
+The pure layout module is intentionally framework-free. It accepts abstract boxes and returns top-left positions relative to the root:
+
+```typescript
+export type TreeLayoutNode = {
+    id: string
+    parentId: string | null
+    width: number
+    height: number
+}
+
+export type LayoutTreeOptions = {
+    depthGap: number
+    siblingGap: number
+    branchFanoutDepthGap?: number
+}
+
+export type LayoutTreeResult = {
+    positions: Map<string, { x: number; y: number }>
+    rootId: string
+    bounds: { width: number; height: number }
+}
+```
+
+The workspace adapter supplies `depthGap` from `settings.imageBranchLineage.imageToImageGap`, `siblingGap` from `branchToBranchGap`, and `branchFanoutDepthGap` from the same settings group. The pure utility never reads settings, canvas nodes, Svelte state, PIXI state, or `branchId`.
+
+### Algorithm
+
+The layout is a left-to-right block-allocation tidy tree:
+
+- **X by depth and fanout:** `x(child) = x(parent) + width(parent) + depthGap + branchFanoutDepthGap * max(0, childCount(parent) - 1)`. A linear chain gets the base gap. A two-child fork gets extra curve room. A large fork pushes the whole child column and its descendants farther right during the same deterministic rebalance.
+- **Y by subtree bands:** each subtree reserves a vertical band equal to the larger of its own height and its stacked child bands plus sibling gaps. Children are stacked into disjoint bands, and the parent center is placed at the midpoint between the first and last child centers. Single-child nodes inherit the child's center, so chains stay perfectly horizontal.
+
+This is deliberately simpler than full Walker/Buchheim contour merging. The canvas is infinite, generated-media nodes are large, and the configured gaps are generous, so tighter contour packing is not worth the extra complexity right now. The module boundary can still support a future contour implementation because callers only depend on `TreeLayoutNode[] -> positions`.
+
+### Layout Examples
+
+| Tree shape | Output behavior |
+|---|---|
+| `R` | Single-node tree is a no-op; the root stays at its anchor. |
+| `R -> A -> B -> C` | All nodes stay on one horizontal center line. |
+| `R -> {A, B}` | `A` is above-right and `B` below-right, symmetric around `R`'s vertical center. |
+| `R -> {A, B, C}` | `B` aligns with `R`; `A` and `C` sit above/below with `branchToBranchGap`. |
+| `R -> {A -> {A1, A2, A3}, B}` | `A`'s subtree gets its own vertical band; `B` sits clear of it. |
+| `R(image) -> {A(video), B(image) -> B1(video)}` | Media kind does not affect geometry; images and videos share the same tree. |
+
+### Trigger Rules
+
+- Adding a generated image/video to a lineage re-tidies the whole affected tree and then runs rigid-box separation.
+- Deleting a generated image/video re-tidies the resulting tree. Deleting a loose node does not trigger tree layout.
+- Partials and progress updates do not re-tidy, because the structure has not changed.
+- Final image/video intrinsic-size updates preserve the node center, update dimensions, and re-run layout for generated media so final aspect ratios cannot unbalance a fork.
+- Dragging a tree node does not snap it back. The drag uses the existing collision cleanup; the next add/remove restores deterministic tree geometry.
+
+The renderer/resolver split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
 
 Old workspaces that still contain a persisted `branchOrigin` node have it (and any edge referencing it) stripped by a load-time sanitizer in `WorkspaceCanvas.ts`; the data self-heals on the next save.
 

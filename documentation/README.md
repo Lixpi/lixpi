@@ -73,7 +73,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 |------|----------------|
 | [Image Generation](media-generation/IMAGE-GENERATION.md) | The `generate_image` tool, provider paths (Image API / Responses API / Gemini native), sizes, image events |
 | [Video Generation](media-generation/VIDEO-GENERATION.md) | VEO submit/poll, the `generate_video` tool, the VEO provider, storage/durability, video events, the video node, model sync, usage, extension |
-| [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md) | The structured VLM resolver, candidate snapshot, persisted metadata, placement rules, branch-origin circles, references-vs-lineage |
+| [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md) | The structured VLM resolver, candidate snapshot, persisted metadata, placement rules, branch-root provenance, balanced branch-tree layout, references-vs-lineage |
 | [Video Player Controls](media-generation/VIDEO-PLAYER-CONTROLS.md) | The shared SVG control bar, two mount points, scrubbing, accessibility |
 
 ## Library

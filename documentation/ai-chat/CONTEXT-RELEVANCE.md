@@ -96,9 +96,10 @@ The design keeps three boundaries clear:
 - **References are context, not lineage.** Reference, style, and
   relevance-selected media may affect prompt routing and placement, but they do
   not become connector parents unless the resolver verifies a real continuation.
-- **Branch origins record births only.** A branch-origin circle stores prompt
-  and references for a new branch. Continuations attach to the existing branch
-  and do not create another origin.
+- **Branch roots record births.** The first generated image or video in a branch
+  stores the prompt, references, and resolver metadata on `generatedBy`.
+  Continuations attach to the existing branch and do not create another
+  provenance node.
 - **Context regions are gone.** Live code should not depend on `contextRegion`
   nodes, region sessions, cloud settings, or context-region subjects.
 
@@ -115,8 +116,7 @@ flowchart TB
         Panel[AI Chat Panel<br/>context chip tray]
         Snapshot[buildWorkspaceContextSnapshot<br/>descriptors only]
         AIS[AiInteractionService]
-        Canvas[WorkspaceCanvas.ts<br/>generation placement + branch origins]
-        BranchLayer[pixiBranchOriginLayer<br/>circle renderer]
+        Canvas[WorkspaceCanvas.ts<br/>generation placement + branch-tree layout]
     end
 
     subgraph API["API Service LangGraph"]
@@ -145,7 +145,6 @@ flowchart TB
     Features --> Branch
     Branch -->|IMAGE_BRANCH_RESOLVED| Stream
     Branch --> Canvas
-    Canvas --> BranchLayer
     Canvas --> DDB
 ```
 
@@ -267,9 +266,9 @@ only when a prompt is sent (see
 Explicit chips are persisted in `CanvasState.aiChatPanel.contextChips`.
 Selecting canvas nodes while the panel is open can add new eligible nodes as
 chips. Deleted nodes and duplicate IDs are sanitized out of panel state.
-`branchOrigin` nodes are not eligible as chips; clicking one seeds the panel with
-its stored references instead (see
-[Branch Lineage](../media-generation/BRANCH-LINEAGE.md)).
+Generated-media branch roots are normal image/video nodes. They can be selected
+as context like other media, and their branch provenance is reconstructed from
+`generatedBy` metadata (see [Branch Lineage](../media-generation/BRANCH-LINEAGE.md)).
 
 Auto chips are derived from the latest relevance resolution. They are not
 persisted. Removing an auto chip removes it from the visible turn context; the
@@ -382,7 +381,7 @@ There is no live context-region feature page.
 | Explicit context extraction | `services/web-ui/src/services/ai-chat-thread-service.ts` |
 | Attachment conversion | `services/api/src/llm/utils/attachments.ts` |
 | Descriptor generation | `services/api/src/llm/media-descriptor.ts`, `services/api/src/NATS/subscriptions/media-descriptor-subjects.ts`, `services/web-ui/src/services/media-descriptor-service.ts` |
-| Canvas placement and branch origins | `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` |
+| Canvas placement and branch-tree layout | `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`, `services/web-ui/src/infographics/workspace/branchTreeLayout.ts` |
 
 ## References
 

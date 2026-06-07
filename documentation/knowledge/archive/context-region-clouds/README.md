@@ -1,6 +1,6 @@
 # Archived Context Region Clouds
 
-Context region clouds were the visual and interaction surface for the old workspace `contextRegion` canvas node. They were removed from the live product in Phase 1 of [Workspace-Aware Chat Context & Branch Origins](../../../memory/WORKSPACE-CONTEXT-RELEVANCE-AND-BRANCH-ORIGINS.md), but the implementation is archived here so the renderer can be recovered without reverse-engineering old commits.
+Context region clouds were the visual and interaction surface for the old workspace `contextRegion` canvas node. They were removed from the live product when descriptor-first workspace relevance replaced region-owned chat context; the current behavior is documented in [Context Relevance](../../../ai-chat/CONTEXT-RELEVANCE.md). The implementation is archived here so the renderer can be recovered without reverse-engineering old commits.
 
 ## Archive Contents
 
