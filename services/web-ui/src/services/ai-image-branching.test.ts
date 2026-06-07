@@ -203,18 +203,6 @@ const threadContextNode = {
     },
 } satisfies CanvasNode
 
-const branchOriginNode = {
-    nodeId: 'branch-origin-branch-person',
-    type: 'branchOrigin',
-    branchId: 'branch-person',
-    prompt: 'make that guy more expressive',
-    referenceNodeIds: ['portrait-source'],
-    referenceFileIds: ['portrait-file'],
-    position: { x: 180, y: 40 },
-    dimensions: { width: 64, height: 64 },
-    createdAt: 7,
-} satisfies CanvasNode
-
 function buildSnapshot(prompt: string, generatedNodes: CanvasNode[] = [personGeneratedNode]) {
     return buildImageBranchCandidateSnapshot({
         regionNodeId: 'thread-node-1',
@@ -410,7 +398,6 @@ describe('buildWorkspaceContextSnapshot', () => {
         uploadedVideoNode,
         cubistDocNode,
         threadContextNode,
-        branchOriginNode,
     ]
 
     it('indexes every context-bearing node, descriptors-only (no pixel data)', () => {
@@ -429,7 +416,6 @@ describe('buildWorkspaceContextSnapshot', () => {
         expect(snapshot.nodes.map((node) => node.nodeId).sort()).toEqual(
             ['cubist-doc', 'goat-generated', 'person-generated', 'thread-context', 'thread-node-1', 'video-uploaded'],
         )
-        expect(snapshot.nodes.some((node) => node.nodeId === branchOriginNode.nodeId)).toBe(false)
 
         // The payload must carry references, never embedded pixels.
         const serialized = JSON.stringify(snapshot)

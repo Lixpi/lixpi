@@ -1,6 +1,6 @@
 ---
 title: Collision Resolution
-description: How the canvas keeps newly inserted and released workspace nodes from overlapping — the geometry-agnostic resolver, the workspace collision plan, when resolution runs, parent/child rules, and invariants.
+description: How the canvas keeps newly inserted and released workspace nodes from overlapping — the geometry-agnostic resolver, the workspace collision plan, the balanced branch-tree layout that feeds it rigid per-tree boxes, when resolution runs, parent/child rules, and invariants.
 ---
 
 # Collision Resolution
@@ -75,6 +75,17 @@ The resolver flow is:
 This resolver must stay geometry-agnostic. Do **not** teach it about canvas node types, generated image metadata, parent-child containment, or framework state. Add workspace-specific behavior in the collision plan that feeds it.
 {% /callout %}
 
+## Branch-Tree Layout (Rigid-Box Separation)
+
+Generated images and videos that share a lineage form a **branch tree** (see [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md)). Trees are laid out by a deterministic tidy-tree algorithm that runs **before** the resolver — never inside it. This is the modular extension of the conflict-resolution system: a new pure sibling of the resolver, plus a workspace adapter, that reuses the unchanged resolver verbatim.
+
+| Layer | File | Responsibility |
+|---|---|---|
+| Pure tidy tree | [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) | Geometry-agnostic, block-allocation tidy-tree layout (left-to-right). Places abstract `{ id, parentId, width, height }` nodes; each subtree owns a disjoint vertical band, so the output is provably overlap-free. Knows nothing about the canvas, PIXI, or `branchId`. |
+| Branch-tree adapter | [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) | Builds the generated-media forest from canvas nodes + lineage edges, tidies each tree (roots keep their anchor), then feeds **one rigid bounding box per tree** plus one box per loose top-level node into the unchanged `resolveCollisions`. |
+
+On every generated-media add/remove the affected trees re-tidy, then `rebalanceBranchTreesAndResolve(...)` hands the resolver rigid per-tree boxes. When a tree box is pushed, **every member translates by the same delta**, so a tree never loses its internal balance because an unrelated node moved nearby. The resolver itself is unchanged — only the *granularity* of the boxes it receives differs (one box per tree instead of one per node). This answers the "do loose nodes interact with trees?" question: they push each other only as whole rigid blocks, never by re-laying-out a tree.
+
 ## When Resolution Runs
 
 Several user actions can produce overlapping nodes. Each routes through the resolver via the plan, but the trigger and the scope differ:
@@ -84,10 +95,10 @@ Several user actions can produce overlapping nodes. Each routes through the reso
 | Toolbar document/image insertion | Svelte creates the node data and calls `renderer.insertNodeAtViewportCenter(...)`. The renderer computes viewport-centered placement and resolves top-level collisions. |
 | Image or video generation commit | The generated media node is added to the canvas, parent/child pairs are excluded, and the resolver can move colliding nodes. |
 | Image-to-image branch continuation | The new media node is placed from the latest branch node, then the resolver can move colliding nodes. |
-| Generated output placement beside source media | The new generated media node or branch-origin node is placed near the source/reference bounds, then top-level collisions are resolved. |
+| Generated output placement beside source media | The new generated media node is placed near the source/reference bounds, then the branch tree re-tidies and top-level collisions are resolved. |
 | Drag release | `computeWorkspaceDragPlan(...)` decides whether collision resolution is allowed. Single-node drags can resolve; rigid group drags preserve spacing; parent-container drags can resolve against top-level peers. |
 
-For generated-media commit placement specifically, the new node is positioned by the branch-lineage layout **first**, and collision resolution is only a cleanup pass afterward. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) for how lineage placement is computed.
+For generated-media commit placement specifically, the affected branch tree is re-tidied by `rebalanceBranchTreesAndResolve(...)` **first** (see [Branch-Tree Layout](#branch-tree-layout-rigid-box-separation)), and the resolver runs only as a rigid-box cleanup pass afterward. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) for how lineage placement is computed.
 
 {% callout type="warning" %}
 Do not duplicate this behavior in [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte). The Svelte file is a thin integration wrapper for DOM refs, stores, service calls, upload plumbing, and callbacks.
@@ -108,7 +119,7 @@ These properties must hold across all collision-producing flows:
 - Parent/child pairs must be excluded from collision resolution so containment does not push children out of their parent container.
 - Persisted child positions must remain parent-relative after world-space collision resolution.
 - Group drags must preserve rigid spacing unless the drag plan explicitly allows collision resolution.
-- Generated branch media should keep lineage placement first; collision resolution is a cleanup pass after placement, not the branch-layout algorithm.
+- Generated branch media is laid out by the tidy-tree algorithm first ([`layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) → [`branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts)); the resolver receives one rigid box per tree as a cleanup pass and never lays out the tree itself.
 
 ## Troubleshooting
 

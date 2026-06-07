@@ -63,14 +63,6 @@ function loadPixiMediaLayer(): string {
 	return readSourceFile('pixiMediaLayer.ts')
 }
 
-function loadPixiBranchOriginLayer(): string {
-	return readSourceFile('rendering/pixiBranchOriginLayer.ts', 'rendering/pixiBranchOriginLayer.ts')
-}
-
-function loadBranchOrigins(): string {
-	return readSourceFile('rendering/branchOrigins.ts', 'rendering/branchOrigins.ts')
-}
-
 function loadViewportBridge(): string {
 	return readSourceFile('rendering/viewportBridge.ts', 'rendering/viewportBridge.ts')
 }
@@ -367,76 +359,37 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'const nextState: CanvasState = {\n                    ...currentCanvasState,')
 	})
 
-	it('keeps image-to-image lineage continuations on their predecessor center line as image proportions resolve', () => {
+	it('re-tidies generated-media trees when final image proportions resolve', () => {
 		expectSourceToContain(ts, 'computeLineageContinuationPositionToRightOfRect(')
-		expectSourceToContain(ts, 'const lineageAnchorRect = getGeneratedImageLineageAnchorRect(imageNode, currentCanvasState.nodes, currentCanvasState.edges)')
-		expectSourceToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
+		expectSourceToContain(ts, 'const resolvedNodes = isGeneratedMediaNode(imageNode)')
+		expectSourceToContain(ts, 'const resolvedNodes = isGeneratedMediaNode(videoNode)')
+		expectSourceToContain(ts, '? rebalanceGeneratedMediaTrees(updatedNodes, currentCanvasState.edges)')
+		expectSourceToContain(ts, 'syncCanvasNodeDomGeometry(nextState.nodes)')
+		expectSourceNotToContain(ts, 'getGeneratedImageLineageAnchorRect(')
+		expectSourceNotToContain(ts, '? computeVerticallyCenteredY(lineageAnchorRect, fittedDimensions.height)')
 	})
 
-	it('persists one branch-origin node for new generated branches', () => {
-		expectSourceToContain(ts, 'function shouldCreateBranchOriginForResolution(resolution: ImageBranchVlmResolution): boolean')
-		expectSourceToContain(ts, "resolution.operationKind === 'new_image'")
-		expectSourceToContain(ts, "resolution.operationKind === 'fresh_branch'")
-		expectSourceToContain(ts, '|| !resolution.targetImageNodeId')
-		expectSourceToContain(ts, 'function applyBranchOriginForGeneratedMedia(')
-		expectSourceToContain(ts, "type: 'branchOrigin'")
-		expectSourceToContain(ts, 'const referenceNodeIds = uniqueStringValues(resolution.referenceImageNodeIds)')
-		expectSourceToContain(ts, 'referenceFileIds: getBranchOriginReferenceFileIds(referenceNodeIds, nodes)')
-		expectSourceToContain(ts, 'const branchApplied = placementNode && resolvedImageNode')
-		expectSourceToContain(ts, 'applyBranchOriginForGeneratedMedia(resolvedNodes, edges, placementNode, resolvedImageNode, threadId)')
-		expectSourceToContain(ts, 'createGeneratedImageEdge(branchOriginNode, outputNode.nodeId)')
-		expectSourceToContain(ts, 'x: outputRect.x - settings.branchOrigin.outputGap - size,')
-		expectSourceToContain(ts, 'function pruneBranchOriginNodes(nodes: CanvasNode[]): CanvasNode[]')
-		expectSourceToContain(ts, "node.type !== 'branchOrigin' || activeBranchIds.has(node.branchId)")
-		expectSourceToContain(ts, "node.type !== 'branchOrigin'")
-		expectSourceToContain(ts, "node.type === 'branchOrigin'")
+	it('routes generated-media add/remove through the centralized tree rebalance', () => {
+		// One helper re-tidies every branch tree and rigid-separates trees + loose
+		// nodes via the unchanged resolver, replacing the per-handler collision block.
+		expectSourceToContain(ts, "import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'")
+		expectSourceToContain(ts, 'function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
+		expectSourceToContain(ts, 'return rebalanceBranchTreesAndResolve(nodes, edges, {')
+		expectSourceToContain(ts, 'depthGap: settings.imageBranchLineage.imageToImageGap,')
+		expectSourceToContain(ts, 'siblingGap: settings.imageBranchLineage.branchToBranchGap,')
+		expectSourceToContain(ts, 'branchFanoutDepthGap: settings.imageBranchLineage.branchFanoutDepthGap,')
+		// Wired into every generated-media add path (image partial + complete, video).
+		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)')
+		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)')
+		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)')
+		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)')
+		// Re-tidies on delete only when the removed node was a lineage member.
+		expectSourceToContain(ts, 'deletedNode && isGeneratedMediaNode(deletedNode)')
+		expectSourceToContain(ts, 'rebalanceGeneratedMediaTrees(remainingNodes, updatedEdges)')
+		expectSourceNotToContain(ts, ['stripLegacy', 'Branch', 'Origin', 'Nodes'].join(''))
+		expectSourceNotToContain(ts, ['branch', 'Origin'].join(''))
 	})
 
-	it('renders branch-origin circles through a dedicated PIXI layer and fixed DOM proxies', () => {
-		const scss = loadScss()
-		const pixiBranchOriginLayer = loadPixiBranchOriginLayer()
-		const branchOrigins = loadBranchOrigins()
-		const viewportBridge = loadViewportBridge()
-
-		expectSourceToContain(ts, "import { createPixiBranchOriginLayer, type PixiBranchOriginLayer }")
-		expectSourceToContain(ts, 'let pixiBranchOriginLayer: PixiBranchOriginLayer | null = null')
-		expectSourceToContain(ts, 'pixiBranchOriginLayer = createPixiBranchOriginLayer({')
-		expectSourceToContain(ts, 'getPixiLayers: () => [pixiMediaLayer, pixiBranchOriginLayer]')
-		expectSourceToContain(ts, 'function syncPixiBranchOriginLayer(canvasState: CanvasState | null = currentCanvasState): void')
-		expectSourceToContain(ts, 'pixiBranchOriginLayer?.sync(canvasState, selectedNodeIds)')
-		expectSourceToContain(ts, 'function syncBranchOriginDomProxies(canvasState: CanvasState | null = currentCanvasState): void')
-		expectSourceToContain(ts, 'nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)')
-		expectSourceToContain(ts, 'renderResizeHandles: false')
-		expectSourceToContain(ts, 'onClick: () => openBranchOriginInAiChatPanel(node)')
-		expectSourceToContain(ts, 'addContextChips(node.referenceNodeIds)')
-		expectSourceToContain(ts, 'replaceActiveAiChatPromptDraft(node.prompt)')
-		expectSourceToContain(ts, 'createBranchOriginInfoPanel(node)')
-		expectSourceToContain(ts, 'getBranchOriginReferenceNodes(node, currentCanvasState?.nodes ?? [])')
-		expectSourceToContain(ts, 'pixiBranchOriginLayer?.setNodeLiveTransform')
-
-		expectSourceToContain(viewportBridge, 'type ViewportAwarePixiLayer = {')
-		expectSourceToContain(viewportBridge, 'getPixiLayers?: () => Array<ViewportAwarePixiLayer | null | undefined>')
-		expectSourceToContain(viewportBridge, 'for (const layer of pixiLayers)')
-
-		expectSourceToContain(branchOrigins, 'export function hitTestBranchOrigin(')
-		expectSourceToContain(branchOrigins, 'radius * radius')
-		expectSourceToContain(branchOrigins, 'export function getBranchOriginReferenceNodes(')
-
-		expectSourceToContain(pixiBranchOriginLayer, 'autoStart: false')
-		expectSourceToContain(pixiBranchOriginLayer, 'sharedTicker: false')
-		expectSourceToContain(pixiBranchOriginLayer, 'world.position.set(currentViewport.x, currentViewport.y)')
-		expectSourceToContain(pixiBranchOriginLayer, 'world.scale.set(currentViewport.zoom, currentViewport.zoom)')
-		expectSourceToContain(pixiBranchOriginLayer, 'getVisibleWorldRect(')
-		expectSourceToContain(pixiBranchOriginLayer, 'settings.branchOrigin.cullingMargin')
-		expectSourceToContain(pixiBranchOriginLayer, 'function pulseBranchOrigin(nodeId: string): void')
-		expectSourceToContain(pixiBranchOriginLayer, 'settings.branchOrigin.pulseDurationMs')
-		expectSourceToContain(pixiBranchOriginLayer, 'requestAnimationFrame')
-
-		expectSourceToContain(scss, '.workspace-pixi-branch-origin-layer')
-		expectSourceToContain(scss, '.workspace-branch-origin-node')
-		expectSourceToContain(scss, '.branch-origin-info-button')
-		expectSourceToContain(scss, '.canvas-branch-origin-reference-thumbnail')
-	})
 })
 
 describe('Workspace canvas — generated video canvas state', () => {
@@ -502,16 +455,14 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "if ((node.type !== 'image' && node.type !== 'video') || node.parentId) return false")
 	})
 
-	it('runs collision resolution when a video completes, mirroring images', () => {
+	it('rebalances branch-lineage trees when a video completes, mirroring images', () => {
 		const completeStart = ts.indexOf('onVideoCompleteToCanvas:')
 		const errorStart = ts.indexOf('onVideoErrorToCanvas:', completeStart)
 		const completeHandler = ts.slice(completeStart, errorStart)
 
-		expectExcerptToContain(completeHandler, 'createCollisionPlan(nodes)', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'resolveCollisions(collisionPlan.nodeBoxes', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'applyBranchOriginForGeneratedMedia(resolvedNodes, currentCanvasState.edges, placementNode, resolvedVideoNode, threadId)', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'nodes: branchApplied.nodes,', 'video complete handler')
-		expectExcerptToContain(completeHandler, 'edges: branchApplied.edges,', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'rebalanceGeneratedMediaTrees(nodes, currentCanvasState.edges)', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'nodes: resolvedNodes,', 'video complete handler')
+		expectExcerptToContain(completeHandler, 'edges: currentCanvasState.edges,', 'video complete handler')
 	})
 
 	it('threads the representative mid-frame fileId onto the completed video node', () => {
@@ -1999,7 +1950,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	})
 
 	it('keeps parent-child containment out of collision pushes', () => {
-		expectSourceToContain(ts, 'if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)')
+		expectSourceToContain(ts, 'collisionExclusions.add(`${child.parentId}-${child.nodeId}`)')
 		expectSourceToContain(ts, 'excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined')
 		expectSourceToContain(ts, 'toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(updatedNodes))')
 	})

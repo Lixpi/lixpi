@@ -81,18 +81,7 @@ export type ImageBranchLineageSettings = {
     rootOutputGap: number
     branchToBranchGap: number
     imageToImageGap: number
-}
-
-export type BranchOriginSettings = {
-    nodeSize: number
-    outputGap: number
-    fillColor: string
-    strokeColor: string
-    selectedStrokeColor: string
-    strokeWidth: number
-    pulseStrokeColor: string
-    pulseDurationMs: number
-    cullingMargin: number
+    branchFanoutDepthGap: number
 }
 
 export type MediaLibrarySettings = {
@@ -122,8 +111,6 @@ export type Settings = {
     imageNode: ImageNodeSettings
 
     imageBranchLineage: ImageBranchLineageSettings
-
-    branchOrigin: BranchOriginSettings
 
     mediaLibrary: MediaLibrarySettings
 
@@ -272,30 +259,10 @@ export const settings: Settings = {
         rootOutputGap: 384,
         // Canvas-unit vertical gap between separate branch rows spawned from the same chat root. Increasing it moves new branches farther below the previous branch.
         branchToBranchGap: 160,
-        // Canvas-unit horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches image-to-image branch spacing.
-        imageToImageGap: 192,
-    },
-
-    // Branch-origin persisted node and PIXI-rendering settings.
-    branchOrigin: {
-        // Canvas-unit width and height for each branch-origin circle node.
-        nodeSize: 64,
-        // Canvas-unit gap between a branch-origin circle and the first generated output. Increasing it moves the origin farther left from the output.
-        outputGap: 32,
-        // Fill color for the persisted provenance circle.
-        fillColor: '#C3DEDD',
-        // Default outline color for an unselected branch-origin circle.
-        strokeColor: '#7BAEAD',
-        // Outline color when the branch-origin node is selected.
-        selectedStrokeColor: '#252B33',
-        // Screen-pixel outline width for the PIXI circle. The renderer zoom-compensates this.
-        strokeWidth: 2,
-        // Pulse ring color used when a newly-created origin is highlighted.
-        pulseStrokeColor: '#D4956A',
-        // Maximum pulse animation length. After this, the PIXI layer stops scheduling frames.
-        pulseDurationMs: 900,
-        // World-coordinate margin around the live viewport before offscreen origins are culled.
-        cullingMargin: 512,
+        // Canvas-unit base horizontal gap between consecutive generated images in the same branch lineage. Increasing it stretches every image-to-image branch step.
+        imageToImageGap: 512,
+        // Canvas-unit extra horizontal gap added for each child after the first when a generated-media node forks. Increasing it gives large branch fans more curve room.
+        branchFanoutDepthGap: 96,
     },
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).

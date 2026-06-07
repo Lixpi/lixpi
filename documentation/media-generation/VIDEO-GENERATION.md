@@ -12,7 +12,7 @@ Structurally, video adds a sibling to every image primitive: a `generate_video` 
 This page covers what is specific to video generation. The shared LangGraph workflow, dual-model architecture, post-stream 3-way router, tool injection/extraction mechanism, routers, stream lifecycle, and shared `ProviderState` are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 {% callout type="note" %}
-The shared workflow, dual-model routing, the `generate_video` tool schema, the 3-way `routeAfterStream` router, and the routers live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-origin circles, and VLM reference selection (including which prior video continues a branch) live in [Branch Lineage](./BRANCH-LINEAGE.md). The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The playback control bar lives in [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md).
+The shared workflow, dual-model routing, the `generate_video` tool schema, the 3-way `routeAfterStream` router, and the routers live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection (including which prior video continues a branch) live in [Branch Lineage](./BRANCH-LINEAGE.md). The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The playback control bar lives in [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md).
 {% /callout %}
 
 ## Opt-In Video Model
@@ -199,7 +199,7 @@ Authentication mirrors the image route (Bearer or `?token=`). The poster reuses 
 
 ## The `VideoCanvasNode`
 
-Generated videos persist as a discriminated member of the `CanvasNode` union (`type: 'video'`), in [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/ts/types.ts), alongside `image`, `document`, `aiChatThread`, and `branchOrigin`. There is **no new database table** — like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
+Generated videos persist as a discriminated member of the `CanvasNode` union (`type: 'video'`), in [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/ts/types.ts), alongside `image`, `document`, and `aiChatThread`. There is **no new database table** — like images, video nodes live in the workspace `canvasState.nodes[]`, with MP4 + poster bytes in the NATS Object Store.
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -296,7 +296,7 @@ A completed `VideoCanvasNode` can be continued: the bubble-menu **Extend video i
 | Model selection | auto-selects a default | opt-in (placeholder until chosen) |
 
 {% callout type="note" %}
-Branch lineage, branch-origin provenance, canvas positioning/collision, the generation-trace meta-info renderer, playback controls, and descriptors are **shared**, not differences. Video reuses workspace relevance, the same candidate-snapshot path, `getGeneratedChildOutputs` positioning, the collision cleanup pass, the `createImageGenerationTraceDetails` renderer, `components/videoControls`, and the `MediaDescriptor`/`ContentDescriptor` shape used by images. A video candidate simply contributes its mid-frame still instead of a full image. See [Branch Lineage](./BRANCH-LINEAGE.md), [Collision Resolution](../canvas/COLLISION-RESOLUTION.md), [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md), and [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md).
+Branch lineage, branch-root provenance, balanced branch-tree layout, canvas positioning/collision, the generation-trace meta-info renderer, playback controls, and descriptors are **shared**, not differences. Video reuses workspace relevance, the same candidate-snapshot path, branch-tree layout, the collision cleanup pass, the `createImageGenerationTraceDetails` renderer, `components/videoControls`, and the `MediaDescriptor`/`ContentDescriptor` shape used by images. A video candidate simply contributes its mid-frame still instead of a full image. See [Branch Lineage](./BRANCH-LINEAGE.md), [Collision Resolution](../canvas/COLLISION-RESOLUTION.md), [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md), and [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md).
 {% /callout %}
 
 ## File Structure
@@ -372,7 +372,7 @@ packages/lixpi/constants/
 
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, dual-model routing, the `generate_video` tool mechanism, the 3-way `routeAfterStream` router, `VideoRouter`, `ProviderState`, and the stream lifecycle.
 - [Image Generation](./IMAGE-GENERATION.md) — the sibling image branch this pipeline extends.
-- [Branch Lineage](./BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-origin circles, and the structured VLM resolver (including how a prior video continues a branch via its mid-frame still).
+- [Branch Lineage](./BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-root provenance, balanced branch-tree layout, and the structured VLM resolver (including how a prior video continues a branch via its mid-frame still).
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the complete stream-event catalog and the browser render path.
 - [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md) — the shared SVG playback control bar and its two mount points.
 - [Media Library](../library/MEDIA-LIBRARY.md) — saving and materializing reusable video copies.

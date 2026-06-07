@@ -10,7 +10,7 @@ Image generation is the **image branch** of Lixpi's shared AI generation pipelin
 This page covers what is specific to image generation: the three image-model provider execution paths, how reference images are extracted from each provider's message format, the image system-prompt instructions, image sizes and hardcoded options, content-hash dedup, multi-turn editing, and the image-specific stream-event details. The shared LangGraph workflow, dual-model routing, tool schema, post-stream router, `ProviderState`, `ImageRouter`, and stream lifecycle are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 {% callout type="note" %}
-The shared workflow, dual-model routing, tool injection/extraction mechanism, and `ImageRouter` live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-origin circles, and VLM reference selection live in [Branch Lineage](./BRANCH-LINEAGE.md). The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
+The shared workflow, dual-model routing, tool injection/extraction mechanism, and `ImageRouter` live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection live in [Branch Lineage](./BRANCH-LINEAGE.md). The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
 {% /callout %}
 
 ## Where Image Generation Sits
@@ -218,7 +218,7 @@ services/web-ui/src/infographics/workspace/
 ## Related Pages
 
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the shared LangGraph workflow, dual-model routing, `generate_image` tool mechanism, `ImageRouter`, `ProviderState`, and stream lifecycle.
-- [Branch Lineage](./BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-origin circles, and the structured VLM resolver that selects which references reach the image model.
+- [Branch Lineage](./BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-root provenance, balanced branch-tree layout, and the structured VLM resolver that selects which references reach the image model.
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the complete stream-event catalog and the browser render path.
 - [Video Generation](./VIDEO-GENERATION.md) — the sibling video branch (Google VEO) that extends this pipeline.
 - [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the descriptor generated images compose for free from their generation metadata.

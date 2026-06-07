@@ -41,13 +41,9 @@ describe('settings - grouped configuration', () => {
 		expect(settings.imageBranchLineage.generatedImageSize).toBeGreaterThan(0)
 		expect(settings.imageBranchLineage.rootOutputGap).toBeGreaterThanOrEqual(0)
 		expect(settings.imageBranchLineage.branchToBranchGap).toBeGreaterThanOrEqual(0)
-		expect(settings.imageBranchLineage.imageToImageGap).toBeGreaterThanOrEqual(0)
+		expect(settings.imageBranchLineage.imageToImageGap).toBe(512)
+		expect(settings.imageBranchLineage.branchFanoutDepthGap).toBe(96)
 		expect(Object.hasOwn(settings, 'imageBranchLineage')).toBe(true)
-		expect(settings.branchOrigin.nodeSize).toBeGreaterThan(0)
-		expect(settings.branchOrigin.strokeWidth).toBeGreaterThan(0)
-		expect(settings.branchOrigin.pulseDurationMs).toBeGreaterThan(0)
-		expect(settings.branchOrigin.cullingMargin).toBeGreaterThanOrEqual(0)
-		expect(Object.hasOwn(settings, 'branchOrigin')).toBe(true)
 	})
 
 	it('keeps migrated behavior and rail hit-target values in their sections', () => {

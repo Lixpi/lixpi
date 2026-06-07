@@ -78,11 +78,9 @@ Standalone chat creation is lazy. A standalone `AiChatThread` with owner
 prompt** from a panel draft. Until then, the draft and chips persist as panel
 state without any conversation record existing.
 
-Clicking a branch-origin circle on the canvas seeds the panel: it opens the
-panel, adds the circle's stored references as explicit context chips, and seeds
-the composer draft with the stored starting prompt. The circle is a provenance
-entry point, not a chat owner — see
-[Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
+Generated-media branch roots are ordinary image/video nodes. Their originating
+prompt and references live on `generatedBy` and are shown through the generated
+media info panel. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 
 ## The Tabbed Panel
 
@@ -134,8 +132,9 @@ chip tray above the composer:
 - Selecting eligible canvas nodes while the panel is open can add chips.
 - Removing a chip does not tear down the ProseMirror composer or draft.
 - Deleted nodes and duplicate IDs are sanitized out of persisted panel state.
-- `branchOrigin` nodes are not chip targets; clicking one adds its stored
-  reference nodes as chips and seeds the prompt draft.
+- Generated branch roots are normal media chip targets; their provenance is
+  reconstructed from `generatedBy` metadata rather than from a separate canvas
+  node.
 - Auto chips render after `CONTEXT_RELEVANCE_RESOLVED` and can be removed from
   the visible tray without persisting.
 
@@ -328,7 +327,7 @@ the last persisted state, not the tokens that were streaming at reload time.
 - [Media and Content Descriptors](./MEDIA-DESCRIPTORS.md) — descriptors that drive relevance
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — what happens on submit (workflow, routing, usage)
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — per-thread streaming subject and event catalog
-- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — branch-origin circles that seed the panel
+- [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — generated-media branch roots, provenance, and branch-tree layout
 - [Extraction Pipeline](../library/EXTRACTION-PIPELINE.md) — the six-stage extraction internals
 - [Using Features](../library/USING-FEATURES.md) — `/use` and `/extract`, the library, and feature application
 - [Workspace Model](../canvas/WORKSPACE-MODEL.md) — canvas state and node model

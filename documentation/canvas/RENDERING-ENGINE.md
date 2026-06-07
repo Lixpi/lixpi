@@ -7,7 +7,7 @@ description: The workspace canvas renderer spine — the DOM interaction shell, 
 
 The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. Two renderers cooperate, split by workload rather than by node type:
 
-- **DOM** owns text-rich controls and interaction structure: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, branch-origin DOM proxies, and handles. The AI Chat panel can be open with zero tabs; its UI state is persisted in canvas state.
+- **DOM** owns text-rich controls and interaction structure: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The AI Chat panel can be open with zero tabs; its UI state is persisted in canvas state.
 - **PIXI v8** owns high-volume pixels, connector strokes, and canvas chrome: image pixel rendering, video poster/placeholder rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays.
 
 This page covers that split and the machinery that keeps DOM and PIXI in lockstep: the layer stack, the viewport bridge, viewport state ownership, the sync pipeline, render scheduling, and the PIXI initialization contract.
@@ -21,7 +21,6 @@ The renderers map to concrete modules:
 | Renderer | Owns | Module |
 |----------|------|--------|
 | PIXI media layer | Image pixels, video posters/placeholders, generated-image progress outlines, connector pixels, image-node selection chrome, marquee/group overlays | [`pixiMediaLayer.ts`](../../services/web-ui/src/infographics/workspace/pixiMediaLayer.ts) |
-| PIXI branch-origin layer | Branch-origin circle rendering | [`rendering/pixiBranchOriginLayer.ts`](../../services/web-ui/src/infographics/workspace/rendering/pixiBranchOriginLayer.ts) |
 | DOM video chrome | Completed video playback and controls in the transformed chrome layer (browser-composited `<video>`) | See [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) |
 | Reusable PIXI outline | Traveling progress outlines | [`utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) |
 
@@ -54,8 +53,8 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/pixiImageDecodeWorker.ts` | Worker body: `fetch` → `createImageBitmap` and post the bitmap back |
 | `workspace/rendering/pixiEdgeRenderer.ts` | PIXI edge renderer (diffed; reuses `Graphics`) |
 | `workspace/rendering/viewportBridge.ts` | Single call site that applies a viewport to DOM CSS and PIXI media |
-| `workspace/rendering/branchOrigins.ts` | Pure branch-origin render data, reference lookup, circular hit testing, and culling predicates |
-| `workspace/rendering/pixiBranchOriginLayer.ts` | Pointerless PIXI branch-origin circle layer with viewport-synced world transform, culling, and bounded pulse animation |
+| `workspace/branchTreeLayout.ts` | Builds the generated-media branch forest, lays each lineage out as a balanced tidy tree, and feeds rigid per-tree boxes to the shared resolver (see [Collision Resolution](./COLLISION-RESOLUTION.md)) |
+| `utils/layoutTree.ts` | Pure, geometry-agnostic block-allocation tidy-tree layout reused by `branchTreeLayout.ts` |
 | `workspace/rendering/mediaNodeRegistry.ts` | Dispatches non-image media nodes to specialized handlers; video nodes are handled by `videoNodeHandler.ts` |
 | `workspace/rendering/videoNodeHandler.ts` | Video node renderer that owns PIXI poster/placeholder sprites and the authenticated `HTMLVideoElement` consumed by DOM video chrome |
 | `workspace/workspaceRenderStatePlan.ts` | Pure render-state reconciliation for pending local visual commits while store acknowledgements arrive |
@@ -99,7 +98,7 @@ documentation/vendor-documentation/xyflow/
 
 ### Layer Stack
 
-The canvas is a stack of four layers inside `.workspace-pane`. Two are CSS-transformed DOM viewports and two are PIXI canvases; all four share one viewport transform every frame (see [Viewport Bridge](#viewport-bridge)).
+The canvas is a stack of three layers inside `.workspace-pane`. Two are CSS-transformed DOM viewports and one is a PIXI canvas; all three share one viewport transform every frame (see [Viewport Bridge](#viewport-bridge)).
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -109,12 +108,7 @@ flowchart TB
             DOC[Document Nodes]
             THR[AI Chat Thread Nodes]
             IMG_DOM[Image Node DOM shells<br/>data-node-id + interaction chrome]
-            BO_DOM[Branch-origin DOM proxies<br/>selection + drag + info]
             HANDLE[Handles, drag overlays, resize handles]
-        end
-        subgraph BranchOriginCanvas[".workspace-pixi-branch-origin-layer (z-index 1, PIXI canvas)"]
-            BO_WORLD[Branch-origin world Container<br/>scale = viewport.zoom<br/>position = viewport.x, y]
-            BO_PIXI[branchOriginLayer<br/>circle strokes + bounded pulse]
         end
         subgraph PixiCanvas[".workspace-pixi-media-layer (z-index 2, PIXI canvas)"]
             WORLD[Pixi world Container<br/>scale = viewport.zoom<br/>position = viewport.x, y]
@@ -130,8 +124,6 @@ flowchart TB
     end
 
     Viewport --> PixiCanvas
-    Viewport --> BranchOriginCanvas
-    BO_WORLD --> BO_PIXI
     WORLD --> EDGE_PIXI
     WORLD --> IMG_SPR
     WORLD --> GEN_BORDER
@@ -146,11 +138,11 @@ The PIXI media canvas sits **above** the DOM viewport. Generated-image provider 
 
 Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Completed video nodes are the deliberate exception: PIXI renders the poster/placeholder and stable geometry, while the actual MP4 frames come from the visible DOM `<video>` element in chrome. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
 
-Branch-origin nodes split the same way by workload. The visible circle is drawn by `pixiBranchOriginLayer.ts` in a pointerless PIXI layer with its own world container; selection, dragging, info affordance, and click-to-seed-chat behavior use transparent DOM proxies in the viewport. The branch-origin provenance model — what a branch-origin node represents, how it is seeded, and how it differs from references — is documented in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
+There is no separate provenance layer: a branch lineage's first generated image **is** the branch root, carries its own provenance (originating prompt + references on `generatedBy`), and renders through the normal media + chrome path. How a lineage is placed as a balanced tidy tree is documented in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) and [Collision Resolution](./COLLISION-RESOLUTION.md).
 
 ### Viewport Bridge
 
-Pan/zoom flows through a single call site so DOM, the media PIXI world, and the branch-origin PIXI world stay in exact agreement on every frame.
+Pan/zoom flows through a single call site so DOM and the media PIXI world stay in exact agreement on every frame.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -160,15 +152,13 @@ flowchart LR
     VB --> CSS[viewport CSS transform<br/>translate + scale]
     VB --> CHROME[image chrome overlay CSS transform<br/>translate + scale]
     VB --> PIXI[pixiMediaLayer.setViewport]
-    VB --> BO[branchOriginLayer.setViewport]
     PIXI --> WORLD[world.position / world.scale]
-    BO --> BO_WORLD[branch-origin world.position / world.scale]
     PIXI --> VIS[scheduleVisibilityUpdate<br/>rAF-coalesced]
     PIXI --> PRE[schedulePrefetch<br/>idle-coalesced]
     PIXI --> RND[scheduleRender<br/>rAF-coalesced]
 ```
 
-This gives DOM, the media PIXI world, and the branch-origin PIXI world a single, consistent transform every frame. PIXI renders stay owned by their layer schedulers instead of being triggered from unrelated viewport acknowledgement paths.
+This gives DOM and the media PIXI world a single, consistent transform every frame. PIXI renders stay owned by their layer schedulers instead of being triggered from unrelated viewport acknowledgement paths.
 
 ### Viewport State Ownership
 
@@ -210,8 +200,6 @@ Regression coverage lives in [`workspaceViewportStatePlan.test.ts`](../../servic
 4. Single `updateVisibleImages()` pass to mark renderable flags and fire texture loads for newly-visible entries.
 5. Schedules an idle prefetch tick.
 6. Schedules a render via rAF.
-
-`pixiBranchOriginLayer.sync(...)` is driven from the same canvas reconciliation points for persisted `branchOrigin` nodes. It receives pure render datums from `branchOrigins.ts`, culls against the current viewport with `settings.branchOrigin.cullingMargin`, and schedules a bounded pulse render only while a circle is active or selected.
 
 ### Render Scheduling
 
@@ -302,5 +290,5 @@ The level-of-detail tier selection, the texture-loading rules behind `ensureText
 - [Image Rendering Performance](./IMAGE-RENDERING-PERFORMANCE.md) — LoD tiers, texture cache, decode pool, mipmaps, edge renderer, optimizations, known issues, tuning constants.
 - [Rendering Architecture for a Media-Heavy Canvas](../knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md) — the canonical rationale for the DOM/PIXI split.
 - [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) — the DOM video chrome layer and the shared SVG control bar.
-- [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) — the branch-origin provenance model behind the branch-origin layer.
+- [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) — how generated media gets parentage, branch identity, and provenance (carried on the branch-root image), and how a lineage is laid out as a balanced tree.
 - [`@xyflow/system` reference](../vendor-documentation/xyflow/overview.md) — pan/zoom and connection math.

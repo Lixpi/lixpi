@@ -18,13 +18,13 @@ This page is part of the canvas domain. For the DOM/PIXI rendering architecture,
 | Concept | Definition |
 |---------|------------|
 | **Workspace** | A named container owned by a user. Holds a canvas state (viewport position, zoom, and node positions) plus references to documents, AI chat threads, and uploaded files. |
-| **Canvas Node** | A positioned item on the canvas. It is one of five kinds — document, image, video, AI chat thread, or branch origin — and stores position, dimensions, and type-specific data. |
+| **Canvas Node** | A positioned item on the canvas. It is one of four kinds — document, image, video, or AI chat thread — and stores position, dimensions, and type-specific data. |
 | **Document** | The actual text content (ProseMirror JSON). It lives separately from its canvas representation, so the same document could theoretically appear in multiple workspaces. Documents use `documentType: 'document'` and contain block-level content (paragraphs, headings, lists, and so on). |
 | **AI Chat Thread** | A persisted AI conversation session stored in the AI-Chat-Threads DynamoDB table. A thread is standalone; its ProseMirror history is rendered in an AI Chat panel tab and streamed through its own `AiInteractionService`. |
 | **AI Chat Panel** | A workspace-owned right-side surface that can be opened without creating a chat session; a standalone thread is created only when the first prompt is submitted. See [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md). |
 | **Image** | An uploaded, imported, generated, or restored image file stored in NATS Object Store. Canvas nodes reference workspace-owned image objects and delete them when removed from the canvas; a user can explicitly save a separate Media Library copy that is **not** deleted with the source node. |
 | **Video** | A generated or restored MP4 stored in NATS Object Store with a poster and an optional representative still. The canvas renders a PIXI poster behind a browser-composited `<video>` surface so playback, scrubbing, PiP, fullscreen, and shared controls do not depend on a PIXI video texture loop. See [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md). |
-| **Branch Origin** | A small persisted circle that records the prompt and reference media that started a generated-media branch. It is an entry point and provenance marker, not a chat owner. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md). |
+| **Branch Root** | The first generated image or video in a branch. It records the prompt, references, resolver metadata, and visual summaries on its own `generatedBy` metadata; no separate provenance node is persisted. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md). |
 | **Viewport** | The current view: x/y offset and zoom level, persisted so users return to where they left off. While a workspace is open, the live viewport inside [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) is the rendering source of truth; Svelte/store persistence is an acknowledgement path. A delayed store render must not replay an older viewport-only state over the current transform. |
 
 ## System Architecture
@@ -171,14 +171,14 @@ Edges are planned by `WorkspaceConnectionManager` and drawn by the PIXI edge ren
 
 ### AI Generated Content Layout
 
-When an AI chat session generates images or videos, the workspace places them automatically to keep a clean layout: first outputs sit near the active chat context or the combined bounds of selected/reference media, image-to-image continuations stay vertically aligned with the previous image in the branch, generated nodes use a fixed canvas-unit size regardless of zoom, and a synchronous partial tracker prevents overlapping or skipped slots during simultaneous stream updates. Reference/style media can anchor and animate placement without becoming a connector parent unless the branch resolver verifies a real generated continuation, and each branch birth persists one `branchOrigin` circle. The complete placement, spacing, provenance chrome, and references-vs-lineage rules live in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
+When an AI chat session generates images or videos, the workspace places them automatically to keep a clean layout: first outputs sit near the active chat context or the combined bounds of selected/reference media, branch continuations become a balanced generated-media tree, generated nodes use a fixed canvas-unit size regardless of zoom, and a synchronous partial tracker prevents overlapping or skipped slots during simultaneous stream updates. Reference/style media can anchor and animate placement without becoming a connector parent unless the branch resolver verifies a real generated continuation. The first generated media node is the branch root and carries its own provenance. The complete placement, spacing, provenance chrome, and references-vs-lineage rules live in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
 
 ### CanvasNode
 
-Canvas nodes use a discriminated union keyed on the `type` field. There are five node types: `document`, `image`, `video`, `aiChatThread`, and `branchOrigin`. Every node shares `nodeId`, `position`, and `dimensions`; the rest is type-specific.
+Canvas nodes use a discriminated union keyed on the `type` field. There are four node types: `document`, `image`, `video`, and `aiChatThread`. Every node shares `nodeId`, `position`, and `dimensions`; the rest is type-specific.
 
 ```typescript
-type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin'
+type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video'
 
 // Document node - contains a ProseMirror editor
 type DocumentCanvasNode = {
@@ -227,25 +227,11 @@ type AiChatThreadCanvasNode = {
     dimensions: { width: number; height: number }
 }
 
-// Branch-origin node - records the birth of a generated media branch
-type BranchOriginCanvasNode = {
-    nodeId: string
-    type: 'branchOrigin'
-    branchId: string
-    prompt: string
-    referenceNodeIds: string[]
-    referenceFileIds: string[]
-    position: { x: number; y: number }
-    dimensions: { width: number; height: number }
-    createdAt: number
-}
-
 type CanvasNode =
     | DocumentCanvasNode
     | ImageCanvasNode
     | VideoCanvasNode
     | AiChatThreadCanvasNode
-    | BranchOriginCanvasNode
 ```
 
 | Node type | Reference target | Key type-specific fields |
@@ -254,7 +240,6 @@ type CanvasNode =
 | `image` | `fileId` → NATS Object Store | `workspaceId`, `src`, `aspectRatio` |
 | `video` | `fileId` → NATS Object Store | `posterFileId`, optional `frameFileId`, `src`, `posterSrc`, `aspectRatio`, `durationSeconds`, `hasAudio` |
 | `aiChatThread` | `referenceId` → `AiChatThread.threadId` | — (history streamed/fetched) |
-| `branchOrigin` | `branchId` → media branch | `prompt`, `referenceNodeIds`, `referenceFileIds`, `createdAt` |
 
 The shared multimodal, workspace-context, descriptor, and canvas-node types are defined in [`packages/lixpi/constants/ts/types.ts`](../../packages/lixpi/constants/ts/types.ts).
 
@@ -433,5 +418,5 @@ flowchart TB
 - [Image Rendering Performance](./IMAGE-RENDERING-PERFORMANCE.md) — texture cache, LoD tiers, the decode pool, and known performance issues.
 - [User Flows](./USER-FLOWS.md) — opening a workspace, creating documents, and adding/saving/deleting/moving/editing media.
 - [Edges & Connections](./EDGES-AND-CONNECTIONS.md) — the connection manager, routing, proximity connect, and message-level anchoring.
-- [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) — generated-media placement, branch-origin circles, and provenance chrome.
+- [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) — generated-media placement, branch-root provenance, and balanced branch-tree layout.
 - [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md) and [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) — the AI chat panel and per-turn workspace relevance.
