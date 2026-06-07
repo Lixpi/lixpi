@@ -66,7 +66,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 - On every generated-media add/remove the affected tree re-tidies via `rebalanceBranchTreesAndResolve` in `branchTreeLayout.ts`, which lays each lineage out as a balanced left-to-right tidy tree using the pure `utils/layoutTree.ts` algorithm
 - Depth spacing uses `settings.imageBranchLineage.imageToImageGap`, plus `branchFanoutDepthGap` for each extra child when a node forks; sibling spacing uses `branchToBranchGap`. The root keeps its anchor, children fan out symmetrically around its vertical center, and linear chains stay collinear. Final image/video aspect-ratio updates preserve the node center, then re-tidy the tree so resolved media proportions cannot collapse a fork back onto the predecessor center line
 - The whole tree is then rigid-separated from neighbors by the unchanged resolver (one bounding box per tree), so a tree moves as a block and never loses its internal balance — see [`documentation/canvas/COLLISION-RESOLUTION.md`](../../../../../documentation/canvas/COLLISION-RESOLUTION.md)
-- Dragging a tree node runs only the existing per-node overlap cleanup and does not snap back; the next add/remove re-tidies deterministically. Old workspaces that still contain a persisted `branchOrigin` node have it stripped at load
+- Dragging a tree node runs only the existing per-node overlap cleanup and does not snap back; the next add/remove re-tidies deterministically
 
 ### Media Library Panel
 - Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the unchanged zoom badge and the style import.

@@ -80,8 +80,7 @@ state without any conversation record existing.
 
 Generated-media branch roots are ordinary image/video nodes. Their originating
 prompt and references live on `generatedBy` and are shown through the generated
-media info panel; there is no separate branch-origin panel shortcut. See
-[Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
+media info panel. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 
 ## The Tabbed Panel
 

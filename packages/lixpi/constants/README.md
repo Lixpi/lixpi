@@ -37,7 +37,7 @@ const deleteImageSubject = IMAGE_SUBJECTS.DELETE_IMAGE
 // Use types
 const payload: AiInteractionChatSendMessagePayload = { messages, aiModel, threadId }
 
-// CanvasNode includes document, image, video, AI chat thread, and branch-origin provenance nodes.
+// CanvasNode includes document, image, video, and AI chat thread nodes.
 
 // AiModel includes imageSizes for image generation providers
 // ImageSizeOption: { value: string; label: string }

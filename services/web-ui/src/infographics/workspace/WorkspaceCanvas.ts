@@ -230,28 +230,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)
     paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)
 
-    // Strip legacy branchOrigin nodes (+ their edges) at the single boundary
-    // where external canvas state enters the renderer. Old workspaces persisted a
-    // provenance circle node; the branch-root image now carries that provenance,
-    // so the node is dropped on load and self-heals on the next save.
-    function stripLegacyBranchOriginNodes(state: CanvasState | null): CanvasState | null {
-        if (!state) return state
-        const legacyIds = new Set(
-            state.nodes
-                .filter((node: CanvasNode) => (node.type as string) === 'branchOrigin')
-                .map((node: CanvasNode) => node.nodeId)
-        )
-        if (legacyIds.size === 0) return state
-        return {
-            ...state,
-            nodes: state.nodes.filter((node: CanvasNode) => !legacyIds.has(node.nodeId)),
-            edges: state.edges.filter((edge: WorkspaceEdge) =>
-                !legacyIds.has(edge.sourceNodeId) && !legacyIds.has(edge.targetNodeId)
-            ),
-        }
-    }
-
-    let currentCanvasState: CanvasState | null = stripLegacyBranchOriginNodes(options.canvasState)
+    let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
     let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
@@ -1586,9 +1565,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Single entry point for the generated-media add/remove paths: re-tidy every
     // branch-lineage tree and rigid-separate trees + loose nodes through the
-    // unchanged resolver. Replaces the per-handler collision block and the
-    // removed branch-origin creation. Depth/sibling gaps come from
-    // imageBranchLineage so spacing matches the rest of the lineage placement.
+    // unchanged resolver. Depth/sibling gaps come from imageBranchLineage so
+    // spacing matches the rest of the lineage placement.
     function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[] {
         return rebalanceBranchTreesAndResolve(nodes, edges, {
             depthGap: settings.imageBranchLineage.imageToImageGap,
@@ -2525,7 +2503,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             view.dispatch(tr.scrollIntoView())
             view.focus()
         } catch (error) {
-            console.error('Failed to seed branch-origin prompt draft:', error)
+            console.error('Failed to seed AI prompt draft:', error)
         }
     }
 
@@ -6241,7 +6219,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (workspaceChanged) pendingLocalCanvasVisualCommit = null
 
             const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({
-                incomingState: stripLegacyBranchOriginNodes(newCanvasState),
+                incomingState: newCanvasState,
                 pendingVisualCommit: pendingLocalCanvasVisualCommit,
             })
             const effectiveCanvasState = renderStatePlan.state

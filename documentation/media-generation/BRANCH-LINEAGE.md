@@ -498,8 +498,6 @@ This is deliberately simpler than full Walker/Buchheim contour merging. The canv
 
 The renderer/resolver split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
 
-Old workspaces that still contain a persisted `branchOrigin` node have it (and any edge referencing it) stripped by a load-time sanitizer in `WorkspaceCanvas.ts`; the data self-heals on the next save.
-
 ## Progress Outlines
 
 While a generation is preparing, the selected/reference media can animate with the same PIXI traveling outline used by the generated placeholder. This makes the active context visible before the first real output arrives.
@@ -541,7 +539,7 @@ On failure the API publishes `IMAGE_BRANCH_RESOLUTION_ERROR`, then the graph err
 
 No new table or bucket exists for this feature.
 
-- **DynamoDB** stores richer generated-media metadata inside the existing workspace `canvasState.nodes[]`; legacy `branchOrigin` nodes are stripped at load and disappear on the next save. The AI chat transcript stays in the existing AI chat thread item. Workspace context and candidate snapshots are **request payloads, not persisted records.**
+- **DynamoDB** stores richer generated-media metadata inside the existing workspace `canvasState.nodes[]`. The AI chat transcript stays in the existing AI chat thread item. Workspace context and candidate snapshots are **request payloads, not persisted records.**
 - **NATS Object Store** remains the file storage layer for candidate and generated media. Candidate URLs use the existing `nats-obj://workspace-{workspaceId}-files/{fileId}` convention.
 - **IAM and service access** do not change. The API already has Object Store access, model-provider credentials, and workspace persistence access.
 

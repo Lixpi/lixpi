@@ -386,6 +386,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		// Re-tidies on delete only when the removed node was a lineage member.
 		expectSourceToContain(ts, 'deletedNode && isGeneratedMediaNode(deletedNode)')
 		expectSourceToContain(ts, 'rebalanceGeneratedMediaTrees(remainingNodes, updatedEdges)')
+		expectSourceNotToContain(ts, ['stripLegacy', 'Branch', 'Origin', 'Nodes'].join(''))
+		expectSourceNotToContain(ts, ['branch', 'Origin'].join(''))
 	})
 
 })

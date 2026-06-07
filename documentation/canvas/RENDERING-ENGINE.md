@@ -138,7 +138,7 @@ The PIXI media canvas sits **above** the DOM viewport. Generated-image provider 
 
 Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Completed video nodes are the deliberate exception: PIXI renders the poster/placeholder and stable geometry, while the actual MP4 frames come from the visible DOM `<video>` element in chrome. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
 
-There is no separate branch-origin layer: a branch lineage's first generated image **is** the branch root, carries its own provenance (originating prompt + references on `generatedBy`), and renders through the normal media + chrome path. How a lineage is placed as a balanced tidy tree is documented in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) and [Collision Resolution](./COLLISION-RESOLUTION.md).
+There is no separate provenance layer: a branch lineage's first generated image **is** the branch root, carries its own provenance (originating prompt + references on `generatedBy`), and renders through the normal media + chrome path. How a lineage is placed as a balanced tidy tree is documented in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) and [Collision Resolution](./COLLISION-RESOLUTION.md).
 
 ### Viewport Bridge
 
