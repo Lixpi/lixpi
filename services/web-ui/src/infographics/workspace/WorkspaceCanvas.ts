@@ -53,6 +53,7 @@ import { WorkspaceConnectionManager } from '$src/infographics/workspace/Workspac
 import { getCanvasChromeZoomMultiplier, getResizeHandleScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
+import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
 import {
     computeLineageContinuationPositionToRightOfRect,
     computeNextBranchRowPositionToRightOfRect,
@@ -419,10 +420,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onDeleteNode: async (nodeId) => {
                 if (!currentCanvasState) return
 
-                const updatedNodes = pruneBranchOriginNodes(currentCanvasState.nodes.filter((n: CanvasNode) => n.nodeId !== nodeId))
+                const deletedNode = currentCanvasState.nodes.find((n: CanvasNode) => n.nodeId === nodeId)
+                const remainingNodes = pruneBranchOriginNodes(currentCanvasState.nodes.filter((n: CanvasNode) => n.nodeId !== nodeId))
                 const updatedEdges = currentCanvasState.edges.filter(
                     (e: WorkspaceEdge) => e.sourceNodeId !== nodeId && e.targetNodeId !== nodeId
                 )
+
+                // Re-tidy only when a lineage member left a tree. Deleting an
+                // unrelated, non-tree node must never trigger tree layout (loose
+                // nodes and trees interact only as rigid blocks, never by snapping).
+                const updatedNodes = deletedNode && isGeneratedMediaNode(deletedNode)
+                    ? rebalanceGeneratedMediaTrees(remainingNodes, updatedEdges)
+                    : remainingNodes
 
                 selectNode(null)
                 commitCanvasState({ ...currentCanvasState, nodes: updatedNodes, edges: updatedEdges })
@@ -1656,6 +1665,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (node.parentId) return node
             const movedPosition = collisionResult.nodes.get(node.nodeId)
             return movedPosition ? { ...node, position: getResolvedNodePositionFromCollisionBox(node, movedPosition, collisionPlan.entries) } : node
+        })
+    }
+
+    // Single entry point for the generated-media add/remove paths: re-tidy every
+    // branch-lineage tree and rigid-separate trees + loose nodes through the
+    // unchanged resolver. Replaces the per-handler collision block and the
+    // removed branch-origin creation. Depth/sibling gaps come from
+    // imageBranchLineage so spacing matches the rest of the lineage placement.
+    function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[] {
+        return rebalanceBranchTreesAndResolve(nodes, edges, {
+            depthGap: settings.imageBranchLineage.imageToImageGap,
+            siblingGap: settings.imageBranchLineage.branchToBranchGap,
         })
     }
 
@@ -4508,7 +4529,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
-            const placementNode = getGeneratedMediaPlacementNode(threadId)
             const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)
             const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
@@ -4552,18 +4572,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 : existingEdges
 
             const nodesWithImage: CanvasNode[] = [...existingNodes, imageNode]
-            const branchApplied = placementNode
-                ? applyBranchOriginForGeneratedMedia(nodesWithImage, newEdges, placementNode, imageNode, threadId)
-                : { nodes: nodesWithImage, edges: newEdges }
+            const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithImage, newEdges)
 
             const newCanvasState: CanvasState = {
                 ...(currentCanvasState ?? {}),
                 viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                nodes: branchApplied.nodes,
-                edges: branchApplied.edges,
+                nodes: rebalancedNodes,
+                edges: newEdges,
             }
             commitCanvasStatePreservingEditors(newCanvasState)
-            appendImageNodeToDOM(imageNode)
+            const placedImageNode = (rebalancedNodes.find((n: CanvasNode) => n.nodeId === nodeId) as ImageCanvasNode) ?? imageNode
+            appendImageNodeToDOM(placedImageNode)
             if (imageUrl) clearGeneratingReferenceNodeIds(threadId)
         },
 
@@ -4612,38 +4631,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 partialImageTracker.delete(threadId)
 
                 // PIXI removes the progress border when the tracker is cleared and this state commits.
-                const collisionExclusions = new Set<string>()
-                for (const child of nodes) {
-                    if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
-                }
-                const collisionPlan = createCollisionPlan(nodes)
-                const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
-                    excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
-                    shouldResolvePair: collisionPlan.shouldResolvePair,
-                })
-
-                const resolvedNodes = collisionResult.hasChanges
-                    ? nodes.map((n: CanvasNode) => {
-                        const resolved = collisionResult.nodes.get(n.nodeId)
-                        if (!resolved) return n
-                        const resolvedPosition = getResolvedNodePositionFromCollisionBox(n, resolved, collisionPlan.entries)
-                        const position = n.parentId
-                            ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(nodes))
-                            : resolvedPosition
-                        return { ...n, position }
-                    })
-                    : nodes
-                const resolvedImageNode = resolvedNodes.find((node: CanvasNode) => node.nodeId === partial.nodeId) as ImageCanvasNode | undefined
-                const placementNode = getGeneratedMediaPlacementNode(threadId)
-                const branchApplied = placementNode && resolvedImageNode
-                    ? applyBranchOriginForGeneratedMedia(resolvedNodes, edges, placementNode, resolvedImageNode, threadId)
-                    : { nodes: resolvedNodes, edges }
+                // Re-tidy the lineage tree the finalized node belongs to and
+                // rigid-separate it from neighbors via the unchanged resolver.
+                const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, edges)
 
                 commitCanvasState({
                     ...(currentCanvasState ?? {}),
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    nodes: branchApplied.nodes,
-                    edges: branchApplied.edges,
+                    nodes: resolvedNodes,
+                    edges,
                 })
                 pendingGeneratedImagePlacements.delete(threadId)
                 clearGeneratingReferenceNodeIds(threadId)
@@ -4655,7 +4651,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     return
                 }
 
-                const placementNode = getGeneratedMediaPlacementNode(threadId)
                 const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)
                 const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
@@ -4700,40 +4695,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
                 const allNodes: CanvasNode[] = [...existingNodes, imageNode]
 
-                const collisionExclusions = new Set<string>()
-                for (const child of allNodes) {
-                    if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
-                }
-                const collisionPlan = createCollisionPlan(allNodes)
-                const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
-                    excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
-                    shouldResolvePair: collisionPlan.shouldResolvePair,
-                })
-
-                const resolvedNodes = collisionResult.hasChanges
-                    ? allNodes.map((n: CanvasNode) => {
-                        const resolved = collisionResult.nodes.get(n.nodeId)
-                        if (!resolved) return n
-                        const resolvedPosition = getResolvedNodePositionFromCollisionBox(n, resolved, collisionPlan.entries)
-                        const position = n.parentId
-                            ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(allNodes))
-                            : resolvedPosition
-                        return { ...n, position }
-                    })
-                    : allNodes
-
-                const resolvedImageNode = collisionResult.hasChanges
-                    ? resolvedNodes.find((node: CanvasNode) => node.nodeId === nodeId) as ImageCanvasNode | undefined ?? imageNode
-                    : imageNode
-                const branchApplied = placementNode
-                    ? applyBranchOriginForGeneratedMedia(resolvedNodes, newEdges, placementNode, resolvedImageNode, threadId)
-                    : { nodes: resolvedNodes, edges: newEdges }
+                const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)
+                const resolvedImageNode = (resolvedNodes.find((node: CanvasNode) => node.nodeId === nodeId) as ImageCanvasNode | undefined) ?? imageNode
 
                 currentCanvasState = {
                     ...(currentCanvasState ?? {}),
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                    nodes: branchApplied.nodes,
-                    edges: branchApplied.edges,
+                    nodes: resolvedNodes,
+                    edges: newEdges,
                 }
                 appendImageNodeToDOM(resolvedImageNode)
 
@@ -4873,7 +4842,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (videoGenerationTracker.has(threadId)) return
 
-            const placementNode = getGeneratedMediaPlacementNode(threadId)
             const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)
             const promptText = pendingGeneratedImagePlacements.get(threadId)?.promptText ?? ''
 
@@ -4920,18 +4888,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 : existingEdges
 
             const nodesWithVideo: CanvasNode[] = [...existingNodes, videoNode]
-            const branchApplied = placementNode
-                ? applyBranchOriginForGeneratedMedia(nodesWithVideo, newEdges, placementNode, videoNode, threadId)
-                : { nodes: nodesWithVideo, edges: newEdges }
+            const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)
 
             const newCanvasState: CanvasState = {
                 ...(currentCanvasState ?? {}),
                 viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
-                nodes: branchApplied.nodes,
-                edges: branchApplied.edges,
+                nodes: rebalancedNodes,
+                edges: newEdges,
             }
             commitCanvasStatePreservingEditors(newCanvasState)
-            appendVideoNodeToDOM(videoNode)
+            const placedVideoNode = (rebalancedNodes.find((n: CanvasNode) => n.nodeId === nodeId) as VideoCanvasNode) ?? videoNode
+            appendVideoNodeToDOM(placedVideoNode)
         },
 
         onVideoGeneratingToCanvas: (_data) => {
@@ -5003,40 +4970,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // outline lifecycle is tracker-driven, same mechanism as images).
             videoGenerationTracker.delete(threadId)
 
-            // Backstop against overlap, mirroring onImageCompleteToCanvas. The
-            // initial placement already accounts for prior media, so this is a
-            // no-op in the common case and only nudges genuinely colliding nodes.
-            const collisionExclusions = new Set<string>()
-            for (const child of nodes) {
-                if (child.parentId) collisionExclusions.add(`${child.parentId}-${child.nodeId}`)
-            }
-            const collisionPlan = createCollisionPlan(nodes)
-            const collisionResult = resolveCollisions(collisionPlan.nodeBoxes, {
-                excludePairs: collisionExclusions.size > 0 ? collisionExclusions : undefined,
-                shouldResolvePair: collisionPlan.shouldResolvePair,
-            })
-
-            const resolvedNodes = collisionResult.hasChanges
-                ? nodes.map((n: CanvasNode) => {
-                    const resolved = collisionResult.nodes.get(n.nodeId)
-                    if (!resolved) return n
-                    const resolvedPosition = getResolvedNodePositionFromCollisionBox(n, resolved, collisionPlan.entries)
-                    const position = n.parentId
-                        ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(nodes))
-                        : resolvedPosition
-                    return { ...n, position }
-                })
-                : nodes
-            const resolvedVideoNode = resolvedNodes.find((node: CanvasNode) => node.nodeId === existing.nodeId) as VideoCanvasNode | undefined
-            const placementNode = getGeneratedMediaPlacementNode(threadId)
-            const branchApplied = placementNode && resolvedVideoNode
-                ? applyBranchOriginForGeneratedMedia(resolvedNodes, currentCanvasState.edges, placementNode, resolvedVideoNode, threadId)
-                : { nodes: resolvedNodes, edges: currentCanvasState.edges }
+            // Backstop against overlap, mirroring onImageCompleteToCanvas. Re-tidy
+            // the lineage tree and rigid-separate it from neighbors; the initial
+            // placement already accounts for prior media, so this is a no-op in the
+            // common case and only nudges genuinely colliding nodes/trees.
+            const resolvedNodes = rebalanceGeneratedMediaTrees(nodes, currentCanvasState.edges)
 
             commitCanvasState({
                 ...currentCanvasState,
-                nodes: branchApplied.nodes,
-                edges: branchApplied.edges,
+                nodes: resolvedNodes,
+                edges: currentCanvasState.edges,
             })
             pendingGeneratedImagePlacements.delete(threadId)
             clearGeneratingReferenceNodeIds(threadId)
