@@ -1,6 +1,6 @@
 ---
 title: Branch Lineage & Provenance
-description: How AI-generated media — images and videos — get their parentage, branch identity, canvas placement, and provenance. The structured VLM resolver, candidate snapshots, persisted metadata, the placement/lineage split, and branch-origin circles.
+description: How AI-generated media — images and videos — get their parentage, branch identity, canvas placement, and provenance. The structured VLM resolver, candidate snapshots, persisted metadata, the placement/lineage split, and the balanced branch-tree layout.
 ---
 
 # Branch Lineage & Provenance
@@ -10,7 +10,7 @@ Branch Lineage makes AI-generated **images and videos** first-class canvas artif
 The one rule everything else follows: when a media model is selected, generated-media reference routing is always resolved by a structured **vision-language model (VLM)** call in the API *before* the text model writes the generation prompt. The browser builds a candidate snapshot, but the browser never decides which references reach the image or video model. The API-side VLM resolution is the routing authority.
 
 {% callout type="important" %}
-**This page is modality-agnostic.** Everything here — candidate snapshots, the `resolveImageBranch` resolver, the references-vs-lineage distinction, canvas placement, branch-origin circles, and progress outlines — applies to **both image and video generation**. The resolver gate runs when an image **or** a video model is selected. A video participates by contributing a **single representative still** (its mid-frame, falling back to the poster); the MP4 is never sent to the resolver. The per-modality deltas live in [Image Generation](./IMAGE-GENERATION.md) and [Video Generation](./VIDEO-GENERATION.md); the shared LangGraph workflow lives in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
+**This page is modality-agnostic.** Everything here — candidate snapshots, the `resolveImageBranch` resolver, the references-vs-lineage distinction, canvas placement, the balanced branch-tree layout, and progress outlines — applies to **both image and video generation**. The resolver gate runs when an image **or** a video model is selected. A video participates by contributing a **single representative still** (its mid-frame, falling back to the poster); the MP4 is never sent to the resolver. The per-modality deltas live in [Image Generation](./IMAGE-GENERATION.md) and [Video Generation](./VIDEO-GENERATION.md); the shared LangGraph workflow lives in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 {% /callout %}
 
 This feature is part of Lixpi's artifact-piping architecture (see [Product Overview](../PRODUCT-OVERVIEW.md)): generated media become persistent canvas nodes that can be piped into later threads, reused as exact visual context, and branched into multiple edit directions.
@@ -31,7 +31,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Resolver Audit Metadata** — The resolver model provider, model ID, confidence, rationale, excluded node IDs, operation kind, visual summaries, and schema version, persisted on generated-media metadata for later candidate labeling and debugging.
 
-**Branch Origin** — A persisted `branchOrigin` canvas node created once per new `branchId`. It records the starting prompt and reference media and connects to the first generated output. It is provenance and an entry point, not a chat owner.
+**Branch Root** — The first generated image/video of a `branchId`. It *is* the start of the branch: it carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. There is no separate provenance node.
 
 **Lineage Source** — A *verified connector parent.* References, style images, and workspace-relevance selections can guide routing or placement, but they do not become connector parents unless the resolver is continuing an existing generated branch, or the output is rooted on a chat thread.
 
@@ -63,10 +63,10 @@ Lixpi solves this by combining deterministic graph narrowing with VLM role assig
 - **Graph narrows candidates; VLM assigns roles.** Deterministic code collects and labels candidate artifacts but does not select the target branch.
 - **Context is selective.** Base context and generated variants have different roles. Only VLM-selected candidates become model references.
 - **References are context, not lineage.** Reference/style media can anchor placement and progress outlines, but only verified lineage sources draw connector edges into generated outputs.
-- **One decision feeds routing and provenance.** The references sent to the model, the generated metadata, and branch-origin provenance all come from the resolver result.
+- **One decision feeds routing and provenance.** The references sent to the model, the generated metadata, and branch-root provenance all come from the resolver result.
 - **No silent guessing.** Resolver failure is user-visible and *stops* generation instead of falling back to regexes, recency, or all-variant injection.
 - **Feature extraction stays independent.** `/use` feature references resolve before branch resolution, and their injected feature image blocks are preserved by the branch resolver.
-- **Branch origins record births only.** A branch-origin circle stores prompt and references for a *new* branch. Continuations attach to the existing branch and create no second origin.
+- **The root image is the branch.** The first generated image of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch; no auxiliary provenance node is ever created.
 
 ## System Architecture
 
@@ -81,8 +81,7 @@ flowchart TB
         WContext[WorkspaceContextSnapshot<br/>descriptor index]
         Context[AI Chat Thread Service<br/>explicit chip context]
         AIS[AiInteractionService]
-        Canvas[WorkspaceCanvas<br/>placement + lineage + branch origins]
-        BranchLayer[pixiBranchOriginLayer<br/>circle renderer]
+        Canvas[WorkspaceCanvas<br/>placement + lineage + tidy-tree layout]
     end
 
     subgraph API["API Service — LangGraph"]
@@ -115,7 +114,6 @@ flowchart TB
     MediaModel --> Obj
     Publisher -->|branch + media events| AIS
     AIS --> Canvas
-    Canvas --> BranchLayer
     Canvas --> DDB
     Obj --> Canvas
 ```
@@ -127,8 +125,7 @@ flowchart TB
 | `resolveWorkspaceContext` | Ranks descriptors, force-includes chips/edges, narrows the media candidate set. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md). |
 | `resolveImageBranch` | The structured VLM resolver — the routing authority for media references and branch identity. |
 | `ImageRouter` / `VideoRouter` | Route the enhanced prompt + approved references to a transient media provider. See [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). |
-| `WorkspaceCanvas` | Places the artifact, draws lineage edges, persists `generatedBy`, mints branch origins. |
-| `pixiBranchOriginLayer` | Renders branch-origin circles. See [Rendering Engine](../canvas/RENDERING-ENGINE.md). |
+| `WorkspaceCanvas` | Places the artifact, draws lineage edges, persists `generatedBy`, and re-tidies the branch tree (via `branchTreeLayout.ts`). |
 
 ## Where This Runs in the Pipeline
 
@@ -301,24 +298,6 @@ Generated media nodes store resolver output in `ImageGeneratedByMetadata` so fut
 | `resolverVersion` | Schema version, currently `image-branch-vlm-v1`. |
 | `createdAt` | Generation placement timestamp. |
 
-### Branch-Origin Node
-
-A `branchOrigin` is a normal canvas node persisted inside `canvasState.nodes[]` — one per generated-branch birth.
-
-```typescript
-export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
-    nodeId: string
-    type: 'branchOrigin'
-    branchId: string
-    prompt: string
-    referenceNodeIds: string[]
-    referenceFileIds: string[]
-    position: CanvasNodePosition
-    dimensions: CanvasNodeDimensions
-    createdAt: number
-}
-```
-
 ## Candidate Snapshot Construction
 
 The browser builds the candidate snapshot in [`ai-image-branching.ts`](../../services/web-ui/src/services/ai-image-branching.ts); the entry point is `buildImageBranchCandidateSnapshot()`. Candidate construction collects:
@@ -375,7 +354,7 @@ Pending placement keeps three concepts strictly separate. This split is what pre
 |-------|---------|
 | `sourceNodeId` | **Verified connector and lineage source only.** |
 | `placementAnchorNodeId` | **Canvas placement helper only** — positions the output without parenting it. |
-| `referenceNodeIds` | **Context/reference media** for prompt routing, progress outlines, and branch-origin provenance. |
+| `referenceNodeIds` | **Context/reference media** for prompt routing, progress outlines, and branch-root provenance. |
 
 ### On Submit
 
@@ -419,8 +398,8 @@ PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels
 1. The placeholder/partial node is upgraded with the final file ID, media URL, response ID, revised prompt, provider badge, and response message ID.
 2. The edge `sourceMessageId` is set to the AI response message ID when applicable.
 3. Resolver metadata is persisted onto `generatedBy`.
-4. If the resolver minted a **new** `branchId`, `applyBranchOriginForGeneratedMedia(...)` persists one `branchOrigin` node and connects it to the first generated output (see [Branch-Origin Circles](#branch-origin-circles)).
-5. Pending placement is cleared **only after** completion state, branch-origin state, and generated metadata have all been committed.
+4. The branch tree is re-tidied and rigid-separated from neighbors via `rebalanceBranchTreesAndResolve(...)` (see [Balanced Branch-Tree Layout](#balanced-branch-tree-layout)). No auxiliary provenance node is created — the first generated image already carries the branch's prompt + references on `generatedBy`.
+5. Pending placement is cleared **only after** completion state and generated metadata have been committed.
 
 ### Generated-Media Provenance Chrome
 
@@ -443,21 +422,22 @@ flowchart TB
     NoLineage --> PlaceR[place right of combined<br/>reference bounds + rootOutputGap]
     PlaceL --> Complete[on COMPLETE: persist generatedBy]
     PlaceR --> Complete
-    Complete --> NewBranch{new branchId<br/>minted?}
-    NewBranch -->|yes| Origin[persist one branchOrigin<br/>+ edge to first output]
-    NewBranch -->|no| Attach[attach to existing branch]
+    Complete --> Rebalance[re-tidy branch tree<br/>+ rigid-box separation from neighbors]
 ```
 
-## Branch-Origin Circles
+## Balanced Branch-Tree Layout
 
-When a new `branchId` is minted, the canvas persists **exactly one** `branchOrigin` node and creates an edge from that origin to the first generated output. Continuations attach to the existing branch and create no new origin.
+A branch lineage is a **tree** of generated media: the first generated image is the root, and each later edit/variant descends from a parent via `generatedBy.parentImageNodeId` (or, failing that, its incoming lineage edge). There is no separate origin node — the root image carries the branch's prompt, references, and visual summaries on its own `generatedBy`, and its info panel reconstructs them.
 
-- The circle is placed at the start of the generated output using `settings.branchOrigin.outputGap`.
-- It is rendered by [`pixiBranchOriginLayer.ts`](../../services/web-ui/src/infographics/workspace/rendering/pixiBranchOriginLayer.ts) with viewport-synced PIXI world transforms, offscreen culling, and a bounded pulse animation. A transparent DOM proxy handles hit testing, selection, dragging, and the click action. (Renderer ownership: [Rendering Engine](../canvas/RENDERING-ENGINE.md).)
-- **Clicking** the circle opens the AI Chat panel, adds its stored references as explicit context chips, and seeds the composer draft with the stored starting prompt. `branchOrigin` nodes are themselves *not* eligible as context chips; clicking one seeds the panel with its stored references instead.
-- The **info affordance** shows the prompt and reference thumbnails using the same provenance/info-panel styling family as media nodes.
+On every generated-media add/remove the affected tree is laid out deterministically and then rigid-separated from its neighbors:
 
-A branch-origin circle is provenance and an entry point — **not a chat owner.** It replaced the generation-provenance job of the removed context-region cloud (see [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md) for the rest of that removal).
+- [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) is a pure, geometry-agnostic block-allocation **tidy-tree** algorithm (left-to-right). The root keeps its anchor; children fan out symmetrically around the parent's vertical center; linear chains stay collinear; sibling subtrees occupy disjoint vertical bands, so the layout is provably overlap-free.
+- [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) builds the generated-media forest from canvas nodes + lineage edges, runs the tidy layout per tree, then feeds **one rigid bounding box per tree** (plus one box per loose node) into the **unchanged** `resolveCollisions`. A pushed tree translates as a single block, so it never loses its internal balance because an unrelated node moved nearby.
+- Depth spacing reuses `settings.imageBranchLineage.imageToImageGap`; sibling spacing reuses `branchToBranchGap`.
+
+Dragging a tree node runs only the existing per-node overlap cleanup and is not snapped back; the next add/remove re-tidies deterministically. The renderer/resolver split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
+
+Old workspaces that still contain a persisted `branchOrigin` node have it (and any edge referencing it) stripped by a load-time sanitizer in `WorkspaceCanvas.ts`; the data self-heals on the next save.
 
 ## Progress Outlines
 
@@ -500,7 +480,7 @@ On failure the API publishes `IMAGE_BRANCH_RESOLUTION_ERROR`, then the graph err
 
 No new table or bucket exists for this feature.
 
-- **DynamoDB** stores richer generated-media metadata and `branchOrigin` nodes inside the existing workspace `canvasState.nodes[]`. The AI chat transcript stays in the existing AI chat thread item. Workspace context and candidate snapshots are **request payloads, not persisted records.**
+- **DynamoDB** stores richer generated-media metadata inside the existing workspace `canvasState.nodes[]`; legacy `branchOrigin` nodes are stripped at load and disappear on the next save. The AI chat transcript stays in the existing AI chat thread item. Workspace context and candidate snapshots are **request payloads, not persisted records.**
 - **NATS Object Store** remains the file storage layer for candidate and generated media. Candidate URLs use the existing `nats-obj://workspace-{workspaceId}-files/{fileId}` convention.
 - **IAM and service access** do not change. The API already has Object Store access, model-provider credentials, and workspace persistence access.
 
@@ -565,8 +545,8 @@ A dedicated `IMAGE_ARTIFACTS` table would help cross-workspace lineage queries a
 | Stream publisher events | [`stream-publisher.ts`](../../services/api/src/llm/graph/stream-publisher.ts) |
 | Browser stream handling | [`ai-interaction-service.ts`](../../services/web-ui/src/services/ai-interaction-service.ts) |
 | ProseMirror event delegation | [`aiChatThreadPlugin.ts`](../../services/web-ui/src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts) |
-| Canvas placement + lineage + branch origins | [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) |
-| Branch-origin rendering | [`branchOrigins.ts`](../../services/web-ui/src/infographics/workspace/rendering/branchOrigins.ts), [`pixiBranchOriginLayer.ts`](../../services/web-ui/src/infographics/workspace/rendering/pixiBranchOriginLayer.ts) |
+| Canvas placement + lineage + tidy-tree layout | [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) |
+| Branch-tree layout | [`branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts), [`layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) |
 | Image routing | [`image-router.ts`](../../services/api/src/llm/tools/image-router.ts) |
 | Image-reference extraction | [`image-generation.ts`](../../services/api/src/llm/tools/image-generation.ts) |
 | Image URL normalization/downscaling | [`attachments.ts`](../../services/api/src/llm/utils/attachments.ts) |
@@ -590,7 +570,7 @@ A dedicated `IMAGE_ARTIFACTS` table would help cross-workspace lineage queries a
 - [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the `ContentDescriptor` shape that labels candidates and is composed for free from resolver summaries.
 - [Image Generation](./IMAGE-GENERATION.md) — image-branch deltas: the `generate_image` tool, provider paths, partial streaming.
 - [Video Generation](./VIDEO-GENERATION.md) — video-branch deltas: VEO submit/poll, the mid-frame still, VEO input mapping.
-- [Rendering Engine](../canvas/RENDERING-ENGINE.md) — DOM/PIXI ownership for the media chrome overlay and `pixiBranchOriginLayer`.
+- [Rendering Engine](../canvas/RENDERING-ENGINE.md) — DOM/PIXI ownership for the media chrome overlay and the generated-media layers.
 - [Collision Resolution](../canvas/COLLISION-RESOLUTION.md) — the post-placement de-overlap pass.
 - [Product Overview](../PRODUCT-OVERVIEW.md) — the artifact-piping thesis.
 
