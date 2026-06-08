@@ -245,7 +245,7 @@ visual QA pass.
 
 - New plugin: `services/web-ui/src/components/proseMirror/plugins/featureReferencePlugin/`:
   - `featureReferenceNode.ts` — inline atom node spec.
-  - `featureReferenceNodeView.ts` — NodeView with hover info bubble using existing [`primitives/infoBubble/`](../../../services/web-ui/src/components/proseMirror/plugins/primitives/infoBubble/). Lazy-loads feature data + samples; caches per featureId per editor session.
+  - `featureReferenceNodeView.ts` — NodeView with hover info bubble using existing [`components/infoBubble/`](../../../services/web-ui/src/components/infoBubble/). Lazy-loads feature data + samples; caches per featureId per editor session.
   - `featureReferencePlugin.ts` — registers the node into prompt-input + thread schemas.
   - `featureReference.scss` — chip styling per "obviously highlighted" requirement.
   - `index.ts` — exports.

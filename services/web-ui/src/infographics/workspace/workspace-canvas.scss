@@ -1130,6 +1130,10 @@
     &:has(.info-bubble-wrapper.static-position .bubble-wrapper.visible) {
         z-index: 10000;
     }
+
+    &:has(.ai-prompt-model-menu-info-bubble.is-visible) {
+        z-index: var(--ai-prompt-model-menu-open-prompt-z-index, 10000);
+    }
 }
 
 .workspace-ai-chat-floating-panel-rail {

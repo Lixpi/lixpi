@@ -7,6 +7,40 @@ import { PROVIDER_NAMES } from '@lixpi/constants'
 import { AiModelsSync } from './ai-models-synchronization.ts'
 
 // =============================================================================
+// IMAGE GENERATION OPTION METADATA — resolution vs aspect ratio
+// =============================================================================
+
+describe('AiModelsSync — image generation option metadata', () => {
+    let sync: any
+
+    beforeAll(() => {
+        process.env.ORG_NAME = process.env.ORG_NAME || 'test-org'
+        process.env.STAGE = process.env.STAGE || 'test'
+        sync = new AiModelsSync({
+            dynamoDBService: {} as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+    })
+
+    it('marks OpenAI image options as resolutions and labels them with pixel values', () => {
+        const model = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 1)
+
+        expect(model.imageSizeMode).toBe('resolution')
+        expect(model.imageSizes?.map((o: any) => o.value)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'auto'])
+        expect(model.imageSizes?.map((o: any) => o.label)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'Auto'])
+    })
+
+    it('marks Gemini image options as aspect ratios because Google receives imageConfig.aspectRatio', () => {
+        const model = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image-preview' }, 1)
+
+        expect(model.imageSizeMode).toBe('aspectRatio')
+        expect(model.imageSizes?.map((o: any) => o.value)).toContain('16:9')
+    })
+})
+
+// =============================================================================
 // VEO VIDEO MODEL SYNC — mapping, pricing, option lists, and blacklist removal
 // =============================================================================
 //

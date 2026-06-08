@@ -181,8 +181,8 @@ describe('workspace node CSS — box-shadow consistency', () => {
 	})
 
 	it('no box-shadow transition on any node', () => {
-		expect(docNodeBlock).not.toContain('transition: box-shadow')
-		expect(docNodeBlock).not.toContain('transition:box-shadow')
+		expectExcerptNotToContain(docNodeBlock, 'transition: box-shadow')
+		expectExcerptNotToContain(docNodeBlock, 'transition:box-shadow')
 	})
 
 	it('.workspace-image-node base uses the theme-configured default box-shadow', () => {
@@ -249,13 +249,13 @@ describe('PIXI media layer — first sync geometry', () => {
 		expect(creationIndex).toBeGreaterThan(-1)
 		expect(spritePositionIndex).toBeGreaterThan(creationIndex)
 		expect(firstReturnAfterCreation === -1 || firstReturnAfterCreation > spritePositionIndex).toBe(true)
-		expect(fnBody).toContain('entry.sprite.width = w')
-		expect(fnBody).toContain('entry.sprite.height = h')
-		expect(fnBody).toContain('entry.colorRect.position.set(x, y)')
-		expect(fnBody).toContain('syncSpriteMask(entry, x, y, w, h)')
-		expect(fnBody).toContain('drawColorRect(entry.colorRect, w, h)')
-		expect(fnBody).toContain('entry.colorRectW = w')
-		expect(fnBody).toContain('entry.colorRectH = h')
+		expectExcerptToContain(fnBody, 'entry.sprite.width = w')
+		expectExcerptToContain(fnBody, 'entry.sprite.height = h')
+		expectExcerptToContain(fnBody, 'entry.colorRect.position.set(x, y)')
+		expectExcerptToContain(fnBody, 'syncSpriteMask(entry, x, y, w, h)')
+		expectExcerptToContain(fnBody, 'drawColorRect(entry.colorRect, w, h)')
+		expectExcerptToContain(fnBody, 'entry.colorRectW = w')
+		expectExcerptToContain(fnBody, 'entry.colorRectH = h')
 	})
 
 	it('clips PIXI image sprites with the configured image border radius', () => {
@@ -620,21 +620,21 @@ describe('Workspace canvas — parent-child world positioning', () => {
 		const fnMatch = ts.match(/function\s+getNodesForConnectionManager[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('getNodeWorldPosition(node, nodesById)')
-		expect(fnBody).toContain('delete nodeForConnection.parentId')
-		expect(fnBody).toContain('delete nodeForConnection.expandParent')
-		expect(fnBody).toContain('delete nodeForConnection.extent')
-		expect(ts).not.toContain('connectionManager?.syncNodes(nextState.nodes)')
-		expect(ts).not.toContain('connectionManager.syncNodes(currentCanvasState.nodes)')
+		expectExcerptToContain(fnBody, 'getNodeWorldPosition(node, nodesById)')
+		expectExcerptToContain(fnBody, 'delete nodeForConnection.parentId')
+		expectExcerptToContain(fnBody, 'delete nodeForConnection.expandParent')
+		expectExcerptToContain(fnBody, 'delete nodeForConnection.extent')
+		expectExcerptNotToContain(ts, 'connectionManager?.syncNodes(nextState.nodes)')
+		expectExcerptNotToContain(ts, 'connectionManager.syncNodes(currentCanvasState.nodes)')
 	})
 
 	it('checks viewport visibility against world-space node rectangles', () => {
 		const fnMatch = ts.match(/function\s+isNodeInViewport[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('const worldRect = getNodeWorldRect(node)')
-		expect(fnBody).toContain('const screenLeft = worldRect.x * zoom + x')
-		expect(fnBody).not.toContain('node.position.x * zoom')
+		expectExcerptToContain(fnBody, 'const worldRect = getNodeWorldRect(node)')
+		expectExcerptToContain(fnBody, 'const screenLeft = worldRect.x * zoom + x')
+		expectExcerptNotToContain(fnBody, 'node.position.x * zoom')
 	})
 })
 
@@ -657,21 +657,21 @@ describe('Workspace canvas — AI panel reload stability', () => {
 		const fnMatch = ts.match(/function\s+renderActiveAiChatPanel[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("const panelThreadId = activeSidebarTab?.type === 'thread' ? activeSidebarTab.refId : null")
-		expect(fnBody).toContain('aiChatThreadId: panelThreadId')
-		expect(fnBody).toContain('threadId: panelThreadId')
-		expect(fnBody).toContain('threadEditors.set(panelThreadId')
-		expect(fnBody).toContain('promptInputController.registerThreadEditor(panelThreadId')
-		expect(fnBody).not.toContain('threadId: activeAiChatThreadId!')
-		expect(fnBody).not.toContain('referenceId: activeAiChatThreadId!')
+		expectExcerptToContain(fnBody, "const panelThreadId = activeSidebarTab?.type === 'thread' ? activeSidebarTab.refId : null")
+		expectExcerptToContain(fnBody, 'aiChatThreadId: panelThreadId')
+		expectExcerptToContain(fnBody, 'threadId: panelThreadId')
+		expectExcerptToContain(fnBody, 'threadEditors.set(panelThreadId')
+		expectExcerptToContain(fnBody, 'promptInputController.registerThreadEditor(panelThreadId')
+		expectExcerptNotToContain(fnBody, 'threadId: activeAiChatThreadId!')
+		expectExcerptNotToContain(fnBody, 'referenceId: activeAiChatThreadId!')
 	})
 
 	it('does not treat AI chat thread content load as a full canvas rerender signal', () => {
 		const fnMatch = ts.match(/function\s+getAiChatThreadsKey[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('return threads.map(t => t.threadId).join')
-		expect(fnBody).not.toContain('t.content')
+		expectExcerptToContain(fnBody, 'return threads.map(t => t.threadId).join')
+		expectExcerptNotToContain(fnBody, 't.content')
 	})
 
 	it('refreshes only the active panel when deferred thread content arrives', () => {
@@ -799,45 +799,45 @@ describe('AI chat thread — auto-grow TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+autoGrowThreadNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('The canvas keeps thread node dimensions explicit')
+		expectExcerptToContain(fnBody, 'The canvas keeps thread node dimensions explicit')
 		expect(fnBody).not.toMatch(/threadNodeEl\.style\.height\s*=\s*['"]auto['"]/)
-		expect(fnBody).not.toContain('threadNodeEl.offsetHeight')
+		expectExcerptNotToContain(fnBody, 'threadNodeEl.offsetHeight')
 	})
 
 	it('scheduleThreadAutoGrow is disabled with autoGrowThreadNode', () => {
 		const fnMatch = ts.match(/function\s+scheduleThreadAutoGrow[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('Disabled')
-		expect(fnBody).not.toContain('requestAnimationFrame')
+		expectExcerptToContain(fnBody, 'Disabled')
+		expectExcerptNotToContain(fnBody, 'requestAnimationFrame')
 	})
 
 	it('updateThreadNodeVisibility still repositions thread companions when visibility changes', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('repositionAllThreadFloatingInputs')
+		expectExcerptToContain(fnBody, 'repositionAllThreadFloatingInputs')
 	})
 
 	it('updateThreadNodeVisibility schedules disabled auto-grow for compatibility', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('scheduleThreadAutoGrow(nodeId)')
+		expectExcerptToContain(fnMatch![0], 'scheduleThreadAutoGrow(nodeId)')
 	})
 
 	it('renderNodes does not schedule parent growth during rendering', () => {
 		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
 		expect(renderMatch).not.toBeNull()
 		const renderBody = renderMatch![0]
-		expect(renderBody).not.toContain('scheduleThreadAutoGrow')
+		expectExcerptNotToContain(renderBody, 'scheduleThreadAutoGrow')
 	})
 
 	it('destroy() cleans up autoGrowRaf and pendingAutoGrowThreadNodeIds', () => {
 		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
 		expect(destroyMatch).not.toBeNull()
 		const destroyBody = destroyMatch![0]
-		expect(destroyBody).toContain('autoGrowRaf')
-		expect(destroyBody).toContain('pendingAutoGrowThreadNodeIds')
+		expectExcerptToContain(destroyBody, 'autoGrowRaf')
+		expectExcerptToContain(destroyBody, 'pendingAutoGrowThreadNodeIds')
 	})
 })
 
@@ -864,17 +864,17 @@ describe('AI chat thread — empty thread visibility', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('ai-user-message-wrapper')
-		expect(fnBody).toContain('ai-response-message-wrapper')
+		expectExcerptToContain(fnBody, 'ai-user-message-wrapper')
+		expectExcerptToContain(fnBody, 'ai-response-message-wrapper')
 	})
 
 	it('updateThreadNodeVisibility hides or shows thread nodes from message state', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('threadContentHasMessages')
-		expect(fnBody).toContain('hideThreadNode')
-		expect(fnBody).toContain('showThreadNode')
+		expectExcerptToContain(fnBody, 'threadContentHasMessages')
+		expectExcerptToContain(fnBody, 'hideThreadNode')
+		expectExcerptToContain(fnBody, 'showThreadNode')
 	})
 
 	it('CSS hides thread nodes with data-thread-empty attribute', () => {
@@ -887,82 +887,82 @@ describe('AI chat thread — empty thread visibility', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('contentJSON')
-		expect(fnBody).toContain('threadNodeEl.querySelector')
+		expectExcerptToContain(fnBody, 'contentJSON')
+		expectExcerptToContain(fnBody, 'threadNodeEl.querySelector')
 	})
 
 	it('positionElementBelowNode accounts for hidden thread nodes', () => {
 		const fnMatch = ts.match(/function\s+positionElementBelowNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('getThreadTopOffset')
+		expectExcerptToContain(fnBody, 'getThreadTopOffset')
 	})
 
 	it('renderNodes clears hiddenEmptyThreadNodeIds', () => {
 		const renderMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
 		expect(renderMatch).not.toBeNull()
 		const renderBody = renderMatch![0]
-		expect(renderBody).toContain('hiddenEmptyThreadNodeIds.clear()')
+		expectExcerptToContain(renderBody, 'hiddenEmptyThreadNodeIds.clear()')
 	})
 
 	it('destroy() clears hiddenEmptyThreadNodeIds', () => {
 		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
 		expect(destroyMatch).not.toBeNull()
 		const destroyBody = destroyMatch![0]
-		expect(destroyBody).toContain('hiddenEmptyThreadNodeIds')
+		expectExcerptToContain(destroyBody, 'hiddenEmptyThreadNodeIds')
 	})
 
 	it('defines hideThreadNode helper that sets data-thread-empty attribute', () => {
 		const fnMatch = ts.match(/function\s+hideThreadNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("threadEmpty")
-		expect(fnBody).toContain("hiddenEmptyThreadNodeIds.add")
+		expectExcerptToContain(fnBody, "threadEmpty")
+		expectExcerptToContain(fnBody, "hiddenEmptyThreadNodeIds.add")
 	})
 
 	it('defines showThreadNode helper that removes data-thread-empty attribute', () => {
 		const fnMatch = ts.match(/function\s+showThreadNode[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("threadEmpty")
-		expect(fnBody).toContain("hiddenEmptyThreadNodeIds.delete")
+		expectExcerptToContain(fnBody, "threadEmpty")
+		expectExcerptToContain(fnBody, "hiddenEmptyThreadNodeIds.delete")
 	})
 
 	it('defines getThreadTopOffset helper', () => {
 		const fnMatch = ts.match(/function\s+getThreadTopOffset[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('hiddenEmptyThreadNodeIds')
+		expectExcerptToContain(fnBody, 'hiddenEmptyThreadNodeIds')
 	})
 
 	it('updateThreadNodeVisibility uses hideThreadNode and showThreadNode', () => {
 		const fnMatch = ts.match(/function\s+updateThreadNodeVisibility[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('showThreadNode')
-		expect(fnBody).toContain('hideThreadNode')
+		expectExcerptToContain(fnBody, 'showThreadNode')
+		expectExcerptToContain(fnBody, 'hideThreadNode')
 	})
 
 	it('hidden thread state collapses thread top offset', () => {
 		const fnMatch = ts.match(/function\s+getThreadTopOffset[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('hiddenEmptyThreadNodeIds.has')
-		expect(fnBody).toContain('? 0 : threadHeight + 16')
+		expectExcerptToContain(fnBody, 'hiddenEmptyThreadNodeIds.has')
+		expectExcerptToContain(fnBody, '? 0 : threadHeight + 16')
 	})
 
 	it('drag mousemove uses getThreadTopOffset for floating input positioning', () => {
 		const fnMatch = ts.match(/function\s+handleDragStart[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('getThreadTopOffset')
+		expectExcerptToContain(fnBody, 'getThreadTopOffset')
 	})
 
 	it('resize mousemove uses getThreadTopOffset for floating input positioning', () => {
 		const fnMatch = ts.match(/function\s+handleResizeStart[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('getThreadTopOffset')
+		expectExcerptToContain(fnBody, 'getThreadTopOffset')
 	})
 })
 
@@ -995,9 +995,9 @@ describe('Resize handles - corner-hover visibility', () => {
 	it('does not reveal all resize handles from node hover, selection, or resizing state', () => {
 		const block = extractBlock(scss, '.workspace-document-node')
 
-		expect(block).not.toContain('&:hover .document-resize-handle')
-		expect(block).not.toContain('&.is-selected .document-resize-handle')
-		expect(block).not.toContain('&.is-resizing .document-resize-handle')
+		expectExcerptNotToContain(block, '&:hover .document-resize-handle')
+		expectExcerptNotToContain(block, '&.is-selected .document-resize-handle')
+		expectExcerptNotToContain(block, '&.is-resizing .document-resize-handle')
 	})
 
 	it('keeps handles as invisible corner hitboxes that reveal only on direct hover or drag', () => {
@@ -1005,16 +1005,16 @@ describe('Resize handles - corner-hover visibility', () => {
 
 		expect(block).toMatch(/opacity:\s*0/)
 		expect(block).toMatch(/pointer-events:\s*auto/)
-		expect(block).toContain('&:hover,')
-		expect(block).toContain('&.is-dragging')
+		expectExcerptToContain(block, '&:hover,')
+		expectExcerptToContain(block, '&.is-dragging')
 		expect(block).toMatch(/&:hover,[\s\S]*&\.is-dragging\s*\{[\s\S]*opacity:\s*1/)
 	})
 
 	it('does not reveal floating input resize handles from thread selection', () => {
 		const block = extractBlock(scss, '.ai-prompt-input-thread-persistent')
 
-		expect(block).not.toContain('&.is-selected .document-resize-handle')
-		expect(block).not.toContain('&.thread-hovered .document-resize-handle')
+		expectExcerptNotToContain(block, '&.is-selected .document-resize-handle')
+		expectExcerptNotToContain(block, '&.thread-hovered .document-resize-handle')
 	})
 
 	it('does not create bottom resize handles for AI chat thread nodes', () => {
@@ -1040,9 +1040,9 @@ describe('AI chat thread sizing', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('Empty parent containers keep their persisted size')
-		expect(fnBody).toContain('node.dimensions.width <= 0 || node.dimensions.height <= 0')
-		expect(fnBody).not.toContain('node.dimensions.width !== 300 || node.dimensions.height !== 200')
+		expectExcerptToContain(fnBody, 'Empty parent containers keep their persisted size')
+		expectExcerptToContain(fnBody, 'node.dimensions.width <= 0 || node.dimensions.height <= 0')
+		expectExcerptNotToContain(fnBody, 'node.dimensions.width !== 300 || node.dimensions.height !== 200')
 	})
 
 	it('does not shrink manually enlarged threads when children are dragged with them', () => {
@@ -1050,11 +1050,11 @@ describe('AI chat thread sizing', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('Dropping a small image into a manually enlarged')
-		expect(fnBody).toContain('let width = Math.max(200, node.dimensions.width)')
-		expect(fnBody).toContain('let height = Math.max(120, node.dimensions.height)')
-		expect(fnBody).not.toContain('let width = 200')
-		expect(fnBody).not.toContain('let height = 120')
+		expectExcerptToContain(fnBody, 'Dropping a small image into a manually enlarged')
+		expectExcerptToContain(fnBody, 'let width = Math.max(200, node.dimensions.width)')
+		expectExcerptToContain(fnBody, 'let height = Math.max(120, node.dimensions.height)')
+		expectExcerptNotToContain(fnBody, 'let width = 200')
+		expectExcerptNotToContain(fnBody, 'let height = 120')
 	})
 })
 
@@ -1133,7 +1133,7 @@ describe('Vertical rail — TS infrastructure', () => {
 	it('repositionAllThreadFloatingInputs also repositions rails', () => {
 		const fnMatch = ts.match(/function\s+repositionAllThreadFloatingInputs[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('repositionThreadRail(')
+		expectExcerptToContain(fnMatch![0], 'repositionThreadRail(')
 	})
 
 	it('drag mousemove handler repositions the rail', () => {
@@ -1151,20 +1151,20 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+updateNodeSelectionClasses[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain("threadRails.get(nodeId)?.classList.add('is-selected')")
-		expect(fnBody).toContain("threadRails.get(nodeId)?.classList.remove('is-selected')")
+		expectExcerptToContain(fnBody, "threadRails.get(nodeId)?.classList.add('is-selected')")
+		expectExcerptToContain(fnBody, "threadRails.get(nodeId)?.classList.remove('is-selected')")
 	})
 
 	it('renderNodes calls destroyAllThreadRails', () => {
 		const fnMatch = ts.match(/function\s+renderNodes\(\)[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('destroyAllThreadRails()')
+		expectExcerptToContain(fnMatch![0], 'destroyAllThreadRails()')
 	})
 
 	it('destroy() calls destroyAllThreadRails', () => {
 		const destroyMatch = ts.match(/destroy\(\)\s*\{[\s\S]*?^        \}/m)
 		expect(destroyMatch).not.toBeNull()
-		expect(destroyMatch![0]).toContain('destroyAllThreadRails()')
+		expectExcerptToContain(destroyMatch![0], 'destroyAllThreadRails()')
 	})
 
 	it('passes railOffset to WorkspaceConnectionManager', () => {
@@ -1174,42 +1174,42 @@ describe('Vertical rail — TS infrastructure', () => {
 	it('createThreadRail creates line child element', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('workspace-thread-rail-line')
+		expectExcerptToContain(fnMatch![0], 'workspace-thread-rail-line')
 	})
 
 	it('createThreadRail sets z-index above all nodes to prevent overlap', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain("zIndex: '9990'")
+		expectExcerptToContain(fnMatch![0], "zIndex: '9990'")
 	})
 
 	it('createThreadRail appends boundary circle to line', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('workspace-thread-rail-boundary-circle')
-		expect(fnMatch![0]).toContain('aiChatThreadRailBoundaryCircle')
+		expectExcerptToContain(fnMatch![0], 'workspace-thread-rail-boundary-circle')
+		expectExcerptToContain(fnMatch![0], 'aiChatThreadRailBoundaryCircle')
 	})
 
 	it('createThreadRail applies configured colors to boundary circle SVG paths', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('settings.aiChatThread.rail.boundaryCircleColors')
-		expect(fnBody).toContain("setAttribute('fill'")
+		expectExcerptToContain(fnBody, 'settings.aiChatThread.rail.boundaryCircleColors')
+		expectExcerptToContain(fnBody, "setAttribute('fill'")
 	})
 
 	it('repositionThreadRail sets --rail-thread-height CSS var', () => {
 		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('--rail-thread-height')
+		expectExcerptToContain(fnMatch![0], '--rail-thread-height')
 	})
 
 	it('repositionThreadRail hides boundary circle when thread is hidden', () => {
 		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expect(fnBody).toContain('workspace-thread-rail-boundary-circle')
-		expect(fnBody).toContain("isHidden ? 'none' : ''")
+		expectExcerptToContain(fnBody, 'workspace-thread-rail-boundary-circle')
+		expectExcerptToContain(fnBody, "isHidden ? 'none' : ''")
 	})
 
 	it('resize handler updates --rail-thread-height CSS var', () => {
@@ -1219,13 +1219,13 @@ describe('Vertical rail — TS infrastructure', () => {
 	it('repositionThreadRail calls connectionManager.setRailHeight', () => {
 		const fnMatch = ts.match(/function\s+repositionThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('connectionManager?.setRailHeight(')
+		expectExcerptToContain(fnMatch![0], 'connectionManager?.setRailHeight(')
 	})
 
 	it('destroyAllThreadRails calls connectionManager.clearRailHeights', () => {
 		const fnMatch = ts.match(/function\s+destroyAllThreadRails[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain('connectionManager?.clearRailHeights()')
+		expectExcerptToContain(fnMatch![0], 'connectionManager?.clearRailHeights()')
 	})
 
 	it('updateSelectionDrivenUi never shows the detached floating input under any node', () => {
@@ -1234,9 +1234,9 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnBody = fnMatch![0]
 		// The deprecated detached prompt-input-below-node must never render for any
 		// node type (documents, threads, images, video).
-		expect(fnBody).not.toContain('showFloatingInput')
-		expect(fnBody).toContain('hideFloatingInput')
-		expect(fnBody).not.toContain('promptInputController.setTarget')
+		expectExcerptNotToContain(fnBody, 'showFloatingInput')
+		expectExcerptToContain(fnBody, 'hideFloatingInput')
+		expectExcerptNotToContain(fnBody, 'promptInputController.setTarget')
 	})
 
 	it('bubble menu callbacks include onAskAi', () => {
@@ -1278,16 +1278,26 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(end).toBeGreaterThan(start)
 		const fnBody = ts.slice(start, end)
 
-		expect(fnBody).toContain('workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
-		expect(fnBody).toContain('new ProseMirrorEditor')
-		expect(fnBody).toContain('workspace-thread-rail workspace-ai-chat-floating-panel-rail')
-		expect(fnBody).toContain('const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop"')
-		expect(fnBody).toContain('paneEl.appendChild(backdropEl)')
-		expect(fnBody).toContain('handleActiveAiChatPanelResizeStart')
-		expect(fnBody).toContain('aiChatThreadRailBoundaryCircle')
-		expect(fnBody).toContain("'--dropdown-popover-box-shadow'")
-		expect(fnBody).toContain('settings.dropdown.popoverBoxShadow')
+		expectExcerptToContain(fnBody, 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
+		expectExcerptToContain(fnBody, 'new ProseMirrorEditor')
+		expectExcerptToContain(fnBody, 'workspace-thread-rail workspace-ai-chat-floating-panel-rail')
+		expectExcerptToContain(fnBody, 'const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop"')
+		expectExcerptToContain(fnBody, 'paneEl.appendChild(backdropEl)')
+		expectExcerptToContain(fnBody, 'handleActiveAiChatPanelResizeStart')
+		expectExcerptToContain(fnBody, 'aiChatThreadRailBoundaryCircle')
+		expectSourceToContain(ts, 'function createFloatingInput(): void')
+		expectSourceToContain(ts, 'const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel-prompt nopan"></div>`')
+		expectSourceToContain(ts, 'applyAiPromptInputStyleSettings(promptEl)')
 		expectSourceNotToContain(ts, `AiChat${'Panel.svelte'}`)
+	})
+
+	it('keeps AI prompt input style values in one helper', () => {
+		const fnMatch = ts.match(/function\s+applyAiPromptInputStyleSettings[\s\S]*?^    \}/m)
+		expect(fnMatch).not.toBeNull()
+		const fnBody = fnMatch![0]
+
+		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)")
+		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--ai-prompt-model-menu-open-prompt-z-index', settings.aiPromptInput.modelMenu.openPromptZIndex)")
 	})
 
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
@@ -1506,9 +1516,9 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(clickMatch).not.toBeNull()
 		const clickHandler = clickMatch![0]
 
-		expect(clickHandler).toContain('selectNode(node.nodeId)')
-		expect(clickHandler).not.toContain('selectNode(selectionTargetNodeId)')
-		expect(clickHandler).not.toContain('selectNode(getSelectionTargetNodeId')
+		expectExcerptToContain(clickHandler, 'selectNode(node.nodeId)')
+		expectExcerptNotToContain(clickHandler, 'selectNode(selectionTargetNodeId)')
+		expectExcerptNotToContain(clickHandler, 'selectNode(getSelectionTargetNodeId')
 	})
 
 	it('marquee selection stores intersected node ids directly', () => {
@@ -1516,8 +1526,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('selectedNodeIdsInRect.add(node.nodeId)')
-		expect(fnBody).not.toContain('getSelectionTargetNodeId')
+		expectExcerptToContain(fnBody, 'selectedNodeIdsInRect.add(node.nodeId)')
+		expectExcerptNotToContain(fnBody, 'getSelectionTargetNodeId')
 	})
 
 	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
@@ -1532,9 +1542,9 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		// - contenteditable: any contenteditable element (ProseMirror root)
 		// - .ProseMirror: the ProseMirror editor container class
 		// - .ai-chat-thread-wrapper: the AI chat thread content container
-		expect(clickHandler).toContain('clickTarget.isContentEditable')
-		expect(clickHandler).toContain(".closest('.ProseMirror')")
-		expect(clickHandler).toContain(".closest('.ai-chat-thread-wrapper')")
+		expectExcerptToContain(clickHandler, 'clickTarget.isContentEditable')
+		expectExcerptToContain(clickHandler, ".closest('.ProseMirror')")
+		expectExcerptToContain(clickHandler, ".closest('.ai-chat-thread-wrapper')")
 
 		// The handler must bail out (return) before reaching selectNode
 		// when the click target matches any of these selectors
@@ -1582,19 +1592,19 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		const fnBody = fnMatch![0]
 
 		// Empty selection = no overlay
-		expect(fnBody).toContain('selectedNodeIds.size === 0) return false')
+		expectExcerptToContain(fnBody, 'selectedNodeIds.size === 0) return false')
 
 		// 2+ nodes = always overlay (regardless of source)
-		expect(fnBody).toContain('if (selectedNodeIds.size > 1) return true')
+		expectExcerptToContain(fnBody, 'if (selectedNodeIds.size > 1) return true')
 
 		// Single node = overlay only if selected via marquee
-		expect(fnBody).toContain('return selectionIsFromMarquee')
-		expect(fnBody).not.toContain('const selectedNodeId = getSingleSelectedNodeId()')
-		expect(fnBody).not.toContain('const selectedNode = currentCanvasState.nodes.find')
+		expectExcerptToContain(fnBody, 'return selectionIsFromMarquee')
+		expectExcerptNotToContain(fnBody, 'const selectedNodeId = getSingleSelectedNodeId()')
+		expectExcerptNotToContain(fnBody, 'const selectedNode = currentCanvasState.nodes.find')
 
 		// Must NOT contain any node-type special casing (e.g. aiChatThread)
-		expect(fnBody).not.toContain("'aiChatThread'")
-		expect(fnBody).not.toContain('node.type')
+		expectExcerptNotToContain(fnBody, "'aiChatThread'")
+		expectExcerptNotToContain(fnBody, 'node.type')
 	})
 
 	it('marquee handler passes fromMarquee=true so even a single marquee node gets the overlay', () => {
@@ -1602,7 +1612,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(paneMouseDownMatch).not.toBeNull()
 		const fnBody = paneMouseDownMatch![0]
 
-		expect(fnBody).toContain('setSelectedNodes(new Set(selectedIds), true)')
+		expectExcerptToContain(fnBody, 'setSelectedNodes(new Set(selectedIds), true)')
 	})
 
 	it('selectNode (plain click) does NOT pass fromMarquee so single-click never shows overlay', () => {
@@ -1611,8 +1621,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		const fnBody = fnMatch![0]
 
 		// selectNode calls setSelectedNodes with default fromMarquee=false
-		expect(fnBody).toContain('setSelectedNodes(nodeId ? new Set([nodeId]) : new Set())')
-		expect(fnBody).not.toContain('true)')
+		expectExcerptToContain(fnBody, 'setSelectedNodes(nodeId ? new Set([nodeId]) : new Set())')
+		expectExcerptNotToContain(fnBody, 'true)')
 	})
 
 	it('toggleNodeSelection does NOT pass fromMarquee', () => {
@@ -1620,8 +1630,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('setSelectedNodes(nextSelectedNodeIds)')
-		expect(fnBody).not.toContain(', true)')
+		expectExcerptToContain(fnBody, 'setSelectedNodes(nextSelectedNodeIds)')
+		expectExcerptNotToContain(fnBody, ', true)')
 	})
 
 	it('clearNodeSelection resets selection and hides overlay', () => {
@@ -1629,8 +1639,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('setSelectedNodes(new Set())')
-		expect(fnBody).toContain('updateSelectionGroupOverlayElement()')
+		expectExcerptToContain(fnBody, 'setSelectedNodes(new Set())')
+		expectExcerptToContain(fnBody, 'updateSelectionGroupOverlayElement()')
 	})
 
 		it('defines and styles the persistent selection overlay', () => {
@@ -1667,8 +1677,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 			expect(fnMatch).not.toBeNull()
 			const fnBody = fnMatch![0]
 
-			expect(fnBody).toContain('return selectedNodeIds.size > 0')
-			expect(fnBody).not.toContain(['isContext', 'RegionCanvasNode'].join(''))
+			expectExcerptToContain(fnBody, 'return selectedNodeIds.size > 0')
+			expectExcerptNotToContain(fnBody, ['isContext', 'RegionCanvasNode'].join(''))
 		})
 
 	it('wires selection colors from settings to CSS custom properties', () => {
@@ -1729,7 +1739,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('does not treat the floating AI chat panel as canvas background', () => {
 		const fnMatch = ts.match(/function\s+isCanvasBackgroundTarget[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
-		expect(fnMatch![0]).toContain("'.workspace-ai-chat-floating-panel'")
+		expectExcerptToContain(fnMatch![0], "'.workspace-ai-chat-floating-panel'")
 	})
 
 		it('creates marquee selection state only after empty-canvas pointer movement', () => {
@@ -1746,7 +1756,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(movementGateIndex).toBeGreaterThan(moveHandlerIndex)
 		expect(selectedClearIndex).toBeGreaterThan(movementGateIndex)
 		expect(marqueeCreateIndex).toBeGreaterThan(selectedClearIndex)
-		expect(fnBody).toContain('moved: true')
+		expectExcerptToContain(fnBody, 'moved: true')
 	})
 
 		it('does not draw any overlay for a plain single-node click', () => {
@@ -1754,15 +1764,15 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 			expect(showMatch).not.toBeNull()
 		const showBody = showMatch![0]
 
-			expect(showBody).toContain('return selectionIsFromMarquee')
-			expect(showBody).not.toContain(['isContext', 'RegionCanvasNode(selectedNode)'].join(''))
+			expectExcerptToContain(showBody, 'return selectionIsFromMarquee')
+			expectExcerptNotToContain(showBody, ['isContext', 'RegionCanvasNode(selectedNode)'].join(''))
 
 			const fillMatch = ts.match(/function\s+shouldFillSelectionOverlayBounds[\s\S]*?^    \}/m)
 			expect(fillMatch).not.toBeNull()
 			const fillBody = fillMatch![0]
 
-			expect(fillBody).toContain('return Boolean(currentCanvasState)')
-			expect(fillBody).not.toContain(['isContext', 'RegionCanvasNode'].join(''))
+			expectExcerptToContain(fillBody, 'return Boolean(currentCanvasState)')
+			expectExcerptNotToContain(fillBody, ['isContext', 'RegionCanvasNode'].join(''))
 			expectSourceToContain(ts, 'pixiMediaLayer?.setSelectionOverlayBounds(bounds, { fill: shouldFillSelectionOverlayBounds() })')
 			expectSourceToContain(ts, 'pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds(), { fill: shouldFillSelectionOverlayBounds() })')
 		})
@@ -1772,8 +1782,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 			expect(panePointerDownMatch).not.toBeNull()
 			const fnBody = panePointerDownMatch![0]
 
-			expect(fnBody).toContain('const hitNodeId = getForegroundNodeHit(start)?.nodeId ?? null')
-			expect(fnBody).toContain('suspendPanZoomForNodePointer(hitNodeId)')
+			expectExcerptToContain(fnBody, 'const hitNodeId = getForegroundNodeHit(start)?.nodeId ?? null')
+			expectExcerptToContain(fnBody, 'suspendPanZoomForNodePointer(hitNodeId)')
 		})
 
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
@@ -1803,14 +1813,14 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		// Hidden empty threads must use only the floating input bounds,
 		// not the invisible thread node dimensions, to prevent phantom
 		// selection over areas the user cannot see
-		expect(fnBody).toContain('const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)')
-		expect(fnBody).toContain('if (isHidden) {')
-		expect(fnBody).toContain('right = position.x + inputWidth')
-		expect(fnBody).toContain('bottom = inputTop + inputHeight')
+		expectExcerptToContain(fnBody, 'const isHidden = hiddenEmptyThreadNodeIds.has(node.nodeId)')
+		expectExcerptToContain(fnBody, 'if (isHidden) {')
+		expectExcerptToContain(fnBody, 'right = position.x + inputWidth')
+		expectExcerptToContain(fnBody, 'bottom = inputTop + inputHeight')
 
 		// Visible threads still use Math.max to combine both bounds
-		expect(fnBody).toContain('right = Math.max(right, position.x + inputWidth)')
-		expect(fnBody).toContain('bottom = Math.max(bottom, inputTop + inputHeight)')
+		expectExcerptToContain(fnBody, 'right = Math.max(right, position.x + inputWidth)')
+		expectExcerptToContain(fnBody, 'bottom = Math.max(bottom, inputTop + inputHeight)')
 	})
 
 	it('marquee selection includes hidden empty threads (they are selectable via their floating input)', () => {
@@ -1820,8 +1830,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 		// Must NOT filter out hidden empty threads — they are still visible
 		// via their floating input and must be selectable
-		expect(fnBody).not.toContain('hiddenEmptyThreadNodeIds')
-		expect(fnBody).toContain('selectionRectIntersectsNode(rect, node)')
+		expectExcerptNotToContain(fnBody, 'hiddenEmptyThreadNodeIds')
+		expectExcerptToContain(fnBody, 'selectionRectIntersectsNode(rect, node)')
 		expectSourceToContain(ts, 'rectsOverlap(rect, getSelectionBoundsForNode(node))')
 	})
 
@@ -1856,7 +1866,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		const fnBody = fnMatch![0]
 
 		// handleMouseMove must bail out before moving nodes when drag hasn't started
-		expect(fnBody).toContain('if (!dragDidMove) return')
+		expectExcerptToContain(fnBody, 'if (!dragDidMove) return')
 	})
 
 	// -------------------------------------------------------------------------
@@ -1888,8 +1898,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('if (dragPlan.allowProximityConnection) {')
-		expect(fnBody).toContain('connectionManager?.checkProximity(resolvedNodeId, currentPos, currentDims)')
+		expectExcerptToContain(fnBody, 'if (dragPlan.allowProximityConnection) {')
+		expectExcerptToContain(fnBody, 'connectionManager?.checkProximity(resolvedNodeId, currentPos, currentDims)')
 	})
 })
 
@@ -1983,10 +1993,10 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).not.toContain("'aiChatThread'")
-		expect(fnBody).not.toContain('node.type')
-			expect(fnBody).not.toContain(['isContext', 'RegionCanvasNode(selectedNode)'].join(''))
-		expect(fnBody).toContain('return selectionIsFromMarquee')
+		expectExcerptNotToContain(fnBody, "'aiChatThread'")
+		expectExcerptNotToContain(fnBody, 'node.type')
+			expectExcerptNotToContain(fnBody, ['isContext', 'RegionCanvasNode(selectedNode)'].join(''))
+		expectExcerptToContain(fnBody, 'return selectionIsFromMarquee')
 	})
 
 	it('REGRESSION: clicking AI chat thread content must NOT trigger selectNode', () => {
@@ -2002,9 +2012,9 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		const clickHandler = clickMatch![0]
 
 		// All three checks must be present — they cover overlapping DOM trees
-		expect(clickHandler).toContain('clickTarget.isContentEditable')
-		expect(clickHandler).toContain(".closest('.ProseMirror')")
-		expect(clickHandler).toContain(".closest('.ai-chat-thread-wrapper')")
+		expectExcerptToContain(clickHandler, 'clickTarget.isContentEditable')
+		expectExcerptToContain(clickHandler, ".closest('.ProseMirror')")
+		expectExcerptToContain(clickHandler, ".closest('.ai-chat-thread-wrapper')")
 
 		// The bail-out must happen BEFORE selectNode
 		const bailOutIndex = clickHandler.indexOf('return')
@@ -2020,9 +2030,9 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		expect(clickMatch).not.toBeNull()
 		const clickHandler = clickMatch![0]
 
-		expect(clickHandler).toContain('selectNode(node.nodeId)')
-		expect(clickHandler).not.toContain('selectNode(selectionTargetNodeId)')
-		expect(clickHandler).not.toContain('selectNode(getSelectionTargetNodeId')
+		expectExcerptToContain(clickHandler, 'selectNode(node.nodeId)')
+		expectExcerptNotToContain(clickHandler, 'selectNode(selectionTargetNodeId)')
+		expectExcerptNotToContain(clickHandler, 'selectNode(getSelectionTargetNodeId')
 	})
 
 	it('REGRESSION: drag overlay must NOT pre-resolve nodeId to parent thread', () => {
@@ -2050,16 +2060,16 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		const fnBody = fnMatch![0]
 
 		// The deferred selection pattern
-		expect(fnBody).toContain('const wasAlreadySelected = isNodeSelected(resolvedNodeId)')
+		expectExcerptToContain(fnBody, 'const wasAlreadySelected = isNodeSelected(resolvedNodeId)')
 
 		// Both selection paths must exist
-		expect(fnBody).toContain('selectNode(resolvedNodeId)')
-		expect(fnBody).toContain('selectNode(nodeId)')
+		expectExcerptToContain(fnBody, 'selectNode(resolvedNodeId)')
+		expectExcerptToContain(fnBody, 'selectNode(nodeId)')
 
 		// selectNode(resolvedNodeId) must be inside a dragDidMove guard
 		const dragMoveSection = fnBody.match(/if \(!dragDidMove[\s\S]*?dragDidMove = true[\s\S]*?\}/)?.[0]
 		expect(dragMoveSection).toBeDefined()
-		expect(dragMoveSection).toContain('selectNode(resolvedNodeId)')
+		expectExcerptToContain(dragMoveSection, 'selectNode(resolvedNodeId)')
 	})
 
 	it('REGRESSION: marquee selecting a single node must show the overlay', () => {
@@ -2074,7 +2084,7 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// The marquee handler must pass fromMarquee=true
 		const paneMouseDownMatch = ts.match(/function\s+handlePaneMouseDown[\s\S]*?^    \}/m)
 		expect(paneMouseDownMatch).not.toBeNull()
-		expect(paneMouseDownMatch![0]).toContain(', true)')
+		expectExcerptToContain(paneMouseDownMatch![0], ', true)')
 	})
 
 	it('REGRESSION: generated output images are not adopted into deleted container types on drag release', () => {
@@ -2146,7 +2156,7 @@ describe('Image error placeholder — SVG icon from svgIcons', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain('innerHTML=${brokenImageIcon}')
+		expectExcerptToContain(fnBody, 'innerHTML=${brokenImageIcon}')
 		// brokenImageIcon should only appear inside an innerHTML= binding
 		const allOccurrences = fnBody.match(/brokenImageIcon/g) || []
 		const inlineHtmlOccurrences = fnBody.match(/innerHTML=\$\{brokenImageIcon\}/g) || []
@@ -2158,8 +2168,8 @@ describe('Image error placeholder — SVG icon from svgIcons', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).toContain("nodeEl.querySelector('.image-error-placeholder')")
-		expect(fnBody).toContain('return')
+		expectExcerptToContain(fnBody, "nodeEl.querySelector('.image-error-placeholder')")
+		expectExcerptToContain(fnBody, 'return')
 	})
 
 	it('no inline SVG markup in showImageErrorPlaceholder', () => {
@@ -2167,8 +2177,8 @@ describe('Image error placeholder — SVG icon from svgIcons', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expect(fnBody).not.toContain('<svg')
-		expect(fnBody).not.toContain('viewBox')
+		expectExcerptNotToContain(fnBody, '<svg')
+		expectExcerptNotToContain(fnBody, 'viewBox')
 	})
 })
 
@@ -2226,13 +2236,13 @@ describe('Marquee selection — stale group overlay suppressed during active mar
 		)
 		expect(fnBody).toBeDefined()
 
-		expect(fnBody!).toContain('if (!marqueeSelection && movedX <= 3 && movedY <= 3) return')
+		expectExcerptToContain(fnBody!, 'if (!marqueeSelection && movedX <= 3 && movedY <= 3) return')
 
 		const clearIndex = fnBody!.indexOf('if (selectedNodeIds.size > 0) setSelectedNodes(new Set())')
 		const marqueeStartIndex = fnBody!.indexOf('marqueeSelection = {')
 		expect(clearIndex).toBeGreaterThan(-1)
 		expect(marqueeStartIndex).toBeGreaterThan(clearIndex)
-		expect(fnBody!).toContain('moved: true')
+		expectExcerptToContain(fnBody!, 'moved: true')
 
 		const updateRectIndex = fnBody!.indexOf('updateSelectionRectElement()')
 		const marqueeSelectIndex = fnBody!.indexOf('setSelectedNodes(new Set(selectedIds), true)')

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { html } from '$src/utils/domTemplates.ts'
 import { chevronDownIcon } from '$src/svgIcons/index.ts'
-import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/pureInfoBubble.ts'
+import { createInfoBubble } from '$src/components/infoBubble/index.ts'
 import { settings } from '$src/settings.ts'
 
 // Inject fill color utility (same as original dropdown)
@@ -93,6 +93,15 @@ export function createPureDropdown(config: PureDropdownConfig) {
 
         // Update visual
         updateSelectedDisplay()
+    }
+
+    const handleDocumentMouseDown = (e: MouseEvent) => {
+        if (!infoBubble?.isOpen?.()) return
+
+        const path = e.composedPath()
+        if (path.includes(dom) || path.includes(infoBubble.dom)) return
+
+        infoBubble.close()
     }
 
     // Filter options based on active tags
@@ -297,6 +306,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
     // Initialize display
     updateSelectedDisplay()
     renderOptionsList()
+    document.addEventListener('mousedown', handleDocumentMouseDown, true)
 
     return {
         dom,
@@ -323,6 +333,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
             updateSelectedDisplay()
         },
         destroy: () => {
+            document.removeEventListener('mousedown', handleDocumentMouseDown, true)
             infoBubble?.destroy()
         }
     }

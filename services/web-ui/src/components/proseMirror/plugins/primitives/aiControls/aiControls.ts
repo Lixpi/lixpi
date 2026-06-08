@@ -42,6 +42,7 @@ type ImageSizeControls = {
     getImageGenerationSize: () => string
     setImageGenerationSize: (size: string) => void
     getProvider?: () => string
+    getCurrentImageModel?: () => string
 }
 
 type ImageModelControls = {
@@ -81,6 +82,48 @@ function transformModelsToOptions(models: any[]): AiModelDropdownOption[] {
         model: aiModel.model,
         tags: aiModel.modalities?.map((m: any) => m.shortTitle) || []
     }))
+}
+
+function isResolutionValue(value: string): boolean {
+    return /^\d+x\d+$/i.test(value)
+}
+
+function isAspectRatioValue(value: string): boolean {
+    return /^\d+:\d+$/.test(value)
+}
+
+function getImageSizeMode(model: any | undefined): 'resolution' | 'aspectRatio' | 'size' {
+    if (model?.imageSizeMode === 'resolution' || model?.imageSizeMode === 'aspectRatio') {
+        return model.imageSizeMode
+    }
+
+    const values = (model?.imageSizes ?? [])
+        .map((option: any) => option.value)
+        .filter((value: unknown): value is string => typeof value === 'string' && value !== 'auto')
+
+    if (values.some(isResolutionValue)) return 'resolution'
+    if (values.some(isAspectRatioValue)) return 'aspectRatio'
+    return 'size'
+}
+
+function getImageSizeControlLabel(model: any | undefined): string {
+    const mode = getImageSizeMode(model)
+    if (mode === 'resolution') return 'Resolution'
+    if (mode === 'aspectRatio') return 'Aspect ratio'
+    return 'Image option'
+}
+
+function findImageSizeModel(models: any[], aiModelId: string | undefined, provider: string | undefined): any | undefined {
+    if (aiModelId) {
+        const selectedModel = models.find((model: any) => `${model.provider}:${model.model}` === aiModelId && model.imageSizes?.length)
+        if (selectedModel) return selectedModel
+    }
+
+    if (provider) {
+        return models.find((model: any) => model.provider === provider && model.imageSizes?.length)
+    }
+
+    return models.find((model: any) => model.imageSizes?.length)
 }
 
 function extractAvailableTags(models: any[]) {
@@ -241,15 +284,32 @@ export function createGenericImageSizeDropdown(
     controls: ImageSizeControls,
     dropdownId: string
 ) {
-    const getSizesForProvider = (provider: string) => {
+    const getImageSizeModel = () => {
         const models: any[] = aiModelsStore.getData()
-        const model = models.find((m: any) => m.provider === provider && m.imageSizes?.length)
-        const sizes = model?.imageSizes ?? [{ value: 'auto', label: 'Auto' }]
-        return sizes.map((s: any) => ({ title: s.label, value: s.value }))
+        return findImageSizeModel(
+            models,
+            controls.getCurrentImageModel?.(),
+            controls.getProvider?.(),
+        )
     }
 
-    let lastProvider = controls.getProvider?.() || ''
-    let IMAGE_SIZES = getSizesForProvider(lastProvider)
+    const getSizesForSelectedModel = () => {
+        const model = getImageSizeModel()
+        const sizes = model?.imageSizes ?? [{ value: 'auto', label: 'Auto' }]
+        const mode = getImageSizeMode(model)
+        return sizes.map((s: any) => ({
+            title: mode === 'resolution' && isResolutionValue(s.value) ? s.value : s.label,
+            value: s.value,
+        }))
+    }
+
+    const getSizeContextKey = () => controls.getCurrentImageModel?.() || controls.getProvider?.() || ''
+    const getOptionsSignature = (options: Array<{ title: string; value: string }>) =>
+        options.map(option => `${option.value}:${option.title}`).join('|')
+
+    let lastSizeContextKey = getSizeContextKey()
+    let IMAGE_SIZES = getSizesForSelectedModel()
+    let lastImageSizesSignature = getOptionsSignature(IMAGE_SIZES)
 
     const currentSize = controls.getImageGenerationSize()
     const selectedValue = IMAGE_SIZES.find(s => s.value === currentSize) || IMAGE_SIZES[0]
@@ -272,10 +332,13 @@ export function createGenericImageSizeDropdown(
     })
 
     const updateSelection = () => {
-        const currentProvider = controls.getProvider?.() || ''
-        if (currentProvider !== lastProvider) {
-            lastProvider = currentProvider
-            IMAGE_SIZES = getSizesForProvider(currentProvider)
+        const currentSizeContextKey = getSizeContextKey()
+        const nextImageSizes = getSizesForSelectedModel()
+        const nextImageSizesSignature = getOptionsSignature(nextImageSizes)
+        if (currentSizeContextKey !== lastSizeContextKey || nextImageSizesSignature !== lastImageSizesSignature) {
+            lastSizeContextKey = currentSizeContextKey
+            lastImageSizesSignature = nextImageSizesSignature
+            IMAGE_SIZES = nextImageSizes
             const currentSize = controls.getImageGenerationSize()
             const matched = IMAGE_SIZES.find(s => s.value === currentSize)
             if (!matched) {
@@ -296,6 +359,7 @@ export function createGenericImageSizeDropdown(
 
     return {
         dom: dropdown.dom,
+        getControlLabel: () => getImageSizeControlLabel(getImageSizeModel()),
         destroy: () => {
             dropdown.destroy?.()
         },

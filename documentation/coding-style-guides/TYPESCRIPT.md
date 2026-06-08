@@ -32,8 +32,42 @@ interface UserProfile {
 
 ## Classes And State Ownership
 
-- Prefer classes when a module owns cohesive state, behavior, lifecycle cleanup, or a public imperative API.
-- Use plain functions for pure utilities, small adapters, simple callbacks, and glue code where a class would add ceremony without making ownership clearer.
+- Use classes by default for nontrivial TypeScript modules that own behavior. If a module owns cohesive state, DOM references, lifecycle cleanup, global listeners, repeated event handlers, layout/positioning logic, subscriptions, timers, or a public imperative API, it **must** be a class.
+- Do not hide stateful component/controller behavior inside a closure-backed factory. A factory can stay as the public entry point, but it should usually return a class instance:
+  ```typescript
+  import { html } from '$src/utils/domTemplates.ts'
+
+  export type ExampleWidgetConfig = {
+      label: string
+  }
+
+  export type ExampleWidgetInstance = {
+      dom: HTMLElement
+      destroy: () => void
+  }
+
+  class ExampleWidget implements ExampleWidgetInstance {
+      readonly dom: HTMLElement
+
+      constructor(private readonly config: ExampleWidgetConfig) {
+          this.dom = this.render()
+      }
+
+      private render(): HTMLElement {
+          return html`<div className="example-widget">${this.config.label}</div>` as HTMLDivElement
+      }
+
+      destroy(): void {
+          this.dom.remove()
+      }
+  }
+
+  export function createExampleWidget(config: ExampleWidgetConfig): ExampleWidgetInstance {
+      return new ExampleWidget(config)
+  }
+  ```
+- Plain functions are only appropriate for pure utilities, tiny adapters, simple callbacks, small mappers, and glue code where a class would clearly add ceremony without improving ownership. If the code needs private state or cleanup, it is no longer a tiny function.
+- For reusable UI components, controllers, services, managers, menu primitives, tooltip/popover primitives, and other imperative instances, assume a class is required unless the implementation is demonstrably just a tiny stateless helper.
 - Prefer composition over inheritance. Do not build inheritance chains deeper than 3 levels; inheritance deeper than 3 levels is a deal breaker and must be redesigned.
 - Keep config, event payloads, and other object shapes as `type` definitions, not `interface`.
 

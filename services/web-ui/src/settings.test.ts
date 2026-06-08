@@ -1,7 +1,7 @@
 'use strict'
 
 import { describe, it, expect } from 'vitest'
-import { settings, type Settings } from '$src/settings.ts'
+import { colorPalette, settings, type Settings } from '$src/settings.ts'
 
 function collectGetterPaths(value: unknown, prefix = ''): string[] {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return []
@@ -27,6 +27,16 @@ function collectGetterPaths(value: unknown, prefix = ''): string[] {
 // =============================================================================
 
 describe('settings - grouped configuration', () => {
+	it('exports the shared color palette and critical AI prompt model menu settings', () => {
+		expect(colorPalette.steelBlue).toBe('#5d656d')
+		expect(colorPalette.offWhite).toBe('#f5f3f3')
+
+		expect(settings.aiPromptInput.modelMenu.openPromptZIndex).toBe('10000')
+		expect(settings.aiPromptInput.modelMenu.infoBubbleZIndex).toBe('10080')
+		expect(settings.aiPromptInput.modelMenu.helpTooltipContentZIndex).toBe('10120')
+		expect(settings.aiPromptInput.modelMenu.controlsMaxWidth).toContain('612px')
+	})
+
 	it('does not use getters for ordinary static settings', () => {
 		expect(collectGetterPaths(settings)).toEqual([])
 	})

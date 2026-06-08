@@ -182,7 +182,7 @@ sequenceDiagram
    would be obvious that the feature was used"* — and colour-coded by category.
 4. **Hover for the info bubble.** Hovering the chip after a 200 ms grace opens a
    hover info bubble (reusing the existing
-   [`primitives/infoBubble/`](../../services/web-ui/src/components/proseMirror/plugins/primitives/infoBubble/)).
+   [`components/infoBubble/`](../../services/web-ui/src/components/infoBubble/)).
    The bubble shows the feature card: name, category badge, summary, tags,
    sample thumbnails (lazy-loaded via the `GET /api/features/:id/samples/:idx`
    route), and an "Open in Library" link. It is cached per `featureId` for the
