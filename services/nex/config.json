@@ -1,0 +1,15 @@
+{
+    "namespace": "system",
+    "logger": {
+        "level": "info"
+    },
+    "node": {
+        "up": {
+            "state": "kv",
+            "events": "nats",
+            "tags": {
+                "app": "lixpi"
+            }
+        }
+    }
+}
