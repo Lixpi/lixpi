@@ -110,7 +110,6 @@ import {
 } from '$src/infographics/workspace/aiChatPanelState.ts'
 import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 import {
-    SLIDING_TABS_SWITCH_TRANSITION_DURATION_MS,
     createSlidingTabsSwitch,
     type SlidingTabsSwitchInstance,
 } from '$src/components/slidingTabsSwitch/index.ts'
@@ -148,6 +147,9 @@ type AiChatThreadEditorEntry = {
 }
 
 type ChatRootNode = AiChatThreadCanvasNode
+type RenderActiveAiChatPanelOptions = {
+    preserveTabsSwitch?: boolean
+}
 
 type MarqueeSelectionState = {
     start: { x: number; y: number }
@@ -291,7 +293,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelEl: HTMLDivElement | null = null
     let activeAiChatBackdropEl: HTMLDivElement | null = null
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
-    let activeAiChatPanelTabRenderTimer: number | null = null
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
@@ -2149,7 +2150,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const switchHeight = settings.aiChatThread.panelTabs.height
         const tabsEl = activeAiChatPanelEl.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-tabs')
-        const switchViewportWidth = getAiChatPanelTabsViewportWidth()
+        const switchViewportWidth = tabsEl?.clientWidth ?? getAiChatPanelTabsViewportWidth()
 
         activeAiChatPanelTabsSwitch.resize(0, 0, switchViewportWidth, switchHeight)
 
@@ -2161,7 +2162,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             )
             tabsEl.scrollLeft = getAiChatPanelActiveTabScrollLeft(
                 switchWidth,
-                getAiChatPanelTabsViewportWidth(),
+                switchViewportWidth,
                 selectedTabIndex,
                 aiChatSidebarTabs.length
             )
@@ -2171,11 +2172,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function applyActiveAiChatPanelWidth(width: number): number {
         const nextWidth = clampInsideRange(width, AI_CHAT_PANEL_MIN_WIDTH, getActiveAiChatPanelMaxWidth())
         const widthValue = `${nextWidth}px`
+        const previousWidth = activeAiChatPanelWidth
 
         activeAiChatPanelWidth = nextWidth
         getWorkspaceCanvasElement()?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
         activeAiChatPanelEl?.style.setProperty('--workspace-ai-chat-sidebar-width', widthValue)
-        resizeActiveAiChatPanelTabsSwitch()
+        if (previousWidth === null || Math.abs(nextWidth - previousWidth) >= 0.5) {
+            resizeActiveAiChatPanelTabsSwitch()
+        }
 
         return nextWidth
     }
@@ -2242,7 +2246,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return Boolean(thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0)
     }
 
-    function destroyActiveAiChatPanel(clearActive = false, panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId): void {
+    function destroyActiveAiChatPanel(
+        clearActive = false,
+        panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId,
+        preserveTabsSwitch = false
+    ): void {
         if (panelThreadId) {
             const entry = threadEditors.get(panelThreadId)
             if (entry) {
@@ -2256,11 +2264,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatPromptEditor?.destroy?.()
         activeAiChatPromptGradient?.destroy()
-        activeAiChatPanelTabsSwitch?.destroy()
-        if (activeAiChatPanelTabRenderTimer !== null) {
-            clearTimeout(activeAiChatPanelTabRenderTimer)
-            activeAiChatPanelTabRenderTimer = null
-        }
+        if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
         activeAiChatPanelEl?.remove()
         activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
@@ -2268,7 +2272,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelHadContent = false
         activeAiChatPanelEl = null
         activeAiChatBackdropEl = null
-        activeAiChatPanelTabsSwitch = null
+        if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch = null
         activeAiChatPromptEditor = null
         activeAiChatPromptGradient = null
         activeContextChipTrayEl = null
@@ -2797,7 +2801,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function renderActiveAiChatPanel(rootNodeOverride?: ChatRootNode, threadOverride?: AiChatThread): void {
+    function renderActiveAiChatPanel(
+        rootNodeOverride?: ChatRootNode,
+        threadOverride?: AiChatThread,
+        options: RenderActiveAiChatPanelOptions = {}
+    ): void {
         if (!aiChatPanelState.isOpen) {
             destroyActiveAiChatPanel(false)
             return
@@ -2816,7 +2824,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : undefined
         activeAiChatThreadId = panelThreadId
         activeAiChatRootNodeId = rootNode?.nodeId ?? null
-        destroyActiveAiChatPanel(false)
+        const preservedTabsEl = options.preserveTabsSwitch
+            ? activeAiChatPanelEl?.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-tabs') ?? null
+            : null
+        const preservedTabsScrollLeft = preservedTabsEl?.scrollLeft ?? 0
+        preservedTabsEl?.remove()
+        destroyActiveAiChatPanel(false, activeAiChatPanelThreadId ?? activeAiChatThreadId, Boolean(preservedTabsEl))
 
         const panelEl = html`<div
             className="workspace-ai-chat-floating-panel workspace-ai-chat-thread-node nopan nowheel"
@@ -2859,9 +2872,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         panelEl.appendChild(controlsEl)
         const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-history-toggle')!
 
-        const tabsEl = html`<div className="workspace-ai-chat-panel-tabs"></div>` as HTMLDivElement
-        let tabsInitialScrollLeft = 0
-        if (aiChatSidebarTabs.length > 0) {
+        const tabsEl = preservedTabsEl ?? html`<div className="workspace-ai-chat-panel-tabs"></div>` as HTMLDivElement
+        let tabsInitialScrollLeft = preservedTabsEl ? preservedTabsScrollLeft : 0
+        if (aiChatSidebarTabs.length > 0 && !preservedTabsEl) {
             const tabSwitchHeight = settings.aiChatThread.panelTabs.height
             const tabSwitchViewportWidth = getAiChatPanelTabsViewportWidth()
             const selectedTabIndex = Math.max(0, aiChatSidebarTabs.findIndex((tab) => tab.tabId === activeSidebarTab?.tabId))
@@ -2876,6 +2889,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 width: tabSwitchViewportWidth,
                 height: tabSwitchHeight,
                 minTabWidth: settings.aiChatThread.panelTabs.minTabWidth,
+                transition: {
+                    durationMs: settings.aiChatThread.panelTabs.transitionDurationMs,
+                    minDurationMs: settings.aiChatThread.panelTabs.transitionMinDurationMs,
+                    distanceSpeedupFactor: settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor,
+                },
                 activeTabBoxShadow: settings.aiChatThread.panelTabs.activeTabBoxShadow,
                 activeTabInsetShadow: settings.aiChatThread.panelTabs.activeTabInsetShadow,
                 tabs: aiChatSidebarTabs.map((tab) => ({
@@ -2888,12 +2906,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onChange: (tabId) => {
                     activeAiChatSidebarTabId = tabId
                     persistAiChatSidebarState()
-                    if (activeAiChatPanelTabRenderTimer !== null) clearTimeout(activeAiChatPanelTabRenderTimer)
-                    activeAiChatPanelTabRenderTimer = window.setTimeout(() => {
-                        activeAiChatPanelTabRenderTimer = null
-                        syncActiveAiChatPanelFromState()
-                        renderActiveAiChatPanel()
-                    }, SLIDING_TABS_SWITCH_TRANSITION_DURATION_MS)
+                    syncActiveAiChatPanelFromState()
+                    renderActiveAiChatPanel(undefined, undefined, { preserveTabsSwitch: true })
                 },
                 onClose: (tabId) => closeAiChatSidebarTab(tabId),
             })
@@ -3234,6 +3248,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         requestAnimationFrame(() => {
+            resizeActiveAiChatPanelTabsSwitch()
             tabsEl.scrollLeft = tabsInitialScrollLeft
             rail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(panelEl)}px`)
         })

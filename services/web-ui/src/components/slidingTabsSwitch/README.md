@@ -26,6 +26,11 @@ Appends one SVG group through `slidingSwitch`.
     selectedValue?: Value
     className?: string
     minTabWidth?: number
+    transition?: {
+        durationMs?: number
+        minDurationMs?: number
+        distanceSpeedupFactor?: number
+    }
     activeTabBoxShadow?: string
     activeTabInsetShadow?: {
         topColor: string
@@ -46,5 +51,5 @@ Returns the underlying sliding switch instance: `{ render, resize, setValue, get
 - Applies `activeTabBoxShadow` and `activeTabInsetShadow` to the active tab indicator for elevation.
 - Renders centered regular-weight tab labels through `tagPill` in content mode so inactive tabs only paint a very light hover background.
 - Shows each tab close control on the left only while that tab is hovered.
+- Passes slide transition timing through to `slidingSwitch`.
 - The host passes the visible tab strip width. `slidingSwitch` applies `minTabWidth`, computes the scrollable content width, and updates the SVG host on resize.
-- Exports `SLIDING_TABS_SWITCH_TRANSITION_DURATION_MS` so hosts that rebuild content after a tab change can wait for the slide animation.

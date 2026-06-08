@@ -1,14 +1,12 @@
 import {
-    SLIDING_SWITCH_TRANSITION_DURATION_MS,
     createSlidingSwitch,
     type SlidingSwitchConfig,
     type SlidingSwitchIndicatorInsetShadow,
     type SlidingSwitchInstance,
     type SlidingSwitchOption,
+    type SlidingSwitchTransitionConfig,
 } from '$src/components/slidingSwitch/index.ts'
 import { createTagPill } from '$src/components/tagPill/index.ts'
-
-export const SLIDING_TABS_SWITCH_TRANSITION_DURATION_MS = SLIDING_SWITCH_TRANSITION_DURATION_MS
 
 export type SlidingTabsSwitchTab<Value extends string = string> = {
     label: string
@@ -29,6 +27,7 @@ export type SlidingTabsSwitchConfig<Value extends string = string> = {
     selectedValue?: Value
     className?: string
     minTabWidth?: number
+    transition?: Partial<SlidingSwitchTransitionConfig>
     activeTabBoxShadow?: string
     activeTabInsetShadow?: SlidingSwitchIndicatorInsetShadow
     onChange?: (value: Value, id: string) => void
@@ -89,6 +88,7 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
 
         if (this.config.height !== undefined) switchConfig.height = this.config.height
         if (this.config.minTabWidth !== undefined) switchConfig.minOptionWidth = this.config.minTabWidth
+        if (this.config.transition !== undefined) switchConfig.transition = this.config.transition
         if (this.config.selectedValue !== undefined) switchConfig.selectedValue = this.config.selectedValue
         if (this.config.className !== undefined) switchConfig.className = this.config.className
         if (this.config.activeTabBoxShadow !== undefined) switchConfig.indicatorBoxShadow = this.config.activeTabBoxShadow

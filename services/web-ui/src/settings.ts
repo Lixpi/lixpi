@@ -58,6 +58,9 @@ export type AiChatThreadRailSettings = {
 export type AiChatThreadPanelTabsSettings = {
     minTabWidth: number
     height: number
+    transitionDurationMs: number
+    transitionMinDurationMs: number
+    transitionDistanceSpeedupFactor: number
     activeTabBoxShadow: string
     activeTabInsetShadow: {
         topColor: string
@@ -275,6 +278,12 @@ export const settings: Settings = {
             minTabWidth: 96,
             // Screen-pixel height for the AI Chat panel tab switch.
             height: 28,
+            // Base active-tab slide duration.
+            transitionDurationMs: 160,
+            // Lower bound when jumping across distant tabs.
+            transitionMinDurationMs: 100,
+            // Per-tab distance speedup. Higher values compress long jumps more.
+            transitionDistanceSpeedupFactor: 0.28,
             // Active tab outer shadow. Keep this setting isolated from dropdown shadows.
             activeTabBoxShadow: 'none',
             // Active tab inset shadow overlay. Keep this setting isolated from dropdown shadows.
