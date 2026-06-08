@@ -132,7 +132,7 @@ type BubbleMenuPositionRequest = {
 }
 ```
 
-`clampToParent` defaults to `true`. Canvas-attached menus can set it to `false` when the menu should move with an off-screen target instead of staying inside the visible parent bounds.
+`clampToParent` defaults to `true`. Canvas-attached or compact-control menus can set it to `false` when the menu should move with the target instead of staying inside the visible parent bounds. For `placement: 'above'`, disabling clamping also disables the automatic below-target flip.
 
 `animateOnShow` defaults to `true`. Anchored canvas menus can set it to `false` when a first-show transform transition would make the menu appear to drift away from its target.
 

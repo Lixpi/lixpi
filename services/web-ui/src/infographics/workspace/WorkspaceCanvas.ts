@@ -122,6 +122,12 @@ type CollisionPlan = {
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
+
+function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
+    promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
+    promptEl.style.setProperty('--ai-prompt-model-menu-open-prompt-z-index', settings.aiPromptInput.modelMenu.openPromptZIndex)
+}
+
 type DocumentEditorEntry = {
     editor: any
     aiService: AiInteractionService | null
@@ -3038,7 +3044,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
 
         const promptEl = html`<div className="ai-prompt-input-floating workspace-ai-chat-floating-panel-prompt nopan"></div>` as HTMLDivElement
-        promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
+        applyAiPromptInputStyleSettings(promptEl)
         if (settings.aiPromptInput.useShiftingGradientBackground) {
             activeAiChatPromptGradient = createShiftingGradientBackground(promptEl)
         }

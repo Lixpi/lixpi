@@ -11,6 +11,7 @@ import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import type {
     AiModel,
+    ImageSizeMode,
     ImageSizeOption,
 } from '@lixpi/constants'
 
@@ -119,6 +120,7 @@ type ModelDefaults = Pick<
     'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'supportsSystemPrompt' | 'modalities' | 'pricing' | 'color' | 'iconName'
 > & {
     imagePromptMaxChars?: number
+    imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
     videoAspectRatios?: ImageSizeOption[]
     videoResolutions?: ImageSizeOption[]
@@ -377,10 +379,11 @@ export class AiModelsSync {
                 // Provider UI defaults
                 color: '#56967c',
                 iconName: 'gptAvatarIcon',
+                imageSizeMode: 'resolution',
                 imageSizes: [
-                    { value: '1024x1024', label: '1:1' },
-                    { value: '1536x1024', label: '3:2' },
-                    { value: '1024x1536', label: '2:3' },
+                    { value: '1024x1024', label: '1024x1024' },
+                    { value: '1536x1024', label: '1536x1024' },
+                    { value: '1024x1536', label: '1024x1536' },
                     { value: 'auto', label: 'Auto' },
                 ],
                 // Base offset for sorting; used to group providers
@@ -522,6 +525,7 @@ export class AiModelsSync {
                 },
                 color: '#4285F4',
                 iconName: 'geminiIcon',
+                imageSizeMode: 'aspectRatio',
                 imageSizes: [
                     { value: '1:1', label: '1:1' },
                     { value: '3:2', label: '3:2' },
@@ -618,6 +622,7 @@ export class AiModelsSync {
                 },
                 color: '#A855F7',
                 iconName: 'stabilityIcon',
+                imageSizeMode: 'aspectRatio',
                 imageSizes: [
                     { value: '1:1', label: '1:1' },
                     { value: '21:9', label: '21:9' },
@@ -728,6 +733,7 @@ export class AiModelsSync {
             defaultTemperature: typeof p.defaultTemperature === 'number' ? p.defaultTemperature : fallback.defaultTemperature,
             supportsSystemPrompt: typeof p.supportsSystemPrompt === 'boolean' ? p.supportsSystemPrompt : fallback.supportsSystemPrompt,
             modalities: Array.isArray(p.modalities) ? p.modalities : fallback.modalities,
+            imageSizeMode: typeof p.imageSizeMode === 'string' ? p.imageSizeMode : fallback.imageSizeMode,
             imageSizes: Array.isArray(p.imageSizes) ? p.imageSizes : fallback.imageSizes,
             videoAspectRatios: Array.isArray(p.videoAspectRatios) ? p.videoAspectRatios : fallback.videoAspectRatios,
             videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
@@ -970,6 +976,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             pricing: modelDefaults.pricing,
             createdAt: now,
@@ -1009,6 +1016,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             pricing: modelDefaults.pricing,
             createdAt: now,
@@ -1052,6 +1060,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
@@ -1431,6 +1440,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             pricing: modelDefaults.pricing,
             createdAt: now,
@@ -1570,6 +1580,7 @@ export class AiModelsSync {
             iconName: modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
+            imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,

@@ -192,7 +192,9 @@ export class BubbleMenu {
         if (placement === 'below') {
             // Center horizontally below target
             const targetCenterX = targetRect.left + targetRect.width / 2
-            const menuScreenLeft = targetCenterX - menuWidthLocal * scale / 2
+            const menuScreenLeft = position.horizontalAlignment === 'end'
+                ? targetRect.right - menuWidthLocal * scale
+                : targetCenterX - menuWidthLocal * scale / 2
             const menuScreenTop = targetRect.bottom + 8 * scale
 
             const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
@@ -206,7 +208,9 @@ export class BubbleMenu {
         } else {
             // Center horizontally above target
             const targetCenterX = targetRect.left + targetRect.width / 2
-            const menuScreenLeft = targetCenterX - menuWidthLocal * scale / 2
+            const menuScreenLeft = position.horizontalAlignment === 'end'
+                ? targetRect.right - menuWidthLocal * scale
+                : targetCenterX - menuWidthLocal * scale / 2
             const menuScreenTop = targetRect.top - menuHeightScreen - 8 * scale
 
             const local = this.screenToLocal(menuScreenLeft, menuScreenTop)
@@ -214,7 +218,7 @@ export class BubbleMenu {
 
             // Flip below if above is out of bounds
             let finalY = local.y
-            if (local.y < 8) {
+            if (shouldClampToParent && local.y < 8) {
                 const belowScreenTop = targetRect.bottom + 8 * scale
                 finalY = this.screenToLocal(0, belowScreenTop).y
             }

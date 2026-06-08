@@ -371,6 +371,40 @@ describe('BubbleMenu — reposition', () => {
         expect(menu.element.style.left).toBe('-80px')
     })
 
+    it('keeps an above placement above the target when parent clamping is disabled', () => {
+        parentEl.getBoundingClientRect = vi.fn(() => ({
+            left: 0,
+            top: 0,
+            right: 400,
+            bottom: 300,
+            width: 400,
+            height: 300,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+        } as DOMRect))
+        Object.defineProperty(menu.element, 'offsetWidth', { configurable: true, value: 120 })
+        Object.defineProperty(menu.element, 'offsetHeight', { configurable: true, value: 60 })
+
+        menu.show('image', {
+            targetRect: {
+                left: 100,
+                right: 132,
+                top: 30,
+                bottom: 62,
+                width: 32,
+                height: 32,
+                x: 100,
+                y: 30,
+                toJSON: () => ({}),
+            } as DOMRect,
+            placement: 'above',
+            clampToParent: false,
+        })
+
+        expect(menu.element.style.top).toBe('-38px')
+    })
+
     it('can disable entrance motion for anchored menus', () => {
         menu.show('image', {
             ...createMockPosition(),

@@ -26,6 +26,10 @@ import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/a
 // HELPERS
 // =============================================================================
 
+function expectSourceToContain(source: string, snippet: string): void {
+    expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
+}
+
 function createEditorStateWithPlugins(document: ProseMirrorNode, plugins: any[] = []) {
     return EditorState.create({ doc: document, schema: testSchema, plugins })
 }
@@ -296,22 +300,22 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
     })
 
     describe('control elements rendering', () => {
-        it('renders model dropdown inside controls', () => {
+        it('renders model dropdown inside model settings bubble menu', () => {
             const { nv, factories } = createNodeView()
-            const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
-            expect(controlsEl.contains(factories.modelDropdownDom)).toBe(true)
+            const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-content')!
+            expect(modelMenu.contains(factories.modelDropdownDom)).toBe(true)
         })
 
-        it('renders image model dropdown inside controls', () => {
+        it('renders image model dropdown inside model settings bubble menu', () => {
             const { nv, factories } = createNodeView()
-            const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
-            expect(controlsEl.contains(factories.imageModelDropdownDom)).toBe(true)
+            const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-content')!
+            expect(modelMenu.contains(factories.imageModelDropdownDom)).toBe(true)
         })
 
-        it('renders image size dropdown inside controls', () => {
+        it('renders image size dropdown inside model settings bubble menu', () => {
             const { nv, factories } = createNodeView()
-            const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
-            expect(controlsEl.contains(factories.imageSizeDropdownDom)).toBe(true)
+            const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-content')!
+            expect(modelMenu.contains(factories.imageSizeDropdownDom)).toBe(true)
         })
 
         it('renders submit button inside controls', () => {
@@ -320,19 +324,26 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(controlsEl.contains(factories.submitButtonDom)).toBe(true)
         })
 
-        it('controls are ordered: model, image model, image size, video dropdowns, submit', () => {
+        it('controls keep only model settings trigger and submit visible by default', () => {
             const { nv, factories } = createNodeView()
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
             const children = Array.from(controlsEl.children)
 
-            expect(children[0]).toBe(factories.modelDropdownDom)
-            expect(children[1]).toBe(factories.imageModelDropdownDom)
-            expect(children[2]).toBe(factories.imageSizeDropdownDom)
-            expect(children[3]).toBe(factories.videoModelDropdownDom)
-            expect(children[4]).toBe(factories.videoAspectDropdownDom)
-            expect(children[5]).toBe(factories.videoResolutionDropdownDom)
-            expect(children[6]).toBe(factories.videoDurationDropdownDom)
-            expect(children[7]).toBe(factories.submitButtonDom)
+            expect(children[0].classList.contains('ai-prompt-model-menu-trigger')).toBe(true)
+            expect(children[1]).toBe(factories.submitButtonDom)
+            expect(children[2].classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
+        })
+
+        it('model settings menu is split into reasoning, image, and video sections', () => {
+            const { nv } = createNodeView()
+            const sectionTitles = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section-title'))
+                .map((element) => element.textContent)
+
+            expect(sectionTitles).toEqual([
+                'Reasoning model',
+                'Image model',
+                'Video model',
+            ])
         })
     })
 })
@@ -689,6 +700,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         const [controls] = factories.createImageSizeDropdown.mock.calls[0]
         expect(controls).toHaveProperty('getImageGenerationSize')
         expect(controls).toHaveProperty('setImageGenerationSize')
+        expect(controls).toHaveProperty('getCurrentImageModel')
     })
 
     it('createSubmitButton receives SubmitControls adapter', () => {
@@ -832,13 +844,11 @@ describe('Visual proportions — SCSS sizing expectations', () => {
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
     }
 
-    it('controls has exactly 8 child elements for balanced layout', () => {
+    it('controls has compact child elements for balanced layout', () => {
         const nv = renderNodeView()
         const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        // SCSS expects: model dropdown, image model dropdown, image size dropdown,
-        // video model/aspect/resolution/duration dropdowns, submit button.
-        // The controls use justify-content: flex-end so they sit right
-        expect(controls.children.length).toBe(8)
+        // SCSS expects: model settings trigger, submit button, and hidden bubble menu.
+        expect(controls.children.length).toBe(3)
     })
 
     it('content area is the first child — gets flex: 1 for vertical fill', () => {
@@ -1525,7 +1535,7 @@ describe('Visual — receiving state CSS expectations', () => {
             resolve(__dirname, 'ai-prompt-input.scss'),
             'utf-8'
         )
-        expect(scss).toContain('data-empty="false"')
+        expectSourceToContain(scss, 'data-empty="false"')
         // Send button
         expect(scss).toMatch(/data-empty="false".*\.ai-submit-button\s+\.send-icon\s+svg/)
         // Model dropdown button text and SVG
@@ -1547,14 +1557,15 @@ describe('Visual — image size dropdown SCSS expectations', () => {
         expect(el.classList.contains('dropdown-menu-tag-pill-wrapper')).toBe(true)
     })
 
-    it('image size dropdown is always visible (no toggle)', () => {
-        // Images are always enabled — no toggle button, just the size dropdown
-        // The dropdown appears directly in controls without a toggle gate
+    it('image size dropdown lives inside the model settings menu', () => {
         const controls = document.createElement('div')
         controls.className = 'ai-prompt-input-controls'
+        const menu = document.createElement('div')
+        menu.className = 'ai-prompt-model-menu-content'
         const dropdown = document.createElement('div')
         dropdown.className = 'dropdown-menu-tag-pill-wrapper'
-        controls.appendChild(dropdown)
+        menu.appendChild(dropdown)
+        controls.appendChild(menu)
         expect(controls.querySelector('.dropdown-menu-tag-pill-wrapper')).not.toBeNull()
     })
 })

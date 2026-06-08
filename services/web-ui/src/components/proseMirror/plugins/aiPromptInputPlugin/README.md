@@ -8,6 +8,7 @@ This plugin powers prompt input editors. It provides:
 - A rich-text ProseMirror editor for composing messages
 - An AI model selector dropdown
 - An image model selector dropdown (with size selector)
+- Contextual help tooltips for the reasoning, image, and video model sections
 - A submit/stop button
 - Placeholder text when the input is empty
 - Keyboard shortcut support (Cmd/Ctrl + Enter to submit)
@@ -39,7 +40,7 @@ graph TD
         NV --> CTRL[Controls Container]
         CTRL --> MD[Model Dropdown]
         CTRL --> IMD[Image Model Dropdown]
-        CTRL --> ISD[Image Size Dropdown]
+        CTRL --> ISD[Image option dropdown]
         CTRL --> SB[Submit Button]
     end
 
@@ -141,8 +142,12 @@ sequenceDiagram
 - Attributes:
   - `aiModel: string` (default `''`) — Selected AI model (e.g., `"Anthropic:claude-3-5-sonnet"`)
   - `aiImageModel: string` (default `''`) — Selected image generation model (e.g., `"OpenAI:dall-e-3"`)
-  - `imageGenerationSize: string` (default `'auto'`) — Image generation size (e.g., `"512x512"`)
-- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-image-model][data-image-generation-size]`
+  - `imageGenerationSize: string` (default `'auto'`) — Image generation resolution or aspect-ratio value, depending on the selected image model metadata
+  - `aiVideoModel: string` (default `''`) — Selected video generation model
+  - `videoAspectRatio: string` (default `''`) — Video generation aspect ratio
+  - `videoResolution: string` (default `''`) — Video generation resolution
+  - `videoDuration: string` (default `''`) — Video generation duration
+- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-image-model][data-image-generation-size][data-ai-video-model][data-video-aspect-ratio][data-video-resolution][data-video-duration]`
 - Content hole: `0` (ProseMirror renders editable content inside)
 
 The document schema for `documentType: 'aiPromptInput'` is:
@@ -160,10 +165,13 @@ The `createAiPromptInputNodeView` factory returns a ProseMirror NodeView with th
 div.ai-prompt-input-wrapper [data-empty="true"|"false"]
 ├── div.ai-prompt-input-content        ← contentDOM (editable)
 └── div.ai-prompt-input-controls
-    ├── [Model Dropdown]               ← injected via createModelDropdown()
-    ├── [Image Model Dropdown]         ← injected via createImageModelDropdown()
-    ├── [Image Size Dropdown]          ← injected via createImageSizeDropdown()
-    └── [Submit Button]                ← injected via createSubmitButton()
+    ├── button.ai-prompt-model-menu-trigger
+    ├── [Submit Button]                ← injected via createSubmitButton()
+    └── div.bubble-menu.ai-prompt-model-menu-info-bubble
+        └── div.ai-prompt-model-menu-content
+            ├── Reasoning model + help tooltip ← createModelDropdown()
+            ├── Image model + help tooltip     ← createImageModelDropdown(), createImageSizeDropdown()
+            └── Video model + help tooltip     ← createVideoModelDropdown(), aspect, resolution, duration
 ```
 
 ### Control Adapters
@@ -177,7 +185,7 @@ const modelControls: AiModelControls = {
 }
 ```
 
-This keeps the controls stateless — the ProseMirror document is the single source of truth.
+This keeps the controls stateless — the ProseMirror document is the single source of truth. The bottom control row only shows the model settings trigger and submit button by default; model dropdowns live in the shared `BubbleMenu` surface. Section help uses the reusable `helpTooltip` TypeScript-html component, which positions its tooltip against the visible viewport instead of assuming there is room on one side.
 
 ### State Synchronization
 
@@ -188,8 +196,8 @@ This keeps the controls stateless — the ProseMirror document is the single sou
 
 - **`ignoreMutation()`** — Returns `true` for mutations inside the controls container, preventing ProseMirror from recreating the NodeView when dropdowns or buttons change.
 - **`stopEvent()`** — Returns `true` for events targeting the controls container, preventing ProseMirror from stealing focus/clicks from dropdowns and buttons.
-- **`update()`** — Accepts updates only for `aiPromptInput` nodes. Syncs empty state, receiving state, and calls `update()` on both dropdowns.
-- **`destroy()`** — Clears the receiving poll interval and calls `destroy()` on dropdowns.
+- **`update()`** — Accepts updates only for `aiPromptInput` nodes. Syncs empty state, receiving state, and calls `update()` on every model dropdown.
+- **`destroy()`** — Clears the receiving poll interval, destroys the model `BubbleMenu`, and calls `destroy()` on dropdowns.
 
 ## Plugin Internals
 
@@ -197,7 +205,7 @@ This keeps the controls stateless — the ProseMirror document is the single sou
 
 **`extractContentJSON(state)`** — Walks the document to find the `aiPromptInput` node, returns its children as a JSON array. Returns `null` if the node isn't found or has no text content.
 
-**`getInputAttrs(state)`** — Reads `aiModel`, `aiImageModel`, and `imageGenerationSize` attributes from the `aiPromptInput` node.
+**`getInputAttrs(state)`** — Reads model, image generation, and video generation attributes from the `aiPromptInput` node.
 
 **`clearInputContent(view)`** — Replaces all content inside the `aiPromptInput` node with a single empty paragraph and positions the cursor at the start.
 
@@ -213,6 +221,10 @@ createAiPromptInputPlugin({
     createModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createImageModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createImageSizeDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createVideoModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createVideoAspectDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createVideoResolutionDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createVideoDurationDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createSubmitButton: (controls) => HTMLElement,
     placeholderText: 'Talk to me...',
 })
@@ -247,6 +259,7 @@ The active panel composer:
 - Uses `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
 - Receives the shared model, image, video, and submit controls from `primitives/aiControls/`
 - Renders inside a `.ai-prompt-input-floating.workspace-ai-chat-floating-panel-prompt` container with optional shifting gradient background (controlled by `settings.aiPromptInput.useShiftingGradientBackground`; see [Visual Effects](../../../../../../../documentation/canvas/VISUAL-EFFECTS.md))
+- Model settings menu colors, sizing, separators, z-index, and shadow are configured through `settings.aiPromptInput.modelMenu`; the shadow is a separate setting with the same default visual value as dropdown popovers.
 
 ## Styling
 
@@ -259,11 +272,14 @@ SCSS lives in `ai-prompt-input.scss`. Key class hierarchy:
     └── .ai-prompt-input-wrapper      ← NodeView root (white glassmorphism card)
         ├── .ai-prompt-input-content  ← editable content area (flex: 1)
         └── .ai-prompt-input-controls ← controls bar (flex-end)
-            ├── .dropdown-menu-tag-pill-wrapper  ← model/size dropdowns
-            └── .ai-submit-button     ← submit/stop button (32px circle)
-                ├── .button-default   ← send icon (normal state)
-                ├── .button-hover     ← send icon (hover state)
-                └── .button-receiving ← stop icon (streaming state)
+            ├── .ai-prompt-model-menu-trigger    ← opens model settings bubble menu
+            ├── .ai-submit-button     ← submit/stop button (32px circle)
+            │   ├── .button-default   ← send icon (normal state)
+            │   ├── .button-hover     ← send icon (hover state)
+            │   └── .button-receiving ← stop icon (streaming state)
+            └── .ai-prompt-model-menu-info-bubble
+                └── .ai-prompt-model-menu-content
+                    └── .ai-prompt-model-menu-section
 ```
 
 **State-driven styling:**
@@ -276,7 +292,8 @@ SCSS lives in `ai-prompt-input.scss`. Key class hierarchy:
 - 4px margin creates a visible gradient "border" between the card and the floating container
 - Content area: 250px max-height with overflow-y scroll
 - Submit button: 32px circle with 3-layer state system (default → hover → receiving)
-- Dropdown positioning: `.info-bubble-wrapper.static-position` overrides InfoBubble's fixed positioning for canvas-embedded dropdowns
+- Model menu positioning: shared `BubbleMenu` anchored to `.ai-prompt-model-menu-trigger`
+- Dropdown positioning: `.info-bubble-wrapper.static-position` overrides InfoBubble's fixed positioning for canvas-embedded dropdowns inside the bubble menu
 
 ## Files in this plugin
 
@@ -314,7 +331,7 @@ SCSS lives in `ai-prompt-input.scss`. Key class hierarchy:
 ## Related Components
 
 - **`$src/services/ai-prompt-input-controller.ts`** — `AiPromptInputController` class that routes submitted messages to the correct thread. Handles target tracking, thread auto-creation, pending message queuing, and receiving state.
-- **`$src/components/proseMirror/plugins/primitives/aiControls/`** — Factory functions for the reusable UI controls (model dropdown, image size dropdown, submit button).
+- **`$src/components/proseMirror/plugins/primitives/aiControls/`** — Factory functions for the reusable UI controls (model dropdown, image option dropdown, submit button).
 - **`$src/components/proseMirror/plugins/aiChatThreadPlugin/`** — The thread plugin that handles AI streaming, response insertion, and conversation rendering. Receives messages from this plugin via `USE_AI_CHAT_META`.
 - **`$src/infographics/workspace/WorkspaceCanvas.ts`** — Creates and positions the floating input editors, manages the `AiPromptInputController` lifecycle.
 - **`$src/components/proseMirror/components/editor.js`** — `ProseMirrorEditor` class that instantiates the plugin with `documentType: 'aiPromptInput'`.
