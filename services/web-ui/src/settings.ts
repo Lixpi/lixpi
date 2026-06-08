@@ -55,6 +55,16 @@ export type AiChatThreadRailSettings = {
     dragGrabWidth: number
 }
 
+export type AiChatThreadPanelTabsSettings = {
+    minTabWidth: number
+    height: number
+    activeTabBoxShadow: string
+    activeTabInsetShadow: {
+        topColor: string
+        bottomColor: string
+    }
+}
+
 export type AiChatThreadSettings = {
     responseMessageBubbleColor: string
     nodeBoxShadow: string
@@ -63,6 +73,7 @@ export type AiChatThreadSettings = {
     useShiftingGradientBackground: boolean
     defaultDimensions: { width: number; height: number }
     adjacentNodeGap: number
+    panelTabs: AiChatThreadPanelTabsSettings
     rail: AiChatThreadRailSettings
 }
 
@@ -257,6 +268,21 @@ export const settings: Settings = {
         defaultDimensions: { width: 640, height: 480 },
         // Canvas-unit gap when a new AI chat thread is placed next to a source media node.
         adjacentNodeGap: 50,
+
+        // AI Chat panel tab switch geometry.
+        panelTabs: {
+            // Minimum screen-pixel width for each tab before the tab strip scrolls horizontally.
+            minTabWidth: 96,
+            // Screen-pixel height for the AI Chat panel tab switch.
+            height: 28,
+            // Active tab outer shadow. Keep this setting isolated from dropdown shadows.
+            activeTabBoxShadow: 'none',
+            // Active tab inset shadow overlay. Keep this setting isolated from dropdown shadows.
+            activeTabInsetShadow: {
+                topColor: 'rgba(255, 255, 255, 0.86)',
+                bottomColor: 'rgba(0, 0, 0, 0)',
+            },
+        },
 
         // Vertical rail presentation and hit-target settings for AI chat threads.
         rail: {

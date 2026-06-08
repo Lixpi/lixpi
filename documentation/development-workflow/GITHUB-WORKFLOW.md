@@ -70,5 +70,6 @@ Include:
 ## Tools
 
 - Use local Git commands for status, staging, commits, checkouts, fetches, and pushes.
+- Never run `gh` commands in the sandbox. GitHub CLI operations require the user's authenticated host environment, network access, credential helpers, and browser or keychain integration. Always run `gh` with unsandboxed execution.
 - Use available GitHub integration tools for branches, pull requests, issue reads, issue updates, and assignment.
 - When sending Markdown through an API, provide real line breaks rather than literal `\n` text so GitHub renders the body correctly.

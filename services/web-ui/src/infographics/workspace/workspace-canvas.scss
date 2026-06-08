@@ -5,6 +5,9 @@
     --workspace-ai-chat-sidebar-width: min(380px, calc(100vw - 64px));
     --workspace-ai-chat-sidebar-edge-gap: 15px;
     --workspace-ai-chat-sidebar-padding: 15px;
+    --workspace-ai-chat-panel-content-inset: 10px;
+    --workspace-ai-chat-panel-backdrop-edge-guard: 180px;
+    --workspace-ai-chat-panel-backdrop-feather: 112px;
     --workspace-ai-chat-sidebar-zoom-gap: 15px;
     --workspace-canvas-padding-top: 32px;
     --workspace-canvas-padding-inline: 0px;
@@ -736,19 +739,21 @@
 
 /* Override global ProseMirror padding for the floating chat panel */
 .workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror {
-    padding: 0 var(--workspace-ai-chat-sidebar-padding) 1rem;
+    padding: 0 0 1rem;
 }
 
 .workspace-ai-chat-floating-panel {
     position: absolute;
     top: 0px;
-    right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline));
+    right: calc(0px - var(--workspace-canvas-padding-inline));
     bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
     width: var(--workspace-ai-chat-sidebar-width);
+    box-sizing: border-box;
     height: auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
+    padding: 0 var(--workspace-ai-chat-panel-content-inset);
     z-index: 10030;
     pointer-events: auto;
     border-radius: 10px;
@@ -771,37 +776,62 @@
     position: absolute;
     z-index: 90;
     top: 0;
-    // Run the blur flush to the pane's right edge (no edge-gap inset) so canvas content can't
-    // peek through unfiltered at the right. The extra edge-gap is added to the width instead,
-    // so the soft left feather stays in exactly the same place.
     right: calc(0px - var(--workspace-canvas-padding-inline));
-    bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom));
-    width: calc(var(--workspace-ai-chat-sidebar-width) + 116px + var(--workspace-ai-chat-sidebar-edge-gap));
+    bottom: calc(0px - var(--workspace-canvas-padding-bottom));
+    width: calc(
+        var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)
+    );
     pointer-events: none;
-    // Soft, rounded on the left; sharp and square on the right so the blur reaches the very edge.
-    border-radius: 18px 0 0 18px;
+    border-radius: 0;
     background: linear-gradient(
         to right,
         rgba(248, 250, 253, 0) 0,
-        rgba(248, 250, 253, 0.22) 38px,
-        rgba(248, 250, 253, 0.68) 88px,
-        rgba(248, 250, 253, 0.84) 110px,
+        rgba(248, 250, 253, 0) var(--workspace-ai-chat-panel-backdrop-edge-guard),
+        rgba(248, 250, 253, 0.012) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 18px),
+        rgba(248, 250, 253, 0.04) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
+        rgba(248, 250, 253, 0.11) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 60px),
+        rgba(248, 250, 253, 0.24) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 82px),
+        rgba(248, 250, 253, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
+        rgba(248, 250, 253, 0.84) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
         rgba(248, 250, 253, 0.84) 100%
     );
-    backdrop-filter: blur(28px) saturate(145%);
-    -webkit-backdrop-filter: blur(28px) saturate(145%);
-    mask-image: linear-gradient(to right, transparent 0, rgba(0, 0, 0, 0.16) 32px, #000 106px, #000 100%);
-    -webkit-mask-image: linear-gradient(to right, transparent 0, rgba(0, 0, 0, 0.16) 32px, #000 106px, #000 100%);
+    backdrop-filter: blur(24px) saturate(145%);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+    mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        transparent var(--workspace-ai-chat-panel-backdrop-edge-guard),
+        rgba(0, 0, 0, 0.012) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 18px),
+        rgba(0, 0, 0, 0.04) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
+        rgba(0, 0, 0, 0.11) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 60px),
+        rgba(0, 0, 0, 0.24) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 82px),
+        rgba(0, 0, 0, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
+        #000 calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
+        #000 100%
+    );
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        transparent var(--workspace-ai-chat-panel-backdrop-edge-guard),
+        rgba(0, 0, 0, 0.012) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 18px),
+        rgba(0, 0, 0, 0.04) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
+        rgba(0, 0, 0, 0.11) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 60px),
+        rgba(0, 0, 0, 0.24) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 82px),
+        rgba(0, 0, 0, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
+        #000 calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
+        #000 100%
+    );
 }
 
 .workspace-ai-chat-panel-tabs {
     position: relative;
     z-index: 2;
-    display: flex;
-    gap: 4px;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
     flex: 0 0 auto;
     overflow-x: auto;
-    padding: 0 var(--workspace-ai-chat-sidebar-padding) 8px;
+    padding: 0 0 8px;
     scrollbar-width: none;
 
     &::-webkit-scrollbar {
@@ -809,10 +839,17 @@
     }
 }
 
+.workspace-ai-chat-panel-tabs-switch {
+    display: block;
+    flex: 0 0 auto;
+    min-width: 100%;
+    overflow: visible;
+}
+
 .workspace-ai-chat-panel-context-controls {
     display: flex;
     flex: 0 0 auto;
-    padding: 10px var(--workspace-ai-chat-sidebar-padding) 12px;
+    padding: 10px 0 12px;
     color: #39455d;
     font-size: 12px;
 }
@@ -950,7 +987,7 @@
 .workspace-ai-chat-panel-sessions {
     flex: 0 0 auto;
     max-height: 152px;
-    margin: 0 var(--workspace-ai-chat-sidebar-padding) 10px;
+    margin: 0 0 10px;
     overflow-y: auto;
     border-bottom: 1px solid rgba(26, 39, 68, 0.09);
     padding-bottom: 8px;
@@ -1025,66 +1062,9 @@
 }
 
 .workspace-ai-chat-panel-empty {
-    padding: 20px var(--workspace-ai-chat-sidebar-padding);
+    padding: 20px 0;
     color: #697388;
     font-size: 13px;
-}
-
-.workspace-ai-chat-panel-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    max-width: 150px;
-    height: 28px;
-    padding: 0 9px;
-    border: 1px solid transparent;
-    border-radius: 14px;
-    background: rgba(108, 117, 135, 0.08);
-    color: #1a2744;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    opacity: 0.7;
-    transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
-}
-
-.workspace-ai-chat-panel-tab:hover,
-.workspace-ai-chat-panel-tab-active {
-    opacity: 1;
-    background: rgba(255, 255, 255, 0.78);
-    border-color: rgba(78, 126, 238, 0.18);
-    box-shadow: 0 1px 6px rgba(35, 45, 63, 0.07);
-}
-
-.workspace-ai-chat-panel-tab-title {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.workspace-ai-chat-panel-tab-close {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    text-align: center;
-    opacity: 0.55;
-
-    &:hover {
-        background: rgba(26, 39, 68, 0.1);
-        opacity: 1;
-    }
-}
-
-.workspace-ai-chat-panel-tab-close svg {
-    width: 7px;
-    height: 7px;
-    fill: currentColor;
 }
 
 .workspace-ai-chat-panel-body {
@@ -1108,7 +1088,7 @@
 }
 
 .workspace-ai-chat-panel-extraction {
-    padding: 0 var(--workspace-ai-chat-sidebar-padding) 12px;
+    padding: 0 0 12px;
     color: #1a2744;
 }
 
@@ -1117,9 +1097,12 @@
     display: block !important;
     left: auto !important;
     top: auto !important;
-    width: 100% !important;
+    width: calc(
+        100% + var(--workspace-ai-chat-panel-content-inset) + var(--workspace-ai-chat-panel-content-inset) - var(--workspace-ai-chat-sidebar-edge-gap)
+    ) !important;
     flex: 0 0 auto;
     margin-top: 12px;
+    margin-left: calc(0px - var(--workspace-ai-chat-panel-content-inset));
     z-index: 4;
     box-shadow: var(--dropdown-popover-box-shadow) !important;
 
@@ -1207,7 +1190,16 @@
 
 @media (prefers-reduced-transparency: reduce) {
     .workspace-ai-chat-panel-backdrop {
-        background: linear-gradient(to right, transparent 0, rgba(248, 250, 253, 0.9) 96px, #f8fafd 110px, #f8fafd 100%);
+        background: linear-gradient(
+            to right,
+            transparent 0,
+            transparent var(--workspace-ai-chat-panel-backdrop-edge-guard),
+            rgba(248, 250, 253, 0.035) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 38px),
+            rgba(248, 250, 253, 0.18) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 72px),
+            rgba(248, 250, 253, 0.48) calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + 100px),
+            #f8fafd calc(var(--workspace-ai-chat-panel-backdrop-edge-guard) + var(--workspace-ai-chat-panel-backdrop-feather)),
+            #f8fafd 100%
+        );
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
     }

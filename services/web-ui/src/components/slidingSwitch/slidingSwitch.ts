@@ -1,22 +1,58 @@
-// SVG sliding single-select, built with the same approach as `toggleSwitch`:
-// it appends an SVG group into a provided d3 parent selection and animates numeric
-// attributes. Domain-agnostic — consumers supply the options and the meaning of
-// each value. No HTML, no stylesheet.
-
 // Side-effect import: patches the d3-selection prototype so `.transition()` exists.
 import 'd3-transition'
 
 // @ts-ignore - runtime import
-import { select } from 'd3-selection'
-// @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
+import { xIcon } from '$src/svgIcons/index.ts'
+import { appendSvgPathIcon } from '$src/components/svgIconPaths.ts'
 
 export type SlidingSwitchOption<Value extends string = string> = {
     label: string
     value: Value
+    closable?: boolean
+    disabled?: boolean
+    ariaLabel?: string
+    closeAriaLabel?: string
 }
 
-type SlidingSwitchConfig<Value extends string = string> = {
+export type SlidingSwitchOptionRenderState<Value extends string = string> = {
+    id: string
+    option: SlidingSwitchOption<Value>
+    index: number
+    x: number
+    y: number
+    width: number
+    height: number
+    selected: boolean
+    hovered: boolean
+    disabled: boolean
+    closable: boolean
+    onClose: (event: Event) => void
+}
+
+export type SlidingSwitchOptionRenderInstance<Value extends string = string> = {
+    render?: (state: SlidingSwitchOptionRenderState<Value>) => void
+    destroy?: () => void
+}
+
+export type SlidingSwitchOptionRenderer<Value extends string = string> = (
+    parent: any,
+    state: SlidingSwitchOptionRenderState<Value>
+) => SlidingSwitchOptionRenderInstance<Value> | void
+
+export type SlidingSwitchIndicatorInsetShadow = {
+    topColor: string
+    bottomColor: string
+}
+
+export type SlidingSwitchVisualOverflowPadding = {
+    top: number
+    right: number
+    bottom: number
+    left: number
+}
+
+export type SlidingSwitchConfig<Value extends string = string> = {
     id: string
     x: number
     y: number
@@ -25,125 +61,587 @@ type SlidingSwitchConfig<Value extends string = string> = {
     options: SlidingSwitchOption<Value>[]
     selectedValue?: Value
     className?: string
+    role?: string
+    optionRole?: string
+    selectedAriaAttribute?: 'aria-checked' | 'aria-selected'
+    minOptionWidth?: number
+    observeParentResize?: boolean
+    visualOverflowPadding?: Partial<SlidingSwitchVisualOverflowPadding>
+    indicatorBoxShadow?: string
+    indicatorInsetShadow?: SlidingSwitchIndicatorInsetShadow
+    renderOption?: SlidingSwitchOptionRenderer<Value>
     onChange?: (value: Value, id: string) => void
+    onClose?: (value: Value, id: string, option: SlidingSwitchOption<Value>) => void
 }
 
-type SlidingSwitchInstance<Value extends string = string> = {
+export type SlidingSwitchInstance<Value extends string = string> = {
     render: () => void
+    resize: (x: number, y: number, width: number, height?: number) => void
     setValue: (value: Value) => void
     getValue: () => Value
+    getContentWidth: () => number
+    getOuterHeight: () => number
     destroy: () => void
 }
 
+type SlidingSwitchOptionView<Value extends string = string> = {
+    option: SlidingSwitchOption<Value>
+    index: number
+    group: any
+    hit: any
+    label: any | null
+    closeGroup: any | null
+    closeBackground: any | null
+    closeIcon: any | null
+    customRenderer: SlidingSwitchOptionRenderInstance<Value> | null
+}
+
 const PADDING = 2
-const TRANSITION_DURATION = 200
+export const SLIDING_SWITCH_TRANSITION_DURATION_MS = 200
+const DEFAULT_HEIGHT = 26
+const FONT_SIZE = 12
+const FONT_WEIGHT = 400
+const TEXT_WIDTH_FACTOR = 0.58
+const CLOSE_SIZE = 14
+const CLOSE_ICON_SIZE = 7
+const CLOSE_GAP = 6
+const SHADOW_PADDING_TOP = 10
+const SHADOW_PADDING_RIGHT = 14
+const SHADOW_PADDING_BOTTOM = 0
+const SHADOW_PADDING_LEFT = 14
+let slidingSwitchInstanceCounter = 0
 
 const COLORS = {
-    track: 'rgba(105, 115, 133, 0.1)',
-    indicator: 'rgba(255, 255, 255, 0.86)',
+    track: 'rgba(105, 115, 133, 0.09)',
+    indicator: 'rgba(255, 255, 255, 0.72)',
     optionText: 'rgba(49, 59, 78, 0.68)',
     optionTextActive: '#1a2744',
+    optionTextDisabled: 'rgba(49, 59, 78, 0.32)',
+    closeHover: 'rgba(26, 39, 68, 0.1)',
+}
+
+function truncateLabel(label: string, maxWidth: number): string {
+    const maxChars = Math.max(0, Math.floor(maxWidth / (FONT_SIZE * TEXT_WIDTH_FACTOR)))
+    if (label.length <= maxChars) return label
+    if (maxChars <= 3) return label.slice(0, maxChars)
+    return `${label.slice(0, maxChars - 3)}...`
+}
+
+class SlidingSwitch<Value extends string = string> implements SlidingSwitchInstance<Value> {
+    private readonly id: string
+    private readonly options: SlidingSwitchOption<Value>[]
+    private readonly className: string
+    private readonly role: string
+    private readonly optionRole: string
+    private readonly selectedAriaAttribute: 'aria-checked' | 'aria-selected'
+    private readonly minOptionWidth: number | null
+    private readonly observeParentResize: boolean
+    private readonly visualOverflowPadding: SlidingSwitchVisualOverflowPadding
+    private readonly indicatorBoxShadow: string
+    private readonly indicatorInsetShadow: SlidingSwitchIndicatorInsetShadow | null
+    private readonly indicatorInsetGradientId: string
+    private readonly onChange?: (value: Value, id: string) => void
+    private readonly onClose?: (value: Value, id: string, option: SlidingSwitchOption<Value>) => void
+    private readonly renderOption?: SlidingSwitchOptionRenderer<Value>
+
+    private x: number
+    private y: number
+    private requestedWidth: number
+    private width: number
+    private height: number
+    private currentValue: Value
+    private hoveredValue: Value | null = null
+    private destroyed = false
+
+    private readonly group: any
+    private readonly parent: any
+    private readonly indicatorInsetGradient: any
+    private readonly track: any
+    private readonly indicator: any
+    private readonly indicatorInset: any
+    private readonly optionViews: SlidingSwitchOptionView<Value>[] = []
+    private resizeObserver: ResizeObserver | null = null
+
+    constructor(parent: any, config: SlidingSwitchConfig<Value>) {
+        if (config.options.length === 0) {
+            throw new Error('Sliding switch requires at least one option')
+        }
+
+        this.parent = parent
+        this.id = config.id
+        this.options = config.options
+        this.className = config.className ?? ''
+        this.role = config.role ?? 'radiogroup'
+        this.optionRole = config.optionRole ?? 'radio'
+        this.selectedAriaAttribute = config.selectedAriaAttribute ?? 'aria-checked'
+        this.minOptionWidth = config.minOptionWidth ?? null
+        this.observeParentResize = config.observeParentResize ?? config.minOptionWidth !== undefined
+        this.indicatorBoxShadow = config.indicatorBoxShadow ?? 'none'
+        this.indicatorInsetShadow = config.indicatorInsetShadow ?? null
+        this.visualOverflowPadding = this.createVisualOverflowPadding(config.visualOverflowPadding)
+        slidingSwitchInstanceCounter += 1
+        this.indicatorInsetGradientId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingSwitchInstanceCounter}-indicator-inset`
+        this.onChange = config.onChange
+        this.onClose = config.onClose
+        this.renderOption = config.renderOption
+        this.x = config.x
+        this.y = config.y
+        this.requestedWidth = config.width
+        this.width = this.resolveContentWidth(config.width)
+        this.height = config.height ?? DEFAULT_HEIGHT
+        this.currentValue = config.selectedValue !== undefined && this.indexOf(config.selectedValue) >= 0
+            ? config.selectedValue
+            : this.options[0]!.value
+
+        this.group = parent.append('g')
+            .attr('class', `sliding-switch-group ${this.className}`)
+            .attr('transform', `translate(${this.x}, ${this.y})`)
+            .attr('data-sliding-switch-id', this.id)
+            .attr('role', this.role)
+            .style('cursor', 'pointer')
+
+        const defs = this.group.append('defs')
+        this.indicatorInsetGradient = defs.append('linearGradient')
+            .attr('id', this.indicatorInsetGradientId)
+            .attr('x1', '0%')
+            .attr('y1', '0%')
+            .attr('x2', '0%')
+            .attr('y2', '100%')
+
+        this.track = this.group.append('rect')
+            .attr('class', 'sliding-switch-track')
+
+        this.indicator = this.group.append('rect')
+            .attr('class', 'sliding-switch-indicator')
+
+        this.indicatorInset = this.group.append('rect')
+            .attr('class', 'sliding-switch-indicator-inset-shadow')
+            .attr('pointer-events', 'none')
+
+        for (const [index, option] of this.options.entries()) {
+            this.optionViews.push(this.createOptionView(option, index))
+        }
+
+        this.bindResizeObserver()
+        this.renderInternal(false)
+    }
+
+    private createVisualOverflowPadding(padding: Partial<SlidingSwitchVisualOverflowPadding> | undefined): SlidingSwitchVisualOverflowPadding {
+        const hasOuterShadow = this.indicatorBoxShadow !== 'none'
+        return {
+            top: padding?.top ?? (hasOuterShadow ? SHADOW_PADDING_TOP : 0),
+            right: padding?.right ?? (hasOuterShadow ? SHADOW_PADDING_RIGHT : 0),
+            bottom: padding?.bottom ?? (hasOuterShadow ? SHADOW_PADDING_BOTTOM : 0),
+            left: padding?.left ?? (hasOuterShadow ? SHADOW_PADDING_LEFT : 0),
+        }
+    }
+
+    private resolveContentWidth(width: number): number {
+        if (this.minOptionWidth === null) return width
+        return Math.max(width, this.options.length * this.minOptionWidth + PADDING * 2)
+    }
+
+    private outerWidth(): number {
+        return this.width + this.visualOverflowPadding.left + this.visualOverflowPadding.right
+    }
+
+    private outerHeight(): number {
+        return this.height + this.visualOverflowPadding.top + this.visualOverflowPadding.bottom
+    }
+
+    private updateHostSvgGeometry(): void {
+        const node = this.parent.node?.()
+        if (node?.tagName?.toLowerCase() !== 'svg') return
+
+        this.parent
+            .attr('width', this.outerWidth())
+            .attr('height', this.outerHeight())
+            .attr('viewBox', `0 0 ${this.outerWidth()} ${this.outerHeight()}`)
+            .style('overflow', 'hidden')
+    }
+
+    private bindResizeObserver(): void {
+        if (!this.observeParentResize || typeof ResizeObserver === 'undefined') return
+
+        const node = this.parent.node?.()
+        const container = node?.parentElement
+        if (!container) return
+
+        this.resizeObserver = new ResizeObserver((entries) => {
+            const containerWidth = entries[0]?.contentRect.width
+            if (!Number.isFinite(containerWidth) || containerWidth <= 0) return
+            if (Math.abs(containerWidth - this.requestedWidth) < 0.5) return
+            this.resize(this.x, this.y, containerWidth, this.height)
+        })
+        this.resizeObserver.observe(container)
+    }
+
+    private indexOf(value: Value): number {
+        return this.options.findIndex((option) => option.value === value)
+    }
+
+    private segmentWidth(): number {
+        return (this.width - PADDING * 2) / this.options.length
+    }
+
+    private segmentX(index: number): number {
+        return PADDING + index * this.segmentWidth()
+    }
+
+    private createOptionState(option: SlidingSwitchOption<Value>, index: number): SlidingSwitchOptionRenderState<Value> {
+        const selected = option.value === this.currentValue
+        const disabled = option.disabled ?? false
+        return {
+            id: `${this.id}:${option.value}`,
+            option,
+            index,
+            x: this.segmentX(index),
+            y: PADDING,
+            width: this.segmentWidth(),
+            height: this.height - PADDING * 2,
+            selected,
+            hovered: this.hoveredValue === option.value,
+            disabled,
+            closable: Boolean(option.closable && this.onClose && !disabled),
+            onClose: (event: Event) => this.closeOption(option, event),
+        }
+    }
+
+    private createOptionView(option: SlidingSwitchOption<Value>, index: number): SlidingSwitchOptionView<Value> {
+        const group = this.group.append('g')
+            .attr('class', 'sliding-switch-option-group')
+            .attr('data-value', option.value)
+
+        const hit = group.append('rect')
+            .attr('class', 'sliding-switch-hit')
+            .attr('fill', 'transparent')
+
+        const state = this.createOptionState(option, index)
+        const customRenderer = this.renderOption?.(group, state) ?? null
+
+        const view: SlidingSwitchOptionView<Value> = {
+            option,
+            index,
+            group,
+            hit,
+            label: null,
+            closeGroup: null,
+            closeBackground: null,
+            closeIcon: null,
+            customRenderer,
+        }
+
+        if (!customRenderer) this.createDefaultOptionContent(view)
+
+        group
+            .on('click', (event: Event) => this.selectOption(option, event))
+            .on('keydown', (event: KeyboardEvent) => this.handleOptionKeydown(option, event))
+            .on('mouseenter', () => {
+                this.hoveredValue = option.value
+                this.renderInternal(false)
+            })
+            .on('mouseleave', () => {
+                if (this.hoveredValue === option.value) this.hoveredValue = null
+                this.renderInternal(false)
+            })
+
+        return view
+    }
+
+    private createDefaultOptionContent(view: SlidingSwitchOptionView<Value>): void {
+        view.label = view.group.append('text')
+            .attr('class', 'sliding-switch-option')
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('font-size', FONT_SIZE)
+            .attr('font-weight', FONT_WEIGHT)
+            .attr('data-value', view.option.value)
+
+        view.closeGroup = view.group.append('g')
+            .attr('class', 'sliding-switch-option-close')
+            .attr('role', 'button')
+
+        view.closeBackground = view.closeGroup.append('circle')
+            .attr('class', 'sliding-switch-option-close-background')
+            .attr('fill', 'transparent')
+
+        view.closeIcon = view.closeGroup.append('g')
+            .attr('class', 'sliding-switch-option-close-icon')
+
+        view.closeGroup
+            .on('click', (event: Event) => this.closeOption(view.option, event))
+            .on('keydown', (event: KeyboardEvent) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                this.closeOption(view.option, event)
+            })
+            .on('mouseenter', () => view.closeBackground?.attr('fill', COLORS.closeHover))
+            .on('mouseleave', () => view.closeBackground?.attr('fill', 'transparent'))
+    }
+
+    private selectOption(option: SlidingSwitchOption<Value>, event: Event): void {
+        if (event.defaultPrevented) return
+        event.preventDefault()
+        event.stopPropagation()
+        this.applyValue(option.value, true)
+    }
+
+    private closeOption(option: SlidingSwitchOption<Value>, event: Event): void {
+        if (!option.closable || !this.onClose || option.disabled) return
+        event.preventDefault()
+        event.stopPropagation()
+        this.onClose(option.value, this.id, option)
+    }
+
+    private handleOptionKeydown(option: SlidingSwitchOption<Value>, event: KeyboardEvent): void {
+        if (event.key === 'Enter' || event.key === ' ') {
+            this.selectOption(option, event)
+            return
+        }
+
+        const offsetByKey: Record<string, number> = {
+            ArrowRight: 1,
+            ArrowDown: 1,
+            ArrowLeft: -1,
+            ArrowUp: -1,
+        }
+        const offset = offsetByKey[event.key]
+        if (offset !== undefined) {
+            event.preventDefault()
+            event.stopPropagation()
+            this.selectByOffset(offset)
+            return
+        }
+
+        if (event.key === 'Home') {
+            event.preventDefault()
+            event.stopPropagation()
+            this.selectFirstEnabled()
+            return
+        }
+
+        if (event.key === 'End') {
+            event.preventDefault()
+            event.stopPropagation()
+            this.selectLastEnabled()
+        }
+    }
+
+    private selectByOffset(offset: number): void {
+        const startIndex = this.indexOf(this.currentValue)
+        for (let step = 1; step <= this.options.length; step += 1) {
+            const index = (startIndex + offset * step + this.options.length) % this.options.length
+            const option = this.options[index]!
+            if (option.disabled) continue
+            this.applyValue(option.value, true)
+            return
+        }
+    }
+
+    private selectFirstEnabled(): void {
+        const option = this.options.find((candidate) => !candidate.disabled)
+        if (option) this.applyValue(option.value, true)
+    }
+
+    private selectLastEnabled(): void {
+        for (let index = this.options.length - 1; index >= 0; index -= 1) {
+            const option = this.options[index]!
+            if (option.disabled) continue
+            this.applyValue(option.value, true)
+            return
+        }
+    }
+
+    private renderDefaultOptionContent(view: SlidingSwitchOptionView<Value>, state: SlidingSwitchOptionRenderState<Value>): void {
+        const textColor = state.disabled
+            ? COLORS.optionTextDisabled
+            : state.selected || state.hovered ? COLORS.optionTextActive : COLORS.optionText
+        const closeVisible = state.closable && state.hovered
+        const closeReserve = state.closable ? CLOSE_SIZE + CLOSE_GAP : 0
+        const textMaxWidth = Math.max(0, state.width - closeReserve - 12)
+        const textCenterX = state.x + closeReserve + (state.width - closeReserve) / 2
+        const closeCenterX = state.x + CLOSE_SIZE / 2 + 4
+        const closeCenterY = state.y + state.height / 2
+
+        view.label
+            ?.attr('x', textCenterX)
+            .attr('y', state.y + state.height / 2)
+            .attr('fill', textColor)
+            .text(truncateLabel(state.option.label, textMaxWidth))
+
+        view.closeGroup
+            ?.attr('transform', `translate(${closeCenterX}, ${closeCenterY})`)
+            .attr('display', closeVisible ? null : 'none')
+            .attr('tabindex', closeVisible ? 0 : null)
+            .attr('aria-label', state.option.closeAriaLabel ?? `Close ${state.option.label}`)
+            .attr('aria-hidden', String(!closeVisible))
+            .style('cursor', closeVisible ? 'pointer' : 'default')
+
+        view.closeBackground
+            ?.attr('cx', 0)
+            .attr('cy', 0)
+            .attr('r', CLOSE_SIZE / 2)
+
+        if (view.closeIcon) {
+            appendSvgPathIcon(view.closeIcon, xIcon, {
+                x: -CLOSE_ICON_SIZE / 2,
+                y: -CLOSE_ICON_SIZE / 2,
+                size: CLOSE_ICON_SIZE,
+                fill: state.disabled ? COLORS.optionTextDisabled : COLORS.optionTextActive,
+            })
+        }
+    }
+
+    private renderOptionView(view: SlidingSwitchOptionView<Value>): void {
+        const state = this.createOptionState(view.option, view.index)
+        const selectedValue = String(state.selected)
+        const checkedValue = String(state.selected)
+
+        view.group
+            .attr('transform', `translate(0, 0)`)
+            .attr('role', this.optionRole)
+            .attr('tabindex', state.disabled ? null : 0)
+            .attr('aria-label', state.option.ariaLabel ?? state.option.label)
+            .attr('aria-disabled', String(state.disabled))
+            .attr('aria-selected', this.selectedAriaAttribute === 'aria-selected' ? selectedValue : null)
+            .attr('aria-checked', this.selectedAriaAttribute === 'aria-checked' ? checkedValue : null)
+            .style('cursor', state.disabled ? 'not-allowed' : 'pointer')
+
+        view.hit
+            .attr('x', state.x)
+            .attr('y', state.y)
+            .attr('width', state.width)
+            .attr('height', state.height)
+            .attr('rx', state.height / 2)
+            .attr('ry', state.height / 2)
+
+        if (view.customRenderer) {
+            view.customRenderer.render?.(state)
+            return
+        }
+
+        this.renderDefaultOptionContent(view, state)
+    }
+
+    private renderInternal(animate: boolean): void {
+        if (this.destroyed) return
+
+        const selectedIndex = this.indexOf(this.currentValue)
+        const segmentWidth = this.segmentWidth()
+        const indicatorHeight = this.height - PADDING * 2
+        const targetX = this.segmentX(selectedIndex)
+
+        this.updateHostSvgGeometry()
+
+        this.group.attr(
+            'transform',
+            `translate(${this.x + this.visualOverflowPadding.left}, ${this.y + this.visualOverflowPadding.top})`
+        )
+
+        this.track
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('width', this.width)
+            .attr('height', this.height)
+            .attr('rx', this.height / 2)
+            .attr('ry', this.height / 2)
+            .attr('fill', COLORS.track)
+
+        this.indicator
+            .attr('y', PADDING)
+            .attr('width', segmentWidth)
+            .attr('height', indicatorHeight)
+            .attr('rx', indicatorHeight / 2)
+            .attr('ry', indicatorHeight / 2)
+            .attr('fill', COLORS.indicator)
+            .attr('stroke', 'none')
+            .attr('stroke-width', 0)
+            .style('filter', this.indicatorBoxShadow === 'none' ? null : `drop-shadow(${this.indicatorBoxShadow})`)
+
+        if (this.indicatorInsetShadow) {
+            this.indicatorInsetGradient.selectAll('*').remove()
+            this.indicatorInsetGradient.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', this.indicatorInsetShadow.topColor)
+            this.indicatorInsetGradient.append('stop')
+                .attr('offset', '38%')
+                .attr('stop-color', 'rgba(255, 255, 255, 0)')
+            this.indicatorInsetGradient.append('stop')
+                .attr('offset', '72%')
+                .attr('stop-color', 'rgba(0, 0, 0, 0)')
+            this.indicatorInsetGradient.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', this.indicatorInsetShadow.bottomColor)
+        }
+
+        this.indicatorInset
+            .attr('y', PADDING)
+            .attr('width', segmentWidth)
+            .attr('height', indicatorHeight)
+            .attr('rx', indicatorHeight / 2)
+            .attr('ry', indicatorHeight / 2)
+            .attr('fill', this.indicatorInsetShadow ? `url(#${this.indicatorInsetGradientId})` : 'transparent')
+            .attr('stroke', 'none')
+            .attr('stroke-width', 0)
+
+        if (animate) {
+            this.indicator.transition().duration(SLIDING_SWITCH_TRANSITION_DURATION_MS).ease(easeCubicOut).attr('x', targetX)
+            this.indicatorInset.transition().duration(SLIDING_SWITCH_TRANSITION_DURATION_MS).ease(easeCubicOut).attr('x', targetX)
+        } else {
+            this.indicator.attr('x', targetX)
+            this.indicatorInset.attr('x', targetX)
+        }
+
+        for (const view of this.optionViews) this.renderOptionView(view)
+    }
+
+    private applyValue(value: Value, notify: boolean): void {
+        const nextIndex = this.indexOf(value)
+        if (nextIndex < 0 || this.options[nextIndex]?.disabled) return
+        const changed = value !== this.currentValue
+        this.currentValue = value
+        this.renderInternal(changed)
+        if (changed && notify) this.onChange?.(value, this.id)
+    }
+
+    render = (): void => this.renderInternal(false)
+
+    resize(x: number, y: number, width: number, height: number = this.height): void {
+        this.x = x
+        this.y = y
+        this.requestedWidth = width
+        this.width = this.resolveContentWidth(width)
+        this.height = height
+        this.renderInternal(false)
+    }
+
+    setValue(value: Value): void {
+        this.applyValue(value, false)
+    }
+
+    getValue(): Value {
+        return this.currentValue
+    }
+
+    getContentWidth(): number {
+        return this.width
+    }
+
+    getOuterHeight(): number {
+        return this.outerHeight()
+    }
+
+    destroy(): void {
+        if (this.destroyed) return
+        this.destroyed = true
+        this.resizeObserver?.disconnect()
+        for (const view of this.optionViews) view.customRenderer?.destroy?.()
+        this.group.remove()
+    }
 }
 
 export function createSlidingSwitch<Value extends string = string>(
     parent: any,
     config: SlidingSwitchConfig<Value>
 ): SlidingSwitchInstance<Value> {
-    const { id, x, y, width, height = 26, options, selectedValue, className = '', onChange } = config
-
-    if (options.length === 0) {
-        throw new Error('Sliding switch requires at least one option')
-    }
-
-    const indexOf = (value: Value): number => options.findIndex((option) => option.value === value)
-    let currentValue = selectedValue !== undefined && indexOf(selectedValue) >= 0 ? selectedValue : options[0]!.value
-
-    const trackRadius = height / 2
-    const segmentWidth = (width - PADDING * 2) / options.length
-    const indicatorHeight = height - PADDING * 2
-    const indicatorRadius = indicatorHeight / 2
-    const segmentX = (index: number): number => PADDING + index * segmentWidth
-
-    const group = parent.append('g')
-        .attr('class', `sliding-switch-group ${className}`)
-        .attr('transform', `translate(${x}, ${y})`)
-        .attr('data-sliding-switch-id', id)
-        .style('cursor', 'pointer')
-
-    group.append('rect')
-        .attr('class', 'sliding-switch-track')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', width)
-        .attr('height', height)
-        .attr('rx', trackRadius)
-        .attr('ry', trackRadius)
-        .attr('fill', COLORS.track)
-
-    const indicator = group.append('rect')
-        .attr('class', 'sliding-switch-indicator')
-        .attr('x', segmentX(indexOf(currentValue)))
-        .attr('y', PADDING)
-        .attr('width', segmentWidth)
-        .attr('height', indicatorHeight)
-        .attr('rx', indicatorRadius)
-        .attr('ry', indicatorRadius)
-        .attr('fill', COLORS.indicator)
-
-    const labels = options.map((option, index) => {
-        const label = group.append('text')
-            .attr('class', 'sliding-switch-option')
-            .attr('x', segmentX(index) + segmentWidth / 2)
-            .attr('y', height / 2)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('font-weight', 550)
-            .attr('data-value', option.value)
-            .attr('fill', option.value === currentValue ? COLORS.optionTextActive : COLORS.optionText)
-            .text(option.label)
-
-        group.append('rect')
-            .attr('class', 'sliding-switch-hit')
-            .attr('x', segmentX(index))
-            .attr('y', PADDING)
-            .attr('width', segmentWidth)
-            .attr('height', indicatorHeight)
-            .attr('fill', 'transparent')
-            .attr('data-value', option.value)
-            .on('click', (event: MouseEvent) => { event.stopPropagation(); applyValue(option.value, true) })
-            .on('mouseenter', () => { if (option.value !== currentValue) label.attr('fill', COLORS.optionTextActive) })
-            .on('mouseleave', () => { if (option.value !== currentValue) label.attr('fill', COLORS.optionText) })
-
-        return label
-    })
-
-    function render(animate: boolean): void {
-        const selectedIndex = indexOf(currentValue)
-
-        labels.forEach((label, index) => {
-            label.attr('fill', index === selectedIndex ? COLORS.optionTextActive : COLORS.optionText)
-        })
-
-        const targetX = segmentX(selectedIndex)
-        if (animate) {
-            indicator.transition().duration(TRANSITION_DURATION).ease(easeCubicOut).attr('x', targetX)
-        } else {
-            indicator.attr('x', targetX)
-        }
-    }
-
-    function applyValue(value: Value, notify: boolean): void {
-        if (indexOf(value) < 0) return
-        const changed = value !== currentValue
-        currentValue = value
-        render(changed)
-        if (changed && notify) onChange?.(value, id)
-    }
-
-    return {
-        render: () => render(false),
-        setValue: (value: Value) => applyValue(value, false),
-        getValue: () => currentValue,
-        destroy: () => group.remove(),
-    }
+    return new SlidingSwitch(parent, config)
 }

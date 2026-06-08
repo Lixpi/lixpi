@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { select, selection } from 'd3-selection'
 import { createSlidingSwitch } from '$src/components/slidingSwitch/slidingSwitch.ts'
+import { createTagPill } from '$src/components/tagPill/tagPill.ts'
 
 // The indicator slide uses a d3 transition on the rect's `x`. happy-dom drives d3
 // timers awkwardly, so stub transitions with a chainable no-op: state (value/onChange)
@@ -110,6 +111,74 @@ describe('createSlidingSwitch', () => {
         expect(slidingSwitch.getValue()).toBe('timeline')
         expect(onChange).not.toHaveBeenCalled()
         expect(labels(svg)[2]!.getAttribute('fill')).toBe('#1a2744')
+    })
+
+    it('supports closable options without selecting the segment', () => {
+        const onChange = vi.fn()
+        const onClose = vi.fn()
+        const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
+        document.body.appendChild(svg)
+        const slidingSwitch = createSlidingSwitch<View>(select(svg), {
+            id: 'view-mode',
+            x: 0,
+            y: 0,
+            width: WIDTH,
+            height: 26,
+            options: options.map((option) => ({ ...option, closable: option.value === 'grid' })),
+            selectedValue: 'list',
+            onChange,
+            onClose,
+        })
+
+        svg.querySelectorAll('.sliding-switch-option-close')[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        expect(slidingSwitch.getValue()).toBe('list')
+        expect(onChange).not.toHaveBeenCalled()
+        expect(onClose).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode', expect.objectContaining({ value: 'grid' }))
+    })
+
+    it('supports keyboard selection across options', () => {
+        const { svg, slidingSwitch, onChange } = mount('list')
+
+        hitRects(svg)[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+
+        expect(slidingSwitch.getValue()).toBe('grid')
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode')
+    })
+
+    it('lets a custom renderer inherit selected state and close behavior', () => {
+        const onClose = vi.fn()
+        const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
+        document.body.appendChild(svg)
+        const slidingSwitch = createSlidingSwitch<View>(select(svg), {
+            id: 'view-mode',
+            x: 0,
+            y: 0,
+            width: WIDTH,
+            height: 26,
+            options: options.map((option) => ({ ...option, closable: option.value === 'grid' })),
+            selectedValue: 'list',
+            onClose,
+            renderOption: (parent, state) => createTagPill(parent, {
+                id: state.id,
+                x: state.x,
+                y: state.y,
+                width: state.width,
+                height: state.height,
+                label: state.option.label,
+                selected: state.selected,
+                hovered: state.hovered,
+                closable: state.closable,
+                closeAriaLabel: state.option.closeAriaLabel,
+                onClose: (_id, event) => state.onClose(event),
+            }),
+        })
+
+        expect(svg.querySelectorAll('.tag-pill-group')).toHaveLength(3)
+        slidingSwitch.setValue('timeline')
+        expect(svg.querySelectorAll('.tag-pill-background')[2]!.getAttribute('stroke')).toBe('rgba(78, 126, 238, 0.18)')
+
+        svg.querySelectorAll('.tag-pill-close')[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        expect(onClose).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode', expect.objectContaining({ value: 'grid' }))
     })
 
     it('removes its group on destroy', () => {

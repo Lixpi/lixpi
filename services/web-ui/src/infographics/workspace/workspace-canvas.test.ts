@@ -1314,6 +1314,8 @@ describe('Vertical rail — TS infrastructure', () => {
 
 	it('renders a removable context chip tray and sends chip context for standalone chats', () => {
 		// The chip tray replaces the old Follow / Pinned / With Sources controls.
+		const scss = loadScss()
+
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chips')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-label')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
@@ -1330,11 +1332,21 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
 		expectSourceToContain(ts, 'const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-sessions-hidden')
+		// Open tabs are now a D3 sliding switch, not DOM tag-style buttons.
+		expectSourceToContain(ts, "import { createSlidingSwitch } from '$src/components/slidingSwitch/index.ts'")
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-tabs-switch')
+		expectSourceToContain(ts, "id: 'workspace-ai-chat-panel-tabs'")
+		expectSourceToContain(ts, "role: 'tablist'")
+		expectSourceToContain(ts, "optionRole: 'tab'")
+		expectSourceToContain(ts, "onClose: (tabId) => closeAiChatSidebarTab(tabId)")
+		expectSourceNotToContain(ts, 'createTagPill')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-title')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-close')
+		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-tab {')
 		// The removed context-mode controls must leave no dangling code.
 		expectSourceNotToContain(ts, "value: 'followSelection'")
 		expectSourceNotToContain(ts, "value: 'pinnedContext'")
 		expectSourceNotToContain(ts, '>With Sources</span>')
-		expectSourceNotToContain(ts, 'createSlidingSwitch')
 		expectSourceNotToContain(ts, 'createToggleSwitch')
 		expectSourceNotToContain(ts, 'includeUpstreamContext')
 		expectSourceNotToContain(ts, 'contextMode')
