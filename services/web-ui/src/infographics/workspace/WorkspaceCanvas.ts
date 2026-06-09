@@ -113,6 +113,7 @@ import {
     createSlidingTabsSwitch,
     type SlidingTabsSwitchInstance,
 } from '$src/components/slidingTabsSwitch/index.ts'
+import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
@@ -296,6 +297,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
+    const activeContextPreviewTooltips: Set<HelpTooltipInstance> = new Set()
     let contextPreviewRefreshVersion = 0
     let autoContextSelections: WorkspaceContextSelection[] = []
     const removedAutoContextChipNodeIds: Set<string> = new Set()
@@ -2380,6 +2382,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPromptEditor?.destroy?.()
         activeAiChatPromptGradient?.destroy()
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
+        destroyContextPreviewTooltips()
         activeAiChatPanelEl?.remove()
         activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
@@ -2648,6 +2651,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         </div>` as HTMLElement
     }
 
+    function destroyContextPreviewTooltips(): void {
+        for (const tooltip of activeContextPreviewTooltips) {
+            tooltip.destroy()
+        }
+        activeContextPreviewTooltips.clear()
+    }
+
     function createAiChatPanelContextTrayElement(): HTMLDivElement {
         const trayEl = html`<div
             className="workspace-ai-chat-panel-context-chips"
@@ -2739,17 +2749,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const text = getContextPreviewText(node)
         const accessibleLabel = title || getContextPreviewTypeLabel(node)
         const shouldRenderPopoverMeta = (node.type === 'image' || node.type === 'video') && Boolean(title || text)
+        const previewTooltip = createHelpTooltip({
+            label: accessibleLabel,
+            triggerContent: renderContextPreviewVisual(node, accessibleLabel, text, 'mini'),
+            content: [
+                renderContextPreviewVisual(node, accessibleLabel, text, 'large'),
+                ...(shouldRenderPopoverMeta ? [renderContextPreviewPopoverMeta(title, text)] : []),
+            ],
+            preferredPlacement: 'top',
+            className: 'workspace-ai-chat-panel-context-preview-tooltip',
+            triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
+            contentClassName: 'workspace-ai-chat-panel-context-preview-popover',
+        })
         const removeLabel = kind === 'auto'
             ? `Remove ${accessibleLabel} from automatic context`
             : `Remove ${accessibleLabel} from context`
+        activeContextPreviewTooltips.add(previewTooltip)
         const chipEl = html`<div
             className=${`workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-${kind}`}
             data=${{ nodeId, contextKind: kind, contextRole: role ?? kind }}
             role="listitem"
-            tabindex="0"
         >
             <div className="workspace-ai-chat-panel-context-preview-main">
-                ${renderContextPreviewVisual(node, accessibleLabel, text, 'mini')}
+                ${previewTooltip.dom}
             </div>
             <button
                 type="button"
@@ -2757,10 +2779,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 aria-label=${removeLabel}
                 innerHTML=${xCircleIcon}
             ></button>
-            <div className="workspace-ai-chat-panel-context-preview-popover" aria-hidden="true">
-                ${renderContextPreviewVisual(node, accessibleLabel, text, 'large')}
-                ${shouldRenderPopoverMeta ? renderContextPreviewPopoverMeta(title, text) : ''}
-            </div>
         </div>` as HTMLDivElement
         chipEl.querySelector('.workspace-ai-chat-panel-context-chip-remove')
             ?.addEventListener('click', () => {
@@ -2783,6 +2801,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         const previousScrollTop = historyScrollerEl?.scrollTop ?? null
         const refreshVersion = ++contextPreviewRefreshVersion
+        destroyContextPreviewTooltips()
         trayEl.replaceChildren()
         const explicitChipNodeIds = aiChatPanelState.contextChips
         const explicitChipNodeIdSet = new Set(explicitChipNodeIds)
