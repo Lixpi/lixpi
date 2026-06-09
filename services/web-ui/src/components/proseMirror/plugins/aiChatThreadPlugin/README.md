@@ -307,6 +307,7 @@ The plugin subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` and expec
 - **status**: START_STREAM, STREAMING, or END_STREAM
 - **aiProvider**: Which AI service is responding (Anthropic, OpenAI, etc.)
 - **threadId**: Identifies which thread this stream belongs to (enables concurrent streams)
+- **generationRun**: Optional multi-model run metadata; when present, parsed text, trace, image, and video events preserve the reasoning/media run ids for variant routing.
 - **segment**: Contains the actual content (text, styles, type, block/inline flag, header level)
 
 ### Streaming Lifecycle
@@ -456,6 +457,7 @@ Users see:
   - Exports ProseMirror node spec for `aiGeneratedImage` (atom node)
   - Manages global `AiGeneratedImageCallbacks` via `setAiGeneratedImageCallbacks()` / `getAiGeneratedImageCallbacks()`
   - Callbacks include `onImagePartialToCanvas`, `onImageCompleteToCanvas`, `onAddToCanvas`, `onEditInNewThread`
+  - Streaming callbacks carry optional `generationRun` metadata; generated image attrs persist generation request, reasoning run, media run, model ids, media type, and variant index.
   - `WorkspaceCanvas.ts` registers these callbacks to receive image events from the plugin
   - The plugin calls `getAiGeneratedImageCallbacks()` during streaming to delegate image placement to the canvas
 

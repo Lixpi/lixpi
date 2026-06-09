@@ -31,6 +31,7 @@ import type {
     ImageGenerationTrace,
     ImageGenerationSize,
     MarkdownParsedSegment,
+    MediaGenerationRunMeta,
     StreamStatus,
     WorkspaceContextResolution,
 } from '@lixpi/constants'
@@ -79,6 +80,7 @@ type SegmentEvent = {
     videoModelProvider?: string
     threadId?: string
     aiChatThreadId?: string
+    generationRun?: MediaGenerationRunMeta
     collapsibleTitle?: string
     // Markdown segment shape from @lixpi/constants (mirrors what @lixpi/markdown-stream-parser
     // emits). TODO: import from @lixpi/markdown-stream-parser once its in-development version
@@ -106,6 +108,15 @@ type SegmentEvent = {
     videoGenerationTrace?: import('@lixpi/constants').VideoGenerationTrace
     error?: string
 }
+type GeneratedRunAttrs = {
+    generationRequestId: string
+    reasoningRunId: string
+    mediaRunId: string
+    reasoningModelId: string
+    mediaModelId: string
+    mediaType: string
+    variantIndex: number | null
+}
 type ImageReference = { fileId: string; workspaceId: string }
 type ThreadContent = {
     nodeType: string
@@ -127,6 +138,18 @@ type AiGeneratedImageAttrs = {
     width: string
     alignment: AiGeneratedImageAlignment
     textWrap: AiGeneratedImageTextWrap
+} & GeneratedRunAttrs
+
+function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previousAttrs: Partial<GeneratedRunAttrs> = {}): GeneratedRunAttrs {
+    return {
+        generationRequestId: generationRun?.generationRequestId || previousAttrs.generationRequestId || '',
+        reasoningRunId: generationRun?.reasoningRunId || previousAttrs.reasoningRunId || '',
+        mediaRunId: generationRun?.mediaRunId || previousAttrs.mediaRunId || '',
+        reasoningModelId: generationRun?.reasoningModelId || previousAttrs.reasoningModelId || '',
+        mediaModelId: generationRun?.mediaModelId || previousAttrs.mediaModelId || '',
+        mediaType: generationRun?.mediaType || previousAttrs.mediaType || '',
+        variantIndex: generationRun?.variantIndex ?? previousAttrs.variantIndex ?? null,
+    }
 }
 type ResponseContext = {
     responseNode: ProseMirrorNode
@@ -706,6 +729,7 @@ class AiChatThreadPluginClass {
             partialIndex?: number
             fileId?: string
             responseId?: string
+            mediaRunId?: string
             partialOnly?: boolean
             fallbackToLastPartial?: boolean
         }
@@ -716,6 +740,7 @@ class AiChatThreadPluginClass {
         responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
             if (child.type.name !== aiGeneratedImageNodeType) return
             if (options.partialOnly && !child.attrs.isPartial) return
+            if (options.mediaRunId && child.attrs.mediaRunId !== options.mediaRunId) return
 
             const nodeInfo = {
                 node: child,
@@ -740,6 +765,8 @@ class AiChatThreadPluginClass {
                 matchedImage = nodeInfo
             }
         })
+
+        if (options.mediaRunId) return matchedImage
 
         return matchedImage ?? (options.fallbackToLastPartial ? latestPartialImage : null)
     }
@@ -771,6 +798,7 @@ class AiChatThreadPluginClass {
             width: previousAttrs.width || AI_GENERATED_IMAGE_THUMBNAIL_WIDTH,
             alignment,
             textWrap,
+            ...buildGeneratedRunAttrs(event.generationRun, previousAttrs),
         }
     }
 
@@ -787,6 +815,7 @@ class AiChatThreadPluginClass {
 
         const partialIndex = event.partialIndex ?? 0
         const existingImage = this.findGeneratedImageInResponse(responseContext, {
+            mediaRunId: event.generationRun?.mediaRunId,
             partialIndex,
             partialOnly: true,
             fallbackToLastPartial: true,
@@ -840,6 +869,7 @@ class AiChatThreadPluginClass {
         const responseMessageId = responseContext.responseNode.attrs.id || ''
         const imageNodeType = state.schema.nodes[aiGeneratedImageNodeType]
         const existingImage = this.findGeneratedImageInResponse(responseContext, {
+            mediaRunId: event.generationRun?.mediaRunId,
             fileId: event.fileId,
             responseId: event.responseId,
             partialOnly: true,
@@ -959,6 +989,7 @@ class AiChatThreadPluginClass {
                     callbacks.onImageBranchResolvedToCanvas?.({
                         threadId: effectiveThreadId,
                         resolution: event.imageBranchResolution,
+                        generationRun: event.generationRun,
                     })
                 }
                 return
@@ -970,6 +1001,7 @@ class AiChatThreadPluginClass {
                     callbacks.onWorkspaceContextResolvedToCanvas?.({
                         threadId: effectiveThreadId,
                         resolution: event.workspaceContextResolution,
+                        generationRun: event.generationRun,
                     })
                 }
                 return
@@ -985,10 +1017,12 @@ class AiChatThreadPluginClass {
                     callbacks.onImageBranchResolutionErrorToCanvas?.({
                         threadId: effectiveThreadId,
                         error: event.error || 'Image branch resolution failed',
+                        generationRun: event.generationRun,
                     })
                     callbacks.onImageErrorToCanvas?.({
                         threadId: effectiveThreadId,
                         error: event.error || 'Image branch resolution failed',
+                        generationRun: event.generationRun,
                     })
                 }
                 this.handleStreamError(view, effectiveThreadId)
@@ -1012,6 +1046,7 @@ class AiChatThreadPluginClass {
                     callbacks.onImageErrorToCanvas?.({
                         threadId: effectiveThreadId,
                         error: event.error || 'AI generation failed',
+                        generationRun: event.generationRun,
                     })
                 }
                 this.handleStreamError(view, effectiveThreadId)
@@ -1061,7 +1096,8 @@ class AiChatThreadPluginClass {
                 fileId: fileId || '',
                 workspaceId: workspaceId || '',
                 partialIndex: partialIndex || 0,
-                aiProvider: aiProvider || ''
+                aiProvider: aiProvider || '',
+                generationRun: event.generationRun,
             })
         } catch (error) {
             console.error('[aiChatThreadPlugin] handleImagePartial failed', { event }, error)
@@ -1092,6 +1128,7 @@ class AiChatThreadPluginClass {
             aiModel: aiProvider || '',
             imageModelProvider: imageModelProvider || '',
             responseMessageId,
+            generationRun: event.generationRun,
         })
     }
 
@@ -1106,6 +1143,7 @@ class AiChatThreadPluginClass {
         callbacks.onVideoPendingToCanvas?.({
             threadId: aiChatThreadId,
             aiProvider: aiProvider || '',
+            generationRun: event.generationRun,
         })
     }
 
@@ -1116,6 +1154,7 @@ class AiChatThreadPluginClass {
         callbacks.onVideoGeneratingToCanvas?.({
             threadId: aiChatThreadId,
             aiProvider: aiProvider || '',
+            generationRun: event.generationRun,
         })
     }
 
@@ -1156,6 +1195,7 @@ class AiChatThreadPluginClass {
             videoModel: videoModel || '',
             videoModelProvider: videoModelProvider || '',
             responseMessageId: '',
+            generationRun: event.generationRun,
         })
     }
 
@@ -1166,6 +1206,7 @@ class AiChatThreadPluginClass {
         callbacks.onVideoErrorToCanvas?.({
             threadId: aiChatThreadId,
             error: error || 'Video generation failed',
+            generationRun: event.generationRun,
         })
     }
 

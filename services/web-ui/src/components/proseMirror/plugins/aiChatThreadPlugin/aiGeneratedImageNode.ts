@@ -2,9 +2,15 @@ import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { ImageBranchVlmResolution, WorkspaceContextResolution } from '@lixpi/constants'
+import type { ImageBranchVlmResolution, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
 
 export const aiGeneratedImageNodeType = 'aiGeneratedImage'
+
+function parseVariantIndex(value: string | null): number | null {
+    if (!value) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
 
 export const aiGeneratedImageNodeSpec = {
     attrs: {
@@ -16,6 +22,13 @@ export const aiGeneratedImageNodeSpec = {
         aiModel: { default: '' },
         isPartial: { default: true },
         partialIndex: { default: 0 },
+        generationRequestId: { default: '' },
+        reasoningRunId: { default: '' },
+        mediaRunId: { default: '' },
+        reasoningModelId: { default: '' },
+        mediaModelId: { default: '' },
+        mediaType: { default: '' },
+        variantIndex: { default: null },
         // Image display attributes (same as regular image node)
         width: { default: null },
         alignment: { default: 'left' },
@@ -37,6 +50,13 @@ export const aiGeneratedImageNodeSpec = {
                     aiModel: dom.getAttribute('data-ai-model') || '',
                     isPartial: dom.getAttribute('data-is-partial') === 'true',
                     partialIndex: parseInt(dom.getAttribute('data-partial-index') || '0', 10),
+                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
+                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
+                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
+                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
+                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
+                    mediaType: dom.getAttribute('data-media-type') || '',
+                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
                     width: dom.getAttribute('data-width') || null,
                     alignment: dom.getAttribute('data-alignment') || 'left',
                     textWrap: dom.getAttribute('data-text-wrap') || 'none',
@@ -55,6 +75,13 @@ export const aiGeneratedImageNodeSpec = {
             'data-ai-model': node.attrs.aiModel,
             'data-is-partial': String(node.attrs.isPartial),
             'data-partial-index': String(node.attrs.partialIndex),
+            'data-generation-request-id': node.attrs.generationRequestId,
+            'data-reasoning-run-id': node.attrs.reasoningRunId,
+            'data-media-run-id': node.attrs.mediaRunId,
+            'data-reasoning-model-id': node.attrs.reasoningModelId,
+            'data-media-model-id': node.attrs.mediaModelId,
+            'data-media-type': node.attrs.mediaType,
+            'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
             'data-width': node.attrs.width || '',
             'data-alignment': node.attrs.alignment || 'left',
             'data-text-wrap': node.attrs.textWrap || 'none',
@@ -78,6 +105,7 @@ export type AiGeneratedImageCallbacks = {
         workspaceId: string
         partialIndex: number
         aiProvider: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onImageCompleteToCanvas?: (data: {
         threadId: string
@@ -89,22 +117,27 @@ export type AiGeneratedImageCallbacks = {
         aiModel: string
         imageModelProvider: string
         responseMessageId: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onImageBranchResolvedToCanvas?: (data: {
         threadId: string
         resolution: ImageBranchVlmResolution
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onWorkspaceContextResolvedToCanvas?: (data: {
         threadId: string
         resolution: WorkspaceContextResolution
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onImageBranchResolutionErrorToCanvas?: (data: {
         threadId: string
         error: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onImageErrorToCanvas?: (data: {
         threadId: string
         error: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
 }
 

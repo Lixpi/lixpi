@@ -7,6 +7,7 @@ import type {
     AiInteractionChatStopMessagePayload,
     ImageGenerationTrace,
     ImageGenerationSize,
+    MediaGenerationRunMeta,
     VideoGenerationTrace,
     WorkspaceContextResolution
 } from '@lixpi/constants'
@@ -38,51 +39,105 @@ type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadI
     videoSourceForExtension?: string
 }
 
+type MarkdownParserContext = {
+    parser: ReturnType<typeof MarkdownStreamParser.getInstance>
+    unsubscribe?: () => void
+    aiProvider: string | null
+    generationRun?: MediaGenerationRunMeta
+}
+
 export default class AiInteractionService {
     workspaceId: string
     aiChatThreadId: string
     segmentsReceiver: any
-    markdownStreamParser: any
-    markdownStreamParserUnsubscribe: any
+    markdownParserContexts: Map<string, MarkdownParserContext>
     currentAiProvider: string | null
 
     constructor({ workspaceId, aiChatThreadId }: { workspaceId: string; aiChatThreadId: string }) {
         this.workspaceId = workspaceId
         this.aiChatThreadId = aiChatThreadId
         this.segmentsReceiver = SegmentsReceiver
+        this.markdownParserContexts = new Map()
         this.currentAiProvider = null
 
         this.initNatsSubscriptions()
     }
 
-    initMarkdownParser() {
-        // Clean up existing parser if any
-        if (this.markdownStreamParser) {
-            if (this.markdownStreamParserUnsubscribe) {
-                this.markdownStreamParserUnsubscribe()
-            }
-            MarkdownStreamParser.removeInstance(this.aiChatThreadId)
-        }
+    getRunKey(generationRun?: MediaGenerationRunMeta): string {
+        return generationRun?.reasoningRunId || this.aiChatThreadId
+    }
 
+    getParserInstanceId(runKey: string): string {
+        return runKey === this.aiChatThreadId ? this.aiChatThreadId : `${this.aiChatThreadId}:${runKey}`
+    }
+
+    getGenerationRun(content: any): MediaGenerationRunMeta | undefined {
+        return content?.generationRun
+            ?? content?.imageGenerationTrace?.generationRun
+            ?? content?.videoGenerationTrace?.generationRun
+    }
+
+    cleanupMarkdownParserContext(runKey: string): void {
+        const context = this.markdownParserContexts.get(runKey)
+        context?.unsubscribe?.()
+        MarkdownStreamParser.removeInstance(this.getParserInstanceId(runKey))
+        this.markdownParserContexts.delete(runKey)
+        if (runKey === this.aiChatThreadId) {
+            this.currentAiProvider = null
+        }
+    }
+
+    initMarkdownParser(generationRun?: MediaGenerationRunMeta, aiProvider?: string) {
+        const runKey = this.getRunKey(generationRun)
+        this.cleanupMarkdownParserContext(runKey)
+
+        const parserInstanceId = this.getParserInstanceId(runKey)
         // Initialize markdown stream parser (exact replication of backend pattern)
-        this.markdownStreamParser = MarkdownStreamParser.getInstance(this.aiChatThreadId)
+        const parser = MarkdownStreamParser.getInstance(parserInstanceId)
+
+        const context: MarkdownParserContext = {
+            parser,
+            aiProvider: aiProvider || null,
+            ...(generationRun ? { generationRun } : {}),
+        }
+        this.markdownParserContexts.set(runKey, context)
 
         // Subscribe to parsed segments from the markdown stream parser
-        this.markdownStreamParserUnsubscribe = this.markdownStreamParser.subscribeToTokenParse((parsedSegment, unsubscribe) => {
+        context.unsubscribe = parser.subscribeToTokenParse((parsedSegment, unsubscribe) => {
             // Emit parsed content to segmentsReceiver with aiProvider and aiChatThreadId
+            const currentContext = this.markdownParserContexts.get(runKey) ?? context
             this.segmentsReceiver.receiveSegment({
                 ...parsedSegment,
-                aiProvider: this.currentAiProvider,
-                aiChatThreadId: this.aiChatThreadId
+                aiProvider: currentContext.aiProvider,
+                aiChatThreadId: this.aiChatThreadId,
+                ...(currentContext.generationRun ? { generationRun: currentContext.generationRun } : {}),
             })
 
             // Cleanup on stream end
             if (parsedSegment.status === 'END_STREAM') {
                 unsubscribe()
-                MarkdownStreamParser.removeInstance(this.aiChatThreadId)
-                this.currentAiProvider = null
+                MarkdownStreamParser.removeInstance(parserInstanceId)
+                this.markdownParserContexts.delete(runKey)
+                if (runKey === this.aiChatThreadId) {
+                    this.currentAiProvider = null
+                }
             }
         })
+    }
+
+    updateRunProvider(runKey: string, aiProvider: string | undefined): string | null {
+        if (!aiProvider) {
+            return this.markdownParserContexts.get(runKey)?.aiProvider ?? this.currentAiProvider
+        }
+
+        const existingContext = this.markdownParserContexts.get(runKey)
+        if (existingContext) {
+            existingContext.aiProvider = aiProvider
+        }
+        if (runKey === this.aiChatThreadId) {
+            this.currentAiProvider = aiProvider
+        }
+        return aiProvider
     }
 
     async initNatsSubscriptions() {
@@ -128,9 +183,13 @@ export default class AiInteractionService {
                 return
             }
 
-            // Track current aiProvider for parser callback
-            if (content.aiProvider) {
-                this.currentAiProvider = content.aiProvider
+            const generationRun = this.getGenerationRun(content)
+            const runKey = this.getRunKey(generationRun)
+            const aiProvider = this.updateRunProvider(runKey, content.aiProvider)
+            const segmentBase = {
+                aiProvider,
+                aiChatThreadId: this.aiChatThreadId,
+                ...(generationRun ? { generationRun } : {}),
             }
 
             if (content.status === STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED) {
@@ -143,8 +202,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'context_relevance_resolved',
                     workspaceContextResolution,
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -154,8 +212,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'context_relevance_error',
                     error: content.error || 'Workspace context relevance failed',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -171,8 +228,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_generation_trace',
                     imageGenerationTrace,
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -185,8 +241,7 @@ export default class AiInteractionService {
                     fileId: content.fileId,
                     workspaceId: this.workspaceId,
                     partialIndex: content.partialIndex,
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -196,8 +251,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_branch_resolved',
                     imageBranchResolution: content.resolution,
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -207,8 +261,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_branch_resolution_error',
                     error: content.error || 'Image branch resolution failed',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -223,8 +276,9 @@ export default class AiInteractionService {
                     workspaceId: this.workspaceId,
                     responseId: content.responseId,
                     revisedPrompt: content.revisedPrompt,
-                    aiProvider: this.currentAiProvider,
+                    aiProvider: aiProvider || '',
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
+                    ...(generationRun ? { generationRun } : {}),
                     aiChatThreadId: this.aiChatThreadId
                 })
                 return
@@ -244,8 +298,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'video_generation_trace',
                     videoGenerationTrace,
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -254,8 +307,7 @@ export default class AiInteractionService {
                 console.log('[AI_INTERACTION] VIDEO_PENDING received')
                 this.segmentsReceiver.receiveSegment({
                     type: 'video_pending',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -263,8 +315,7 @@ export default class AiInteractionService {
             if (content.status === STREAM_STATUS.VIDEO_GENERATING) {
                 this.segmentsReceiver.receiveSegment({
                     type: 'video_generating',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -287,8 +338,7 @@ export default class AiInteractionService {
                     revisedPrompt: content.revisedPrompt,
                     videoModel: content.videoModelId,
                     videoModelProvider: content.videoModelProvider || content.aiProvider || '',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -298,8 +348,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'video_error',
                     error: content.error || 'Video generation failed',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -308,8 +357,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     status: 'ERROR',
                     error: content.text || content.error || 'AI generation failed',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -318,8 +366,7 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'collapsible_start',
                     collapsibleTitle: content.collapsibleTitle || 'Image generation prompt',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -327,8 +374,7 @@ export default class AiInteractionService {
             if (content.status === STREAM_STATUS.COLLAPSIBLE_END) {
                 this.segmentsReceiver.receiveSegment({
                     type: 'collapsible_end',
-                    aiProvider: this.currentAiProvider,
-                    aiChatThreadId: this.aiChatThreadId
+                    ...segmentBase,
                 })
                 return
             }
@@ -336,15 +382,15 @@ export default class AiInteractionService {
             // Route raw tokens through markdown parser (exact replication of backend pattern)
             if (content.status === STREAM_STATUS.START_STREAM) {
                 // Initialize fresh parser instance for this stream
-                this.initMarkdownParser()
+                this.initMarkdownParser(generationRun, aiProvider || undefined)
                 // startParsing() emits START_STREAM event via subscribeToTokenParse callback
-                this.markdownStreamParser.startParsing()
+                this.markdownParserContexts.get(runKey)?.parser.startParsing()
             } else if (content.status === STREAM_STATUS.STREAMING && content.text) {
                 // Feed raw token to parser - it will emit parsed segments via subscribeToTokenParse callback
-                this.markdownStreamParser.parseToken(content.text)
+                this.markdownParserContexts.get(runKey)?.parser.parseToken(content.text)
             } else if (content.status === STREAM_STATUS.END_STREAM) {
                 // stopParsing() will emit END_STREAM event internally via subscribeToTokenParse callback
-                this.markdownStreamParser.stopParsing()
+                this.markdownParserContexts.get(runKey)?.parser.stopParsing()
             }
         } catch (error) {
             console.error('[AI_INTERACTION] onChatMessageResponse failed:', { data }, error)
@@ -465,8 +511,9 @@ export default class AiInteractionService {
 
     disconnect() {
         const subject = `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${this.workspaceId}.${this.aiChatThreadId}`
-        this.markdownStreamParserUnsubscribe?.()
-        MarkdownStreamParser.removeInstance(this.aiChatThreadId)
+        for (const runKey of Array.from(this.markdownParserContexts.keys())) {
+            this.cleanupMarkdownParserContext(runKey)
+        }
         servicesStore.getData('nats')?.getSubscriptions([subject]).forEach(sub => sub.unsubscribe())
         this.currentAiProvider = null
     }

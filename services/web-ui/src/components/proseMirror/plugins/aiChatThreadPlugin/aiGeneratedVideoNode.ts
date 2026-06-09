@@ -2,7 +2,7 @@ import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { ImageBranchVlmResolution } from '@lixpi/constants'
+import type { ImageBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
 import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
@@ -14,6 +14,12 @@ import { createVideoControls, type VideoControlsInstance } from '$src/components
 // the shared SVG videoControls bar used by the workspace canvas.
 
 export const aiGeneratedVideoNodeType = 'aiGeneratedVideo'
+
+function parseVariantIndex(value: string | null): number | null {
+    if (!value) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
 
 export const aiGeneratedVideoNodeSpec = {
     attrs: {
@@ -30,6 +36,13 @@ export const aiGeneratedVideoNodeSpec = {
         videoModel: { default: '' },
         isPending: { default: true },
         errorMessage: { default: '' },
+        generationRequestId: { default: '' },
+        reasoningRunId: { default: '' },
+        mediaRunId: { default: '' },
+        reasoningModelId: { default: '' },
+        mediaModelId: { default: '' },
+        mediaType: { default: '' },
+        variantIndex: { default: null },
         // Display attributes (mirror the image node)
         width: { default: null },
         alignment: { default: 'left' },
@@ -56,6 +69,13 @@ export const aiGeneratedVideoNodeSpec = {
                     videoModel: dom.getAttribute('data-video-model') || '',
                     isPending: dom.getAttribute('data-is-pending') === 'true',
                     errorMessage: dom.getAttribute('data-error-message') || '',
+                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
+                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
+                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
+                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
+                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
+                    mediaType: dom.getAttribute('data-media-type') || '',
+                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
                     width: dom.getAttribute('data-width') || null,
                     alignment: dom.getAttribute('data-alignment') || 'left',
                     textWrap: dom.getAttribute('data-text-wrap') || 'none',
@@ -79,6 +99,13 @@ export const aiGeneratedVideoNodeSpec = {
             'data-video-model': node.attrs.videoModel,
             'data-is-pending': String(node.attrs.isPending),
             'data-error-message': node.attrs.errorMessage,
+            'data-generation-request-id': node.attrs.generationRequestId,
+            'data-reasoning-run-id': node.attrs.reasoningRunId,
+            'data-media-run-id': node.attrs.mediaRunId,
+            'data-reasoning-model-id': node.attrs.reasoningModelId,
+            'data-media-model-id': node.attrs.mediaModelId,
+            'data-media-type': node.attrs.mediaType,
+            'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
             'data-width': node.attrs.width || '',
             'data-alignment': node.attrs.alignment || 'left',
             'data-text-wrap': node.attrs.textWrap || 'none',
@@ -103,10 +130,12 @@ export type AiGeneratedVideoCallbacks = {
     onVideoPendingToCanvas?: (data: {
         threadId: string
         aiProvider: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onVideoGeneratingToCanvas?: (data: {
         threadId: string
         aiProvider: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onVideoCompleteToCanvas?: (data: {
         threadId: string
@@ -125,10 +154,12 @@ export type AiGeneratedVideoCallbacks = {
         videoModel: string
         videoModelProvider: string
         responseMessageId: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
     onVideoErrorToCanvas?: (data: {
         threadId: string
         error: string
+        generationRun?: MediaGenerationRunMeta
     }) => void
     // The structured VLM resolver is shared with images; video uses the same
     // resolution payload, so the resolved/error callbacks are reused from the
@@ -136,6 +167,7 @@ export type AiGeneratedVideoCallbacks = {
     onVideoBranchResolvedToCanvas?: (data: {
         threadId: string
         resolution: ImageBranchVlmResolution
+        generationRun?: MediaGenerationRunMeta
     }) => void
 }
 
