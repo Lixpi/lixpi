@@ -67,6 +67,18 @@ describe('settings - grouped configuration', () => {
 		expect(settings.imageNode.useZoomCompensatedResizeHandleScaling).toBe(true)
 	})
 
+	it('adds configurable AI chat panel tabs settings with finite values', () => {
+		expect(Object.hasOwn(settings.aiChatThread, 'panelTabs')).toBe(true)
+		expect(settings.aiChatThread.panelTabs.minTabWidth).toBe(96)
+		expect(settings.aiChatThread.panelTabs.height).toBe(28)
+		expect(settings.aiChatThread.panelTabs.transitionDurationMs).toBe(160)
+		expect(settings.aiChatThread.panelTabs.transitionMinDurationMs).toBe(100)
+		expect(settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor).toBeGreaterThan(0)
+		expect(settings.aiChatThread.panelTabs.activeTabBoxShadow).toBe('none')
+		expect(settings.aiChatThread.panelTabs.activeTabInsetShadow.topColor).toBe('rgba(255, 255, 255, 0.86)')
+		expect(settings.aiChatThread.panelTabs.activeTabInsetShadow.bottomColor).toBe('rgba(0, 0, 0, 0)')
+	})
+
 	it('satisfies the Settings type', () => {
 		const configuredSettings: Settings = settings
 		expect(configuredSettings).toBe(settings)
