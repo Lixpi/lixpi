@@ -1,10 +1,14 @@
 # Web-UI Testing Guide
 
-Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`). Tests are no exception — always run them through Docker, never locally.
+Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`).
+Tests are no exception — when the user explicitly asks for tests, always run
+them through Docker, never locally.
 
 ## Agent Verification Commands
 
-For web-ui changes, agents verify test behavior only through Dockerized Vitest runs:
+For web-ui changes, agents may run tests only after the user explicitly asks
+for tests in the current thread. When tests are requested, verify test behavior
+only through Dockerized Vitest runs:
 
 ```bash
 # Run all tests
@@ -18,6 +22,7 @@ docker exec lixpi-web-ui pnpm test:run -- src/infographics/utils/zoomScaling.tes
 
 - Never run `svelte-check`, including `pnpm svelte-check`, `pnpm run svelte-check`, or another script or wrapper that invokes it.
 - Never load the application in a browser or use browser automation, screenshots, or manual visual inspection to verify an agent's work.
+- Never write, modify, or run tests unless the user explicitly asks for tests in the current thread.
 - Never replace a missing test with one of these prohibited checks. State the uncovered behavior in the completion report.
 
 ## Test Infrastructure
