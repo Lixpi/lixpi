@@ -99,6 +99,10 @@ function loadSettings(): string {
 	return readSourceFile('../../settings.ts', 'settings.ts')
 }
 
+function loadSvgIcons(): string {
+	return readSourceFile('../../svgIcons/index.ts', 'svgIcons/index.ts')
+}
+
 function extractBlock(scss: string, selector: string): string {
 	const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 	const pattern = new RegExp(`${escapedSelector}\\s*\\{`)
@@ -150,6 +154,30 @@ function extractBlockContainingSelector(scss: string, selector: string): string 
 function extractBoxShadowValues(block: string): string[] {
 	const matches = [...block.matchAll(/box-shadow:\s*([^;]+);/g)]
 	return matches.map(m => m[1].trim())
+}
+
+function extractFunctionBody(source: string, functionName: string): string {
+	const functionIndex = source.indexOf(`function ${functionName}`)
+	if (functionIndex === -1) return ''
+
+	const openIndex = source.indexOf('{', functionIndex)
+	if (openIndex === -1) return ''
+
+	let depth = 0
+	let endIndex = openIndex
+
+	for (let i = openIndex + 1; i < source.length; i++) {
+		if (source[i] === '{') depth++
+		if (source[i] === '}') {
+			if (depth === 0) {
+				endIndex = i
+				break
+			}
+			depth--
+		}
+	}
+
+	return source.slice(functionIndex, endIndex + 1)
 }
 
 // =============================================================================
@@ -743,6 +771,100 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
 		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
 		expectSourceToContain(svelte, 'viewport: scheduledViewport')
+	})
+})
+
+// =============================================================================
+// Workspace AI chat panel — session history interactions
+// =============================================================================
+
+describe('Workspace AI chat panel — session history interactions', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+	const svgIcons = loadSvgIcons()
+
+	it('uses the circle icon as the new-chat control and binds a start-new-draft action', () => {
+		expect(ts).toMatch(/import\s*\{[^}]*xCircleIcon as plusIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-new-chat')
+		expectSourceToContain(ts, 'aria-label="Start new chat"')
+		expectSourceToContain(ts, 'innerHTML=${plusIcon}')
+		expectSourceToContain(ts, 'const newChatEl = controlsEl.querySelector<HTMLButtonElement>(\'.workspace-ai-chat-panel-new-chat\')!')
+		expectSourceToContain(ts, 'newChatEl.addEventListener(\'click\', startNewAiChatDraft)')
+		expectSourceToContain(svgIcons, 'export const xCircleIcon')
+	})
+
+	it('styles the session control row and session entry details consistently', () => {
+		const historyToggleBlock = extractBlockContainingSelector(scss, '.workspace-ai-chat-panel-history-toggle,\n.workspace-ai-chat-panel-new-chat')
+		const newChatBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat')
+		const sessionBlock = extractBlock(scss, '.workspace-ai-chat-panel-session')
+		const titleBlock = extractBlock(scss, '.workspace-ai-chat-panel-session-title')
+		expect(historyToggleBlock).toContain('display: grid')
+		expect(historyToggleBlock).toContain('place-items: center')
+		expect(newChatBlock).toContain('border-radius: 99px')
+		expect(newChatBlock).toContain('background: transparent')
+		const sessionHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-session:focus-within')
+		const historyToggleHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-history-toggle:focus-visible')
+		const newChatHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat:focus-visible')
+		expect(historyToggleHoverBlock).toContain('background: rgba(105, 115, 136, 0.1)')
+		expect(historyToggleHoverBlock).toContain('outline: none')
+		expect(newChatHoverBlock).toContain('color: #39455d')
+		expect(newChatHoverBlock).toContain('outline: none')
+		expect(sessionHoverBlock).toContain('background: rgba(130, 178, 192, 0.14)')
+		expect(scss).toContain('max-height: 236px')
+		expect(sessionBlock).toContain('display: flex')
+		expect(sessionBlock).toContain('min-height: 58px')
+		expect(titleBlock).toContain('font-size: 13px')
+		expect(titleBlock).toContain('font-weight: 620')
+	})
+
+	it('starts a fresh standalone draft when last session tab is closed', () => {
+		const closeBody = extractFunctionBody(ts, 'closeAiChatSidebarTab')
+		const startNewBody = extractFunctionBody(ts, 'startNewAiChatDraft')
+		expect(closeBody).toContain('if (aiChatSidebarTabs.length === 0) {')
+		expectExcerptToContain(closeBody, 'startNewAiChatDraft()', 'closeAiChatSidebarTab')
+		expectExcerptToContain(closeBody, 'return', 'closeAiChatSidebarTab')
+		expectExcerptToContain(startNewBody, 'const drafts = { ...(aiChatPanelState.drafts ?? {}) }', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'delete drafts[NEW_CHAT_DRAFT_KEY]', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'aiChatSidebarTabs = []', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatSidebarTabId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatSidebarThreadId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatThreadId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatRootNodeId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'contextChips: [],', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'clearAutoContextChips()', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'promptInputController.setTarget(null)', 'startNewAiChatDraft')
+	})
+
+	it('keeps thread sessions renderable with message count and status metadata', () => {
+		expectSourceToContain(ts, 'function countProseMirrorNodesByType(value: unknown, nodeTypes: Set<string>): number')
+		expectSourceToContain(ts, 'countAiChatSessionMessages(session.content)')
+		expectSourceToContain(ts, '${getAiChatSessionMeta(session)}')
+		expectSourceToContain(ts, 'pluralizeSessionCount(messageCount, \'message\')')
+	})
+
+	it('renders session history entries with thread/extraction markers and timestamps', () => {
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-marker-thread')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-marker-extraction')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-content')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-title')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-date')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-meta')
+		expectSourceToContain(ts, 'formatSessionUpdatedAt(session.updatedAt)')
+		expectSourceToContain(ts, 'formatSessionUpdatedAt(extractionState.updatedAt)')
+		expectSourceToContain(ts, 'sessionEl.querySelector(\'.workspace-ai-chat-panel-session-open\')?.addEventListener(\'click\', () => {')
+		expectSourceToContain(ts, 'activeAiChatSidebarTabId = `thread:${session.threadId}`')
+		expectSourceToContain(ts, 'openFeatureExtractionTab(extractionState.extractionRunId)')
+	})
+
+	it('defines stable session metadata formatters for deterministic labels', () => {
+		expectSourceToContain(ts, 'function formatSessionStatus(status: string): string')
+		expectSourceToContain(ts, ".split(/[-_]/)")
+		expectSourceToContain(ts, 'const minuteMs = 60_000')
+		expectSourceToContain(ts, 'return `${days} ${days === 1 ? \'day\' : \'days\'} ago`')
+		expectSourceToContain(ts, 'return `${weeks} ${weeks === 1 ? \'week\' : \'weeks\'} ago`')
+		expectSourceToContain(ts, 'formatSessionUpdatedAt')
+		expectSourceToContain(ts, 'formatSessionTimestamp(updatedAt)')
+		expectSourceToContain(ts, 'Date unavailable')
 	})
 })
 
