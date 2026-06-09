@@ -8,6 +8,7 @@ This plugin powers prompt input editors. It provides:
 - A rich-text ProseMirror editor for composing messages
 - An AI model selector dropdown
 - An image model selector dropdown (with size selector)
+- Multi-model selection state for upcoming reasoning/image/video fanout
 - Contextual help tooltips for the reasoning, image, and video model sections
 - A submit/stop button
 - Placeholder text when the input is empty
@@ -15,7 +16,7 @@ This plugin powers prompt input editors. It provides:
 
 When a user types a message and submits:
 1. The plugin extracts the content as JSON from the `aiPromptInput` node
-2. Reads the `aiModel` and `imageGenerationSize` attributes
+2. Reads the scalar model attrs, serialized model-list attrs, and media option attrs
 3. Calls the `onSubmit` callback with `{ contentJSON, aiModel, imageOptions }`
 4. Clears the input content and resets the cursor
 
@@ -58,7 +59,7 @@ graph TD
 **Key Design Principles:**
 - **Minimal schema:** The document consists of a single `aiPromptInput` node — no title, no conversation history
 - **Decoupled from threads:** The plugin only handles input composition and extraction, never touches thread state or streaming
-- **Adapter pattern:** NodeView controls bridge ProseMirror node attrs (`aiModel`, `imageGenerationSize`) to UI controls via getter/setter adapters
+- **Adapter pattern:** NodeView controls bridge ProseMirror node attrs (`aiModel`, `aiModels`, `imageGenerationSize`) to UI controls via getter/setter adapters
 - **Factory injection:** UI controls (dropdowns, buttons) are injected via factory functions, keeping the plugin framework-agnostic
 - **Polling for external state:** Receiving state is synced via a 200ms polling interval since it's owned by external services, not plugin state
 
@@ -141,13 +142,16 @@ sequenceDiagram
 - Isolating: `true` (prevents cursor from escaping)
 - Attributes:
   - `aiModel: string` (default `''`) — Selected AI model (e.g., `"Anthropic:claude-3-5-sonnet"`)
+  - `aiModels: string` (default `''`) — JSON-serialized ordered reasoning model ids for multi-model sends
   - `aiImageModel: string` (default `''`) — Selected image generation model (e.g., `"OpenAI:dall-e-3"`)
+  - `aiImageModels: string` (default `''`) — JSON-serialized ordered image generation model ids for multi-model sends
   - `imageGenerationSize: string` (default `'auto'`) — Image generation resolution or aspect-ratio value, depending on the selected image model metadata
   - `aiVideoModel: string` (default `''`) — Selected video generation model
+  - `aiVideoModels: string` (default `''`) — JSON-serialized ordered video generation model ids for multi-model sends
   - `videoAspectRatio: string` (default `''`) — Video generation aspect ratio
   - `videoResolution: string` (default `''`) — Video generation resolution
   - `videoDuration: string` (default `''`) — Video generation duration
-- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-image-model][data-image-generation-size][data-ai-video-model][data-video-aspect-ratio][data-video-resolution][data-video-duration]`
+- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-models][data-ai-image-model][data-ai-image-models][data-image-generation-size][data-ai-video-model][data-ai-video-models][data-video-aspect-ratio][data-video-resolution][data-video-duration]`
 - Content hole: `0` (ProseMirror renders editable content inside)
 
 The document schema for `documentType: 'aiPromptInput'` is:

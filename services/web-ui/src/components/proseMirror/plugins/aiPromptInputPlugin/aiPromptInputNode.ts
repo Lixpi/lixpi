@@ -8,6 +8,36 @@ import { settings, type AiPromptInputModelMenuSettings } from '$src/settings.ts'
 
 export const aiPromptInputNodeType = 'aiPromptInput'
 
+export function parseAiModelSelectionAttr(value: unknown): string[] {
+    if (Array.isArray(value)) {
+        return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    }
+
+    if (typeof value !== 'string') return []
+    const trimmed = value.trim()
+    if (!trimmed) return []
+
+    try {
+        const parsed = JSON.parse(trimmed) as unknown
+        if (Array.isArray(parsed)) {
+            return parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        }
+    } catch {
+        return []
+    }
+
+    return []
+}
+
+export function serializeAiModelSelectionAttr(models: readonly string[]): string {
+    const uniqueModels = Array.from(new Set(models.filter((model) => model.trim().length > 0)))
+    return uniqueModels.length > 0 ? JSON.stringify(uniqueModels) : ''
+}
+
+function normalizeAiModelSelectionAttr(value: unknown): string {
+    return serializeAiModelSelectionAttr(parseAiModelSelectionAttr(value))
+}
+
 export const aiPromptInputNodeSpec = {
     content: '(paragraph | block)+',
     group: 'block',
@@ -16,9 +46,12 @@ export const aiPromptInputNodeSpec = {
     isolating: true,
     attrs: {
         aiModel: { default: '' },
+        aiModels: { default: '' },
         aiImageModel: { default: '' },
+        aiImageModels: { default: '' },
         imageGenerationSize: { default: 'auto' },
         aiVideoModel: { default: '' },
+        aiVideoModels: { default: '' },
         videoAspectRatio: { default: '' },
         videoResolution: { default: '' },
         videoDuration: { default: '' },
@@ -28,9 +61,12 @@ export const aiPromptInputNodeSpec = {
             tag: 'div.ai-prompt-input-wrapper',
             getAttrs: (dom: HTMLElement) => ({
                 aiModel: dom.getAttribute('data-ai-model') || '',
+                aiModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-models')),
                 aiImageModel: dom.getAttribute('data-ai-image-model') || '',
+                aiImageModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-image-models')),
                 imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
                 aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
+                aiVideoModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-video-models')),
                 videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                 videoResolution: dom.getAttribute('data-video-resolution') || '',
                 videoDuration: dom.getAttribute('data-video-duration') || '',
@@ -43,9 +79,12 @@ export const aiPromptInputNodeSpec = {
             {
                 class: 'ai-prompt-input-wrapper',
                 'data-ai-model': node.attrs.aiModel,
+                'data-ai-models': normalizeAiModelSelectionAttr(node.attrs.aiModels),
                 'data-ai-image-model': node.attrs.aiImageModel,
+                'data-ai-image-models': normalizeAiModelSelectionAttr(node.attrs.aiImageModels),
                 'data-image-generation-size': node.attrs.imageGenerationSize,
                 'data-ai-video-model': node.attrs.aiVideoModel,
+                'data-ai-video-models': normalizeAiModelSelectionAttr(node.attrs.aiVideoModels),
                 'data-video-aspect-ratio': node.attrs.videoAspectRatio,
                 'data-video-resolution': node.attrs.videoResolution,
                 'data-video-duration': node.attrs.videoDuration,
