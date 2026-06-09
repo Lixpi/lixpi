@@ -118,10 +118,21 @@ export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): B
         }
     }
 
-    // Deterministic sibling order: oldest first (createdAt asc), nodeId tie-break.
+    // Deterministic sibling order: matrix variant order first, then oldest first
+    // (createdAt asc), then nodeId tie-break.
+    const variantIndexById = new Map<string, number | undefined>()
     const createdAtById = new Map<string, number>()
-    for (const node of members) createdAtById.set(node.nodeId, node.generatedBy?.createdAt ?? 0)
+    for (const node of members) {
+        variantIndexById.set(node.nodeId, node.generatedBy?.variantIndex)
+        createdAtById.set(node.nodeId, node.generatedBy?.createdAt ?? 0)
+    }
     const compareSiblings = (a: string, b: string): number => {
+        const variantA = variantIndexById.get(a)
+        const variantB = variantIndexById.get(b)
+        if (variantA !== undefined || variantB !== undefined) {
+            const variantDelta = (variantA ?? Number.MAX_SAFE_INTEGER) - (variantB ?? Number.MAX_SAFE_INTEGER)
+            if (variantDelta !== 0) return variantDelta
+        }
         const delta = (createdAtById.get(a) ?? 0) - (createdAtById.get(b) ?? 0)
         if (delta !== 0) return delta
         return a < b ? -1 : a > b ? 1 : 0

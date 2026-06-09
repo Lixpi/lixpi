@@ -456,7 +456,8 @@ Users see:
 - `aiGeneratedImageNode.ts` - AI-generated image node and canvas callback system:
   - Exports ProseMirror node spec for `aiGeneratedImage` (atom node)
   - Manages global `AiGeneratedImageCallbacks` via `setAiGeneratedImageCallbacks()` / `getAiGeneratedImageCallbacks()`
-  - Callbacks include `onImagePartialToCanvas`, `onImageCompleteToCanvas`, `onAddToCanvas`, `onEditInNewThread`
+  - Callbacks include `onImageGenerationTraceToCanvas`, `onImagePartialToCanvas`, `onImageCompleteToCanvas`, `onAddToCanvas`, `onEditInNewThread`
+  - Video callbacks include `onVideoGenerationTraceToCanvas`, pending/generating/complete/error events, and carry the same optional `generationRun` metadata.
   - Streaming callbacks carry optional `generationRun` metadata; generated image attrs persist generation request, reasoning run, media run, model ids, media type, and variant index.
   - `WorkspaceCanvas.ts` registers these callbacks to receive image events from the plugin
   - The plugin calls `getAiGeneratedImageCallbacks()` during streaming to delegate image placement to the canvas

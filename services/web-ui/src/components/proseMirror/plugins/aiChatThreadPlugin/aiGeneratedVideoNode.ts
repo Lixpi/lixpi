@@ -156,6 +156,10 @@ export type AiGeneratedVideoCallbacks = {
         responseMessageId: string
         generationRun?: MediaGenerationRunMeta
     }) => void
+    onVideoGenerationTraceToCanvas?: (data: {
+        threadId: string
+        generationRun?: MediaGenerationRunMeta
+    }) => void
     onVideoErrorToCanvas?: (data: {
         threadId: string
         error: string

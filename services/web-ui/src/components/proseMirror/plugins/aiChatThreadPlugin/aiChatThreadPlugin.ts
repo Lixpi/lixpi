@@ -1248,6 +1248,10 @@ class AiChatThreadPluginClass {
     private handleVideoGenerationTrace(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId: threadId, videoGenerationTrace } = event
         if (!threadId || !videoGenerationTrace) return
+        getAiGeneratedVideoCallbacks().onVideoGenerationTraceToCanvas?.({
+            threadId,
+            generationRun: event.generationRun,
+        })
         this.applyGenerationTraceCollapsible(view, threadId, {
             title: 'Video generation details',
             isOpen: false,
@@ -1259,6 +1263,10 @@ class AiChatThreadPluginClass {
     private handleImageGenerationTrace(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId: threadId, imageGenerationTrace } = event
         if (!threadId || !imageGenerationTrace) return
+        getAiGeneratedImageCallbacks().onImageGenerationTraceToCanvas?.({
+            threadId,
+            generationRun: event.generationRun,
+        })
         this.applyGenerationTraceCollapsible(view, threadId, {
             title: 'Image generation details',
             isOpen: false,

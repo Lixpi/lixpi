@@ -119,6 +119,10 @@ export type AiGeneratedImageCallbacks = {
         responseMessageId: string
         generationRun?: MediaGenerationRunMeta
     }) => void
+    onImageGenerationTraceToCanvas?: (data: {
+        threadId: string
+        generationRun?: MediaGenerationRunMeta
+    }) => void
     onImageBranchResolvedToCanvas?: (data: {
         threadId: string
         resolution: ImageBranchVlmResolution
