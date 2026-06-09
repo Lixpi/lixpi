@@ -112,16 +112,19 @@ flowchart TB
 
 - **Tab strip pinned at the top** of the floating panel, always visible — even
   with one tab. Predictability is favored over minimalism here.
-- **Each tab** shows a small icon (thread vs extraction), a truncated 24-char
-  title, a streaming dot when the tab is actively receiving tokens, and a close
-  X visible on hover.
+- **Open tabs** render through the shared SVG
+  `services/web-ui/src/components/slidingTabsSwitch/` primitive. Each tab shows
+  a centered text label, truncates to the available segment width, and reveals a
+  close control on the left while hovered. The active tab is the sliding
+  indicator surface, not a per-tab border.
 - **Selecting canvas nodes** can add explicit context chips while the panel is
   open; it does not create or activate a canvas thread node.
 - **All extraction triggers** open a new `extraction` tab.
 - **Closing the last tab** leaves the durable session reopenable from Sessions;
   panel visibility is controlled by `aiChatPanel.isOpen`.
-- **Overflow** is a horizontal scroll on the strip with edge fades — not an
-  overflow dropdown. This keeps tab positions predictable, matching Cursor.
+- **Overflow** is a horizontal scroll on the strip, driven by
+  `settings.aiChatThread.panelTabs.minTabWidth`, not an overflow dropdown. This
+  keeps tab positions predictable, matching Cursor.
 
 ## Context Tray
 
@@ -286,6 +289,8 @@ the web UI and API:
 
 - The panel host is the canvas-owned TypeScript stack in
   `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`.
+- Open tabs are mounted as a D3 SVG `slidingTabsSwitch`, composed from
+  `slidingSwitch` and `tagPill`.
 - `services/web-ui/src/components/WorkspaceCanvas.svelte` supplies the right-side
   launcher and canvas-state persistence.
 - Panel presentation state is persisted under `CanvasState.aiChatPanel`, with
@@ -313,8 +318,12 @@ the last persisted state, not the tokens that were streaming at reload time.
 | Area | File |
 |------|------|
 | Panel host | `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts` |
+| Panel tab switch | `services/web-ui/src/components/slidingTabsSwitch/slidingTabsSwitch.ts` |
+| Sliding switch primitive | `services/web-ui/src/components/slidingSwitch/slidingSwitch.ts` |
+| Tab pill primitive | `services/web-ui/src/components/tagPill/tagPill.ts` |
 | Launcher + persistence | `services/web-ui/src/components/WorkspaceCanvas.svelte` |
 | Panel state + chip sanitization | `services/web-ui/src/infographics/workspace/aiChatPanelState.ts` |
+| Panel tab settings | `services/web-ui/src/settings.ts` |
 | Standalone thread model | `services/api/src/models/ai-chat-thread.ts` |
 | Standalone thread subjects | `services/api/src/NATS/subscriptions/ai-chat-thread-subjects.ts` |
 | Workspace relevance resolver | `services/api/src/llm/graph/workspace-context-resolver.ts` |

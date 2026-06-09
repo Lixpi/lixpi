@@ -17,7 +17,7 @@ Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in 
 
 ## Code Style
 
-Use the documentation index to find the current coding guidance for the files you are changing. Read the guide that matches the language, styling layer, framework, or runtime surface you are touching.
+At the start of every implementation iteration, use the documentation index to find the current coding guidance for the files you are changing. Read the guide that matches the language, styling layer, framework, or runtime surface before editing. For `services/web-ui` TypeScript UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, always read [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) and [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md).
 
 ## Documentation
 

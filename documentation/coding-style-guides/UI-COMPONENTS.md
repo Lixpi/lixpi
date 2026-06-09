@@ -76,27 +76,35 @@ export type ExampleControlInstance = {
     destroy: () => void
 }
 
+class ExampleControl implements ExampleControlInstance {
+    private readonly group: any
+    private readonly background: any
+
+    constructor(parent: any, private readonly config: ExampleControlConfig) {
+        this.group = parent.append('g')
+            .attr('class', `example-control-group ${config.className ?? ''}`)
+            .attr('transform', `translate(${config.x}, ${config.y})`)
+            .attr('data-example-control-id', config.id)
+
+        this.background = this.group.append('rect')
+            .attr('class', 'example-control-background')
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('width', config.width)
+            .attr('height', config.height ?? 24)
+    }
+
+    render(): void {
+        this.background.attr('width', this.config.width)
+    }
+
+    destroy(): void {
+        this.group.remove()
+    }
+}
+
 export function createExampleControl(parent: any, config: ExampleControlConfig): ExampleControlInstance {
-    const group = parent.append('g')
-        .attr('class', `example-control-group ${config.className ?? ''}`)
-        .attr('transform', `translate(${config.x}, ${config.y})`)
-        .attr('data-example-control-id', config.id)
-
-    const background = group.append('rect')
-        .attr('class', 'example-control-background')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', config.width)
-        .attr('height', config.height ?? 24)
-
-    function render(): void {
-        background.attr('width', config.width)
-    }
-
-    return {
-        render,
-        destroy: () => group.remove(),
-    }
+    return new ExampleControl(parent, config)
 }
 ```
 
@@ -106,7 +114,7 @@ The public API should usually be `createX(parent, config)`. It appends one top-l
 
 Follow [`TYPESCRIPT.md`](./TYPESCRIPT.md) for class usage.
 
-Use a class when the component owns cohesive state, many selections, layout, lifecycle cleanup, global listeners, or a public imperative API. Keep the factory as the public entry point:
+Use a class by default for UI components. A component that owns cohesive state, selections, layout, lifecycle cleanup, listeners, or a public imperative API must be class-backed. Keep the factory as the public entry point:
 
 ```typescript
 class ExampleControl implements ExampleControlInstance {
@@ -119,7 +127,7 @@ export function createExampleControl(parent: any, config: ExampleControlConfig):
 }
 ```
 
-A closure-backed factory is fine for small controls with limited state and simple cleanup.
+Closure-backed factories are not acceptable for reusable UI components, D3/SVG controls, canvas chrome controls, controllers, menus, switches, sliders, popovers, tooltips, or editor-backed UI. Use plain functions only for pure utilities, tiny adapters, simple callbacks, and small mappers with no retained state or cleanup.
 
 Do not build deep inheritance hierarchies. Prefer composition and helper functions. Inheritance deeper than 3 levels is not allowed.
 
@@ -292,17 +300,15 @@ Use existing icons from [`svgIcons/index.ts`](../../services/web-ui/src/svgIcons
 
 For HTML/Svelte, inject icon markup through the existing DOM/template patterns.
 
-For D3 SVG controls, parse imported SVG markup and append paths into an SVG group:
+For D3 SVG controls, use `appendSvgPathIcon` from
+[`svgIconPaths.ts`](../../services/web-ui/src/components/svgIconPaths.ts) to
+parse imported SVG markup and append scaled paths into an SVG group:
 
 ```typescript
-function setIconPaths(iconGroup: any, svgMarkup: string, fill: string): void {
-    iconGroup.selectAll('*').remove()
-    for (const pathData of extractPathData(svgMarkup)) {
-        iconGroup.append('path')
-            .attr('d', pathData)
-            .attr('fill', fill)
-    }
-}
+import { appendSvgPathIcon } from '$src/components/svgIconPaths.ts'
+import { xIcon } from '$src/svgIcons/index.ts'
+
+appendSvgPathIcon(iconGroup, xIcon, { x: 0, y: 0, size: 14, fill: '#1a2744' })
 ```
 
 Cache parsed path data if an icon is large or updated frequently.

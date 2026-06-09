@@ -115,11 +115,7 @@ The toggle switch uses relative proportions based on the `size` parameter:
 
 ## AI Chat Panel Integration
 
-The workspace AI Chat panel uses this SVG control for `Include Upstream Context`:
-
-1. It is rendered inside an SVG host so D3 can append SVG-native track and knob elements.
-2. Its checked state is persisted in `canvasState.aiChatPanel.includeUpstreamContext`.
-3. Its value applies to both Follow Selection and Pinned Context submissions.
+The workspace AI Chat panel no longer uses this component. The old `Include Upstream Context`, Follow Selection, and Pinned Context controls were removed when the panel moved to explicit context chips plus automatic workspace relevance. Use `toggleSwitch` for generic binary SVG controls only.
 
 
 ## Implementation Notes
