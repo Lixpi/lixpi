@@ -62,7 +62,8 @@ All of this happens without the Svelte component knowing the details. It just pa
 - Expose `Add to Media Library` once their stored MP4 is available; videos still polling through VEO hide the action until completion
 
 ### Branch Lineage Trees
-- Generated images/videos that share a lineage form a **branch tree**; the first generated image *is* the branch root and carries the originating prompt + references in its own `generatedBy` metadata — there is no separate provenance node
+- Generated images/videos that share a lineage form a **branch tree**; the first generated image/video is normally the branch root and carries the originating prompt + references in its own `generatedBy` metadata
+- Fresh multi-model generations with no source/thread node create a temporary `branchOrigin` root marker, rendered with a robot-face placeholder and referenced by every child output through `generatedBy.branchOriginNodeId`; the code is marked TODO until final branch-origin UX is designed
 - On every generated-media add/remove the affected tree re-tidies via `rebalanceBranchTreesAndResolve` in `branchTreeLayout.ts`, which lays each lineage out as a balanced left-to-right tidy tree using the pure `utils/layoutTree.ts` algorithm
 - Depth spacing uses `settings.imageBranchLineage.imageToImageGap`, plus `branchFanoutDepthGap` for each extra child when a node forks; sibling spacing uses `branchToBranchGap`. The root keeps its anchor, children fan out symmetrically around its vertical center, and linear chains stay collinear. Final image/video aspect-ratio updates preserve the node center, then re-tidy the tree so resolved media proportions cannot collapse a fork back onto the predecessor center line
 - The whole tree is then rigid-separated from neighbors by the unchanged resolver (one bounding box per tree), so a tree moves as a block and never loses its internal balance — see [`documentation/canvas/COLLISION-RESOLUTION.md`](../../../../../documentation/canvas/COLLISION-RESOLUTION.md)
@@ -469,6 +470,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-video-controls-host` | DOM mount point for `components/videoControls` inside each video chrome surface |
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
+| `.workspace-branch-origin-node` | Temporary fresh-branch origin marker for generated-media lineage |
 | `.workspace-ai-chat-thread-node` | Canvas-owned floating AI chat panel styling |
 | `.document-drag-overlay` | Top bar for dragging documents |
 | `.ai-chat-thread-drag-overlay` | Top bar for dragging AI chat threads |

@@ -2,11 +2,11 @@
 // and the pure tidy-tree algorithm in utils/layoutTree.ts.
 //
 // A "branch tree" is a connected component of top-level generated-media nodes
-// (image/video carrying generatedBy.branchId, no parentId) linked by lineage.
-// A member's in-tree parent is its generatedBy.parentImageNodeId when that
-// points at another member, otherwise the source of its incoming lineage edge
-// when that source is a member; if neither, the member is a tree root (its real
-// parent is a chat thread, a reference group, or nothing).
+// (image/video carrying generatedBy.branchId, no parentId) and temporary
+// branch-origin markers linked by lineage. A member's in-tree parent is its
+// generatedBy.parentImageNodeId when that points at another member, then its
+// generatedBy.branchOriginNodeId, otherwise the source of its incoming lineage
+// edge when that source is a member; if neither, the member is a tree root.
 //
 // This module is pure: it reads node positions/sizes + lineage edges and returns
 // new node arrays. It never touches PIXI, the DOM, or canvas closures — it reuses
@@ -15,6 +15,7 @@
 
 import type {
     CanvasNode,
+    BranchOriginCanvasNode,
     ImageCanvasNode,
     VideoCanvasNode,
     WorkspaceEdge,
@@ -25,13 +26,14 @@ import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeWorldPosition, buildNodesById } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
+type BranchTreeMemberNode = GeneratedMediaNode | BranchOriginCanvasNode
 type Point = { x: number; y: number }
 type Rect = { x: number; y: number; width: number; height: number }
 type CollisionBox = { id: string; x: number; y: number; width: number; height: number }
 
 export type BranchTree = {
     rootId: string
-    memberIds: string[]                       // every top-level generated-media member
+    memberIds: string[]                       // every top-level generated-media / origin member
     childrenByParentId: Map<string, string[]> // in-tree parent → ordered children
 }
 
@@ -46,13 +48,16 @@ export type BranchTreeLayoutOptions = {
 // completion-handler behavior that was in place before tree rebalancing.
 const DEFAULT_COLLISION_MARGIN = 20
 
-// A node is a branch-tree member when it is a top-level generated image/video.
-// Mirrors WorkspaceCanvas.isGeneratedMediaNode (branchId-gated) plus the
-// top-level-only rule from getGeneratedChildOutputs.
-function isBranchTreeMember(node: CanvasNode): node is GeneratedMediaNode {
-    return (node.type === 'image' || node.type === 'video')
-        && !node.parentId
-        && Boolean(node.generatedBy?.branchId)
+function isGeneratedMediaBranchMember(node: CanvasNode): node is GeneratedMediaNode {
+    return (node.type === 'image' || node.type === 'video') && !node.parentId && Boolean(node.generatedBy?.branchId)
+}
+
+function isBranchOriginMember(node: CanvasNode): node is BranchOriginCanvasNode {
+    return node.type === 'branchOrigin' && !node.parentId && Boolean(node.branchId)
+}
+
+function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
+    return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node)
 }
 
 // Build the generated-media forest from canvas nodes + lineage edges. Trees are
@@ -62,7 +67,7 @@ export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): B
     const members = nodes.filter(isBranchTreeMember)
     if (members.length === 0) return []
 
-    const memberIds = new Set(members.map((node: GeneratedMediaNode) => node.nodeId))
+    const memberIds = new Set(members.map((node: BranchTreeMemberNode) => node.nodeId))
 
     // First incoming lineage-edge source per node — the fallback parent used when
     // generatedBy.parentImageNodeId is absent (mirrors the anchor lookup).
@@ -75,13 +80,16 @@ export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): B
 
     const inTreeParentById = new Map<string, string | null>()
     for (const node of members) {
-        const metadataParent = node.generatedBy?.parentImageNodeId
+        const metadataParent = isGeneratedMediaBranchMember(node) ? node.generatedBy?.parentImageNodeId : undefined
+        const originParent = isGeneratedMediaBranchMember(node) ? node.generatedBy?.branchOriginNodeId : undefined
         const edgeParent = edgeSourceByTarget.get(node.nodeId)
         const parentId = metadataParent && memberIds.has(metadataParent)
             ? metadataParent
-            : edgeParent && memberIds.has(edgeParent)
-                ? edgeParent
-                : null
+            : originParent && memberIds.has(originParent)
+                ? originParent
+                : edgeParent && memberIds.has(edgeParent)
+                    ? edgeParent
+                    : null
         inTreeParentById.set(node.nodeId, parentId)
     }
 
@@ -123,8 +131,8 @@ export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): B
     const variantIndexById = new Map<string, number | undefined>()
     const createdAtById = new Map<string, number>()
     for (const node of members) {
-        variantIndexById.set(node.nodeId, node.generatedBy?.variantIndex)
-        createdAtById.set(node.nodeId, node.generatedBy?.createdAt ?? 0)
+        variantIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.variantIndex : undefined)
+        createdAtById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.createdAt ?? 0 : 0)
     }
     const compareSiblings = (a: string, b: string): number => {
         const variantA = variantIndexById.get(a)
@@ -172,7 +180,7 @@ export function applyBranchTreeLayout(
         const memberSet = new Set(tree.memberIds)
         const parentByChild = parentByChildOf(tree)
         const layoutNodes: TreeLayoutNode[] = tree.memberIds.map((id: string) => {
-            const node = nodesById.get(id) as GeneratedMediaNode
+            const node = nodesById.get(id) as BranchTreeMemberNode
             const parentId = parentByChild.get(id)
             return {
                 id,

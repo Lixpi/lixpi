@@ -1351,6 +1351,46 @@
     background: transparent;
 }
 
+.workspace-branch-origin-node {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f7f7f2;
+    border: 1px solid #c8cbc1;
+    border-radius: 50%;
+    box-shadow: 0 6px 18px rgba(42, 48, 57, 0.18);
+    overflow: visible;
+    padding: 0;
+
+    &.is-dragging {
+        cursor: move;
+    }
+
+    &.is-selected {
+        box-shadow: 0 0 0 2px #4f8f9d, 0 8px 22px rgba(42, 48, 57, 0.22);
+    }
+}
+
+.workspace-branch-origin-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 34px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.branch-origin-drag-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: move;
+    z-index: 15;
+    background: transparent;
+    border-radius: 50%;
+}
+
 .image-error {
     display: flex;
     align-items: center;

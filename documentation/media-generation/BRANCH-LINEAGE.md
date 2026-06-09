@@ -31,7 +31,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Resolver Audit Metadata** — The resolver model provider, model ID, confidence, rationale, excluded node IDs, operation kind, visual summaries, and schema version, persisted on generated-media metadata for later candidate labeling and debugging.
 
-**Branch Root** — The first generated image/video of a `branchId`. It *is* the start of the branch: it carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. There is no separate provenance node.
+**Branch Root** — The first generated image/video of a `branchId`. It normally carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. Fresh multi-model generations with no source/thread node temporarily persist a `branchOrigin` marker so every generated sibling has the same explicit graph parent; this marker is a temporary UX exception until final branch-origin design exists.
 
 **Lineage Source** — A *verified connector parent.* References, style images, and workspace-relevance selections can guide routing or placement, but they do not become connector parents unless the resolver is continuing an existing generated branch, or the output is rooted on a chat thread.
 
@@ -66,7 +66,7 @@ Lixpi solves this by combining deterministic graph narrowing with VLM role assig
 - **One decision feeds routing and provenance.** The references sent to the model, the generated metadata, and branch-root provenance all come from the resolver result.
 - **No silent guessing.** Resolver failure is user-visible and *stops* generation instead of falling back to regexes, recency, or all-variant injection.
 - **Feature extraction stays independent.** `/use` feature references resolve before branch resolution, and their injected feature image blocks are preserved by the branch resolver.
-- **The root image is the branch.** The first generated image of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch; no auxiliary provenance node is ever created.
+- **The root media is the branch unless a temporary origin is required.** The first generated image/video of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch. Fresh multi-model requests with no source/thread node temporarily persist a `branchOrigin` marker so siblings share one explicit graph origin.
 
 ## System Architecture
 
@@ -344,7 +344,7 @@ The router's reference fingerprints should match the resolution's `referenceImag
 
 This is where one resolver decision becomes a positioned, parented, provenance-bearing canvas artifact. The rules below are **shared by image and video**; the only modality difference is the event names that drive each step (progressive `IMAGE_PARTIAL` for images vs. `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` for video).
 
-[`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) stores pending generation placement by thread ID. Standalone AI Chat panel generations no longer require a source `aiChatThread` canvas node.
+[`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) stores pending generation placement by `generationRequestId` plus run metadata, with a legacy thread-ID fallback for older single-run events. Standalone AI Chat panel generations no longer require a source `aiChatThread` canvas node.
 
 ### The Three-Field Pending-Placement Split
 
@@ -355,6 +355,7 @@ Pending placement keeps three concepts strictly separate. This split is what pre
 | `sourceNodeId` | **Verified connector and lineage source only.** |
 | `placementAnchorNodeId` | **Canvas placement helper only** — positions the output without parenting it. |
 | `referenceNodeIds` | **Context/reference media** for prompt routing, progress outlines, and branch-root provenance. |
+| `branchOriginNodeId` | **Temporary fresh-branch source only** — points fresh multi-model siblings at the same `branchOrigin` marker when no source/thread node exists. |
 
 ### On Submit
 
@@ -384,11 +385,11 @@ Style-transfer continuations can still continue a branch through these same sign
 
 For images, an empty `IMAGE_PARTIAL` creates a transparent placeholder canvas node; non-empty partials update that same node in place. (Video drops its placeholder on `VIDEO_PENDING` and upgrades it on `VIDEO_COMPLETE` — there are no partial frames.) In both cases:
 
-1. The placeholder edge uses **only** the verified lineage source, if one was resolved.
+1. The placeholder edge uses **only** the verified lineage source, if one was resolved. Fresh multi-model runs with no source/thread node create a temporary `branchOrigin` marker and edge every sibling from that marker.
 2. The node's `generatedBy` metadata includes `getPendingGeneratedImageLineage()` output.
 3. **Placement geometry:**
    - If placement continues from a generated media node, the placeholder is **vertically centered** on that preceding artifact.
-   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.imageBranchLineage.rootOutputGap` breathing room.
+   - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.imageBranchLineage.rootOutputGap` breathing room. If no source/thread node exists, the temporary `branchOrigin` marker is placed to the left of the generated sibling group.
 4. Reference media animate with the same PIXI traveling outline as the generated placeholder while generation prepares (see [Progress Outlines](#progress-outlines)).
 
 PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels load. For generated media-to-media continuations, each intrinsic-size correction recomputes the node's vertical position from its lineage-anchor center — so a square placeholder, a landscape partial, and a portrait final all stay on one branch center line even as their rectangles change size.
@@ -398,7 +399,7 @@ PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels
 1. The placeholder/partial node is upgraded with the final file ID, media URL, response ID, revised prompt, provider badge, and response message ID.
 2. The edge `sourceMessageId` is set to the AI response message ID when applicable.
 3. Resolver metadata is persisted onto `generatedBy`.
-4. The branch tree is re-tidied and rigid-separated from neighbors via `rebalanceBranchTreesAndResolve(...)` (see [Balanced Branch-Tree Layout](#balanced-branch-tree-layout)). No auxiliary provenance node is created — the first generated image already carries the branch's prompt + references on `generatedBy`.
+4. The branch tree is re-tidied and rigid-separated from neighbors via `rebalanceBranchTreesAndResolve(...)` (see [Balanced Branch-Tree Layout](#balanced-branch-tree-layout)). Fresh multi-model siblings may be rooted under the temporary `branchOrigin` marker; otherwise the first generated image/video carries the branch's prompt + references on `generatedBy`.
 5. Pending placement is cleared **only after** completion state and generated metadata have been committed.
 
 ### Generated-Media Provenance Chrome
@@ -417,9 +418,12 @@ The finalized generated node also gets canvas provenance chrome rendered in a de
 flowchart TB
     Resolved[IMAGE_BRANCH_RESOLVED] --> Decide{Verified<br/>continuation?}
     Decide -->|edit-active-branch /<br/>edit_existing /<br/>matching branchId| Lineage[set sourceNodeId<br/>= verified parent]
-    Decide -->|fresh / reference-only| NoLineage[no lineage edge<br/>placementAnchor + referenceNodeIds only]
+    Decide -->|fresh / reference-only| NoLineage[placementAnchor + referenceNodeIds only]
+    NoLineage --> Origin{source/thread<br/>node exists?}
+    Origin -->|no| Marker[create temporary<br/>branchOrigin marker]
+    Origin -->|yes| PlaceR[place right of combined<br/>reference bounds + rootOutputGap]
     Lineage --> PlaceL[center on preceding<br/>media in branch]
-    NoLineage --> PlaceR[place right of combined<br/>reference bounds + rootOutputGap]
+    Marker --> PlaceR
     PlaceL --> Complete[on COMPLETE: persist generatedBy]
     PlaceR --> Complete
     Complete --> Rebalance[re-tidy branch tree<br/>+ rigid-box separation from neighbors]
@@ -427,7 +431,7 @@ flowchart TB
 
 ## Balanced Branch-Tree Layout
 
-A branch lineage is a **tree** of generated media: the first generated image is the root, and each later edit/variant descends from a parent via `generatedBy.parentImageNodeId` (or, failing that, its incoming lineage edge). There is no separate origin node — the root image carries the branch's prompt, references, and visual summaries on its own `generatedBy`, and its info panel reconstructs them.
+A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via `generatedBy.parentImageNodeId` (or, failing that, its incoming lineage edge). Fresh multi-model requests with no source/thread node use a temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated children still carry prompt, references, and visual summaries on `generatedBy`.
 
 On every generated-media add/remove the affected tree is laid out deterministically and then rigid-separated from its neighbors:
 
@@ -437,7 +441,12 @@ On every generated-media add/remove the affected tree is laid out deterministica
 
 ### What Counts as a Branch Tree
 
-A branch tree is a connected component of **top-level generated media**: `type: 'image' | 'video'`, with `generatedBy.branchId`, and no `parentId`. A node's in-tree parent is resolved from `generatedBy.parentImageNodeId` first, then from an incoming lineage edge whose source is generated media. If neither exists, the node is a root. This lets one tree mix images and videos and lets a single branch fork into multiple children without inventing another persisted node type.
+A branch tree is a connected component of **top-level generated media** plus temporary branch origins:
+
+- generated media: `type: 'image' | 'video'`, with `generatedBy.branchId`, and no `parentId`
+- temporary origins: `type: 'branchOrigin'`, with `branchId`, `temporary: true`, and no `parentId`
+
+A generated node's in-tree parent is resolved from `generatedBy.parentImageNodeId` first, then `generatedBy.branchOriginNodeId`, then an incoming lineage edge whose source is a tree member. If neither exists, the generated node is a root. This lets one tree mix images and videos, lets a single branch fork into multiple children, and gives fresh multi-model siblings a shared explicit root when no source node exists.
 
 Reference/style media and workspace-relevance selections can anchor placement and become model references, but they are not tree members unless they are themselves generated media in the lineage. Parented nodes are also excluded from tree layout, matching the canvas rule that containment is handled separately from top-level branch placement.
 

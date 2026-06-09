@@ -19,6 +19,7 @@ import {
     type ImageCanvasNode,
     type VideoCanvasNode,
     type AiChatThreadCanvasNode,
+    type BranchOriginCanvasNode,
     type AiChatThread,
     type WorkspaceEdge,
     type CanvasAiChatSidebarTab,
@@ -127,6 +128,7 @@ type CollisionPlan = {
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
+const BRANCH_ORIGIN_NODE_DIMENSIONS = { width: 72, height: 72 }
 
 function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
     promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
@@ -439,7 +441,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // Re-tidy only when a lineage member left a tree. Deleting an
                 // unrelated, non-tree node must never trigger tree layout (loose
                 // nodes and trees interact only as rigid blocks, never by snapping).
-                const updatedNodes = deletedNode && isGeneratedMediaNode(deletedNode)
+                const updatedNodes = deletedNode && isBranchTreeCanvasNode(deletedNode)
                     ? rebalanceGeneratedMediaTrees(remainingNodes, updatedEdges)
                     : remainingNodes
 
@@ -809,7 +811,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         for (let i = currentCanvasState.nodes.length - 1; i >= 0; i--) {
             const node = currentCanvasState.nodes[i]
-            if (node.type !== 'image' && node.type !== 'video' && node.type !== 'document' && node.type !== 'aiChatThread') continue
+            if (node.type !== 'image' && node.type !== 'video' && node.type !== 'document' && node.type !== 'aiChatThread' && node.type !== 'branchOrigin') continue
             const rect = getNodeWorldRect(node, nodesById)
             if (rectContainsCanvasPoint(rect, point)) return node
         }
@@ -3807,6 +3809,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         sourceNodeId?: string
         placementAnchorNodeId?: string
         referenceNodeIds?: string[]
+        branchOriginNodeId?: string
         promptText: string
         branchId: string
         imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
@@ -3958,7 +3961,58 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getGeneratedMediaEdgeSourceNode(threadId: string, generationRun?: MediaGenerationRunMeta): CanvasNode | undefined {
         const pendingSourceNodeId = getPendingGeneratedMediaPlacement(threadId, generationRun)?.sourceNodeId
-        return findCanvasNodeById(pendingSourceNodeId) ?? findSourceThreadNode(threadId)
+        const pendingOriginNodeId = getPendingGeneratedMediaPlacement(threadId, generationRun)?.branchOriginNodeId
+        return findCanvasNodeById(pendingSourceNodeId)
+            ?? findSourceThreadNode(threadId)
+            ?? findCanvasNodeById(pendingOriginNodeId)
+    }
+
+    function addBranchOriginNodeIfMissing(nodes: CanvasNode[], branchOriginNode: BranchOriginCanvasNode | undefined): CanvasNode[] {
+        if (!branchOriginNode) return nodes
+        if (nodes.some((node: CanvasNode) => node.nodeId === branchOriginNode.nodeId)) return nodes
+        return [...nodes, branchOriginNode]
+    }
+
+    function ensureBranchOriginForGeneratedMedia(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        mediaHeight: number,
+    ): BranchOriginCanvasNode | undefined {
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        if (!placement || placement.sourceNodeId || findSourceThreadNode(threadId)) return undefined
+
+        const existing = findCanvasNodeById(placement.branchOriginNodeId)
+        if (existing?.type === 'branchOrigin') return existing as BranchOriginCanvasNode
+
+        const generationRequestId = generationRun?.generationRequestId ?? `legacy-${threadId}`
+        const nodeId = `branch-origin-${placement.branchId}`
+        const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
+            ?? getCenteredInsertionPosition({ width: getGeneratedImageInsertionSize(), height: mediaHeight })
+        const position = {
+            x: referencePosition.x - settings.imageBranchLineage.imageToImageGap - BRANCH_ORIGIN_NODE_DIMENSIONS.width,
+            y: referencePosition.y + (mediaHeight - BRANCH_ORIGIN_NODE_DIMENSIONS.height) / 2,
+        }
+
+        // TODO temporary branch-start marker for fresh multi-model generations.
+        // Replace this robot-face placeholder when final branch-origin UX is designed.
+        const branchOriginNode: BranchOriginCanvasNode = {
+            nodeId,
+            type: 'branchOrigin',
+            branchId: placement.branchId,
+            generationRequestId,
+            ...(placement.imageBranchCandidateSnapshot?.promptFingerprint
+                ? { promptFingerprint: placement.imageBranchCandidateSnapshot.promptFingerprint }
+                : {}),
+            position,
+            dimensions: BRANCH_ORIGIN_NODE_DIMENSIONS,
+            temporary: true,
+        }
+
+        setPendingGeneratedMediaPlacement(threadId, generationRun, {
+            ...placement,
+            branchOriginNodeId: nodeId,
+        })
+        return branchOriginNode
     }
 
     function setGeneratingReferenceNodeIds(threadId: string, nodeIds: Iterable<string | null | undefined>): void {
@@ -4201,11 +4255,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaModelId: generationRun?.mediaModelId ?? existingGeneratedBy?.mediaModelId,
             mediaType: generationRun?.mediaType ?? existingGeneratedBy?.mediaType,
             variantIndex: generationRun?.variantIndex ?? existingGeneratedBy?.variantIndex,
+            branchOriginNodeId: existingGeneratedBy?.branchOriginNodeId ?? placement.branchOriginNodeId,
             branchId: existingGeneratedBy?.branchId ?? resolution?.branchId ?? placement.branchId,
             parentImageNodeId: existingGeneratedBy?.parentImageNodeId ?? parentImageNodeId ?? undefined,
             sourceContextNodeIds: resolution?.sourceContextNodeIds ?? [],
             referenceImageNodeIds: resolution?.referenceImageNodeIds ?? [],
-            operationKind: resolution?.operationKind ?? 'new_image',
+            operationKind: resolution?.operationKind ?? (placement.branchOriginNodeId ? 'fresh_branch' : 'new_image'),
             promptText: placement.promptText,
             promptFingerprint: placement.imageBranchCandidateSnapshot?.promptFingerprint,
             visualEntitySummary: resolution?.visualEntitySummary,
@@ -4232,6 +4287,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function isGeneratedMediaNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode {
         return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy?.branchId)
+    }
+
+    function isBranchTreeCanvasNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode | BranchOriginCanvasNode {
+        return isGeneratedMediaNode(node) || node.type === 'branchOrigin'
     }
 
     // Compose a media descriptor for AI-generated media for free from the branch
@@ -4483,6 +4542,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncPixiMediaLayer(currentCanvasState)
     }
 
+    function appendBranchOriginNodeToDOM(branchOriginNode: BranchOriginCanvasNode): void {
+        if (viewportEl.querySelector(`[data-node-id="${branchOriginNode.nodeId}"]`)) return
+        const nodeEl = createBranchOriginNode(branchOriginNode)
+        viewportEl.appendChild(nodeEl)
+        connectionManager?.registerNodeElement(branchOriginNode.nodeId, nodeEl as HTMLDivElement)
+        syncPixiMediaLayer(currentCanvasState)
+    }
+
     // Persist canvas state without triggering a full re-render.
     // Updates internal state + persists via callback, then immediately updates the
     // structure key so the Svelte $effect's render() call sees no structural change
@@ -4671,7 +4738,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
-            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun)
+            const imageWidth = getGeneratedImageInsertionSize()
+            const imageHeight = imageWidth
+            const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, imageHeight)
+            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
             const nodeId = `node-${fileId || uuidv4()}`
@@ -4679,8 +4749,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             const imageSrc = buildImageSrc(imageUrl, '', false)
 
-            const imageWidth = getGeneratedImageInsertionSize()
-            const imageHeight = imageWidth
             const position = getGeneratedMediaInsertionPosition(threadId, imageHeight, generationRun)
                 ?? getCenteredInsertionPosition({ width: imageWidth, height: imageHeight })
 
@@ -4703,7 +4771,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
 
-            const existingNodes = currentCanvasState?.nodes || []
+            const existingNodes = addBranchOriginNodeIfMissing(currentCanvasState?.nodes || [], branchOriginNode)
             const existingEdges = currentCanvasState?.edges || []
 
             const newEdges = edgeSourceNode
@@ -4723,6 +4791,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 edges: newEdges,
             }
             commitCanvasStatePreservingEditors(newCanvasState)
+            if (branchOriginNode) {
+                const placedBranchOriginNode =
+                    (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
+                    ?? branchOriginNode
+                appendBranchOriginNodeToDOM(placedBranchOriginNode)
+            }
             const placedImageNode = (rebalancedNodes.find((n: CanvasNode) => n.nodeId === nodeId) as ImageCanvasNode) ?? imageNode
             appendImageNodeToDOM(placedImageNode)
             if (imageUrl) clearGeneratingReferencesOnFirstPixels(placementKey, generationRun)
@@ -4796,13 +4870,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     return
                 }
 
-                const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun)
+                const imageWidth = getGeneratedImageInsertionSize()
+                const imageHeight = imageWidth
+                const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, imageHeight)
+                const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
                 const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
                 const nodeId = `node-${fileId || uuidv4()}`
 
-                const imageWidth = getGeneratedImageInsertionSize()
-                const imageHeight = imageWidth
                 const position = getGeneratedMediaInsertionPosition(threadId, imageHeight, generationRun)
                     ?? getCenteredInsertionPosition({ width: imageWidth, height: imageHeight })
 
@@ -4828,7 +4903,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     descriptor: buildDescriptorFromGeneratedBy(generatedBy),
                 }
 
-                const existingNodes = currentCanvasState?.nodes || []
+                const existingNodes = addBranchOriginNodeIfMissing(currentCanvasState?.nodes || [], branchOriginNode)
                 const existingEdges = currentCanvasState?.edges || []
 
                 const newEdges = edgeSourceNode
@@ -4848,6 +4923,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     viewport: currentCanvasState?.viewport || { x: 0, y: 0, zoom: 1 },
                     nodes: resolvedNodes,
                     edges: newEdges,
+                }
+                if (branchOriginNode) {
+                    const placedBranchOriginNode =
+                        (resolvedNodes.find((node: CanvasNode) => node.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
+                        ?? branchOriginNode
+                    appendBranchOriginNodeToDOM(placedBranchOriginNode)
                 }
                 appendImageNodeToDOM(resolvedImageNode)
 
@@ -4988,17 +5069,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (videoGenerationTracker.has(runKey)) return
 
-            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun)
-            const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
-
-            const nodeId = `node-${uuidv4()}`
-            videoGenerationTracker.set(runKey, { nodeId, fileId: '', placementKey, ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })
-
             // Placeholder is square until the attached <video> reports the MP4's
             // intrinsic dimensions; handleVideoIntrinsicSize re-fits the node,
             // then re-tidies the generated-media tree around the final frame.
             const placeholderWidth = getGeneratedImageInsertionSize()
             const placeholderHeight = placeholderWidth
+            const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, placeholderHeight)
+            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+            const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
+
+            const nodeId = `node-${uuidv4()}`
+            videoGenerationTracker.set(runKey, { nodeId, fileId: '', placementKey, ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })
+
             const position = getGeneratedMediaInsertionPosition(threadId, placeholderHeight, generationRun)
                 ?? getCenteredInsertionPosition({ width: placeholderWidth, height: placeholderHeight })
 
@@ -5024,7 +5106,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 },
             }
 
-            const existingNodes = currentCanvasState?.nodes || []
+            const existingNodes = addBranchOriginNodeIfMissing(currentCanvasState?.nodes || [], branchOriginNode)
             const existingEdges = currentCanvasState?.edges || []
             const newEdges = edgeSourceNode
                 ? [
@@ -5043,6 +5125,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 edges: newEdges,
             }
             commitCanvasStatePreservingEditors(newCanvasState)
+            if (branchOriginNode) {
+                const placedBranchOriginNode =
+                    (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
+                    ?? branchOriginNode
+                appendBranchOriginNodeToDOM(placedBranchOriginNode)
+            }
             const placedVideoNode = (rebalancedNodes.find((n: CanvasNode) => n.nodeId === nodeId) as VideoCanvasNode) ?? videoNode
             appendVideoNodeToDOM(placedVideoNode)
         },
@@ -6194,6 +6282,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    function createBranchOriginNode(node: BranchOriginCanvasNode): HTMLElement {
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-branch-origin-node',
+            {
+                branchId: node.branchId,
+                generationRequestId: node.generationRequestId,
+            },
+            { renderResizeHandles: false }
+        )
+        dragOverlay.className = 'branch-origin-drag-overlay nopan'
+
+        // TODO temporary branch-start marker for fresh multi-model generations.
+        // Replace this robot-face placeholder when final branch-origin UX is designed.
+        const icon = html`<div className="workspace-branch-origin-icon" innerHTML=${'&#129302;'}></div>` as HTMLDivElement
+        nodeEl.insertBefore(icon, dragOverlay)
+
+        return nodeEl
+    }
+
     function handlePanePointerDown(event: PointerEvent): void {
         if (event.button !== 0 || !event.isPrimary) return
         if (!isCanvasBackgroundTarget(event.target)) return
@@ -6351,6 +6459,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createImageNode(node as ImageCanvasNode)
             } else if (node.type === 'video') {
                 nodeEl = createVideoNode(node as VideoCanvasNode)
+            } else if (node.type === 'branchOrigin') {
+                nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)
             } else {
                 // Inert legacy guard: old workspaces may still contain
                 // `type: 'contextRegion'` nodes. Phase 1 intentionally does not
