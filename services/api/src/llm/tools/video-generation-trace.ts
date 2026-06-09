@@ -227,6 +227,7 @@ export const buildVideoGenerationTrace = (state: ProviderState): VideoGeneration
 
     return {
         traceVersion: 'video-generation-trace-v1',
+        generationRun: state.generationRun,
         chatModelProvider: state.provider,
         chatModelId: state.modelVersion,
         videoModelProvider: videoProvider,

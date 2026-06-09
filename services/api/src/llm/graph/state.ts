@@ -3,6 +3,7 @@
 import type {
     ImageBranchCandidateSnapshot,
     ImageBranchVlmResolution,
+    MediaGenerationRunMeta,
     ProviderName,
     WorkspaceContextResolution,
     WorkspaceContextSnapshot,
@@ -55,6 +56,17 @@ export type AiModelMetaInfo = {
     videoMaxReferenceImages?: number
     pricing?: Record<string, any>
     [key: string]: unknown
+}
+
+export type MediaFanoutPlan = {
+    generationRequestId: string
+    imageModels: AiModelMetaInfo[]
+    videoModels: AiModelMetaInfo[]
+    imageSize?: string
+    videoAspectRatio?: string
+    videoResolution?: string
+    videoDurationSeconds?: number
+    videoSourceForExtension?: string
 }
 
 // Reference-image cap for the selected video model. VEO accepts 3, Seedance 9.
@@ -145,6 +157,11 @@ export type ProviderState = {
     // Feature reference resolution (/use chips on chat messages)
     referencedFeatureIds?: string[] | undefined
     featureUsagePrompt?: string | undefined
+
+    // Multi-model media generation request-group metadata.
+    generationRun?: MediaGenerationRunMeta | undefined
+    mediaFanoutPlan?: MediaFanoutPlan | undefined
+    preflightResolved?: boolean | undefined
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
@@ -203,4 +220,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     previousResponseId: { reducer: keep },
     referencedFeatureIds: { reducer: keep },
     featureUsagePrompt: { reducer: keep },
+    generationRun: { reducer: keep },
+    mediaFanoutPlan: { reducer: keep },
+    preflightResolved: { reducer: keep, default: () => false },
 }

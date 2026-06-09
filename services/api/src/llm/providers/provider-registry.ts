@@ -84,19 +84,22 @@ export class ProviderRegistry {
         return provider
     }
 
-    // One-shot instance not stored in the registry — used by image router for transient image-model providers.
+    // One-shot provider used by media routers. It is stored while running so
+    // request-group stop can abort media children as well as reasoning children.
     createTransient(instanceKey: string, providerName: ProviderName): BaseProvider {
-        const Ctor = this.providerCtors.get(providerName)
-        if (!Ctor) {
-            throw new Error(`Unsupported provider: ${providerName}`)
+        const provider = this.getOrCreate(instanceKey, providerName)
+        const requestGroupKey = this.inferRequestGroupKey(instanceKey)
+        if (requestGroupKey) {
+            this.registerRequestGroupInstance(requestGroupKey, instanceKey)
         }
-        return new Ctor(instanceKey, this.buildDeps())
+        return provider
     }
 
     remove(instanceKey: string): void {
         if (this.instances.delete(instanceKey)) {
             info(`Removed instance: ${instanceKey}`)
         }
+        this.unregisterInstanceFromAllGroups(instanceKey)
     }
 
     get(instanceKey: string): BaseProvider | undefined {
@@ -180,6 +183,21 @@ export class ProviderRegistry {
         if (instanceKeys.size === 0) {
             this.requestGroups.delete(requestGroupKey)
         }
+    }
+
+    private unregisterInstanceFromAllGroups(instanceKey: string): void {
+        for (const [requestGroupKey, instanceKeys] of this.requestGroups) {
+            if (!instanceKeys.delete(instanceKey)) continue
+            if (instanceKeys.size === 0) {
+                this.requestGroups.delete(requestGroupKey)
+            }
+        }
+    }
+
+    private inferRequestGroupKey(instanceKey: string): string | undefined {
+        const reasoningMarkerIndex = instanceKey.indexOf(':reasoning:')
+        if (reasoningMarkerIndex === -1) return undefined
+        return instanceKey.slice(0, reasoningMarkerIndex)
     }
 
     async shutdown(): Promise<void> {

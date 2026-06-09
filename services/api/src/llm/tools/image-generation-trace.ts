@@ -204,6 +204,7 @@ export const buildImageGenerationTrace = (state: ProviderState): ImageGeneration
 
     return {
         traceVersion: 'image-generation-trace-v1',
+        generationRun: state.generationRun,
         chatModelProvider: state.provider,
         chatModelId: state.modelVersion,
         imageModelProvider: imageProvider,

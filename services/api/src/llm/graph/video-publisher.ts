@@ -1,7 +1,7 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { STREAM_STATUS, type ProviderName } from '@lixpi/constants'
+import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
 import type { StoreWorkspaceImageFn } from './image-publisher.ts'
 import type { StoreVideoInput, StoreVideoResult } from '../../services/video-storage.ts'
@@ -25,6 +25,7 @@ export class VideoPublisher {
         private readonly workspaceId: string,
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
+        private readonly generationRun?: MediaGenerationRunMeta,
     ) {}
 
     // Placeholder event: UI creates the pending video node + traveling outline.
@@ -35,6 +36,7 @@ export class VideoPublisher {
                 videoUrl: '',
                 fileId: '',
                 aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -46,6 +48,7 @@ export class VideoPublisher {
             content: {
                 status: STREAM_STATUS.VIDEO_GENERATING,
                 aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -125,6 +128,7 @@ export class VideoPublisher {
                 aiProvider: this.provider,
                 videoModelProvider: this.provider,
                 videoModelId,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -136,6 +140,7 @@ export class VideoPublisher {
                 status: STREAM_STATUS.VIDEO_ERROR,
                 error: message,
                 aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })

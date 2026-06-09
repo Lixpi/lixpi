@@ -1,7 +1,7 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { STREAM_STATUS, type ProviderName } from '@lixpi/constants'
+import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
 
 import type { StoreImageInput, StoreImageResult } from '../../services/image-storage.ts'
 
@@ -17,6 +17,7 @@ export class ImagePublisher {
         private readonly workspaceId: string,
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
+        private readonly generationRun?: MediaGenerationRunMeta,
     ) {}
 
     // Empty imageBase64 publishes a placeholder event (UI shows animated border).
@@ -30,6 +31,7 @@ export class ImagePublisher {
                     fileId: '',
                     partialIndex,
                     aiProvider: this.provider,
+                    ...(this.generationRun ? { generationRun: this.generationRun } : {}),
                 },
                 aiChatThreadId: this.aiChatThreadId,
             })
@@ -53,6 +55,7 @@ export class ImagePublisher {
                     fileId: result.fileId,
                     partialIndex,
                     aiProvider: this.provider,
+                    ...(this.generationRun ? { generationRun: this.generationRun } : {}),
                 },
                 aiChatThreadId: this.aiChatThreadId,
             })
@@ -104,6 +107,7 @@ export class ImagePublisher {
                 aiProvider: this.provider,
                 imageModelProvider: this.provider,
                 imageModelId,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })

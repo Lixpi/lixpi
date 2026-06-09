@@ -60,7 +60,7 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
         runImageRouter: (state) => imageRouter.execute(state),
         storeWorkspaceImage: deps.storeWorkspaceImage,
     })
-    const mediaGenerationMatrixOrchestrator = new MediaGenerationMatrixOrchestrator(registry)
+    const mediaGenerationMatrixOrchestrator = new MediaGenerationMatrixOrchestrator(registry, deps.natsService)
 
     return {
         process: (instanceKey, providerName, requestData) =>

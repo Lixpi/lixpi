@@ -1,7 +1,8 @@
 'use strict'
 
 import { v4 as uuid } from 'uuid'
-import { info, warn } from '@lixpi/debug-tools'
+import type NatsService from '@lixpi/nats-service'
+import { info } from '@lixpi/debug-tools'
 import type {
     AiInteractionMediaGenerationRequest,
     AiModel,
@@ -11,6 +12,11 @@ import type {
 } from '@lixpi/constants'
 
 import AiModelModel from '../../models/ai-model.ts'
+import { resolveFeatures } from '../graph/feature-resolver.ts'
+import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
+import { StreamPublisher } from '../graph/stream-publisher.ts'
+import type { ProviderState } from '../graph/state.ts'
+import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 
 export type MatrixRequestData = Record<string, any> & {
@@ -136,7 +142,10 @@ const buildReasoningInstanceKey = (requestGroupKey: string, reasoningIndex: numb
     `${requestGroupKey}:reasoning:${reasoningIndex}`
 
 export class MediaGenerationMatrixOrchestrator {
-    constructor(private readonly registry: ProviderRegistry) {}
+    constructor(
+        private readonly registry: ProviderRegistry,
+        private readonly natsService: NatsService,
+    ) {}
 
     async process(requestData: MatrixRequestData): Promise<void> {
         const normalized = await this.resolveRequest(this.normalizeRequest(requestData))
@@ -145,6 +154,15 @@ export class MediaGenerationMatrixOrchestrator {
         const normalizedVideoAspectRatio = normalizeModelOption(requestData.videoAspectRatio ?? normalized.videoAspectRatio, primaryVideoModel?.meta.videoAspectRatios)
         const normalizedVideoResolution = normalizeModelOption(requestData.videoResolution ?? normalized.videoResolution, primaryVideoModel?.meta.videoResolutions)
         const normalizedVideoDuration = normalizeModelOption(requestData.videoDuration ?? normalized.videoDuration, primaryVideoModel?.meta.videoDurations)
+        const sharedPreflightState = await this.runSharedPreflight({
+            requestData,
+            normalized,
+            primaryImageModel,
+            primaryVideoModel,
+            normalizedVideoAspectRatio,
+            normalizedVideoResolution,
+            normalizedVideoDuration,
+        })
 
         info('[MEDIA_MATRIX] Starting media generation matrix request', {
             generationRequestId: normalized.generationRequestId,
@@ -167,6 +185,24 @@ export class MediaGenerationMatrixOrchestrator {
                 videoResolution: normalizedVideoResolution,
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: normalized.videoSourceForExtension,
+                workspaceContextResolution: sharedPreflightState.workspaceContextResolution,
+                imageBranchResolution: sharedPreflightState.imageBranchResolution,
+                messages: sharedPreflightState.messages,
+                featureReferenceImages: sharedPreflightState.featureReferenceImages,
+                featureReferenceImageTraceUrls: sharedPreflightState.featureReferenceImageTraceUrls,
+                featureUsagePrompt: sharedPreflightState.featureUsagePrompt,
+                referencedFeatureIds: sharedPreflightState.referencedFeatureIds,
+                preflightResolved: true,
+                mediaFanoutPlan: {
+                    generationRequestId: normalized.generationRequestId,
+                    imageModels: normalized.imageModels.map((model) => model.meta),
+                    videoModels: normalized.videoModels.map((model) => model.meta),
+                    imageSize: normalized.imageSize,
+                    ...(normalizedVideoAspectRatio ? { videoAspectRatio: normalizedVideoAspectRatio } : {}),
+                    ...(normalizedVideoResolution ? { videoResolution: normalizedVideoResolution } : {}),
+                    ...(normalizedVideoDuration ? { videoDurationSeconds: Number(normalizedVideoDuration) } : {}),
+                    ...(normalized.videoSourceForExtension ? { videoSourceForExtension: normalized.videoSourceForExtension } : {}),
+                },
                 mediaGenerationRequest: {
                     requestVersion: 'media-generation-matrix-v1',
                     generationRequestId: normalized.generationRequestId,
@@ -250,14 +286,6 @@ export class MediaGenerationMatrixOrchestrator {
         imageModels.forEach(assertImageModel)
         videoModels.forEach(assertVideoModel)
 
-        if (normalized.imageModelIds.length > 1 || normalized.videoModelIds.length > 1) {
-            warn('[MEDIA_MATRIX] Media model fanout is deferred to Phase 5; Phase 4 routes each reasoning run to the first selected media model.', {
-                generationRequestId: normalized.generationRequestId,
-                imageModelCount: normalized.imageModelIds.length,
-                videoModelCount: normalized.videoModelIds.length,
-            })
-        }
-
         return {
             ...normalized,
             reasoningModels,
@@ -284,5 +312,96 @@ export class MediaGenerationMatrixOrchestrator {
                 meta,
             }
         }))
+    }
+
+    private async runSharedPreflight({
+        requestData,
+        normalized,
+        primaryImageModel,
+        primaryVideoModel,
+        normalizedVideoAspectRatio,
+        normalizedVideoResolution,
+        normalizedVideoDuration,
+    }: {
+        requestData: MatrixRequestData
+        normalized: ResolvedMatrixRequest
+        primaryImageModel?: ResolvedAiModel
+        primaryVideoModel?: ResolvedAiModel
+        normalizedVideoAspectRatio?: string
+        normalizedVideoResolution?: string
+        normalizedVideoDuration?: string
+    }): Promise<Partial<ProviderState>> {
+        const reasoningModel = normalized.reasoningModels[0]
+        const abortController = new AbortController()
+        const generationRun = {
+            generationRequestId: normalized.generationRequestId,
+            reasoningRunId: buildReasoningRunId(normalized.generationRequestId, 0),
+            reasoningModelId: reasoningModel.modelId,
+            reasoningIndex: 0,
+        }
+        const publisher = new StreamPublisher(
+            this.natsService,
+            requestData.workspaceId,
+            requestData.aiChatThreadId,
+            reasoningModel.provider,
+            generationRun,
+        )
+        let state: ProviderState = {
+            messages: requestData.messages ?? [],
+            aiModelMetaInfo: reasoningModel.meta,
+            eventMeta: requestData.eventMeta ?? {},
+            workspaceId: requestData.workspaceId,
+            aiChatThreadId: requestData.aiChatThreadId,
+            instanceKey: `${normalized.requestGroupKey}:preflight`,
+            provider: reasoningModel.provider,
+            modelVersion: reasoningModel.meta.modelVersion,
+            maxCompletionSize: reasoningModel.meta.maxCompletionSize,
+            temperature: reasoningModel.meta.defaultTemperature ?? 0.7,
+            streamActive: false,
+            aiRequestReceivedAt: Date.now(),
+            enableImageGeneration: requestData.enableImageGeneration ?? false,
+            imageSize: normalized.imageSize,
+            imageModelMetaInfo: primaryImageModel?.meta,
+            imageModelVersion: primaryImageModel?.meta.modelVersion,
+            imageProviderName: primaryImageModel?.provider,
+            imagePromptRetryCount: 0,
+            workspaceContextSnapshot: requestData.workspaceContextSnapshot,
+            imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
+            referencedFeatureIds: requestData.referencedFeatureIds,
+            enableVideoGeneration: requestData.enableVideoGeneration ?? false,
+            videoModelMetaInfo: primaryVideoModel?.meta,
+            videoModelVersion: primaryVideoModel?.meta.modelVersion,
+            videoProviderName: primaryVideoModel?.provider,
+            videoAspectRatio: normalizedVideoAspectRatio,
+            videoResolution: normalizedVideoResolution,
+            videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+            videoSourceForExtension: normalized.videoSourceForExtension,
+            generationRun,
+        }
+
+        state = this.applyStatePatch(state, await resolveWorkspaceContext(state, {
+            natsService: this.natsService,
+            publisher,
+            abortSignal: abortController.signal,
+        }))
+        state = this.applyStatePatch(state, await resolveFeatures(state))
+        state = this.applyStatePatch(state, await resolveImageBranch(state, {
+            natsService: this.natsService,
+            publisher,
+            abortSignal: abortController.signal,
+        }))
+
+        return state
+    }
+
+    private applyStatePatch(state: ProviderState, patch: Partial<ProviderState>): ProviderState {
+        const nextState = { ...state }
+        for (const [key, value] of Object.entries(patch)) {
+            if (value !== undefined) {
+                const writableState = nextState as Record<string, unknown>
+                writableState[key] = value
+            }
+        }
+        return nextState
     }
 }
