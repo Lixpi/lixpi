@@ -12,6 +12,17 @@ function parseVariantIndex(value: string | null): number | null {
     return Number.isFinite(parsed) ? parsed : null
 }
 
+function formatModelLabel(modelId: string): string {
+    if (!modelId) return ''
+    const parts = String(modelId).split(':')
+    return parts[1] || parts[0] || ''
+}
+
+function formatVariantLabel(variantIndex: number | null): string {
+    if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
+    return `Variant ${Number(variantIndex) + 1}`
+}
+
 export const aiGeneratedImageNodeSpec = {
     attrs: {
         imageData: { default: '' },
@@ -165,12 +176,14 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
                 </div>
                 <img className="ai-generated-image-content" alt="" />
             </div>
+            <div className="ai-generated-media-run-meta"></div>
         </div>
     `
 
     const container = wrapper.querySelector('.ai-generated-image-container') as HTMLElement
     const spinnerElement = wrapper.querySelector('.ai-generated-image-spinner') as HTMLElement
     const imageElement = wrapper.querySelector('.ai-generated-image-content') as HTMLImageElement
+    const runMetaElement = wrapper.querySelector('.ai-generated-media-run-meta') as HTMLElement
 
     // Click handler to select the node (needed for bubble menu)
     const handleClick = (event: MouseEvent) => {
@@ -186,6 +199,24 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     }
 
     wrapper.addEventListener('click', handleClick)
+
+    const updateRunMeta = () => {
+        const mediaLabel = formatModelLabel(node.attrs.mediaModelId)
+        const variantLabel = formatVariantLabel(node.attrs.variantIndex)
+        runMetaElement.replaceChildren()
+
+        if (mediaLabel) {
+            const modelPill = html`<span className="ai-generated-media-run-pill" title=${node.attrs.mediaModelId}>${mediaLabel}</span>` as HTMLElement
+            runMetaElement.appendChild(modelPill)
+        }
+
+        if (variantLabel) {
+            const variantPill = html`<span className="ai-generated-media-run-pill is-variant">${variantLabel}</span>` as HTMLElement
+            runMetaElement.appendChild(variantPill)
+        }
+
+        runMetaElement.hidden = runMetaElement.childElementCount === 0
+    }
 
     const updateDisplay = async () => {
         const { imageData, revisedPrompt, responseId, aiModel, isPartial } = node.attrs
@@ -243,6 +274,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     }
 
     updateDisplay().catch(() => {})
+    updateRunMeta()
 
     return {
         dom: wrapper,
@@ -253,6 +285,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
 
             node = updatedNode
             updateDisplay()
+            updateRunMeta()
             return true
         },
         destroy: () => {

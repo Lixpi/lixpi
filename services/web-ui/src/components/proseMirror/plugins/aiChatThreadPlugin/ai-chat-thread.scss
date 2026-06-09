@@ -298,6 +298,44 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         justify-content: flex-start;
         min-height: 20px;
         margin-top: 0.25rem;
+        gap: 0.35rem;
+    }
+
+    .ai-response-run-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        min-width: 0;
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    .ai-response-run-pill,
+    .ai-generated-media-run-pill {
+        display: inline-flex;
+        align-items: center;
+        max-width: 12rem;
+        min-height: 1.25rem;
+        padding: 0.15rem 0.45rem;
+        border: 1px solid rgba(42, 45, 47, 0.12);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.74);
+        color: rgba(42, 45, 47, 0.62);
+        font-size: 0.68rem;
+        font-weight: 700;
+        line-height: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-sizing: border-box;
+
+        &.is-variant {
+            color: rgba(32, 86, 96, 0.74);
+            border-color: rgba(79, 143, 157, 0.26);
+            background: rgba(241, 248, 247, 0.78);
+        }
     }
 
     // ===== AI RESPONSE MESSAGE =====
@@ -515,6 +553,18 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         &.is-visible {
             display: block;
         }
+    }
+}
+
+.ai-generated-media-run-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.35rem;
+    min-height: 1.25rem;
+
+    &[hidden] {
+        display: none;
     }
 }
 
@@ -785,4 +835,3 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         flex-shrink: 0;
     }
 }
-

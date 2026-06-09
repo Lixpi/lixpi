@@ -140,6 +140,25 @@ type AiGeneratedImageAttrs = {
     textWrap: AiGeneratedImageTextWrap
 } & GeneratedRunAttrs
 
+type AiGeneratedVideoAttrs = {
+    videoUrl: string
+    fileId: string
+    workspaceId: string
+    posterUrl: string
+    posterFileId: string
+    durationSeconds: number
+    aspectRatio: number
+    hasAudio: boolean
+    revisedPrompt: string
+    responseId: string
+    videoModel: string
+    isPending: boolean
+    errorMessage: string
+    width: string
+    alignment: AiGeneratedImageAlignment
+    textWrap: AiGeneratedImageTextWrap
+} & GeneratedRunAttrs
+
 function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previousAttrs: Partial<GeneratedRunAttrs> = {}): GeneratedRunAttrs {
     return {
         generationRequestId: generationRun?.generationRequestId || previousAttrs.generationRequestId || '',
@@ -151,6 +170,19 @@ function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previous
         variantIndex: generationRun?.variantIndex ?? previousAttrs.variantIndex ?? null,
     }
 }
+
+function getReasoningRunKey(generationRun?: MediaGenerationRunMeta): string {
+    return generationRun?.reasoningRunId || 'legacy'
+}
+
+function getMediaOrReasoningRunKey(generationRun?: MediaGenerationRunMeta): string {
+    return generationRun?.mediaRunId || getReasoningRunKey(generationRun)
+}
+
+function getThreadScopedRunKey(threadId: string, generationRun?: MediaGenerationRunMeta): string {
+    return `${threadId}:${getReasoningRunKey(generationRun)}`
+}
+
 type ResponseContext = {
     responseNode: ProseMirrorNode
     responseStartPos: number
@@ -160,16 +192,22 @@ type ResponseImageNodeInfo = {
     node: ProseMirrorNode
     nodePos: number
 }
+type ResponseVideoNodeInfo = {
+    node: ProseMirrorNode
+    nodePos: number
+}
 type MessageContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
 type Message = { role: string; content: string | MessageContentPart[] }
 type AiChatThreadPluginState = {
     receivingThreadIds: Set<string>
+    receivingRunKeysByThread: Map<string, Set<string>>
     insideBackticks: boolean
     backtickBuffer: string
     insideCodeBlock: boolean
     codeBuffer: string
     decorations: DecorationSet
     collapsibleThreadIds: Set<string>
+    collapsibleRunKeys: Set<string>
     // Note: dropdownStates removed - now handled by dropdown primitive plugin
 }
 
@@ -257,6 +295,12 @@ class ContentExtractor {
                 const { fileId, workspaceId } = child.attrs
                 if (fileId && workspaceId) {
                     images.push({ fileId, workspaceId })
+                }
+            } else if (child.type.name === aiGeneratedVideoNodeType) {
+                // Reuse the video poster as still-image context in chat history.
+                const { posterFileId, workspaceId } = child.attrs
+                if (posterFileId && workspaceId) {
+                    images.push({ fileId: posterFileId, workspaceId })
                 }
             } else if (child.type.name === 'feature_reference') {
                 const { featureId, featureName } = child.attrs
@@ -481,6 +525,17 @@ class ContentExtractor {
 
 // Document position and insertion utilities
 class PositionFinder {
+    static responseMatchesGenerationRun(attrs: Record<string, any>, generationRun?: MediaGenerationRunMeta): boolean {
+        if (!generationRun?.reasoningRunId) return true
+        return attrs?.reasoningRunId === generationRun.reasoningRunId
+    }
+
+    static collapsibleMatchesGenerationRun(attrs: Record<string, any>, generationRun?: MediaGenerationRunMeta): boolean {
+        if (!generationRun?.reasoningRunId && !generationRun?.mediaRunId) return true
+        if (generationRun?.mediaRunId) return attrs?.mediaRunId === generationRun.mediaRunId
+        return attrs?.reasoningRunId === generationRun.reasoningRunId && !attrs?.mediaRunId
+    }
+
     // Find where to insert aiResponseMessage in the active thread
     // Returns null if the specified threadId is not found in this document
     static findThreadInsertionPoint(state: EditorState, threadId?: string): {
@@ -509,13 +564,15 @@ class PositionFinder {
     }
 
     // Find the current aiResponseMessage being streamed into for a specific thread
-    static findResponseNode(state: EditorState, threadId?: string): {
+    static findResponseNode(state: EditorState, threadId?: string, generationRun?: MediaGenerationRunMeta): {
         found: boolean
         endOfNodePos?: number
         childCount?: number
+        nodePos?: number
     } {
         let bestEndPos: number | undefined
         let bestChildCount: number | undefined
+        let bestNodePos: number | undefined
         let bestScore = -1 // 2: isReceiving, 1: isInitialRender, 0: any response
 
         const scoreNode = (attrs: any) =>
@@ -528,7 +585,9 @@ class PositionFinder {
 
                 node.descendants((child: ProseMirrorNode, relPos: number) => {
                     if (child.type.name !== aiResponseMessageNodeType) return
+                    if (!PositionFinder.responseMatchesGenerationRun(child.attrs, generationRun)) return
 
+                    const nodePos = pos + relPos + 1
                     const endPos = pos + relPos + 1 + child.nodeSize
                     const score = scoreNode(child.attrs)
 
@@ -536,6 +595,7 @@ class PositionFinder {
                         bestScore = score
                         bestEndPos = endPos
                         bestChildCount = child.childCount
+                        bestNodePos = nodePos
                     }
                 })
                 return false // Stop after finding thread
@@ -543,12 +603,12 @@ class PositionFinder {
         }
 
         return bestEndPos !== undefined
-            ? { found: true, endOfNodePos: bestEndPos, childCount: bestChildCount }
+            ? { found: true, endOfNodePos: bestEndPos, childCount: bestChildCount, nodePos: bestNodePos }
             : { found: false }
     }
 
     // Find the last aiCollapsibleBlock node inside the current response message for a thread
-    static findCollapsibleNode(state: EditorState, threadId?: string): {
+    static findCollapsibleNode(state: EditorState, threadId?: string, generationRun?: MediaGenerationRunMeta): {
         found: boolean
         endOfNodePos?: number
         childCount?: number
@@ -568,6 +628,7 @@ class PositionFinder {
 
             node.descendants((child: ProseMirrorNode, relPos: number) => {
                 if (child.type.name === aiCollapsibleBlockNodeType) {
+                    if (!PositionFinder.collapsibleMatchesGenerationRun(child.attrs, generationRun)) return
                     const absPos = pos + relPos + 1
                     lastCollapsiblePos = absPos
                     lastCollapsibleEnd = absPos + child.nodeSize
@@ -708,8 +769,8 @@ class AiChatThreadPluginClass {
 
     // ========== STREAMING MANAGEMENT ==========
 
-    private getCurrentResponseContext(state: EditorState, threadId: string): ResponseContext | null {
-        const responseNodeInfo = PositionFinder.findResponseNode(state, threadId)
+    private getCurrentResponseContext(state: EditorState, threadId: string, generationRun?: MediaGenerationRunMeta): ResponseContext | null {
+        const responseNodeInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
         if (!responseNodeInfo.found || responseNodeInfo.endOfNodePos === undefined) return null
 
         const $endPos = state.doc.resolve(responseNodeInfo.endOfNodePos)
@@ -763,6 +824,11 @@ class AiChatThreadPluginClass {
 
             if (options.partialIndex !== undefined && child.attrs.partialIndex === options.partialIndex) {
                 matchedImage = nodeInfo
+                return
+            }
+
+            if (options.mediaRunId) {
+                matchedImage = nodeInfo
             }
         })
 
@@ -810,7 +876,7 @@ class AiChatThreadPluginClass {
         const imageNodeType = state.schema.nodes[aiGeneratedImageNodeType]
         if (!imageNodeType) return
 
-        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId)
+        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId, event.generationRun)
         if (!responseContext) return
 
         const partialIndex = event.partialIndex ?? 0
@@ -835,13 +901,14 @@ class AiChatThreadPluginClass {
         }
     }
 
-    private removePartialImagesInChat(view: EditorView, threadId: string): void {
-        const responseContext = this.getCurrentResponseContext(view.state, threadId)
+    private removePartialImagesInChat(view: EditorView, threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        const responseContext = this.getCurrentResponseContext(view.state, threadId, generationRun)
         if (!responseContext) return
 
         const ranges: Array<{ from: number; to: number }> = []
         responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
             if (child.type.name !== aiGeneratedImageNodeType || !child.attrs.isPartial) return
+            if (generationRun?.mediaRunId && child.attrs.mediaRunId !== generationRun.mediaRunId) return
             const from = responseContext.responseStartPos + 1 + offset
             ranges.push({ from, to: from + child.nodeSize })
         })
@@ -863,12 +930,16 @@ class AiChatThreadPluginClass {
         if (!aiChatThreadId) return ''
 
         const { state, dispatch } = view
-        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId)
+        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId, event.generationRun)
         if (!responseContext) return ''
 
         const responseMessageId = responseContext.responseNode.attrs.id || ''
         const imageNodeType = state.schema.nodes[aiGeneratedImageNodeType]
         const existingImage = this.findGeneratedImageInResponse(responseContext, {
+            mediaRunId: event.generationRun?.mediaRunId,
+            fileId: event.fileId,
+            responseId: event.responseId,
+        }) ?? this.findGeneratedImageInResponse(responseContext, {
             mediaRunId: event.generationRun?.mediaRunId,
             fileId: event.fileId,
             responseId: event.responseId,
@@ -881,6 +952,7 @@ class AiChatThreadPluginClass {
 
         responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
             if (child.type.name !== aiGeneratedImageNodeType || !child.attrs.isPartial) return
+            if (event.generationRun?.mediaRunId && child.attrs.mediaRunId !== event.generationRun.mediaRunId) return
 
             const from = responseContext.responseStartPos + 1 + offset
             if (existingImage?.nodePos === from) return
@@ -895,7 +967,7 @@ class AiChatThreadPluginClass {
         let imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
         let insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
 
-        if (revisedPrompt) {
+        if (revisedPrompt && (!existingImage || existingImage.node.attrs.isPartial)) {
             const revisedPromptNode = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
             const revisedPromptInsertionPos = imageNodePos ?? insertionPos
             tr.insert(revisedPromptInsertionPos, revisedPromptNode)
@@ -921,6 +993,190 @@ class AiChatThreadPluginClass {
         }
 
         return responseMessageId
+    }
+
+    private findGeneratedVideoInResponse(
+        responseContext: ResponseContext,
+        options: {
+            mediaRunId?: string
+            fileId?: string
+            responseId?: string
+        }
+    ): ResponseVideoNodeInfo | null {
+        let matchedVideo: ResponseVideoNodeInfo | null = null
+
+        responseContext.responseNode.forEach((child: ProseMirrorNode, offset: number) => {
+            if (child.type.name !== aiGeneratedVideoNodeType) return
+            if (options.mediaRunId && child.attrs.mediaRunId !== options.mediaRunId) return
+
+            const nodeInfo = {
+                node: child,
+                nodePos: responseContext.responseStartPos + 1 + offset,
+            }
+
+            if (options.fileId && child.attrs.fileId === options.fileId) {
+                matchedVideo = nodeInfo
+                return
+            }
+
+            if (options.responseId && child.attrs.responseId === options.responseId) {
+                matchedVideo = nodeInfo
+                return
+            }
+
+            if (options.mediaRunId) {
+                matchedVideo = nodeInfo
+            }
+        })
+
+        return matchedVideo
+    }
+
+    private buildGeneratedVideoAttrs(
+        event: SegmentEvent,
+        isPending: boolean,
+        errorMessage = '',
+        previousAttrs: Partial<AiGeneratedVideoAttrs> = {}
+    ): AiGeneratedVideoAttrs {
+        const previousAlignment = previousAttrs.alignment
+        const alignment = previousAlignment === 'left' || previousAlignment === 'center' || previousAlignment === 'right'
+            ? previousAlignment
+            : AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT
+        const previousTextWrap = previousAttrs.textWrap
+        const textWrap = previousTextWrap === 'left' || previousTextWrap === 'right' || previousTextWrap === 'none'
+            ? previousTextWrap
+            : AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP
+
+        return {
+            videoUrl: event.videoUrl || previousAttrs.videoUrl || '',
+            fileId: event.fileId || previousAttrs.fileId || '',
+            workspaceId: event.workspaceId || previousAttrs.workspaceId || '',
+            posterUrl: event.posterUrl || previousAttrs.posterUrl || '',
+            posterFileId: event.posterFileId || previousAttrs.posterFileId || '',
+            durationSeconds: event.durationSeconds ?? previousAttrs.durationSeconds ?? 0,
+            aspectRatio: event.aspectRatio ?? previousAttrs.aspectRatio ?? 1.777,
+            hasAudio: event.hasAudio ?? previousAttrs.hasAudio ?? true,
+            revisedPrompt: event.revisedPrompt || previousAttrs.revisedPrompt || '',
+            responseId: event.responseId || previousAttrs.responseId || '',
+            videoModel: event.videoModel || event.generationRun?.mediaModelId || previousAttrs.videoModel || '',
+            isPending,
+            errorMessage,
+            width: previousAttrs.width || AI_GENERATED_IMAGE_THUMBNAIL_WIDTH,
+            alignment,
+            textWrap,
+            ...buildGeneratedRunAttrs(event.generationRun, previousAttrs),
+        }
+    }
+
+    private upsertVideoPendingInChat(view: EditorView, event: SegmentEvent): string {
+        const { aiChatThreadId } = event
+        if (!aiChatThreadId) return ''
+
+        const { state, dispatch } = view
+        const videoNodeType = state.schema.nodes[aiGeneratedVideoNodeType]
+        if (!videoNodeType) return ''
+
+        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId, event.generationRun)
+        if (!responseContext) return ''
+
+        const existingVideo = this.findGeneratedVideoInResponse(responseContext, {
+            mediaRunId: event.generationRun?.mediaRunId,
+        })
+        const videoAttrs = this.buildGeneratedVideoAttrs(event, true, '', existingVideo?.node.attrs)
+        const tr = state.tr
+
+        if (existingVideo) {
+            tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
+        } else {
+            tr.insert(responseContext.responseEndPos - 1, videoNodeType.create(videoAttrs))
+        }
+
+        if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
+            dispatch(tr)
+        }
+
+        return responseContext.responseNode.attrs.id || ''
+    }
+
+    private upsertVideoCompleteInChat(view: EditorView, event: SegmentEvent): string {
+        const { aiChatThreadId, revisedPrompt } = event
+        if (!aiChatThreadId) return ''
+
+        const { state, dispatch } = view
+        const videoNodeType = state.schema.nodes[aiGeneratedVideoNodeType]
+        if (!videoNodeType) return ''
+
+        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId, event.generationRun)
+        if (!responseContext) return ''
+
+        const existingVideo = this.findGeneratedVideoInResponse(responseContext, {
+            mediaRunId: event.generationRun?.mediaRunId,
+            fileId: event.fileId,
+            responseId: event.responseId,
+        })
+        const tr = state.tr
+        let videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
+        let insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
+
+        if (revisedPrompt && (!existingVideo || existingVideo.node.attrs.isPending)) {
+            const revisedPromptNode = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
+            const revisedPromptInsertionPos = videoNodePos ?? insertionPos
+            tr.insert(revisedPromptInsertionPos, revisedPromptNode)
+
+            if (videoNodePos !== undefined) {
+                videoNodePos = tr.mapping.map(videoNodePos, 1)
+            } else {
+                insertionPos += revisedPromptNode.nodeSize
+            }
+        }
+
+        const videoAttrs = this.buildGeneratedVideoAttrs(event, false, '', existingVideo?.node.attrs)
+        if (videoNodePos !== undefined) {
+            tr.setNodeMarkup(videoNodePos, undefined, videoAttrs)
+        } else {
+            tr.insert(insertionPos, videoNodeType.create(videoAttrs))
+        }
+
+        if (tr.docChanged) {
+            dispatch(tr)
+        }
+
+        return responseContext.responseNode.attrs.id || ''
+    }
+
+    private upsertVideoErrorInChat(view: EditorView, event: SegmentEvent): void {
+        const { aiChatThreadId } = event
+        if (!aiChatThreadId) return
+
+        const { state, dispatch } = view
+        const videoNodeType = state.schema.nodes[aiGeneratedVideoNodeType]
+        if (!videoNodeType) return
+
+        const responseContext = this.getCurrentResponseContext(state, aiChatThreadId, event.generationRun)
+        if (!responseContext) return
+
+        const existingVideo = this.findGeneratedVideoInResponse(responseContext, {
+            mediaRunId: event.generationRun?.mediaRunId,
+        })
+        const videoAttrs = this.buildGeneratedVideoAttrs(
+            event,
+            false,
+            event.error || 'Video generation failed',
+            existingVideo?.node.attrs
+        )
+        const tr = state.tr
+
+        if (existingVideo) {
+            tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
+        } else {
+            tr.insert(responseContext.responseEndPos - 1, videoNodeType.create(videoAttrs))
+        }
+
+        if (tr.docChanged) {
+            tr.setMeta('skipDispatch', true)
+            dispatch(tr)
+        }
     }
 
     private startStreaming(view: EditorView): void {
@@ -1025,7 +1281,7 @@ class AiChatThreadPluginClass {
                         generationRun: event.generationRun,
                     })
                 }
-                this.handleStreamError(view, effectiveThreadId)
+                this.handleStreamError(view, effectiveThreadId, event.generationRun)
                 return
             }
 
@@ -1049,30 +1305,30 @@ class AiChatThreadPluginClass {
                         generationRun: event.generationRun,
                     })
                 }
-                this.handleStreamError(view, effectiveThreadId)
+                this.handleStreamError(view, effectiveThreadId, event.generationRun)
                 return
             }
 
             // Handle text streaming events
             switch (status) {
                 case 'START_STREAM':
-                    this.handleStreamStart(state, dispatch, aiProvider, effectiveThreadId)
+                    this.handleStreamStart(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
                     break
                 case 'STREAMING':
-                    if (segment) this.handleStreaming(state, dispatch, segment, effectiveThreadId, aiProvider)
+                    if (segment) this.handleStreaming(state, dispatch, segment, effectiveThreadId, aiProvider, event.generationRun)
                     break
                 case 'END_STREAM':
-                    this.handleStreamEnd(state, dispatch, effectiveThreadId)
+                    this.handleStreamEnd(state, dispatch, effectiveThreadId, event.generationRun)
                     break
             }
         })
     }
 
-    private handleStreamError(view: EditorView, threadId?: string): void {
+    private handleStreamError(view: EditorView, threadId?: string, generationRun?: MediaGenerationRunMeta): void {
         if (threadId) {
-            this.removePartialImagesInChat(view, threadId)
+            this.removePartialImagesInChat(view, threadId, generationRun)
         }
-        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), threadId)
+        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), threadId, generationRun)
     }
 
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {
@@ -1132,13 +1388,12 @@ class AiChatThreadPluginClass {
         })
     }
 
-    // Video segment handlers. The canvas owns the visible representation
-    // (placeholder node + PIXI traveling outline + final inline texture); the
-    // chat-thread document doesn't insert an aiGeneratedVideo block in Phase 5
-    // v1, but the schema + nodeView are registered so future iterations can.
-    private handleVideoPending(_view: EditorView, event: SegmentEvent): void {
+    // Video segment handlers. Chat history gets a compact aiGeneratedVideo node
+    // keyed by mediaRunId, while the canvas owns the full-size generated output.
+    private handleVideoPending(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId, aiProvider } = event
         if (!aiChatThreadId) return
+        this.upsertVideoPendingInChat(view, event)
         const callbacks = getAiGeneratedVideoCallbacks()
         callbacks.onVideoPendingToCanvas?.({
             threadId: aiChatThreadId,
@@ -1158,7 +1413,7 @@ class AiChatThreadPluginClass {
         })
     }
 
-    private handleVideoComplete(_view: EditorView, event: SegmentEvent): void {
+    private handleVideoComplete(view: EditorView, event: SegmentEvent): void {
         const {
             aiChatThreadId,
             videoUrl,
@@ -1177,6 +1432,7 @@ class AiChatThreadPluginClass {
             videoModelProvider,
         } = event
         if (!aiChatThreadId || !videoUrl) return
+        const responseMessageId = this.upsertVideoCompleteInChat(view, event)
         const callbacks = getAiGeneratedVideoCallbacks()
         callbacks.onVideoCompleteToCanvas?.({
             threadId: aiChatThreadId,
@@ -1194,14 +1450,15 @@ class AiChatThreadPluginClass {
             revisedPrompt: revisedPrompt || '',
             videoModel: videoModel || '',
             videoModelProvider: videoModelProvider || '',
-            responseMessageId: '',
+            responseMessageId,
             generationRun: event.generationRun,
         })
     }
 
-    private handleVideoError(_view: EditorView, event: SegmentEvent): void {
+    private handleVideoError(view: EditorView, event: SegmentEvent): void {
         const { aiChatThreadId, error } = event
         if (!aiChatThreadId) return
+        this.upsertVideoErrorInChat(view, event)
         const callbacks = getAiGeneratedVideoCallbacks()
         callbacks.onVideoErrorToCanvas?.({
             threadId: aiChatThreadId,
@@ -1214,13 +1471,19 @@ class AiChatThreadPluginClass {
     // trace. Shared by the image and video trace handlers — the only difference
     // between them is which trace attr + title they pass in. The generalized
     // aiCollapsibleBlock renderer picks image vs video by which trace is set.
-    private applyGenerationTraceCollapsible(view: EditorView, threadId: string, attrs: Record<string, unknown>): void {
+    private applyGenerationTraceCollapsible(
+        view: EditorView,
+        threadId: string,
+        attrs: Record<string, unknown>,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
         const { state, dispatch } = view
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) return
 
         const tr = state.tr
-        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId)
+        const runAttrs = buildGeneratedRunAttrs(generationRun)
+        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId, generationRun)
 
         if (collapsibleInfo.found && collapsibleInfo.nodePos !== undefined) {
             const collapsibleNode = state.doc.nodeAt(collapsibleInfo.nodePos)
@@ -1228,16 +1491,20 @@ class AiChatThreadPluginClass {
                 tr.setNodeMarkup(collapsibleInfo.nodePos, undefined, {
                     ...collapsibleNode.attrs,
                     ...attrs,
+                    ...runAttrs,
                 })
             }
         } else {
-            const responseInfo = PositionFinder.findResponseNode(state, threadId)
+            const responseInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
             if (!responseInfo.found || !responseInfo.endOfNodePos) return
-            const collapsibleNode = state.schema.nodes[aiCollapsibleBlockNodeType].create(attrs)
+            const collapsibleNode = state.schema.nodes[aiCollapsibleBlockNodeType].create({
+                ...attrs,
+                ...runAttrs,
+            })
             tr.insert(responseInfo.endOfNodePos - 1, collapsibleNode)
         }
 
-        tr.setMeta('setCollapsible', { threadId, active: false })
+        tr.setMeta('setCollapsible', { threadId, active: false, runKey: getMediaOrReasoningRunKey(generationRun) })
 
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
@@ -1257,7 +1524,7 @@ class AiChatThreadPluginClass {
             isOpen: false,
             isStreaming: false,
             videoGenerationTrace,
-        })
+        }, event.generationRun)
     }
 
     private handleImageGenerationTrace(view: EditorView, event: SegmentEvent): void {
@@ -1273,7 +1540,7 @@ class AiChatThreadPluginClass {
             isStreaming: false,
             imageGenerationTrace,
             imageGenerationTraceId: null,
-        })
+        }, event.generationRun)
     }
 
     private handleCreateVariantRequest(view: EditorView, node: ProseMirrorNode, pos: number): void {
@@ -1308,7 +1575,13 @@ class AiChatThreadPluginClass {
         })
     }
 
-    private handleStreamStart(state: EditorState, dispatch: (tr: Transaction) => void, aiProvider?: string, threadId?: string): void {
+    private handleStreamStart(
+        state: EditorState,
+        dispatch: (tr: Transaction) => void,
+        aiProvider?: string,
+        threadId?: string,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
 
@@ -1321,7 +1594,8 @@ class AiChatThreadPluginClass {
             id: responseMessageId,
             isInitialRenderAnimation: true,
             isReceivingAnimation: true,
-            aiProvider
+            aiProvider,
+            ...buildGeneratedRunAttrs(generationRun),
         })
 
         try {
@@ -1334,7 +1608,7 @@ class AiChatThreadPluginClass {
 
             // Set receiving state for this specific thread
             if (threadId) {
-                tr.setMeta('setReceiving', { threadId, receiving: true })
+                tr.setMeta('setReceiving', { threadId, receiving: true, runKey: getReasoningRunKey(generationRun) })
             }
             tr.setMeta('skipDispatch', true)
             dispatch(tr)
@@ -1348,7 +1622,8 @@ class AiChatThreadPluginClass {
         dispatch: (tr: Transaction) => void,
         segment: SegmentEvent['segment'],
         threadId?: string,
-        aiProvider?: string
+        aiProvider?: string,
+        generationRun?: MediaGenerationRunMeta
     ): void {
         if (!segment) return
 
@@ -1360,19 +1635,19 @@ class AiChatThreadPluginClass {
 
         // Check if we're inside a collapsible block for this thread
         const pluginState = PLUGIN_KEY.getState(state)
-        const isInsideCollapsible = threadId && pluginState?.collapsibleThreadIds.has(threadId)
+        const isInsideCollapsible = threadId && pluginState?.collapsibleRunKeys.has(getThreadScopedRunKey(threadId, generationRun))
 
         let targetInfo: { found: boolean; endOfNodePos?: number; childCount?: number }
 
         if (isInsideCollapsible) {
             // Insert into the collapsible node
-            targetInfo = PositionFinder.findCollapsibleNode(state, threadId)
+            targetInfo = PositionFinder.findCollapsibleNode(state, threadId, generationRun)
             if (!targetInfo.found) {
                 // Fallback to response node if collapsible not found
-                targetInfo = PositionFinder.findResponseNode(state, threadId)
+                targetInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
             }
         } else {
-            targetInfo = PositionFinder.findResponseNode(state, threadId)
+            targetInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
         }
 
         // Create response node if missing in the correct thread
@@ -1381,9 +1656,11 @@ class AiChatThreadPluginClass {
 
             const { insertPos } = threadInfo
             const responseNode = state.schema.nodes[aiResponseMessageNodeType].create({
+                id: `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
                 isInitialRenderAnimation: true,
                 isReceivingAnimation: true,
-                aiProvider: aiProvider || 'Anthropic'
+                aiProvider: aiProvider || 'Anthropic',
+                ...buildGeneratedRunAttrs(generationRun),
             })
 
             tr.insert(insertPos, responseNode)
@@ -1416,7 +1693,12 @@ class AiChatThreadPluginClass {
         }
     }
 
-    private handleStreamEnd(state: EditorState, dispatch: (tr: Transaction) => void, threadId?: string): void {
+    private handleStreamEnd(
+        state: EditorState,
+        dispatch: (tr: Transaction) => void,
+        threadId?: string,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
         // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) {
@@ -1424,39 +1706,34 @@ class AiChatThreadPluginClass {
             return
         }
 
-        state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-            if (node.type.name === aiResponseMessageNodeType && node.attrs.isInitialRenderAnimation) {
-                // Check if this response is in the correct thread
-                const $pos = state.doc.resolve(pos)
-                let responseThreadId: string | undefined
-                for (let depth = $pos.depth; depth > 0; depth--) {
-                    const parentNode = $pos.node(depth)
-                    if (parentNode.type.name === aiChatThreadNodeType) {
-                        responseThreadId = parentNode.attrs?.threadId
-                        break
-                    }
-                }
-
-                // Only process if this response belongs to the target thread
-                if (responseThreadId !== threadId) {
-                    return // Skip this response, continue searching
-                }
-
-                const tr = state.tr.setNodeMarkup(pos, undefined, {
-                    ...node.attrs,
-                    isInitialRenderAnimation: false,
-                    isReceivingAnimation: false
-                })
-
-                // Clear receiving state
-                if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
-                    tr.setMeta('setReceiving', { threadId, receiving: false })
-                }
-
-                dispatch(tr)
-                return false // Stop after first match
+        const responseInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
+        if (!responseInfo.found || responseInfo.nodePos === undefined) {
+            if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
+                dispatch(state.tr.setMeta('setReceiving', { threadId, receiving: false, runKey: getReasoningRunKey(generationRun) }))
             }
+            return
+        }
+
+        const node = state.doc.nodeAt(responseInfo.nodePos)
+        if (!node || node.type.name !== aiResponseMessageNodeType) {
+            if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
+                dispatch(state.tr.setMeta('setReceiving', { threadId, receiving: false, runKey: getReasoningRunKey(generationRun) }))
+            }
+            return
+        }
+
+        const tr = state.tr.setNodeMarkup(responseInfo.nodePos, undefined, {
+            ...node.attrs,
+            isInitialRenderAnimation: false,
+            isReceivingAnimation: false
         })
+
+        // Clear receiving state
+        if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
+            tr.setMeta('setReceiving', { threadId, receiving: false, runKey: getReasoningRunKey(generationRun) })
+        }
+
+        dispatch(tr)
     }
 
     private handleCollapsibleStart(view: EditorView, event: SegmentEvent): void {
@@ -1467,7 +1744,7 @@ class AiChatThreadPluginClass {
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) return
 
-        const responseInfo = PositionFinder.findResponseNode(state, threadId)
+        const responseInfo = PositionFinder.findResponseNode(state, threadId, event.generationRun)
         if (!responseInfo.found || !responseInfo.endOfNodePos) return
 
         const tr = state.tr
@@ -1475,6 +1752,7 @@ class AiChatThreadPluginClass {
             title: collapsibleTitle || 'Image generation prompt',
             isOpen: false,
             isStreaming: true,
+            ...buildGeneratedRunAttrs(event.generationRun),
         })
 
         // Insert collapsible block at end of response message content
@@ -1482,7 +1760,7 @@ class AiChatThreadPluginClass {
         tr.insert(insertPos, collapsibleNode)
 
         // Track that this thread is now inside a collapsible block
-        tr.setMeta('setCollapsible', { threadId, active: true })
+        tr.setMeta('setCollapsible', { threadId, active: true, runKey: getReasoningRunKey(event.generationRun) })
 
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
@@ -1499,7 +1777,7 @@ class AiChatThreadPluginClass {
         if (!threadInfo) return
 
         // Mark collapsible as no longer streaming
-        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId)
+        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId, event.generationRun)
         if (!collapsibleInfo.found || collapsibleInfo.nodePos === undefined) return
 
         const tr = state.tr
@@ -1512,7 +1790,7 @@ class AiChatThreadPluginClass {
         }
 
         // Clear collapsible tracking for this thread
-        tr.setMeta('setCollapsible', { threadId, active: false })
+        tr.setMeta('setCollapsible', { threadId, active: false, runKey: getReasoningRunKey(event.generationRun) })
 
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
@@ -1748,29 +2026,52 @@ class AiChatThreadPluginClass {
             state: {
                 init: (): AiChatThreadPluginState => ({
                     receivingThreadIds: new Set<string>(),
+                    receivingRunKeysByThread: new Map<string, Set<string>>(),
                     insideBackticks: false,
                     backtickBuffer: '',
                     insideCodeBlock: false,
                     codeBuffer: '',
                     decorations: DecorationSet.empty,
-                    collapsibleThreadIds: new Set<string>()
+                    collapsibleThreadIds: new Set<string>(),
+                    collapsibleRunKeys: new Set<string>()
                 }),
                 apply: (tr: Transaction, prev: AiChatThreadPluginState): AiChatThreadPluginState => {
                     // Handle receiving state toggle per thread
                     const receivingMeta = tr.getMeta('setReceiving')
                     if (receivingMeta !== undefined) {
-                        const { threadId, receiving } = receivingMeta
+                        const { threadId, receiving, runKey = 'legacy' } = receivingMeta
                         if (threadId) {
-                            const newSet = new Set(prev.receivingThreadIds)
+                            const previousThreadReceiving = prev.receivingThreadIds.has(threadId)
+                            const nextRunKeysByThread = new Map(prev.receivingRunKeysByThread)
+                            const nextThreadRunKeys = new Set(nextRunKeysByThread.get(threadId) ?? [])
+
                             if (receiving) {
+                                nextThreadRunKeys.add(runKey)
+                            } else {
+                                nextThreadRunKeys.delete(runKey)
+                            }
+
+                            if (nextThreadRunKeys.size > 0) {
+                                nextRunKeysByThread.set(threadId, nextThreadRunKeys)
+                            } else {
+                                nextRunKeysByThread.delete(threadId)
+                            }
+
+                            const newSet = new Set(prev.receivingThreadIds)
+                            if (nextThreadRunKeys.size > 0) {
                                 newSet.add(threadId)
                             } else {
                                 newSet.delete(threadId)
                             }
-                            this.onReceivingStateChange?.(threadId, receiving)
+
+                            const nextThreadReceiving = newSet.has(threadId)
+                            if (previousThreadReceiving !== nextThreadReceiving) {
+                                this.onReceivingStateChange?.(threadId, nextThreadReceiving)
+                            }
                             return {
                                 ...prev,
                                 receivingThreadIds: newSet,
+                                receivingRunKeysByThread: nextRunKeysByThread,
                                 decorations: prev.decorations.map(tr.mapping, tr.doc)
                             }
                         }
@@ -1779,10 +2080,19 @@ class AiChatThreadPluginClass {
                     // Handle collapsible state toggle per thread
                     const collapsibleMeta = tr.getMeta('setCollapsible')
                     if (collapsibleMeta !== undefined) {
-                        const { threadId, active } = collapsibleMeta
+                        const { threadId, active, runKey = 'legacy' } = collapsibleMeta
                         if (threadId) {
-                            const newSet = new Set(prev.collapsibleThreadIds)
+                            const scopedRunKey = `${threadId}:${runKey}`
+                            const nextRunKeys = new Set(prev.collapsibleRunKeys)
                             if (active) {
+                                nextRunKeys.add(scopedRunKey)
+                            } else {
+                                nextRunKeys.delete(scopedRunKey)
+                            }
+
+                            const newSet = new Set(prev.collapsibleThreadIds)
+                            const hasThreadActiveRun = Array.from(nextRunKeys).some((key) => key.startsWith(`${threadId}:`))
+                            if (hasThreadActiveRun) {
                                 newSet.add(threadId)
                             } else {
                                 newSet.delete(threadId)
@@ -1790,6 +2100,7 @@ class AiChatThreadPluginClass {
                             return {
                                 ...prev,
                                 collapsibleThreadIds: newSet,
+                                collapsibleRunKeys: nextRunKeys,
                                 decorations: prev.decorations.map(tr.mapping, tr.doc)
                             }
                         }

@@ -21,6 +21,17 @@ function parseVariantIndex(value: string | null): number | null {
     return Number.isFinite(parsed) ? parsed : null
 }
 
+function formatModelLabel(modelId: string): string {
+    if (!modelId) return ''
+    const parts = String(modelId).split(':')
+    return parts[1] || parts[0] || ''
+}
+
+function formatVariantLabel(variantIndex: number | null): string {
+    if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
+    return `Variant ${Number(variantIndex) + 1}`
+}
+
 export const aiGeneratedVideoNodeSpec = {
     attrs: {
         videoUrl: { default: '' },
@@ -235,6 +246,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
                 <video className="ai-generated-video-content" preload="metadata" playsinline crossorigin="anonymous"></video>
                 <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
             </div>
+            <div className="ai-generated-media-run-meta"></div>
         </div>
     `
 
@@ -243,6 +255,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
     const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
+    const runMetaElement = wrapper.querySelector('.ai-generated-media-run-meta') as HTMLElement
     let videoControls: VideoControlsInstance | null = null
     let controlsSvg: any = null
     let resizeObserver: ResizeObserver | null = null
@@ -265,6 +278,24 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
 
     wrapper.addEventListener('click', handleClick)
+
+    const updateRunMeta = (): void => {
+        const mediaLabel = formatModelLabel(node.attrs.mediaModelId || node.attrs.videoModel)
+        const variantLabel = formatVariantLabel(node.attrs.variantIndex)
+        runMetaElement.replaceChildren()
+
+        if (mediaLabel) {
+            const modelPill = html`<span className="ai-generated-media-run-pill" title=${node.attrs.mediaModelId || node.attrs.videoModel}>${mediaLabel}</span>` as HTMLElement
+            runMetaElement.appendChild(modelPill)
+        }
+
+        if (variantLabel) {
+            const variantPill = html`<span className="ai-generated-media-run-pill is-variant">${variantLabel}</span>` as HTMLElement
+            runMetaElement.appendChild(variantPill)
+        }
+
+        runMetaElement.hidden = runMetaElement.childElementCount === 0
+    }
 
     const getControlsWidth = (): number => {
         const measuredWidth = controlsHost.getBoundingClientRect().width || controlsHost.clientWidth
@@ -373,6 +404,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
 
     updateDisplay().catch(() => {})
+    updateRunMeta()
 
     return {
         dom: wrapper,
@@ -383,6 +415,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
             node = updatedNode
             updateDisplay().catch(() => {})
+            updateRunMeta()
             return true
         },
         destroy: () => {

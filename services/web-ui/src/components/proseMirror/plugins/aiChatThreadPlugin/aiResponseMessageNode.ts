@@ -2,6 +2,7 @@
 // Import SVG icons for various UI elements
 import { claudeAnimatedFrameIcon, claudeIcon } from '$src/svgIcons/index.ts'
 import { createAiResponseMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 // Define the unique type name for this custom node
 export const aiResponseMessageNodeType = 'aiResponseMessage'
@@ -16,6 +17,13 @@ export const aiResponseMessageNodeSpec = {
         isReceivingAnimation: { default: false }, // Flag for receiving message animation
         aiProvider: { default: '' }, // AI provider (Anthropic or OpenAI)
         currentFrame: { default: 0 }, // Current frame for Claude's animation
+        generationRequestId: { default: '' },
+        reasoningRunId: { default: '' },
+        mediaRunId: { default: '' },
+        reasoningModelId: { default: '' },
+        mediaModelId: { default: '' },
+        mediaType: { default: '' },
+        variantIndex: { default: null },
     },
     // Content allowed inside this node (paragraphs or other block elements)
     // Allow zero-or-more so we can create an empty shell on START_STREAM
@@ -35,6 +43,13 @@ export const aiResponseMessageNodeSpec = {
                     id: dom.getAttribute('id'),
                     style: dom.getAttribute('style'),
                     aiProvider: dom.getAttribute('data-ai-provider'),
+                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
+                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
+                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
+                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
+                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
+                    mediaType: dom.getAttribute('data-media-type') || '',
+                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
                 }
             },
         },
@@ -45,9 +60,33 @@ export const aiResponseMessageNodeSpec = {
             id: node.attrs.id,
             style: node.attrs.style,
             class: 'ai-response-message',
-            'data-ai-provider': node.attrs.aiProvider
+            'data-ai-provider': node.attrs.aiProvider,
+            'data-generation-request-id': node.attrs.generationRequestId,
+            'data-reasoning-run-id': node.attrs.reasoningRunId,
+            'data-media-run-id': node.attrs.mediaRunId,
+            'data-reasoning-model-id': node.attrs.reasoningModelId,
+            'data-media-model-id': node.attrs.mediaModelId,
+            'data-media-type': node.attrs.mediaType,
+            'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
         }, 0] // 0 is a placeholder for the node's content
     },
+}
+
+function parseVariantIndex(value) {
+    if (!value) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatModelLabel(modelId) {
+    if (!modelId) return ''
+    const parts = String(modelId).split(':')
+    return parts[1] || parts[0] || ''
+}
+
+function formatVariantLabel(variantIndex) {
+    if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
+    return `Variant ${Number(variantIndex) + 1}`
 }
 
 // Define the node view for custom rendering and behavior
@@ -67,6 +106,8 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     const spinnerElement = responseShell.spinnerEl
     const bubbleElement = responseShell.bubbleEl
     const responseMessageContent = responseShell.contentEl
+    const runMetaElement = html`<div className="ai-response-run-meta"></div>`
+    responseShell.metaEl.appendChild(runMetaElement)
 
     // // Create an accept button
     // const acceptButton = document.createElement('button')
@@ -128,8 +169,27 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         }
     }
 
+    const updateRunMeta = () => {
+        const reasoningLabel = formatModelLabel(node.attrs.reasoningModelId)
+        const variantLabel = formatVariantLabel(node.attrs.variantIndex)
+        runMetaElement.replaceChildren()
+
+        if (reasoningLabel) {
+            const modelPill = html`<span className="ai-response-run-pill" title=${String(node.attrs.reasoningModelId || '')}>${reasoningLabel}</span>`
+            runMetaElement.appendChild(modelPill)
+        }
+
+        if (variantLabel) {
+            const variantPill = html`<span className="ai-response-run-pill is-variant">${variantLabel}</span>`
+            runMetaElement.appendChild(variantPill)
+        }
+
+        runMetaElement.hidden = runMetaElement.childElementCount === 0
+    }
+
     updateAnimation()
     updateSpinnerState()
+    updateRunMeta()
 
     // Return the node view object
     return {
@@ -155,6 +215,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             responseShell.setProvider(node.attrs.aiProvider)
             updateAnimation()    // Update the animation state
             updateSpinnerState()
+            updateRunMeta()
 
             return true    // Indicate successful update
         },

@@ -207,17 +207,35 @@ sequenceDiagram
 **`aiResponseMessage`** - Individual AI responses
 - Content: `(paragraph | block)*` (empty allowed for streaming shell)
 - Attributes: `id, style, isInitialRenderAnimation, isReceivingAnimation, aiProvider, currentFrame`
+- Multi-model run attributes: `generationRequestId, reasoningRunId, mediaRunId, reasoningModelId, mediaModelId, mediaType, variantIndex`
 - DOM: `div.ai-response-message[data-ai-provider]`
 - Empty shells render a horizontal spinner placeholder so the layout keeps height while the first tokens stream in.
+- Run-aware responses render compact reasoning-model and variant badges in the message metadata row.
 
 **`aiGeneratedImage`** - AI-generated images (from DALL-E, etc.)
+- Carries the same multi-model run attributes as the response node.
+- Inline partial and completed images are matched by `mediaRunId` when present, so parallel image model outputs update the correct chat entry.
+- Completed media renders compact media-model and variant badges under the preview.
 
 **`aiGeneratedVideo`** - AI-generated videos (from VEO, etc.)
+- Carries the same multi-model run attributes as the response node.
+- Pending, complete, and error states are matched by `mediaRunId` when present, so parallel video model outputs update the correct chat entry.
 - Renders pending and error states inline in the AI response body
 - On completion, displays a native-controls-disabled `<video>` element with the shared SVG `components/videoControls` bar overlaid at the bottom
 - Uses the same scrub semantics as canvas video nodes: pointer down pauses if needed, drag updates the requested timestamp continuously, and release resumes only when playback was active before the scrub
 - Uses the same authenticated URL resolution path as generated images for `/api/videos/...` and poster `/api/images/...` URLs
 - Emits canvas lifecycle callbacks for pending, generating, complete, error, branch-resolution, and trace events
+- Completed media renders compact media-model and variant badges under the preview.
+
+### Multi-Model Run Grouping
+
+Multi-model media generation can produce several reasoning streams and several media outputs from one user request. Chat history keeps those variants distinguishable with run metadata instead of relying on thread-level state alone:
+
+- Reasoning text streams are grouped by `reasoningRunId`. `START_STREAM` creates one `aiResponseMessage` per reasoning run, and `STREAMING`/`END_STREAM` only update that matching response.
+- Media entries and generation trace collapsibles are grouped by `mediaRunId` when a media run exists. This lets one reasoning response contain several image or video outputs from different media models without overwriting sibling variants.
+- The plugin still exposes thread-level receiving state to the rest of the UI, but internally it tracks active receiving runs per thread. Completing one reasoning variant no longer clears the stop/receiving state while sibling variants are still streaming.
+- In-chat generated video nodes are now inserted for pending, complete, and error events. The canvas still owns full-size placement and branch lineage, while chat history keeps a compact per-run record.
+- Video poster file ids are included as still-image context when chat history is reused in a later request.
 
 **`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
 - Content: `(paragraph | block)*`
