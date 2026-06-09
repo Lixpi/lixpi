@@ -27,14 +27,18 @@ const llmModule = createLlmModule({
 // Used by the gateway handler
 await llmModule.process(instanceKey, providerName, requestData)
 
+// Used by the gateway handler for multi-model media sends
+await llmModule.processMediaGenerationMatrix(requestData)
+
 // Used by the stop handler
 await llmModule.stop(instanceKey)
+await llmModule.stopMediaGenerationMatrix({ workspaceId, aiChatThreadId, generationRequestId })
 
 // Used on SIGINT
 await llmModule.shutdown()
 ```
 
-The factory returns `{ process, stop, shutdown, getSubscriptions }`. `getSubscriptions()` is currently `[]` because the gateway invokes `process()` in-process. It marks the intended boundary for a future worker split, but the worker subscriptions still need to be implemented before a separate `llm-workers` service can run.
+The factory returns `{ process, processMediaGenerationMatrix, stop, stopMediaGenerationMatrix, shutdown, getSubscriptions }`. `getSubscriptions()` is currently `[]` because the gateway invokes `process()` in-process. It marks the intended boundary for a future worker split, but the worker subscriptions still need to be implemented before a separate `llm-workers` service can run.
 
 ## File layout
 
@@ -58,6 +62,8 @@ src/llm/
         byteplus-provider.ts     # BytePlus ModelArk Seedance 2.0 (video-only: create/poll/download)
         byteplus-video-types.ts  # Typed ModelArk REST client + buildSeedanceContent + pollVideoGenerationTask
         stability-provider.ts    # Stability v2beta REST (multipart, no streaming)
+    orchestration/
+        media-generation-matrix.ts # Normalizes multi-model media requests, resolves model metadata, starts grouped reasoning runs
     tools/
         image-generation.ts      # Tool definition, per-provider format builders, tool-call extractors
         image-generation-trace.ts # Final image-model prompt + reference-image trace payload builder

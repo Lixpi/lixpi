@@ -71,6 +71,7 @@ export const aiInteractionSubjects = [
                 referencedFeatureIds,
                 imageBranchCandidateSnapshot,
                 workspaceContextSnapshot,
+                mediaGenerationRequest,
             } = data as {
                 user: { userId: string; stripeCustomerId: string }
                 workspaceId: string
@@ -86,8 +87,47 @@ export const aiInteractionSubjects = [
                 videoSourceForExtension?: string
             } & AiInteractionChatSendMessagePayload
 
-            const [provider, model] = (aiModel as string).split(':')
             const natsService = await NATS_Service.getInstance()
+
+            if (mediaGenerationRequest) {
+                infoStr([
+                    chalk.cyan('🧬 [AI_INTERACTION]'),
+                    ' :: Invoking media generation matrix',
+                    ' :: generationRequestId:',
+                    chalk.yellow(mediaGenerationRequest.generationRequestId),
+                    ' :: reasoningCount:',
+                    chalk.green(String(mediaGenerationRequest.reasoningModelIds.length)),
+                ])
+
+                const runMediaGenerationMatrix = async (): Promise<void> => {
+                    try {
+                        await getLlmModule().processMediaGenerationMatrix({
+                            ...data,
+                            workspaceId,
+                            aiChatThreadId,
+                            organizationId,
+                            mediaGenerationRequest,
+                            eventMeta: {
+                                userId,
+                                stripeCustomerId,
+                                organizationId,
+                                workspaceId,
+                                aiChatThreadId,
+                            },
+                        })
+                    } catch (e) {
+                        err(`Media generation matrix failed for ${workspaceId}:${aiChatThreadId}:`, e)
+                        natsService!.publish(
+                            `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`,
+                            { error: e instanceof Error ? e.message : String(e) },
+                        )
+                    }
+                }
+                void runMediaGenerationMatrix()
+                return
+            }
+
+            const [provider, model] = (aiModel as string).split(':')
 
             try {
                 const aiModelMetaInfo = await AiModel.getAiModel({
@@ -153,38 +193,41 @@ export const aiInteractionSubjects = [
                 // directly to NATS as it runs. We do not await here because
                 // NATS message handlers should return quickly so the queue
                 // worker can pick up the next request.
-                getLlmModule()
-                    .process(instanceKey, provider as ProviderName, {
-                        messages,
-                        aiModelMetaInfo,
-                        imageModelMetaInfo,
-                        videoModelMetaInfo,
-                        workspaceId,
-                        aiChatThreadId,
-                        enableImageGeneration,
-                        imageSize,
-                        videoAspectRatio: normalizedVideoAspectRatio,
-                        videoResolution: normalizedVideoResolution,
-                        videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
-                        videoSourceForExtension,
-                        referencedFeatureIds,
-                        imageBranchCandidateSnapshot,
-                        workspaceContextSnapshot,
-                        eventMeta: {
-                            userId,
-                            stripeCustomerId,
-                            organizationId,
+                const runLlmProcess = async (): Promise<void> => {
+                    try {
+                        await getLlmModule().process(instanceKey, provider as ProviderName, {
+                            messages,
+                            aiModelMetaInfo,
+                            imageModelMetaInfo,
+                            videoModelMetaInfo,
                             workspaceId,
                             aiChatThreadId,
-                        },
-                    })
-                    .catch(e => {
+                            enableImageGeneration,
+                            imageSize,
+                            videoAspectRatio: normalizedVideoAspectRatio,
+                            videoResolution: normalizedVideoResolution,
+                            videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+                            videoSourceForExtension,
+                            referencedFeatureIds,
+                            imageBranchCandidateSnapshot,
+                            workspaceContextSnapshot,
+                            eventMeta: {
+                                userId,
+                                stripeCustomerId,
+                                organizationId,
+                                workspaceId,
+                                aiChatThreadId,
+                            },
+                        })
+                    } catch (e) {
                         err(`LLM module process failed for ${instanceKey}:`, e)
                         natsService!.publish(
                             `${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.${workspaceId}.${aiChatThreadId}`,
                             { error: e instanceof Error ? e.message : String(e) },
                         )
-                    })
+                    }
+                }
+                void runLlmProcess()
             } catch (error) {
                 err('❌ [AI_INTERACTION] handler error:', error)
                 natsService!.publish(
@@ -205,10 +248,11 @@ export const aiInteractionSubjects = [
             pub: { allow: [AI_INTERACTION_SUBJECTS.CHAT_STOP_MESSAGE] },
         },
         handler: async (data: any, _msg: any) => {
-            const { workspaceId, aiChatThreadId } = data as {
+            const { workspaceId, aiChatThreadId, generationRequestId } = data as {
                 user: { userId: string }
                 workspaceId: string
                 aiChatThreadId: string
+                generationRequestId?: string
             }
 
             const instanceKey = `${workspaceId}:${aiChatThreadId}`
@@ -222,6 +266,11 @@ export const aiInteractionSubjects = [
 
             try {
                 await getLlmModule().stop(instanceKey)
+                await getLlmModule().stopMediaGenerationMatrix({
+                    workspaceId,
+                    aiChatThreadId,
+                    generationRequestId,
+                })
             } catch (e) {
                 err(`Failed to stop ${instanceKey}:`, e)
             }
