@@ -1,20 +1,20 @@
 ---
 title: Chat Panel and Sessions
-description: The workspace-owned AI Chat panel, its tabbed surface, standalone and extraction sessions, context tray, and persistence model.
+description: The workspace-owned AI Chat panel, its tabbed surface, standalone and extraction sessions, composer context previews, and persistence model.
 ---
 
 # Chat Panel and Sessions
 
 The AI Chat panel is a workspace-owned right-side surface that opens, persists,
 and restores independently of any canvas node. It hosts durable standalone chat
-tabs, extraction tabs, prompt drafts, explicit context chips, automatic
-workspace relevance feedback, and a collapsible Sessions list that merges
+tabs, extraction tabs, prompt drafts, explicit composer context previews,
+automatic workspace relevance feedback, and a collapsible Sessions list that merges
 standalone chats with feature-extraction sessions for the workspace.
 
 The panel is a presentation surface, not a conversation entity. Opening it,
-resizing it, toggling Sessions, editing a draft, or changing context chips all
-persist through `CanvasState.aiChatPanel` — but none of them create a durable
-session record. A standalone chat exists only once the user submits a prompt.
+resizing it, toggling Sessions, editing a draft, or changing composer context all
+persist through `CanvasState.aiChatPanel` until submit — but none of them create
+a durable session record. A standalone chat exists only once the user submits a prompt.
 This page covers the panel surface and the session model; the relevance engine
 that selects context for each turn is owned by
 [Workspace Context Relevance](./CONTEXT-RELEVANCE.md), what happens when a turn
@@ -35,16 +35,18 @@ Current context relevance is documented in
 
 **AI Chat Panel** — A singleton workspace surface. It can be open with zero
 tabs. Opening, closing, resizing, toggling Sessions, editing a draft, and
-changing explicit context chips persist through `CanvasState.aiChatPanel`; none
-of these create a durable session record by themselves.
+changing explicit composer context persist through `CanvasState.aiChatPanel`
+until the next submit; none of these create a durable session record by
+themselves.
 
 **Standalone Chat** — An `AiChatThread` with owner `{ type: 'standalone' }`,
 created only when the user submits the first prompt from a panel draft. Its
 outgoing context is explicit chips plus the API's automatic workspace relevance
 selection for that turn.
 
-**Context Chip** — A persisted explicit force-include in the panel's context
-tray. Chips are removable and sanitized against live canvas nodes. The chip vs
+**Context Preview** — A composer-embedded explicit force-include preview.
+Previews are removable, sanitized against live canvas nodes, and cleared after
+submit so the next turn falls back to automatic workspace relevance. The chip vs
 auto-chip distinction and the relevance engine that consumes them live in
 [Workspace Context Relevance](./CONTEXT-RELEVANCE.md).
 
@@ -94,7 +96,7 @@ flowchart TB
     subgraph Panel["AI Chat Panel"]
         Strip[Tab strip<br/>pinned top, always visible]
         Body[Active tab body]
-        Tray[Context chip tray + composer]
+        Composer[Composer<br/>context previews inside input]
         Sessions[Sessions list<br/>collapsed by default]
     end
 
@@ -106,7 +108,7 @@ flowchart TB
     Strip --> Body
     Body --> Thread
     Body --> Extraction
-    Body --> Tray
+    Body --> Composer
     Strip -.toggle.-> Sessions
 ```
 
@@ -117,7 +119,7 @@ flowchart TB
   a centered text label, truncates to the available segment width, and reveals a
   close control on the left while hovered. The active tab is the sliding
   indicator surface, not a per-tab border.
-- **Selecting canvas nodes** can add explicit context chips while the panel is
+- **Selecting canvas nodes** can add explicit composer context while the panel is
   open; it does not create or activate a canvas thread node.
 - **All extraction triggers** open a new `extraction` tab.
 - **Closing the last tab** leaves the durable session reopenable from Sessions;
@@ -126,20 +128,25 @@ flowchart TB
   `settings.aiChatThread.panelTabs.minTabWidth`, not an overflow dropdown. This
   keeps tab positions predictable, matching Cursor.
 
-## Context Tray
+## Composer Context Previews
 
-The old Follow / Pinned / With Sources controls are gone. The panel now uses a
-chip tray above the composer:
+The old Follow / Pinned / With Sources controls are gone. The panel now renders
+explicit and automatic context as media/document previews inside the prompt
+input's white composer area:
 
-- Explicit chips persist in `CanvasState.aiChatPanel.contextChips`.
-- Selecting eligible canvas nodes while the panel is open can add chips.
-- Removing a chip does not tear down the ProseMirror composer or draft.
+- Explicit previews are stored in `CanvasState.aiChatPanel.contextChips` as the
+  current draft's forced node ids.
+- Selecting eligible canvas nodes while the panel is open can add previews.
+- Removing a preview does not tear down the ProseMirror composer or draft.
 - Deleted nodes and duplicate IDs are sanitized out of persisted panel state.
 - Generated branch roots are normal media chip targets; their provenance is
   reconstructed from `generatedBy` metadata rather than from a separate canvas
   node.
 - Auto chips render after `CONTEXT_RELEVANCE_RESOLVED` and can be removed from
-  the visible tray without persisting.
+  the visible composer without persisting.
+- Submitting a prompt snapshots the explicit preview ids for that turn, clears
+  the explicit set, and lets the next prompt fall back to automatic workspace
+  relevance unless the user selects new context.
 
 On submit, explicit chips are resolved through the same extraction path used by
 canvas-thread context. The browser also sends a `WorkspaceContextSnapshot`, a
@@ -148,7 +155,7 @@ snapshot, force-includes chip and edge-connected nodes, and streams its
 resolution back to the panel.
 
 {% callout type="tip" %}
-The chip tray is the panel's surface for context; the ranking, self-heal,
+The composer preview strip is the panel's surface for context; the ranking, self-heal,
 force-include, and auto-chip behavior all live in the relevance engine. For the
 chip vs auto-chip contract and the resolver flow, see
 [Workspace Context Relevance](./CONTEXT-RELEVANCE.md).
@@ -272,7 +279,7 @@ aiChatPanel?: {
 | `isSessionHistoryOpen` | Whether the Sessions list is expanded |
 | `tabs` | Ordered tab presentation: thread vs extraction, ref id, title |
 | `activeTabId` | The currently focused tab |
-| `contextChips` | Explicit force-include chip node IDs |
+| `contextChips` | Current draft's explicit force-include preview node IDs; cleared after submit |
 | `width` | Persisted panel width |
 | `drafts` | Per-tab ProseMirror draft content |
 
@@ -292,7 +299,7 @@ canvas state.
 
 ## Current Status
 
-The panel, standalone ownership model, context chip tray, workspace relevance
+The panel, standalone ownership model, composer context previews, workspace relevance
 feedback, Sessions projection, and extraction-session history are implemented in
 the web UI and API:
 
@@ -331,7 +338,7 @@ the last persisted state, not the tokens that were streaming at reload time.
 | Sliding switch primitive | `services/web-ui/src/components/slidingSwitch/slidingSwitch.ts` |
 | Tab pill primitive | `services/web-ui/src/components/tagPill/tagPill.ts` |
 | Launcher + persistence | `services/web-ui/src/components/WorkspaceCanvas.svelte` |
-| Panel state + chip sanitization | `services/web-ui/src/infographics/workspace/aiChatPanelState.ts` |
+| Panel state + draft context sanitization | `services/web-ui/src/infographics/workspace/aiChatPanelState.ts` |
 | Panel tab settings | `services/web-ui/src/settings.ts` |
 | Standalone thread model | `services/api/src/models/ai-chat-thread.ts` |
 | Standalone thread subjects | `services/api/src/NATS/subscriptions/ai-chat-thread-subjects.ts` |

@@ -121,6 +121,8 @@ type AiPromptInputNodeViewOptions = {
     onSubmit: () => void
     onStop: () => void
     isReceiving: () => boolean
+    placeholderText?: string
+    createContextTray?: () => HTMLElement | null
     createModelDropdown: (controls: AiModelControls, dropdownId: string) => DropdownView
     createImageModelDropdown: (controls: ImageModelControls, dropdownId: string) => DropdownView
     createImageSizeDropdown: (controls: ImageSizeControls, dropdownId: string) => DropdownView
@@ -306,8 +308,10 @@ function createModelMenuTrigger(onClick: (event: MouseEvent) => void): HTMLButto
 export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOptions) {
     return (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) => {
         const dom = html`<div className="ai-prompt-input-wrapper"></div>` as HTMLDivElement
+        const contextTrayEl = options.createContextTray?.() ?? null
         const contentDOM = html`<div className="ai-prompt-input-content"></div>` as HTMLDivElement
         const controlsEl = html`<div className="ai-prompt-input-controls"></div>` as HTMLDivElement
+        contentDOM.setAttribute('data-placeholder', options.placeholderText ?? '')
         applyModelMenuStyleSettings(dom)
 
         // Build controls adapters that read/write ProseMirror node attrs
@@ -446,6 +450,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         controlsEl.appendChild(modelMenuTrigger)
         controlsEl.appendChild(submitButton)
 
+        if (contextTrayEl) dom.appendChild(contextTrayEl)
         dom.appendChild(contentDOM)
         dom.appendChild(controlsEl)
 
@@ -499,6 +504,9 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             dom,
             contentDOM,
             ignoreMutation: (mutation: MutationRecord) => {
+                if (contextTrayEl && (mutation.target === contextTrayEl || contextTrayEl.contains(mutation.target as Node))) {
+                    return true
+                }
                 if (mutation.target === controlsEl || controlsEl.contains(mutation.target as Node)) {
                     return true
                 }
@@ -527,10 +535,13 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             },
             stopEvent: (e: Event) => {
                 // Prevent ProseMirror from stealing focus/clicks from controls
-                const isControl = controlsEl.contains(e.target as Node)
+                const target = e.target as Node
+                const isControl = controlsEl.contains(target)
+                const isContextTray = Boolean(contextTrayEl?.contains(target))
                 if (isControl) {
                     return true
                 }
+                if (isContextTray) return true
                 return false
             },
         }

@@ -42,7 +42,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon, xCircleIcon as plusIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -296,6 +296,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
+    let contextPreviewRefreshVersion = 0
     let autoContextSelections: WorkspaceContextSelection[] = []
     const removedAutoContextChipNodeIds: Set<string> = new Set()
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
@@ -1907,8 +1908,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
         scheduleEdgesRender()
         // Selecting canvas nodes while the panel is open force-includes them as
-        // explicit context chips. Only newly-selected ids are added so removing a
-        // chip whose node stays selected doesn't immediately re-add it.
+        // explicit composer previews. Only newly-selected ids are added so a
+        // removed preview whose node stays selected isn't immediately re-added.
         if (currentCanvasState && aiChatPanelState.isOpen) {
             addContextChips(Array.from(selectedNodeIds).filter((nodeId) => !prevSelectedNodeIds.has(nodeId)))
         }
@@ -2099,6 +2100,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getPromptControlFactories() {
         return {
+            createContextTray: createAiChatPanelContextTrayElement,
             createModelDropdown: createGenericAiModelDropdown,
             createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
@@ -2438,9 +2440,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasMetadataState(persistedState)
     }
 
-    // A short, human-readable label for a context chip. Prefer the node's ready
-    // descriptor summary (Phase 2) and fall back to a type label so a chip is
-    // never blank while its descriptor is still being generated.
+    // A short visible label for context metadata. Media previews are already
+    // visual, so unresolved image/video descriptors stay label-free.
     function getContextChipLabel(node: CanvasNode): string {
         const descriptor = isDescriptorCanvasNode(node) ? node.descriptor : undefined
         const summary = descriptor && descriptor.status === 'ready' ? descriptor.summary : ''
@@ -2448,11 +2449,215 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (trimmed) return trimmed
         switch (node.type) {
             case 'document': return 'Document'
+            case 'aiChatThread': return 'Chat'
+            case 'image':
+            case 'video': return ''
+            default: return node.type
+        }
+    }
+
+    function getContextPreviewTitle(node: CanvasNode): string {
+        if (node.type === 'document') {
+            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
+            const title = document?.title?.trim()
+            if (title) return title
+        }
+        if (node.type === 'aiChatThread') {
+            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
+            const title = thread?.title?.trim()
+            if (title) return title
+        }
+        if (node.type === 'image' || node.type === 'video') return ''
+        return getContextChipLabel(node)
+    }
+
+    function getContextPreviewText(node: CanvasNode): string {
+        const descriptor = isDescriptorCanvasNode(node) && node.descriptor?.status === 'ready'
+            ? node.descriptor.summary.trim()
+            : ''
+        if (descriptor) return descriptor
+
+        if (node.type === 'document') {
+            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
+            const { text } = extractContentFromProseMirror((document?.content ?? '') as string | object)
+            return text.trim()
+        }
+
+        if (node.type === 'aiChatThread') {
+            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
+            const { text } = extractContentFromProseMirror((thread?.content ?? '') as string | object)
+            return text.trim()
+        }
+
+        return ''
+    }
+
+    function getContextPreviewTypeLabel(node: CanvasNode): string {
+        switch (node.type) {
+            case 'document': return 'Document'
             case 'image': return 'Image'
             case 'video': return 'Video'
             case 'aiChatThread': return 'Chat'
             default: return node.type
         }
+    }
+
+    function buildContextPreviewInitialMediaSrc(mediaUrl: string): string {
+        if (!mediaUrl) return ''
+        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
+        if (mediaUrl.startsWith('/api/') || mediaUrl.startsWith('http')) return mediaUrl
+        return `data:image/png;base64,${mediaUrl}`
+    }
+
+    function setContextPreviewMediaTokenParam(mediaUrl: string, token: string): string {
+        if (!token) return mediaUrl
+        const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(mediaUrl)
+        try {
+            const url = isAbsoluteUrl ? new URL(mediaUrl) : new URL(mediaUrl, window.location.origin)
+            url.searchParams.set('token', token)
+            if (isAbsoluteUrl) return url.toString()
+            return `${url.pathname}${url.search}${url.hash}`
+        } catch {
+            const separator = mediaUrl.includes('?') ? '&' : '?'
+            return `${mediaUrl}${separator}token=${encodeURIComponent(token)}`
+        }
+    }
+
+    async function buildContextPreviewAuthenticatedMediaSrc(mediaUrl: string): Promise<string> {
+        if (!mediaUrl) return ''
+        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
+        if (mediaUrl.startsWith('/api/')) {
+            const token = await AuthService.getTokenSilently()
+            const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+            const sourceUrl = apiBaseUrl ? `${apiBaseUrl}${mediaUrl}` : mediaUrl
+            return setContextPreviewMediaTokenParam(sourceUrl, token)
+        }
+        if (mediaUrl.startsWith('http')) {
+            if (mediaUrl.includes('/api/videos/') || mediaUrl.includes('/api/images/')) {
+                const token = await AuthService.getTokenSilently()
+                return setContextPreviewMediaTokenParam(mediaUrl, token)
+            }
+            return mediaUrl
+        }
+        return `data:image/png;base64,${mediaUrl}`
+    }
+
+    function hydrateContextPreviewMedia(el: HTMLImageElement | HTMLVideoElement, mediaUrl: string, attr: 'src' | 'poster' = 'src'): void {
+        if (!mediaUrl) return
+        void (async () => {
+            try {
+                const src = await buildContextPreviewAuthenticatedMediaSrc(mediaUrl)
+                if (!src || !el.isConnected) return
+                if (attr === 'poster' && el instanceof HTMLVideoElement) {
+                    el.poster = src
+                    return
+                }
+                el.src = src
+            } catch (error) {
+                console.warn('Failed to resolve context preview media URL:', error)
+            }
+        })()
+    }
+
+    function setContextPreviewVideoSources(videoEl: HTMLVideoElement, node: VideoCanvasNode): void {
+        const initialSrc = buildContextPreviewInitialMediaSrc(node.src)
+        const initialPoster = buildContextPreviewInitialMediaSrc(node.posterSrc)
+        if (initialSrc) videoEl.src = initialSrc
+        if (initialPoster) videoEl.poster = initialPoster
+        hydrateContextPreviewMedia(videoEl, node.src)
+        hydrateContextPreviewMedia(videoEl, node.posterSrc, 'poster')
+    }
+
+    function renderContextImagePreview(node: ImageCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
+        const imageEl = html`<img
+            className=${`workspace-ai-chat-panel-context-preview-image workspace-ai-chat-panel-context-preview-image-${size}`}
+            src=${buildImageSrc(node.src, '', false)}
+            alt=""
+            loading="lazy"
+        />` as HTMLImageElement
+        imageEl.setAttribute('aria-label', label)
+        hydrateContextPreviewMedia(imageEl, node.src)
+        return imageEl
+    }
+
+    function renderContextVideoPreview(node: VideoCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
+        if (size === 'large') {
+            const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-large">
+                <video
+                    muted="true"
+                    playsinline="true"
+                    preload="metadata"
+                    controls="true"
+                    aria-label=${label}
+                ></video>
+                <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
+            </div>` as HTMLElement
+            const videoEl = previewEl.querySelector('video')
+            if (videoEl) setContextPreviewVideoSources(videoEl, node)
+            return previewEl
+        }
+
+        const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-mini">
+            <video
+                muted="true"
+                playsinline="true"
+                preload="metadata"
+                aria-label=${label}
+            ></video>
+            <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
+        </div>` as HTMLElement
+        const videoEl = previewEl.querySelector('video')
+        if (videoEl) setContextPreviewVideoSources(videoEl, node)
+        return previewEl
+    }
+
+    function renderContextDocumentPreview(node: DocumentCanvasNode | AiChatThreadCanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
+        if (size === 'mini') {
+            return html`<div className="workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-mini">
+                <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
+                <span className="workspace-ai-chat-panel-context-preview-document-skeleton" aria-label=${title}>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </div>` as HTMLElement
+        }
+
+        return html`<div className=${`workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-${size}`}>
+            <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
+            <span className="workspace-ai-chat-panel-context-preview-document-lines">
+                <span className="workspace-ai-chat-panel-context-preview-document-title">${title}</span>
+                <span className="workspace-ai-chat-panel-context-preview-document-text">${text || getContextPreviewTypeLabel(node)}</span>
+            </span>
+        </div>` as HTMLElement
+    }
+
+    function renderContextPreviewVisual(node: CanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
+        if (node.type === 'image') return renderContextImagePreview(node, title, size)
+        if (node.type === 'video') return renderContextVideoPreview(node, title, size)
+        if (node.type === 'document' || node.type === 'aiChatThread') {
+            return renderContextDocumentPreview(node, title, text, size)
+        }
+        return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
+    }
+
+    function renderContextPreviewPopoverMeta(title: string, text: string): HTMLElement {
+        return html`<div className="workspace-ai-chat-panel-context-preview-popover-meta">
+            ${title ? html`<span className="workspace-ai-chat-panel-context-preview-popover-title">${title}</span>` : ''}
+            ${text ? html`<span className="workspace-ai-chat-panel-context-preview-popover-text">${text}</span>` : ''}
+        </div>` as HTMLElement
+    }
+
+    function createAiChatPanelContextTrayElement(): HTMLDivElement {
+        const trayEl = html`<div
+            className="workspace-ai-chat-panel-context-chips"
+            role="list"
+            aria-label="Chat context previews"
+            contenteditable="false"
+        ></div>` as HTMLDivElement
+        activeContextChipTrayEl = trayEl
+        refreshContextChipTray()
+        return trayEl
     }
 
     function addContextChips(nodeIds: Iterable<string>): void {
@@ -2482,6 +2687,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         refreshContextChipTray()
     }
 
+    function clearExplicitContextChips(): void {
+        if (aiChatPanelState.contextChips.length === 0) return
+        aiChatPanelState = { ...aiChatPanelState, contextChips: [] }
+        persistAiChatSidebarState()
+        refreshContextChipTray()
+    }
+
     function removeAutoContextChip(nodeId: string): void {
         if (!autoContextSelections.some((selection) => selection.nodeId === nodeId)) return
         removedAutoContextChipNodeIds.add(nodeId)
@@ -2495,33 +2707,61 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         refreshContextChipTray()
     }
 
+    function updateActiveAiChatPanelRailHeight(): void {
+        if (!activeAiChatPanelEl) return
+        const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-rail')
+        if (!panelRail) return
+        panelRail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(activeAiChatPanelEl)}px`)
+    }
+
+    function restoreAiChatPanelHistoryScroll(historyScrollerEl: HTMLElement | null | undefined, scrollTop: number | null, refreshVersion: number): void {
+        if (!historyScrollerEl || scrollTop === null) return
+        historyScrollerEl.scrollTop = scrollTop
+        requestAnimationFrame(() => {
+            if (refreshVersion !== contextPreviewRefreshVersion) return
+            if (historyScrollerEl.isConnected) historyScrollerEl.scrollTop = scrollTop
+            updateActiveAiChatPanelRailHeight()
+        })
+    }
+
     function renderContextChip({
         nodeId,
-        label,
+        node,
         kind,
         role,
     }: {
         nodeId: string
-        label: string
+        node: CanvasNode
         kind: 'explicit' | 'auto'
         role?: WorkspaceContextSelection['role']
-    }): HTMLSpanElement {
+    }): HTMLDivElement {
+        const title = getContextPreviewTitle(node)
+        const text = getContextPreviewText(node)
+        const accessibleLabel = title || getContextPreviewTypeLabel(node)
+        const shouldRenderPopoverMeta = (node.type === 'image' || node.type === 'video') && Boolean(title || text)
         const removeLabel = kind === 'auto'
-            ? `Remove ${label} from automatic context`
-            : `Remove ${label} from context`
-        const chipEl = html`<span
+            ? `Remove ${accessibleLabel} from automatic context`
+            : `Remove ${accessibleLabel} from context`
+        const chipEl = html`<div
             className=${`workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-${kind}`}
             data=${{ nodeId, contextKind: kind, contextRole: role ?? kind }}
-            title=${label}
+            role="listitem"
+            tabindex="0"
         >
-            <span className="workspace-ai-chat-panel-context-chip-label">${label}</span>
+            <div className="workspace-ai-chat-panel-context-preview-main">
+                ${renderContextPreviewVisual(node, accessibleLabel, text, 'mini')}
+            </div>
             <button
                 type="button"
                 className="workspace-ai-chat-panel-context-chip-remove"
                 aria-label=${removeLabel}
-                innerHTML=${xIcon}
+                innerHTML=${xCircleIcon}
             ></button>
-        </span>` as HTMLSpanElement
+            <div className="workspace-ai-chat-panel-context-preview-popover" aria-hidden="true">
+                ${renderContextPreviewVisual(node, accessibleLabel, text, 'large')}
+                ${shouldRenderPopoverMeta ? renderContextPreviewPopoverMeta(title, text) : ''}
+            </div>
+        </div>` as HTMLDivElement
         chipEl.querySelector('.workspace-ai-chat-panel-context-chip-remove')
             ?.addEventListener('click', () => {
                 if (kind === 'auto') {
@@ -2533,11 +2773,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return chipEl
     }
 
-    // Re-render just the chip tray in place (not the whole panel) so adding or
-    // removing a chip never tears down the ProseMirror composer or its draft.
+    // Re-render just the composer preview strip in place so adding or removing
+    // context never tears down the ProseMirror composer or its draft.
     function refreshContextChipTray(): void {
         const trayEl = activeContextChipTrayEl
         if (!trayEl) return
+        const historyScrollerEl = activeAiChatPanelEl?.querySelector<HTMLElement>(
+            '.workspace-ai-chat-panel-body-pane:not(.workspace-ai-chat-panel-body-pane-hidden)'
+        )
+        const previousScrollTop = historyScrollerEl?.scrollTop ?? null
+        const refreshVersion = ++contextPreviewRefreshVersion
         trayEl.replaceChildren()
         const explicitChipNodeIds = aiChatPanelState.contextChips
         const explicitChipNodeIdSet = new Set(explicitChipNodeIds)
@@ -2554,26 +2799,29 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             autoChipSelections.push(selection)
         }
         if (explicitChipNodeIds.length === 0 && autoChipSelections.length === 0) {
-            trayEl.appendChild(
-                html`<span className="workspace-ai-chat-panel-context-chips-empty">Select nodes to add context</span>` as HTMLSpanElement
-            )
+            trayEl.hidden = true
+            restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
+            updateActiveAiChatPanelRailHeight()
             return
         }
+        trayEl.hidden = false
         for (const nodeId of explicitChipNodeIds) {
             const node = nodesById.get(nodeId)
-            const label = node ? getContextChipLabel(node) : 'Node'
-            trayEl.appendChild(renderContextChip({ nodeId, label, kind: 'explicit' }))
+            if (!node) continue
+            trayEl.appendChild(renderContextChip({ nodeId, node, kind: 'explicit' }))
         }
         for (const selection of autoChipSelections) {
             const node = nodesById.get(selection.nodeId)
-            const label = node ? getContextChipLabel(node) : 'Node'
+            if (!node) continue
             trayEl.appendChild(renderContextChip({
                 nodeId: selection.nodeId,
-                label,
+                node,
                 kind: 'auto',
                 role: selection.role,
             }))
         }
+        restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
+        updateActiveAiChatPanelRailHeight()
     }
 
     function getPersistedFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
@@ -2992,15 +3240,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">
             <div className="workspace-ai-chat-panel-context-mode">
-                <span className="workspace-ai-chat-panel-context-heading">Context</span>
-                <div className="workspace-ai-chat-panel-context-chips" role="list" aria-label="Chat context chips"></div>
                 <div className="workspace-ai-chat-panel-history-control">
-                    <span className="workspace-ai-chat-panel-context-divider" aria-hidden="true"></span>
                     <button
                         type="button"
                         className="workspace-ai-chat-panel-new-chat"
                         aria-label="Start new chat"
-                        innerHTML=${plusIcon}
+                        innerHTML=${xCircleIcon}
                     ></button>
                     <button
                         type="button"
@@ -3013,8 +3258,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 </div>
             </div>
         </div>` as HTMLDivElement
-        activeContextChipTrayEl = controlsEl.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-context-chips')
-        refreshContextChipTray()
         panelEl.appendChild(controlsEl)
         const newChatEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-new-chat')!
         newChatEl.addEventListener('click', startNewAiChatDraft)
@@ -3192,7 +3435,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // Explicit context chips are always force-included. For a canvas
                         // thread node we also pull its edge-connected context; chip and
                         // edge items are deduped by nodeId so an overlapping node isn't sent twice.
-                        const chipNodeIds = aiChatPanelState.contextChips
+                        const chipNodeIds = aiChatPanelState.contextChips.slice()
                         const edgeContext = rootNode
                             ? await aiChatThreadService.extractConnectedContext(rootNode.nodeId)
                             : []
@@ -3233,7 +3476,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 nodes: currentCanvasState.nodes,
                                 edges: currentCanvasState.edges,
                                 rootNodeId: rootNode?.nodeId,
-                                contextChipNodeIds: aiChatPanelState.contextChips,
+                                contextChipNodeIds: chipNodeIds,
                                 titlesByNodeId: buildWorkspaceContextTitlesByNodeId(currentCanvasState.nodes),
                             })
                             : undefined
@@ -3266,6 +3509,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             imageBranchCandidateSnapshot,
                             workspaceContextSnapshot,
                         })
+                        clearExplicitContextChips()
                     } catch (error) {
                         console.error('Failed to gather AI chat context:', error)
                         throw error
@@ -3331,6 +3575,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (currentTab?.type === 'extraction') {
                     const userText = extractPromptTextFromContentJSON(data.contentJSON)
                     if (!userText) return
+                    clearAutoContextChips()
                     const ctx = {
                         ...(getPendingExtractionContext(currentTab.refId) ?? {}),
                         aiModel: data.aiModel,
@@ -3340,6 +3585,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         getState: getPersistedFeatureExtractionState,
                         saveState: persistFeatureExtractionState,
                     })
+                    clearExplicitContextChips()
                     return
                 }
 

@@ -26,6 +26,7 @@ type AiPromptInputPluginOptions = {
     onSubmit: SubmitHandler
     onStop: StopHandler
     isReceiving: () => boolean
+    createContextTray?: Parameters<typeof createAiPromptInputNodeView>[0]['createContextTray']
     createModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createModelDropdown']
     createImageModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createImageModelDropdown']
     createImageSizeDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createImageSizeDropdown']
@@ -139,6 +140,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         onSubmit,
         onStop,
         isReceiving,
+        createContextTray,
         createModelDropdown,
         createImageModelDropdown,
         createImageSizeDropdown,
@@ -226,6 +228,8 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     },
                     onStop,
                     isReceiving,
+                    placeholderText,
+                    createContextTray,
                     createModelDropdown,
                     createImageModelDropdown,
                     createImageSizeDropdown,

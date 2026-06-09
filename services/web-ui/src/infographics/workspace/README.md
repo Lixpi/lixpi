@@ -29,9 +29,9 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Add images** via the toolbar button which opens an upload modal
 - **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
-- **Connect nodes** by dragging from a handle, then use the AI Chat panel context tray and workspace relevance to decide what the next prompt sees
-- **Provide AI context** from explicit context chips while also sending a compact workspace descriptor snapshot with each chat turn
-- **Use the AI Chat panel composer** to send prompts with explicit context chips and workspace relevance
+- **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
+- **Provide AI context** from explicit composer previews while also sending a compact workspace descriptor snapshot with each chat turn
+- **Use the AI Chat panel composer** to send prompts with per-message context previews and workspace relevance
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
@@ -78,9 +78,9 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 ### AI Chat Panel And Sessions
 
-The canvas owns a singleton right-side AI Chat panel. The outside top-right toggle shows the chat icon while closed and the collapse icon while open, shifting left when the panel opens; it opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and explicit context chips are stored in `canvasState.aiChatPanel`. Open tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs`; the context chip tray sits above the composer, persists forced node ids, and can update without tearing down the ProseMirror draft.
+The canvas owns a singleton right-side AI Chat panel. The outside top-right toggle shows the chat icon while closed and the collapse icon while open, shifting left when the panel opens; it opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and draft context previews are stored in `canvasState.aiChatPanel`. Open tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs`; the context previews render inside the ProseMirror composer, snapshot forced node ids on submit, clear after submit, and can update without tearing down the ProseMirror draft.
 
-The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the context-control row; when expanded it renders directly under that row and above the tab switch. The plus control beside the history toggle starts a fresh draft with no context chips and no active tab; the durable chat is still created only when the user submits. Closing the last open tab uses that same blank-draft path so stale context chips, active thread ids, and legacy last-active-thread state cannot carry into the next prompt. Each history row shows a title, absolute update date plus relative recency, and session metadata such as chat message count, status, extraction provider, or source count. Its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
+The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the panel control row; when expanded it renders directly under that row and above the tab switch. The plus control beside the history toggle starts a fresh draft with no context chips and no active tab; the durable chat is still created only when the user submits. Closing the last open tab uses that same blank-draft path so stale context chips, active thread ids, and legacy last-active-thread state cannot carry into the next prompt. Each history row shows a title, absolute update date plus relative recency, and session metadata such as chat message count, status, extraction provider, or source count. Its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
 
 ### Legacy AI Chat Thread Nodes
 This section documents the older canvas-thread implementation that still has code and persisted data types in the repository. The current workspace renderer does not create or draw `aiChatThread` canvas nodes; active chat sessions live in the right-side AI Chat panel.
@@ -361,15 +361,15 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 
 ### AI Chat Context Extraction
 
-Standalone chat tabs use the panel's context chips as explicit forced context. Chips are resolved through the existing extraction service, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the panel adds distinct ephemeral auto chips for non-explicit selections and patches any `improvedDescriptors` into local canvas state so descriptor chrome updates without a reload.
+Standalone chat tabs use the composer context previews as explicit forced context for the next submitted message. Preview node ids are resolved through the existing extraction service, each submit snapshots then clears the explicit set, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the panel adds distinct ephemeral auto previews for non-explicit selections and patches any `improvedDescriptors` into local canvas state so descriptor chrome updates without a reload.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-    DOC[Document Node] -->|explicit chip| CTX[ExtractedContext]
-    IMG[Image Node] -->|explicit chip| CTX
+    DOC[Document Node] -->|explicit preview| CTX[ExtractedContext]
+    IMG[Image Node] -->|explicit preview| CTX
     VID[Video Node] -->|representative still| CTX
-    CHAT[Canvas AI Chat Panel] -->|context chips| CTX
+    CHAT[Canvas AI Chat Panel] -->|composer context previews| CTX
     CHAT -->|WorkspaceContextSnapshot| SNAP[Descriptor Index]
     CTX -->|buildContextMessage| MSG[Multimodal Message]
     SNAP -->|descriptors only| MSG
@@ -377,7 +377,7 @@ flowchart LR
 
 The extraction flow:
 
-1. **Context source** - Standalone tabs call `extractSelectedContext({ nodeIds })` for explicit context chips
+1. **Context source** - Standalone tabs call `extractSelectedContext({ nodeIds })` for the explicit composer previews snapshotted on submit
 2. **Content extraction** - Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64; video nodes contribute their representative still (`frameFileId`, falling back to poster) for normal model context
 3. **Workspace snapshot** - `buildWorkspaceContextSnapshot()` indexes all context-bearing nodes by descriptor summary/tags plus media object references and force-include flags; it never embeds pixel data
 4. **Resolution feedback** - `CONTEXT_RELEVANCE_RESOLVED` bypasses markdown parsing, renders removable auto chips for engine selections, and applies improved descriptors to the live canvas

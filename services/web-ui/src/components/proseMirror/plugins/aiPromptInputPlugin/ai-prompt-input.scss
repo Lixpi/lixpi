@@ -137,6 +137,11 @@
     }
 }
 
+.ai-prompt-input-wrapper.empty-node-placeholder[data-placeholder]::before {
+    display: none;
+    content: none;
+}
+
 .ai-prompt-input-content {
     position: relative;
     flex: 1;
