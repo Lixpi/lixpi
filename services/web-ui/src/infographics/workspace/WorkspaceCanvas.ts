@@ -42,7 +42,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon, xCircleIcon as plusIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -2246,6 +2246,119 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return Boolean(thread && thread.content != null && typeof thread.content === 'object' && Object.keys(thread.content).length > 0)
     }
 
+    function countProseMirrorNodesByType(value: unknown, nodeTypes: Set<string>): number {
+        if (!value || typeof value !== 'object') return 0
+
+        const candidate = value as { type?: unknown; content?: unknown }
+        const ownCount = typeof candidate.type === 'string' && nodeTypes.has(candidate.type) ? 1 : 0
+        if (!Array.isArray(candidate.content)) return ownCount
+
+        let childCount = 0
+        for (const child of candidate.content) {
+            childCount += countProseMirrorNodesByType(child, nodeTypes)
+        }
+
+        return ownCount + childCount
+    }
+
+    function countAiChatSessionMessages(content: object): number {
+        return countProseMirrorNodesByType(content, new Set(['aiUserMessage', 'aiResponseMessage']))
+    }
+
+    function formatSessionTimestamp(updatedAt: number): string {
+        const date = new Date(updatedAt)
+        if (!Number.isFinite(updatedAt) || Number.isNaN(date.getTime())) return 'Date unavailable'
+
+        return new Intl.DateTimeFormat(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(date)
+    }
+
+    function formatSessionRelativeTime(updatedAt: number): string {
+        if (!Number.isFinite(updatedAt)) return ''
+
+        const elapsedMs = Math.max(0, Date.now() - updatedAt)
+        const minuteMs = 60_000
+        const hourMs = 60 * minuteMs
+        const dayMs = 24 * hourMs
+        const weekMs = 7 * dayMs
+
+        if (elapsedMs < minuteMs) return 'just now'
+        if (elapsedMs < hourMs) return `${Math.floor(elapsedMs / minuteMs)}m ago`
+        if (elapsedMs < dayMs) return `${Math.floor(elapsedMs / hourMs)}h ago`
+        if (elapsedMs < weekMs) {
+            const days = Math.floor(elapsedMs / dayMs)
+            return `${days} ${days === 1 ? 'day' : 'days'} ago`
+        }
+
+        const weeks = Math.floor(elapsedMs / weekMs)
+        return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`
+    }
+
+    function formatSessionUpdatedAt(updatedAt: number): string {
+        const timestamp = formatSessionTimestamp(updatedAt)
+        const relative = formatSessionRelativeTime(updatedAt)
+        return relative ? `${timestamp} · ${relative}` : timestamp
+    }
+
+    function formatSessionStatus(status: string): string {
+        return status
+            .split(/[-_]/)
+            .filter(Boolean)
+            .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+            .join(' ')
+    }
+
+    function pluralizeSessionCount(count: number, singular: string): string {
+        return `${count} ${count === 1 ? singular : `${singular}s`}`
+    }
+
+    function getAiChatSessionMeta(session: AiChatThread): string {
+        const messageCount = countAiChatSessionMessages(session.content)
+        return [
+            pluralizeSessionCount(messageCount, 'message'),
+            formatSessionStatus(session.status),
+        ].filter(Boolean).join(' · ')
+    }
+
+    function getExtractionSourceCount(sourceContextSnapshot: object | undefined): number {
+        if (!sourceContextSnapshot || typeof sourceContextSnapshot !== 'object') return 0
+
+        const snapshot = sourceContextSnapshot as {
+            imageNatsUrl?: unknown
+            contextMessages?: unknown
+            nodes?: unknown
+        }
+        let count = snapshot.imageNatsUrl ? 1 : 0
+        if (Array.isArray(snapshot.contextMessages)) count += snapshot.contextMessages.length
+        if (Array.isArray(snapshot.nodes)) count += snapshot.nodes.length
+
+        return count
+    }
+
+    function getExtractionSessionTitle(extractionState: CanvasFeatureExtractionState): string {
+        const userText = typeof extractionState.userText === 'string' ? extractionState.userText.trim() : ''
+        if (userText) return userText
+
+        const featureName = typeof extractionState.featureCard?.name === 'string'
+            ? extractionState.featureCard.name.trim()
+            : ''
+        return featureName ? `Extract ${featureName}` : 'Extract Feature'
+    }
+
+    function getExtractionSessionMeta(extractionState: CanvasFeatureExtractionState): string {
+        const sourceCount = getExtractionSourceCount(extractionState.sourceContextSnapshot)
+        return [
+            'Feature extraction',
+            formatSessionStatus(extractionState.status),
+            extractionState.aiProvider,
+            sourceCount > 0 ? pluralizeSessionCount(sourceCount, 'source') : '',
+        ].filter(Boolean).join(' · ')
+    }
+
     function destroyActiveAiChatPanel(
         clearActive = false,
         panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId,
@@ -2312,14 +2425,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ...(nextActiveTabId ? { activeTabId: nextActiveTabId } : {}),
         }
         const nextCanvasState = setAiChatPanelState(currentCanvasState, aiChatPanelState)
-        const legacyLastActiveThreadId = activeAiChatThreadId ?? currentCanvasState.lastActiveAiChatThreadId
+        const { lastActiveAiChatThreadId: _existingLastActiveThreadId, ...nextCanvasStateWithoutLegacyLastActive } = nextCanvasState
         const persistedState = {
-            ...nextCanvasState,
-            ...(legacyLastActiveThreadId ? { lastActiveAiChatThreadId: legacyLastActiveThreadId } : {}),
+            ...nextCanvasStateWithoutLegacyLastActive,
+            ...(activeAiChatThreadId ? { lastActiveAiChatThreadId: activeAiChatThreadId } : {}),
         }
         if (JSON.stringify(currentCanvasState.aiChatPanel) === JSON.stringify(persistedState.aiChatPanel)
             && JSON.stringify(currentCanvasState.aiChatSidebarTabs ?? []) === JSON.stringify(persistedState.aiChatSidebarTabs ?? [])
-            && currentCanvasState.activeAiChatSidebarTabId === persistedState.activeAiChatSidebarTabId) return
+            && currentCanvasState.activeAiChatSidebarTabId === persistedState.activeAiChatSidebarTabId
+            && currentCanvasState.lastActiveAiChatThreadId === persistedState.lastActiveAiChatThreadId) return
 
         commitCanvasMetadataState(persistedState)
     }
@@ -2639,7 +2753,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function openFeatureExtractionTab(extractionRunId: string): void {
         syncActiveAiChatPanelFromState()
-        aiChatPanelState = { ...aiChatPanelState, isOpen: true }
+        aiChatPanelState = { ...aiChatPanelState, isOpen: true, isSessionHistoryOpen: false }
         const tabId = `extraction:${extractionRunId}`
         if (!aiChatSidebarTabs.some((tab) => tab.tabId === tabId)) {
             aiChatSidebarTabs.push({ tabId, type: 'extraction', refId: extractionRunId, title: 'Extract Feature' })
@@ -2667,6 +2781,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         void loadExtractionSessionHistory()
     }
 
+    function startNewAiChatDraft(): void {
+        syncActiveAiChatPanelFromState()
+        const drafts = { ...(aiChatPanelState.drafts ?? {}) }
+        delete drafts[NEW_CHAT_DRAFT_KEY]
+        aiChatSidebarTabs = []
+        activeAiChatSidebarTabId = null
+        activeAiChatSidebarThreadId = null
+        activeAiChatThreadId = null
+        activeAiChatRootNodeId = null
+        aiChatPanelState = {
+            ...aiChatPanelState,
+            isOpen: true,
+            contextChips: [],
+            drafts,
+        }
+        clearAutoContextChips()
+        promptInputController.setTarget(null)
+        persistAiChatSidebarState()
+        syncActiveAiChatPanelFromState()
+        renderActiveAiChatPanel()
+    }
+
     function closeAiChatPanel(): void {
         aiChatPanelState = { ...aiChatPanelState, isOpen: false }
         persistAiChatSidebarState()
@@ -2683,6 +2819,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function closeAiChatSidebarTab(tabId: string): void {
         aiChatSidebarTabs = aiChatSidebarTabs.filter((tab) => tab.tabId !== tabId)
+        if (aiChatSidebarTabs.length === 0) {
+            startNewAiChatDraft()
+            return
+        }
         if (activeAiChatSidebarTabId === tabId) {
             activeAiChatSidebarTabId = aiChatSidebarTabs[0]?.tabId ?? null
         }
@@ -2858,6 +2998,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     <span className="workspace-ai-chat-panel-context-divider" aria-hidden="true"></span>
                     <button
                         type="button"
+                        className="workspace-ai-chat-panel-new-chat"
+                        aria-label="Start new chat"
+                        innerHTML=${plusIcon}
+                    ></button>
+                    <button
+                        type="button"
                         className=${`workspace-ai-chat-panel-history-toggle${aiChatPanelState.isSessionHistoryOpen ? ' workspace-ai-chat-panel-history-toggle-active' : ''}`}
                         aria-label="Toggle session history"
                         aria-controls="workspace-ai-chat-panel-sessions"
@@ -2870,6 +3016,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeContextChipTrayEl = controlsEl.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-context-chips')
         refreshContextChipTray()
         panelEl.appendChild(controlsEl)
+        const newChatEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-new-chat')!
+        newChatEl.addEventListener('click', startNewAiChatDraft)
         const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-history-toggle')!
 
         const tabsEl = preservedTabsEl ?? html`<div className="workspace-ai-chat-panel-tabs"></div>` as HTMLDivElement
@@ -2918,8 +3066,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 aiChatSidebarTabs.length
             )
         }
-        panelEl.appendChild(tabsEl)
-
         const sessionsEl = html`<div
             id="workspace-ai-chat-panel-sessions"
             className=${`workspace-ai-chat-panel-sessions${aiChatPanelState.isSessionHistoryOpen ? '' : ' workspace-ai-chat-panel-sessions-hidden'}`}
@@ -2940,12 +3086,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const session of sessions) {
             const sessionTitle = session.title ?? 'AI Chat'
             const sessionEl = html`<div className="workspace-ai-chat-panel-session">
-                <button type="button" className="workspace-ai-chat-panel-session-open">${sessionTitle}</button>
+                <button type="button" className="workspace-ai-chat-panel-session-open">
+                    <span className="workspace-ai-chat-panel-session-marker workspace-ai-chat-panel-session-marker-thread" aria-hidden="true"></span>
+                    <span className="workspace-ai-chat-panel-session-content">
+                        <span className="workspace-ai-chat-panel-session-title">${sessionTitle}</span>
+                        <span className="workspace-ai-chat-panel-session-date">${formatSessionUpdatedAt(session.updatedAt)}</span>
+                        <span className="workspace-ai-chat-panel-session-meta">${getAiChatSessionMeta(session)}</span>
+                    </span>
+                </button>
             </div>` as HTMLDivElement
             sessionEl.querySelector('.workspace-ai-chat-panel-session-open')?.addEventListener('click', () => {
                 ensureAiChatSidebarThreadTab(session.threadId)
                 activeAiChatSidebarTabId = `thread:${session.threadId}`
-                aiChatPanelState = { ...aiChatPanelState, isOpen: true }
+                aiChatPanelState = { ...aiChatPanelState, isOpen: true, isSessionHistoryOpen: false }
                 persistAiChatSidebarState()
                 syncActiveAiChatPanelFromState()
                 renderActiveAiChatPanel(getChatRootNodeForThread(session.threadId), session)
@@ -2959,7 +3112,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .sort((a, b) => b.updatedAt - a.updatedAt)
         for (const extractionState of extractionSessions) {
             const sessionEl = html`<div className="workspace-ai-chat-panel-session">
-                <button type="button" className="workspace-ai-chat-panel-session-open">Extract Feature</button>
+                <button type="button" className="workspace-ai-chat-panel-session-open">
+                    <span className="workspace-ai-chat-panel-session-marker workspace-ai-chat-panel-session-marker-extraction" aria-hidden="true"></span>
+                    <span className="workspace-ai-chat-panel-session-content">
+                        <span className="workspace-ai-chat-panel-session-title">${getExtractionSessionTitle(extractionState)}</span>
+                        <span className="workspace-ai-chat-panel-session-date">${formatSessionUpdatedAt(extractionState.updatedAt)}</span>
+                        <span className="workspace-ai-chat-panel-session-meta">${getExtractionSessionMeta(extractionState)}</span>
+                    </span>
+                </button>
             </div>` as HTMLDivElement
             sessionEl.querySelector('.workspace-ai-chat-panel-session-open')?.addEventListener('click', () => {
                 openFeatureExtractionTab(extractionState.extractionRunId)
@@ -2970,6 +3130,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             sessionsListEl.appendChild(sessionEl)
         }
         panelEl.appendChild(sessionsEl)
+        panelEl.appendChild(tabsEl)
 
         const bodyHost = html`<div className="workspace-ai-chat-panel-body"></div>` as HTMLDivElement
         const showingThread = activeSidebarTab?.type === 'thread'

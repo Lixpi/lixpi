@@ -17,7 +17,7 @@ Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in 
 
 ## Code Style
 
-At the start of every implementation iteration, use the documentation index to find the current coding guidance for the files you are changing. Read the guide that matches the language, styling layer, framework, or runtime surface before editing. For `services/web-ui` TypeScript UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, always read [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) and [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md).
+At the start of every implementation iteration, use the documentation index to find the current coding guidance for the files you are changing. Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed. Read the guide that matches the language, styling layer, framework, or runtime surface before editing. For `services/web-ui` TypeScript UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, always read [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) and [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md).
 
 ## Documentation
 
@@ -26,9 +26,10 @@ Start at the documentation index, then read [Maintaining Documentation](document
 ## Conventions
 
 - When a question is related to SVG or D3, always refer to the available `D3` MCP server.
-- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`). Verify web-ui tests with `docker exec lixpi-web-ui pnpm test:run` or the targeted equivalent documented in `documentation/testing/TypeScript/web-ui/TESTING-GUIDE.md`.
+- Agents MUST NOT write tests or run tests unless the user explicitly asks for tests in the current thread. Static review and non-test hygiene checks are allowed, but test files and test commands are user-gated.
+- Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`). If the user explicitly asks to run web-ui tests, use `docker exec lixpi-web-ui pnpm test:run` or the targeted equivalent documented in `documentation/testing/TypeScript/web-ui/TESTING-GUIDE.md`.
 - Agents MUST NOT run `svelte-check` anywhere in this repository, directly or through a package script or wrapper. It is prohibited.
-- Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use the permitted automated test commands and static review instead.
+- Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review unless the user explicitly asks for permitted automated test commands.
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.
 

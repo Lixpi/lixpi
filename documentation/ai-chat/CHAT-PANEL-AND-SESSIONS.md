@@ -227,9 +227,18 @@ the [Extraction Pipeline](../library/EXTRACTION-PIPELINE.md) and
 ## Sessions List
 
 Sessions is collapsed by default and toggled from the history icon in the panel
-control row. When expanded it lists submitted standalone chats and submitted
-feature-extraction sessions for the workspace, sorted by most recent update.
-Closing a tab only changes panel presentation; the session remains reopenable.
+control row. When expanded it opens directly under that control row, above the
+tab strip, and lists submitted standalone chats and submitted feature-extraction
+sessions for the workspace, sorted by most recent update. Rows include a title,
+absolute update date plus relative recency, and compact metadata such as message
+count, status, extraction provider, or source count. Closing a tab only
+changes panel presentation; the session remains reopenable.
+
+The plus control beside the history toggle starts a fresh panel draft with empty
+context and no active tab. This does not create a durable standalone chat until
+the user submits the first prompt. Closing the last open tab uses the same blank
+draft path, clearing context chips, active thread ids, and legacy last-active
+thread state before the next prompt.
 
 Standalone and extraction entries both expose a permanent-delete control:
 
