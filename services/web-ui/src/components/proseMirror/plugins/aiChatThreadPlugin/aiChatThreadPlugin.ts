@@ -22,6 +22,7 @@ import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/com
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+import { parseAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
@@ -46,11 +47,13 @@ const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
 type ImageOptions = {
     aiImageModel: string
+    aiImageModels?: string[]
     imageGenerationSize: ImageGenerationSize
 }
 
 type VideoOptions = {
     aiVideoModel: string
+    aiVideoModels?: string[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
@@ -61,7 +64,7 @@ type VideoOptions = {
     sourceVideoNodeId?: string
 }
 
-type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => void
+type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { aiModels?: string[]; imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
@@ -1599,11 +1602,14 @@ class AiChatThreadPluginClass {
         // Extract thread attributes including image + video generation settings
         const {
             aiModel = '',
+            aiModels = '',
             aiImageModel = '',
+            aiImageModels = '',
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
             imageGenerationSize = 'auto',
             aiVideoModel = '',
+            aiVideoModels = '',
             videoAspectRatio = '',
             videoResolution = '',
             videoDuration = '',
@@ -1611,8 +1617,15 @@ class AiChatThreadPluginClass {
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 
+        const reasoningModelIds = parseAiModelSelectionAttr(aiModels)
+        const imageModelIds = parseAiModelSelectionAttr(aiImageModels)
+        const videoModelIds = parseAiModelSelectionAttr(aiVideoModels)
+        const effectiveAiModel = aiModel || reasoningModelIds[0] || ''
+        const effectiveImageModel = aiImageModel || imageModelIds[0] || ''
+        const effectiveVideoModel = aiVideoModel || videoModelIds[0] || ''
+
         // Validate AI model selected
-        if (!aiModel) {
+        if (!effectiveAiModel) {
             alert('Please select an AI model from the dropdown before submitting.')
             return
         }
@@ -1624,23 +1637,33 @@ class AiChatThreadPluginClass {
         const referencedFeatureIds = ContentExtractor.collectReferencedFeatureIds(threadContent)
 
         // Build image generation options if an image model is selected
-        const imageOptions = aiImageModel ? {
-            aiImageModel,
+        const imageOptions = effectiveImageModel ? {
+            aiImageModel: effectiveImageModel,
+            aiImageModels: imageModelIds,
             imageGenerationSize
         } : undefined
 
         // Build video generation options if a video model is selected. The
         // sourceVideoNodeId is preserved through the thread node attrs and only
         // forwarded when present (set by the "Extend in new thread" action).
-        const videoOptions = aiVideoModel ? {
-            aiVideoModel,
+        const videoOptions = effectiveVideoModel ? {
+            aiVideoModel: effectiveVideoModel,
+            aiVideoModels: videoModelIds,
             videoAspectRatio,
             videoResolution,
             videoDuration,
             ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
         } : undefined
 
-        this.sendAiRequestHandler({ messages, aiModel, threadId, imageOptions, videoOptions, referencedFeatureIds })
+        this.sendAiRequestHandler({
+            messages,
+            aiModel: effectiveAiModel,
+            aiModels: reasoningModelIds,
+            threadId,
+            imageOptions,
+            videoOptions,
+            referencedFeatureIds,
+        })
     }
 
     private handleStopRequest(transaction: Transaction): void {

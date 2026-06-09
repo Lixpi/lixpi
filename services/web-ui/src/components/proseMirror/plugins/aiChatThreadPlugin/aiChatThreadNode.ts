@@ -18,8 +18,10 @@ export const aiChatThreadNodeSpec = {
         status: { default: 'active' }, // active, paused, completed
         // Leave aiModel blank initially; we'll assign first available model from store when models load
         aiModel: { default: '' },
+        aiModels: { default: '' },
         // Image model for image generation routing (Provider:model format)
         aiImageModel: { default: '' },
+        aiImageModels: { default: '' },
         // Image generation settings
         imageGenerationEnabled: { default: false },
         imageGenerationSize: { default: 'auto' }, // 1024x1024, 1536x1024, 1024x1536, auto
@@ -27,6 +29,7 @@ export const aiChatThreadNodeSpec = {
         previousResponseId: { default: '' },
         // Video model for video generation routing (Provider:model format)
         aiVideoModel: { default: '' },
+        aiVideoModels: { default: '' },
         // Video generation parameters (VEO 3)
         videoAspectRatio: { default: '' },   // e.g. '16:9' | '9:16'
         videoResolution: { default: '' },    // e.g. '720p' | '1080p' | '4k'
@@ -44,11 +47,14 @@ export const aiChatThreadNodeSpec = {
                 threadId: dom.getAttribute('data-thread-id'),
                 status: dom.getAttribute('data-status') || 'active',
                 aiModel: dom.getAttribute('data-ai-model') || '',
+                aiModels: dom.getAttribute('data-ai-models') || '',
                 aiImageModel: dom.getAttribute('data-ai-image-model') || '',
+                aiImageModels: dom.getAttribute('data-ai-image-models') || '',
                 imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
                 imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
                 previousResponseId: dom.getAttribute('data-previous-response-id') || '',
                 aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
+                aiVideoModels: dom.getAttribute('data-ai-video-models') || '',
                 videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                 videoResolution: dom.getAttribute('data-video-resolution') || '',
                 videoDuration: dom.getAttribute('data-video-duration') || '',
@@ -63,11 +69,14 @@ export const aiChatThreadNodeSpec = {
             'data-thread-id': node.attrs.threadId,
             'data-status': node.attrs.status,
             'data-ai-model': node.attrs.aiModel,
+            'data-ai-models': node.attrs.aiModels,
             'data-ai-image-model': node.attrs.aiImageModel,
+            'data-ai-image-models': node.attrs.aiImageModels,
             'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
             'data-image-generation-size': node.attrs.imageGenerationSize,
             'data-previous-response-id': node.attrs.previousResponseId,
             'data-ai-video-model': node.attrs.aiVideoModel,
+            'data-ai-video-models': node.attrs.aiVideoModels,
             'data-video-aspect-ratio': node.attrs.videoAspectRatio,
             'data-video-resolution': node.attrs.videoResolution,
             'data-video-duration': node.attrs.videoDuration,

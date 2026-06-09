@@ -11,6 +11,7 @@ import type {
 } from '@lixpi/constants'
 
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import { serializeAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import { settings } from '$src/settings.ts'
 
 type ThreadEditorEntry = {
@@ -20,6 +21,7 @@ type ThreadEditorEntry = {
 
 type VideoOptions = {
     aiVideoModel?: string
+    aiVideoModels?: string[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
@@ -28,9 +30,11 @@ type VideoOptions = {
 type AiSubmitPayload = {
     messages: any[]
     aiModel: string
+    aiModels?: string[]
     threadId: string
     imageOptions?: {
         aiImageModel?: string
+        aiImageModels?: string[]
         imageGenerationSize: ImageGenerationSize
     }
     videoOptions?: VideoOptions
@@ -45,8 +49,10 @@ type TargetNode = {
 type PendingMessage = {
     content: any
     aiModel: string
+    aiModels?: string[]
     imageOptions?: {
         aiImageModel?: string
+        aiImageModels?: string[]
         imageGenerationSize: ImageGenerationSize
     }
     videoOptions?: VideoOptions
@@ -144,13 +150,15 @@ export class AiPromptInputController {
     async submitMessage(params: {
         contentJSON: any
         aiModel: string
+        aiModels?: string[]
         imageOptions?: {
             aiImageModel?: string
+            aiImageModels?: string[]
             imageGenerationSize: ImageGenerationSize
         }
         videoOptions?: VideoOptions
     }): Promise<void> {
-        const { contentJSON, aiModel, imageOptions, videoOptions } = params
+        const { contentJSON, aiModel, aiModels, imageOptions, videoOptions } = params
 
         if (!this.target) {
             console.warn('[AiPromptInputController] No target set, cannot submit')
@@ -165,10 +173,10 @@ export class AiPromptInputController {
         if (this.target.type === 'aiChatThread') {
             // Target is an existing AI chat thread — inject message directly
             const threadId = this.target.referenceId
-            this.injectMessageAndSubmit(threadId, { content: contentJSON, aiModel, imageOptions, videoOptions })
+            this.injectMessageAndSubmit(threadId, { content: contentJSON, aiModel, aiModels, imageOptions, videoOptions })
         } else {
             // Target is a document or image — auto-create a new AI chat thread
-            await this.createThreadAndSubmit(contentJSON, aiModel, imageOptions, videoOptions)
+            await this.createThreadAndSubmit(contentJSON, aiModel, aiModels, imageOptions, videoOptions)
         }
     }
 
@@ -235,10 +243,16 @@ export class AiPromptInputController {
 
         // Update the AI model, image options, and video options on the thread node
         const currentAttrs = (threadNode as ProseMirrorNode).attrs
+        const pendingAiModels = pending.aiModels ? serializeAiModelSelectionAttr(pending.aiModels) : undefined
+        const pendingImageModels = pending.imageOptions?.aiImageModels ? serializeAiModelSelectionAttr(pending.imageOptions.aiImageModels) : undefined
+        const pendingVideoModels = pending.videoOptions?.aiVideoModels ? serializeAiModelSelectionAttr(pending.videoOptions.aiVideoModels) : undefined
         const needsUpdate = currentAttrs.aiModel !== pending.aiModel
+            || (pendingAiModels !== undefined && currentAttrs.aiModels !== pendingAiModels)
             || (pending.imageOptions?.aiImageModel && currentAttrs.aiImageModel !== pending.imageOptions.aiImageModel)
+            || (pendingImageModels !== undefined && currentAttrs.aiImageModels !== pendingImageModels)
             || (pending.imageOptions?.imageGenerationSize && currentAttrs.imageGenerationSize !== pending.imageOptions.imageGenerationSize)
             || (pending.videoOptions?.aiVideoModel && currentAttrs.aiVideoModel !== pending.videoOptions.aiVideoModel)
+            || (pendingVideoModels !== undefined && currentAttrs.aiVideoModels !== pendingVideoModels)
             || (pending.videoOptions?.videoAspectRatio && currentAttrs.videoAspectRatio !== pending.videoOptions.videoAspectRatio)
             || (pending.videoOptions?.videoResolution && currentAttrs.videoResolution !== pending.videoOptions.videoResolution)
             || (pending.videoOptions?.videoDuration && currentAttrs.videoDuration !== pending.videoOptions.videoDuration)
@@ -248,12 +262,15 @@ export class AiPromptInputController {
             tr = tr.setNodeMarkup(mappedThreadPos, undefined, {
                 ...currentAttrs,
                 aiModel: pending.aiModel,
+                ...(pendingAiModels !== undefined ? { aiModels: pendingAiModels } : {}),
                 ...(pending.imageOptions ? {
-                    aiImageModel: pending.imageOptions.aiImageModel,
+                    aiImageModel: pending.imageOptions.aiImageModel || '',
+                    ...(pendingImageModels !== undefined ? { aiImageModels: pendingImageModels } : {}),
                     imageGenerationSize: pending.imageOptions.imageGenerationSize,
                 } : {}),
                 ...(pending.videoOptions ? {
                     aiVideoModel: pending.videoOptions.aiVideoModel || '',
+                    ...(pendingVideoModels !== undefined ? { aiVideoModels: pendingVideoModels } : {}),
                     videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
                     videoResolution: pending.videoOptions.videoResolution || '',
                     videoDuration: pending.videoOptions.videoDuration || '',
@@ -272,6 +289,7 @@ export class AiPromptInputController {
     private async createThreadAndSubmit(
         contentJSON: any,
         aiModel: string,
+        aiModels?: string[],
         imageOptions?: PendingMessage['imageOptions'],
         videoOptions?: PendingMessage['videoOptions']
     ): Promise<void> {
@@ -293,9 +311,12 @@ export class AiPromptInputController {
                     attrs: {
                         threadId,
                         aiModel,
+                        ...(aiModels?.length ? { aiModels: serializeAiModelSelectionAttr(aiModels) } : {}),
                         ...(imageOptions?.aiImageModel ? { aiImageModel: imageOptions.aiImageModel } : {}),
+                        ...(imageOptions?.aiImageModels?.length ? { aiImageModels: serializeAiModelSelectionAttr(imageOptions.aiImageModels) } : {}),
                         ...(imageOptions?.imageGenerationSize ? { imageGenerationSize: imageOptions.imageGenerationSize } : {}),
                         ...(videoOptions?.aiVideoModel ? { aiVideoModel: videoOptions.aiVideoModel } : {}),
+                        ...(videoOptions?.aiVideoModels?.length ? { aiVideoModels: serializeAiModelSelectionAttr(videoOptions.aiVideoModels) } : {}),
                         ...(videoOptions?.videoAspectRatio ? { videoAspectRatio: videoOptions.videoAspectRatio } : {}),
                         ...(videoOptions?.videoResolution ? { videoResolution: videoOptions.videoResolution } : {}),
                         ...(videoOptions?.videoDuration ? { videoDuration: videoOptions.videoDuration } : {}),

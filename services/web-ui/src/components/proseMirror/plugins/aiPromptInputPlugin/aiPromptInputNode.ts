@@ -97,6 +97,8 @@ export const aiPromptInputNodeSpec = {
 type AiModelControls = {
     getCurrentAiModel: () => string
     setAiModel: (aiModel: string) => void
+    getCurrentAiModels?: () => string[]
+    setAiModels?: (aiModels: string[]) => void
 }
 
 type SubmitControls = {
@@ -115,11 +117,15 @@ type ImageSizeControls = {
 type ImageModelControls = {
     getCurrentImageModel: () => string
     setImageModel: (aiModel: string) => void
+    getCurrentImageModels?: () => string[]
+    setImageModels?: (aiModels: string[]) => void
 }
 
 type VideoModelControls = {
     getCurrentVideoModel: () => string
     setVideoModel: (aiModel: string) => void
+    getCurrentVideoModels?: () => string[]
+    setVideoModels?: (aiModels: string[]) => void
 }
 
 type VideoOptionControls = {
@@ -258,6 +264,16 @@ function setNodeAttr(view: EditorView, getPos: () => number | undefined, attrNam
     view.dispatch(tr)
 }
 
+function setNodeAttrs(view: EditorView, getPos: () => number | undefined, attrs: Record<string, unknown>): void {
+    const pos = getPos()
+    if (pos === undefined) return
+    const tr = view.state.tr.setNodeMarkup(pos, undefined, {
+        ...view.state.doc.nodeAt(pos)?.attrs,
+        ...attrs,
+    })
+    view.dispatch(tr)
+}
+
 function getNodeAttr(view: EditorView, getPos: () => number | undefined, attrName: string): any {
     const pos = getPos()
     if (pos === undefined) return undefined
@@ -352,12 +368,38 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         // Build controls adapters that read/write ProseMirror node attrs
         const modelControls: AiModelControls = {
             getCurrentAiModel: () => getNodeAttr(view, getPos, 'aiModel') || '',
-            setAiModel: (aiModel: string) => setNodeAttr(view, getPos, 'aiModel', aiModel),
+            setAiModel: (aiModel: string) => setNodeAttrs(view, getPos, {
+                aiModel,
+                aiModels: serializeAiModelSelectionAttr(aiModel ? [aiModel] : []),
+            }),
+            getCurrentAiModels: () => {
+                const selectedModels = parseAiModelSelectionAttr(getNodeAttr(view, getPos, 'aiModels'))
+                if (selectedModels.length > 0) return selectedModels
+                const aiModel = getNodeAttr(view, getPos, 'aiModel') || ''
+                return aiModel ? [aiModel] : []
+            },
+            setAiModels: (aiModels: string[]) => setNodeAttrs(view, getPos, {
+                aiModel: aiModels[0] ?? '',
+                aiModels: serializeAiModelSelectionAttr(aiModels),
+            }),
         }
 
         const imageModelControls: ImageModelControls = {
             getCurrentImageModel: () => getNodeAttr(view, getPos, 'aiImageModel') || '',
-            setImageModel: (aiModel: string) => setNodeAttr(view, getPos, 'aiImageModel', aiModel),
+            setImageModel: (aiModel: string) => setNodeAttrs(view, getPos, {
+                aiImageModel: aiModel,
+                aiImageModels: serializeAiModelSelectionAttr(aiModel ? [aiModel] : []),
+            }),
+            getCurrentImageModels: () => {
+                const selectedModels = parseAiModelSelectionAttr(getNodeAttr(view, getPos, 'aiImageModels'))
+                if (selectedModels.length > 0) return selectedModels
+                const aiModel = getNodeAttr(view, getPos, 'aiImageModel') || ''
+                return aiModel ? [aiModel] : []
+            },
+            setImageModels: (aiModels: string[]) => setNodeAttrs(view, getPos, {
+                aiImageModel: aiModels[0] ?? '',
+                aiImageModels: serializeAiModelSelectionAttr(aiModels),
+            }),
         }
 
         const imageControls: ImageSizeControls = {
@@ -369,7 +411,20 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         const videoModelControls: VideoModelControls = {
             getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
-            setVideoModel: (aiModel: string) => setNodeAttr(view, getPos, 'aiVideoModel', aiModel),
+            setVideoModel: (aiModel: string) => setNodeAttrs(view, getPos, {
+                aiVideoModel: aiModel,
+                aiVideoModels: serializeAiModelSelectionAttr(aiModel ? [aiModel] : []),
+            }),
+            getCurrentVideoModels: () => {
+                const selectedModels = parseAiModelSelectionAttr(getNodeAttr(view, getPos, 'aiVideoModels'))
+                if (selectedModels.length > 0) return selectedModels
+                const aiModel = getNodeAttr(view, getPos, 'aiVideoModel') || ''
+                return aiModel ? [aiModel] : []
+            },
+            setVideoModels: (aiModels: string[]) => setNodeAttrs(view, getPos, {
+                aiVideoModel: aiModels[0] ?? '',
+                aiVideoModels: serializeAiModelSelectionAttr(aiModels),
+            }),
         }
 
         const videoAspectControls: VideoOptionControls = {

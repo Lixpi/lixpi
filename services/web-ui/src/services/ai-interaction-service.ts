@@ -1,5 +1,6 @@
 'use strict'
 
+import { v4 as uuidv4 } from 'uuid'
 import { NATS_SUBJECTS, STREAM_STATUS } from '@lixpi/constants'
 import type {
     AiInteractionChatSendMessagePayload,
@@ -21,9 +22,12 @@ import { userStore } from '$src/stores/userStore.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
+    aiModels?: string[]
     aiImageModel?: string
+    aiImageModels?: string[]
     imageSize?: ImageGenerationSize
     aiVideoModel?: string
+    aiVideoModels?: string[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
@@ -350,9 +354,12 @@ export default class AiInteractionService {
     async sendChatMessage({
         messages,
         aiModel,
+        aiModels,
         aiImageModel,
+        aiImageModels,
         imageSize,
         aiVideoModel,
+        aiVideoModels,
         videoAspectRatio,
         videoResolution,
         videoDuration,
@@ -404,13 +411,40 @@ export default class AiInteractionService {
             if (videoSourceForExtension) payload.videoSourceForExtension = videoSourceForExtension
         }
 
+        const reasoningModelIds = aiModels?.length ? aiModels : aiModel ? [aiModel] : []
+        const imageModelIds = aiImageModels?.length ? aiImageModels : aiImageModel ? [aiImageModel] : []
+        const videoModelIds = aiVideoModels?.length ? aiVideoModels : aiVideoModel ? [aiVideoModel] : []
+        const selectedModelCount = reasoningModelIds.length + imageModelIds.length + videoModelIds.length
+        const scalarModelCount = (aiModel ? 1 : 0) + (aiImageModel ? 1 : 0) + (aiVideoModel ? 1 : 0)
+        if (selectedModelCount > scalarModelCount) {
+            payload.mediaGenerationRequest = {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: uuidv4(),
+                reasoningModelIds,
+                imageModelIds,
+                videoModelIds,
+                imageOptions: {
+                    imageSize: imageSize || 'auto',
+                },
+                videoOptions: {
+                    ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
+                    ...(videoResolution ? { resolution: videoResolution } : {}),
+                    ...(videoDuration ? { duration: videoDuration } : {}),
+                    ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
+                },
+            }
+        }
+
         console.log(`[AI_INTERACTION] Publishing message to ${AI_INTERACTION_SUBJECTS.CHAT_SEND_MESSAGE}`, {
             workspaceId: this.workspaceId,
             aiChatThreadId: this.aiChatThreadId,
             aiModel,
+            reasoningModelCount: reasoningModelIds.length,
             messageCount: messages.length,
-            hasImageModel: !!aiImageModel,
-            hasVideoModel: !!aiVideoModel,
+            imageModelCount: imageModelIds.length,
+            videoModelCount: videoModelIds.length,
+            hasImageModel: imageModelIds.length > 0,
+            hasVideoModel: videoModelIds.length > 0,
             referencedFeatureCount: referencedFeatureIds?.length ?? 0,
             imageBranchCandidateCount: imageBranchCandidateSnapshot?.candidates.length ?? 0,
             workspaceContextNodeCount: workspaceContextSnapshot?.nodes.length ?? 0,

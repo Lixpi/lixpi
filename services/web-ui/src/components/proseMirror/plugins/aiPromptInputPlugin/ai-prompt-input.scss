@@ -458,6 +458,42 @@
     text-overflow: ellipsis;
 }
 
+.ai-model-multi-select .selected-option-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+}
+
+.ai-model-multi-select .selected-option-icon:empty {
+    display: none;
+}
+
+.ai-model-multi-select-list {
+    min-width: 220px;
+}
+
+.ai-model-multi-select-option {
+    gap: 8px;
+}
+
+.ai-model-multi-select-check {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+}
+
+.ai-model-multi-select-check svg,
+.ai-model-multi-select-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.ai-model-multi-select-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .ai-prompt-model-menu-section-controls .info-bubble-wrapper.static-position {
     --static-bubble-gap: var(--ai-prompt-model-menu-nested-dropdown-gap, 8px);
 }

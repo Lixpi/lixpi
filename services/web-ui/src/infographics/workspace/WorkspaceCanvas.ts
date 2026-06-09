@@ -90,11 +90,11 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import { extractContentFromProseMirror } from '$src/services/ai-chat-thread-service.ts'
 import {
-    createGenericAiModelDropdown,
+    createGenericAiModelMultiSelect,
     createGenericSubmitButton,
     createGenericImageSizeDropdown,
-    createGenericImageModelDropdown,
-    createGenericVideoModelDropdown,
+    createGenericImageModelMultiSelect,
+    createGenericVideoModelMultiSelect,
     createGenericVideoAspectDropdown,
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
@@ -2099,10 +2099,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getPromptControlFactories() {
         return {
-            createModelDropdown: createGenericAiModelDropdown,
-            createImageModelDropdown: createGenericImageModelDropdown,
+            createModelDropdown: createGenericAiModelMultiSelect,
+            createImageModelDropdown: createGenericImageModelMultiSelect,
             createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoModelDropdown: createGenericVideoModelMultiSelect,
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
             createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
             createVideoDurationDropdown: createGenericVideoDurationDropdown,
@@ -2645,9 +2645,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     type: 'aiPromptInput',
                     attrs: {
                         aiModel: attrs.aiModel || '',
+                        aiModels: attrs.aiModels || '',
                         aiImageModel: attrs.aiImageModel || '',
+                        aiImageModels: attrs.aiImageModels || '',
                         imageGenerationSize: attrs.imageGenerationSize || 'auto',
                         aiVideoModel: attrs.aiVideoModel || '',
+                        aiVideoModels: attrs.aiVideoModels || '',
                         videoAspectRatio: attrs.videoAspectRatio || '',
                         videoResolution: attrs.videoResolution || '',
                         videoDuration: attrs.videoDuration || '',
@@ -2936,6 +2939,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         await promptInputController.submitMessage({
             contentJSON: data.contentJSON,
             aiModel: data.aiModel,
+            aiModels: data.aiModels,
             imageOptions: data.imageOptions,
             videoOptions: data.videoOptions,
         })
@@ -3182,7 +3186,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)
                 },
                 onProjectTitleChange: () => {},
-                onAiChatSubmit: async ({ messages, aiModel, imageOptions, videoOptions, referencedFeatureIds }: any) => {
+                onAiChatSubmit: async ({ messages, aiModel, aiModels, imageOptions, videoOptions, referencedFeatureIds }: any) => {
                     gradient?.triggerAnimation()
                     activeAiChatPromptGradient?.triggerAnimation()
                     clearAutoContextChips()
@@ -3211,7 +3215,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         // VEO image-to-video / reference-image inputs come from the same VLM
                         // resolution, so the snapshot must be built whenever an image OR
                         // video model is selected.
-                        const hasMediaModel = Boolean(imageOptions?.aiImageModel || videoOptions?.aiVideoModel)
+                        const hasMediaModel = Boolean(
+                            imageOptions?.aiImageModel
+                            || imageOptions?.aiImageModels?.length
+                            || videoOptions?.aiVideoModel
+                            || videoOptions?.aiVideoModels?.length
+                        )
                         const imagePlacement = rootNode
                             ? rememberGeneratedImagePlacement(
                                 rootNode.referenceId,
@@ -3255,9 +3264,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         aiService.sendChatMessage({
                             messages: messagesWithContext,
                             aiModel,
+                            aiModels,
                             aiImageModel: imageOptions?.aiImageModel,
+                            aiImageModels: imageOptions?.aiImageModels,
                             imageSize: imageOptions?.imageGenerationSize,
                             aiVideoModel: videoOptions?.aiVideoModel,
+                            aiVideoModels: videoOptions?.aiVideoModels,
                             videoAspectRatio: videoOptions?.videoAspectRatio,
                             videoResolution: videoOptions?.videoResolution,
                             videoDuration: videoOptions?.videoDuration,
@@ -3353,6 +3365,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 void promptInputController.submitMessage({
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
+                    aiModels: data.aiModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
                 })
@@ -3432,10 +3445,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         floatingInputEl.appendChild(editorContainer)
 
         const controlFactories = {
-            createModelDropdown: createGenericAiModelDropdown,
-            createImageModelDropdown: createGenericImageModelDropdown,
+            createModelDropdown: createGenericAiModelMultiSelect,
+            createImageModelDropdown: createGenericImageModelMultiSelect,
             createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoModelDropdown: createGenericVideoModelMultiSelect,
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
             createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
             createVideoDurationDropdown: createGenericVideoDurationDropdown,
@@ -3457,6 +3470,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 promptInputController.submitMessage({
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
+                    aiModels: data.aiModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
                 })
@@ -3512,7 +3526,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
 
-    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiImageModel?: string; imageGenerationSize?: string }): void {
+    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string }): void {
         if (threadFloatingInputs.has(node.nodeId)) return
 
         const threadInputStyle = { position: 'absolute' as const, display: 'block', zIndex: '9999' }
@@ -3530,10 +3544,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         el.appendChild(editorContainer)
 
         const controlFactories = {
-            createModelDropdown: createGenericAiModelDropdown,
-            createImageModelDropdown: createGenericImageModelDropdown,
+            createModelDropdown: createGenericAiModelMultiSelect,
+            createImageModelDropdown: createGenericImageModelMultiSelect,
             createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoModelDropdown: createGenericVideoModelMultiSelect,
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
             createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
             createVideoDurationDropdown: createGenericVideoDurationDropdown,
@@ -3563,6 +3577,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 promptInputController.submitMessage({
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
+                    aiModels: data.aiModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
                 })

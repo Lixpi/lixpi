@@ -3,17 +3,20 @@ import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 
 import { AI_PROMPT_INPUT_PLUGIN_KEY, SUBMIT_AI_PROMPT_META, STOP_AI_PROMPT_META } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
-import { aiPromptInputNodeType, createAiPromptInputNodeView } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import { aiPromptInputNodeType, createAiPromptInputNodeView, parseAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 
 type SubmitHandler = (data: {
     contentJSON: any[]
     aiModel: string
+    aiModels: string[]
     imageOptions?: {
         aiImageModel?: string
+        aiImageModels?: string[]
         imageGenerationSize: string
     }
     videoOptions?: {
         aiVideoModel?: string
+        aiVideoModels?: string[]
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string
@@ -67,9 +70,12 @@ function extractContentJSON(state: EditorState): any[] | null {
 
 type InputAttrs = {
     aiModel: string
+    aiModels: string[]
     aiImageModel: string
+    aiImageModels: string[]
     imageGenerationSize: string
     aiVideoModel: string
+    aiVideoModels: string[]
     videoAspectRatio: string
     videoResolution: string
     videoDuration: string
@@ -78,9 +84,12 @@ type InputAttrs = {
 function getInputAttrs(state: EditorState): InputAttrs {
     let attrs: InputAttrs = {
         aiModel: '',
+        aiModels: [],
         aiImageModel: '',
+        aiImageModels: [],
         imageGenerationSize: 'auto',
         aiVideoModel: '',
+        aiVideoModels: [],
         videoAspectRatio: '',
         videoResolution: '',
         videoDuration: '',
@@ -89,9 +98,12 @@ function getInputAttrs(state: EditorState): InputAttrs {
         if (node.type.name === aiPromptInputNodeType) {
             attrs = {
                 aiModel: node.attrs.aiModel || '',
+                aiModels: parseAiModelSelectionAttr(node.attrs.aiModels),
                 aiImageModel: node.attrs.aiImageModel || '',
+                aiImageModels: parseAiModelSelectionAttr(node.attrs.aiImageModels),
                 imageGenerationSize: node.attrs.imageGenerationSize || 'auto',
                 aiVideoModel: node.attrs.aiVideoModel || '',
+                aiVideoModels: parseAiModelSelectionAttr(node.attrs.aiVideoModels),
                 videoAspectRatio: node.attrs.videoAspectRatio || '',
                 videoResolution: node.attrs.videoResolution || '',
                 videoDuration: node.attrs.videoDuration || '',
@@ -153,12 +165,15 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
     const buildSubmitPayload = (contentJSON: any[], attrs: InputAttrs) => ({
         contentJSON,
         aiModel: attrs.aiModel,
+        aiModels: attrs.aiModels,
         imageOptions: {
             aiImageModel: attrs.aiImageModel,
+            aiImageModels: attrs.aiImageModels,
             imageGenerationSize: attrs.imageGenerationSize,
         },
         videoOptions: {
             aiVideoModel: attrs.aiVideoModel,
+            aiVideoModels: attrs.aiVideoModels,
             videoAspectRatio: attrs.videoAspectRatio,
             videoResolution: attrs.videoResolution,
             videoDuration: attrs.videoDuration,

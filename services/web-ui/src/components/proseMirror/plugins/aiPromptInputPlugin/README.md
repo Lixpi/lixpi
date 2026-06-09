@@ -6,8 +6,8 @@ Provides the ProseMirror editor used by AI prompt input surfaces. It is a **sepa
 
 This plugin powers prompt input editors. It provides:
 - A rich-text ProseMirror editor for composing messages
-- An AI model selector dropdown
-- An image model selector dropdown (with size selector)
+- An AI model multi-select control
+- An image model multi-select control (with size selector)
 - Multi-model selection state for upcoming reasoning/image/video fanout
 - Contextual help tooltips for the reasoning, image, and video model sections
 - A submit/stop button
@@ -39,8 +39,8 @@ graph TD
         N[aiPromptInputNode.ts] --> NV[createAiPromptInputNodeView]
         NV --> CONT[Content Area<br/>ProseMirror contentDOM]
         NV --> CTRL[Controls Container]
-        CTRL --> MD[Model Dropdown]
-        CTRL --> IMD[Image Model Dropdown]
+        CTRL --> MD[Model Multi-select]
+        CTRL --> IMD[Image Model Multi-select]
         CTRL --> ISD[Image option dropdown]
         CTRL --> SB[Submit Button]
     end
@@ -173,9 +173,9 @@ div.ai-prompt-input-wrapper [data-empty="true"|"false"]
     ├── [Submit Button]                ← injected via createSubmitButton()
     └── div.bubble-menu.ai-prompt-model-menu-info-bubble
         └── div.ai-prompt-model-menu-content
-            ├── Reasoning model + help tooltip ← createModelDropdown()
-            ├── Image model + help tooltip     ← createImageModelDropdown(), createImageSizeDropdown()
-            └── Video model + help tooltip     ← createVideoModelDropdown(), aspect, resolution, duration
+            ├── Reasoning models + help tooltip ← createModelDropdown()
+            ├── Image models + help tooltip     ← createImageModelDropdown(), createImageSizeDropdown()
+            └── Video models + help tooltip     ← createVideoModelDropdown(), aspect, resolution, duration
 ```
 
 ### Control Adapters
