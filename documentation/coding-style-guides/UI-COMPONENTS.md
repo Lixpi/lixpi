@@ -300,17 +300,15 @@ Use existing icons from [`svgIcons/index.ts`](../../services/web-ui/src/svgIcons
 
 For HTML/Svelte, inject icon markup through the existing DOM/template patterns.
 
-For D3 SVG controls, parse imported SVG markup and append paths into an SVG group:
+For D3 SVG controls, use `appendSvgPathIcon` from
+[`svgIconPaths.ts`](../../services/web-ui/src/components/svgIconPaths.ts) to
+parse imported SVG markup and append scaled paths into an SVG group:
 
 ```typescript
-function setIconPaths(iconGroup: any, svgMarkup: string, fill: string): void {
-    iconGroup.selectAll('*').remove()
-    for (const pathData of extractPathData(svgMarkup)) {
-        iconGroup.append('path')
-            .attr('d', pathData)
-            .attr('fill', fill)
-    }
-}
+import { appendSvgPathIcon } from '$src/components/svgIconPaths.ts'
+import { xIcon } from '$src/svgIcons/index.ts'
+
+appendSvgPathIcon(iconGroup, xIcon, { x: 0, y: 0, size: 14, fill: '#1a2744' })
 ```
 
 Cache parsed path data if an icon is large or updated frequently.

@@ -11,7 +11,7 @@ This module renders the main workspace view: a zoomable, pannable canvas where d
 > - For context chips, automatic workspace relevance, reference-vs-lineage rules, generated-media provenance, and the balanced branch-tree layout, read [`documentation/ai-chat/CONTEXT-RELEVANCE.md`](../../../../../documentation/ai-chat/CONTEXT-RELEVANCE.md) and [`documentation/media-generation/BRANCH-LINEAGE.md`](../../../../../documentation/media-generation/BRANCH-LINEAGE.md).
 > - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
 
-> **Configuration rule.** Workspace-canvas values that are meant to be tuned - colors, shadows, dimensions, gaps, hit radii, resize cursor activation areas, animation timing, behavior flags, and generated-image placement spacing - belong in [`settings.ts`](../../settings.ts). Keep them in logical top-level subsections such as `aiChatThread`, `connector`, `imageNode`, and `imageBranchLineage`; use nested subsections for child domains such as `aiChatThread.rail`; separate every group with a blank line before and after; and document every key with what changing it does. Use getters only when a setting needs to self-reference sibling settings through `this`; keep ordinary static values as plain properties.
+> **Configuration rule.** Workspace-canvas values that are meant to be tuned - colors, shadows, dimensions, gaps, hit radii, resize cursor activation areas, animation timing, behavior flags, and generated-image placement spacing - belong in [`settings.ts`](../../settings.ts). Keep them in logical top-level subsections such as `aiChatThread`, `connector`, `imageNode`, and `imageBranchLineage`; use nested subsections for child domains such as `aiChatThread.rail` and `aiChatThread.panelTabs`; separate every group with a blank line before and after; and document every key with what changing it does. Use getters only when a setting needs to self-reference sibling settings through `this`; keep ordinary static values as plain properties.
 
 ## What It Does
 
@@ -21,7 +21,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Zoom** with pinch gestures or Ctrl+scroll
 - **Multi-select nodes** by dragging a marquee rectangle from empty canvas space
 - **Toggle selection membership** with Mod-click (`Cmd` on macOS, `Ctrl` on other platforms)
-- **Drag** nodes by grabbing the overlay (top bar for documents/threads, anywhere for images)
+- **Drag** nodes by grabbing the overlay (top bar for documents, anywhere for images/videos)
 - **Drag selected groups** as a rigid set while preserving relative spacing
 - **Resize** nodes from any corner by hovering that corner handle (images preserve aspect ratio)
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
@@ -78,7 +78,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 ### AI Chat Panel And Sessions
 
-The canvas owns a singleton right-side AI Chat panel. The outside top-right toggle shows the chat icon while closed and the collapse icon while open, shifting left when the panel opens; it opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and explicit context chips are stored in `canvasState.aiChatPanel`. Open tabs render through the shared SVG `components/slidingTabsSwitch` primitive, while the context chip tray sits above the composer, persists forced node ids, and can update without tearing down the ProseMirror draft.
+The canvas owns a singleton right-side AI Chat panel. The outside top-right toggle shows the chat icon while closed and the collapse icon while open, shifting left when the panel opens; it opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and explicit context chips are stored in `canvasState.aiChatPanel`. Open tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs`; the context chip tray sits above the composer, persists forced node ids, and can update without tearing down the ProseMirror draft.
 
 The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the context-control row; its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
 
