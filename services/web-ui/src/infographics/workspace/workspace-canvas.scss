@@ -1301,16 +1301,17 @@
     top: -6px;
     right: -6px;
     flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     padding: 0;
     border: 0;
     border-radius: 50%;
-    background: transparent;
+    background: #fff;
     color: #39455d;
     cursor: pointer;
+    overflow: hidden;
     opacity: 0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.62);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.32);
     transition: opacity 120ms ease, color 120ms ease;
     z-index: 2;
 }
@@ -1320,18 +1321,13 @@
     opacity: 1;
 }
 
-.workspace-ai-chat-panel-context-chip-remove:hover,
-.workspace-ai-chat-panel-context-chip-remove:focus-visible {
-    background: transparent;
-    color: #000;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.82);
-    opacity: 1;
-    outline: none;
-}
 
 .workspace-ai-chat-panel-context-chip-remove svg {
-    width: 16px;
-    height: 16px;
+    display: block;
+    width: 18px;
+    height: 18px;
+    margin-top: -2px;
+    margin-left: -2px;
     fill: currentColor;
 }
 
