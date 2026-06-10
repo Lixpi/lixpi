@@ -160,7 +160,10 @@ function extractFunctionBody(source: string, functionName: string): string {
 	const functionIndex = source.indexOf(`function ${functionName}`)
 	if (functionIndex === -1) return ''
 
-	const openIndex = source.indexOf('{', functionIndex)
+	const signatureCloseIndex = source.indexOf(')', functionIndex)
+	if (signatureCloseIndex === -1) return ''
+
+	const openIndex = source.indexOf('{', signatureCloseIndex)
 	if (openIndex === -1) return ''
 
 	let depth = 0
@@ -288,7 +291,7 @@ describe('PIXI media layer — first sync geometry', () => {
 
 	it('clips PIXI image sprites with the configured image border radius', () => {
 		expectSourceToContain(ts, "import { settings } from '$src/settings.ts'")
-		expectSourceToContain(ts, 'settings.imageNode.borderRadius')
+		expectSourceToContain(ts, 'settings.imageNode.styles.borderRadius')
 		expectSourceToContain(ts, 'sprite.mask = spriteMask')
 		expectSourceToContain(ts, 'function syncSpriteMask(entry: PixiImageEntry')
 		expectSourceToContain(ts, 'entry.spriteMask.roundRect(0, 0, width, height, radius)')
@@ -301,6 +304,19 @@ describe('PIXI media layer — first sync geometry', () => {
 		expectSourceToContain(ts, 'options: SelectionOverlayOptions = {}')
 		expectSourceToContain(ts, 'if (options.fill !== false) groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })')
 		expectSourceToContain(ts, 'groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke')
+	})
+
+	it('reads generation-border colors from style tokens while keeping geometry tokens separate', () => {
+		expectSourceToContain(ts, 'const generationBorder = settings.imageNode.generationBorder')
+		expectSourceToContain(ts, 'const generationBorderStyles = generationBorder.styles')
+		expectSourceToContain(ts, 'radius: generationBorder.radius')
+		expectSourceToContain(ts, 'trackWidth: generationBorder.trackWidth')
+		expectSourceToContain(ts, 'trackColor: generationBorderStyles.trackColor')
+		expectSourceToContain(ts, 'trackAlpha: generationBorderStyles.trackAlpha')
+		expectSourceToContain(ts, 'segmentTailAlpha: generationBorderStyles.snakeTailAlpha')
+		expectSourceToContain(ts, 'segmentColors: generationBorderStyles.snakeColors')
+		expectSourceNotToContain(ts, 'trackColor: generationBorder.trackColor')
+		expectSourceNotToContain(ts, 'segmentColors: generationBorder.snakeColors')
 	})
 })
 
@@ -784,12 +800,13 @@ describe('Workspace AI chat panel — session history interactions', () => {
 	const svgIcons = loadSvgIcons()
 
 	it('uses the circle icon as the new-chat control and binds a start-new-draft action', () => {
-		expect(ts).toMatch(/import\s*\{[^}]*xCircleIcon as plusIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
+		expectSourceToContain(ts, 'xCircleIcon,')
+		expectSourceNotToContain(ts, 'xCircleIcon as plusIcon')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-new-chat')
 		expectSourceToContain(ts, 'aria-label="Start new chat"')
-		expectSourceToContain(ts, 'innerHTML=${plusIcon}')
+		expectSourceToContain(ts, 'innerHTML=${xCircleIcon}')
 		expectSourceToContain(ts, 'const newChatEl = controlsEl.querySelector<HTMLButtonElement>(\'.workspace-ai-chat-panel-new-chat\')!')
-		expectSourceToContain(ts, 'newChatEl.addEventListener(\'click\', startNewAiChatDraft)')
+		expectSourceToContain(ts, 'newChatEl.addEventListener(\'click\', () => startNewAiChatDraft())')
 		expectSourceToContain(svgIcons, 'export const xCircleIcon')
 	})
 
@@ -798,41 +815,67 @@ describe('Workspace AI chat panel — session history interactions', () => {
 		const newChatBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat')
 		const sessionBlock = extractBlock(scss, '.workspace-ai-chat-panel-session')
 		const titleBlock = extractBlock(scss, '.workspace-ai-chat-panel-session-title')
-		expect(historyToggleBlock).toContain('display: grid')
-		expect(historyToggleBlock).toContain('place-items: center')
-		expect(newChatBlock).toContain('border-radius: 99px')
-		expect(newChatBlock).toContain('background: transparent')
+		expectExcerptToContain(historyToggleBlock, 'display: grid', 'session controls block')
+		expectExcerptToContain(historyToggleBlock, 'place-items: center', 'session controls block')
+		expectExcerptToContain(newChatBlock, 'border-radius: 99px', 'new chat block')
+		expectExcerptToContain(newChatBlock, 'background: transparent', 'new chat block')
 		const sessionHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-session:focus-within')
 		const historyToggleHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-history-toggle:focus-visible')
 		const newChatHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat:focus-visible')
-		expect(historyToggleHoverBlock).toContain('background: rgba(105, 115, 136, 0.1)')
-		expect(historyToggleHoverBlock).toContain('outline: none')
-		expect(newChatHoverBlock).toContain('color: #39455d')
-		expect(newChatHoverBlock).toContain('outline: none')
-		expect(sessionHoverBlock).toContain('background: rgba(130, 178, 192, 0.14)')
-		expect(scss).toContain('max-height: 236px')
-		expect(sessionBlock).toContain('display: flex')
-		expect(sessionBlock).toContain('min-height: 58px')
-		expect(titleBlock).toContain('font-size: 13px')
-		expect(titleBlock).toContain('font-weight: 620')
+		expectExcerptToContain(historyToggleHoverBlock, 'background: var(--workspace-ai-chat-panel-session-history-toggle-hover-background, rgba(105, 115, 136, 0.1))', 'session history toggle focus block')
+		expectExcerptToContain(historyToggleHoverBlock, 'outline: none', 'session history toggle focus block')
+		expectExcerptToContain(newChatHoverBlock, 'color: var(--workspace-ai-chat-panel-session-action-hover-background, #{$steelBlue})', 'new chat focus block')
+		expectExcerptToContain(newChatHoverBlock, 'outline: none', 'new chat focus block')
+		expectExcerptToContain(sessionHoverBlock, 'background-image:', 'session focus block')
+		expectExcerptToContain(sessionHoverBlock, '--workspace-ai-chat-panel-session-hover-background-image', 'session focus block')
+		expectExcerptToContain(sessionHoverBlock, 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)', 'session focus block')
+		expectSourceToContain(scss, 'max-height: 236px')
+		expectExcerptToContain(sessionBlock, 'display: flex', 'session block')
+		expectExcerptToContain(sessionBlock, 'min-height: 58px', 'session block')
+		expectExcerptToContain(titleBlock, 'font-size: 13px', 'session title block')
+		expectExcerptToContain(titleBlock, 'font-weight: 620', 'session title block')
 	})
 
 	it('starts a fresh standalone draft when last session tab is closed', () => {
 		const closeBody = extractFunctionBody(ts, 'closeAiChatSidebarTab')
 		const startNewBody = extractFunctionBody(ts, 'startNewAiChatDraft')
-		expect(closeBody).toContain('if (aiChatSidebarTabs.length === 0) {')
-		expectExcerptToContain(closeBody, 'startNewAiChatDraft()', 'closeAiChatSidebarTab')
+		const emptyBranchIndex = closeBody.indexOf('if (aiChatSidebarTabs.length === 0) {')
+		const startFreshIndex = closeBody.indexOf('startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })')
+		const returnIndex = closeBody.indexOf('return', startFreshIndex)
+
+		expect(emptyBranchIndex).toBeGreaterThan(-1)
+		expect(startFreshIndex).toBeGreaterThan(emptyBranchIndex)
+		expect(returnIndex).toBeGreaterThan(startFreshIndex)
+		expectExcerptToContain(closeBody, 'startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })', 'closeAiChatSidebarTab')
 		expectExcerptToContain(closeBody, 'return', 'closeAiChatSidebarTab')
 		expectExcerptToContain(startNewBody, 'const drafts = { ...(aiChatPanelState.drafts ?? {}) }', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'delete drafts[NEW_CHAT_DRAFT_KEY]', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'aiChatSidebarTabs = []', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'preserveOpenTabs = true', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'syncFromState = true', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'if (preserveOpenTabs && aiChatSidebarTabs.length > 0)', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'createAiChatDraftSidebarTab()', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'activeAiChatSidebarTabId = null', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'activeAiChatSidebarThreadId = null', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'activeAiChatThreadId = null', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'activeAiChatRootNodeId = null', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'contextChips: [],', 'startNewAiChatDraft')
-		expectExcerptToContain(startNewBody, 'clearAutoContextChips()', 'startNewAiChatDraft')
 		expectExcerptToContain(startNewBody, 'promptInputController.setTarget(null)', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'syncActiveAiChatPanelFromState()', 'startNewAiChatDraft')
+	})
+
+	it('turns a submitted draft tab into a thread tab and removes only that draft payload', () => {
+		const replaceBody = extractFunctionBody(ts, 'replaceAiChatDraftSidebarTab')
+		const submitBody = extractFunctionBody(ts, 'createStandaloneThreadAndSubmit')
+
+		expectExcerptToContain(replaceBody, 'if (tab.tabId !== draftTabId) return tab', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'replacedDraftTab = true', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'return threadTab', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'delete drafts[draftTabId]', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'aiChatPanelState = { ...aiChatPanelState, drafts }', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(submitBody, "const submittedDraftTabId = submittedTab?.type === 'draft' ? submittedTab.tabId : null", 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, 'replaceAiChatDraftSidebarTab(submittedDraftTabId, threadId)', 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, 'activeAiChatSidebarTabId = `thread:${threadId}`', 'createStandaloneThreadAndSubmit')
 	})
 
 	it('keeps thread sessions renderable with message count and status metadata', () => {
@@ -1319,7 +1362,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'settings.aiChatThread.rail.boundaryCircleColors')
+		expectExcerptToContain(fnBody, 'settings.aiChatThread.rail.styles.boundaryCircleColors')
 		expectExcerptToContain(fnBody, "setAttribute('fill'")
 	})
 
@@ -1421,8 +1464,8 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)")
-		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--ai-prompt-model-menu-open-prompt-z-index', settings.aiPromptInput.modelMenu.openPromptZIndex)")
+		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)")
+		expect(fnBody).not.toMatch(/open-prompt-z-index/)
 	})
 
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
@@ -1442,12 +1485,17 @@ describe('Vertical rail — TS infrastructure', () => {
 		const scss = loadScss()
 
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chips')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-label')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
 		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
+		expectSourceToContain(ts, 'function destroyContextPreviewTooltips(): void')
+		expectSourceToContain(ts, 'activeContextPreviewTooltips.clear()')
 		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
 		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
+		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
+		expectSourceToContain(ts, 'function createAiChatPanelContextTrayElement(): HTMLDivElement')
 		expectSourceToContain(ts, 'removeContextChip(nodeId)')
+		expectSourceToContain(ts, 'activeContextPreviewTooltips.add(previewTooltip)')
 		// Submitting a standalone chat force-includes the explicit chips.
 		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips')
 		expectSourceToContain(ts, 'extractSelectedContext({ nodeIds: chipNodeIds, includeUpstream: false })')
@@ -1469,8 +1517,8 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionDurationMs')
 		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionMinDurationMs')
 		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.activeTabBoxShadow')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.activeTabInsetShadow')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.styles.activeTabBoxShadow')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.styles.activeTabInsetShadow')
 		expectSourceNotToContain(ts, 'createTagPill')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-title')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-close')
@@ -1498,30 +1546,63 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'function getAiChatPanelTabsViewportWidth(')
 	})
 
-	it('renders removable automatic context chips and patches improved descriptors', () => {
+	it('renders a single-tab divider instead of an empty tabs switch and hides it behind history', () => {
 		const scss = loadScss()
 
-		expectSourceToContain(ts, 'let autoContextSelections: WorkspaceContextSelection[] = []')
-		expectSourceToContain(ts, 'const removedAutoContextChipNodeIds: Set<string> = new Set()')
-		expectSourceToContain(ts, 'function removeAutoContextChip(nodeId: string): void')
-		expectSourceToContain(ts, 'function clearAutoContextChips(): void')
-		expectSourceToContain(ts, "kind: 'explicit' | 'auto'")
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-${kind}')
-		expectSourceToContain(ts, 'contextKind: kind')
-		expectSourceToContain(ts, "if (selection.role === 'forced-chip') continue")
-		expectSourceToContain(ts, 'if (kind === \'auto\')')
-		expectSourceToContain(ts, 'removeAutoContextChip(nodeId)')
+		expectSourceToContain(ts, 'const shouldRenderTabs = aiChatSidebarTabs.length > 1')
+		expectSourceToContain(ts, 'const singleTabDividerEl = shouldRenderTabs')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-single-tab-divider')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-single-tab-divider-hidden')
+		expectSourceToContain(ts, 'singleTabDividerEl?.classList.toggle(\'workspace-ai-chat-panel-single-tab-divider-hidden\', isSessionHistoryOpen)')
+		expectSourceToContain(scss, '.workspace-ai-chat-panel-single-tab-divider')
+		expectSourceToContain(scss, 'border-top: var(--workspace-ai-chat-panel-divider-border')
+	})
+
+	it('renders removable explicit context chips and patches improved descriptors', () => {
+		const scss = loadScss()
+
+		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
+		expectSourceToContain(ts, 'function renderContextChip({')
+		expectSourceToContain(ts, 'function destroyContextPreviewTooltips(): void')
+		expectSourceToContain(ts, 'contextKind: \'explicit\'')
 		expectSourceToContain(ts, 'function patchWorkspaceContextImprovedDescriptors(improvedDescriptors: Record<string, ContentDescriptor> | undefined): void')
 		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution): void')
 		expectSourceToContain(ts, 'patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)')
 		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)')
 		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
 		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(threadId, referenceNodeIds)')
-		expectSourceToContain(ts, 'autoContextSelections = resolution.selections')
 		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ threadId, resolution }) =>')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-explicit')
-		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-auto')
-		expectSourceToContain(scss, 'border: 1px dashed rgba(212, 149, 106, 0.72)')
+		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-context-chip-auto')
+	})
+
+	it('applies context-preview styling helper variables to the panel shell', () => {
+		expectSourceToContain(ts, 'function applyAiChatPanelContextPreviewSettings(panelEl: HTMLElement): void')
+		expectSourceToContain(ts, 'settings.aiChatThread.contextPreview.styles')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-controls')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-preview-tooltip')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-preview-trigger')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-context-chip-remove-box-shadow')
+	})
+
+	it('passes panel context-preview CSS variables through to detached tooltip content', () => {
+		expectSourceToContain(ts, 'const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-tooltip-background\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-tooltip-box-shadow\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-border-radius\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-video-glyph-background\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-document-icon-color\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-popover-text-color\'')
+		expectSourceToContain(ts, 'contentCssVariableNames: AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES')
+	})
+
+	it('applies session-history styling helper variables to the panel shell', () => {
+		expectSourceToContain(ts, 'function applyAiChatPanelSessionHistorySettings(panelEl: HTMLElement): void')
+		expectSourceToContain(ts, 'settings.aiChatThread.sessionHistory.styles')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-control-color')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-control-hover-color')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-delete-color')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-thread-marker-box-shadow')
 	})
 
 	it('prepares standalone panel media generations for canvas placeholders and branch origins', () => {
@@ -1567,7 +1648,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(aiGeneratedImageNode, 'resolution: WorkspaceContextResolution')
 	})
 
-	it('removes drafts only when a session is deleted, not when its tab is closed', () => {
+	it('keeps submitted-session drafts until deletion and removes unsent draft payloads when draft tabs close', () => {
 		const closeStart = ts.indexOf('function closeAiChatSidebarTab')
 		const removeDraftStart = ts.indexOf('function removeAiChatPanelDraft', closeStart)
 		const deleteChatStart = ts.indexOf('async function deleteAiChatSession', removeDraftStart)
@@ -1576,6 +1657,8 @@ describe('Vertical rail — TS infrastructure', () => {
 		const deleteChatBody = ts.slice(deleteChatStart, deleteExtractionStart)
 		const deleteExtractionBody = ts.slice(deleteExtractionStart, ts.indexOf('async function loadExtractionSessionHistory', deleteExtractionStart))
 
+		expectExcerptToContain(closeBody, "if (closedTab?.type === 'draft')", 'close-tab handler')
+		expectExcerptToContain(closeBody, 'delete drafts[closedTab.tabId]', 'close-tab handler')
 		expectExcerptNotToContain(closeBody, 'removeAiChatPanelDraft', 'close-tab handler')
 		expectExcerptToContain(deleteChatBody, 'removeAiChatPanelDraft(`thread:${threadId}`)', 'delete-chat handler')
 		expectExcerptToContain(deleteExtractionBody, 'removeAiChatPanelDraft(`extraction:${extractionRunId}`)', 'delete-extraction handler')
@@ -1840,19 +1923,19 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		})
 
 	it('wires selection colors from settings to CSS custom properties', () => {
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-border-color', settings.selection.marqueeBorderColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-background-color', settings.selection.marqueeBackgroundColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-border-color', settings.selection.overlayBorderColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-background-color', settings.selection.overlayBackgroundColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-outline-color', settings.selection.outlineColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-border-color', selectionStyles.marqueeBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-background-color', selectionStyles.marqueeBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-border-color', selectionStyles.overlayBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-background-color', selectionStyles.overlayBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-outline-color', selectionStyles.outlineColor)")
 		expect(scss).toMatch(/var\(--selection-outline-color/)
 	})
 
-		it('wires image settings to CSS custom properties', () => {
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', settings.imageNode.defaultBoxShadow)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', settings.imageNode.selectedBoxShadow)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)")
+	it('wires image settings to CSS custom properties', () => {
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)")
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)")
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)")
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)")
 			expect(scss).toMatch(/border-radius:\s*var\(--workspace-image-border-radius\)/)
 	})
 

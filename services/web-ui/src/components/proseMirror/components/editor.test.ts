@@ -24,4 +24,11 @@ describe('ProseMirrorEditor — AI prompt draft restoration', () => {
         expectSourceToContain("console.warn('[EDITOR] Invalid AI prompt draft, creating fresh input:', e)")
         expectSourceToContain('this.editorSchema.nodes[aiPromptInputNodeType].createAndFill()')
     })
+
+    it('forwards context tray control factory into the AI prompt input plugin', () => {
+        expectSourceToContain('createContextTray: this.promptControlFactories?.createContextTray,')
+        expectSourceToContain('createAiPromptInputPlugin({')
+        expectSourceToContain('onStop: () => this.onPromptStop?.()')
+        expectSourceToContain('promptControlFactories?.createModelDropdown,')
+    })
 })
