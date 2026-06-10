@@ -61,7 +61,7 @@ graph TD
 - **Decoupled from threads:** The plugin only handles input composition and extraction, never touches thread state or streaming
 - **Adapter pattern:** NodeView controls bridge ProseMirror node attrs (`aiModel`, `imageGenerationSize`) to UI controls via getter/setter adapters
 - **Factory injection:** UI controls (dropdowns, buttons) are injected via factory functions, keeping the plugin framework-agnostic
-- **Optional context chrome:** Host surfaces can inject a context preview strip into the white input area without making the plugin own context state
+- **Optional context chrome:** Host surfaces can inject draft-owned context previews into the white input area without making the plugin own context state. Submitted-turn resolver feedback belongs outside the composer.
 - **Polling for external state:** Receiving state is synced via a 200ms polling interval since it's owned by external services, not plugin state
 
 ## Data Flow

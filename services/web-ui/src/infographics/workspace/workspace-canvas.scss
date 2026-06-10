@@ -1,3 +1,4 @@
+@import '$src/sass/_transitions.scss';
 @import '$src/sass/_variables.scss';
 @import '$src/components/bubbleMenu/bubbleMenu.scss';
 @import '$src/components/helpTooltip/help-tooltip.scss';
@@ -903,12 +904,6 @@
     border: 0;
 }
 
-.workspace-ai-chat-panel-context-chip-auto {
-    border: 0;
-    background: transparent;
-    color: #5a3a2a;
-}
-
 .workspace-ai-chat-panel-context-chip:hover,
 .workspace-ai-chat-panel-context-chip:focus-within {
     z-index: 5;
@@ -1334,7 +1329,7 @@
 .workspace-ai-chat-panel-history-control {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--workspace-ai-chat-panel-history-control-gap, 8px);
     margin-left: auto;
 }
 
@@ -1343,43 +1338,55 @@
     display: grid;
     place-items: center;
     flex: 0 0 auto;
-    width: 20px;
-    height: 20px;
     padding: 0;
     border: 0;
     border-radius: 99px;
     background: transparent;
-    color: #697388;
+    color: var(--workspace-ai-chat-panel-session-control-color, #697388);
     cursor: pointer;
+    transition: hoverTransition(background, 150ms), hoverTransition(color, 150ms);
+}
+
+.workspace-ai-chat-panel-history-toggle {
+    width: var(--workspace-ai-chat-panel-session-history-toggle-button-size, 20px);
+    height: var(--workspace-ai-chat-panel-session-history-toggle-button-size, 20px);
+}
+
+.workspace-ai-chat-panel-new-chat {
+    width: var(--workspace-ai-chat-panel-session-new-chat-button-size, 20px);
+    height: var(--workspace-ai-chat-panel-session-new-chat-button-size, 20px);
 }
 
 .workspace-ai-chat-panel-history-toggle:hover,
 .workspace-ai-chat-panel-history-toggle:focus-visible {
-    background: rgba(105, 115, 136, 0.1);
-    color: #39455d;
+    background: var(--workspace-ai-chat-panel-session-history-toggle-hover-background, rgba(105, 115, 136, 0.1));
+    color: var(--workspace-ai-chat-panel-session-control-hover-color, #39455d);
     outline: none;
 }
 
 .workspace-ai-chat-panel-new-chat:hover,
 .workspace-ai-chat-panel-new-chat:focus-visible {
-    color: #39455d;
+    color: var(--workspace-ai-chat-panel-session-action-hover-background, #{$steelBlue});
     outline: none;
 }
 
 .workspace-ai-chat-panel-history-toggle-active {
-    color: #39455d;
+    color: var(--workspace-ai-chat-panel-session-control-hover-color, #39455d);
 }
 
 .workspace-ai-chat-panel-history-toggle svg,
 .workspace-ai-chat-panel-new-chat svg {
-    width: 15px;
-    height: 15px;
     fill: currentColor;
 }
 
+.workspace-ai-chat-panel-history-toggle svg {
+    width: var(--workspace-ai-chat-panel-session-history-toggle-icon-size, 15px);
+    height: var(--workspace-ai-chat-panel-session-history-toggle-icon-size, 15px);
+}
+
 .workspace-ai-chat-panel-new-chat svg {
-    width: 17px;
-    height: 17px;
+    width: var(--workspace-ai-chat-panel-session-new-chat-icon-size, 20px);
+    height: var(--workspace-ai-chat-panel-session-new-chat-icon-size, 20px);
     transform: rotate(45deg);
 }
 
@@ -1412,12 +1419,17 @@
     min-height: 58px;
     padding: 7px 8px;
     border-radius: 8px;
-    transition: background 150ms ease;
+    transition: hoverTransition(background, 150ms);
 }
 
 .workspace-ai-chat-panel-session:hover,
 .workspace-ai-chat-panel-session:focus-within {
-    background: rgba(130, 178, 192, 0.14);
+    background-image: var(
+        --workspace-ai-chat-panel-session-hover-background-image,
+        linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)
+    );
+    background-repeat: var(--workspace-ai-chat-panel-session-hover-background-repeat, no-repeat);
+    background-size: var(--workspace-ai-chat-panel-session-hover-background-size, 100% 100%);
 }
 
 .workspace-ai-chat-panel-session-open {
@@ -1445,8 +1457,8 @@
 }
 
 .workspace-ai-chat-panel-session-marker-thread {
-    background: #4a8a9d;
-    box-shadow: 0 0 0 3px rgba(74, 138, 157, 0.12);
+    background: var(--workspace-ai-chat-panel-session-thread-marker-background, #5f8fcf);
+    box-shadow: var(--workspace-ai-chat-panel-session-thread-marker-box-shadow, 0 0 0 3px rgba(95, 143, 207, 0.14));
 }
 
 .workspace-ai-chat-panel-session-marker-extraction {
@@ -1490,32 +1502,57 @@
 }
 
 .workspace-ai-chat-panel-session-delete {
+    position: relative;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
-    width: 22px;
-    height: 22px;
+    width: var(--workspace-ai-chat-panel-session-delete-button-size, 20px);
+    height: var(--workspace-ai-chat-panel-session-delete-button-size, 20px);
     margin-top: 2px;
     padding: 0;
     border: 0;
     border-radius: 50%;
     background: transparent;
-    color: #7a8497;
+    color: var(--workspace-ai-chat-panel-session-delete-color, #7a8497);
     cursor: pointer;
-    transition: background 150ms ease, color 150ms ease;
+    transition: hoverTransition(color, 150ms);
+}
+
+.workspace-ai-chat-panel-session-delete::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--workspace-ai-chat-panel-session-delete-hover-circle-size, 16px);
+    height: var(--workspace-ai-chat-panel-session-delete-hover-circle-size, 16px);
+    border-radius: 50%;
+    background: transparent;
+    transform: translate(-50%, -50%);
+    transition: hoverTransition(background, 150ms);
 }
 
 .workspace-ai-chat-panel-session-delete:hover,
 .workspace-ai-chat-panel-session-delete:focus-visible {
-    background: rgba(255, 255, 255, 0.64);
-    color: rgba(180, 59, 55, 0.9);
+    color: var(--workspace-ai-chat-panel-session-action-hover-color, #{$offWhite});
     outline: none;
 }
 
+.workspace-ai-chat-panel-session-delete:hover::before,
+.workspace-ai-chat-panel-session-delete:focus-visible::before {
+    background: var(--workspace-ai-chat-panel-session-action-hover-background, #{$steelBlue});
+}
+
 .workspace-ai-chat-panel-session-delete svg {
-    width: 13px;
-    height: 13px;
+    position: relative;
+    z-index: 1;
+    width: var(--workspace-ai-chat-panel-session-delete-icon-size, 15px);
+    height: var(--workspace-ai-chat-panel-session-delete-icon-size, 15px);
     fill: currentColor;
+}
+
+.workspace-ai-chat-panel-session-delete:hover svg,
+.workspace-ai-chat-panel-session-delete:focus-visible svg {
+    fill: var(--workspace-ai-chat-panel-session-action-hover-color, #{$offWhite});
 }
 
 .workspace-ai-chat-panel-empty {

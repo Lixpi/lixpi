@@ -68,6 +68,28 @@ export type AiChatThreadPanelTabsSettings = {
     }
 }
 
+export type AiChatThreadSessionHistorySettings = {
+    controlGap: string
+    controlColor: string
+    controlHoverColor: string
+    historyToggleButtonSize: string
+    historyToggleHoverBackground: string
+    historyToggleIconSize: string
+    newChatButtonSize: string
+    newChatIconSize: string
+    actionHoverBackground: string
+    actionHoverColor: string
+    deleteButtonSize: string
+    deleteHoverCircleSize: string
+    deleteIconSize: string
+    deleteColor: string
+    hoverBackgroundImage: string
+    hoverBackgroundRepeat: string
+    hoverBackgroundSize: string
+    threadMarkerBackground: string
+    threadMarkerBoxShadow: string
+}
+
 export type AiChatThreadSettings = {
     responseMessageBubbleColor: string
     nodeBoxShadow: string
@@ -77,6 +99,7 @@ export type AiChatThreadSettings = {
     defaultDimensions: { width: number; height: number }
     adjacentNodeGap: number
     panelTabs: AiChatThreadPanelTabsSettings
+    sessionHistory: AiChatThreadSessionHistorySettings
     rail: AiChatThreadRailSettings
 }
 
@@ -291,6 +314,48 @@ export const settings: Settings = {
                 topColor: 'rgba(255, 255, 255, 0.86)',
                 bottomColor: 'rgba(0, 0, 0, 0)',
             },
+        },
+
+        // AI Chat panel session history presentation.
+        sessionHistory: {
+            // Gap between the new-chat control and the session-history toggle.
+            controlGap: '8px',
+            // Default color for panel session controls.
+            controlColor: '#697388',
+            // Hover/focus color for panel session controls.
+            controlHoverColor: '#39455d',
+            // Circular hit target size for the session-history toggle.
+            historyToggleButtonSize: '20px',
+            // Hover/focus background for the session-history toggle.
+            historyToggleHoverBackground: 'rgba(105, 115, 136, 0.1)',
+            // Icon size for the session-history toggle.
+            historyToggleIconSize: '15px',
+            // Circular hit target size for the new-chat control.
+            newChatButtonSize: '20px',
+            // Icon size for the new-chat plus circle.
+            newChatIconSize: '20px',
+            // Shared prominent hover background for destructive session actions.
+            actionHoverBackground: colorPalette.steelBlue,
+            // Shared prominent hover fill/color for destructive session action icons.
+            actionHoverColor: colorPalette.offWhite,
+            // Circular hit target size for session delete controls.
+            deleteButtonSize: '20px',
+            // Visual hover circle size for session delete controls.
+            deleteHoverCircleSize: '16px',
+            // Trash icon size inside session delete controls.
+            deleteIconSize: '15px',
+            // Default color for session delete controls.
+            deleteColor: '#7a8497',
+            // Hover/focus gradient for session rows. Uses the dropdown hover structure with light blue stops.
+            hoverBackgroundImage: 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)',
+            // Background repeat for the session-row hover gradient.
+            hoverBackgroundRepeat: 'no-repeat',
+            // Background size for the session-row hover gradient.
+            hoverBackgroundSize: '100% 100%',
+            // Dot color for submitted chat sessions in the history list.
+            threadMarkerBackground: '#5f8fcf',
+            // Ring around the submitted chat session dot.
+            threadMarkerBoxShadow: '0 0 0 3px rgba(95, 143, 207, 0.14)',
         },
 
         // Vertical rail presentation and hit-target settings for AI chat threads.

@@ -9,6 +9,12 @@ This guide applies to `.scss` files, styles inside Svelte components, and TypeSc
 - Reuse existing variables, mixins, and shared component styles before introducing new equivalents.
 - Follow the local import pattern in the stylesheet you are editing. Migrating deprecated Sass imports is separate work and should not be mixed into an unrelated UI change.
 
+## Transitions
+
+- All transition timing and easing must come from `services/web-ui/src/sass/_transitions.scss`. Import that file and reuse its shared Sass helpers or mixins; never hand-write custom transition durations or curves in component CSS.
+- Hover and hover-equivalent focus state changes must use `hoverTransition(...)`. Do not write raw hover transitions such as `transition: background 150ms ease`.
+- If a component needs a transition pattern that is not covered by the existing helpers or mixins, add or update the shared transition API in `_transitions.scss` first, then reuse it from the component stylesheet.
+
 ## Class Names
 
 Use flat, single-hyphen kebab-case for Lixpi-owned CSS class names:

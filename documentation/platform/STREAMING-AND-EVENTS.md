@@ -46,7 +46,7 @@ Every message on the per-thread subject carries a `status` from `STREAM_STATUS`.
 | `STREAMING` | `{ content }` | `MarkdownStreamParser` → ProseMirror | A streaming text delta. |
 | `END_STREAM` | `{ text: '', aiProvider }` | Finalize the response | End streaming. Ignored if it arrives before `START_STREAM`. Usage is computed separately and is not currently included in the stream event. |
 | `ERROR` | `{ error }` | Surface the error; end receiving state | Stream-level failure (including pre-stream errors). |
-| `CONTEXT_RELEVANCE_RESOLVED` | `{ workspaceContextResolution }` | Panel/canvas: show auto chips, patch improved descriptors, narrow media candidates | Result of `resolveWorkspaceContext`. Bypasses the markdown parser. |
+| `CONTEXT_RELEVANCE_RESOLVED` | `{ workspaceContextResolution }` | Panel/canvas: keep selections scoped to the submitted turn, patch improved descriptors, narrow media candidates | Result of `resolveWorkspaceContext`. Bypasses the markdown parser. |
 | `CONTEXT_RELEVANCE_ERROR` | `{ error }` | Surface relevance failure; the graph error path closes the stream | Relevance resolution failed. |
 | `IMAGE_BRANCH_RESOLVED` | `{ resolution }` | Canvas: apply VLM-selected references and branch lineage | Result of `resolveImageBranch` (image and video). Forwarded as an `image_branch_resolved` segment. |
 | `IMAGE_BRANCH_RESOLUTION_ERROR` | `{ error }` | Surface branch failure; clear pending placement | Branch resolution failed (e.g. missing candidate snapshot). |

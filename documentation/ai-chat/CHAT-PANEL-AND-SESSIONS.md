@@ -86,15 +86,15 @@ media info panel. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 
 ## The Tabbed Panel
 
-The panel hosts normal standalone chat tabs plus extraction tabs without
-displacing the user's current thread. The tab system follows Cursor IDE / Linear
-AI / Claude.ai / VS Code conventions.
+The panel hosts normal standalone chat tabs, unsent draft tabs, and extraction
+tabs without displacing the user's current thread. The tab system follows Cursor
+IDE / Linear AI / Claude.ai / VS Code conventions.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Panel["AI Chat Panel"]
-        Strip[Tab strip<br/>pinned top, always visible]
+        Strip[Tab strip<br/>shown for 2+ tabs]
         Body[Active tab body]
         Composer[Composer<br/>context previews inside input]
         Sessions[Sessions list<br/>collapsed by default]
@@ -102,18 +102,21 @@ flowchart TB
 
     subgraph TabKinds["Tab kinds"]
         Thread[Thread tab<br/>standalone chat]
+        Draft[Draft tab<br/>unsent chat]
         Extraction[Extraction tab<br/>stage timeline + feature card]
     end
 
     Strip --> Body
     Body --> Thread
+    Body --> Draft
     Body --> Extraction
     Body --> Composer
     Strip -.toggle.-> Sessions
 ```
 
-- **Tab strip pinned at the top** of the floating panel, always visible — even
-  with one tab. Predictability is favored over minimalism here.
+- **Tab strip pinned at the top** of the floating panel when more than one tab
+  is open. A single open tab uses the panel body directly, so the strip only
+  appears when there is an actual tab choice.
 - **Open tabs** render through the shared SVG
   `services/web-ui/src/components/slidingTabsSwitch/` primitive. Each tab shows
   a centered text label, truncates to the available segment width, and reveals a
@@ -131,8 +134,8 @@ flowchart TB
 ## Composer Context Previews
 
 The old Follow / Pinned / With Sources controls are gone. The panel now renders
-explicit and automatic context as media/document previews inside the prompt
-input's white composer area:
+explicit draft context as media/document previews inside the prompt input's
+white composer area:
 
 - Explicit previews are stored in `CanvasState.aiChatPanel.contextChips` as the
   current draft's forced node ids.
@@ -142,8 +145,8 @@ input's white composer area:
 - Generated branch roots are normal media chip targets; their provenance is
   reconstructed from `generatedBy` metadata rather than from a separate canvas
   node.
-- Auto chips render after `CONTEXT_RELEVANCE_RESOLVED` and can be removed from
-  the visible composer without persisting.
+- `CONTEXT_RELEVANCE_RESOLVED` is submitted-turn feedback. Its automatic
+  selections do not render in or mutate the current draft composer.
 - Submitting a prompt snapshots the explicit preview ids for that turn, clears
   the explicit set, and lets the next prompt fall back to automatic workspace
   relevance unless the user selects new context.
@@ -174,7 +177,7 @@ flowchart TB
     Chips[Explicit Context Chips]
     Snapshot[WorkspaceContextSnapshot<br/>descriptors only]
     Relevance[resolveWorkspaceContext<br/>rank + force include + self-heal]
-    Auto[CONTEXT_RELEVANCE_RESOLVED<br/>auto chips + improved descriptors]
+    Auto[CONTEXT_RELEVANCE_RESOLVED<br/>turn selections + improved descriptors]
     Features[resolveFeatures]
     Branch[resolveImageBranch<br/>media role authority]
     Stream[Stream Tokens or Media Generation]
@@ -235,17 +238,19 @@ the [Extraction Pipeline](../library/EXTRACTION-PIPELINE.md) and
 
 Sessions is collapsed by default and toggled from the history icon in the panel
 control row. When expanded it opens directly under that control row, above the
-tab strip, and lists submitted standalone chats and submitted feature-extraction
-sessions for the workspace, sorted by most recent update. Rows include a title,
-absolute update date plus relative recency, and compact metadata such as message
-count, status, extraction provider, or source count. Closing a tab only
-changes panel presentation; the session remains reopenable.
+tab strip when the strip is rendered, and lists submitted standalone chats and
+submitted feature-extraction sessions for the workspace, sorted by most recent
+update. Rows include a title, absolute update date plus relative recency, and
+compact metadata such as message count, status, extraction provider, or source
+count. Closing a tab only changes panel presentation; the session remains
+reopenable.
 
 The plus control beside the history toggle starts a fresh panel draft with empty
-context and no active tab. This does not create a durable standalone chat until
-the user submits the first prompt. Closing the last open tab uses the same blank
-draft path, clearing context chips, active thread ids, and legacy last-active
-thread state before the next prompt.
+context. If another tab is already open, the draft is added as its own tab so the
+existing session remains open. This does not create a durable standalone chat
+until the user submits the first prompt. Closing the last open tab uses the same
+blank draft path without rendering a tab strip, clearing context chips, active
+thread ids, and legacy last-active thread state before the next prompt.
 
 Standalone and extraction entries both expose a permanent-delete control:
 
@@ -265,7 +270,7 @@ handled in
 aiChatPanel?: {
     isOpen: boolean
     isSessionHistoryOpen: boolean
-    tabs: Array<{ tabId: string; type: 'thread' | 'extraction'; refId: string; title: string }>
+    tabs: Array<{ tabId: string; type: 'thread' | 'extraction' | 'draft'; refId: string; title: string }>
     activeTabId?: string
     contextChips: string[]
     width?: number
@@ -294,8 +299,8 @@ DynamoDB tables back the durable records the panel surfaces:
 | `EXTRACTION_RUNS` | Extraction-session transcript/trace history | `ExtractionRun.deleteWorkspaceRuns({ workspaceId })` |
 
 `CONTEXT_RELEVANCE_RESOLVED` is stream feedback, not persisted panel state. The
-browser uses it to render auto chips and patch improved descriptors into local
-canvas state.
+browser uses it for submitted-turn context bookkeeping and local descriptor
+patches; it does not inject automatic selections into the draft composer.
 
 ## Current Status
 
@@ -348,7 +353,7 @@ the last persisted state, not the tokens that were streaming at reload time.
 
 ## References
 
-- [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) — context chips, auto chips, and the relevance engine
+- [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) — context chips, automatic selections, and the relevance engine
 - [Media and Content Descriptors](./MEDIA-DESCRIPTORS.md) — descriptors that drive relevance
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — what happens on submit (workflow, routing, usage)
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — per-thread streaming subject and event catalog
