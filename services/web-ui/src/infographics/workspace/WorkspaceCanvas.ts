@@ -296,6 +296,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
+    let activeAiChatPromptResizeObserver: ResizeObserver | null = null
+    let activeAiChatPanelRailHeightFrame: number | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
     const activeContextPreviewTooltips: Set<HelpTooltipInstance> = new Set()
     let contextPreviewRefreshVersion = 0
@@ -2381,6 +2383,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatPromptEditor?.destroy?.()
         activeAiChatPromptGradient?.destroy()
+        activeAiChatPromptResizeObserver?.disconnect()
+        if (activeAiChatPanelRailHeightFrame !== null) {
+            cancelAnimationFrame(activeAiChatPanelRailHeightFrame)
+            activeAiChatPanelRailHeightFrame = null
+        }
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
         destroyContextPreviewTooltips()
         activeAiChatPanelEl?.remove()
@@ -2393,6 +2400,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch = null
         activeAiChatPromptEditor = null
         activeAiChatPromptGradient = null
+        activeAiChatPromptResizeObserver = null
         activeContextChipTrayEl = null
 
         if (clearActive) {
@@ -2752,6 +2760,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-rail')
         if (!panelRail) return
         panelRail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(activeAiChatPanelEl)}px`)
+    }
+
+    function scheduleActiveAiChatPanelRailHeightUpdate(): void {
+        if (activeAiChatPanelRailHeightFrame !== null) return
+        activeAiChatPanelRailHeightFrame = requestAnimationFrame(() => {
+            activeAiChatPanelRailHeightFrame = null
+            updateActiveAiChatPanelRailHeight()
+        })
     }
 
     function restoreAiChatPanelHistoryScroll(historyScrollerEl: HTMLElement | null | undefined, scrollTop: number | null, refreshVersion: number): void {
@@ -3612,6 +3628,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadId: panelThreadId ?? NEW_CHAT_DRAFT_KEY,
             onEditorChange: (value: object) => {
                 persistAiChatPromptDraft(promptDraftKey, value)
+                scheduleActiveAiChatPanelRailHeightUpdate()
             },
             onProjectTitleChange: () => {},
             onAiChatSubmit: () => {},
@@ -3693,6 +3710,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelRootNodeId = rootNode?.nodeId ?? null
         activeAiChatPanelHadContent = hasContent
         activeAiChatBackdropEl = backdropEl
+        activeAiChatPromptResizeObserver = new ResizeObserver(scheduleActiveAiChatPanelRailHeightUpdate)
+        activeAiChatPromptResizeObserver.observe(promptEl)
         paneEl.appendChild(backdropEl)
         paneEl.appendChild(panelEl)
 
