@@ -267,7 +267,7 @@ The active panel composer:
 - Uses `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
 - Receives the shared model, image, video, and submit controls from `primitives/aiControls/`
 - Renders inside a `.ai-prompt-input-floating.workspace-ai-chat-floating-panel-prompt` container with optional shifting gradient background (controlled by `settings.aiPromptInput.useShiftingGradientBackground`; see [Visual Effects](../../../../../../../documentation/canvas/VISUAL-EFFECTS.md))
-- Model settings menu colors, sizing, separators, z-index, and shadow are configured through `settings.aiPromptInput.modelMenu`; the shadow is a separate setting with the same default visual value as dropdown popovers.
+- Model settings menu colors, radii, divider styling, and shadows are configured through `settings.aiPromptInput.modelMenu.styles`. Layout mechanics such as grid shape, padding, width limits, z-index, and tooltip sizing stay in `ai-prompt-input.scss`.
 
 ## Styling
 

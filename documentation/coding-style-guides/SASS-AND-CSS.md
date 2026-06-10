@@ -5,7 +5,9 @@ This guide applies to `.scss` files, styles inside Svelte components, and TypeSc
 ## Style Ownership
 
 - Keep component styles next to the component or framework-agnostic UI module that owns them.
-- When styling the workspace canvas or related panels, keep user-tunable dimensions, colors, shadows, and timing values in `services/web-ui/src/settings.ts`.
+- `services/web-ui/src/settings.ts` is for product configuration and theme tokens, not a mirror of CSS. Keep behavior flags, interaction thresholds, semantic sizing knobs, colors, shadows, borders, border radii, line styles, and line thicknesses there only when changing the value is meant to be supported.
+- Put theme-only values under a nested `styles` key inside the relevant settings group. Keep non-style configuration at the group root.
+- Keep CSS mechanics in CSS: `display`, `position`, offsets, z-index, grid templates, background repeat/size, layout padding/gaps that exist only to make the component work, typography metrics that would break fitting, and fallback values for local CSS custom properties.
 - Reuse existing variables, mixins, and shared component styles before introducing new equivalents.
 - Follow the local import pattern in the stylesheet you are editing. Migrating deprecated Sass imports is separate work and should not be mixed into an unrelated UI change.
 

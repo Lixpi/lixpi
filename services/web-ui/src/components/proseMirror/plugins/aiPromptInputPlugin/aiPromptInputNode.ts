@@ -133,81 +133,39 @@ type AiPromptInputNodeViewOptions = {
     createSubmitButton: (controls: SubmitControls) => HTMLElement
 }
 
-const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuSettings]> = [
-    ['--ai-prompt-model-menu-open-prompt-z-index', 'openPromptZIndex'],
-    ['--ai-prompt-model-menu-info-bubble-z-index', 'infoBubbleZIndex'],
-    ['--ai-prompt-model-menu-trigger-size', 'triggerSize'],
-    ['--ai-prompt-model-menu-trigger-icon-size', 'triggerIconSize'],
+type AiPromptInputModelMenuStyleSettings = AiPromptInputModelMenuSettings['styles']
+
+const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuStyleSettings]> = [
     ['--ai-prompt-model-menu-trigger-color', 'triggerColor'],
     ['--ai-prompt-model-menu-trigger-active-color', 'triggerActiveColor'],
     ['--ai-prompt-model-menu-trigger-active-background', 'triggerActiveBackground'],
     ['--ai-prompt-model-menu-trigger-focus-outline', 'triggerFocusOutline'],
-    ['--ai-prompt-model-menu-trigger-focus-outline-offset', 'triggerFocusOutlineOffset'],
-    ['--ai-prompt-model-menu-trigger-transition', 'triggerTransition'],
-    ['--ai-prompt-model-menu-info-bubble-width', 'infoBubbleWidth'],
-    ['--ai-prompt-model-menu-info-bubble-max-width', 'infoBubbleMaxWidth'],
-    ['--ai-prompt-model-menu-info-bubble-mobile-max-width', 'infoBubbleMobileMaxWidth'],
-    ['--ai-prompt-model-menu-info-bubble-padding', 'infoBubblePadding'],
     ['--ai-prompt-model-menu-info-bubble-border-radius', 'infoBubbleBorderRadius'],
     ['--ai-prompt-model-menu-info-bubble-background', 'infoBubbleBackground'],
     ['--ai-prompt-model-menu-info-bubble-box-shadow', 'infoBubbleBoxShadow'],
     ['--ai-prompt-model-menu-info-bubble-color', 'infoBubbleColor'],
-    ['--ai-prompt-model-menu-content-gap', 'contentGap'],
-    ['--ai-prompt-model-menu-section-gap', 'sectionGap'],
-    ['--ai-prompt-model-menu-section-divider-padding-top', 'sectionDividerPaddingTop'],
-    ['--ai-prompt-model-menu-section-divider-width', 'sectionDividerWidth'],
     ['--ai-prompt-model-menu-section-divider-height', 'sectionDividerHeight'],
     ['--ai-prompt-model-menu-section-divider-gradient', 'sectionDividerGradient'],
     ['--ai-prompt-model-menu-section-divider-border-radius', 'sectionDividerBorderRadius'],
-    ['--ai-prompt-model-menu-section-heading-gap', 'sectionHeadingGap'],
-    ['--ai-prompt-model-menu-section-heading-justify-content', 'sectionHeadingJustifyContent'],
     ['--ai-prompt-model-menu-section-title-color', 'sectionTitleColor'],
-    ['--ai-prompt-model-menu-section-title-font-size', 'sectionTitleFontSize'],
-    ['--ai-prompt-model-menu-section-title-font-weight', 'sectionTitleFontWeight'],
-    ['--ai-prompt-model-menu-section-title-line-height', 'sectionTitleLineHeight'],
-    ['--ai-prompt-model-menu-controls-grid-template-columns', 'controlsGridTemplateColumns'],
-    ['--ai-prompt-model-menu-controls-mobile-grid-template-columns', 'controlsMobileGridTemplateColumns'],
-    ['--ai-prompt-model-menu-controls-gap', 'controlsGap'],
-    ['--ai-prompt-model-menu-controls-max-width', 'controlsMaxWidth'],
-    ['--ai-prompt-model-menu-controls-mobile-max-width', 'controlsMobileMaxWidth'],
-    ['--ai-prompt-model-menu-control-gap', 'controlGap'],
     ['--ai-prompt-model-menu-control-label-color', 'controlLabelColor'],
-    ['--ai-prompt-model-menu-control-label-inset', 'controlLabelInset'],
-    ['--ai-prompt-model-menu-control-label-font-size', 'controlLabelFontSize'],
-    ['--ai-prompt-model-menu-control-label-font-weight', 'controlLabelFontWeight'],
-    ['--ai-prompt-model-menu-control-label-line-height', 'controlLabelLineHeight'],
-    ['--ai-prompt-model-menu-dropdown-button-max-width', 'dropdownButtonMaxWidth'],
-    ['--ai-prompt-model-menu-dropdown-button-mobile-max-width', 'dropdownButtonMobileMaxWidth'],
-    ['--ai-prompt-model-menu-nested-dropdown-gap', 'nestedDropdownGap'],
-    ['--help-tooltip-trigger-size', 'helpTooltipTriggerSize'],
     ['--help-tooltip-trigger-border', 'helpTooltipTriggerBorder'],
     ['--help-tooltip-trigger-background', 'helpTooltipTriggerBackground'],
     ['--help-tooltip-trigger-color', 'helpTooltipTriggerColor'],
     ['--help-tooltip-trigger-hover-background', 'helpTooltipTriggerHoverBackground'],
     ['--help-tooltip-trigger-hover-color', 'helpTooltipTriggerHoverColor'],
-    ['--help-tooltip-icon-size', 'helpTooltipIconSize'],
     ['--help-tooltip-trigger-focus-outline', 'helpTooltipTriggerFocusOutline'],
-    ['--help-tooltip-trigger-focus-outline-offset', 'helpTooltipTriggerFocusOutlineOffset'],
-    ['--help-tooltip-offset', 'helpTooltipOffset'],
-    ['--help-tooltip-viewport-margin', 'helpTooltipViewportMargin'],
-    ['--help-tooltip-width', 'helpTooltipWidth'],
-    ['--help-tooltip-max-width', 'helpTooltipMaxWidth'],
-    ['--help-tooltip-padding', 'helpTooltipPadding'],
     ['--help-tooltip-background', 'helpTooltipBackground'],
     ['--help-tooltip-border', 'helpTooltipBorder'],
     ['--help-tooltip-border-radius', 'helpTooltipBorderRadius'],
     ['--help-tooltip-box-shadow', 'helpTooltipBoxShadow'],
     ['--help-tooltip-color', 'helpTooltipColor'],
-    ['--help-tooltip-font-size', 'helpTooltipFontSize'],
-    ['--help-tooltip-font-weight', 'helpTooltipFontWeight'],
-    ['--help-tooltip-line-height', 'helpTooltipLineHeight'],
-    ['--help-tooltip-content-z-index', 'helpTooltipContentZIndex'],
 ]
 
 function applyModelMenuStyleSettings(element: HTMLElement): void {
-    const modelMenuSettings = settings.aiPromptInput.modelMenu
+    const modelMenuStyleSettings = settings.aiPromptInput.modelMenu.styles
     for (const [propertyName, settingKey] of modelMenuCssVariables) {
-        element.style.setProperty(propertyName, modelMenuSettings[settingKey])
+        element.style.setProperty(propertyName, modelMenuStyleSettings[settingKey])
     }
 }
 
@@ -475,7 +433,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             },
         })
         modelMenu.element.classList.add('ai-prompt-model-menu-info-bubble')
-        modelMenu.element.style.zIndex = settings.aiPromptInput.modelMenu.infoBubbleZIndex
         modelMenu.element.setAttribute('aria-label', 'Model settings')
 
         const handleDocumentMouseDown = (event: MouseEvent): void => {

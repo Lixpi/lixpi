@@ -115,8 +115,7 @@ flowchart TB
 ```
 
 - **Tab strip pinned at the top** of the floating panel when more than one tab
-  is open. A single open tab uses the panel body directly, so the strip only
-  appears when there is an actual tab choice.
+  is open. A single open tab renders only a divider at the strip's top edge.
 - **Open tabs** render through the shared SVG
   `services/web-ui/src/components/slidingTabsSwitch/` primitive. Each tab shows
   a centered text label, truncates to the available segment width, and reveals a

@@ -1,5 +1,6 @@
 import { applyStyle, html } from '$src/utils/domTemplates.ts'
 import { questionMarkCircleIcon } from '$src/svgIcons/index.ts'
+import { settings } from '$src/settings.ts'
 
 let nextHelpTooltipId = 0
 
@@ -55,6 +56,7 @@ export type HelpTooltipConfig = {
     className?: string
     triggerClassName?: string
     contentClassName?: string
+    contentCssVariableNames?: string[]
     interactive?: boolean
 }
 
@@ -161,8 +163,11 @@ class HelpTooltip implements HelpTooltipInstance {
 
     private syncContentCssVariables(): void {
         const computedStyle = getComputedStyle(this.dom)
+        const cssVariableNames = this.config.contentCssVariableNames
+            ? [...helpTooltipCssVariableNames, ...this.config.contentCssVariableNames]
+            : helpTooltipCssVariableNames
 
-        for (const variableName of helpTooltipCssVariableNames) {
+        for (const variableName of cssVariableNames) {
             const value = computedStyle.getPropertyValue(variableName)
             if (value.trim()) {
                 this.content.style.setProperty(variableName, value)
@@ -339,7 +344,7 @@ class HelpTooltip implements HelpTooltipInstance {
             if (!this.isTriggerActive && !this.isContentActive && !hasFocus) {
                 this.hideTooltip()
             }
-        }, 80)
+        }, settings.helpTooltip.interactiveHideDelayMs)
     }
 
     private handleTriggerPointerEnter = (): void => {

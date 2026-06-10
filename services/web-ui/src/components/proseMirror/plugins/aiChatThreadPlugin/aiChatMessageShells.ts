@@ -72,7 +72,7 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
     ` as HTMLElement
 
     const bubbleEl = wrapper.querySelector('.ai-response-message-bubble') as HTMLElement
-    bubbleEl.style.setProperty('--ai-response-bubble-color', settings.aiChatThread.responseMessageBubbleColor)
+    bubbleEl.style.setProperty('--ai-response-bubble-color', settings.aiChatThread.styles.responseMessageBubbleColor)
 
     const setProvider = (nextProvider: string | null | undefined, iconOverride?: string | null): void => {
         const avatarEl = wrapper.querySelector('.user-avatar') as HTMLElement

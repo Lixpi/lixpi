@@ -128,33 +128,64 @@ type CollisionPlan = {
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
+const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
+    '--workspace-ai-chat-panel-context-preview-tooltip-background',
+    '--workspace-ai-chat-panel-context-preview-tooltip-border',
+    '--workspace-ai-chat-panel-context-preview-tooltip-border-radius',
+    '--workspace-ai-chat-panel-context-preview-tooltip-box-shadow',
+    '--workspace-ai-chat-panel-context-preview-tooltip-color',
+    '--workspace-ai-chat-panel-context-preview-border-radius',
+    '--workspace-ai-chat-panel-context-preview-video-background',
+    '--workspace-ai-chat-panel-context-preview-video-glyph-background',
+    '--workspace-ai-chat-panel-context-preview-video-glyph-color',
+    '--workspace-ai-chat-panel-context-preview-document-color',
+    '--workspace-ai-chat-panel-context-preview-document-icon-color',
+    '--workspace-ai-chat-panel-context-preview-document-text-color',
+    '--workspace-ai-chat-panel-context-preview-popover-title-color',
+    '--workspace-ai-chat-panel-context-preview-popover-text-color',
+]
 
 function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
-    promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
-    promptEl.style.setProperty('--ai-prompt-model-menu-open-prompt-z-index', settings.aiPromptInput.modelMenu.openPromptZIndex)
+    promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
 }
 
 function applyAiChatPanelSessionHistorySettings(panelEl: HTMLElement): void {
-    const sessionHistory = settings.aiChatThread.sessionHistory
-    panelEl.style.setProperty('--workspace-ai-chat-panel-history-control-gap', sessionHistory.controlGap)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-control-color', sessionHistory.controlColor)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-control-hover-color', sessionHistory.controlHoverColor)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-history-toggle-button-size', sessionHistory.historyToggleButtonSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-history-toggle-hover-background', sessionHistory.historyToggleHoverBackground)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-history-toggle-icon-size', sessionHistory.historyToggleIconSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-new-chat-button-size', sessionHistory.newChatButtonSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-new-chat-icon-size', sessionHistory.newChatIconSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-action-hover-background', sessionHistory.actionHoverBackground)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-action-hover-color', sessionHistory.actionHoverColor)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-delete-button-size', sessionHistory.deleteButtonSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-delete-hover-circle-size', sessionHistory.deleteHoverCircleSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-delete-icon-size', sessionHistory.deleteIconSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-delete-color', sessionHistory.deleteColor)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-hover-background-image', sessionHistory.hoverBackgroundImage)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-hover-background-repeat', sessionHistory.hoverBackgroundRepeat)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-hover-background-size', sessionHistory.hoverBackgroundSize)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-thread-marker-background', sessionHistory.threadMarkerBackground)
-    panelEl.style.setProperty('--workspace-ai-chat-panel-session-thread-marker-box-shadow', sessionHistory.threadMarkerBoxShadow)
+    const sessionHistoryStyles = settings.aiChatThread.sessionHistory.styles
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-control-color', sessionHistoryStyles.controlColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-control-hover-color', sessionHistoryStyles.controlHoverColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-history-toggle-hover-background', sessionHistoryStyles.historyToggleHoverBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-action-hover-background', sessionHistoryStyles.actionHoverBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-action-hover-color', sessionHistoryStyles.actionHoverColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-delete-color', sessionHistoryStyles.deleteColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-hover-background-image', sessionHistoryStyles.hoverBackgroundImage)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-thread-marker-background', sessionHistoryStyles.threadMarkerBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-thread-marker-box-shadow', sessionHistoryStyles.threadMarkerBoxShadow)
+}
+
+function applyAiChatPanelContextPreviewSettings(panelEl: HTMLElement): void {
+    const contextPreviewStyles = settings.aiChatThread.contextPreview.styles
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-controls-color', contextPreviewStyles.controlsColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-background', contextPreviewStyles.chipBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-trigger-border-radius', contextPreviewStyles.triggerBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-border-radius', contextPreviewStyles.previewBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-background', contextPreviewStyles.tooltipBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-border', contextPreviewStyles.tooltipBorder)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-border-radius', contextPreviewStyles.tooltipBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-box-shadow', contextPreviewStyles.tooltipBoxShadow)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-color', contextPreviewStyles.tooltipColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-video-background', contextPreviewStyles.videoBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-video-glyph-background', contextPreviewStyles.videoGlyphBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-video-glyph-color', contextPreviewStyles.videoGlyphColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-color', contextPreviewStyles.documentColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-skeleton-line-border-radius', contextPreviewStyles.documentSkeletonLineBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-skeleton-line-background', contextPreviewStyles.documentSkeletonLineBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-icon-color', contextPreviewStyles.documentIconColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-text-color', contextPreviewStyles.documentTextColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-popover-title-color', contextPreviewStyles.popoverTitleColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-popover-text-color', contextPreviewStyles.popoverTextColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-remove-background', contextPreviewStyles.removeButtonBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-remove-color', contextPreviewStyles.removeButtonColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-remove-box-shadow', contextPreviewStyles.removeButtonBoxShadow)
 }
 
 type DocumentEditorEntry = {
@@ -255,18 +286,21 @@ function defaultPanZoomConfig(onTransformChange: (transform: Transform) => void)
 export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const { paneEl, viewportEl, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange, onAiChatThreadContentChange } = options
     let workspaceId = options.workspaceId
+    const connectorStyles = settings.connector.styles
+    const selectionStyles = settings.selection.styles
+    const imageNodeStyles = settings.imageNode.styles
 
-    paneEl.style.setProperty('--connector-line-default-color', settings.connector.lineDefaultColor)
-    paneEl.style.setProperty('--connector-line-focus-color', settings.connector.lineFocusColor)
-    paneEl.style.setProperty('--selection-marquee-border-color', settings.selection.marqueeBorderColor)
-    paneEl.style.setProperty('--selection-marquee-background-color', settings.selection.marqueeBackgroundColor)
-    paneEl.style.setProperty('--selection-overlay-border-color', settings.selection.overlayBorderColor)
-    paneEl.style.setProperty('--selection-overlay-background-color', settings.selection.overlayBackgroundColor)
-    paneEl.style.setProperty('--selection-outline-color', settings.selection.outlineColor)
-    paneEl.style.setProperty('--workspace-image-default-box-shadow', settings.imageNode.defaultBoxShadow)
-    paneEl.style.setProperty('--workspace-image-selected-box-shadow', settings.imageNode.selectedBoxShadow)
-    paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)
-    paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)
+    paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
+    paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
+    paneEl.style.setProperty('--selection-marquee-border-color', selectionStyles.marqueeBorderColor)
+    paneEl.style.setProperty('--selection-marquee-background-color', selectionStyles.marqueeBackgroundColor)
+    paneEl.style.setProperty('--selection-overlay-border-color', selectionStyles.overlayBorderColor)
+    paneEl.style.setProperty('--selection-overlay-background-color', selectionStyles.overlayBackgroundColor)
+    paneEl.style.setProperty('--selection-outline-color', selectionStyles.outlineColor)
+    paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)
+    paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
+    paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
+    paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
@@ -362,10 +396,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let videoNodeHandler: VideoNodeHandlerControl | null = null
 
     const pixiSelectionColors: SelectionColors = {
-        marqueeStroke: settings.selection.marqueeBorderColor,
-        marqueeFill: settings.selection.marqueeBackgroundColor,
-        groupOverlayStroke: settings.selection.overlayBorderColor,
-        groupOverlayFill: settings.selection.overlayBackgroundColor,
+        marqueeStroke: selectionStyles.marqueeBorderColor,
+        marqueeFill: selectionStyles.marqueeBackgroundColor,
+        groupOverlayStroke: selectionStyles.overlayBorderColor,
+        groupOverlayFill: selectionStyles.overlayBackgroundColor,
     }
     pixiMediaLayer = createPixiMediaLayer({
         paneEl,
@@ -2829,6 +2863,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             className: 'workspace-ai-chat-panel-context-preview-tooltip',
             triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
             contentClassName: getContextPreviewPopoverClassName(node, Boolean(title || text)),
+            contentCssVariableNames: AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
             interactive: true,
         })
         const removeLabel = `Remove ${accessibleLabel} from context`
@@ -3318,9 +3353,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onclick=${(event: Event) => event.stopPropagation()}
         ></div>` as HTMLDivElement
 
-        panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', settings.aiChatThread.nodeBoxShadow)
-        panelEl.style.setProperty('--ai-chat-thread-node-border', settings.aiChatThread.nodeBorder)
+        panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', settings.aiChatThread.styles.nodeBoxShadow)
+        panelEl.style.setProperty('--ai-chat-thread-node-border', settings.aiChatThread.styles.nodeBorder)
+        panelEl.style.setProperty('--workspace-ai-chat-panel-divider-border', settings.aiChatThread.styles.panelSectionDividerBorder)
         applyAiChatPanelSessionHistorySettings(panelEl)
+        applyAiChatPanelContextPreviewSettings(panelEl)
         const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop" aria-hidden="true"></div>` as HTMLDivElement
 
         if (!settings.aiChatThread.showHeader) {
@@ -3380,8 +3417,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     minDurationMs: settings.aiChatThread.panelTabs.transitionMinDurationMs,
                     distanceSpeedupFactor: settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor,
                 },
-                activeTabBoxShadow: settings.aiChatThread.panelTabs.activeTabBoxShadow,
-                activeTabInsetShadow: settings.aiChatThread.panelTabs.activeTabInsetShadow,
+                activeTabBoxShadow: settings.aiChatThread.panelTabs.styles.activeTabBoxShadow,
+                activeTabInsetShadow: settings.aiChatThread.panelTabs.styles.activeTabInsetShadow,
                 tabs: aiChatSidebarTabs.map((tab) => ({
                     label: tab.title,
                     value: tab.tabId,
@@ -3411,12 +3448,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <div className="workspace-ai-chat-panel-sessions-title">Sessions</div>
             <div className="workspace-ai-chat-panel-sessions-list"></div>
         </div>` as HTMLDivElement
+        const singleTabDividerEl = shouldRenderTabs
+            ? null
+            : html`<div
+                className=${`workspace-ai-chat-panel-single-tab-divider${aiChatPanelState.isSessionHistoryOpen ? ' workspace-ai-chat-panel-single-tab-divider-hidden' : ''}`}
+                aria-hidden="true"
+            ></div>` as HTMLDivElement
         historyToggleEl.addEventListener('click', () => {
             const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen
             aiChatPanelState = { ...aiChatPanelState, isSessionHistoryOpen }
             historyToggleEl.classList.toggle('workspace-ai-chat-panel-history-toggle-active', isSessionHistoryOpen)
             select(historyToggleEl).attr('aria-expanded', String(isSessionHistoryOpen))
             sessionsEl.classList.toggle('workspace-ai-chat-panel-sessions-hidden', !isSessionHistoryOpen)
+            singleTabDividerEl?.classList.toggle('workspace-ai-chat-panel-single-tab-divider-hidden', isSessionHistoryOpen)
             persistAiChatSidebarState()
         })
         const sessionsListEl = sessionsEl.querySelector('.workspace-ai-chat-panel-sessions-list') as HTMLDivElement
@@ -3469,6 +3513,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
         panelEl.appendChild(sessionsEl)
         if (tabsEl) panelEl.appendChild(tabsEl)
+        if (singleTabDividerEl) panelEl.appendChild(singleTabDividerEl)
 
         const bodyHost = html`<div className="workspace-ai-chat-panel-body"></div>` as HTMLDivElement
         const showingThread = activeSidebarTab?.type === 'thread'
@@ -3720,8 +3765,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             style=${railStyle}
             data=${{ threadNodeId: rootNode?.nodeId ?? 'ai-chat-panel' }}
         ></div>` as HTMLDivElement
-        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.gradient)
-        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.width)
+        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.styles.gradient)
+        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.styles.width)
         rail.addEventListener('mousedown', (event) => {
             handleActiveAiChatPanelResizeStart(event, panelEl)
         })
@@ -3729,7 +3774,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
         const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
-        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.boundaryCircleColors
+        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.styles.boundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
         if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
         if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
@@ -3998,13 +4043,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             style=${railStyle}
             data=${{ threadNodeId: node.nodeId }}
         ></div>` as HTMLDivElement
-        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.gradient)
-        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.width)
+        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.styles.gradient)
+        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.styles.width)
 
         const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
         const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
-        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.boundaryCircleColors
+        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.styles.boundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
         if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
         if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
