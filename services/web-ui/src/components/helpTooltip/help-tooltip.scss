@@ -66,6 +66,7 @@
     visibility: hidden;
     width: var(--help-tooltip-width, 240px);
     max-width: var(--help-tooltip-max-width, min(260px, calc(100vw - 48px)));
+    max-height: var(--help-tooltip-available-max-height, none);
     padding: var(--help-tooltip-padding, 8px 10px);
     border: var(--help-tooltip-border, none);
     border-radius: var(--help-tooltip-border-radius, 8px);

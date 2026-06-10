@@ -2644,11 +2644,41 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
     }
 
+    type ContextPreviewPopoverOrientation = 'landscape' | 'portrait'
+
+    function getContextPreviewPopoverOrientation(node: ImageCanvasNode | VideoCanvasNode): ContextPreviewPopoverOrientation {
+        if (Number.isFinite(node.aspectRatio) && node.aspectRatio > 0) {
+            return node.aspectRatio < 1 ? 'portrait' : 'landscape'
+        }
+        return node.dimensions.height > node.dimensions.width ? 'portrait' : 'landscape'
+    }
+
     function renderContextPreviewPopoverMeta(title: string, text: string): HTMLElement {
         return html`<div className="workspace-ai-chat-panel-context-preview-popover-meta">
             ${title ? html`<span className="workspace-ai-chat-panel-context-preview-popover-title">${title}</span>` : ''}
             ${text ? html`<span className="workspace-ai-chat-panel-context-preview-popover-text">${text}</span>` : ''}
         </div>` as HTMLElement
+    }
+
+    function renderContextPreviewPopoverContent(node: CanvasNode, title: string, text: string, accessibleLabel: string): HTMLElement {
+        if (node.type !== 'image' && node.type !== 'video') {
+            return renderContextPreviewVisual(node, accessibleLabel, text, 'large')
+        }
+
+        const hasPopoverMeta = Boolean(title || text)
+        const orientation = hasPopoverMeta ? getContextPreviewPopoverOrientation(node) : 'landscape'
+        return html`<div className=${`workspace-ai-chat-panel-context-preview-popover-body workspace-ai-chat-panel-context-preview-popover-body-${orientation}`}>
+            <div className="workspace-ai-chat-panel-context-preview-popover-media">
+                ${renderContextPreviewVisual(node, accessibleLabel, text, 'large')}
+            </div>
+            ${hasPopoverMeta ? renderContextPreviewPopoverMeta(title, text) : ''}
+        </div>` as HTMLElement
+    }
+
+    function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boolean): string {
+        const baseClassName = 'workspace-ai-chat-panel-context-preview-popover'
+        if ((node.type !== 'image' && node.type !== 'video') || !hasPopoverMeta) return baseClassName
+        return `${baseClassName} ${baseClassName}-${getContextPreviewPopoverOrientation(node)}`
     }
 
     function destroyContextPreviewTooltips(): void {
@@ -2748,18 +2778,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const title = getContextPreviewTitle(node)
         const text = getContextPreviewText(node)
         const accessibleLabel = title || getContextPreviewTypeLabel(node)
-        const shouldRenderPopoverMeta = (node.type === 'image' || node.type === 'video') && Boolean(title || text)
         const previewTooltip = createHelpTooltip({
             label: accessibleLabel,
             triggerContent: renderContextPreviewVisual(node, accessibleLabel, text, 'mini'),
-            content: [
-                renderContextPreviewVisual(node, accessibleLabel, text, 'large'),
-                ...(shouldRenderPopoverMeta ? [renderContextPreviewPopoverMeta(title, text)] : []),
-            ],
+            content: renderContextPreviewPopoverContent(node, title, text, accessibleLabel),
             preferredPlacement: 'top',
             className: 'workspace-ai-chat-panel-context-preview-tooltip',
             triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
-            contentClassName: 'workspace-ai-chat-panel-context-preview-popover',
+            contentClassName: getContextPreviewPopoverClassName(node, Boolean(title || text)),
+            interactive: true,
         })
         const removeLabel = kind === 'auto'
             ? `Remove ${accessibleLabel} from automatic context`

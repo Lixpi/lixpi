@@ -271,7 +271,9 @@ class HelpTooltip implements HelpTooltipInstance {
         const margin = this.getCssPixelValue('--help-tooltip-viewport-margin', 8)
         if (this.config.preferredPlacement === 'top') {
             const availableHeight = triggerRect.top - viewportBounds.top - margin - offset
-            this.content.style.maxHeight = `${Math.max(0, availableHeight)}px`
+            this.content.style.setProperty('--help-tooltip-available-max-height', `${Math.max(0, availableHeight)}px`)
+        } else {
+            this.content.style.removeProperty('--help-tooltip-available-max-height')
         }
         const contentRect = this.content.getBoundingClientRect()
         const placement = this.choosePlacement(triggerRect, contentRect, viewportBounds, offset, margin)
