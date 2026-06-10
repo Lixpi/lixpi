@@ -11,7 +11,7 @@ This module renders the main workspace view: a zoomable, pannable canvas where d
 > - For context chips, automatic workspace relevance, reference-vs-lineage rules, generated-media provenance, and the balanced branch-tree layout, read [`documentation/ai-chat/CONTEXT-RELEVANCE.md`](../../../../../documentation/ai-chat/CONTEXT-RELEVANCE.md) and [`documentation/media-generation/BRANCH-LINEAGE.md`](../../../../../documentation/media-generation/BRANCH-LINEAGE.md).
 > - This README documents the local code shape — file roles, DOM structure, click and selection rules, AI chat thread layout, edge connection UX.
 
-> **Configuration rule.** Workspace-canvas values that are meant to be tuned - colors, shadows, dimensions, gaps, hit radii, resize cursor activation areas, animation timing, behavior flags, and generated-image placement spacing - belong in [`settings.ts`](../../settings.ts). Keep them in logical top-level subsections such as `aiChatThread`, `connector`, `imageNode`, and `imageBranchLineage`; use nested subsections for child domains such as `aiChatThread.rail` and `aiChatThread.panelTabs`; separate every group with a blank line before and after; and document every key with what changing it does. Use getters only when a setting needs to self-reference sibling settings through `this`; keep ordinary static values as plain properties.
+> **Configuration rule.** Workspace-canvas values belong in [`settings.ts`](../../settings.ts) only when they are supported product configuration or theme tokens. Keep behavior flags, interaction thresholds, semantic sizing knobs, generated-media placement spacing, colors, shadows, borders, border radii, line styles, and line thicknesses there. Put theme-only values under the nearest `styles` key, and keep non-style configuration at that group root. Do not add CSS mechanics to settings: `display`, `position`, offsets, z-index, grid templates, background repeat/size, component-internal padding/gaps, and typography metrics that exist only to make the layout fit stay in SCSS or local component code.
 
 ## What It Does
 
@@ -29,9 +29,9 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Add images** via the toolbar button which opens an upload modal
 - **Open the Media Library** from the independent bottom-right icon above the original zoom badge to browse Features, explicitly saved Images, or explicitly saved Videos; the canvas-owned full-height drawer shifts left when AI chat is open and covers its launcher while open
 - **Save media for reuse** from an image or video bubble menu; saved Media Library items are independent Object Store copies that survive removal of the source canvas node. Saving confirms in place (no panel switch) and re-saving the same source media reuses the existing item instead of duplicating it
-- **Connect nodes** by dragging from a handle, then use the AI Chat panel context tray and workspace relevance to decide what the next prompt sees
-- **Provide AI context** from explicit context chips while also sending a compact workspace descriptor snapshot with each chat turn
-- **Use the AI Chat panel composer** to send prompts with explicit context chips and workspace relevance
+- **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
+- **Provide AI context** from explicit composer previews while also sending a compact workspace descriptor snapshot with each chat turn
+- **Use the AI Chat panel composer** to send prompts with per-message context previews and workspace relevance
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
@@ -79,9 +79,13 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 ### AI Chat Panel And Sessions
 
-The canvas owns a singleton right-side AI Chat panel. The outside top-right toggle shows the chat icon while closed and the collapse icon while open, shifting left when the panel opens; it opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and explicit context chips are stored in `canvasState.aiChatPanel`. Open tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs`; the context chip tray sits above the composer, persists forced node ids, and can update without tearing down the ProseMirror draft.
+The canvas owns a singleton right-side AI Chat panel. The outside top-right toggle shows the chat icon while closed and the collapse icon while open, shifting left when the panel opens; it opens the panel with zero tabs if needed, without creating an `AiChatThread`. The first prompt creates a standalone history record. Open/closed panel state, ordered tabs, active tab, width, prompt drafts, and draft context previews are stored in `canvasState.aiChatPanel`. When more than one tab is open, tabs render through the shared SVG `components/slidingTabsSwitch` primitive, with geometry and slide timing configured by `settings.aiChatThread.panelTabs` and active-tab theming under `settings.aiChatThread.panelTabs.styles`; a single open tab renders only a section divider at the tab strip's top edge. The context previews render inside the ProseMirror composer, snapshot forced node ids on submit, clear after submit, and can update without tearing down the ProseMirror draft. Context preview hover cards use the shared `components/helpTooltip` primitive so placement stays clamped to the visible viewport while image and video previews fill their media container with normal sizing; portrait media places text beside the preview, and taller cards scroll after their bounded natural height. Their color, radius, border, and shadow tokens live in `settings.aiChatThread.contextPreview.styles`; fixed layout mechanics stay in `workspace-canvas.scss`.
 
-The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the context-control row; when expanded it renders directly under that row and above the tab switch. The plus control beside the history toggle starts a fresh draft with no context chips and no active tab; the durable chat is still created only when the user submits. Closing the last open tab uses that same blank-draft path so stale context chips, active thread ids, and legacy last-active-thread state cannot carry into the next prompt. Each history row shows a title, absolute update date plus relative recency, and session metadata such as chat message count, status, extraction provider, or source count. Its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
+The panel rail remeasures after prompt draft mutations and observes the active composer size so multi-line input and context-preview height changes keep the boundary circle aligned with the top of the composer.
+
+The Sessions surface includes standalone chats and feature-extraction sessions. It is collapsed by default and toggled from the history icon in the panel control row; when expanded it renders directly under that row and above the tab strip when multiple tabs are open. The plus control beside the history toggle closes Sessions and starts a fresh draft with no context chips; if another tab is already open, the draft gets its own tab and the existing session remains open. The durable chat is still created only when the user submits. Closing the active tab selects the tab to its right, or the new rightmost tab when the closed tab was already rightmost. Closing the last open tab uses that same blank-draft path so stale context chips, active thread ids, and legacy last-active-thread state cannot carry into the next prompt. Each history row shows a title, absolute update date plus relative recency, and session metadata such as chat message count, status, extraction provider, or source count. Its expanded state is persisted in `canvasState.aiChatPanel`. Closing any tab leaves its session reopenable. Standalone chats and extraction sessions can be deleted explicitly; deleting an extraction session does not delete a separately saved Feature.
+
+Session history colors, row hover gradient, and thread marker colors live under `settings.aiChatThread.sessionHistory.styles`; the shared panel divider border lives under `settings.aiChatThread.styles`. Fixed control sizing stays in `workspace-canvas.scss`.
 
 ### Legacy AI Chat Thread Nodes
 This section documents the older canvas-thread implementation that still has code and persisted data types in the repository. The current workspace renderer does not create or draw `aiChatThread` canvas nodes; active chat sessions live in the right-side AI Chat panel.
@@ -98,7 +102,7 @@ This section documents the older canvas-thread implementation that still has cod
 
 - A **vertical rail** element spans the full height of the thread node, the gap, and the floating input. It is a sibling element in the viewport (not nested inside the thread node) tracked via the `threadRails` Map. The rail uses a two-layer architecture:
 - **Outer container** (`.workspace-thread-rail`) — spans the full functional height (thread + gap + floating input). Handles drag interactions and connection proxy hit areas. Invisible by itself
-- **Inner visual line** (`.workspace-thread-rail-line`) — a child div whose height is limited to the thread node height via the `--rail-thread-height` CSS variable. Hosts the `::before` pseudo-element that renders the visible gradient line, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `settings.aiChatThread.rail.gradient` and `settings.aiChatThread.rail.width`
+- **Inner visual line** (`.workspace-thread-rail-line`) — a child div whose height is limited to the thread node height via the `--rail-thread-height` CSS variable. Hosts the `::before` pseudo-element that renders the visible gradient line, using the same `linear-gradient(135deg, …)` as model selector dropdown highlights, themed with `settings.aiChatThread.rail.styles.gradient` and `settings.aiChatThread.rail.styles.width`
 - **Drag handle** — clicking and dragging anywhere on the full-height outer container moves both the thread node and its floating input (reuses `handleDragStart`)
 - **Connection proxy** — all connector line left-side anchors are shifted to the rail position via `railOffset` in `WorkspaceConnectionManager`, so edges visually connect to the rail rather than the node edge. The anchor Y range spans the full rail height (thread + gap + floating input) via `railHeights`, so connectors slide from the very top to the very bottom of the rail. The top/bottom edge margin is configurable via `aiChatThreadRailEdgeMargin` (fractional, default 0.025). When the rail height is below `aiChatThreadRailMinSlideHeight` (default 120px) all connectors snap to the vertical center instead of sliding
 - **Menu-driven connect snap** — the image-node “Connect to node” action snaps against that same full rail geometry, including the floating input area for empty threads, and only commits the edge on mouse release so the snap preview is visible before creation. The snap distance is configurable via `settings.connector.menuConnectionSnapRadius`
@@ -231,7 +235,7 @@ Image nodes have a simpler structure:
 
 Generated-image provider badges, info buttons, and expanded provenance panels do not live inside the image node shell. They render in `.workspace-image-chrome-viewport`, above the PIXI media layer, so stored image sprites cannot cover them.
 
-Image pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [Rendering Engine](../../../../../documentation/canvas/RENDERING-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. Completed video playback is the exception: `videoNodeHandler.ts` still loads the poster into PIXI for stable canvas geometry, but `WorkspaceCanvas.ts` moves the attached `<video>` into `.workspace-video-chrome` for visible playback and controls. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the media sprite. Image/video corner rounding is configured through `settings.imageNode.borderRadius` and applied through the PIXI sprite mask or chrome surface.
+Image pixels are drawn by **PIXI** (see `pixiMediaLayer.ts` and [Rendering Engine](../../../../../documentation/canvas/RENDERING-ENGINE.md)). Canvas image nodes do not create a DOM `<img>` proxy. Progressive AI image partials and final stored images both update canvas state and render through PIXI. Completed video playback is the exception: `videoNodeHandler.ts` still loads the poster into PIXI for stable canvas geometry, but `WorkspaceCanvas.ts` moves the attached `<video>` into `.workspace-video-chrome` for visible playback and controls. While generation is active, the shared `PixiTravelingOutlineRenderer` draws a subdued rounded track and a traveling blue-purple-orange progress segment in `generatingBorderLayer`, above the media sprite. Image/video corner rounding is configured through `settings.imageNode.styles.borderRadius` and applied through the PIXI sprite mask or chrome surface.
 
 New PIXI image entries must initialize their sprite position, size, and placeholder rectangle during the same first `sync()` that inserts them into the spatial index. They should not need a later viewport change, click, or store render before their pixels line up with the DOM node.
 
@@ -295,7 +299,7 @@ Node selection is runtime-only UI state and is not persisted into `canvasState`.
 
 **Editor content bypass:** The `nodeEl` click handler checks `isContentEditable`, `.ProseMirror`, and `.ai-chat-thread-wrapper` and bails out before reaching `selectNode`. This prevents clicks inside AI chat thread content from triggering node selection UI (resize handles, outline), which would block text editing. Mod-click still fires through the bypass to allow toggling selection.
 
-**Image node shadows:** Image nodes use `settings.imageNode.defaultBoxShadow` in their default state and `selectedBoxShadow` when selected. The default shadow should stay subtler than the selected shadow so selection remains legible.
+**Image node shadows:** Image nodes use `settings.imageNode.styles.defaultBoxShadow` in their default state and `settings.imageNode.styles.selectedBoxShadow` when selected. The default shadow should stay subtler than the selected shadow so selection remains legible.
 
 #### Marquee Selection
 
@@ -343,7 +347,7 @@ Single-target canvas UI stays single-target:
 - The detached prompt input is deprecated; the active composer lives in the AI Chat panel
 - Legacy per-thread floating inputs remain attached only to old AI chat thread nodes if those nodes are ever rendered again
 
-Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `settings.selection` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
+Selection colors (marquee border/background, overlay border/background, thread-input outline) are configurable via `settings.selection.styles` and applied as CSS custom properties on the pane element. Clicking outside the selected range clears the selection.
 
 Note: viewport transforms are only re-applied when the saved viewport actually changes. This prevents temporary zoom/pan flashes when unrelated canvas updates (for example, image onload corrections) occur.
 
@@ -363,15 +367,15 @@ Edges are stored in `canvasState.edges` and rendered by the PIXI edge renderer. 
 
 ### AI Chat Context Extraction
 
-Standalone chat tabs use the panel's context chips as explicit forced context. Chips are resolved through the existing extraction service, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the panel adds distinct ephemeral auto chips for non-explicit selections and patches any `improvedDescriptors` into local canvas state so descriptor chrome updates without a reload.
+Standalone chat tabs use the composer context previews as explicit forced context for the next submitted message. Preview node ids are resolved through the existing extraction service, each submit snapshots then clears the explicit set, and each submit also sends a `WorkspaceContextSnapshot`: a descriptors-only index of context-bearing workspace nodes with chip and edge-forced flags for the API relevance stage. When the API streams `CONTEXT_RELEVANCE_RESOLVED`, the canvas uses those submitted-turn selections for generation placement/reference bookkeeping and patches any `improvedDescriptors` into local canvas state so descriptor chrome updates without a reload. Resolver-selected context never writes back into the draft composer.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart LR
-    DOC[Document Node] -->|explicit chip| CTX[ExtractedContext]
-    IMG[Image Node] -->|explicit chip| CTX
+    DOC[Document Node] -->|explicit preview| CTX[ExtractedContext]
+    IMG[Image Node] -->|explicit preview| CTX
     VID[Video Node] -->|representative still| CTX
-    CHAT[Canvas AI Chat Panel] -->|context chips| CTX
+    CHAT[Canvas AI Chat Panel] -->|composer context previews| CTX
     CHAT -->|WorkspaceContextSnapshot| SNAP[Descriptor Index]
     CTX -->|buildContextMessage| MSG[Multimodal Message]
     SNAP -->|descriptors only| MSG
@@ -379,10 +383,10 @@ flowchart LR
 
 The extraction flow:
 
-1. **Context source** - Standalone tabs call `extractSelectedContext({ nodeIds })` for explicit context chips
+1. **Context source** - Standalone tabs call `extractSelectedContext({ nodeIds })` for the explicit composer previews snapshotted on submit
 2. **Content extraction** - Documents and AI threads have their ProseMirror content parsed; embedded images are collected. Image nodes are fetched and converted to base64; video nodes contribute their representative still (`frameFileId`, falling back to poster) for normal model context
 3. **Workspace snapshot** - `buildWorkspaceContextSnapshot()` indexes all context-bearing nodes by descriptor summary/tags plus media object references and force-include flags; it never embeds pixel data
-4. **Resolution feedback** - `CONTEXT_RELEVANCE_RESOLVED` bypasses markdown parsing, renders removable auto chips for engine selections, and applies improved descriptors to the live canvas
+4. **Resolution feedback** - `CONTEXT_RELEVANCE_RESOLVED` bypasses markdown parsing, keeps engine selections scoped to the submitted turn, and applies improved descriptors to the live canvas
 5. **Message building** - `buildContextMessage()` formats explicit context as multimodal content blocks (`input_text` for text, `input_image` for images and video stills)
 6. **Submission** - The context message is prepended to the user's messages, and the workspace snapshot is sent alongside the chat request
 

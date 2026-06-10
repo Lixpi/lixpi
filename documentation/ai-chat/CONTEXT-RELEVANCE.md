@@ -33,14 +33,15 @@ nodes. `MediaDescriptor` remains an alias for media nodes, but the shared shape
 is `ContentDescriptor`. Full lifecycle, sourcing, and self-heal detail live in
 [Media and Content Descriptors](./MEDIA-DESCRIPTORS.md).
 
-**Context Chip** — A persisted explicit force-include in the AI Chat panel.
-Chips live in `CanvasState.aiChatPanel.contextChips`, render above the composer,
-and are removable by the user.
+**Context Chip** — An explicit force-include selected in the AI Chat panel.
+Chips live in `CanvasState.aiChatPanel.contextChips` for the current draft,
+render as media/document previews inside the composer, are removable by the
+user, and clear after submit.
 
-**Auto Chip** — An ephemeral chip created from `CONTEXT_RELEVANCE_RESOLVED`. Auto
-chips show what the relevance engine selected. They are visually distinct from
-explicit chips and can be removed from the current turn surface, but they are
-never persisted into panel state.
+**Automatic Selection** — A submitted-turn selection created from
+`CONTEXT_RELEVANCE_RESOLVED`. Automatic selections show what the relevance
+engine used for the request that is already in flight. They are never persisted
+into panel state and never injected into the draft composer.
 
 **Workspace Context Snapshot** — A browser-built descriptors-only request
 payload. It indexes context-bearing nodes with descriptor status, summary/tags,
@@ -88,8 +89,9 @@ The design keeps three boundaries clear:
   first; full content and pixels are resolved only for selected nodes.
 - **Explicit context is sacred.** Context chips and edge-forced nodes are
   force-included on every turn.
-- **Automatic context is visible.** Auto-selected nodes appear as removable auto
-  chips, not invisible prompt material.
+- **Automatic context is submitted-turn state.** Auto-selected nodes can be
+  shown in response, trace, or generated-media provenance surfaces, but they do
+  not mutate the next draft's composer context.
 - **One pixel authority.** The workspace relevance stage never decides
   target/style/reference visual roles for media. The structured VLM branch
   resolver does that.
@@ -113,7 +115,7 @@ the media bytes the resolver pulls stills from.
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 flowchart TB
     subgraph Browser["Browser Workspace"]
-        Panel[AI Chat Panel<br/>context chip tray]
+        Panel[AI Chat Panel<br/>composer context previews]
         Snapshot[buildWorkspaceContextSnapshot<br/>descriptors only]
         AIS[AiInteractionService]
         Canvas[WorkspaceCanvas.ts<br/>generation placement + branch-tree layout]
@@ -216,7 +218,7 @@ sequenceDiagram
         Note over Panel, Stream: PHASE 4 - PUBLISH + ASSEMBLE — Stream and build the request
         activate Resolver
         Resolver->>Stream: CONTEXT_RELEVANCE_RESOLVED {selections, improvedDescriptors, narrowedMediaNodeIds}
-        Stream-->>Panel: auto chips + descriptor patches
+        Stream-->>Panel: turn selections + descriptor patches
         Resolver->>Store: resolve selected content (ProseMirror, Object Store URLs, stills)
         Resolver->>Resolver: insert full content into state.messages
         deactivate Resolver
@@ -248,31 +250,34 @@ The stage can improve recall on text-only turns as well as media turns. For
 "summarize my canvas," it can select salient docs, threads, images, and videos
 without invoking pixel branch routing.
 
-## Context Chips vs Auto Chips
+## Context Chips vs Automatic Selections
 
-The AI Chat panel owns the context tray. Opening the panel creates no session
+The AI Chat panel owns the composer context previews. Opening the panel creates no session
 and no hidden canvas node; the first submit creates a standalone `AiChatThread`
 only when a prompt is sent (see
 [Chat Panel and Sessions](./CHAT-PANEL-AND-SESSIONS.md)).
 
-| Aspect | Context Chip (explicit) | Auto Chip |
+| Aspect | Context Chip (explicit) | Automatic selection |
 |--------|-------------------------|-----------|
 | Origin | User selects an eligible canvas node | Relevance engine selection in `CONTEXT_RELEVANCE_RESOLVED` |
-| Persistence | Stored in `CanvasState.aiChatPanel.contextChips` | Ephemeral; never persisted |
+| Persistence | Stored as the current draft's `CanvasState.aiChatPanel.contextChips`; cleared after submit | Ephemeral; never persisted |
 | Selection role | `forced-chip` | `auto` |
-| Force-included? | Always, on every turn | No — re-evaluated each turn |
-| Removal | User removes; persists | User removes from the visible turn surface only |
+| Force-included? | Yes, for the submitted turn | No — re-evaluated each turn |
+| Composer behavior | Renders in the draft composer until submit | Never renders in or mutates the draft composer |
 
-Explicit chips are persisted in `CanvasState.aiChatPanel.contextChips`.
-Selecting canvas nodes while the panel is open can add new eligible nodes as
-chips. Deleted nodes and duplicate IDs are sanitized out of panel state.
+Explicit chips are stored in `CanvasState.aiChatPanel.contextChips` while the
+prompt is being drafted. Selecting canvas nodes while the panel is open can add
+new eligible nodes as chips. Deleted nodes and duplicate IDs are sanitized out
+of panel state, and submit clears the explicit chip set after the turn snapshots
+it.
 Generated-media branch roots are normal image/video nodes. They can be selected
 as context like other media, and their branch provenance is reconstructed from
 `generatedBy` metadata (see [Branch Lineage](../media-generation/BRANCH-LINEAGE.md)).
 
-Auto chips are derived from the latest relevance resolution. They are not
-persisted. Removing an auto chip removes it from the visible turn context; the
-engine may select it again on a later turn if it is still relevant.
+Automatic selections are derived from the relevance resolution for the submitted
+turn. They are not persisted, and they do not become context previews for the
+next unsubmitted draft. The engine may select the same nodes again on a later
+turn if they are still relevant.
 
 ## Data Contracts
 
@@ -386,7 +391,7 @@ There is no live context-region feature page.
 ## References
 
 - [Media and Content Descriptors](./MEDIA-DESCRIPTORS.md) — descriptor shape, sourcing, self-heal, indicator
-- [Chat Panel and Sessions](./CHAT-PANEL-AND-SESSIONS.md) — the panel that owns the context tray
+- [Chat Panel and Sessions](./CHAT-PANEL-AND-SESSIONS.md) — the panel that owns composer context previews
 - [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md) — the `resolveWorkspaceContext` workflow node, routing, and usage
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — `CONTEXT_RELEVANCE_RESOLVED` and the full event catalog
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — `resolveImageBranch`, structured VLM media-role assignment, placement anchors

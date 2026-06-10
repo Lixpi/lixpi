@@ -10,6 +10,7 @@ This plugin powers prompt input editors. It provides:
 - An image model multi-select control (with size selector)
 - Multi-model selection state for upcoming reasoning/image/video fanout
 - Contextual help tooltips for the reasoning, image, and video model sections
+- Optional injected context-preview strip for surfaces that need composer-owned context chrome
 - A submit/stop button
 - Placeholder text when the input is empty
 - Keyboard shortcut support (Cmd/Ctrl + Enter to submit)
@@ -61,6 +62,7 @@ graph TD
 - **Decoupled from threads:** The plugin only handles input composition and extraction, never touches thread state or streaming
 - **Adapter pattern:** NodeView controls bridge ProseMirror node attrs (`aiModel`, `aiModels`, `imageGenerationSize`) to UI controls via getter/setter adapters
 - **Factory injection:** UI controls (dropdowns, buttons) are injected via factory functions, keeping the plugin framework-agnostic
+- **Optional context chrome:** Host surfaces can inject draft-owned context previews into the white input area without making the plugin own context state. Submitted-turn resolver feedback belongs outside the composer.
 - **Polling for external state:** Receiving state is synced via a 200ms polling interval since it's owned by external services, not plugin state
 
 ## Data Flow
@@ -167,6 +169,7 @@ The `createAiPromptInputNodeView` factory returns a ProseMirror NodeView with th
 
 ```
 div.ai-prompt-input-wrapper [data-empty="true"|"false"]
+├── [Optional context preview strip]   ← injected via createContextTray()
 ├── div.ai-prompt-input-content        ← contentDOM (editable)
 └── div.ai-prompt-input-controls
     ├── button.ai-prompt-model-menu-trigger
@@ -189,17 +192,18 @@ const modelControls: AiModelControls = {
 }
 ```
 
-This keeps the controls stateless — the ProseMirror document is the single source of truth. The bottom control row only shows the model settings trigger and submit button by default; model dropdowns live in the shared `BubbleMenu` surface. Section help uses the reusable `helpTooltip` TypeScript-html component, which positions its tooltip against the visible viewport instead of assuming there is room on one side.
+This keeps the controls stateless — the ProseMirror document is the single source of truth. The bottom control row only shows the model settings trigger and submit button by default; model dropdowns live in the shared `BubbleMenu` surface. Section help uses the reusable `helpTooltip` TypeScript-html component, which positions its tooltip against the visible viewport instead of assuming there is room on one side. When `createContextTray()` is supplied, the returned element is inserted before the editable content so context previews occupy the white input area and increase composer height without changing the gradient border container.
 
 ### State Synchronization
 
 - **Empty state:** `data-empty` attribute on the wrapper toggles placeholder visibility via SCSS. Updated on every `update()` call.
+- **Placeholder owner:** The NodeView copies `placeholderText` onto `.ai-prompt-input-content`, so injected context previews can push the editable content down while the placeholder stays aligned with the text insertion point.
 - **Receiving state:** The `receiving` CSS class on `.ai-prompt-input-controls` is polled every 200ms via `options.isReceiving()`. This external state comes from `AiPromptInputController.isReceiving()` which tracks which thread IDs are currently streaming.
 
 ### NodeView Lifecycle
 
 - **`ignoreMutation()`** — Returns `true` for mutations inside the controls container, preventing ProseMirror from recreating the NodeView when dropdowns or buttons change.
-- **`stopEvent()`** — Returns `true` for events targeting the controls container, preventing ProseMirror from stealing focus/clicks from dropdowns and buttons.
+- **`stopEvent()`** — Returns `true` for events targeting the controls container or injected context preview strip, preventing ProseMirror from stealing focus/clicks from dropdowns, buttons, and context preview remove controls.
 - **`update()`** — Accepts updates only for `aiPromptInput` nodes. Syncs empty state, receiving state, and calls `update()` on every model dropdown.
 - **`destroy()`** — Clears the receiving poll interval, destroys the model `BubbleMenu`, and calls `destroy()` on dropdowns.
 
@@ -222,6 +226,7 @@ createAiPromptInputPlugin({
     onSubmit: (data) => { /* { contentJSON, aiModel, imageOptions } */ },
     onStop: () => { /* stop streaming */ },
     isReceiving: () => boolean,
+    createContextTray: () => HTMLElement | null,
     createModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createImageModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createImageSizeDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
@@ -248,7 +253,10 @@ A single decoration layer: **placeholder decoration**. When the `aiPromptInput` 
 - Class: `empty-node-placeholder`
 - Attribute: `data-placeholder` set to the configured `placeholderText`
 
-SCSS renders the placeholder via `::before` pseudo-element using `content: attr(data-placeholder)`.
+The visible placeholder is rendered by `.ai-prompt-input-content::before`. The
+NodeView copies `placeholderText` onto the content element so the placeholder
+belongs to the editable text area, not to the wrapper that can also contain
+injected context previews.
 
 ## Integration with WorkspaceCanvas
 
@@ -263,7 +271,7 @@ The active panel composer:
 - Uses `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
 - Receives the shared model, image, video, and submit controls from `primitives/aiControls/`
 - Renders inside a `.ai-prompt-input-floating.workspace-ai-chat-floating-panel-prompt` container with optional shifting gradient background (controlled by `settings.aiPromptInput.useShiftingGradientBackground`; see [Visual Effects](../../../../../../../documentation/canvas/VISUAL-EFFECTS.md))
-- Model settings menu colors, sizing, separators, z-index, and shadow are configured through `settings.aiPromptInput.modelMenu`; the shadow is a separate setting with the same default visual value as dropdown popovers.
+- Model settings menu colors, radii, divider styling, and shadows are configured through `settings.aiPromptInput.modelMenu.styles`. Layout mechanics such as grid shape, padding, width limits, z-index, and tooltip sizing stay in `ai-prompt-input.scss`.
 
 ## Styling
 

@@ -984,7 +984,7 @@ export type ExtractionRun = {
 
 export type CanvasAiChatSidebarTab = {
     tabId: string
-    type: 'thread' | 'extraction'
+    type: 'thread' | 'extraction' | 'draft'
     refId: string
     title: string
 }

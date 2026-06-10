@@ -44,7 +44,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, xIcon, aiChatPanelToggleHistoryIcon, xCircleIcon as plusIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -115,6 +115,7 @@ import {
     createSlidingTabsSwitch,
     type SlidingTabsSwitchInstance,
 } from '$src/components/slidingTabsSwitch/index.ts'
+import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
@@ -128,11 +129,65 @@ type CollisionPlan = {
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
-const BRANCH_ORIGIN_NODE_DIMENSIONS = { width: 72, height: 72 }
+const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
+const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
+    '--workspace-ai-chat-panel-context-preview-tooltip-background',
+    '--workspace-ai-chat-panel-context-preview-tooltip-border',
+    '--workspace-ai-chat-panel-context-preview-tooltip-border-radius',
+    '--workspace-ai-chat-panel-context-preview-tooltip-box-shadow',
+    '--workspace-ai-chat-panel-context-preview-tooltip-color',
+    '--workspace-ai-chat-panel-context-preview-border-radius',
+    '--workspace-ai-chat-panel-context-preview-video-background',
+    '--workspace-ai-chat-panel-context-preview-video-glyph-background',
+    '--workspace-ai-chat-panel-context-preview-video-glyph-color',
+    '--workspace-ai-chat-panel-context-preview-document-color',
+    '--workspace-ai-chat-panel-context-preview-document-icon-color',
+    '--workspace-ai-chat-panel-context-preview-document-text-color',
+    '--workspace-ai-chat-panel-context-preview-popover-title-color',
+    '--workspace-ai-chat-panel-context-preview-popover-text-color',
+]
 
 function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
-    promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
-    promptEl.style.setProperty('--ai-prompt-model-menu-open-prompt-z-index', settings.aiPromptInput.modelMenu.openPromptZIndex)
+    promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
+}
+
+function applyAiChatPanelSessionHistorySettings(panelEl: HTMLElement): void {
+    const sessionHistoryStyles = settings.aiChatThread.sessionHistory.styles
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-control-color', sessionHistoryStyles.controlColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-control-hover-color', sessionHistoryStyles.controlHoverColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-history-toggle-hover-background', sessionHistoryStyles.historyToggleHoverBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-action-hover-background', sessionHistoryStyles.actionHoverBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-action-hover-color', sessionHistoryStyles.actionHoverColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-delete-color', sessionHistoryStyles.deleteColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-hover-background-image', sessionHistoryStyles.hoverBackgroundImage)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-thread-marker-background', sessionHistoryStyles.threadMarkerBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-session-thread-marker-box-shadow', sessionHistoryStyles.threadMarkerBoxShadow)
+}
+
+function applyAiChatPanelContextPreviewSettings(panelEl: HTMLElement): void {
+    const contextPreviewStyles = settings.aiChatThread.contextPreview.styles
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-controls-color', contextPreviewStyles.controlsColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-background', contextPreviewStyles.chipBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-trigger-border-radius', contextPreviewStyles.triggerBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-border-radius', contextPreviewStyles.previewBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-background', contextPreviewStyles.tooltipBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-border', contextPreviewStyles.tooltipBorder)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-border-radius', contextPreviewStyles.tooltipBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-box-shadow', contextPreviewStyles.tooltipBoxShadow)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-tooltip-color', contextPreviewStyles.tooltipColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-video-background', contextPreviewStyles.videoBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-video-glyph-background', contextPreviewStyles.videoGlyphBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-video-glyph-color', contextPreviewStyles.videoGlyphColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-color', contextPreviewStyles.documentColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-skeleton-line-border-radius', contextPreviewStyles.documentSkeletonLineBorderRadius)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-skeleton-line-background', contextPreviewStyles.documentSkeletonLineBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-icon-color', contextPreviewStyles.documentIconColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-document-text-color', contextPreviewStyles.documentTextColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-popover-title-color', contextPreviewStyles.popoverTitleColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-preview-popover-text-color', contextPreviewStyles.popoverTextColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-remove-background', contextPreviewStyles.removeButtonBackground)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-remove-color', contextPreviewStyles.removeButtonColor)
+    panelEl.style.setProperty('--workspace-ai-chat-panel-context-chip-remove-box-shadow', contextPreviewStyles.removeButtonBoxShadow)
 }
 
 type DocumentEditorEntry = {
@@ -240,18 +295,21 @@ function defaultPanZoomConfig(onTransformChange: (transform: Transform) => void)
 export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const { paneEl, viewportEl, onViewportChange, onCanvasStateChange, onDocumentContentChange, onDocumentTitleChange, onAiChatThreadContentChange } = options
     let workspaceId = options.workspaceId
+    const connectorStyles = settings.connector.styles
+    const selectionStyles = settings.selection.styles
+    const imageNodeStyles = settings.imageNode.styles
 
-    paneEl.style.setProperty('--connector-line-default-color', settings.connector.lineDefaultColor)
-    paneEl.style.setProperty('--connector-line-focus-color', settings.connector.lineFocusColor)
-    paneEl.style.setProperty('--selection-marquee-border-color', settings.selection.marqueeBorderColor)
-    paneEl.style.setProperty('--selection-marquee-background-color', settings.selection.marqueeBackgroundColor)
-    paneEl.style.setProperty('--selection-overlay-border-color', settings.selection.overlayBorderColor)
-    paneEl.style.setProperty('--selection-overlay-background-color', settings.selection.overlayBackgroundColor)
-    paneEl.style.setProperty('--selection-outline-color', settings.selection.outlineColor)
-    paneEl.style.setProperty('--workspace-image-default-box-shadow', settings.imageNode.defaultBoxShadow)
-    paneEl.style.setProperty('--workspace-image-selected-box-shadow', settings.imageNode.selectedBoxShadow)
-    paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)
-    paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)
+    paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
+    paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
+    paneEl.style.setProperty('--selection-marquee-border-color', selectionStyles.marqueeBorderColor)
+    paneEl.style.setProperty('--selection-marquee-background-color', selectionStyles.marqueeBackgroundColor)
+    paneEl.style.setProperty('--selection-overlay-border-color', selectionStyles.overlayBorderColor)
+    paneEl.style.setProperty('--selection-overlay-background-color', selectionStyles.overlayBackgroundColor)
+    paneEl.style.setProperty('--selection-outline-color', selectionStyles.outlineColor)
+    paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)
+    paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
+    paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
+    paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
@@ -305,9 +363,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPanelTabsSwitch: SlidingTabsSwitchInstance<string> | null = null
     let activeAiChatPromptEditor: any = null
     let activeAiChatPromptGradient: { destroy: () => void; triggerAnimation: () => void } | null = null
+    let activeAiChatPromptResizeObserver: ResizeObserver | null = null
+    let activeAiChatPanelRailHeightFrame: number | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
-    let autoContextSelections: WorkspaceContextSelection[] = []
-    const removedAutoContextChipNodeIds: Set<string> = new Set()
+    const activeContextPreviewTooltips: Set<HelpTooltipInstance> = new Set()
+    let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     const mediaLibraryService = new MediaLibraryService()
     let activeAiChatSidebarThreadId: string | null = null
@@ -345,10 +405,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let videoNodeHandler: VideoNodeHandlerControl | null = null
 
     const pixiSelectionColors: SelectionColors = {
-        marqueeStroke: settings.selection.marqueeBorderColor,
-        marqueeFill: settings.selection.marqueeBackgroundColor,
-        groupOverlayStroke: settings.selection.overlayBorderColor,
-        groupOverlayFill: settings.selection.overlayBackgroundColor,
+        marqueeStroke: selectionStyles.marqueeBorderColor,
+        marqueeFill: selectionStyles.marqueeBackgroundColor,
+        groupOverlayStroke: selectionStyles.overlayBorderColor,
+        groupOverlayFill: selectionStyles.overlayBackgroundColor,
     }
     pixiMediaLayer = createPixiMediaLayer({
         paneEl,
@@ -1917,8 +1977,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
         scheduleEdgesRender()
         // Selecting canvas nodes while the panel is open force-includes them as
-        // explicit context chips. Only newly-selected ids are added so removing a
-        // chip whose node stays selected doesn't immediately re-add it.
+        // explicit composer previews. Only newly-selected ids are added so a
+        // removed preview whose node stays selected isn't immediately re-added.
         if (currentCanvasState && aiChatPanelState.isOpen) {
             addContextChips(Array.from(selectedNodeIds).filter((nodeId) => !prevSelectedNodeIds.has(nodeId)))
         }
@@ -2109,8 +2169,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getPromptControlFactories() {
         return {
-            createModelDropdown: createGenericAiModelMultiSelect,
-            createImageModelDropdown: createGenericImageModelMultiSelect,
+            createContextTray: createAiChatPanelContextTrayElement,
+            createModelDropdown: createGenericAiModelDropdown,
+            createImageModelDropdown: createGenericImageModelDropdown,
             createImageSizeDropdown: createGenericImageSizeDropdown,
             createVideoModelDropdown: createGenericVideoModelMultiSelect,
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
@@ -2156,7 +2217,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function resizeActiveAiChatPanelTabsSwitch(): void {
-        if (!activeAiChatPanelTabsSwitch || !activeAiChatPanelEl || aiChatSidebarTabs.length === 0) return
+        if (!activeAiChatPanelTabsSwitch || !activeAiChatPanelEl || aiChatSidebarTabs.length < 2) return
 
         const switchHeight = settings.aiChatThread.panelTabs.height
         const tabsEl = activeAiChatPanelEl.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-tabs')
@@ -2387,7 +2448,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         activeAiChatPromptEditor?.destroy?.()
         activeAiChatPromptGradient?.destroy()
+        activeAiChatPromptResizeObserver?.disconnect()
+        if (activeAiChatPanelRailHeightFrame !== null) {
+            cancelAnimationFrame(activeAiChatPanelRailHeightFrame)
+            activeAiChatPanelRailHeightFrame = null
+        }
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
+        destroyContextPreviewTooltips()
         activeAiChatPanelEl?.remove()
         activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
@@ -2398,6 +2465,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch = null
         activeAiChatPromptEditor = null
         activeAiChatPromptGradient = null
+        activeAiChatPromptResizeObserver = null
         activeContextChipTrayEl = null
 
         if (clearActive) {
@@ -2420,6 +2488,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createAiChatThreadSidebarTab(threadId: string): CanvasAiChatSidebarTab {
         return { tabId: `thread:${threadId}`, type: 'thread', refId: threadId, title: 'AI Chat' }
+    }
+
+    function createAiChatDraftSidebarTab(): CanvasAiChatSidebarTab {
+        const draftId = uuidv4()
+        return { tabId: `${AI_CHAT_DRAFT_TAB_PREFIX}${draftId}`, type: 'draft', refId: draftId, title: 'AI Chat' }
+    }
+
+    function replaceAiChatDraftSidebarTab(draftTabId: string, threadId: string): void {
+        const threadTab = createAiChatThreadSidebarTab(threadId)
+        let replacedDraftTab = false
+        aiChatSidebarTabs = aiChatSidebarTabs.map((tab) => {
+            if (tab.tabId !== draftTabId) return tab
+            replacedDraftTab = true
+            return threadTab
+        })
+        if (!replacedDraftTab && !aiChatSidebarTabs.some((tab) => tab.tabId === threadTab.tabId)) {
+            aiChatSidebarTabs.unshift(threadTab)
+        }
+
+        const drafts = { ...(aiChatPanelState.drafts ?? {}) }
+        delete drafts[draftTabId]
+        aiChatPanelState = { ...aiChatPanelState, drafts }
     }
 
     function persistAiChatSidebarState(): void {
@@ -2448,9 +2538,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasMetadataState(persistedState)
     }
 
-    // A short, human-readable label for a context chip. Prefer the node's ready
-    // descriptor summary (Phase 2) and fall back to a type label so a chip is
-    // never blank while its descriptor is still being generated.
+    // A short visible label for context metadata. Media previews are already
+    // visual, so unresolved image/video descriptors stay label-free.
     function getContextChipLabel(node: CanvasNode): string {
         const descriptor = isDescriptorCanvasNode(node) ? node.descriptor : undefined
         const summary = descriptor && descriptor.status === 'ready' ? descriptor.summary : ''
@@ -2458,11 +2547,252 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (trimmed) return trimmed
         switch (node.type) {
             case 'document': return 'Document'
+            case 'aiChatThread': return 'Chat'
+            case 'image':
+            case 'video': return ''
+            default: return node.type
+        }
+    }
+
+    function getContextPreviewTitle(node: CanvasNode): string {
+        if (node.type === 'document') {
+            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
+            const title = document?.title?.trim()
+            if (title) return title
+        }
+        if (node.type === 'aiChatThread') {
+            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
+            const title = thread?.title?.trim()
+            if (title) return title
+        }
+        if (node.type === 'image' || node.type === 'video') return ''
+        return getContextChipLabel(node)
+    }
+
+    function getContextPreviewText(node: CanvasNode): string {
+        const descriptor = isDescriptorCanvasNode(node) && node.descriptor?.status === 'ready'
+            ? node.descriptor.summary.trim()
+            : ''
+        if (descriptor) return descriptor
+
+        if (node.type === 'document') {
+            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
+            const { text } = extractContentFromProseMirror((document?.content ?? '') as string | object)
+            return text.trim()
+        }
+
+        if (node.type === 'aiChatThread') {
+            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
+            const { text } = extractContentFromProseMirror((thread?.content ?? '') as string | object)
+            return text.trim()
+        }
+
+        return ''
+    }
+
+    function getContextPreviewTypeLabel(node: CanvasNode): string {
+        switch (node.type) {
+            case 'document': return 'Document'
             case 'image': return 'Image'
             case 'video': return 'Video'
             case 'aiChatThread': return 'Chat'
             default: return node.type
         }
+    }
+
+    function buildContextPreviewInitialMediaSrc(mediaUrl: string): string {
+        if (!mediaUrl) return ''
+        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
+        if (mediaUrl.startsWith('/api/') || mediaUrl.startsWith('http')) return mediaUrl
+        return `data:image/png;base64,${mediaUrl}`
+    }
+
+    function setContextPreviewMediaTokenParam(mediaUrl: string, token: string): string {
+        if (!token) return mediaUrl
+        const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(mediaUrl)
+        try {
+            const url = isAbsoluteUrl ? new URL(mediaUrl) : new URL(mediaUrl, window.location.origin)
+            url.searchParams.set('token', token)
+            if (isAbsoluteUrl) return url.toString()
+            return `${url.pathname}${url.search}${url.hash}`
+        } catch {
+            const separator = mediaUrl.includes('?') ? '&' : '?'
+            return `${mediaUrl}${separator}token=${encodeURIComponent(token)}`
+        }
+    }
+
+    async function buildContextPreviewAuthenticatedMediaSrc(mediaUrl: string): Promise<string> {
+        if (!mediaUrl) return ''
+        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
+        if (mediaUrl.startsWith('/api/')) {
+            const token = await AuthService.getTokenSilently()
+            const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+            const sourceUrl = apiBaseUrl ? `${apiBaseUrl}${mediaUrl}` : mediaUrl
+            return setContextPreviewMediaTokenParam(sourceUrl, token)
+        }
+        if (mediaUrl.startsWith('http')) {
+            if (mediaUrl.includes('/api/videos/') || mediaUrl.includes('/api/images/')) {
+                const token = await AuthService.getTokenSilently()
+                return setContextPreviewMediaTokenParam(mediaUrl, token)
+            }
+            return mediaUrl
+        }
+        return `data:image/png;base64,${mediaUrl}`
+    }
+
+    function hydrateContextPreviewMedia(el: HTMLImageElement | HTMLVideoElement, mediaUrl: string, attr: 'src' | 'poster' = 'src'): void {
+        if (!mediaUrl) return
+        void (async () => {
+            try {
+                const src = await buildContextPreviewAuthenticatedMediaSrc(mediaUrl)
+                if (!src || !el.isConnected) return
+                if (attr === 'poster' && el instanceof HTMLVideoElement) {
+                    el.poster = src
+                    return
+                }
+                el.src = src
+            } catch (error) {
+                console.warn('Failed to resolve context preview media URL:', error)
+            }
+        })()
+    }
+
+    function setContextPreviewVideoSources(videoEl: HTMLVideoElement, node: VideoCanvasNode): void {
+        const initialSrc = buildContextPreviewInitialMediaSrc(node.src)
+        const initialPoster = buildContextPreviewInitialMediaSrc(node.posterSrc)
+        if (initialSrc) videoEl.src = initialSrc
+        if (initialPoster) videoEl.poster = initialPoster
+        hydrateContextPreviewMedia(videoEl, node.src)
+        hydrateContextPreviewMedia(videoEl, node.posterSrc, 'poster')
+    }
+
+    function renderContextImagePreview(node: ImageCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
+        const imageEl = html`<img
+            className=${`workspace-ai-chat-panel-context-preview-image workspace-ai-chat-panel-context-preview-image-${size}`}
+            src=${buildImageSrc(node.src, '', false)}
+            alt=""
+            loading="lazy"
+        />` as HTMLImageElement
+        imageEl.setAttribute('aria-label', label)
+        hydrateContextPreviewMedia(imageEl, node.src)
+        return imageEl
+    }
+
+    function renderContextVideoPreview(node: VideoCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
+        if (size === 'large') {
+            const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-large">
+                <video
+                    muted="true"
+                    playsinline="true"
+                    preload="metadata"
+                    controls="true"
+                    aria-label=${label}
+                ></video>
+                <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
+            </div>` as HTMLElement
+            const videoEl = previewEl.querySelector('video')
+            if (videoEl) setContextPreviewVideoSources(videoEl, node)
+            return previewEl
+        }
+
+        const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-mini">
+            <video
+                muted="true"
+                playsinline="true"
+                preload="metadata"
+                aria-label=${label}
+            ></video>
+            <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
+        </div>` as HTMLElement
+        const videoEl = previewEl.querySelector('video')
+        if (videoEl) setContextPreviewVideoSources(videoEl, node)
+        return previewEl
+    }
+
+    function renderContextDocumentPreview(node: DocumentCanvasNode | AiChatThreadCanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
+        if (size === 'mini') {
+            return html`<div className="workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-mini">
+                <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
+                <span className="workspace-ai-chat-panel-context-preview-document-skeleton" aria-label=${title}>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </div>` as HTMLElement
+        }
+
+        return html`<div className=${`workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-${size}`}>
+            <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
+            <span className="workspace-ai-chat-panel-context-preview-document-lines">
+                <span className="workspace-ai-chat-panel-context-preview-document-title">${title}</span>
+                <span className="workspace-ai-chat-panel-context-preview-document-text">${text || getContextPreviewTypeLabel(node)}</span>
+            </span>
+        </div>` as HTMLElement
+    }
+
+    function renderContextPreviewVisual(node: CanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
+        if (node.type === 'image') return renderContextImagePreview(node, title, size)
+        if (node.type === 'video') return renderContextVideoPreview(node, title, size)
+        if (node.type === 'document' || node.type === 'aiChatThread') {
+            return renderContextDocumentPreview(node, title, text, size)
+        }
+        return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
+    }
+
+    type ContextPreviewPopoverOrientation = 'landscape' | 'portrait'
+
+    function getContextPreviewPopoverOrientation(node: ImageCanvasNode | VideoCanvasNode): ContextPreviewPopoverOrientation {
+        if (Number.isFinite(node.aspectRatio) && node.aspectRatio > 0) {
+            return node.aspectRatio < 1 ? 'portrait' : 'landscape'
+        }
+        return node.dimensions.height > node.dimensions.width ? 'portrait' : 'landscape'
+    }
+
+    function renderContextPreviewPopoverMeta(title: string, text: string): HTMLElement {
+        return html`<div className="workspace-ai-chat-panel-context-preview-popover-meta">
+            ${title ? html`<span className="workspace-ai-chat-panel-context-preview-popover-title">${title}</span>` : ''}
+            ${text ? html`<span className="workspace-ai-chat-panel-context-preview-popover-text">${text}</span>` : ''}
+        </div>` as HTMLElement
+    }
+
+    function renderContextPreviewPopoverContent(node: CanvasNode, title: string, text: string, accessibleLabel: string): HTMLElement {
+        if (node.type !== 'image' && node.type !== 'video') {
+            return renderContextPreviewVisual(node, accessibleLabel, text, 'large')
+        }
+
+        const hasPopoverMeta = Boolean(title || text)
+        const orientation = hasPopoverMeta ? getContextPreviewPopoverOrientation(node) : 'landscape'
+        return html`<div className=${`workspace-ai-chat-panel-context-preview-popover-body workspace-ai-chat-panel-context-preview-popover-body-${orientation}`}>
+            <div className="workspace-ai-chat-panel-context-preview-popover-media">
+                ${renderContextPreviewVisual(node, accessibleLabel, text, 'large')}
+            </div>
+            ${hasPopoverMeta ? renderContextPreviewPopoverMeta(title, text) : ''}
+        </div>` as HTMLElement
+    }
+
+    function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boolean): string {
+        const baseClassName = 'workspace-ai-chat-panel-context-preview-popover'
+        if ((node.type !== 'image' && node.type !== 'video') || !hasPopoverMeta) return baseClassName
+        return `${baseClassName} ${baseClassName}-${getContextPreviewPopoverOrientation(node)}`
+    }
+
+    function destroyContextPreviewTooltips(): void {
+        for (const tooltip of activeContextPreviewTooltips) {
+            tooltip.destroy()
+        }
+        activeContextPreviewTooltips.clear()
+    }
+
+    function createAiChatPanelContextTrayElement(): HTMLDivElement {
+        const trayEl = html`<div
+            className="workspace-ai-chat-panel-context-chips"
+            role="list"
+            aria-label="Chat context previews"
+            contenteditable="false"
+        ></div>` as HTMLDivElement
+        activeContextChipTrayEl = trayEl
+        refreshContextChipTray()
+        return trayEl
     }
 
     function addContextChips(nodeIds: Iterable<string>): void {
@@ -2492,98 +2822,112 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         refreshContextChipTray()
     }
 
-    function removeAutoContextChip(nodeId: string): void {
-        if (!autoContextSelections.some((selection) => selection.nodeId === nodeId)) return
-        removedAutoContextChipNodeIds.add(nodeId)
+    function clearExplicitContextChips(): void {
+        if (aiChatPanelState.contextChips.length === 0) return
+        aiChatPanelState = { ...aiChatPanelState, contextChips: [] }
+        persistAiChatSidebarState()
         refreshContextChipTray()
     }
 
-    function clearAutoContextChips(): void {
-        if (autoContextSelections.length === 0 && removedAutoContextChipNodeIds.size === 0) return
-        autoContextSelections = []
-        removedAutoContextChipNodeIds.clear()
-        refreshContextChipTray()
+    function updateActiveAiChatPanelRailHeight(): void {
+        if (!activeAiChatPanelEl) return
+        const panelRail = activeAiChatPanelEl.querySelector<HTMLElement>('.workspace-ai-chat-floating-panel-rail')
+        if (!panelRail) return
+        panelRail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(activeAiChatPanelEl)}px`)
+    }
+
+    function scheduleActiveAiChatPanelRailHeightUpdate(): void {
+        if (activeAiChatPanelRailHeightFrame !== null) return
+        activeAiChatPanelRailHeightFrame = requestAnimationFrame(() => {
+            activeAiChatPanelRailHeightFrame = null
+            updateActiveAiChatPanelRailHeight()
+        })
+    }
+
+    function restoreAiChatPanelHistoryScroll(historyScrollerEl: HTMLElement | null | undefined, scrollTop: number | null, refreshVersion: number): void {
+        if (!historyScrollerEl || scrollTop === null) return
+        historyScrollerEl.scrollTop = scrollTop
+        requestAnimationFrame(() => {
+            if (refreshVersion !== contextPreviewRefreshVersion) return
+            if (historyScrollerEl.isConnected) historyScrollerEl.scrollTop = scrollTop
+            updateActiveAiChatPanelRailHeight()
+        })
     }
 
     function renderContextChip({
         nodeId,
-        label,
-        kind,
-        role,
+        node,
     }: {
         nodeId: string
-        label: string
-        kind: 'explicit' | 'auto'
-        role?: WorkspaceContextSelection['role']
-    }): HTMLSpanElement {
-        const removeLabel = kind === 'auto'
-            ? `Remove ${label} from automatic context`
-            : `Remove ${label} from context`
-        const chipEl = html`<span
-            className=${`workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-${kind}`}
-            data=${{ nodeId, contextKind: kind, contextRole: role ?? kind }}
-            title=${label}
+        node: CanvasNode
+    }): HTMLDivElement {
+        const title = getContextPreviewTitle(node)
+        const text = getContextPreviewText(node)
+        const accessibleLabel = title || getContextPreviewTypeLabel(node)
+        const previewTooltip = createHelpTooltip({
+            label: accessibleLabel,
+            triggerContent: renderContextPreviewVisual(node, accessibleLabel, text, 'mini'),
+            content: renderContextPreviewPopoverContent(node, title, text, accessibleLabel),
+            preferredPlacement: 'top',
+            className: 'workspace-ai-chat-panel-context-preview-tooltip',
+            triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
+            contentClassName: getContextPreviewPopoverClassName(node, Boolean(title || text)),
+            contentCssVariableNames: AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
+            interactive: true,
+        })
+        const removeLabel = `Remove ${accessibleLabel} from context`
+        activeContextPreviewTooltips.add(previewTooltip)
+        const chipEl = html`<div
+            className="workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-explicit"
+            data=${{ nodeId, contextKind: 'explicit', contextRole: 'forced-chip' }}
+            role="listitem"
         >
-            <span className="workspace-ai-chat-panel-context-chip-label">${label}</span>
+            <div className="workspace-ai-chat-panel-context-preview-main">
+                ${previewTooltip.dom}
+            </div>
             <button
                 type="button"
                 className="workspace-ai-chat-panel-context-chip-remove"
                 aria-label=${removeLabel}
-                innerHTML=${xIcon}
+                innerHTML=${xCircleIcon}
             ></button>
-        </span>` as HTMLSpanElement
+        </div>` as HTMLDivElement
         chipEl.querySelector('.workspace-ai-chat-panel-context-chip-remove')
-            ?.addEventListener('click', () => {
-                if (kind === 'auto') {
-                    removeAutoContextChip(nodeId)
-                    return
-                }
-                removeContextChip(nodeId)
-            })
+            ?.addEventListener('click', () => removeContextChip(nodeId))
         return chipEl
     }
 
-    // Re-render just the chip tray in place (not the whole panel) so adding or
-    // removing a chip never tears down the ProseMirror composer or its draft.
+    // Re-render just the composer preview strip in place so adding or removing
+    // draft context never tears down the ProseMirror composer or its draft.
     function refreshContextChipTray(): void {
         const trayEl = activeContextChipTrayEl
         if (!trayEl) return
+        const historyScrollerEl = activeAiChatPanelEl?.querySelector<HTMLElement>(
+            '.workspace-ai-chat-panel-body-pane:not(.workspace-ai-chat-panel-body-pane-hidden)'
+        )
+        const previousScrollTop = historyScrollerEl?.scrollTop ?? null
+        const refreshVersion = ++contextPreviewRefreshVersion
+        destroyContextPreviewTooltips()
         trayEl.replaceChildren()
         const explicitChipNodeIds = aiChatPanelState.contextChips
-        const explicitChipNodeIdSet = new Set(explicitChipNodeIds)
         const nodesById = new Map(currentCanvasState?.nodes.map((node): [string, CanvasNode] => [node.nodeId, node]) ?? [])
-        const autoChipSelections: WorkspaceContextSelection[] = []
-        const autoChipNodeIds = new Set<string>()
-        for (const selection of autoContextSelections) {
-            if (selection.role === 'forced-chip') continue
-            if (explicitChipNodeIdSet.has(selection.nodeId)) continue
-            if (removedAutoContextChipNodeIds.has(selection.nodeId)) continue
-            if (!nodesById.has(selection.nodeId)) continue
-            if (autoChipNodeIds.has(selection.nodeId)) continue
-            autoChipNodeIds.add(selection.nodeId)
-            autoChipSelections.push(selection)
-        }
-        if (explicitChipNodeIds.length === 0 && autoChipSelections.length === 0) {
-            trayEl.appendChild(
-                html`<span className="workspace-ai-chat-panel-context-chips-empty">Select nodes to add context</span>` as HTMLSpanElement
-            )
-            return
-        }
+        const explicitChipNodes: CanvasNode[] = []
         for (const nodeId of explicitChipNodeIds) {
             const node = nodesById.get(nodeId)
-            const label = node ? getContextChipLabel(node) : 'Node'
-            trayEl.appendChild(renderContextChip({ nodeId, label, kind: 'explicit' }))
+            if (node) explicitChipNodes.push(node)
         }
-        for (const selection of autoChipSelections) {
-            const node = nodesById.get(selection.nodeId)
-            const label = node ? getContextChipLabel(node) : 'Node'
-            trayEl.appendChild(renderContextChip({
-                nodeId: selection.nodeId,
-                label,
-                kind: 'auto',
-                role: selection.role,
-            }))
+        if (explicitChipNodes.length === 0) {
+            trayEl.hidden = true
+            restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
+            updateActiveAiChatPanelRailHeight()
+            return
         }
+        trayEl.hidden = false
+        for (const node of explicitChipNodes) {
+            trayEl.appendChild(renderContextChip({ nodeId: node.nodeId, node }))
+        }
+        restoreAiChatPanelHistoryScroll(historyScrollerEl, previousScrollTop, refreshVersion)
+        updateActiveAiChatPanelRailHeight()
     }
 
     function getPersistedFeatureExtractionState(extractionRunId: string): CanvasFeatureExtractionState | undefined {
@@ -2794,22 +3138,34 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         void loadExtractionSessionHistory()
     }
 
-    function startNewAiChatDraft(): void {
-        syncActiveAiChatPanelFromState()
+    function startNewAiChatDraft({
+        preserveOpenTabs = true,
+        syncFromState = true,
+    }: {
+        preserveOpenTabs?: boolean
+        syncFromState?: boolean
+    } = {}): void {
+        if (syncFromState) syncActiveAiChatPanelFromState()
         const drafts = { ...(aiChatPanelState.drafts ?? {}) }
         delete drafts[NEW_CHAT_DRAFT_KEY]
-        aiChatSidebarTabs = []
-        activeAiChatSidebarTabId = null
+        if (preserveOpenTabs && aiChatSidebarTabs.length > 0) {
+            const draftTab = createAiChatDraftSidebarTab()
+            aiChatSidebarTabs = [...aiChatSidebarTabs, draftTab]
+            activeAiChatSidebarTabId = draftTab.tabId
+        } else {
+            aiChatSidebarTabs = []
+            activeAiChatSidebarTabId = null
+        }
         activeAiChatSidebarThreadId = null
         activeAiChatThreadId = null
         activeAiChatRootNodeId = null
         aiChatPanelState = {
             ...aiChatPanelState,
             isOpen: true,
+            isSessionHistoryOpen: false,
             contextChips: [],
             drafts,
         }
-        clearAutoContextChips()
         promptInputController.setTarget(null)
         persistAiChatSidebarState()
         syncActiveAiChatPanelFromState()
@@ -2831,13 +3187,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function closeAiChatSidebarTab(tabId: string): void {
+        const closedTabIndex = aiChatSidebarTabs.findIndex((tab) => tab.tabId === tabId)
+        const closedTab = aiChatSidebarTabs.find((tab) => tab.tabId === tabId)
         aiChatSidebarTabs = aiChatSidebarTabs.filter((tab) => tab.tabId !== tabId)
+        if (closedTab?.type === 'draft') {
+            const drafts = { ...(aiChatPanelState.drafts ?? {}) }
+            delete drafts[closedTab.tabId]
+            aiChatPanelState = { ...aiChatPanelState, drafts }
+        }
         if (aiChatSidebarTabs.length === 0) {
-            startNewAiChatDraft()
+            startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })
             return
         }
         if (activeAiChatSidebarTabId === tabId) {
-            activeAiChatSidebarTabId = aiChatSidebarTabs[0]?.tabId ?? null
+            const nextActiveTabIndex = closedTabIndex >= 0
+                ? Math.min(closedTabIndex, aiChatSidebarTabs.length - 1)
+                : 0
+            activeAiChatSidebarTabId = aiChatSidebarTabs[nextActiveTabIndex]?.tabId ?? null
         }
         persistAiChatSidebarState()
         syncActiveAiChatPanelFromState()
@@ -2916,6 +3282,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
         if (!aiChatThreadService) return
 
+        const submittedTab = getActiveAiChatSidebarTab()
+        const submittedDraftTabId = submittedTab?.type === 'draft' ? submittedTab.tabId : null
         const threadId = uuidv4()
         const initialContent = {
             type: 'doc',
@@ -2934,7 +3302,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         if (!thread) return
 
-        ensureAiChatSidebarThreadTab(threadId)
+        if (submittedDraftTabId) {
+            replaceAiChatDraftSidebarTab(submittedDraftTabId, threadId)
+            activeAiChatSidebarThreadId = threadId
+        } else {
+            ensureAiChatSidebarThreadTab(threadId)
+        }
         activeAiChatSidebarTabId = `thread:${threadId}`
         activeAiChatThreadId = threadId
         activeAiChatRootNodeId = null
@@ -2978,7 +3351,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             : undefined
         activeAiChatThreadId = panelThreadId
         activeAiChatRootNodeId = rootNode?.nodeId ?? null
-        const preservedTabsEl = options.preserveTabsSwitch
+        const shouldRenderTabs = aiChatSidebarTabs.length > 1
+        const preservedTabsEl = options.preserveTabsSwitch && shouldRenderTabs
             ? activeAiChatPanelEl?.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-tabs') ?? null
             : null
         const preservedTabsScrollLeft = preservedTabsEl?.scrollLeft ?? 0
@@ -2992,8 +3366,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             onclick=${(event: Event) => event.stopPropagation()}
         ></div>` as HTMLDivElement
 
-        panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', settings.aiChatThread.nodeBoxShadow)
-        panelEl.style.setProperty('--ai-chat-thread-node-border', settings.aiChatThread.nodeBorder)
+        panelEl.style.setProperty('--ai-chat-thread-node-box-shadow', settings.aiChatThread.styles.nodeBoxShadow)
+        panelEl.style.setProperty('--ai-chat-thread-node-border', settings.aiChatThread.styles.nodeBorder)
+        panelEl.style.setProperty('--workspace-ai-chat-panel-divider-border', settings.aiChatThread.styles.panelSectionDividerBorder)
+        applyAiChatPanelSessionHistorySettings(panelEl)
+        applyAiChatPanelContextPreviewSettings(panelEl)
         const backdropEl = html`<div className="workspace-ai-chat-panel-backdrop" aria-hidden="true"></div>` as HTMLDivElement
 
         if (!settings.aiChatThread.showHeader) {
@@ -3006,15 +3383,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">
             <div className="workspace-ai-chat-panel-context-mode">
-                <span className="workspace-ai-chat-panel-context-heading">Context</span>
-                <div className="workspace-ai-chat-panel-context-chips" role="list" aria-label="Chat context chips"></div>
                 <div className="workspace-ai-chat-panel-history-control">
-                    <span className="workspace-ai-chat-panel-context-divider" aria-hidden="true"></span>
                     <button
                         type="button"
                         className="workspace-ai-chat-panel-new-chat"
                         aria-label="Start new chat"
-                        innerHTML=${plusIcon}
+                        innerHTML=${xCircleIcon}
                     ></button>
                     <button
                         type="button"
@@ -3027,16 +3401,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 </div>
             </div>
         </div>` as HTMLDivElement
-        activeContextChipTrayEl = controlsEl.querySelector<HTMLDivElement>('.workspace-ai-chat-panel-context-chips')
-        refreshContextChipTray()
         panelEl.appendChild(controlsEl)
         const newChatEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-new-chat')!
-        newChatEl.addEventListener('click', startNewAiChatDraft)
+        newChatEl.addEventListener('click', () => startNewAiChatDraft())
         const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>('.workspace-ai-chat-panel-history-toggle')!
 
-        const tabsEl = preservedTabsEl ?? html`<div className="workspace-ai-chat-panel-tabs"></div>` as HTMLDivElement
+        const tabsEl = shouldRenderTabs
+            ? preservedTabsEl ?? html`<div className="workspace-ai-chat-panel-tabs"></div>` as HTMLDivElement
+            : null
         let tabsInitialScrollLeft = preservedTabsEl ? preservedTabsScrollLeft : 0
-        if (aiChatSidebarTabs.length > 0 && !preservedTabsEl) {
+        if (tabsEl && !preservedTabsEl) {
             const tabSwitchHeight = settings.aiChatThread.panelTabs.height
             const tabSwitchViewportWidth = getAiChatPanelTabsViewportWidth()
             const selectedTabIndex = Math.max(0, aiChatSidebarTabs.findIndex((tab) => tab.tabId === activeSidebarTab?.tabId))
@@ -3056,8 +3430,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     minDurationMs: settings.aiChatThread.panelTabs.transitionMinDurationMs,
                     distanceSpeedupFactor: settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor,
                 },
-                activeTabBoxShadow: settings.aiChatThread.panelTabs.activeTabBoxShadow,
-                activeTabInsetShadow: settings.aiChatThread.panelTabs.activeTabInsetShadow,
+                activeTabBoxShadow: settings.aiChatThread.panelTabs.styles.activeTabBoxShadow,
+                activeTabInsetShadow: settings.aiChatThread.panelTabs.styles.activeTabInsetShadow,
                 tabs: aiChatSidebarTabs.map((tab) => ({
                     label: tab.title,
                     value: tab.tabId,
@@ -3087,12 +3461,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <div className="workspace-ai-chat-panel-sessions-title">Sessions</div>
             <div className="workspace-ai-chat-panel-sessions-list"></div>
         </div>` as HTMLDivElement
+        const singleTabDividerEl = shouldRenderTabs
+            ? null
+            : html`<div
+                className=${`workspace-ai-chat-panel-single-tab-divider${aiChatPanelState.isSessionHistoryOpen ? ' workspace-ai-chat-panel-single-tab-divider-hidden' : ''}`}
+                aria-hidden="true"
+            ></div>` as HTMLDivElement
         historyToggleEl.addEventListener('click', () => {
             const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen
             aiChatPanelState = { ...aiChatPanelState, isSessionHistoryOpen }
             historyToggleEl.classList.toggle('workspace-ai-chat-panel-history-toggle-active', isSessionHistoryOpen)
             select(historyToggleEl).attr('aria-expanded', String(isSessionHistoryOpen))
             sessionsEl.classList.toggle('workspace-ai-chat-panel-sessions-hidden', !isSessionHistoryOpen)
+            singleTabDividerEl?.classList.toggle('workspace-ai-chat-panel-single-tab-divider-hidden', isSessionHistoryOpen)
             persistAiChatSidebarState()
         })
         const sessionsListEl = sessionsEl.querySelector('.workspace-ai-chat-panel-sessions-list') as HTMLDivElement
@@ -3144,14 +3525,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             sessionsListEl.appendChild(sessionEl)
         }
         panelEl.appendChild(sessionsEl)
-        panelEl.appendChild(tabsEl)
+        if (tabsEl) panelEl.appendChild(tabsEl)
+        if (singleTabDividerEl) panelEl.appendChild(singleTabDividerEl)
 
         const bodyHost = html`<div className="workspace-ai-chat-panel-body"></div>` as HTMLDivElement
         const showingThread = activeSidebarTab?.type === 'thread'
         const showingExtraction = activeSidebarTab?.type === 'extraction'
+        const emptyBodyText = activeSidebarTab?.type === 'draft' ? '' : 'Start a new chat or reopen a session.'
         const editorContainer = html`<div className=${`ai-chat-thread-node-editor workspace-ai-chat-panel-body-pane nopan${showingThread ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
         const extractionBodyEl = html`<div className=${`workspace-ai-chat-panel-extraction workspace-ai-chat-panel-body-pane nopan${showingExtraction ? '' : ' workspace-ai-chat-panel-body-pane-hidden'}`}></div>` as HTMLDivElement
-        const emptyBodyEl = html`<div className=${`workspace-ai-chat-panel-empty workspace-ai-chat-panel-body-pane nopan${showingThread || showingExtraction ? ' workspace-ai-chat-panel-body-pane-hidden' : ''}`}>Start a new chat or reopen a session.</div>` as HTMLDivElement
+        const emptyBodyEl = html`<div className=${`workspace-ai-chat-panel-empty workspace-ai-chat-panel-body-pane nopan${showingThread || showingExtraction ? ' workspace-ai-chat-panel-body-pane-hidden' : ''}`}>${emptyBodyText}</div>` as HTMLDivElement
         bodyHost.appendChild(editorContainer)
         bodyHost.appendChild(extractionBodyEl)
         bodyHost.appendChild(emptyBodyEl)
@@ -3199,14 +3582,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 onAiChatSubmit: async ({ messages, aiModel, aiModels, imageOptions, videoOptions, referencedFeatureIds }: any) => {
                     gradient?.triggerAnimation()
                     activeAiChatPromptGradient?.triggerAnimation()
-                    clearAutoContextChips()
 
                     try {
                         const aiChatThreadService = servicesStore.getData('aiChatThreadService')
                         // Explicit context chips are always force-included. For a canvas
                         // thread node we also pull its edge-connected context; chip and
                         // edge items are deduped by nodeId so an overlapping node isn't sent twice.
-                        const chipNodeIds = aiChatPanelState.contextChips
+                        const chipNodeIds = aiChatPanelState.contextChips.slice()
                         const edgeContext = rootNode
                             ? await aiChatThreadService.extractConnectedContext(rootNode.nodeId)
                             : []
@@ -3252,7 +3634,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 nodes: currentCanvasState.nodes,
                                 edges: currentCanvasState.edges,
                                 rootNodeId: rootNode?.nodeId,
-                                contextChipNodeIds: aiChatPanelState.contextChips,
+                                contextChipNodeIds: chipNodeIds,
                                 titlesByNodeId: buildWorkspaceContextTitlesByNodeId(currentCanvasState.nodes),
                             })
                             : undefined
@@ -3288,6 +3670,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             imageBranchCandidateSnapshot,
                             workspaceContextSnapshot,
                         })
+                        clearExplicitContextChips()
                     } catch (error) {
                         console.error('Failed to gather AI chat context:', error)
                         throw error
@@ -3344,6 +3727,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             threadId: panelThreadId ?? NEW_CHAT_DRAFT_KEY,
             onEditorChange: (value: object) => {
                 persistAiChatPromptDraft(promptDraftKey, value)
+                scheduleActiveAiChatPanelRailHeightUpdate()
             },
             onProjectTitleChange: () => {},
             onAiChatSubmit: () => {},
@@ -3362,6 +3746,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         getState: getPersistedFeatureExtractionState,
                         saveState: persistFeatureExtractionState,
                     })
+                    clearExplicitContextChips()
                     return
                 }
 
@@ -3402,8 +3787,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             style=${railStyle}
             data=${{ threadNodeId: rootNode?.nodeId ?? 'ai-chat-panel' }}
         ></div>` as HTMLDivElement
-        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.gradient)
-        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.width)
+        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.styles.gradient)
+        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.styles.width)
         rail.addEventListener('mousedown', (event) => {
             handleActiveAiChatPanelResizeStart(event, panelEl)
         })
@@ -3411,7 +3796,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
         const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
-        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.boundaryCircleColors
+        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.styles.boundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
         if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
         if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
@@ -3424,6 +3809,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatPanelRootNodeId = rootNode?.nodeId ?? null
         activeAiChatPanelHadContent = hasContent
         activeAiChatBackdropEl = backdropEl
+        activeAiChatPromptResizeObserver = new ResizeObserver(scheduleActiveAiChatPanelRailHeightUpdate)
+        activeAiChatPromptResizeObserver.observe(promptEl)
         paneEl.appendChild(backdropEl)
         paneEl.appendChild(panelEl)
 
@@ -3433,7 +3820,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         requestAnimationFrame(() => {
             resizeActiveAiChatPanelTabsSwitch()
-            tabsEl.scrollLeft = tabsInitialScrollLeft
+            if (tabsEl) tabsEl.scrollLeft = tabsInitialScrollLeft
             rail.style.setProperty('--rail-thread-height', `${measureActiveAiChatPanelRailThreadHeight(panelEl)}px`)
         })
     }
@@ -3680,13 +4067,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             style=${railStyle}
             data=${{ threadNodeId: node.nodeId }}
         ></div>` as HTMLDivElement
-        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.gradient)
-        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.width)
+        rail.style.setProperty('--rail-gradient', settings.aiChatThread.rail.styles.gradient)
+        rail.style.setProperty('--rail-width', settings.aiChatThread.rail.styles.width)
 
         const line = html`<div className="workspace-thread-rail-line"></div>` as HTMLDivElement
         const bottomCircle = html`<div className="workspace-thread-rail-boundary-circle" innerHTML=${aiChatThreadRailBoundaryCircle}></div>` as HTMLDivElement
         const circlePaths = bottomCircle.querySelectorAll('path')
-        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.boundaryCircleColors
+        const [outerColor, ringColor, innerColor] = settings.aiChatThread.rail.styles.boundaryCircleColors
         if (circlePaths[0]) circlePaths[0].setAttribute('fill', outerColor)
         if (circlePaths[1]) circlePaths[1].setAttribute('fill', ringColor)
         if (circlePaths[2]) circlePaths[2].setAttribute('fill', innerColor)
@@ -4394,10 +4781,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution, generationRun?: MediaGenerationRunMeta): void {
         patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)
-        updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)
-        autoContextSelections = resolution.selections
-        removedAutoContextChipNodeIds.clear()
-        refreshContextChipTray()
+        updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)
     }
 
     // Patch a single media node's descriptor and re-commit so the canvas chrome

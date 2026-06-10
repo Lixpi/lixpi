@@ -21,6 +21,7 @@ import {
     STOP_AI_PROMPT_META,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
+import { settings } from '$src/settings.ts'
 
 // =============================================================================
 // HELPERS
@@ -28,6 +29,10 @@ import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/a
 
 function expectSourceToContain(source: string, snippet: string): void {
     expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string): void {
+    expect(source.includes(snippet), `source should not contain: ${snippet}`).toBe(false)
 }
 
 function createEditorStateWithPlugins(document: ProseMirrorNode, plugins: any[] = []) {
@@ -58,6 +63,8 @@ function createMockControlFactories() {
 
     const submitButtonDom = document.createElement('button')
     submitButtonDom.className = 'mock-submit-button'
+    const contextTrayDom = document.createElement('div')
+    contextTrayDom.className = 'mock-context-tray'
 
     return {
         createModelDropdown: vi.fn(() => ({
@@ -96,6 +103,7 @@ function createMockControlFactories() {
             destroy: vi.fn(),
         })),
         createSubmitButton: vi.fn(() => submitButtonDom),
+        createContextTray: vi.fn(() => contextTrayDom),
         modelDropdownDom,
         imageModelDropdownDom,
         imageSizeDropdownDom,
@@ -104,6 +112,7 @@ function createMockControlFactories() {
         videoResolutionDropdownDom,
         videoDurationDropdownDom,
         submitButtonDom,
+        contextTrayDom,
     }
 }
 
@@ -114,6 +123,7 @@ function createPluginOptions(overrides: Partial<Parameters<typeof createAiPrompt
             onSubmit: vi.fn(),
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
+            createContextTray: factories.createContextTray,
             createModelDropdown: factories.createModelDropdown,
             createImageModelDropdown: factories.createImageModelDropdown,
             createImageSizeDropdown: factories.createImageSizeDropdown,
@@ -239,7 +249,11 @@ describe('aiPromptInputNodeSpec — schema definition', () => {
 // =============================================================================
 
 describe('createAiPromptInputNodeView — DOM structure', () => {
-    function createNodeView(text = 'Hello world', attrs: Record<string, unknown> = {}) {
+    function createNodeView(
+        text = 'Hello world',
+        attrs: Record<string, unknown> = {},
+        options: Partial<Parameters<typeof createAiPromptInputNodeView>[0]> = {},
+    ) {
         const testDoc = doc(promptInput(attrs, p(text)))
         const state = createBaseEditorState(testDoc)
         const node = state.doc.firstChild!
@@ -265,6 +279,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
+            ...options,
         })(node, mockView, getPos)
 
         return { nv, factories, node, mockView }
@@ -280,6 +295,119 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const { nv } = createNodeView()
         expect(nv.contentDOM).toBeInstanceOf(HTMLDivElement)
         expect(nv.contentDOM!.className).toBe('ai-prompt-input-content')
+    })
+
+    it('uses placeholderText on contentDOM data-placeholder', () => {
+        const { nv } = createNodeView('Hello world', {}, { placeholderText: 'Talk to me...' })
+        expect(nv.contentDOM!.getAttribute('data-placeholder')).toBe('Talk to me...')
+    })
+
+    it('inserts context tray before the editable content when provided', () => {
+        const contextTray = document.createElement('div')
+        contextTray.className = 'provided-context-tray'
+        const { nv } = createNodeView('Hello', {}, {
+            createContextTray: () => contextTray,
+        })
+
+        const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
+        expect(nv.dom.childNodes[0]).toBe(contextTray)
+        expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
+        expect(nv.dom.childNodes[2]).toBe(controlsEl)
+        expect(controlsEl).toBeDefined()
+    })
+
+    it('leaves the original content and controls order unchanged when context tray factory returns null', () => {
+        const createContextTray = vi.fn(() => null)
+        const { nv } = createNodeView('Hello', {}, { createContextTray })
+
+        expect(createContextTray).toHaveBeenCalledTimes(1)
+        expect(nv.dom.childNodes).toHaveLength(2)
+        expect(nv.dom.childNodes[0]).toBe(nv.contentDOM)
+        expect((nv.dom.childNodes[1] as HTMLElement).className).toBe('ai-prompt-input-controls')
+    })
+
+    it('applies model menu CSS variables from settings.aiPromptInput.modelMenu.styles', () => {
+        const contextTrayDom = document.createElement('div')
+        const { nv } = createNodeView('Hello world', {}, { createContextTray: () => contextTrayDom })
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.triggerColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-active-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.triggerActiveColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-active-background')).toBe(
+            settings.aiPromptInput.modelMenu.styles.triggerActiveBackground,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-focus-outline')).toBe(
+            settings.aiPromptInput.modelMenu.styles.triggerFocusOutline,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-border-radius')).toBe(
+            settings.aiPromptInput.modelMenu.styles.infoBubbleBorderRadius,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-background')).toBe(
+            settings.aiPromptInput.modelMenu.styles.infoBubbleBackground,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-divider-height')).toBe(
+            settings.aiPromptInput.modelMenu.styles.sectionDividerHeight,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-section-title-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.sectionTitleColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.controlLabelColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-border')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerBorder,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-background')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerBackground,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-hover-background')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerHoverBackground,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-hover-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerHoverColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-focus-outline')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerFocusOutline,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-background')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipBackground,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-border')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipBorder,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-border-radius')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipBorderRadius,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-box-shadow')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipBoxShadow,
+        )
+        expect(nv.dom.style.getPropertyValue('--help-tooltip-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.helpTooltipColor,
+        )
+    })
+
+    it('tracks overridden model menu style values from settings', () => {
+        const originalTriggerColor = settings.aiPromptInput.modelMenu.styles.triggerColor
+        settings.aiPromptInput.modelMenu.styles.triggerColor = '#ff00ff'
+
+        try {
+            const { nv } = createNodeView()
+            expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe('#ff00ff')
+        } finally {
+            settings.aiPromptInput.modelMenu.styles.triggerColor = originalTriggerColor
+        }
+    })
+
+    it('lets CSS variables own model menu layering instead of hard-coded inline z-index', () => {
+        const nodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
+
+        expectSourceNotToContain(nodeSource, 'modelMenu.element.style.zIndex')
+        expectSourceNotToContain(nodeSource, 'settings.aiPromptInput.modelMenu.infoBubbleZIndex')
     })
 
     describe('visual hierarchy — wrapper contains content then controls', () => {
@@ -415,7 +543,7 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
 // =============================================================================
 
 describe('createAiPromptInputNodeView — stopEvent', () => {
-    function createNodeViewWithControls() {
+    function createNodeViewWithControls(options: Partial<Parameters<typeof createAiPromptInputNodeView>[0]> = {}) {
         const testDoc = doc(promptInput(p('Hello')))
         const state = createBaseEditorState(testDoc)
         const inputNode = state.doc.firstChild!
@@ -438,6 +566,7 @@ describe('createAiPromptInputNodeView — stopEvent', () => {
             createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
+            ...options,
         })(inputNode, mockView, () => 0)
 
         return { nv, factories }
@@ -469,6 +598,15 @@ describe('createAiPromptInputNodeView — stopEvent', () => {
 
         expect(nv.stopEvent!(event)).toBe(true)
     })
+
+    it('stops events from context tray', () => {
+        const contextTray = document.createElement('div')
+        const { nv } = createNodeViewWithControls({ createContextTray: () => contextTray })
+        const event = new MouseEvent('click')
+        Object.defineProperty(event, 'target', { value: contextTray })
+
+        expect(nv.stopEvent!(event)).toBe(true)
+    })
 })
 
 // =============================================================================
@@ -476,7 +614,7 @@ describe('createAiPromptInputNodeView — stopEvent', () => {
 // =============================================================================
 
 describe('createAiPromptInputNodeView — ignoreMutation', () => {
-    function createNodeViewInstance() {
+    function createNodeViewInstance(options: Partial<Parameters<typeof createAiPromptInputNodeView>[0]> = {}) {
         const testDoc = doc(promptInput(p('Hello')))
         const state = createBaseEditorState(testDoc)
         const inputNode = state.doc.firstChild!
@@ -499,6 +637,7 @@ describe('createAiPromptInputNodeView — ignoreMutation', () => {
             createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
             createSubmitButton: factories.createSubmitButton,
+            ...options,
         })(inputNode, mockView, () => 0)
 
         return { nv, factories }
@@ -524,6 +663,16 @@ describe('createAiPromptInputNodeView — ignoreMutation', () => {
         const mutation = { target: nv.contentDOM! } as MutationRecord
 
         expect(nv.ignoreMutation!(mutation)).toBe(false)
+    })
+
+    it('ignores mutations on the injected context tray and its descendants', () => {
+        const contextTray = document.createElement('div')
+        const removeButton = document.createElement('button')
+        contextTray.appendChild(removeButton)
+        const { nv } = createNodeViewInstance({ createContextTray: () => contextTray })
+
+        expect(nv.ignoreMutation!({ target: contextTray } as MutationRecord)).toBe(true)
+        expect(nv.ignoreMutation!({ target: removeButton } as MutationRecord)).toBe(true)
     })
 })
 
@@ -812,6 +961,15 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
         expect(nv.dom.querySelector('.ai-prompt-input-content')).not.toBeNull()
     })
 
+    it('SCSS keeps placeholder rendering on contentDOM instead of the decorated wrapper', () => {
+        const scss = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+
+        expectSourceToContain(scss, '.ai-prompt-input-wrapper.empty-node-placeholder[data-placeholder]::before')
+        expectSourceToContain(scss, 'content: none;')
+        expectSourceToContain(scss, '&[data-empty="true"] .ai-prompt-input-content')
+        expectSourceToContain(scss, 'content: attr(data-placeholder);')
+    })
+
     it('wrapper contains no border styling classes — clean look from SCSS', () => {
         const nv = renderNodeView()
         expect(nv.dom.classList.contains('bordered')).toBe(false)
@@ -909,6 +1067,31 @@ describe('createAiPromptInputPlugin — plugin creation', () => {
         const plugin = createAiPromptInputPlugin(options)
 
         expect(plugin.props.handleDOMEvents).toHaveProperty('keydown')
+    })
+
+    it('forwards placeholderText and context tray factory to node views', () => {
+        const contextTray = document.createElement('div')
+        contextTray.className = 'plugin-context-tray'
+        const { options } = createPluginOptions({
+            createContextTray: vi.fn(() => contextTray),
+            placeholderText: 'Talk to me...',
+        })
+        const plugin = createAiPromptInputPlugin(options)
+        const testDoc = doc(promptInput(p('Hello')))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+        const nodeViewFactory = plugin.props.nodeViews[aiPromptInputNodeType]
+
+        expect(typeof nodeViewFactory).toBe('function')
+
+        const nv = nodeViewFactory!(
+            state.doc.firstChild!,
+            { state, dispatch: vi.fn() } as unknown as EditorView,
+            () => 0,
+        ) as { dom: HTMLElement; contentDOM: HTMLElement | null }
+
+        expect(options.createContextTray).toHaveBeenCalledTimes(1)
+        expect(nv.dom.querySelector('.plugin-context-tray')).toBe(contextTray)
+        expect(nv.contentDOM?.getAttribute('data-placeholder')).toBe('Talk to me...')
     })
 
     it('plugin provides decorations function', () => {
@@ -1575,33 +1758,22 @@ describe('Visual — image size dropdown SCSS expectations', () => {
 // =============================================================================
 
 describe('Visual — static-position dropdown SCSS expectations', () => {
-    it('static-position dropdown uses absolute positioning below handle', () => {
-        // SCSS: .info-bubble-wrapper.static-position { position: absolute; top: 100%; }
-        // This ensures dropdown menu opens below the model selector handle
-        const expectedPosition = 'absolute'
-        const expectedTop = '100%'
-        expect(expectedPosition).toBe('absolute')
-        expect(expectedTop).toBe('100%')
+    it('anchors static-position info bubbles inside the prompt node instead of the viewport', () => {
+        const scss = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+
+        expectSourceToContain(scss, '.info-bubble-wrapper.static-position')
+        expectSourceToContain(scss, 'position: absolute !important;')
+        expectSourceToContain(scss, 'top: 100% !important;')
+        expectSourceToContain(scss, 'right: 0 !important;')
+        expectSourceToContain(scss, 'transform: translateY(var(--static-bubble-gap, 15px)) !important;')
     })
 
-    it('bubble-wrapper overridden to static inside prompt input', () => {
-        // SCSS: .bubble-wrapper { position: static !important; }
-        // This prevents the InfoBubble's default fixed positioning
-        const expectedPosition = 'static'
-        expect(expectedPosition).toBe('static')
-    })
+    it('overrides nested InfoBubble positioning and hides arrows for M3-style dropdown menus', () => {
+        const scss = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
 
-    it('arrow pseudo-elements are hidden for M3-style menu', () => {
-        // SCSS: .bubble-container { &:before, &:after { display: none !important; } }
-        // M3 menus don't use arrows
-        const arrowDisplay = 'none'
-        expect(arrowDisplay).toBe('none')
-    })
-
-    it('dropdown translateY offset avoids overlapping input border', () => {
-        // SCSS: transform: translateY(15px) !important;
-        const expectedOffset = 15
-        expect(expectedOffset).toBeGreaterThan(0)
-        expect(expectedOffset).toBeLessThanOrEqual(20) // Reasonable gap
+        expectSourceToContain(scss, '.bubble-wrapper')
+        expectSourceToContain(scss, 'position: static !important;')
+        expectSourceToContain(scss, '.bubble-container')
+        expectSourceToContain(scss, 'display: none !important;')
     })
 })

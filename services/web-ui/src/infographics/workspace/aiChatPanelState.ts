@@ -22,7 +22,7 @@ function sanitizeTabs(tabs: CanvasAiChatSidebarTab[] | undefined): CanvasAiChatS
 
     for (const tab of tabs ?? []) {
         if (!tab?.tabId || !tab.refId || seen.has(tab.tabId)) continue
-        if (tab.type !== 'thread' && tab.type !== 'extraction') continue
+        if (tab.type !== 'thread' && tab.type !== 'extraction' && tab.type !== 'draft') continue
         seen.add(tab.tabId)
         sanitizedTabs.push(tab)
     }
