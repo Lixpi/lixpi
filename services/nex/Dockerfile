@@ -3,7 +3,8 @@
 # Mirrors services/api: a node:23-alpine base so the workload can run TypeScript
 # via `node --experimental-transform-types` (exactly how the API container runs
 # TS), plus the pinned `nex` binary that turns this container into a NEX node
-# running the bundled native nexlet.
+# running the bundled native nexlet. The workload's @lixpi/* + provider-SDK deps
+# are installed from the pnpm workspace, just like the API.
 #
 # `nex` is a static Go binary published per-arch on GitHub releases. libc6-compat
 # is installed as a safety net in case a release links against glibc on musl.
@@ -23,7 +24,7 @@ ARG TARGETARCH
 # libc6-compat: lets the prebuilt Go binary run on musl Alpine.
 RUN apk add --update --no-cache curl ca-certificates libc6-compat
 
-# pnpm installs the workload's node_modules at runtime (mirrors services/api).
+# pnpm installs the workload's node_modules (mirrors services/api).
 RUN npm install -g pnpm
 
 # Install the pinned nex binary for the build's target architecture.
@@ -34,6 +35,17 @@ RUN set -eux; \
     chmod +x /usr/local/bin/nex
 
 WORKDIR /usr/src/service
+
+# Workspace setup (mirrors services/api): the nex package.json is the in-container
+# workspace root; @lixpi/* resolve as workspace members via the baked
+# pnpm-workspace.yaml. Locally the @lixpi packages are bind-mounted over
+# ./packages and the entrypoint re-installs; for AWS/Pulumi (no mounts) the baked
+# install below is what ships.
+COPY services/nex/package.json ./package.json
+COPY pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY packages ./packages
+COPY services/nex/workloads ./workloads
+RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store
 
 # Static, non-secret node defaults. kong auto-loads /etc/nex/config.json; the
 # entrypoint still passes connection details + the node nkey as flags (flags

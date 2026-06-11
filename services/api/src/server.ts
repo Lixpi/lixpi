@@ -38,7 +38,6 @@ import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 import featureRoutes from './routes/feature-routes.ts'
 import mediaLibraryRoutes from './routes/media-library-routes.ts'
 
-import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
 import { createLlmModule } from './llm/index.ts'
 import { storeWorkspaceImage } from './services/image-storage.ts'
 import { storeWorkspaceVideo } from './services/video-storage.ts'
@@ -100,13 +99,10 @@ global.dynamoDBService = new DynamoDBService({
 // ])
 // sqsPollingService.startPolling()
 
-// Initialize AI Models Synchronization service and synchronize models on startup
-const aiModelsSync = new AiModelsSync({
-    dynamoDBService: global.dynamoDBService
-})
-
-// Synchronize AI models on startup
-await aiModelsSync.synchronizeModels()
+// AI models synchronization runs hourly on the NATS NEX execution-engine node
+// (services/nex). The API reads the AI_MODELS_LIST table live (model::AiModel
+// .getAvailableAiModels) and does not run the sync itself. See
+// documentation/platform/deployment/NEX-EXECUTION-ENGINE.md.
 
 const subscriptions = [
     ...userSubjects,
@@ -197,12 +193,12 @@ app.use('/api/media-library', mediaLibraryRoutes)
 // Health check endpoint
 app.get('/health-check', (req, res) => {
     // Perform other necessary health checks
-    const isHealthy = httpServer.listening     //TODO: is there a better way to check if socket.io is alive?
+    const isHealthy = httpServer.listening
 
     if (isHealthy) {
-        res.json({ status: 'healthy', services: { socketIo: 'running' } })
+        res.json({ status: 'healthy', services: { httpServer: 'running' } })
     } else {
-        res.status(503).json({ status: 'unhealthy', services: { socketIo: 'not running' } })
+        res.status(503).json({ status: 'unhealthy', services: { httpServer: 'not running' } })
     }
 })
 

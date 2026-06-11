@@ -162,7 +162,7 @@ Add brief descriptions in nodes using `<br/>` for line breaks:
 
 ```
 FastAPI[FastAPI App]
-SIOServer[Socket.IO Server<br/>socketio-service]
+NATSServer[NATS Server<br/>nats-service]
 Redis[(Redis<br/>Sessions / Rate Limits)]
 ```
 
@@ -246,7 +246,7 @@ List all participants at the top in logical order (left-to-right = flow directio
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Server as Socket.IO Server
+    participant Server as NATS Server
     participant Responder
     participant Database as Database
 ```

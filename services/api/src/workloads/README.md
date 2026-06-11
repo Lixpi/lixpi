@@ -1,9 +1,22 @@
 # Workloads
 
-This directory contains code that wants to be decoupled as a set of independent functions and services, but isn't ready to do that yet.
+Lixpi's background work runs on the NATS bus via NEX (the NATS Execution Engine),
+on the node at [`services/nex`](../../../nex) — no AWS Lambda / GCP / Azure
+function runtimes.
 
-I want this project to be as cloud agnostic as possible and therefore I don't want to utilize any specific workloads implementation like AWS Lmabda or GCP or Azure functions.
+NEX supports containers, VMs, and WASM through pluggable nexlets and ships an
+official multi-arch Docker image. The bundled runtime is the `native` nexlet;
+other runtimes are a Go-SDK extension point. See
+[`documentation/knowledge/NATS-NEX-EXECUTION-ENGINE-EXPLAINED.md`](../../../../documentation/knowledge/NATS-NEX-EXECUTION-ENGINE-EXPLAINED.md).
 
-Ideally I want to use NATS NEX to run workloads, but that stuff is still a bit rough and doesn't support docker container yet, though they promise that it's on their roadmap.
+## Workloads
 
-So in the future this is going to be transfered to NATS NEX, but for now it's just a part of this main-api service.
+- **`ai-models-synchronization`** — the hourly AI-models catalog sync, at
+  [`services/nex/workloads/ai-models-synchronization`](../../../nex/workloads/ai-models-synchronization).
+
+## Adding a workload
+
+Put it under `services/nex/workloads/<name>/` with a thin wrapper + a Nexfile and
+deploy it from the node entrypoint. See the deployment doc
+[`documentation/platform/deployment/NEX-EXECUTION-ENGINE.md`](../../../../documentation/platform/deployment/NEX-EXECUTION-ENGINE.md)
+and the operator guide at [`services/nex/README.md`](../../../nex/README.md).
