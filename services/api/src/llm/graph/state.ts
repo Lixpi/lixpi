@@ -65,6 +65,7 @@ export type MediaFanoutPlan = {
     imageSize?: string
     videoAspectRatio?: string
     videoResolution?: string
+    videoDuration?: string | number
     videoDurationSeconds?: number
     videoSourceForExtension?: string
 }

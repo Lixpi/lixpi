@@ -6,9 +6,9 @@ Provides the ProseMirror editor used by AI prompt input surfaces. It is a **sepa
 
 This plugin powers prompt input editors. It provides:
 - A rich-text ProseMirror editor for composing messages
-- An AI model multi-select control
-- An image model multi-select control (with size selector)
-- Multi-model selection state for upcoming reasoning/image/video fanout
+- Reasoning, image, and video model selectors that default to single-select
+- Per-section multi-model toggles for reasoning/image/video fanout
+- Selected-model tag rows under each section when multi-model mode is enabled
 - Contextual help tooltips for the reasoning, image, and video model sections
 - Optional injected context-preview strip for surfaces that need composer-owned context chrome
 - A submit/stop button
@@ -18,7 +18,7 @@ This plugin powers prompt input editors. It provides:
 When a user types a message and submits:
 1. The plugin extracts the content as JSON from the `aiPromptInput` node
 2. Reads the scalar model attrs, serialized model-list attrs, and media option attrs
-3. Calls the `onSubmit` callback with `{ contentJSON, aiModel, imageOptions }`
+3. Calls the `onSubmit` callback with `{ contentJSON, aiModel, aiModels, useMultipleModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }`
 4. Clears the input content and resets the cursor
 
 The plugin does **not** handle AI streaming, message routing, or thread management — that is the responsibility of the `AiPromptInputController` service and the `aiChatThreadPlugin`. In the workspace AI Chat panel, `WorkspaceCanvas.ts` persists each prompt editor document as a per-tab draft in `canvasState.aiChatPanel` and restores it on panel/tab reload; the plugin remains unaware of that storage policy.
@@ -40,9 +40,9 @@ graph TD
         N[aiPromptInputNode.ts] --> NV[createAiPromptInputNodeView]
         NV --> CONT[Content Area<br/>ProseMirror contentDOM]
         NV --> CTRL[Controls Container]
-        CTRL --> MD[Model Multi-select]
-        CTRL --> IMD[Image Model Multi-select]
-        CTRL --> ISD[Image option dropdown]
+        CTRL --> MD[Reasoning model setup block]
+        CTRL --> IMD[Image model setup block]
+        CTRL --> VMD[Video model setup block]
         CTRL --> SB[Submit Button]
     end
 
@@ -60,7 +60,7 @@ graph TD
 **Key Design Principles:**
 - **Minimal schema:** The document consists of a single `aiPromptInput` node — no title, no conversation history
 - **Decoupled from threads:** The plugin only handles input composition and extraction, never touches thread state or streaming
-- **Adapter pattern:** NodeView controls bridge ProseMirror node attrs (`aiModel`, `aiModels`, `imageGenerationSize`) to UI controls via getter/setter adapters
+- **Adapter pattern:** NodeView controls bridge ProseMirror node attrs (`aiModel`, `aiModels`, per-section multi-model flags, `imageGenerationSize`) to UI controls via getter/setter adapters
 - **Factory injection:** UI controls (dropdowns, buttons) are injected via factory functions, keeping the plugin framework-agnostic
 - **Optional context chrome:** Host surfaces can inject draft-owned context previews into the white input area without making the plugin own context state. Submitted-turn resolver feedback belongs outside the composer.
 - **Polling for external state:** Receiving state is synced via a 200ms polling interval since it's owned by external services, not plugin state
@@ -145,6 +145,10 @@ sequenceDiagram
 - Attributes:
   - `aiModel: string` (default `''`) — Selected AI model (e.g., `"Anthropic:claude-3-5-sonnet"`)
   - `aiModels: string` (default `''`) — JSON-serialized ordered reasoning model ids for multi-model sends
+  - `useMultipleModels: boolean` (default `false`) — Legacy aggregate multi-model flag
+  - `useMultipleReasoningModels: boolean` (default `false`) — Enables multi-select mode for the reasoning model section
+  - `useMultipleImageModels: boolean` (default `false`) — Enables multi-select mode for the image model section
+  - `useMultipleVideoModels: boolean` (default `false`) — Enables multi-select mode for the video model section
   - `aiImageModel: string` (default `''`) — Selected image generation model (e.g., `"OpenAI:dall-e-3"`)
   - `aiImageModels: string` (default `''`) — JSON-serialized ordered image generation model ids for multi-model sends
   - `imageGenerationSize: string` (default `'auto'`) — Image generation resolution or aspect-ratio value, depending on the selected image model metadata
@@ -153,7 +157,7 @@ sequenceDiagram
   - `videoAspectRatio: string` (default `''`) — Video generation aspect ratio
   - `videoResolution: string` (default `''`) — Video generation resolution
   - `videoDuration: string` (default `''`) — Video generation duration
-- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-models][data-ai-image-model][data-ai-image-models][data-image-generation-size][data-ai-video-model][data-ai-video-models][data-video-aspect-ratio][data-video-resolution][data-video-duration]`
+- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-models][data-use-multiple-models][data-use-multiple-reasoning-models][data-use-multiple-image-models][data-use-multiple-video-models][data-ai-image-model][data-ai-image-models][data-image-generation-size][data-ai-video-model][data-ai-video-models][data-video-aspect-ratio][data-video-resolution][data-video-duration]`
 - Content hole: `0` (ProseMirror renders editable content inside)
 
 The document schema for `documentType: 'aiPromptInput'` is:
@@ -176,9 +180,9 @@ div.ai-prompt-input-wrapper [data-empty="true"|"false"]
     ├── [Submit Button]                ← injected via createSubmitButton()
     └── div.bubble-menu.ai-prompt-model-menu-info-bubble
         └── div.ai-prompt-model-menu-content
-            ├── Reasoning models + help tooltip ← createModelDropdown()
-            ├── Image models + help tooltip     ← createImageModelDropdown(), createImageSizeDropdown()
-            └── Video models + help tooltip     ← createVideoModelDropdown(), aspect, resolution, duration
+            ├── Reasoning model section ← title, help tooltip, multi-model switch, createModelDropdown(), selected tag row
+            ├── Image model section     ← title, help tooltip, multi-model switch, createImageModelDropdown(), createImageSizeDropdown(), selected tag row
+            └── Video model section     ← title, help tooltip, multi-model switch, createVideoModelDropdown(), aspect, resolution, duration, selected tag row
 ```
 
 ### Control Adapters
@@ -192,7 +196,7 @@ const modelControls: AiModelControls = {
 }
 ```
 
-This keeps the controls stateless — the ProseMirror document is the single source of truth. The bottom control row only shows the model settings trigger and submit button by default; model dropdowns live in the shared `BubbleMenu` surface. Section help uses the reusable `helpTooltip` TypeScript-html component, which positions its tooltip against the visible viewport instead of assuming there is room on one side. When `createContextTray()` is supplied, the returned element is inserted before the editable content so context previews occupy the white input area and increase composer height without changing the gradient border container.
+This keeps the controls stateless — the ProseMirror document is the single source of truth. The bottom control row only shows the model settings trigger and submit button by default; model dropdowns live in the shared `BubbleMenu` surface. Each model section header keeps the title and help tooltip together on the left, with the per-section multi-model switch on the right. When a section is in multi-model mode and has selected models, a content-tight tag-pill row is rendered below that section's controls grid, so video model options stay on their existing row while selected models can wrap horizontally beneath it. Section help uses the reusable `helpTooltip` TypeScript-html component, which positions its tooltip against the visible viewport instead of assuming there is room on one side. When `createContextTray()` is supplied, the returned element is inserted before the editable content so context previews occupy the white input area and increase composer height without changing the gradient border container.
 
 ### State Synchronization
 
@@ -228,9 +232,12 @@ createAiPromptInputPlugin({
     isReceiving: () => boolean,
     createContextTray: () => HTMLElement | null,
     createModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createModelMultiSelect: (controls, dropdownId) => ({ dom, update, destroy }),
     createImageModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createImageModelMultiSelect: (controls, dropdownId) => ({ dom, update, destroy }),
     createImageSizeDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createVideoModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
+    createVideoModelMultiSelect: (controls, dropdownId) => ({ dom, update, destroy }),
     createVideoAspectDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createVideoResolutionDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
     createVideoDurationDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
@@ -238,6 +245,8 @@ createAiPromptInputPlugin({
     placeholderText: 'Talk to me...',
 })
 ```
+
+The `create*MultiSelect` factories are optional fallbacks for hosts that have not wired multi-select controls yet. When a per-section switch is off, the NodeView mounts the single-select dropdown for that section. When the switch is on, it mounts the matching multi-select factory if supplied, otherwise it falls back to the single-select dropdown while preserving the ProseMirror multi-model attrs.
 
 ### Transaction Meta Signals
 

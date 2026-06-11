@@ -13,8 +13,17 @@ Appends one SVG group to a d3 selection.
     id: string
     x: number
     y: number
-    width: number
+    width?: number
     height?: number
+    size?: number
+    minWidth?: number
+    fontSize?: number
+    fontWeight?: number
+    horizontalPadding?: number
+    closeSize?: number
+    closeIconSize?: number
+    closeGap?: number
+    textWidthFactor?: number
     label: string
     selected?: boolean
     hovered?: boolean
@@ -38,8 +47,12 @@ Returns `{ render, resize, setSelected, destroy }`.
 
 - Renders SVG only: `g`, `rect`, `text`, `circle`, and icon paths.
 - Uses numeric D3 attributes for geometry, colors, hover state, and close icon placement.
+- Accepts pixel sizing controls for height (`height` or legacy-style `size`), typography, horizontal padding, close target size, close icon size, close gap, and auto-width estimation.
+- Defaults use the same compact primitive geometry as the AI chat tabs: 24px tall segment, 96px minimum width, regular 12px text, centered labels, a subtle active border, and the close icon on the left.
+- If `width` is omitted, the pill sizes to the rendered label and close control, clamped to the tab-style minimum width. Labels are never truncated.
+- Auto-sized width is stable across hover/selected-only renders; hover may change paint and close visibility, but not layout geometry.
 - `surface: 'content'` keeps the selected background transparent so another component can own the selected surface, while inactive hover paints a very light grey background.
-- `closeVisibility: 'hover'` renders the close control only while the pill is hovered.
+- Closeable pills show the close control by default; `closeVisibility: 'hover'` keeps the close control hidden until hover for tab strips.
 - `closePlacement: 'start'` renders the close control on the left side of the pill.
 - Keeps close behavior local: close clicks stop propagation and call `onClose(id, event)`.
 - `render(state)` updates label, selected/hovered/disabled state, close visibility, variant, and dimensions.

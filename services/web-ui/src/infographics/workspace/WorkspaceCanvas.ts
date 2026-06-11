@@ -92,10 +92,13 @@ import { aiChatThreadsStore } from '$src/stores/aiChatThreadsStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
 import { extractContentFromProseMirror } from '$src/services/ai-chat-thread-service.ts'
 import {
+    createGenericAiModelDropdown,
     createGenericAiModelMultiSelect,
     createGenericSubmitButton,
     createGenericImageSizeDropdown,
+    createGenericImageModelDropdown,
     createGenericImageModelMultiSelect,
+    createGenericVideoModelDropdown,
     createGenericVideoModelMultiSelect,
     createGenericVideoAspectDropdown,
     createGenericVideoResolutionDropdown,
@@ -129,6 +132,7 @@ type CollisionPlan = {
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
+const BRANCH_ORIGIN_NODE_DIMENSIONS = { width: 72, height: 72 }
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
 const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-tooltip-background',
@@ -2171,9 +2175,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return {
             createContextTray: createAiChatPanelContextTrayElement,
             createModelDropdown: createGenericAiModelDropdown,
+            createModelMultiSelect: createGenericAiModelMultiSelect,
             createImageModelDropdown: createGenericImageModelDropdown,
+            createImageModelMultiSelect: createGenericImageModelMultiSelect,
             createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelMultiSelect,
+            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoModelMultiSelect: createGenericVideoModelMultiSelect,
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
             createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
             createVideoDurationDropdown: createGenericVideoDurationDropdown,
@@ -2987,11 +2994,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         persistAiChatSidebarState()
     }
 
-    function buildAiPromptDraftFromText(promptText: string, attrs: Record<string, string> = {}): object {
+    function buildAiPromptDraftFromText(promptText: string, attrs: Record<string, any> = {}): object {
         const text = promptText.trim()
         const paragraph = text
             ? { type: 'paragraph', content: [{ type: 'text', text }] }
             : { type: 'paragraph' }
+        const legacyUseMultipleModels = attrs.useMultipleModels === true || attrs.useMultipleModels === 'true'
+        const rawUseMultipleReasoningModels = attrs.useMultipleReasoningModels === true || attrs.useMultipleReasoningModels === 'true'
+        const rawUseMultipleImageModels = attrs.useMultipleImageModels === true || attrs.useMultipleImageModels === 'true'
+        const rawUseMultipleVideoModels = attrs.useMultipleVideoModels === true || attrs.useMultipleVideoModels === 'true'
+        const hasSectionModelMode = rawUseMultipleReasoningModels || rawUseMultipleImageModels || rawUseMultipleVideoModels
+        const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
         return {
             type: 'doc',
             content: [
@@ -3000,6 +3013,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     attrs: {
                         aiModel: attrs.aiModel || '',
                         aiModels: attrs.aiModels || '',
+                        useMultipleModels: legacyUseMultipleModels || hasSectionModelMode,
+                        useMultipleReasoningModels: rawUseMultipleReasoningModels || useLegacyModeFallback,
+                        useMultipleImageModels: rawUseMultipleImageModels || useLegacyModeFallback,
+                        useMultipleVideoModels: rawUseMultipleVideoModels || useLegacyModeFallback,
                         aiImageModel: attrs.aiImageModel || '',
                         aiImageModels: attrs.aiImageModels || '',
                         imageGenerationSize: attrs.imageGenerationSize || 'auto',
@@ -3015,9 +3032,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function getActiveAiPromptInputAttrs(): Record<string, string> {
+    function getActiveAiPromptInputAttrs(): Record<string, any> {
         const view = activeAiChatPromptEditor?.editorView
-        const attrs: Record<string, string> = {}
+        const attrs: Record<string, any> = {}
         view?.state.doc.descendants((node: any) => {
             if (node.type.name !== 'aiPromptInput') return true
             Object.assign(attrs, node.attrs)
@@ -3323,6 +3340,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             contentJSON: data.contentJSON,
             aiModel: data.aiModel,
             aiModels: data.aiModels,
+            useMultipleModels: data.useMultipleModels,
+            useMultipleReasoningModels: data.useMultipleReasoningModels,
+            useMultipleImageModels: data.useMultipleImageModels,
+            useMultipleVideoModels: data.useMultipleVideoModels,
             imageOptions: data.imageOptions,
             videoOptions: data.videoOptions,
         })
@@ -3761,6 +3782,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
                     aiModels: data.aiModels,
+                    useMultipleModels: data.useMultipleModels,
+                    useMultipleReasoningModels: data.useMultipleReasoningModels,
+                    useMultipleImageModels: data.useMultipleImageModels,
+                    useMultipleVideoModels: data.useMultipleVideoModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
                 })
@@ -3842,10 +3867,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         floatingInputEl.appendChild(editorContainer)
 
         const controlFactories = {
-            createModelDropdown: createGenericAiModelMultiSelect,
-            createImageModelDropdown: createGenericImageModelMultiSelect,
+            createModelDropdown: createGenericAiModelDropdown,
+            createModelMultiSelect: createGenericAiModelMultiSelect,
+            createImageModelDropdown: createGenericImageModelDropdown,
+            createImageModelMultiSelect: createGenericImageModelMultiSelect,
             createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelMultiSelect,
+            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoModelMultiSelect: createGenericVideoModelMultiSelect,
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
             createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
             createVideoDurationDropdown: createGenericVideoDurationDropdown,
@@ -3868,6 +3896,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
                     aiModels: data.aiModels,
+                    useMultipleModels: data.useMultipleModels,
+                    useMultipleReasoningModels: data.useMultipleReasoningModels,
+                    useMultipleImageModels: data.useMultipleImageModels,
+                    useMultipleVideoModels: data.useMultipleVideoModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
                 })
@@ -3923,7 +3955,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
 
-    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string }): void {
+    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; useMultipleModels?: boolean | string; useMultipleReasoningModels?: boolean | string; useMultipleImageModels?: boolean | string; useMultipleVideoModels?: boolean | string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string }): void {
         if (threadFloatingInputs.has(node.nodeId)) return
 
         const threadInputStyle = { position: 'absolute' as const, display: 'block', zIndex: '9999' }
@@ -3941,10 +3973,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         el.appendChild(editorContainer)
 
         const controlFactories = {
-            createModelDropdown: createGenericAiModelMultiSelect,
-            createImageModelDropdown: createGenericImageModelMultiSelect,
+            createModelDropdown: createGenericAiModelDropdown,
+            createModelMultiSelect: createGenericAiModelMultiSelect,
+            createImageModelDropdown: createGenericImageModelDropdown,
+            createImageModelMultiSelect: createGenericImageModelMultiSelect,
             createImageSizeDropdown: createGenericImageSizeDropdown,
-            createVideoModelDropdown: createGenericVideoModelMultiSelect,
+            createVideoModelDropdown: createGenericVideoModelDropdown,
+            createVideoModelMultiSelect: createGenericVideoModelMultiSelect,
             createVideoAspectDropdown: createGenericVideoAspectDropdown,
             createVideoResolutionDropdown: createGenericVideoResolutionDropdown,
             createVideoDurationDropdown: createGenericVideoDurationDropdown,
@@ -3975,6 +4010,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     contentJSON: data.contentJSON,
                     aiModel: data.aiModel,
                     aiModels: data.aiModels,
+                    useMultipleModels: data.useMultipleModels,
+                    useMultipleReasoningModels: data.useMultipleReasoningModels,
+                    useMultipleImageModels: data.useMultipleImageModels,
+                    useMultipleVideoModels: data.useMultipleVideoModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
                 })
@@ -4781,7 +4820,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution, generationRun?: MediaGenerationRunMeta): void {
         patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)
-        updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)
+        updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)
     }
 
     // Patch a single media node's descriptor and re-commit so the canvas chrome

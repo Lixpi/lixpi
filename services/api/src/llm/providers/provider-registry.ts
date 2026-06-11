@@ -196,8 +196,12 @@ export class ProviderRegistry {
 
     private inferRequestGroupKey(instanceKey: string): string | undefined {
         const reasoningMarkerIndex = instanceKey.indexOf(':reasoning:')
-        if (reasoningMarkerIndex === -1) return undefined
-        return instanceKey.slice(0, reasoningMarkerIndex)
+        if (reasoningMarkerIndex !== -1) return instanceKey.slice(0, reasoningMarkerIndex)
+
+        const mediaMarkerIndex = instanceKey.indexOf(':media:')
+        if (mediaMarkerIndex !== -1) return instanceKey.slice(0, mediaMarkerIndex)
+
+        return undefined
     }
 
     async shutdown(): Promise<void> {

@@ -15,6 +15,20 @@ export type AiModelMultiSelectControls = {
     setAiModels?: (aiModels: string[]) => void
 }
 
+export type ImageModelMultiSelectControls = {
+    getCurrentImageModel: () => string
+    setImageModel: (aiModel: string) => void
+    getCurrentImageModels?: () => string[]
+    setImageModels?: (aiModels: string[]) => void
+}
+
+export type VideoModelMultiSelectControls = {
+    getCurrentVideoModel: () => string
+    setVideoModel: (aiModel: string) => void
+    getCurrentVideoModels?: () => string[]
+    setVideoModels?: (aiModels: string[]) => void
+}
+
 type ModelMultiSelectInstance = {
     dom: HTMLElement
     destroy: () => void
@@ -57,16 +71,40 @@ function sameModelIds(a: string[], b: string[]): boolean {
     return a.every((modelId, index) => modelId === b[index])
 }
 
+function adaptImageModelControls(controls: ImageModelMultiSelectControls): AiModelMultiSelectControls {
+    const adaptedControls: AiModelMultiSelectControls = {
+        getCurrentAiModel: controls.getCurrentImageModel,
+        setAiModel: controls.setImageModel,
+    }
+
+    if (controls.getCurrentImageModels) adaptedControls.getCurrentAiModels = controls.getCurrentImageModels
+    if (controls.setImageModels) adaptedControls.setAiModels = controls.setImageModels
+
+    return adaptedControls
+}
+
+function adaptVideoModelControls(controls: VideoModelMultiSelectControls): AiModelMultiSelectControls {
+    const adaptedControls: AiModelMultiSelectControls = {
+        getCurrentAiModel: controls.getCurrentVideoModel,
+        setAiModel: controls.setVideoModel,
+    }
+
+    if (controls.getCurrentVideoModels) adaptedControls.getCurrentAiModels = controls.getCurrentVideoModels
+    if (controls.setVideoModels) adaptedControls.setAiModels = controls.setVideoModels
+
+    return adaptedControls
+}
+
 class ModelMultiSelect implements ModelMultiSelectInstance {
     readonly dom: HTMLElement
 
     private readonly button: HTMLButtonElement
     private readonly titleEl: HTMLElement
-    private readonly iconEl: HTMLElement
     private readonly dotsMenu: HTMLElement
     private readonly optionsList: HTMLUListElement
     private readonly infoBubble: InfoBubbleInstance
     private readonly unsubscribe: () => void
+    private readonly handleDocumentMouseDown: (event: MouseEvent) => void
     private options: AiModelDropdownOption[] = []
     private selectedModelIds: string[] = []
 
@@ -76,7 +114,6 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         this.dom = this.render()
         this.button = this.dom.querySelector('button') as HTMLButtonElement
         this.titleEl = this.dom.querySelector('.title') as HTMLElement
-        this.iconEl = this.dom.querySelector('.selected-option-icon') as HTMLElement
         this.dotsMenu = this.dom.querySelector('.dots-dropdown-menu') as HTMLElement
         this.optionsList = html`<ul className="submenu ai-model-multi-select-list" onwheel=${this.handleWheel}></ul>` as HTMLUListElement
 
@@ -99,11 +136,20 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
                 this.dotsMenu.classList.remove('is-active')
             },
         })
-        this.infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
+        this.infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
         this.dotsMenu.appendChild(this.infoBubble.dom)
+        this.handleDocumentMouseDown = (event: MouseEvent): void => {
+            if (!this.infoBubble.isOpen?.()) return
+
+            const path = event.composedPath()
+            if (path.includes(this.dom) || path.includes(this.infoBubble.dom)) return
+
+            this.infoBubble.close()
+        }
 
         this.renderSelection()
         this.renderOptions()
+        document.addEventListener('mousedown', this.handleDocumentMouseDown, true)
 
         let receivedInitialStoreValue = false
         this.unsubscribe = aiModelsStore.subscribe((storeState: any) => {
@@ -131,7 +177,6 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
                         onmousedown=${this.preventProseMirrorEdit}
                         contenteditable="false"
                     >
-                        <span className="selected-option-icon flex items-center"></span>
                         <span className="title"></span>
                         <span className="state-indicator flex items-center" innerHTML=${chevronDownIcon}></span>
                     </button>
@@ -175,8 +220,11 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     }
 
     private getNormalizedControlSelection(): string[] {
+        const controlSelection = this.getControlSelection()
+        if (this.options.length === 0) return controlSelection
+
         const availableModelIds = new Set(this.options.map((option) => option.aiModel))
-        return this.getControlSelection().filter((modelId) => availableModelIds.has(modelId))
+        return controlSelection.filter((modelId) => availableModelIds.has(modelId))
     }
 
     private writeSelection(modelIds: string[]): void {
@@ -187,6 +235,13 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     }
 
     private syncSelection(commitChanges: boolean): void {
+        if (this.options.length === 0) {
+            this.selectedModelIds = this.getControlSelection()
+            this.renderSelection()
+            this.renderOptions()
+            return
+        }
+
         const controlSelection = this.getNormalizedControlSelection()
         const nextSelection = controlSelection.length > 0
             ? controlSelection
@@ -224,14 +279,11 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             .map((modelId) => this.options.find((option) => option.aiModel === modelId))
             .filter((option): option is AiModelDropdownOption => Boolean(option))
 
-        const firstSelected = selectedOptions[0]
         this.titleEl.textContent = selectedOptions.length === 0
             ? this.config.placeholderTitle
             : selectedOptions.length === 1
-                ? firstSelected.title
+                ? selectedOptions[0].title
                 : `${selectedOptions.length} models`
-
-        this.iconEl.innerHTML = firstSelected?.icon ?? ''
     }
 
     private renderOptions(): void {
@@ -250,9 +302,9 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
                     data-selected=${isSelected ? 'true' : 'false'}
                     onclick=${handleClick}
                 >
-                    <span className="ai-model-multi-select-check" innerHTML=${isSelected ? checkMarkIcon : ''}></span>
                     ${option.icon ? html`<span className="ai-model-multi-select-icon" innerHTML=${option.icon}></span>` : null}
                     <span className="ai-model-multi-select-title">${option.title}</span>
+                    <span className="ai-model-multi-select-check" innerHTML=${isSelected ? checkMarkIcon : ''}></span>
                 </li>
             ` as HTMLLIElement
         })
@@ -265,6 +317,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     }
 
     destroy(): void {
+        document.removeEventListener('mousedown', this.handleDocumentMouseDown, true)
         this.unsubscribe()
         this.infoBubble.destroy()
     }
@@ -285,12 +338,12 @@ export function createGenericAiModelMultiSelect(
 }
 
 export function createGenericImageModelMultiSelect(
-    controls: AiModelMultiSelectControls,
+    controls: ImageModelMultiSelectControls,
     dropdownId: string
 ): ModelMultiSelectInstance {
     return new ModelMultiSelect({
         id: dropdownId,
-        controls,
+        controls: adaptImageModelControls(controls),
         placeholderTitle: 'Image models',
         requireSelection: true,
         autoSelectFirst: true,
@@ -299,12 +352,12 @@ export function createGenericImageModelMultiSelect(
 }
 
 export function createGenericVideoModelMultiSelect(
-    controls: AiModelMultiSelectControls,
+    controls: VideoModelMultiSelectControls,
     dropdownId: string
 ): ModelMultiSelectInstance {
     return new ModelMultiSelect({
         id: dropdownId,
-        controls,
+        controls: adaptVideoModelControls(controls),
         placeholderTitle: 'Video models',
         requireSelection: false,
         autoSelectFirst: false,

@@ -31,6 +31,10 @@ type AiSubmitPayload = {
     messages: any[]
     aiModel: string
     aiModels?: string[]
+    useMultipleModels?: boolean
+    useMultipleReasoningModels?: boolean
+    useMultipleImageModels?: boolean
+    useMultipleVideoModels?: boolean
     threadId: string
     imageOptions?: {
         aiImageModel?: string
@@ -50,6 +54,10 @@ type PendingMessage = {
     content: any
     aiModel: string
     aiModels?: string[]
+    useMultipleModels?: boolean
+    useMultipleReasoningModels?: boolean
+    useMultipleImageModels?: boolean
+    useMultipleVideoModels?: boolean
     imageOptions?: {
         aiImageModel?: string
         aiImageModels?: string[]
@@ -151,6 +159,10 @@ export class AiPromptInputController {
         contentJSON: any
         aiModel: string
         aiModels?: string[]
+        useMultipleModels?: boolean
+        useMultipleReasoningModels?: boolean
+        useMultipleImageModels?: boolean
+        useMultipleVideoModels?: boolean
         imageOptions?: {
             aiImageModel?: string
             aiImageModels?: string[]
@@ -158,7 +170,17 @@ export class AiPromptInputController {
         }
         videoOptions?: VideoOptions
     }): Promise<void> {
-        const { contentJSON, aiModel, aiModels, imageOptions, videoOptions } = params
+        const {
+            contentJSON,
+            aiModel,
+            aiModels,
+            useMultipleModels,
+            useMultipleReasoningModels,
+            useMultipleImageModels,
+            useMultipleVideoModels,
+            imageOptions,
+            videoOptions,
+        } = params
 
         if (!this.target) {
             console.warn('[AiPromptInputController] No target set, cannot submit')
@@ -173,10 +195,30 @@ export class AiPromptInputController {
         if (this.target.type === 'aiChatThread') {
             // Target is an existing AI chat thread — inject message directly
             const threadId = this.target.referenceId
-            this.injectMessageAndSubmit(threadId, { content: contentJSON, aiModel, aiModels, imageOptions, videoOptions })
+            this.injectMessageAndSubmit(threadId, {
+                content: contentJSON,
+                aiModel,
+                aiModels,
+                useMultipleModels,
+                useMultipleReasoningModels,
+                useMultipleImageModels,
+                useMultipleVideoModels,
+                imageOptions,
+                videoOptions,
+            })
         } else {
             // Target is a document or image — auto-create a new AI chat thread
-            await this.createThreadAndSubmit(contentJSON, aiModel, aiModels, imageOptions, videoOptions)
+            await this.createThreadAndSubmit({
+                contentJSON,
+                aiModel,
+                aiModels,
+                useMultipleModels,
+                useMultipleReasoningModels,
+                useMultipleImageModels,
+                useMultipleVideoModels,
+                imageOptions,
+                videoOptions,
+            })
         }
     }
 
@@ -246,7 +288,31 @@ export class AiPromptInputController {
         const pendingAiModels = pending.aiModels ? serializeAiModelSelectionAttr(pending.aiModels) : undefined
         const pendingImageModels = pending.imageOptions?.aiImageModels ? serializeAiModelSelectionAttr(pending.imageOptions.aiImageModels) : undefined
         const pendingVideoModels = pending.videoOptions?.aiVideoModels ? serializeAiModelSelectionAttr(pending.videoOptions.aiVideoModels) : undefined
+        const legacyPendingUseMultipleModels = Boolean(pending.useMultipleModels)
+        const pendingUseMultipleReasoningModels = pending.useMultipleReasoningModels ?? legacyPendingUseMultipleModels
+        const pendingUseMultipleImageModels = pending.useMultipleImageModels ?? legacyPendingUseMultipleModels
+        const pendingUseMultipleVideoModels = pending.useMultipleVideoModels ?? legacyPendingUseMultipleModels
+        const pendingUseMultipleModels = pendingUseMultipleReasoningModels
+            || pendingUseMultipleImageModels
+            || pendingUseMultipleVideoModels
+        const legacyCurrentUseMultipleModels = currentAttrs.useMultipleModels === true || currentAttrs.useMultipleModels === 'true'
+        const rawCurrentUseMultipleReasoningModels = currentAttrs.useMultipleReasoningModels === true
+            || currentAttrs.useMultipleReasoningModels === 'true'
+        const rawCurrentUseMultipleImageModels = currentAttrs.useMultipleImageModels === true
+            || currentAttrs.useMultipleImageModels === 'true'
+        const rawCurrentUseMultipleVideoModels = currentAttrs.useMultipleVideoModels === true
+            || currentAttrs.useMultipleVideoModels === 'true'
+        const hasCurrentSectionModelMode = rawCurrentUseMultipleReasoningModels
+            || rawCurrentUseMultipleImageModels
+            || rawCurrentUseMultipleVideoModels
+        const useCurrentLegacyModeFallback = legacyCurrentUseMultipleModels && !hasCurrentSectionModelMode
+        const currentUseMultipleReasoningModels = rawCurrentUseMultipleReasoningModels || useCurrentLegacyModeFallback
+        const currentUseMultipleImageModels = rawCurrentUseMultipleImageModels || useCurrentLegacyModeFallback
+        const currentUseMultipleVideoModels = rawCurrentUseMultipleVideoModels || useCurrentLegacyModeFallback
         const needsUpdate = currentAttrs.aiModel !== pending.aiModel
+            || currentUseMultipleReasoningModels !== pendingUseMultipleReasoningModels
+            || currentUseMultipleImageModels !== pendingUseMultipleImageModels
+            || currentUseMultipleVideoModels !== pendingUseMultipleVideoModels
             || (pendingAiModels !== undefined && currentAttrs.aiModels !== pendingAiModels)
             || (pending.imageOptions?.aiImageModel && currentAttrs.aiImageModel !== pending.imageOptions.aiImageModel)
             || (pendingImageModels !== undefined && currentAttrs.aiImageModels !== pendingImageModels)
@@ -262,6 +328,10 @@ export class AiPromptInputController {
             tr = tr.setNodeMarkup(mappedThreadPos, undefined, {
                 ...currentAttrs,
                 aiModel: pending.aiModel,
+                useMultipleModels: pendingUseMultipleModels,
+                useMultipleReasoningModels: pendingUseMultipleReasoningModels,
+                useMultipleImageModels: pendingUseMultipleImageModels,
+                useMultipleVideoModels: pendingUseMultipleVideoModels,
                 ...(pendingAiModels !== undefined ? { aiModels: pendingAiModels } : {}),
                 ...(pending.imageOptions ? {
                     aiImageModel: pending.imageOptions.aiImageModel || '',
@@ -286,17 +356,39 @@ export class AiPromptInputController {
         entry.triggerGradientAnimation?.()
     }
 
-    private async createThreadAndSubmit(
-        contentJSON: any,
-        aiModel: string,
-        aiModels?: string[],
-        imageOptions?: PendingMessage['imageOptions'],
+    private async createThreadAndSubmit(params: {
+        contentJSON: any
+        aiModel: string
+        aiModels?: string[]
+        useMultipleModels?: boolean
+        useMultipleReasoningModels?: boolean
+        useMultipleImageModels?: boolean
+        useMultipleVideoModels?: boolean
+        imageOptions?: PendingMessage['imageOptions']
         videoOptions?: PendingMessage['videoOptions']
-    ): Promise<void> {
+    }): Promise<void> {
+        const {
+            contentJSON,
+            aiModel,
+            aiModels,
+            useMultipleModels,
+            useMultipleReasoningModels,
+            useMultipleImageModels,
+            useMultipleVideoModels,
+            imageOptions,
+            videoOptions,
+        } = params
         if (!this.target) return
 
         const threadId = uuidv4()
         const targetNodeId = this.target.nodeId
+        const legacyUseMultipleModels = Boolean(useMultipleModels)
+        const threadUseMultipleReasoningModels = useMultipleReasoningModels ?? legacyUseMultipleModels
+        const threadUseMultipleImageModels = useMultipleImageModels ?? legacyUseMultipleModels
+        const threadUseMultipleVideoModels = useMultipleVideoModels ?? legacyUseMultipleModels
+        const threadUseMultipleModels = threadUseMultipleReasoningModels
+            || threadUseMultipleImageModels
+            || threadUseMultipleVideoModels
 
         // Create the initial thread content (without aiUserInput since we removed it)
         const initialContent = {
@@ -311,6 +403,10 @@ export class AiPromptInputController {
                     attrs: {
                         threadId,
                         aiModel,
+                        useMultipleModels: threadUseMultipleModels,
+                        useMultipleReasoningModels: threadUseMultipleReasoningModels,
+                        useMultipleImageModels: threadUseMultipleImageModels,
+                        useMultipleVideoModels: threadUseMultipleVideoModels,
                         ...(aiModels?.length ? { aiModels: serializeAiModelSelectionAttr(aiModels) } : {}),
                         ...(imageOptions?.aiImageModel ? { aiImageModel: imageOptions.aiImageModel } : {}),
                         ...(imageOptions?.aiImageModels?.length ? { aiImageModels: serializeAiModelSelectionAttr(imageOptions.aiImageModels) } : {}),
@@ -385,7 +481,17 @@ export class AiPromptInputController {
 
             // Queue the AI submit for after the thread editor mounts
             // The message is already in the initial content, so we just need to trigger the AI request
-            this.pendingMessages.set(threadId, { content: contentJSON, aiModel, imageOptions, videoOptions })
+            this.pendingMessages.set(threadId, {
+                content: contentJSON,
+                aiModel,
+                aiModels,
+                useMultipleModels: threadUseMultipleModels,
+                useMultipleReasoningModels: threadUseMultipleReasoningModels,
+                useMultipleImageModels: threadUseMultipleImageModels,
+                useMultipleVideoModels: threadUseMultipleVideoModels,
+                imageOptions,
+                videoOptions,
+            })
 
             this.persistCanvasState(newCanvasState)
 

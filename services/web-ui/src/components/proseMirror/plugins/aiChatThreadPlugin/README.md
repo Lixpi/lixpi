@@ -192,7 +192,11 @@ sequenceDiagram
   - `threadId: string | null` - Unique identifier for the thread
   - `status: 'active'|'paused'|'completed'` - Thread lifecycle state
   - `aiModel: string` - Selected AI model (e.g., "Anthropic:claude-3-5-sonnet")
-- DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model]`
+  - `useMultipleModels: boolean` - Legacy aggregate multi-model flag
+  - `useMultipleReasoningModels: boolean` - Enables reasoning model request arrays on submit
+  - `useMultipleImageModels: boolean` - Enables image model request arrays on submit
+  - `useMultipleVideoModels: boolean` - Enables video model request arrays on submit
+- DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model][data-use-multiple-models][data-use-multiple-reasoning-models][data-use-multiple-image-models][data-use-multiple-video-models]`
 - **Note:** User input is handled by the separate `aiPromptInputPlugin` which renders as a floating canvas element below the selected node. See `aiPromptInputPlugin/` for details.
 
 **`aiUserMessage`** - Sent user message bubble
@@ -232,6 +236,7 @@ sequenceDiagram
 Multi-model media generation can produce several reasoning streams and several media outputs from one user request. Chat history keeps those variants distinguishable with run metadata instead of relying on thread-level state alone:
 
 - Reasoning text streams are grouped by `reasoningRunId`. `START_STREAM` creates one `aiResponseMessage` per reasoning run, and `STREAMING`/`END_STREAM` only update that matching response.
+- Context, branch-resolution, and generation-trace events can create the same empty receiving response shell before `START_STREAM` arrives, so preflight work still shows the initial spinner.
 - Media entries and generation trace collapsibles are grouped by `mediaRunId` when a media run exists. This lets one reasoning response contain several image or video outputs from different media models without overwriting sibling variants.
 - The plugin still exposes thread-level receiving state to the rest of the UI, but internally it tracks active receiving runs per thread. Completing one reasoning variant no longer clears the stop/receiving state while sibling variants are still streaming.
 - In-chat generated video nodes are now inserted for pending, complete, and error events. The canvas still owns full-size placement and branch lineage, while chat history keeps a compact per-run record.

@@ -19,6 +19,10 @@ export const aiChatThreadNodeSpec = {
         // Leave aiModel blank initially; we'll assign first available model from store when models load
         aiModel: { default: '' },
         aiModels: { default: '' },
+        useMultipleModels: { default: false },
+        useMultipleReasoningModels: { default: false },
+        useMultipleImageModels: { default: false },
+        useMultipleVideoModels: { default: false },
         // Image model for image generation routing (Provider:model format)
         aiImageModel: { default: '' },
         aiImageModels: { default: '' },
@@ -43,47 +47,81 @@ export const aiChatThreadNodeSpec = {
     parseDOM: [
         {
             tag: 'div.ai-chat-thread-wrapper',
-            getAttrs: (dom) => ({
-                threadId: dom.getAttribute('data-thread-id'),
-                status: dom.getAttribute('data-status') || 'active',
-                aiModel: dom.getAttribute('data-ai-model') || '',
-                aiModels: dom.getAttribute('data-ai-models') || '',
-                aiImageModel: dom.getAttribute('data-ai-image-model') || '',
-                aiImageModels: dom.getAttribute('data-ai-image-models') || '',
-                imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
-                imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
-                previousResponseId: dom.getAttribute('data-previous-response-id') || '',
-                aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
-                aiVideoModels: dom.getAttribute('data-ai-video-models') || '',
-                videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
-                videoResolution: dom.getAttribute('data-video-resolution') || '',
-                videoDuration: dom.getAttribute('data-video-duration') || '',
-                sourceVideoNodeId: dom.getAttribute('data-source-video-node-id') || ''
-            })
+            getAttrs: (dom) => {
+                const legacyUseMultipleModels = dom.getAttribute('data-use-multiple-models') === 'true'
+                const hasSectionModeAttrs = dom.hasAttribute('data-use-multiple-reasoning-models')
+                    || dom.hasAttribute('data-use-multiple-image-models')
+                    || dom.hasAttribute('data-use-multiple-video-models')
+                const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModeAttrs
+                return {
+                    threadId: dom.getAttribute('data-thread-id'),
+                    status: dom.getAttribute('data-status') || 'active',
+                    aiModel: dom.getAttribute('data-ai-model') || '',
+                    aiModels: dom.getAttribute('data-ai-models') || '',
+                    useMultipleModels: legacyUseMultipleModels,
+                    useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true' || useLegacyModeFallback,
+                    useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true' || useLegacyModeFallback,
+                    useMultipleVideoModels: dom.getAttribute('data-use-multiple-video-models') === 'true' || useLegacyModeFallback,
+                    aiImageModel: dom.getAttribute('data-ai-image-model') || '',
+                    aiImageModels: dom.getAttribute('data-ai-image-models') || '',
+                    imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
+                    imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
+                    previousResponseId: dom.getAttribute('data-previous-response-id') || '',
+                    aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
+                    aiVideoModels: dom.getAttribute('data-ai-video-models') || '',
+                    videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
+                    videoResolution: dom.getAttribute('data-video-resolution') || '',
+                    videoDuration: dom.getAttribute('data-video-duration') || '',
+                    sourceVideoNodeId: dom.getAttribute('data-source-video-node-id') || ''
+                }
+            }
         }
     ],
-    toDOM: (node) => [
-        'div',
-        {
-            class: 'ai-chat-thread-wrapper',
-            'data-thread-id': node.attrs.threadId,
-            'data-status': node.attrs.status,
-            'data-ai-model': node.attrs.aiModel,
-            'data-ai-models': node.attrs.aiModels,
-            'data-ai-image-model': node.attrs.aiImageModel,
-            'data-ai-image-models': node.attrs.aiImageModels,
-            'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
-            'data-image-generation-size': node.attrs.imageGenerationSize,
-            'data-previous-response-id': node.attrs.previousResponseId,
-            'data-ai-video-model': node.attrs.aiVideoModel,
-            'data-ai-video-models': node.attrs.aiVideoModels,
-            'data-video-aspect-ratio': node.attrs.videoAspectRatio,
-            'data-video-resolution': node.attrs.videoResolution,
-            'data-video-duration': node.attrs.videoDuration,
-            'data-source-video-node-id': node.attrs.sourceVideoNodeId
-        },
-        0
-    ]
+    toDOM: (node) => {
+        const legacyUseMultipleModels = node.attrs.useMultipleModels === true || node.attrs.useMultipleModels === 'true'
+        const hasSectionMode = node.attrs.useMultipleReasoningModels === true
+            || node.attrs.useMultipleReasoningModels === 'true'
+            || node.attrs.useMultipleImageModels === true
+            || node.attrs.useMultipleImageModels === 'true'
+            || node.attrs.useMultipleVideoModels === true
+            || node.attrs.useMultipleVideoModels === 'true'
+        const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionMode
+        const useMultipleReasoningModels = node.attrs.useMultipleReasoningModels === true
+            || node.attrs.useMultipleReasoningModels === 'true'
+            || useLegacyModeFallback
+        const useMultipleImageModels = node.attrs.useMultipleImageModels === true
+            || node.attrs.useMultipleImageModels === 'true'
+            || useLegacyModeFallback
+        const useMultipleVideoModels = node.attrs.useMultipleVideoModels === true
+            || node.attrs.useMultipleVideoModels === 'true'
+            || useLegacyModeFallback
+        return [
+            'div',
+            {
+                class: 'ai-chat-thread-wrapper',
+                'data-thread-id': node.attrs.threadId,
+                'data-status': node.attrs.status,
+                'data-ai-model': node.attrs.aiModel,
+                'data-ai-models': node.attrs.aiModels,
+                'data-use-multiple-models': String(useMultipleReasoningModels || useMultipleImageModels || useMultipleVideoModels),
+                'data-use-multiple-reasoning-models': String(useMultipleReasoningModels),
+                'data-use-multiple-image-models': String(useMultipleImageModels),
+                'data-use-multiple-video-models': String(useMultipleVideoModels),
+                'data-ai-image-model': node.attrs.aiImageModel,
+                'data-ai-image-models': node.attrs.aiImageModels,
+                'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
+                'data-image-generation-size': node.attrs.imageGenerationSize,
+                'data-previous-response-id': node.attrs.previousResponseId,
+                'data-ai-video-model': node.attrs.aiVideoModel,
+                'data-ai-video-models': node.attrs.aiVideoModels,
+                'data-video-aspect-ratio': node.attrs.videoAspectRatio,
+                'data-video-resolution': node.attrs.videoResolution,
+                'data-video-duration': node.attrs.videoDuration,
+                'data-source-video-node-id': node.attrs.sourceVideoNodeId
+            },
+            0
+        ]
+    }
 }
 
 export const defaultAttrs = {

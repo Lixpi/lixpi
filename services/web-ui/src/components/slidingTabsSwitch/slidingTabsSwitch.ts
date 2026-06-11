@@ -79,8 +79,6 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
                 closable: state.closable,
                 surface: 'content',
                 closeVisibility: 'hover',
-                labelAlign: 'center',
-                closePlacement: 'start',
                 closeAriaLabel: state.option.closeAriaLabel,
                 onClose: (_id, event) => state.onClose(event),
             }),

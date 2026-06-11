@@ -396,14 +396,27 @@
 .ai-prompt-model-menu-section-heading {
     display: flex;
     align-items: center;
-    justify-content: var(--ai-prompt-model-menu-section-heading-justify-content, space-between);
-    gap: var(--ai-prompt-model-menu-section-heading-gap, 6px);
+    gap: var(--ai-prompt-model-menu-section-heading-gap, 8px);
     width: 100%;
     min-width: 0;
 }
 
-.ai-prompt-model-menu-section-help {
+.ai-prompt-model-menu-section-heading-main {
+    display: flex;
+    align-items: center;
+    gap: var(--ai-prompt-model-menu-section-title-help-gap, 6px);
+    min-width: 0;
+}
+
+.ai-prompt-model-menu-section-heading-action {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
     margin-left: auto;
+}
+
+.ai-prompt-model-menu-section-help {
+    flex: 0 0 auto;
 }
 
 .ai-prompt-model-menu-section-title {
@@ -443,6 +456,81 @@
     min-width: 0;
 }
 
+.ai-prompt-selected-model-tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ai-prompt-selected-model-tags-gap, 6px);
+    min-width: 0;
+    max-width: var(--ai-prompt-model-menu-controls-max-width, min(612px, calc(100vw - 48px)));
+    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+}
+
+.ai-prompt-selected-model-tags-row[data-visible="false"] {
+    display: none;
+}
+
+.ai-prompt-selected-model-tag,
+.ai-prompt-selected-model-tag-svg {
+    flex: 0 0 auto;
+}
+
+.ai-prompt-selected-model-tag {
+    display: inline-flex;
+    line-height: 0;
+}
+
+.ai-prompt-selected-model-tag-svg {
+    display: block;
+}
+
+.ai-prompt-selected-model-tag-svg {
+    overflow: visible;
+}
+
+.ai-prompt-model-selector-host {
+    display: inline-flex;
+    min-width: 0;
+}
+
+.ai-prompt-model-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ai-prompt-model-menu-toggle-gap, 8px);
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ai-prompt-model-menu-control-label-color, #7a828a);
+    font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ai-prompt-model-menu-toggle-text {
+    font-size: var(--ai-prompt-model-menu-control-label-font-size, 10px);
+    font-weight: var(--ai-prompt-model-menu-control-label-font-weight, 600);
+    line-height: var(--ai-prompt-model-menu-control-label-line-height, 1.2);
+}
+
+.ai-prompt-model-menu-toggle:focus-visible {
+    outline: var(--ai-prompt-model-menu-trigger-focus-outline, 2px solid #b8bec8);
+    outline-offset: var(--ai-prompt-model-menu-trigger-focus-outline-offset, 2px);
+}
+
+.ai-prompt-model-menu-toggle-svg-host,
+.ai-prompt-model-menu-toggle-svg {
+    display: block;
+    width: 34px;
+    height: 22px;
+    flex: 0 0 34px;
+}
+
+.ai-prompt-model-menu-toggle-svg {
+    overflow: visible;
+}
+
 .ai-prompt-model-menu-section-controls .dropdown-menu-tag-pill-wrapper {
     position: relative;
     min-width: 0;
@@ -461,6 +549,18 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.ai-prompt-model-selector-host,
+.ai-prompt-model-selector-host > .dropdown-menu-tag-pill-wrapper,
+.ai-prompt-model-selector-host .dots-dropdown-menu,
+.ai-prompt-model-selector-host .dots-dropdown-menu button {
+    height: var(--ai-prompt-model-selector-trigger-height, 30px);
+    min-height: var(--ai-prompt-model-selector-trigger-height, 30px);
+}
+
+.ai-prompt-model-selector-host .dots-dropdown-menu button {
+    align-items: center;
 }
 
 .ai-model-multi-select .selected-option-icon {
@@ -485,6 +585,7 @@
     width: 14px;
     height: 14px;
     flex: 0 0 14px;
+    margin-left: auto;
 }
 
 .ai-model-multi-select-check svg,

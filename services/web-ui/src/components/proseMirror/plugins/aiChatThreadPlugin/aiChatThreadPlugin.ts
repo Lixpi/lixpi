@@ -1197,6 +1197,7 @@ class AiChatThreadPluginClass {
 
             // Handle image generation events
             if (type === 'image_generation_trace') {
+                this.ensureReceivingResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
                 this.handleImageGenerationTrace(view, event)
                 return
             }
@@ -1235,11 +1236,13 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'video_generation_trace') {
+                this.ensureReceivingResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
                 this.handleVideoGenerationTrace(view, event)
                 return
             }
 
             if (type === 'image_branch_resolved') {
+                this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
                 const callbacks = getAiGeneratedImageCallbacks()
                 if (effectiveThreadId && event.imageBranchResolution) {
                     callbacks.onImageBranchResolvedToCanvas?.({
@@ -1252,6 +1255,7 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'context_relevance_resolved') {
+                this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
                 const callbacks = getAiGeneratedImageCallbacks()
                 if (effectiveThreadId && event.workspaceContextResolution) {
                     callbacks.onWorkspaceContextResolvedToCanvas?.({
@@ -1575,19 +1579,44 @@ class AiChatThreadPluginClass {
         })
     }
 
-    private handleStreamStart(
+    private ensureReceivingResponseNode(
         state: EditorState,
         dispatch: (tr: Transaction) => void,
         aiProvider?: string,
         threadId?: string,
         generationRun?: MediaGenerationRunMeta
     ): void {
-        // Only process events for threads that exist in THIS document
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
-
         if (!threadInfo) return
 
-        const { insertPos } = threadInfo
+        const existingInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
+        if (existingInfo.found && existingInfo.nodePos !== undefined) {
+            const existingNode = state.doc.nodeAt(existingInfo.nodePos)
+            const isActivePlaceholder = Boolean(
+                existingNode?.attrs?.isReceivingAnimation
+                || existingNode?.attrs?.isInitialRenderAnimation
+            )
+
+            if (existingNode?.type.name === aiResponseMessageNodeType && isActivePlaceholder) {
+                let tr = state.tr
+                if (!existingNode.attrs.isReceivingAnimation || !existingNode.attrs.isInitialRenderAnimation) {
+                    tr = tr.setNodeMarkup(existingInfo.nodePos, undefined, {
+                        ...existingNode.attrs,
+                        isInitialRenderAnimation: true,
+                        isReceivingAnimation: true,
+                        aiProvider: existingNode.attrs.aiProvider || aiProvider,
+                    })
+                }
+                if (threadId) {
+                    tr.setMeta('setReceiving', { threadId, receiving: true, runKey: getReasoningRunKey(generationRun) })
+                }
+                if (tr.docChanged || threadId) {
+                    tr.setMeta('skipDispatch', true)
+                    dispatch(tr)
+                }
+                return
+            }
+        }
 
         const responseMessageId = `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
         const aiResponseNode = state.schema.nodes[aiResponseMessageNodeType].create({
@@ -1598,20 +1627,23 @@ class AiChatThreadPluginClass {
             ...buildGeneratedRunAttrs(generationRun),
         })
 
+        let tr = state.tr.insert(threadInfo.insertPos, aiResponseNode)
+        if (threadId) {
+            tr.setMeta('setReceiving', { threadId, receiving: true, runKey: getReasoningRunKey(generationRun) })
+        }
+        tr.setMeta('skipDispatch', true)
+        dispatch(tr)
+    }
+
+    private handleStreamStart(
+        state: EditorState,
+        dispatch: (tr: Transaction) => void,
+        aiProvider?: string,
+        threadId?: string,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
         try {
-            let tr = state.tr
-            tr.insert(insertPos, aiResponseNode)
-
-            // Keep cursor in the user input composer.
-            // We intentionally do not create trailing paragraphs anymore;
-            // the thread always ends with a dedicated aiUserInput node.
-
-            // Set receiving state for this specific thread
-            if (threadId) {
-                tr.setMeta('setReceiving', { threadId, receiving: true, runKey: getReasoningRunKey(generationRun) })
-            }
-            tr.setMeta('skipDispatch', true)
-            dispatch(tr)
+            this.ensureReceivingResponseNode(state, dispatch, aiProvider, threadId, generationRun)
         } catch (error) {
             console.error('Error inserting aiResponseMessage:', error)
         }
@@ -1930,6 +1962,10 @@ class AiChatThreadPluginClass {
         const {
             aiModel = '',
             aiModels = '',
+            useMultipleModels = false,
+            useMultipleReasoningModels = false,
+            useMultipleImageModels = false,
+            useMultipleVideoModels = false,
             aiImageModel = '',
             aiImageModels = '',
             threadContext = 'Thread',
@@ -1944,12 +1980,33 @@ class AiChatThreadPluginClass {
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
 
-        const reasoningModelIds = parseAiModelSelectionAttr(aiModels)
-        const imageModelIds = parseAiModelSelectionAttr(aiImageModels)
-        const videoModelIds = parseAiModelSelectionAttr(aiVideoModels)
-        const effectiveAiModel = aiModel || reasoningModelIds[0] || ''
-        const effectiveImageModel = aiImageModel || imageModelIds[0] || ''
-        const effectiveVideoModel = aiVideoModel || videoModelIds[0] || ''
+        const legacyUseMultipleModels = useMultipleModels === true || useMultipleModels === 'true'
+        const rawReasoningModelsEnabled = useMultipleReasoningModels === true
+            || useMultipleReasoningModels === 'true'
+        const rawImageModelsEnabled = useMultipleImageModels === true
+            || useMultipleImageModels === 'true'
+        const rawVideoModelsEnabled = useMultipleVideoModels === true
+            || useMultipleVideoModels === 'true'
+        const hasSectionModelMode = rawReasoningModelsEnabled || rawImageModelsEnabled || rawVideoModelsEnabled
+        const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
+        const reasoningModelsEnabled = rawReasoningModelsEnabled || useLegacyModeFallback
+        const imageModelsEnabled = rawImageModelsEnabled || useLegacyModeFallback
+        const videoModelsEnabled = rawVideoModelsEnabled || useLegacyModeFallback
+        const rawReasoningModelIds = parseAiModelSelectionAttr(aiModels)
+        const rawImageModelIds = parseAiModelSelectionAttr(aiImageModels)
+        const rawVideoModelIds = parseAiModelSelectionAttr(aiVideoModels)
+        const effectiveAiModel = aiModel || rawReasoningModelIds[0] || ''
+        const effectiveImageModel = aiImageModel || rawImageModelIds[0] || ''
+        const effectiveVideoModel = aiVideoModel || rawVideoModelIds[0] || ''
+        const reasoningModelIds = reasoningModelsEnabled
+            ? (rawReasoningModelIds.length > 0 ? rawReasoningModelIds : effectiveAiModel ? [effectiveAiModel] : [])
+            : []
+        const imageModelIds = imageModelsEnabled
+            ? (rawImageModelIds.length > 0 ? rawImageModelIds : effectiveImageModel ? [effectiveImageModel] : [])
+            : []
+        const videoModelIds = videoModelsEnabled
+            ? (rawVideoModelIds.length > 0 ? rawVideoModelIds : effectiveVideoModel ? [effectiveVideoModel] : [])
+            : []
 
         // Validate AI model selected
         if (!effectiveAiModel) {

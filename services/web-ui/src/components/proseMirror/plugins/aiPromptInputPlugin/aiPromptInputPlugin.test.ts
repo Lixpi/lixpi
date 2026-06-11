@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { selection } from 'd3-selection'
 import { EditorState, Transaction } from 'prosemirror-state'
 import { EditorView, DecorationSet } from 'prosemirror-view'
 import {
@@ -22,6 +23,19 @@ import {
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
 import { settings } from '$src/settings.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+
+// The model setup block contains SVG toggle switches. happy-dom does not
+// implement the full SVG transform API d3-transition expects, so keep
+// transition chains synchronous and no-op for these unit tests.
+const makeChain = (): any => {
+    const chain: any = {}
+    for (const method of ['duration', 'ease', 'attr', 'style', 'select', 'delay', 'on', 'remove', 'tween']) {
+        chain[method] = () => chain
+    }
+    return chain
+}
+;(selection.prototype as any).transition = () => makeChain()
 
 // =============================================================================
 // HELPERS
@@ -43,14 +57,23 @@ function createMockControlFactories() {
     const modelDropdownDom = document.createElement('div')
     modelDropdownDom.className = 'mock-model-dropdown'
 
+    const modelMultiSelectDom = document.createElement('div')
+    modelMultiSelectDom.className = 'mock-model-multi-select'
+
     const imageModelDropdownDom = document.createElement('div')
     imageModelDropdownDom.className = 'mock-image-model-dropdown'
+
+    const imageModelMultiSelectDom = document.createElement('div')
+    imageModelMultiSelectDom.className = 'mock-image-model-multi-select'
 
     const imageSizeDropdownDom = document.createElement('div')
     imageSizeDropdownDom.className = 'mock-image-size-dropdown'
 
     const videoModelDropdownDom = document.createElement('div')
     videoModelDropdownDom.className = 'mock-video-model-dropdown'
+
+    const videoModelMultiSelectDom = document.createElement('div')
+    videoModelMultiSelectDom.className = 'mock-video-model-multi-select'
 
     const videoAspectDropdownDom = document.createElement('div')
     videoAspectDropdownDom.className = 'mock-video-aspect-dropdown'
@@ -72,8 +95,18 @@ function createMockControlFactories() {
             update: vi.fn(),
             destroy: vi.fn(),
         })),
+        createModelMultiSelect: vi.fn(() => ({
+            dom: modelMultiSelectDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
         createImageModelDropdown: vi.fn(() => ({
             dom: imageModelDropdownDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
+        createImageModelMultiSelect: vi.fn(() => ({
+            dom: imageModelMultiSelectDom,
             update: vi.fn(),
             destroy: vi.fn(),
         })),
@@ -84,6 +117,11 @@ function createMockControlFactories() {
         })),
         createVideoModelDropdown: vi.fn(() => ({
             dom: videoModelDropdownDom,
+            update: vi.fn(),
+            destroy: vi.fn(),
+        })),
+        createVideoModelMultiSelect: vi.fn(() => ({
+            dom: videoModelMultiSelectDom,
             update: vi.fn(),
             destroy: vi.fn(),
         })),
@@ -105,9 +143,12 @@ function createMockControlFactories() {
         createSubmitButton: vi.fn(() => submitButtonDom),
         createContextTray: vi.fn(() => contextTrayDom),
         modelDropdownDom,
+        modelMultiSelectDom,
         imageModelDropdownDom,
+        imageModelMultiSelectDom,
         imageSizeDropdownDom,
         videoModelDropdownDom,
+        videoModelMultiSelectDom,
         videoAspectDropdownDom,
         videoResolutionDropdownDom,
         videoDurationDropdownDom,
@@ -125,9 +166,12 @@ function createPluginOptions(overrides: Partial<Parameters<typeof createAiPrompt
             isReceiving: vi.fn(() => false),
             createContextTray: factories.createContextTray,
             createModelDropdown: factories.createModelDropdown,
+            createModelMultiSelect: factories.createModelMultiSelect,
             createImageModelDropdown: factories.createImageModelDropdown,
+            createImageModelMultiSelect: factories.createImageModelMultiSelect,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoModelMultiSelect: factories.createVideoModelMultiSelect,
             createVideoAspectDropdown: factories.createVideoAspectDropdown,
             createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
@@ -272,9 +316,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             onStop: vi.fn(),
             isReceiving: vi.fn(() => false),
             createModelDropdown: factories.createModelDropdown,
+            createModelMultiSelect: factories.createModelMultiSelect,
             createImageModelDropdown: factories.createImageModelDropdown,
+            createImageModelMultiSelect: factories.createImageModelMultiSelect,
             createImageSizeDropdown: factories.createImageSizeDropdown,
             createVideoModelDropdown: factories.createVideoModelDropdown,
+            createVideoModelMultiSelect: factories.createVideoModelMultiSelect,
             createVideoAspectDropdown: factories.createVideoAspectDropdown,
             createVideoResolutionDropdown: factories.createVideoResolutionDropdown,
             createVideoDurationDropdown: factories.createVideoDurationDropdown,
@@ -472,6 +519,117 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 'Image model',
                 'Video model',
             ])
+        })
+
+        it('renders each model setup section with heading help, toggle, controls row, and selected-tags row', () => {
+            const { nv } = createNodeView()
+            const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
+            const expectedSections = [
+                { title: 'Reasoning model', controlCount: 1, toggleLabel: 'Use multiple reasoning models' },
+                { title: 'Image model', controlCount: 2, toggleLabel: 'Use multiple image models' },
+                { title: 'Video model', controlCount: 4, toggleLabel: 'Use multiple video models' },
+            ]
+
+            expect(sections).toHaveLength(expectedSections.length)
+            for (const [index, expectedSection] of expectedSections.entries()) {
+                const section = sections[index]!
+                const heading = section.querySelector('.ai-prompt-model-menu-section-heading')!
+                const headingMain = section.querySelector('.ai-prompt-model-menu-section-heading-main')!
+                const headingAction = section.querySelector('.ai-prompt-model-menu-section-heading-action')!
+                const controlsRow = section.querySelector('.ai-prompt-model-menu-section-controls')!
+                const selectedTagsRow = section.querySelector('.ai-prompt-selected-model-tags-row')!
+
+                expect(heading.contains(headingMain)).toBe(true)
+                expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(expectedSection.title)
+                expect(headingMain.querySelector('.help-tooltip-trigger')).not.toBeNull()
+                expect(headingAction.querySelector('.ai-prompt-model-menu-toggle')?.getAttribute('aria-label')).toBe(expectedSection.toggleLabel)
+                expect(headingAction.querySelector('.ai-prompt-model-menu-toggle-text')?.textContent).toBe('Use multiple models')
+                expect(controlsRow.querySelectorAll('.ai-prompt-model-menu-control')).toHaveLength(expectedSection.controlCount)
+                expect(section.children[2]).toBe(selectedTagsRow)
+                expect(selectedTagsRow.getAttribute('data-visible')).toBe('false')
+            }
+
+            nv.destroy!()
+        })
+
+        it('keeps single-select dropdowns mounted until a section toggle enables multi-select mode', () => {
+            const { nv, factories, mockView } = createNodeView('Hello', {
+                aiModel: 'Anthropic:sonnet-4-6',
+            })
+
+            expect(factories.createModelDropdown).toHaveBeenCalledTimes(1)
+            expect(factories.createModelMultiSelect).not.toHaveBeenCalled()
+            expect(nv.dom.contains(factories.modelDropdownDom)).toBe(true)
+
+            const reasoningToggle = nv.dom.querySelector(
+                '.ai-prompt-model-menu-toggle[aria-label="Use multiple reasoning models"]'
+            )!
+            reasoningToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            nv.update!(mockView.state.doc.firstChild!)
+
+            expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(true)
+            expect(mockView.state.doc.firstChild!.attrs.useMultipleImageModels).toBe(false)
+            expect(mockView.state.doc.firstChild!.attrs.useMultipleVideoModels).toBe(false)
+            expect(mockView.state.doc.firstChild!.attrs.aiModels).toBe(JSON.stringify(['Anthropic:sonnet-4-6']))
+            expect(factories.createModelMultiSelect).toHaveBeenCalledTimes(1)
+            expect(nv.dom.contains(factories.modelMultiSelectDom)).toBe(true)
+            expect(nv.dom.contains(factories.modelDropdownDom)).toBe(false)
+
+            nv.destroy!()
+        })
+
+        it('renders selected model tag pills only below the enabled multi-model section and removes models from that row', () => {
+            aiModelsStore.setAiModels([
+                {
+                    provider: 'Anthropic',
+                    model: 'sonnet-4-6',
+                    shortTitle: 'Sonnet 4.6',
+                    iconName: 'claudeIcon',
+                    color: '#1a2744',
+                    modalities: [{ modality: 'TEXT', shortTitle: 'Text' }],
+                },
+                {
+                    provider: 'Anthropic',
+                    model: 'opus-4-8',
+                    shortTitle: 'Opus 4.8',
+                    iconName: 'claudeIcon',
+                    color: '#1a2744',
+                    modalities: [{ modality: 'TEXT', shortTitle: 'Text' }],
+                },
+            ] as any)
+
+            const { nv, mockView } = createNodeView('Hello', {
+                aiModel: 'Anthropic:sonnet-4-6',
+                aiModels: JSON.stringify(['Anthropic:sonnet-4-6', 'Anthropic:opus-4-8']),
+                useMultipleReasoningModels: true,
+                aiImageModels: JSON.stringify(['Anthropic:sonnet-4-6']),
+            })
+            const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
+            const reasoningTagsRow = sections[0]!.querySelector('.ai-prompt-selected-model-tags-row')!
+            const imageTagsRow = sections[1]!.querySelector('.ai-prompt-selected-model-tags-row')!
+            const reasoningLabels = () => Array.from(reasoningTagsRow.querySelectorAll('.tag-pill-label'))
+                .map((element) => element.textContent)
+
+            expect(reasoningTagsRow.getAttribute('data-visible')).toBe('true')
+            expect(imageTagsRow.getAttribute('data-visible')).toBe('false')
+            expect(reasoningLabels()).toEqual(['Sonnet 4.6', 'Opus 4.8'])
+            expect(reasoningTagsRow.querySelector('.tag-pill-label')!.getAttribute('text-anchor')).toBe('start')
+            expect(reasoningTagsRow.querySelector('.tag-pill-close')!.getAttribute('transform')).toBe('translate(11, 12)')
+            expect(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('stroke')).toBe('rgba(105, 115, 133, 0.12)')
+            expect(Number(
+                reasoningTagsRow.querySelectorAll('.tag-pill-background')[1]!.getAttribute('width')
+            )).toBeLessThan(96)
+
+            reasoningTagsRow.querySelector('.tag-pill-close')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            nv.update!(mockView.state.doc.firstChild!)
+
+            expect(mockView.state.doc.firstChild!.attrs.aiModel).toBe('Anthropic:opus-4-8')
+            expect(mockView.state.doc.firstChild!.attrs.aiModels).toBe(JSON.stringify(['Anthropic:opus-4-8']))
+            expect(reasoningLabels()).toEqual(['Opus 4.8'])
+            expect(Number(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('width'))).toBeLessThan(96)
+
+            nv.destroy!()
+            aiModelsStore.setAiModels([])
         })
     })
 })
@@ -1285,6 +1443,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
             aiImageModel: '',
+            aiImageModels: [],
             imageGenerationSize: '512x512',
         })
     })
@@ -1311,6 +1470,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         const submitCall = options.onSubmit.mock.calls[0][0]
         expect(submitCall.imageOptions).toEqual({
             aiImageModel: '',
+            aiImageModels: [],
             imageGenerationSize: 'auto',
         })
     })

@@ -244,7 +244,7 @@ describe('createSlidingSwitch', () => {
 
         expect(svg.querySelectorAll('.tag-pill-group')).toHaveLength(3)
         slidingSwitch.setValue('timeline')
-        expect(svg.querySelectorAll('.tag-pill-background')[2]!.getAttribute('stroke')).toBe('rgba(78, 126, 238, 0.18)')
+        expect(svg.querySelectorAll('.tag-pill-background')[2]!.getAttribute('stroke')).toBe('rgba(105, 115, 133, 0.12)')
 
         svg.querySelectorAll('.tag-pill-close')[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         expect(onClose).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode', expect.objectContaining({ value: 'grid' }))

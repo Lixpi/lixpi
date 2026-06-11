@@ -39,6 +39,21 @@ type FanoutRouterResult = Pick<ProviderState,
     'generatedVideos'
 >
 
+const normalizeModelOption = (
+    requested: string | number | undefined,
+    options: Array<{ value?: string; label?: string }> | undefined,
+): string | undefined => {
+    const requestedValue = requested == null ? '' : String(requested)
+    if (!Array.isArray(options) || options.length === 0) return requestedValue || undefined
+
+    const values = options
+        .map(option => option.value)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    if (values.length === 0) return requestedValue || undefined
+    if (requestedValue && values.includes(requestedValue)) return requestedValue
+    return values[0]
+}
+
 // Shared LangGraph workflow for chat-style LLM calls (with optional image-gen branch).
 // Extraction runs have their own dedicated graph in src/llm/extraction/; this graph is
 // for chat threads and image generation only. The resolveFeatures pre-stage handles
@@ -544,15 +559,27 @@ export abstract class BaseProvider {
 
         const settledResults = await Promise.allSettled(videoModels.map(async (videoModelMetaInfo, videoIndex): Promise<FanoutRouterResult> => {
             const generationRun = this.buildMediaRun(state, videoModelMetaInfo, 'video', videoIndex, videoModels.length)
+            const normalizedVideoAspectRatio = normalizeModelOption(
+                state.mediaFanoutPlan?.videoAspectRatio ?? state.videoAspectRatio,
+                videoModelMetaInfo.videoAspectRatios as Array<{ value?: string; label?: string }> | undefined,
+            )
+            const normalizedVideoResolution = normalizeModelOption(
+                state.mediaFanoutPlan?.videoResolution ?? state.videoResolution,
+                videoModelMetaInfo.videoResolutions as Array<{ value?: string; label?: string }> | undefined,
+            )
+            const normalizedVideoDuration = normalizeModelOption(
+                state.mediaFanoutPlan?.videoDuration ?? state.mediaFanoutPlan?.videoDurationSeconds ?? state.videoDurationSeconds,
+                videoModelMetaInfo.videoDurations as Array<{ value?: string; label?: string }> | undefined,
+            )
             const fanoutState: ProviderState = {
                 ...state,
                 generationRun,
                 videoModelMetaInfo,
                 videoModelVersion: videoModelMetaInfo.modelVersion,
                 videoProviderName: videoModelMetaInfo.provider as ProviderName,
-                videoAspectRatio: state.mediaFanoutPlan?.videoAspectRatio ?? state.videoAspectRatio,
-                videoResolution: state.mediaFanoutPlan?.videoResolution ?? state.videoResolution,
-                videoDurationSeconds: state.mediaFanoutPlan?.videoDurationSeconds ?? state.videoDurationSeconds,
+                videoAspectRatio: normalizedVideoAspectRatio,
+                videoResolution: normalizedVideoResolution,
+                videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
                 eventMeta: this.buildFanoutEventMeta(state, generationRun),
             }

@@ -6,11 +6,23 @@ export type TagPillCloseVisibility = 'always' | 'hover'
 export type TagPillLabelAlign = 'start' | 'center'
 export type TagPillClosePlacement = 'start' | 'end'
 
-export type TagPillConfig = {
+export type TagPillSizing = {
+    size?: number
+    minWidth?: number
+    fontSize?: number
+    fontWeight?: number
+    horizontalPadding?: number
+    closeSize?: number
+    closeIconSize?: number
+    closeGap?: number
+    textWidthFactor?: number
+}
+
+export type TagPillConfig = TagPillSizing & {
     id: string
     x: number
     y: number
-    width: number
+    width?: number
     height?: number
     label: string
     selected?: boolean
@@ -40,6 +52,15 @@ export type TagPillRenderState = Partial<Pick<
     | 'labelAlign'
     | 'closePlacement'
     | 'closeAriaLabel'
+    | 'size'
+    | 'minWidth'
+    | 'fontSize'
+    | 'fontWeight'
+    | 'horizontalPadding'
+    | 'closeSize'
+    | 'closeIconSize'
+    | 'closeGap'
+    | 'textWidthFactor'
 >> & {
     width?: number
     height?: number
@@ -52,10 +73,11 @@ export type TagPillInstance = {
     destroy: () => void
 }
 
-const DEFAULT_HEIGHT = 28
+const DEFAULT_HEIGHT = 24
+const DEFAULT_MIN_WIDTH = 0
 const FONT_SIZE = 12
 const FONT_WEIGHT = 400
-const HORIZONTAL_PADDING = 9
+const HORIZONTAL_PADDING = 4
 const CLOSE_SIZE = 14
 const CLOSE_ICON_SIZE = 7
 const CLOSE_GAP = 6
@@ -64,10 +86,10 @@ const TEXT_WIDTH_FACTOR = 0.58
 const COLORS = {
     neutral: {
         fill: 'rgba(108, 117, 135, 0.08)',
-        fillActive: 'rgba(255, 255, 255, 0.78)',
-        fillHover: 'rgba(255, 255, 255, 0.78)',
+        fillActive: 'rgba(255, 255, 255, 0.72)',
+        fillHover: 'rgba(255, 255, 255, 0.72)',
         stroke: 'transparent',
-        strokeActive: 'rgba(78, 126, 238, 0.18)',
+        strokeActive: 'rgba(105, 115, 133, 0.12)',
         text: '#1a2744',
         closeHover: 'rgba(26, 39, 68, 0.1)',
     },
@@ -93,14 +115,30 @@ const COLORS = {
 
 const CONTENT_HOVER_FILL = 'rgba(105, 115, 133, 0.055)'
 
-function truncateLabel(label: string, maxWidth: number): string {
-    const maxChars = Math.max(0, Math.floor(maxWidth / (FONT_SIZE * TEXT_WIDTH_FACTOR)))
-    if (label.length <= maxChars) return label
-    if (maxChars <= 3) return label.slice(0, maxChars)
-    return `${label.slice(0, maxChars - 3)}...`
+function estimateLabelWidth(label: string, fontSize: number, textWidthFactor: number): number {
+    return Math.ceil(label.length * fontSize * textWidthFactor)
+}
+
+function getCloseReserve(closable: boolean, closeSize: number, closeGap: number): number {
+    return closable ? closeSize + closeGap : 0
+}
+
+function estimateTagPillWidthFromLabelWidth(
+    labelWidth: number,
+    minWidth: number,
+    closable: boolean,
+    horizontalPadding: number,
+    closeSize: number,
+    closeGap: number,
+    labelAlign: TagPillLabelAlign
+): number {
+    const closeReserve = getCloseReserve(closable, closeSize, closeGap)
+    const reservedCloseWidth = labelAlign === 'center' ? closeReserve * 2 : closeReserve
+    return Math.max(minWidth, Math.ceil(labelWidth + horizontalPadding * 2 + reservedCloseWidth))
 }
 
 class TagPill implements TagPillInstance {
+    private explicitWidth: boolean
     private x: number
     private y: number
     private width: number
@@ -116,6 +154,16 @@ class TagPill implements TagPillInstance {
     private labelAlign: TagPillLabelAlign
     private closePlacement: TagPillClosePlacement
     private closeAriaLabel: string
+    private minWidth: number
+    private fontSize: number
+    private fontWeight: number
+    private horizontalPadding: number
+    private closeSize: number
+    private closeIconSize: number
+    private closeGap: number
+    private textWidthFactor: number
+    private labelWidth: number
+    private autoWidthSignature = ''
 
     private readonly group: any
     private readonly background: any
@@ -124,11 +172,10 @@ class TagPill implements TagPillInstance {
     private readonly closeBackground: any
     private readonly closeIcon: any
 
-    constructor(parent: any, private readonly config: TagPillConfig) {
+    constructor(private readonly parent: any, private readonly config: TagPillConfig) {
         this.x = config.x
         this.y = config.y
-        this.width = config.width
-        this.height = config.height ?? DEFAULT_HEIGHT
+        this.height = config.height ?? config.size ?? DEFAULT_HEIGHT
         this.label = config.label
         this.selected = config.selected ?? false
         this.hovered = config.hovered ?? false
@@ -137,9 +184,20 @@ class TagPill implements TagPillInstance {
         this.variant = config.variant ?? 'neutral'
         this.surface = config.surface ?? 'pill'
         this.closeVisibility = config.closeVisibility ?? 'always'
-        this.labelAlign = config.labelAlign ?? 'start'
-        this.closePlacement = config.closePlacement ?? 'end'
+        this.labelAlign = config.labelAlign ?? 'center'
+        this.closePlacement = config.closePlacement ?? 'start'
         this.closeAriaLabel = config.closeAriaLabel ?? `Remove ${config.label}`
+        this.minWidth = config.minWidth ?? DEFAULT_MIN_WIDTH
+        this.fontSize = config.fontSize ?? FONT_SIZE
+        this.fontWeight = config.fontWeight ?? FONT_WEIGHT
+        this.horizontalPadding = config.horizontalPadding ?? HORIZONTAL_PADDING
+        this.closeSize = config.closeSize ?? CLOSE_SIZE
+        this.closeIconSize = config.closeIconSize ?? CLOSE_ICON_SIZE
+        this.closeGap = config.closeGap ?? CLOSE_GAP
+        this.textWidthFactor = config.textWidthFactor ?? TEXT_WIDTH_FACTOR
+        this.labelWidth = estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)
+        this.explicitWidth = config.width !== undefined
+        this.width = config.width ?? this.estimateCurrentWidth()
 
         this.group = parent.append('g')
             .attr('class', `tag-pill-group ${config.className ?? ''}`)
@@ -155,8 +213,8 @@ class TagPill implements TagPillInstance {
 
         this.text = this.group.append('text')
             .attr('class', 'tag-pill-label')
-            .attr('font-size', FONT_SIZE)
-            .attr('font-weight', FONT_WEIGHT)
+            .attr('font-size', this.fontSize)
+            .attr('font-weight', this.fontWeight)
             .attr('dominant-baseline', 'central')
 
         this.closeGroup = this.group.append('g')
@@ -172,6 +230,47 @@ class TagPill implements TagPillInstance {
 
         this.bindEvents()
         this.render()
+    }
+
+    private estimateCurrentWidth(labelWidth: number = estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)): number {
+        return estimateTagPillWidthFromLabelWidth(
+            labelWidth,
+            this.minWidth,
+            this.closable,
+            this.horizontalPadding,
+            this.closeSize,
+            this.closeGap,
+            this.labelAlign
+        )
+    }
+
+    private getAutoWidthSignature(): string {
+        return JSON.stringify({
+            label: this.label,
+            closable: this.closable,
+            minWidth: this.minWidth,
+            fontSize: this.fontSize,
+            fontWeight: this.fontWeight,
+            horizontalPadding: this.horizontalPadding,
+            closeSize: this.closeSize,
+            closeGap: this.closeGap,
+            labelAlign: this.labelAlign,
+            textWidthFactor: this.textWidthFactor,
+        })
+    }
+
+    private updateHostSvgGeometry(): void {
+        const node = this.parent.node?.()
+        if (node?.tagName?.toLowerCase() !== 'svg') return
+
+        this.parent
+            .attr('width', this.width)
+            .attr('height', this.height)
+            .attr('viewBox', `0 0 ${this.width} ${this.height}`)
+            .style('width', `${this.width}px`)
+            .style('height', `${this.height}px`)
+            .style('min-width', `${this.width}px`)
+            .style('overflow', 'visible')
     }
 
     private bindEvents(): void {
@@ -229,20 +328,46 @@ class TagPill implements TagPillInstance {
         this.labelAlign = state.labelAlign ?? this.labelAlign
         this.closePlacement = state.closePlacement ?? this.closePlacement
         this.closeAriaLabel = state.closeAriaLabel ?? this.closeAriaLabel
-        this.width = state.width ?? this.width
-        this.height = state.height ?? this.height
+        if (state.width !== undefined) {
+            this.explicitWidth = true
+            this.width = state.width
+        }
+        this.height = state.height ?? state.size ?? this.height
+        this.minWidth = state.minWidth ?? this.minWidth
+        this.fontSize = state.fontSize ?? this.fontSize
+        this.fontWeight = state.fontWeight ?? this.fontWeight
+        this.horizontalPadding = state.horizontalPadding ?? this.horizontalPadding
+        this.closeSize = state.closeSize ?? this.closeSize
+        this.closeIconSize = state.closeIconSize ?? this.closeIconSize
+        this.closeGap = state.closeGap ?? this.closeGap
+        this.textWidthFactor = state.textWidthFactor ?? this.textWidthFactor
 
         const palette = COLORS[this.variant]
+        this.text
+            .attr('font-size', this.fontSize)
+            .attr('font-weight', this.fontWeight)
+            .attr('fill', palette.text)
+            .attr('opacity', this.disabled ? 0.58 : 1)
+            .text(this.label)
+
+        if (!this.explicitWidth) {
+            const nextAutoWidthSignature = this.getAutoWidthSignature()
+            if (nextAutoWidthSignature !== this.autoWidthSignature) {
+                this.labelWidth = estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)
+                this.width = this.estimateCurrentWidth(this.labelWidth)
+                this.autoWidthSignature = nextAutoWidthSignature
+            }
+        }
+
         const radius = this.height / 2
         const closeVisible = this.closable && !this.disabled && (this.closeVisibility === 'always' || this.hovered)
         const closeDisplay = closeVisible ? null : 'none'
-        const closeReserve = this.closable ? CLOSE_SIZE + CLOSE_GAP : 0
+        const closeReserve = getCloseReserve(this.closable, this.closeSize, this.closeGap)
         const closeX = this.closePlacement === 'start'
-            ? HORIZONTAL_PADDING + CLOSE_SIZE / 2
-            : this.width - HORIZONTAL_PADDING - CLOSE_SIZE / 2
+            ? this.horizontalPadding + this.closeSize / 2
+            : this.width - this.horizontalPadding - this.closeSize / 2
         const closeY = this.height / 2
-        const textMaxWidth = Math.max(0, this.width - HORIZONTAL_PADDING * 2 - closeReserve)
-        const textStartX = HORIZONTAL_PADDING + (this.closePlacement === 'start' ? closeReserve : 0)
+        const textStartX = this.horizontalPadding + (this.closePlacement === 'start' ? closeReserve : 0)
         const textX = this.labelAlign === 'center' ? this.width / 2 : textStartX
         const textAnchor = this.labelAlign === 'center' ? 'middle' : 'start'
         const fill = this.surface === 'content'
@@ -252,6 +377,8 @@ class TagPill implements TagPillInstance {
             ? 'transparent'
             : this.selected ? palette.strokeActive : palette.stroke
         const opacity = this.disabled ? 0.45 : this.selected || this.hovered ? 1 : 0.7
+
+        this.updateHostSvgGeometry()
 
         this.group
             .attr('transform', `translate(${this.x}, ${this.y})`)
@@ -275,9 +402,6 @@ class TagPill implements TagPillInstance {
             .attr('x', textX)
             .attr('y', this.height / 2)
             .attr('text-anchor', textAnchor)
-            .attr('fill', palette.text)
-            .attr('opacity', this.disabled ? 0.58 : 1)
-            .text(truncateLabel(this.label, textMaxWidth))
 
         this.closeGroup
             .attr('transform', `translate(${closeX}, ${closeY})`)
@@ -290,12 +414,12 @@ class TagPill implements TagPillInstance {
         this.closeBackground
             .attr('cx', 0)
             .attr('cy', 0)
-            .attr('r', CLOSE_SIZE / 2)
+            .attr('r', this.closeSize / 2)
 
         appendSvgPathIcon(this.closeIcon, xIcon, {
-            x: -CLOSE_ICON_SIZE / 2,
-            y: -CLOSE_ICON_SIZE / 2,
-            size: CLOSE_ICON_SIZE,
+            x: -this.closeIconSize / 2,
+            y: -this.closeIconSize / 2,
+            size: this.closeIconSize,
             fill: palette.text,
         })
     }
@@ -303,6 +427,7 @@ class TagPill implements TagPillInstance {
     resize(x: number, y: number, width: number, height: number = this.height): void {
         this.x = x
         this.y = y
+        this.explicitWidth = true
         this.width = width
         this.height = height
         this.render()

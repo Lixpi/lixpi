@@ -39,7 +39,9 @@ Creates and renders a toggle switch within a D3 SVG selection.
     id: string              // Unique identifier
     x: number              // X position (left edge of track)
     y: number              // Y position (top edge of track)
-    size?: number          // Height in pixels (default: 24, width is ~1.8x)
+    width?: number         // Track width in pixels
+    height?: number        // Track height in pixels
+    size?: number          // Height alias in pixels when height is omitted (default: 24, width is ~1.8x)
     checked?: boolean      // Initial state (default: false)
     disabled?: boolean     // Disabled state (default: false)
     className?: string     // Additional CSS classes
@@ -71,7 +73,8 @@ const toggleSwitch = createToggleSwitch(g, {
     id: 'thread-1',
     x: 10,
     y: 50,
-    size: 14,
+    width: 30,
+    height: 18,
     checked: false,
     onChange: (checked, id) => {
         console.log(`Toggle ${id}: ${checked}`)
@@ -87,9 +90,10 @@ toggleSwitch.destroy()
 
 ## Dimensions
 
-The toggle switch uses relative proportions based on the `size` parameter:
-- **Height**: `size * 1.0`
-- **Width**: `size * 1.8`
+The toggle switch uses explicit `width`/`height` when supplied. If `height` is omitted, `size` is used as the track height. If `width` is omitted, width is derived from height.
+
+- **Height**: `height ?? size`
+- **Width**: `width ?? height * 1.8`
 - **Knob radius**: `height * 0.7 / 2`
 - **Track radius**: `height / 2`
 
