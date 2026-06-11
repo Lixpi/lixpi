@@ -1,10 +1,14 @@
 # Web-UI Testing Guide
 
-Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`). Tests are no exception — always run them through Docker, never locally.
+Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`).
+Tests are no exception — when the user explicitly asks for tests, always run
+them through Docker, never locally.
 
 ## Agent Verification Commands
 
-For web-ui changes, agents verify test behavior only through Dockerized Vitest runs:
+For web-ui changes, agents may run tests only after the user explicitly asks
+for tests in the current thread. When tests are requested, verify test behavior
+only through Dockerized Vitest runs:
 
 ```bash
 # Run all tests
@@ -18,6 +22,7 @@ docker exec lixpi-web-ui pnpm test:run -- src/infographics/utils/zoomScaling.tes
 
 - Never run `svelte-check`, including `pnpm svelte-check`, `pnpm run svelte-check`, or another script or wrapper that invokes it.
 - Never load the application in a browser or use browser automation, screenshots, or manual visual inspection to verify an agent's work.
+- Never write, modify, or run tests unless the user explicitly asks for tests in the current thread.
 - Never replace a missing test with one of these prohibited checks. State the uncovered behavior in the completion report.
 
 ## Test Infrastructure
@@ -103,7 +108,14 @@ Always prefer testing pure, exported functions. If a class has complex logic bur
 
 Some regression tests inspect source text directly when a behavior depends on code structure that is hard to exercise through a small unit test. Keep these assertions terse on failure.
 
-Avoid direct `.toContain(...)` or `.not.toContain(...)` assertions on whole files or large extracted function/block strings. Vitest prints the entire received source when these fail, which makes failures noisy and hard to read. Use an `includes` assertion with a custom message instead:
+Never use direct `.toContain(...)` or `.not.toContain(...)` assertions on whole files or large extracted function/block strings. Vitest prints the entire received source when these fail, which makes failures noisy and hard to read.
+
+Required pattern:
+
+- If you are inspecting source text, wrap assertions through `.includes(...)` with a targeted error message.
+- Use dedicated helper functions for this style of check.
+
+Use this shape:
 
 ```typescript
 function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
@@ -122,6 +134,7 @@ function expectSourceNotToContain(source: string, snippet: string, label = 'sour
 ```
 
 Use these helpers for extracted handlers, function bodies, SCSS blocks, and full-file source strings. This keeps failures focused on the missing or unexpected snippet instead of dumping the entire source excerpt.
+If a test can be written as a runtime behavior test, prefer that over source-shape checks.
 
 ## Testing Classes with DOM Dependencies
 

@@ -1,10 +1,10 @@
-# InfoBubble Primitive
+# InfoBubble Component
 
-Generic floating bubble container for ProseMirror NodeViews. Lives outside the document schema – never part of saved content.
+Generic floating infoBubble container for shared web-ui surfaces. It lives outside ProseMirror schemas and should not be serialized into saved content.
 
 ## What it is
 
-A factory function that creates floating bubble UI controls with optional header and body sections. **Manages its own state** including open/close, click handling, and mutual exclusion with other bubbles.
+A class-backed factory that creates floating infoBubble UI controls with optional header and body sections. **Manages its own state** including open/close, click handling, and mutual exclusion with other bubbles.
 
 **Key features:**
 - Not a document node (no NodeSpec)
@@ -105,7 +105,7 @@ createInfoBubble({
 The `infoBubbleStateManager` singleton ensures only one bubble is open at a time:
 
 ```typescript
-import { infoBubbleStateManager } from '$src/components/proseMirror/plugins/primitives/infoBubble/index.ts'
+import { infoBubbleStateManager } from '$src/components/infoBubble/index.ts'
 
 infoBubbleStateManager.closeAll()      // Close all open bubbles
 infoBubbleStateManager.isOpen(id)      // Check if specific bubble is open
@@ -139,7 +139,7 @@ This means dropdowns with filtered content automatically reposition without manu
 ### Simple Info Bubble
 
 ```typescript
-import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/index.ts'
+import { createInfoBubble } from '$src/components/infoBubble/index.ts'
 
 // Create anchor element
 const infoIcon = html`
@@ -169,7 +169,7 @@ container.appendChild(infoBubble.dom)
 ### Dropdown with Separate Positioning Anchor
 
 ```typescript
-import { createInfoBubble } from '$src/components/proseMirror/plugins/primitives/infoBubble/index.ts'
+import { createInfoBubble } from '$src/components/infoBubble/index.ts'
 
 // Dropdown button with chevron icon
 const button = html`

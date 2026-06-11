@@ -1,0 +1,70 @@
+.help-tooltip {
+    display: inline-flex;
+    position: relative;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.help-tooltip-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--help-tooltip-trigger-size, 14px);
+    height: var(--help-tooltip-trigger-size, 14px);
+    padding: 0;
+    border: var(--help-tooltip-trigger-border, none);
+    border-radius: 999px;
+    background: var(--help-tooltip-trigger-background, transparent);
+    color: var(--help-tooltip-trigger-color, #8d949d);
+    line-height: 1;
+    cursor: default;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.help-tooltip-trigger:hover,
+.help-tooltip-trigger:focus-visible {
+    background: var(--help-tooltip-trigger-hover-background, #f3f4f8);
+    color: var(--help-tooltip-trigger-hover-color, #59626b);
+}
+
+.help-tooltip-trigger:focus-visible {
+    outline: var(--help-tooltip-trigger-focus-outline, 2px solid #b8bec8);
+    outline-offset: var(--help-tooltip-trigger-focus-outline-offset, 2px);
+}
+
+.help-tooltip-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.help-tooltip-mark svg {
+    display: block;
+    width: var(--help-tooltip-icon-size, 12px);
+    height: var(--help-tooltip-icon-size, 12px);
+    fill: currentColor;
+}
+
+.help-tooltip-content {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: var(--help-tooltip-content-z-index, 10120);
+    visibility: hidden;
+    width: var(--help-tooltip-width, 240px);
+    max-width: var(--help-tooltip-max-width, min(260px, calc(100vw - 48px)));
+    padding: var(--help-tooltip-padding, 8px 10px);
+    border: var(--help-tooltip-border, none);
+    border-radius: var(--help-tooltip-border-radius, 8px);
+    background: var(--help-tooltip-background, #5d656d);
+    box-shadow: var(--help-tooltip-box-shadow, 0 2px 12px rgba(0, 0, 0, 0.1), 0 10px 26px rgba(35, 41, 45, 0.22), inset 0 0 5px 0 #42494f);
+    color: var(--help-tooltip-color, #f5f3f3);
+    font-size: var(--help-tooltip-font-size, 11px);
+    font-weight: var(--help-tooltip-font-weight, 500);
+    line-height: var(--help-tooltip-line-height, 1.35);
+    pointer-events: none;
+}
+
+.help-tooltip-content.is-visible {
+    visibility: visible;
+}

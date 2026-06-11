@@ -246,7 +246,7 @@ Dropdown Primitive
   ├─ Button (anchor)
   │   └─ [InfoBubble attaches click handler]
   │
-  └─ InfoBubble Primitive
+  └─ InfoBubble Component
       ├─ State Management
       │   ├─ Open/Close state
       │   ├─ Click outside detection

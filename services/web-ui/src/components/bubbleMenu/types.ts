@@ -13,10 +13,12 @@ export type BubbleMenuItem = {
 }
 
 export type BubbleMenuPlacement = 'above' | 'below'
+export type BubbleMenuHorizontalAlignment = 'center' | 'end'
 
 export type BubbleMenuPositionRequest = {
     targetRect: DOMRect
     placement: BubbleMenuPlacement
+    horizontalAlignment?: BubbleMenuHorizontalAlignment
     clampToParent?: boolean
     animateOnShow?: boolean
 }

@@ -1,7 +1,7 @@
 'use strict'
 
 import { describe, it, expect } from 'vitest'
-import { settings, type Settings } from '$src/settings.ts'
+import { colorPalette, settings, type Settings } from '$src/settings.ts'
 
 function collectGetterPaths(value: unknown, prefix = ''): string[] {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return []
@@ -27,6 +27,16 @@ function collectGetterPaths(value: unknown, prefix = ''): string[] {
 // =============================================================================
 
 describe('settings - grouped configuration', () => {
+	it('exports the shared color palette and critical AI prompt model menu settings', () => {
+		expect(colorPalette.steelBlue).toBe('#5d656d')
+		expect(colorPalette.offWhite).toBe('#f5f3f3')
+
+		expect(settings.aiPromptInput.modelMenu.openPromptZIndex).toBe('10000')
+		expect(settings.aiPromptInput.modelMenu.infoBubbleZIndex).toBe('10080')
+		expect(settings.aiPromptInput.modelMenu.helpTooltipContentZIndex).toBe('10120')
+		expect(settings.aiPromptInput.modelMenu.controlsMaxWidth).toContain('612px')
+	})
+
 	it('does not use getters for ordinary static settings', () => {
 		expect(collectGetterPaths(settings)).toEqual([])
 	})
@@ -55,6 +65,18 @@ describe('settings - grouped configuration', () => {
 		expect(settings.connector.menuConnectionSnapRadius).toBe(110)
 		expect(settings.aiChatThread.rail.dragGrabWidth).toBe(20)
 		expect(settings.imageNode.useZoomCompensatedResizeHandleScaling).toBe(true)
+	})
+
+	it('adds configurable AI chat panel tabs settings with finite values', () => {
+		expect(Object.hasOwn(settings.aiChatThread, 'panelTabs')).toBe(true)
+		expect(settings.aiChatThread.panelTabs.minTabWidth).toBe(96)
+		expect(settings.aiChatThread.panelTabs.height).toBe(28)
+		expect(settings.aiChatThread.panelTabs.transitionDurationMs).toBe(160)
+		expect(settings.aiChatThread.panelTabs.transitionMinDurationMs).toBe(100)
+		expect(settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor).toBeGreaterThan(0)
+		expect(settings.aiChatThread.panelTabs.activeTabBoxShadow).toBe('none')
+		expect(settings.aiChatThread.panelTabs.activeTabInsetShadow.topColor).toBe('rgba(255, 255, 255, 0.86)')
+		expect(settings.aiChatThread.panelTabs.activeTabInsetShadow.bottomColor).toBe('rgba(0, 0, 0, 0)')
 	})
 
 	it('satisfies the Settings type', () => {

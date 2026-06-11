@@ -1,7 +1,7 @@
 /* Import base infoBubble styles */
-@import '$src/components/proseMirror/plugins/primitives/infoBubble/_infoBubble-mixins.scss';
+@import '$src/components/infoBubble/_infoBubble-mixins.scss';
 
-/* InfoBubble Primitive Styles */
+/* InfoBubble component styles */
 .info-bubble-wrapper {
     position: fixed; // Positioned relative to viewport; JS computes top/left based on anchor
     z-index: 10;

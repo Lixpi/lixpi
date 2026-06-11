@@ -32,8 +32,43 @@ interface UserProfile {
 
 ## Classes And State Ownership
 
-- Prefer classes when a module owns cohesive state, behavior, lifecycle cleanup, or a public imperative API.
-- Use plain functions for pure utilities, small adapters, simple callbacks, and glue code where a class would add ceremony without making ownership clearer.
+- Prefer classes by default. If a TypeScript module owns cohesive behavior, state, DOM references, lifecycle cleanup, listeners, layout/positioning logic, subscriptions, timers, or a public imperative API, it **must** be a class.
+- If you are unsure whether a module is "simple enough" for plain functions, use a class. Plain functions are the exception, not the default.
+- Do not hide component, controller, service, manager, menu, switch, tooltip/popover, editor, canvas-control, or other stateful behavior inside a closure-backed factory. A factory can stay as the public entry point, but it must return a class instance for these module types:
+  ```typescript
+  import { html } from '$src/utils/domTemplates.ts'
+
+  export type ExampleWidgetConfig = {
+      label: string
+  }
+
+  export type ExampleWidgetInstance = {
+      dom: HTMLElement
+      destroy: () => void
+  }
+
+  class ExampleWidget implements ExampleWidgetInstance {
+      readonly dom: HTMLElement
+
+      constructor(private readonly config: ExampleWidgetConfig) {
+          this.dom = this.render()
+      }
+
+      private render(): HTMLElement {
+          return html`<div className="example-widget">${this.config.label}</div>` as HTMLDivElement
+      }
+
+      destroy(): void {
+          this.dom.remove()
+      }
+  }
+
+  export function createExampleWidget(config: ExampleWidgetConfig): ExampleWidgetInstance {
+      return new ExampleWidget(config)
+  }
+  ```
+- Plain functions are only appropriate for pure utilities, tiny adapters, simple callbacks, small mappers, and glue code where a class would clearly add ceremony without improving ownership. If the code needs private state, cleanup, lifecycle, callbacks retained across calls, DOM references, or an imperative instance API, it is no longer a tiny function.
+- Reusable UI components, controllers, services, managers, menu primitives, tooltip/popover primitives, canvas controls, SVG controls, editor plugins/views, and other imperative instances must use a class-backed implementation. Do not implement these as closure-backed factories.
 - Prefer composition over inheritance. Do not build inheritance chains deeper than 3 levels; inheritance deeper than 3 levels is a deal breaker and must be redesigned.
 - Keep config, event payloads, and other object shapes as `type` definitions, not `interface`.
 

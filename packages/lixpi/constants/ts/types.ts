@@ -103,12 +103,29 @@ export type DocumentCanvasNode = CanvasNodeParentingFields & {
     descriptor?: ContentDescriptor
 }
 
-export type ImageGenerationSize = '1024x1024' | '1536x1024' | '1024x1536' | 'auto'
+export type ImageGenerationSize =
+    | '1024x1024'
+    | '1536x1024'
+    | '1024x1536'
+    | '1:1'
+    | '3:2'
+    | '2:3'
+    | '16:9'
+    | '9:16'
+    | '4:3'
+    | '3:4'
+    | '4:5'
+    | '5:4'
+    | '21:9'
+    | '9:21'
+    | 'auto'
 
 export type ImageSizeOption = {
     value: string
     label: string
 }
+
+export type ImageSizeMode = 'resolution' | 'aspectRatio'
 
 export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
 
@@ -1064,6 +1081,8 @@ export type AiModel = {
     iconName: string
     sortingPosition: number
     modalities: Array<{ modality: string; title: string; shortTitle: string }>
+    // Describes what imageSizes values mean for this image-generation model.
+    imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
     // Video generation option lists (VEO and future video providers). Reuse the
     // ImageSizeOption { value, label } shape the size dropdown already consumes.
