@@ -16,7 +16,7 @@ This page documents the Lixpi deployment and operation of that node. For how NEX
 | `ai-models-sync` | `native` · `service` | Runs `AiModelsSync.synchronizeModels()` at boot and every hour, writing the `AI_MODELS_LIST` DynamoDB table. |
 | `system-reporter` | `native` · `service` | A trivial smoke-test workload (echoes uptime every 30s). Deployed by hand to prove the substrate. |
 
-The API reads the catalog straight from DynamoDB on each request ([`getAvailableAiModels`](../../../services/api/src/models/ai-model.ts) scans `AI_MODELS_LIST`), so the node's hourly write is all the UI needs to pick up new models — no restart, no push event.
+The API reads the catalog straight from DynamoDB on each request ([`getAvailableAiModels`](../../../services/api/src/models/ai-model.ts) scans `AI_MODELS_LIST`), so the hourly write reaches the UI on its next fetch with no restart. After each run the workload also publishes a completion event the API subscribes to (see [Completion event](#completion-event)).
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -72,6 +72,12 @@ The node authenticates into a dedicated **`NEX`** account in [`services/nats/nat
 {% /callout %}
 
 Keeping the node in its own account means its `$NEX.>` control plane and feeds stay isolated from application subjects, and the `AUTH`-scoped auth callout never applies to it — it authenticates by standard nkey verification, like the static `SYS`/`AUTH` backend users. For the conceptual auth model see [Authentication](../AUTHENTICATION.md).
+
+## Completion event
+
+After each run the workload publishes `aiModels.syncCompleted` (constant `AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED`) with the run totals — `{ totalNew, totalUpdated, totalDeleted, totalProcessed, ranAt }` — using the NATS credentials the native nexlet mints for it, so the event originates in the `NEX` account.
+
+Because the API runs in the `AUTH` account and NATS subjects are account-scoped, [`nats-server.conf`](../../../services/nats/nats-server.conf) bridges the boundary: the `NEX` account **exports** the `aiModels.syncCompleted` stream and the `AUTH` account **imports** it on the same subject. The API subscribes in [`ai-model-subjects.ts`](../../../services/api/src/NATS/subscriptions/ai-model-subjects.ts). Since the API reads the catalog from DynamoDB on demand, the event is a refresh/liveness signal, not the data path.
 
 ## Two things that surprise people
 

@@ -14,6 +14,8 @@
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",
+        "@nats-io/nats-core": "*",
+        "@nats-io/transport-node": "*",
         "openai": "*",
         "@anthropic-ai/sdk": "*",
         "@google/genai": "*",
