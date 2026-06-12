@@ -162,7 +162,12 @@ const createReferenceTile = (
     options: ImageGenerationTraceDetailsOptions,
 ): HTMLElement => {
     const role = formatImageGenerationTraceRole(reference.role)
-    const image = html`<img className="ai-image-generation-reference-image" alt=${reference.label} loading="lazy" />` as HTMLImageElement
+    // The tile starts hidden and reveals itself in `onload` (so the multi-source
+    // retry chain never flashes a broken image). `loading="lazy"` must NOT be used
+    // here: a hidden image is `display:none`, never intersects the viewport, so a
+    // lazy image would never load — `onload` would never fire and the tile would
+    // stay blank. Eager loading loads regardless of visibility.
+    const image = html`<img className="ai-image-generation-reference-image" alt=${reference.label} />` as HTMLImageElement
     const unavailable = html`<span className="ai-image-generation-reference-unavailable">Unavailable</span>` as HTMLSpanElement
     const tile = html`
         <figure className="ai-image-generation-reference" data=${{ source: reference.source, role: reference.role }}>
