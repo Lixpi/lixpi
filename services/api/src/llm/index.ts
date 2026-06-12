@@ -16,6 +16,8 @@ import { ExtractionOrchestrator } from './extraction/orchestrator.ts'
 import type { StoreWorkspaceImageFn } from './graph/image-publisher.ts'
 import type { StoreWorkspaceVideoFn } from './graph/video-publisher.ts'
 import type { ExtractionInput, ExtractionResult } from './extraction/types.ts'
+import type { BillingClient } from '../billing/billing-client.ts'
+import type { Allowance } from '../billing/contracts.ts'
 
 export type LlmModule = {
     process: (instanceKey: string, providerName: ProviderName, requestData: Record<string, any>) => Promise<void>
@@ -31,6 +33,9 @@ export type LlmModuleDeps = {
     natsService: NatsService
     storeWorkspaceImage: StoreWorkspaceImageFn
     storeWorkspaceVideo: StoreWorkspaceVideoFn
+    // Billing integration (optional — absent/disabled keeps today's behavior).
+    billing?: BillingClient
+    getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
 export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
@@ -44,6 +49,10 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
             Google: GoogleProvider,
             Stability: StabilityProvider,
             BytePlus: BytePlusProvider,
+        },
+        {
+            billing: deps.billing,
+            getOrgAllowance: deps.getOrgAllowance,
         },
     )
 

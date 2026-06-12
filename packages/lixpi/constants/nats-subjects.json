@@ -106,5 +106,11 @@
 		"DELETE_CUSTOMER_PAYMENT_METHOD": "delete-customer-payment-method",
 		"TOP_UP_CUSTOMER_BALANCE": "top-up-customer-balance",
 		"GET_CUSTOMER": "get-customer"
+	},
+	"BILLING_SUBJECTS": {
+		"WORKFLOW_STARTED": "billing.workflow.started",
+		"USAGE": "metrics.usage.ai",
+		"BALANCE_GET": "billing.balance.get",
+		"BALANCE_CHANGED": "billing.balance.changed"
 	}
 }

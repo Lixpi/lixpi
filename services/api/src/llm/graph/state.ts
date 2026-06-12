@@ -145,6 +145,12 @@ export type ProviderState = {
     // Feature reference resolution (/use chips on chat messages)
     referencedFeatureIds?: string[] | undefined
     featureUsagePrompt?: string | undefined
+
+    // Billing — transient per-run identity. workflowId is minted in validateRequest
+    // and groups this run's start signal + usage events; workflowSeq is a 1-based
+    // counter incremented per emitted usage event (gap detection on the billing side).
+    workflowId?: string | undefined
+    workflowSeq?: number | undefined
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
@@ -203,4 +209,6 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     previousResponseId: { reducer: keep },
     referencedFeatureIds: { reducer: keep },
     featureUsagePrompt: { reducer: keep },
+    workflowId: { reducer: keep },
+    workflowSeq: { reducer: keep },
 }
