@@ -279,6 +279,7 @@ services:
             - ./.aws/config:/root/.aws/config:cached    # AWS SSO credentials
             - caddy-certs:/opt/nex/certs:ro    # Cluster CA (only needed when 4222 uses TLS, e.g. AWS)
             - nex-1-data:/data                 # Persistent nex resource/config dir across restarts
+            - nex-workloads:/opt/nex/private-workloads:ro # Private repos place native workload binaries here
 
             # @lixpi workspace packages the workload imports (mirrors lixpi-api)
             - ./packages/lixpi/constants:/usr/src/service/packages/lixpi/constants:cached
@@ -632,6 +633,8 @@ volumes:
     nats-2-data:   # Persistent JetStream storage for NATS node 2
     nats-3-data:   # Persistent JetStream storage for NATS node 3
     nex-1-data:    # Persistent nex resource/config dir for the NEX node
+    nex-workloads: # Shared native workload binary volume for private repos
+        name: lixpi-nex-workloads
 
 networks:
     nats:
