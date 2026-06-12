@@ -25,5 +25,5 @@
         "vitest": "latest",
         "@types/node": "*"
     },
-    "packageManager": "pnpm@9.15.0"
+    "packageManager": "pnpm@11.6.0"
 }

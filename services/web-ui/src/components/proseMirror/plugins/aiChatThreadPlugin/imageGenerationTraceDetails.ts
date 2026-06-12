@@ -21,6 +21,10 @@ export type ImageGenerationTraceDetailsAttrs = {
     imageGenerationTrace?: ImageGenerationTrace | null
     imageGenerationTraceId?: string | null
     videoGenerationTrace?: VideoGenerationTrace | null
+    // The reasoning model that produced this generation prompt. Shown in the
+    // collapsible summary (even while collapsed) so each run is attributable to
+    // its model without a separate pill beside the avatar.
+    reasoningModelId?: string | null
 }
 
 type RenderImageGenerationTraceDetailsParams = {
@@ -63,6 +67,14 @@ export const getImageGenerationSummaryTitle = (attrs: ImageGenerationTraceDetail
 
 export const formatImageGenerationTraceRole = (role: string): string => {
     return role.split(/[-_]/).map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ')
+}
+
+// Reasoning model ids arrive as `Provider:model` (e.g. `Anthropic:claude-sonnet-4-6`);
+// the summary shows just the model segment.
+export const formatTraceModelLabel = (modelId?: string | null): string => {
+    if (!modelId) return ''
+    const parts = String(modelId).split(':')
+    return parts[1] || parts[0] || ''
 }
 
 const appendAuthenticatedToken = async (imageUrl: string): Promise<string> => {
@@ -344,9 +356,11 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         renderedTrace = trace
 
         summaryTitle.textContent = getImageGenerationSummaryTitle(attrs)
-        summaryMeta.textContent = trace
+        const modelLabel = formatTraceModelLabel(attrs.reasoningModelId)
+        const referenceMeta = trace
             ? `${trace.referenceImages.length} reference${trace.referenceImages.length === 1 ? '' : 's'}`
             : ''
+        summaryMeta.textContent = [modelLabel, referenceMeta].filter(Boolean).join(' · ')
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
         toolPromptSection.classList.toggle('has-trace', hasTrace)

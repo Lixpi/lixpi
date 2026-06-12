@@ -5,4 +5,6 @@ description: 'Author Lixpi implementation plans, technical proposals, design doc
 
 # Implementation Plans
 
+Before running any command, follow the Docker-only command rule in `AGENTS.md` and `documentation/development-workflow/AGENT-SKILLS.md`: never run `npm`, `npx`, `pnpm`, or `pnpx` on the host.
+
 Read and follow `documentation/development-workflow/WRITING-IMPLEMENTATION-PLANS.md`. That document is the source of truth.

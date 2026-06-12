@@ -1175,7 +1175,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         if (generatedBy) {
             const thread = currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === generatedBy.aiChatThreadId)
-            const turnInfo = getGeneratedImageTurnInfoFromThreadContent(thread?.content, generatedBy.responseMessageId)
+            // Pass the image's reasoning model so its history resolves to that
+            // model's section only, never another model's in the same response.
+            const turnInfo = getGeneratedImageTurnInfoFromThreadContent(thread?.content, generatedBy.responseMessageId, generatedBy.reasoningModelId)
             const modelName = node.type === 'video'
                 ? String((generatedBy as VideoCanvasNode['generatedBy'])?.videoModel || '')
                 : String((generatedBy as ImageCanvasNode['generatedBy'])?.aiModel || '')
@@ -4568,7 +4570,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (existing?.type === 'branchOrigin') return existing as BranchOriginCanvasNode
 
         const generationRequestId = generationRun?.generationRequestId ?? `legacy-${threadId}`
-        const nodeId = `branch-origin-${placement.branchId}`
+        // One branch origin per user prompt: all reasoning-model variants of a
+        // single request share this origin so they render as siblings off one
+        // branch start. Keying by branchId would split them, because each run's
+        // resolution/branchId can diverge and the runs create the origin
+        // concurrently before `placement.branchOriginNodeId` is set. Legacy
+        // single-model runs (no requestId) keep the per-branchId origin.
+        const nodeId = generationRun?.generationRequestId
+            ? `branch-origin-${generationRun.generationRequestId}`
+            : `branch-origin-${placement.branchId}`
         const dimensions = getBranchOriginNodeDimensions()
         const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
             ?? getCenteredInsertionPosition({ width: getGeneratedImageInsertionSize(), height: mediaHeight })

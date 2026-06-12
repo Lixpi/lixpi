@@ -5,6 +5,8 @@ description: 'Author implementation plans, technical proposals, design docs, RFC
 
 # Implementation Plans & Research
 
+Before running any command, follow the Docker-only command rule in `AGENTS.md` and `documentation/development-workflow/AGENT-SKILLS.md`: never run `npm`, `npx`, `pnpm`, or `pnpx` on the host.
+
 The full procedure — research methodology, mandatory document structure, diagram conventions, iteration protocol with the user, GitHub sync, cleanup rules — lives in `documentation/development-workflow/WRITING-IMPLEMENTATION-PLANS.md`.
 
 ## When to use this skill

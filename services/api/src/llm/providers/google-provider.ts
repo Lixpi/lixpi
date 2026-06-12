@@ -111,6 +111,21 @@ export class GoogleProvider extends BaseProvider {
                 functionDeclarations.push({ name: VIDEO_TOOL_NAME, description: videoToolDef.description, parameters: videoToolDef.parameters })
             }
             config.tools = [{ functionDeclarations }]
+
+            // In an explicit media-generation run (the matrix fans this reasoning
+            // model out to image/video models) the model MUST emit the tool call —
+            // its prompt is the whole point of the run, and without it that variant
+            // produces no media. Gemini in AUTO mode sometimes answers in prose and
+            // skips the call, so force it here. Outside the matrix (opportunistic
+            // chat image-gen) we leave AUTO so plain replies still work.
+            if (state.mediaFanoutPlan) {
+                config.toolConfig = {
+                    functionCallingConfig: {
+                        mode: 'ANY',
+                        allowedFunctionNames: functionDeclarations.map((declaration) => declaration.name),
+                    },
+                }
+            }
         }
 
         let systemInstruction: string | undefined

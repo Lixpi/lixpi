@@ -79,12 +79,26 @@ export function collectResponseTextById(root: ProseMirrorJsonNode): Record<strin
     return responseTextById
 }
 
-function getFirstGenerationTrace(responseNode: ProseMirrorJsonNode): {
+// A multi-model response holds one aiReasoningSection per reasoning model; the
+// content owner for a given image/video is the section whose model produced it
+// (so each image's history shows ONLY its own model, never the other models').
+// Legacy single-model responses have no sections, so the message itself is used.
+function getReasoningContainer(responseNode: ProseMirrorJsonNode, reasoningModelId?: string): ProseMirrorJsonNode {
+    const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
+    if (sections.length === 0) return responseNode
+    if (reasoningModelId) {
+        const matched = sections.find((section) => section.attrs?.reasoningModelId === reasoningModelId)
+        if (matched) return matched
+    }
+    return sections[0]
+}
+
+function getFirstGenerationTrace(container: ProseMirrorJsonNode): {
     imageTrace: ImageGenerationTrace | null
     videoTrace: VideoGenerationTrace | null
     promptText: string
 } {
-    for (const child of responseNode.content ?? []) {
+    for (const child of container.content ?? []) {
         if (child.type !== 'aiCollapsibleBlock') continue
         return {
             imageTrace: (child.attrs?.imageGenerationTrace as ImageGenerationTrace | undefined) ?? null,
@@ -98,7 +112,8 @@ function getFirstGenerationTrace(responseNode: ProseMirrorJsonNode): {
 
 export function getGeneratedImageTurnInfoFromThreadContent(
     threadContent: unknown,
-    responseMessageId: string | undefined
+    responseMessageId: string | undefined,
+    reasoningModelId?: string
 ): GeneratedImageTurnInfo | null {
     const root = parseProseMirrorJsonContent(threadContent)
     if (!root) return null
@@ -115,10 +130,11 @@ export function getGeneratedImageTurnInfoFromThreadContent(
 
             if (child.type === 'aiResponseMessage') {
                 const responseId = typeof child.attrs?.id === 'string' ? child.attrs.id : ''
-                const { imageTrace, videoTrace, promptText } = getFirstGenerationTrace(child)
+                const container = getReasoningContainer(child, reasoningModelId)
+                const { imageTrace, videoTrace, promptText } = getFirstGenerationTrace(container)
                 const info: GeneratedImageTurnInfo = {
                     userPromptText: collectProseMirrorText(latestUserMessage ?? undefined).trim(),
-                    responseText: collectProseMirrorText(child, {
+                    responseText: collectProseMirrorText(container, {
                         excludedNodeTypes: ['aiCollapsibleBlock', 'aiGeneratedImage'],
                     }).trim(),
                     responseMessageId: responseId,

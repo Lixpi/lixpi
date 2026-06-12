@@ -36,5 +36,12 @@ export {
     aiCollapsibleBlockNodeView
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 
+// Export aiReasoningSection node (per-model slice of a multi-model response)
+export {
+    aiReasoningSectionNodeType,
+    aiReasoningSectionNodeSpec,
+    aiReasoningSectionNodeView
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
+
 // Export all from plugin
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'

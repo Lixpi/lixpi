@@ -61,5 +61,5 @@
         "type": "git",
         "url": "git+https://github.com/Lixpi/lixpi-API.git"
     },
-    "packageManager": "pnpm@9.15.0"
+    "packageManager": "pnpm@11.6.0"
 }

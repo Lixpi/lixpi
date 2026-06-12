@@ -116,4 +116,58 @@ describe('aiChatThreadContentUtils', () => {
         expect(turnInfo?.imageGenerationTrace).toBe(null)
         expect(turnInfo?.imageGenerationPromptText).toBe('Video prompt text.')
     })
+
+    it('resolves each model to its own section in a multi-model response (no history mixing)', () => {
+        const claudeTrace = { ...createTrace(), toolPrompt: 'Claude prompt' }
+        const geminiTrace = { ...createTrace(), imageModelId: 'gemini-2.5-flash-image', toolPrompt: 'Gemini prompt' }
+        const content = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'thread-1' },
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'swap the characters' }] }],
+                        },
+                        {
+                            type: 'aiResponseMessage',
+                            attrs: { id: 'response-1' },
+                            content: [
+                                {
+                                    type: 'aiReasoningSection',
+                                    attrs: { reasoningModelId: 'Anthropic:claude-sonnet-4-6', reasoningRunId: 'run-0' },
+                                    content: [
+                                        { type: 'paragraph', content: [{ type: 'text', text: 'Claude reply.' }] },
+                                        { type: 'aiCollapsibleBlock', attrs: { imageGenerationTrace: claudeTrace }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Claude prompt text.' }] }] },
+                                        { type: 'aiGeneratedImage', attrs: { revisedPrompt: 'claude thumb' } },
+                                    ],
+                                },
+                                {
+                                    type: 'aiReasoningSection',
+                                    attrs: { reasoningModelId: 'Google:gemini-flash-latest', reasoningRunId: 'run-1' },
+                                    content: [
+                                        { type: 'aiCollapsibleBlock', attrs: { imageGenerationTrace: geminiTrace }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Gemini prompt text.' }] }] },
+                                        { type: 'aiGeneratedImage', attrs: { revisedPrompt: 'gemini thumb' } },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        const claudeInfo = getGeneratedImageTurnInfoFromThreadContent(content, 'response-1', 'Anthropic:claude-sonnet-4-6')
+        expect(claudeInfo?.imageGenerationTrace).toBe(claudeTrace)
+        expect(claudeInfo?.imageGenerationPromptText).toBe('Claude prompt text.')
+        expect(claudeInfo?.responseText).toBe('Claude reply.')
+
+        const geminiInfo = getGeneratedImageTurnInfoFromThreadContent(content, 'response-1', 'Google:gemini-flash-latest')
+        expect(geminiInfo?.imageGenerationTrace).toBe(geminiTrace)
+        expect(geminiInfo?.imageGenerationPromptText).toBe('Gemini prompt text.')
+        // The Gemini section has no reply text; it must NOT borrow Claude's.
+        expect(geminiInfo?.responseText).toBe('')
+    })
 })

@@ -1,6 +1,4 @@
 // @ts-nocheck
-// Import SVG icons for various UI elements
-import { claudeAnimatedFrameIcon, claudeIcon } from '$src/svgIcons/index.ts'
 import { createAiResponseMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { html } from '$src/utils/domTemplates.ts'
 
@@ -16,7 +14,6 @@ export const aiResponseMessageNodeSpec = {
         isInitialRenderAnimation: { default: false }, // Flag for initial render animation
         isReceivingAnimation: { default: false }, // Flag for receiving message animation
         aiProvider: { default: '' }, // AI provider (Anthropic or OpenAI)
-        currentFrame: { default: 0 }, // Current frame for Claude's animation
         generationRequestId: { default: '' },
         reasoningRunId: { default: '' },
         mediaRunId: { default: '' },
@@ -78,12 +75,6 @@ function parseVariantIndex(value) {
     return Number.isFinite(parsed) ? parsed : null
 }
 
-function formatModelLabel(modelId) {
-    if (!modelId) return ''
-    const parts = String(modelId).split(':')
-    return parts[1] || parts[0] || ''
-}
-
 function formatVariantLabel(variantIndex) {
     if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
     return `Variant ${Number(variantIndex) + 1}`
@@ -91,18 +82,15 @@ function formatVariantLabel(variantIndex) {
 
 // Define the node view for custom rendering and behavior
 export const aiResponseMessageNodeView = (node, view, getPos) => {
-    let animationInterval
-    const totalFrames = 8    // Total frames in Claude's animation
-
     const responseShell = createAiResponseMessageShell({
         provider: node.attrs.aiProvider,
         messageId: node.attrs.id,
+        includeAvatar: false,
     })
 
     // Get references to the nested elements for manipulation
     const parentWrapper = responseShell.wrapper
     const aiResponseMessageContainer = responseShell.messageEl
-    const userAvatarContainer = responseShell.avatarEl
     const spinnerElement = responseShell.spinnerEl
     const bubbleElement = responseShell.bubbleEl
     const responseMessageContent = responseShell.contentEl
@@ -121,41 +109,11 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     // deleteButton.innerHTML = trashBinIcon
     // aiResponseMessageContainer.appendChild(deleteButton)
 
-    // Function to update the animation state
+    // Response nodes no longer carry an avatar, so the only "animation" left is the
+    // one-shot content reveal on first render. The "receiving" state is conveyed by
+    // the in-bubble spinner (see updateSpinnerState), not an animated avatar.
     const updateAnimation = () => {
-        if (node.attrs.aiProvider === 'Anthropic') {
-            if (node.attrs.isReceivingAnimation) {
-                // Set up Claude's animated avatar
-                if (!userAvatarContainer.querySelector('.animated-frame-claude')) {
-                    userAvatarContainer.innerHTML = claudeAnimatedFrameIcon
-                }
-
-                const svg = userAvatarContainer.querySelector('svg')
-                svg.setAttribute('viewBox', `0 ${node.attrs.currentFrame * 100} 100 100`)
-                userAvatarContainer.setAttribute('data-frame', node.attrs.currentFrame.toString())    // Set data-frame attribute for animation tracking and external interaction
-
-                // Start the animation interval if not already running
-                if (!animationInterval) {
-                    animationInterval = setInterval(() => {
-                        const newFrame = (node.attrs.currentFrame + 1) % totalFrames
-                        // Update the node's attributes with the new frame
-                        // IMPORTANT: This triggers an update to the node in the ProseMirror document, I couldn't find a better way to do this :(
-                        view.dispatch(view.state.tr.setNodeMarkup(getPos(), null, {...node.attrs, currentFrame: newFrame}))
-                    }, 90) // Change frame every 90ms
-                }
-            } else {
-                // Stop the animation when not receiving
-                clearInterval(animationInterval)
-                animationInterval = null
-                userAvatarContainer.innerHTML = claudeIcon    // Reset to the static avatar
-            }
-        } else {
-            responseShell.setProvider(node.attrs.aiProvider)
-        }
-
-        // Toggle classes for animations
         responseMessageContent.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
-        userAvatarContainer.classList.toggle('node-receiving-animation', node.attrs.isReceivingAnimation)
     }
 
     const updateSpinnerState = () => {
@@ -169,15 +127,13 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
         }
     }
 
+    // The reasoning model is identified inside the image/video generation
+    // collapsible header (visible even while collapsed), not as a pill beside the
+    // avatar — so the only run-meta pill here is the variant marker (which image/
+    // video variant this is when several media models run for one reasoning model).
     const updateRunMeta = () => {
-        const reasoningLabel = formatModelLabel(node.attrs.reasoningModelId)
         const variantLabel = formatVariantLabel(node.attrs.variantIndex)
         runMetaElement.replaceChildren()
-
-        if (reasoningLabel) {
-            const modelPill = html`<span className="ai-response-run-pill" title=${String(node.attrs.reasoningModelId || '')}>${reasoningLabel}</span>`
-            runMetaElement.appendChild(modelPill)
-        }
 
         if (variantLabel) {
             const variantPill = html`<span className="ai-response-run-pill is-variant">${variantLabel}</span>`
@@ -212,15 +168,12 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
             node = updatedNode    // Update the node reference and refresh the animation
             responseShell.setMessageId(node.attrs.id)
-            responseShell.setProvider(node.attrs.aiProvider)
-            updateAnimation()    // Update the animation state
+            updateAnimation()    // Update the content-reveal animation state
             updateSpinnerState()
             updateRunMeta()
 
             return true    // Indicate successful update
         },
-        destroy: () => {
-            clearInterval(animationInterval)    // Clean up the animation interval when the node is removed
-        }
+        destroy: () => {},
     }
 }

@@ -417,6 +417,34 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                     margin-top: 0;
                 }
             }
+
+            // Per-reasoning-model slice of a multi-model response. Consecutive
+            // sections are separated by a hairline so each model's reply + its
+            // generation collapsible + its image read as one grouped block.
+            .ai-reasoning-section {
+                position: relative;
+
+                & + .ai-reasoning-section {
+                    margin-top: 0.75rem;
+                    padding-top: 0.75rem;
+                    border-top: 1px solid rgba(42, 45, 47, 0.08);
+                }
+
+                .ai-reasoning-section-spinner {
+                    display: none;
+                }
+
+                &.is-empty .ai-reasoning-section-spinner.is-active {
+                    display: block;
+                    width: 14px;
+                    height: 14px;
+                    margin: 0.25rem 0;
+                    border: 2px solid rgba(42, 45, 47, 0.15);
+                    border-top-color: rgba(42, 45, 47, 0.55);
+                    border-radius: 50%;
+                    animation: spin 0.8s linear infinite;
+                }
+            }
         }
     }
 }

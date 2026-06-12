@@ -161,6 +161,13 @@ describe('aiResponseMessage — parseDOM spec', () => {
 			id: 'msg-parsed-123',
 			style: 'color: red',
 			aiProvider: 'OpenAI',
+			generationRequestId: '',
+			reasoningRunId: '',
+			mediaRunId: '',
+			reasoningModelId: '',
+			mediaModelId: '',
+			mediaType: '',
+			variantIndex: null,
 		})
 	})
 })
@@ -326,21 +333,19 @@ describe('aiResponseMessageNodeView — DOM structure', () => {
 		expect(contentDOM.className).toBe('ai-response-message-content')
 	})
 
-	it('places the provider avatar below the message bubble, not beside it', () => {
+	it('renders the response node without a provider avatar', () => {
+		// Avatars (and their animation) were removed from response nodes; a single
+		// response can hold several reasoning models, so a per-node avatar no longer
+		// makes sense. Attribution lives in each generation collapsible header.
 		const { nodeView } = createResponseNodeView({ aiProvider: 'Google' })
 		const dom = nodeView.dom as HTMLElement
 		const messageRow = dom.querySelector('.ai-response-message')
 		const bubble = dom.querySelector('.ai-response-message-bubble')
-		const meta = dom.querySelector('.ai-response-message-meta')
-		const avatar = dom.querySelector('.user-avatar')
 
 		expect(messageRow).not.toBeNull()
 		expect(bubble).not.toBeNull()
-		expect(meta).not.toBeNull()
-		expect(avatar).not.toBeNull()
 		expect(messageRow!.contains(bubble)).toBe(true)
-		expect(messageRow!.contains(avatar)).toBe(false)
-		expect(meta!.contains(avatar)).toBe(true)
+		expect(dom.querySelector('.user-avatar')).toBeNull()
 	})
 
 	it('keeps the provider avatar compact so the bubble can use full width', () => {

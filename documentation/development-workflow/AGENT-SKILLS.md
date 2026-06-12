@@ -15,6 +15,14 @@ The project maintains matching aliases in these native harness locations as need
 
 Some harnesses also recognize compatibility directories. Matching aliases intentionally have identical names, descriptions, and pointer bodies, so discovery order is not behaviorally significant when a tool scans more than one location.
 
+## Command Execution Rule
+
+Agents must not run `npm`, `npx`, `pnpm`, or `pnpx` on the host. Agents must not install project dependencies or tooling on the host by any package manager.
+
+Agents must not run project setup, package scripts, build scripts, docs builds, linters, formatters, test runners, framework CLIs, or repo scripts on the host. All project setup and all script execution must happen inside the appropriate Docker container, such as `docker exec <container> pnpm ...`, when the task's other permission and testing gates allow that command.
+
+If the Dockerized command is not documented or the required container is unavailable, agents stop and ask instead of falling back to a host command.
+
 ## Why Aliases, Not Copied Instructions
 
 - A single documentation source prevents policy drift.

@@ -19,6 +19,7 @@ import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/compo
 import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
 import { aiUserMessageNodeType, aiUserMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
+import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
@@ -574,13 +575,18 @@ class PositionFinder {
         return result
     }
 
-    // Find the current aiResponseMessage being streamed into for a specific thread
+    // The content target for a run. A multi-model run (with a reasoningRunId)
+    // streams into its per-reasoning-run aiReasoningSection inside the single
+    // shared response message; a legacy text/single-model run streams into the
+    // aiResponseMessage itself. Callers (streaming, collapsible, media placement)
+    // insert at endOfNodePos, so this resolves to whichever node owns the content.
     static findResponseNode(state: EditorState, threadId?: string, generationRun?: MediaGenerationRunMeta): {
         found: boolean
         endOfNodePos?: number
         childCount?: number
         nodePos?: number
     } {
+        const targetType = generationRun?.reasoningRunId ? aiReasoningSectionNodeType : aiResponseMessageNodeType
         let bestEndPos: number | undefined
         let bestChildCount: number | undefined
         let bestNodePos: number | undefined
@@ -595,7 +601,7 @@ class PositionFinder {
                 if (node.type.name !== aiChatThreadNodeType || node.attrs?.threadId !== threadId) return
 
                 node.descendants((child: ProseMirrorNode, relPos: number) => {
-                    if (child.type.name !== aiResponseMessageNodeType) return
+                    if (child.type.name !== targetType) return
                     if (!PositionFinder.responseMatchesGenerationRun(child.attrs, generationRun)) return
 
                     const nodePos = pos + relPos + 1
@@ -615,6 +621,41 @@ class PositionFinder {
 
         return bestEndPos !== undefined
             ? { found: true, endOfNodePos: bestEndPos, childCount: bestChildCount, nodePos: bestNodePos }
+            : { found: false }
+    }
+
+    // Find the single shared response message for a request group (one user prompt
+    // → one aiResponseMessage), used to host one aiReasoningSection per model.
+    static findResponseMessage(state: EditorState, threadId?: string, generationRun?: MediaGenerationRunMeta): {
+        found: boolean
+        nodePos?: number
+        contentEndPos?: number
+    } {
+        let bestNodePos: number | undefined
+        let bestContentEnd: number | undefined
+        const requestId = generationRun?.generationRequestId
+
+        if (threadId) {
+            state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+                if (node.type.name !== aiChatThreadNodeType || node.attrs?.threadId !== threadId) return
+
+                node.descendants((child: ProseMirrorNode, relPos: number) => {
+                    if (child.type.name !== aiResponseMessageNodeType) return
+                    if (requestId && child.attrs?.generationRequestId !== requestId) return
+
+                    const nodePos = pos + relPos + 1
+                    // Prefer the latest matching message
+                    if (bestNodePos === undefined || nodePos > bestNodePos) {
+                        bestNodePos = nodePos
+                        bestContentEnd = nodePos + child.nodeSize - 1
+                    }
+                })
+                return false
+            })
+        }
+
+        return bestNodePos !== undefined
+            ? { found: true, nodePos: bestNodePos, contentEndPos: bestContentEnd }
             : { found: false }
     }
 
@@ -824,7 +865,9 @@ class AiChatThreadPluginClass {
 
         const $endPos = state.doc.resolve(responseNodeInfo.endOfNodePos)
         const responseNode = $endPos.nodeBefore
-        if (!responseNode || responseNode.type.name !== aiResponseMessageNodeType) return null
+        // The content owner is the per-run section (matrix) or the message (legacy);
+        // generated media lands inside it, keeping each run's media to its own section.
+        if (!responseNode || (responseNode.type.name !== aiResponseMessageNodeType && responseNode.type.name !== aiReasoningSectionNodeType)) return null
 
         return {
             responseNode,
@@ -1618,6 +1661,64 @@ class AiChatThreadPluginClass {
         })
     }
 
+    // One user prompt → one aiResponseMessage. Each reasoning model's run gets its
+    // own aiReasoningSection inside that shared message; the first run of a request
+    // creates the message, later runs append another section to it.
+    private ensureReceivingResponseSection(
+        state: EditorState,
+        dispatch: (tr: Transaction) => void,
+        aiProvider: string | undefined,
+        threadId: string | undefined,
+        generationRun: MediaGenerationRunMeta
+    ): void {
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
+        if (!threadInfo) return
+
+        const sectionInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
+        if (sectionInfo.found && sectionInfo.nodePos !== undefined) {
+            const sectionNode = state.doc.nodeAt(sectionInfo.nodePos)
+            if (sectionNode?.type.name === aiReasoningSectionNodeType) {
+                const tr = state.tr
+                if (!sectionNode.attrs.isReceivingAnimation) {
+                    tr.setNodeMarkup(sectionInfo.nodePos, undefined, { ...sectionNode.attrs, isReceivingAnimation: true })
+                }
+                if (threadId) tr.setMeta('setReceiving', { threadId, receiving: true, runKey: getReasoningRunKey(generationRun) })
+                if (tr.docChanged || threadId) {
+                    tr.setMeta('skipDispatch', true)
+                    dispatch(tr)
+                }
+                return
+            }
+        }
+
+        const sectionNode = state.schema.nodes[aiReasoningSectionNodeType].create({
+            generationRequestId: generationRun.generationRequestId || '',
+            reasoningRunId: generationRun.reasoningRunId || '',
+            reasoningModelId: generationRun.reasoningModelId || '',
+            reasoningIndex: generationRun.reasoningIndex ?? null,
+            isReceivingAnimation: true,
+        })
+
+        const messageInfo = PositionFinder.findResponseMessage(state, threadId, generationRun)
+        const tr = state.tr
+        if (messageInfo.found && messageInfo.contentEndPos !== undefined) {
+            tr.insert(messageInfo.contentEndPos, sectionNode)
+        } else {
+            const responseMessageId = `resp-${generationRun.generationRequestId || Date.now()}`
+            const aiResponseNode = state.schema.nodes[aiResponseMessageNodeType].create({
+                id: responseMessageId,
+                isInitialRenderAnimation: true,
+                isReceivingAnimation: true,
+                aiProvider,
+                generationRequestId: generationRun.generationRequestId || '',
+            }, sectionNode)
+            tr.insert(threadInfo.insertPos, aiResponseNode)
+        }
+        if (threadId) tr.setMeta('setReceiving', { threadId, receiving: true, runKey: getReasoningRunKey(generationRun) })
+        tr.setMeta('skipDispatch', true)
+        dispatch(tr)
+    }
+
     private ensureReceivingResponseNode(
         state: EditorState,
         dispatch: (tr: Transaction) => void,
@@ -1625,6 +1726,11 @@ class AiChatThreadPluginClass {
         threadId?: string,
         generationRun?: MediaGenerationRunMeta
     ): void {
+        if (generationRun?.reasoningRunId) {
+            this.ensureReceivingResponseSection(state, dispatch, aiProvider, threadId, generationRun)
+            return
+        }
+
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) return
 
@@ -1745,25 +1851,46 @@ class AiChatThreadPluginClass {
             targetInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
         }
 
-        // Create response node if missing in the correct thread
+        // Create the target if missing (rare: a stream chunk arrived before
+        // START_STREAM set up the node). Matrix runs must land in this request's
+        // shared message as a per-run section, never a second bare message.
         if (!targetInfo.found) {
             console.warn('[aiChatThreadPlugin] no response node found; creating one', { threadId })
 
             const { insertPos } = threadInfo
-            const responseNode = state.schema.nodes[aiResponseMessageNodeType].create({
-                id: `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-                isInitialRenderAnimation: true,
-                isReceivingAnimation: true,
-                aiProvider: aiProvider || 'Anthropic',
-                ...buildGeneratedRunAttrs(generationRun),
-            })
-
-            tr.insert(insertPos, responseNode)
-
-            targetInfo = {
-                found: true,
-                endOfNodePos: insertPos + responseNode.nodeSize,
-                childCount: 0
+            if (generationRun?.reasoningRunId) {
+                const sectionNode = state.schema.nodes[aiReasoningSectionNodeType].create({
+                    generationRequestId: generationRun.generationRequestId || '',
+                    reasoningRunId: generationRun.reasoningRunId || '',
+                    reasoningModelId: generationRun.reasoningModelId || '',
+                    reasoningIndex: generationRun.reasoningIndex ?? null,
+                    isReceivingAnimation: true,
+                })
+                const messageInfo = PositionFinder.findResponseMessage(state, threadId, generationRun)
+                if (messageInfo.found && messageInfo.contentEndPos !== undefined) {
+                    tr.insert(messageInfo.contentEndPos, sectionNode)
+                    targetInfo = { found: true, endOfNodePos: messageInfo.contentEndPos + sectionNode.nodeSize, childCount: 0 }
+                } else {
+                    const responseNode = state.schema.nodes[aiResponseMessageNodeType].create({
+                        id: `resp-${generationRun.generationRequestId || Date.now()}`,
+                        isInitialRenderAnimation: true,
+                        isReceivingAnimation: true,
+                        aiProvider: aiProvider || 'Anthropic',
+                        generationRequestId: generationRun.generationRequestId || '',
+                    }, sectionNode)
+                    tr.insert(insertPos, responseNode)
+                    targetInfo = { found: true, endOfNodePos: insertPos + responseNode.nodeSize - 1, childCount: 0 }
+                }
+            } else {
+                const responseNode = state.schema.nodes[aiResponseMessageNodeType].create({
+                    id: `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                    isInitialRenderAnimation: true,
+                    isReceivingAnimation: true,
+                    aiProvider: aiProvider || 'Anthropic',
+                    ...buildGeneratedRunAttrs(generationRun),
+                })
+                tr.insert(insertPos, responseNode)
+                targetInfo = { found: true, endOfNodePos: insertPos + responseNode.nodeSize, childCount: 0 }
             }
         }
 
@@ -1810,7 +1937,9 @@ class AiChatThreadPluginClass {
         }
 
         const node = state.doc.nodeAt(responseInfo.nodePos)
-        if (!node || node.type.name !== aiResponseMessageNodeType) {
+        // findResponseNode resolves to the per-run section for matrix runs and to
+        // the message itself for legacy runs; clear the receiving flag on whichever.
+        if (!node || (node.type.name !== aiResponseMessageNodeType && node.type.name !== aiReasoningSectionNodeType)) {
             if (!IS_RECEIVING_TEMP_DEBUG_STATE && threadId) {
                 dispatch(state.tr.setMeta('setReceiving', { threadId, receiving: false, runKey: getReasoningRunKey(generationRun) }))
             }
@@ -2463,6 +2592,8 @@ class AiChatThreadPluginClass {
                         aiUserMessageNodeView(node, view, getPos),
                     [aiCollapsibleBlockNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiCollapsibleBlockNodeView(node, view, getPos),
+                    [aiReasoningSectionNodeType]: (node: ProseMirrorNode) =>
+                        aiReasoningSectionNodeView(node),
                     [aiGeneratedVideoNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiGeneratedVideoNodeView(node, view, getPos),
                     // Note: aiGeneratedImage is handled by imageSelectionPlugin for bubble menu integration

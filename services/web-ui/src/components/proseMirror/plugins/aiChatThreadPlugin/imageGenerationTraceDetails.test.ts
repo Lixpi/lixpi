@@ -2,7 +2,11 @@
 
 import { describe, it, expect, vi } from 'vitest'
 
-import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
+import {
+    createImageGenerationTraceDetails,
+    formatTraceModelLabel,
+    type ImageGenerationTraceDetailsAttrs,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import type { ImageGenerationTrace, ImageGenerationTraceReference } from '@lixpi/constants'
 
 vi.mock('$src/services/auth-service.ts', () => ({
@@ -136,5 +140,56 @@ describe('createImageGenerationTraceDetails — reference grid', () => {
         const { details, tiles } = renderTiles([])
         expect(tiles).toHaveLength(0)
         expect(details.dom.querySelector('.ai-image-generation-empty-references')?.textContent).toContain('No reference images were sent')
+    })
+})
+
+// =============================================================================
+// COLLAPSIBLE SUMMARY — REASONING MODEL ATTRIBUTION
+// The reasoning model is identified in the collapsible header (replacing the pill
+// that used to sit beside the avatar), and must show even while collapsed.
+// =============================================================================
+
+function renderSummary(attrs: Partial<ImageGenerationTraceDetailsAttrs>) {
+    const details = createImageGenerationTraceDetails()
+    details.render({
+        attrs: { title: 'Image generation prompt', isOpen: false, isStreaming: false, ...attrs },
+        childCount: 0,
+    })
+    const summaryMeta = details.dom.querySelector('.ai-collapsible-block-summary-meta') as HTMLElement
+    return summaryMeta
+}
+
+describe('createImageGenerationTraceDetails — reasoning model in the summary', () => {
+    it('shows the reasoning model alongside the reference count', () => {
+        const summaryMeta = renderSummary({
+            imageGenerationTrace: makeTrace([makeReference()]),
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+        })
+        expect(summaryMeta.textContent).toBe('claude-sonnet-4-6 · 1 reference')
+    })
+
+    it('shows the model even before the trace arrives (while streaming the prompt)', () => {
+        const summaryMeta = renderSummary({
+            isStreaming: true,
+            reasoningModelId: 'Google:gemini-flash-latest',
+        })
+        expect(summaryMeta.textContent).toBe('gemini-flash-latest')
+    })
+
+    it('omits the model segment when no reasoning model is set', () => {
+        const summaryMeta = renderSummary({ imageGenerationTrace: makeTrace([makeReference()]) })
+        expect(summaryMeta.textContent).toBe('1 reference')
+    })
+})
+
+describe('formatTraceModelLabel', () => {
+    it('returns the model segment of a Provider:model id', () => {
+        expect(formatTraceModelLabel('Anthropic:claude-sonnet-4-6')).toBe('claude-sonnet-4-6')
+    })
+
+    it('returns an empty string for a missing id', () => {
+        expect(formatTraceModelLabel('')).toBe('')
+        expect(formatTraceModelLabel(undefined)).toBe('')
+        expect(formatTraceModelLabel(null)).toBe('')
     })
 })
