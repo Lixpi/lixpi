@@ -108,6 +108,15 @@ The NEX key variables have different owners:
 - `NATS_NEX_NODE_NKEY_PUBLIC` is safe verification material. NEX needs it for the native NATS client flags, the NATS server config needs it to advertise the nonce required by native NKey auth, and `services/api` needs it in `serviceAuthConfigs` so the auth callout can verify the raw NKey signature.
 - The NATS server's static nkey user entry is not the final authorization decision in the current centralized auth-callout design. It enables the native NKey challenge; NATS forwards the auth decision to the API and enforces the returned user JWT.
 
+Local private-repo NEX workloads should currently use `file://` artifacts placed
+in the shared Docker volume mounted at `/opt/nex/private-workloads`, not
+`nats://` Object Store artifacts. NEX 0.4.1 can fetch Object Store artifacts in
+compatible credential setups, but the `--issuer-nkey` path used by Lixpi mints
+NKey credentials while the native artifact fetcher connects with
+`UserJWTAndSeed`. With centralized auth callout enabled, that artifact-fetch
+connection has no usable `auth_token` or raw `nkey` challenge fields and is
+rejected.
+
 ## Code samples
 
 The samples below show the concrete implementation shape. If you need to read the full files:

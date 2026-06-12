@@ -156,6 +156,14 @@ The native nexlet (`agents/native`) is the one you get for free. It runs an OS e
 **You can deliver workload binaries over NATS today.** The Object Store path (`nats://`) is fully implemented — you can push a binary into a JetStream Object Store bucket and reference it by `uri`, instead of baking it into the node’s host/image. OCI-registry delivery is anticipated by the URI parser but not yet wired up; don’t plan on `oci://` working at `0.4.1`.
 {% /callout %}
 
+For Lixpi's current centralized auth-callout deployment, prefer `file://`
+artifacts mounted into the NEX node over `nats://` artifacts. The NEX 0.4.1
+`NkeyMinter` path hands the native nexlet NKey credentials, but its Object Store
+artifact fetcher opens the NATS connection with `UserJWTAndSeed`. That mismatch
+causes the auth callout to receive a connection with no usable token or raw NKey
+challenge fields. `nats://` is still valid NEX behavior in compatible NATS
+credential setups; it is not the local Lixpi private-repo path right now.
+
 The native nexlet supports the `service` and `job` lifecycles (it is described in the docs as the reference "process runner which deploys jobs and services"). It does **not** do `function`.
 
 ## 7. Every way to run NEX

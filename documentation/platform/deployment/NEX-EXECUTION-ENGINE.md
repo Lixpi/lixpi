@@ -81,6 +81,22 @@ Credential ownership is intentionally split:
 
 Keeping the node in its own account means its `$NEX.>` control plane and feeds stay isolated from application subjects. The auth decision still goes through the centralized API callout; the isolation comes from the issued JWT targeting `NEX` with NEX-only permissions. For the conceptual auth model see [Authentication](../AUTHENTICATION.md).
 
+Local private-repo workloads are delivered through the shared Docker volume
+`lixpi-nex-workloads`, mounted in the node at `/opt/nex/private-workloads`
+read-only. Private repos write native executable artifacts into that volume and
+deploy Nexfiles that use `file:///opt/nex/private-workloads/...` URIs. This keeps
+the public repo responsible for the NEX substrate while letting private repos
+supply private binaries without baking them into the public image.
+
+NEX 0.4.1 also supports `nats://<bucket>/<object>` Object Store artifacts in the
+native nexlet, but Lixpi does not use that path with the current `--issuer-nkey`
+setup. The `NkeyMinter` supplies NKey credentials, while the native artifact
+fetcher opens the Object Store connection with `UserJWTAndSeed`; under
+centralized auth callout that produces a connection with no usable token or raw
+NKey challenge fields, so the API correctly rejects it. Use the shared volume
+path locally unless Lixpi moves to a compatible NATS JWT/operator setup or a
+patched NEX artifact fetcher.
+
 ## Completion event
 
 After each run the workload publishes `aiModels.syncCompleted` (constant `AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED`) with the run totals — `{ totalNew, totalUpdated, totalDeleted, totalProcessed, ranAt }` — using the NATS credentials the native nexlet mints for it, so the event originates in the `NEX` account.

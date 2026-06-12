@@ -77,8 +77,8 @@ await startNatsAuthCalloutService({
             userId: 'svc:nex-node',
             account: 'NEX',
             permissions: {
-                pub: { allow: ['$NEX.>', '_INBOX.>', 'aiModels.syncCompleted'] },
-                sub: { allow: ['$NEX.>', '_INBOX.>'] }
+                pub: { allow: ['$NEX.>', '$JS.API.>', '$JS.lixpi.API.>', '_INBOX.>', 'aiModels.syncCompleted'] },
+                sub: { allow: ['$NEX.>', '$JS.API.>', '$JS.lixpi.API.>', '_INBOX.>'] }
             }
         }
     ]
