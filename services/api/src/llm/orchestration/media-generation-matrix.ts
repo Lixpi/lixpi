@@ -186,6 +186,7 @@ export class MediaGenerationMatrixOrchestrator {
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: normalized.videoSourceForExtension,
                 workspaceContextResolution: sharedPreflightState.workspaceContextResolution,
+                imageBranchCandidateSnapshot: sharedPreflightState.imageBranchCandidateSnapshot,
                 imageBranchResolution: sharedPreflightState.imageBranchResolution,
                 messages: sharedPreflightState.messages,
                 featureReferenceImages: sharedPreflightState.featureReferenceImages,

@@ -31,7 +31,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Resolver Audit Metadata** — The resolver model provider, model ID, confidence, rationale, excluded node IDs, operation kind, visual summaries, and schema version, persisted on generated-media metadata for later candidate labeling and debugging.
 
-**Branch Root** — The first generated image/video of a `branchId`. It normally carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. Fresh multi-model generations with no source/thread node temporarily persist a `branchOrigin` marker so every generated sibling has the same explicit graph parent; this marker is a temporary UX exception until final branch-origin design exists.
+**Branch Root** — The first generated image/video of a `branchId`. It normally carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. Fresh multi-model generations with no source/thread node persist a `branchOrigin` marker so every generated sibling has the same explicit graph parent; this marker opens the generated branch provenance/details panel below the marker and is never treated as chat context.
 
 **Lineage Source** — A *verified connector parent.* References, style images, and workspace-relevance selections can guide routing or placement, but they do not become connector parents unless the resolver is continuing an existing generated branch, or the output is rooted on a chat thread.
 
@@ -66,7 +66,7 @@ Lixpi solves this by combining deterministic graph narrowing with VLM role assig
 - **One decision feeds routing and provenance.** The references sent to the model, the generated metadata, and branch-root provenance all come from the resolver result.
 - **No silent guessing.** Resolver failure is user-visible and *stops* generation instead of falling back to regexes, recency, or all-variant injection.
 - **Feature extraction stays independent.** `/use` feature references resolve before branch resolution, and their injected feature image blocks are preserved by the branch resolver.
-- **The root media is the branch unless a temporary origin is required.** The first generated image/video of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch. Fresh multi-model requests with no source/thread node temporarily persist a `branchOrigin` marker so siblings share one explicit graph origin.
+- **The root media is the branch unless a temporary origin is required.** The first generated image/video of a new branch carries its prompt and references on `generatedBy`. Continuations attach to the existing branch. Fresh multi-model requests with no source/thread node persist a `branchOrigin` marker so siblings share one explicit graph origin.
 
 ## System Architecture
 
@@ -390,7 +390,7 @@ For images, an empty `IMAGE_PARTIAL` creates a transparent placeholder canvas no
 3. **Placement geometry:**
    - If placement continues from a generated media node, the placeholder is **vertically centered** on that preceding artifact.
    - **Fresh / reference-only** generations place to the **right of the combined bounds of all reference media**, with `settings.imageBranchLineage.rootOutputGap` breathing room. If no source/thread node exists, the temporary `branchOrigin` marker is placed to the left of the generated sibling group.
-4. Reference media animate with the same PIXI traveling outline as the generated placeholder while generation prepares (see [Progress Outlines](#progress-outlines)).
+4. Reference media animate with the same PIXI traveling outline as the generated placeholder while the reasoning model prepares the media prompt (see [Progress Outlines](#progress-outlines)).
 
 PIXI reports intrinsic dimensions whenever placeholder, partial, or final pixels load. For generated media-to-media continuations, each intrinsic-size correction recomputes the node's vertical position from its lineage-anchor center — so a square placeholder, a landscape partial, and a portrait final all stay on one branch center line even as their rectangles change size.
 
@@ -509,9 +509,9 @@ The renderer/resolver split is owned by [Rendering Engine](../canvas/RENDERING-E
 
 ## Progress Outlines
 
-While a generation is preparing, the selected/reference media can animate with the same PIXI traveling outline used by the generated placeholder. This makes the active context visible before the first real output arrives.
+While the reasoning model is preparing a media prompt, the selected/reference media can animate with the same PIXI traveling outline used by the generated placeholder. This makes the active context visible before the request hands off to the media model.
 
-- **Reference outlines** clear as soon as the first real partial arrives (for video, when the node upgrades to its poster/MP4).
+- **Reference outlines** clear when `IMAGE_GENERATION_TRACE` or `VIDEO_GENERATION_TRACE` arrives, because that is the handoff from reasoning model to media model.
 - The **generated-output outline** clears on completion or on error. Canvas DOM node shells are geometry-synced after visual-only commits so a moved PIXI media node does not leave a stale interaction border at its old position.
 
 Video follows these same outline rules, using `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` instead of progressive image partials.

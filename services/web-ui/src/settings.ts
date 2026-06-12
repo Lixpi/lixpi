@@ -228,6 +228,16 @@ export type ImageBranchLineageSettings = {
     branchToBranchGap: number
     imageToImageGap: number
     branchFanoutDepthGap: number
+    branchOrigin: {
+        size: number
+        iconSize: number
+        styles: {
+            backgroundColor: string
+            borderColor: string
+            iconColor: string
+            boxShadow: string
+        }
+    }
 }
 
 export type MediaLibrarySettings = {
@@ -550,6 +560,19 @@ export const settings: Settings = {
         imageToImageGap: 512,
         // Canvas-unit extra horizontal gap added for each child after the first when a generated-media node forks. Increasing it gives large branch fans more curve room.
         branchFanoutDepthGap: 96,
+        // Temporary root marker used when a fresh multi-model branch has no real source node.
+        branchOrigin: {
+            // Canvas-unit diameter of the branch-origin circle.
+            size: 96,
+            // Canvas-unit size for the centered branch icon.
+            iconSize: 52,
+            styles: {
+                backgroundColor: colorPalette.steelBlue,
+                borderColor: colorPalette.steelBlue,
+                iconColor: colorPalette.offWhite,
+                boxShadow: '0 8px 24px rgba(42, 48, 57, 0.22)',
+            },
+        },
     },
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).

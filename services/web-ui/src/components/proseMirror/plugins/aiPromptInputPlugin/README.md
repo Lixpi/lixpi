@@ -1,358 +1,271 @@
 # AI Prompt Input Plugin
 
-Provides the ProseMirror editor used by AI prompt input surfaces. It is a **separate, standalone editor** with its own `documentType: 'aiPromptInput'`, independent from the `aiChatThreadPlugin`. The active workspace composer lives in the AI Chat panel; the older detached canvas-node input path is deprecated.
+`aiPromptInputPlugin` provides the ProseMirror editor used by AI prompt composer surfaces. It runs with `documentType: 'aiPromptInput'` and a single `aiPromptInput` document node. Hosts provide model controls, media controls, context chrome, submit behavior, stop behavior, and receiving state through plugin options.
 
-## What it does
+## Input Flow
 
-This plugin powers prompt input editors. It provides:
-- A rich-text ProseMirror editor for composing messages
-- Reasoning, image, and video model selectors that default to single-select
-- Per-section multi-model toggles for reasoning/image/video fanout
-- Selected-model tag rows under each section when multi-model mode is enabled
-- Contextual help tooltips for the reasoning, image, and video model sections
-- Optional injected context-preview strip for surfaces that need composer-owned context chrome
-- A submit/stop button
-- Placeholder text when the input is empty
-- Keyboard shortcut support (Cmd/Ctrl + Enter to submit)
+1. The user writes rich-text prompt content in the `aiPromptInput` node.
+2. Cmd/Ctrl+Enter, the injected submit button, or `SUBMIT_AI_PROMPT_META` starts submission.
+3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
+4. `getInputAttrs()` reads reasoning, image, video, and multi-model attrs from the input node.
+5. `onSubmit()` receives `{ contentJSON, aiModel, aiModels, useMultipleModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }`.
+6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
+7. `AiPromptInputController` routes the submitted content to an existing AI chat thread or creates a thread and queues the submit until that thread editor is registered.
 
-When a user types a message and submits:
-1. The plugin extracts the content as JSON from the `aiPromptInput` node
-2. Reads the scalar model attrs, serialized model-list attrs, and media option attrs
-3. Calls the `onSubmit` callback with `{ contentJSON, aiModel, aiModels, useMultipleModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }`
-4. Clears the input content and resets the cursor
+The plugin boundary is the submit/stop callback surface. `AiPromptInputController` handles target tracking, thread creation, `aiUserMessage` insertion, `USE_AI_CHAT_META`, and receiving-state updates.
 
-The plugin does **not** handle AI streaming, message routing, or thread management — that is the responsibility of the `AiPromptInputController` service and the `aiChatThreadPlugin`. In the workspace AI Chat panel, `WorkspaceCanvas.ts` persists each prompt editor document as a per-tab draft in `canvasState.aiChatPanel` and restores it on panel/tab reload; the plugin remains unaware of that storage policy.
+## Runtime Wiring
 
-## Technical Architecture
+`ProseMirrorEditor` adds this plugin for `documentType: 'aiPromptInput'`.
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-graph TD
-    subgraph "Plugin Layer"
-        A[createAiPromptInputPlugin] --> B[KeyboardHandler]
-        A --> C[extractContentJSON]
-        A --> D[getInputAttrs]
-        A --> E[clearInputContent]
-        A --> F[PlaceholderDecoration]
-    end
-
-    subgraph "NodeView Layer"
-        N[aiPromptInputNode.ts] --> NV[createAiPromptInputNodeView]
-        NV --> CONT[Content Area<br/>ProseMirror contentDOM]
-        NV --> CTRL[Controls Container]
-        CTRL --> MD[Reasoning model setup block]
-        CTRL --> IMD[Image model setup block]
-        CTRL --> VMD[Video model setup block]
-        CTRL --> SB[Submit Button]
-    end
-
-    subgraph "External Integration"
-        PE[ProseMirrorEditor] --> A
-        WC[WorkspaceCanvas.ts] --> PE
-        WC --> CTRL2[AiPromptInputController]
-        CTRL2 --> INJ[injectMessageAndSubmit]
-        CTRL2 --> CRT[createThreadAndSubmit]
-    end
-
-    A --> N
-```
-
-**Key Design Principles:**
-- **Minimal schema:** The document consists of a single `aiPromptInput` node — no title, no conversation history
-- **Decoupled from threads:** The plugin only handles input composition and extraction, never touches thread state or streaming
-- **Adapter pattern:** NodeView controls bridge ProseMirror node attrs (`aiModel`, `aiModels`, per-section multi-model flags, `imageGenerationSize`) to UI controls via getter/setter adapters
-- **Factory injection:** UI controls (dropdowns, buttons) are injected via factory functions, keeping the plugin framework-agnostic
-- **Optional context chrome:** Host surfaces can inject draft-owned context previews into the white input area without making the plugin own context state. Submitted-turn resolver feedback belongs outside the composer.
-- **Polling for external state:** Receiving state is synced via a 200ms polling interval since it's owned by external services, not plugin state
-
-## Data Flow
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
-sequenceDiagram
-    participant U as User
-    participant PI as PromptInput Plugin
-    participant NV as NodeView
-    participant PE as ProseMirrorEditor
-    participant CTRL as AiPromptInputController
-    participant WC as WorkspaceCanvas
-    participant TP as aiChatThreadPlugin
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 1: COMPOSE & SUBMIT
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(220, 236, 233)
-        Note over U, TP: PHASE 1 — COMPOSE & SUBMIT
-        U->>NV: Types message in floating input
-        activate NV
-        NV->>NV: syncEmptyState() → data-empty attr
-        deactivate NV
-        U->>PI: Cmd+Enter or click submit button
-        activate PI
-        PI->>PI: extractContentJSON(state)
-        PI->>PI: getInputAttrs(state) → aiModel, imageGenerationSize
-        PI->>PE: onSubmit({ contentJSON, aiModel, imageOptions })
-        PI->>PI: clearInputContent(view) → reset to empty paragraph
-        deactivate PI
-    end
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 2: ROUTE TO THREAD
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(195, 222, 221)
-        Note over U, TP: PHASE 2 — ROUTE TO THREAD
-        PE->>CTRL: submitMessage({ contentJSON, aiModel, imageOptions })
-        activate CTRL
-        alt Target is existing AI chat thread
-            CTRL->>CTRL: injectMessageAndSubmit(threadId, pending)
-            CTRL->>TP: Dispatch USE_AI_CHAT_META to thread editor
-            activate TP
-            deactivate TP
-        else Target is document or image
-            CTRL->>WC: createThreadAndSubmit()
-            activate WC
-            Note over WC: Creates AiChatThreadCanvasNode<br/>+ WorkspaceEdge
-            WC-->>CTRL: Canvas state persisted
-            deactivate WC
-            CTRL->>CTRL: Queue pending message for new thread
-        end
-        deactivate CTRL
-    end
-
-    %% ═══════════════════════════════════════════════════════════════
-    %% PHASE 3: AI RESPONSE
-    %% ═══════════════════════════════════════════════════════════════
-    rect rgb(242, 234, 224)
-        Note over U, TP: PHASE 3 — AI RESPONSE (handled by aiChatThreadPlugin)
-        activate TP
-        TP->>TP: Streaming response into aiResponseMessage node
-        deactivate TP
-        CTRL->>NV: isReceiving() → true
-        activate NV
-        NV->>NV: syncReceivingState() → controls.receiving class
-        deactivate NV
-    end
-```
-
-### Schema Node
-
-**`aiPromptInput`** — Floating composer for sending messages to any canvas node
-- Content: `(paragraph | block)+`
-- Group: `block`
-- Draggable: `false`
-- Selectable: `false`
-- Isolating: `true` (prevents cursor from escaping)
-- Attributes:
-  - `aiModel: string` (default `''`) — Selected AI model (e.g., `"Anthropic:claude-3-5-sonnet"`)
-  - `aiModels: string` (default `''`) — JSON-serialized ordered reasoning model ids for multi-model sends
-  - `useMultipleModels: boolean` (default `false`) — Legacy aggregate multi-model flag
-  - `useMultipleReasoningModels: boolean` (default `false`) — Enables multi-select mode for the reasoning model section
-  - `useMultipleImageModels: boolean` (default `false`) — Enables multi-select mode for the image model section
-  - `useMultipleVideoModels: boolean` (default `false`) — Enables multi-select mode for the video model section
-  - `aiImageModel: string` (default `''`) — Selected image generation model (e.g., `"OpenAI:dall-e-3"`)
-  - `aiImageModels: string` (default `''`) — JSON-serialized ordered image generation model ids for multi-model sends
-  - `imageGenerationSize: string` (default `'auto'`) — Image generation resolution or aspect-ratio value, depending on the selected image model metadata
-  - `aiVideoModel: string` (default `''`) — Selected video generation model
-  - `aiVideoModels: string` (default `''`) — JSON-serialized ordered video generation model ids for multi-model sends
-  - `videoAspectRatio: string` (default `''`) — Video generation aspect ratio
-  - `videoResolution: string` (default `''`) — Video generation resolution
-  - `videoDuration: string` (default `''`) — Video generation duration
-- DOM: `div.ai-prompt-input-wrapper[data-ai-model][data-ai-models][data-use-multiple-models][data-use-multiple-reasoning-models][data-use-multiple-image-models][data-use-multiple-video-models][data-ai-image-model][data-ai-image-models][data-image-generation-size][data-ai-video-model][data-ai-video-models][data-video-aspect-ratio][data-video-resolution][data-video-duration]`
-- Content hole: `0` (ProseMirror renders editable content inside)
-
-The document schema for `documentType: 'aiPromptInput'` is:
-```
-doc → aiPromptInput
-```
-
-No title node, no other blocks — just the single input node.
-
-## NodeView
-
-The `createAiPromptInputNodeView` factory returns a ProseMirror NodeView with this DOM structure:
-
-```
-div.ai-prompt-input-wrapper [data-empty="true"|"false"]
-├── [Optional context preview strip]   ← injected via createContextTray()
-├── div.ai-prompt-input-content        ← contentDOM (editable)
-└── div.ai-prompt-input-controls
-    ├── button.ai-prompt-model-menu-trigger
-    ├── [Submit Button]                ← injected via createSubmitButton()
-    └── div.bubble-menu.ai-prompt-model-menu-info-bubble
-        └── div.ai-prompt-model-menu-content
-            ├── Reasoning model section ← title, help tooltip, multi-model switch, createModelDropdown(), selected tag row
-            ├── Image model section     ← title, help tooltip, multi-model switch, createImageModelDropdown(), createImageSizeDropdown(), selected tag row
-            └── Video model section     ← title, help tooltip, multi-model switch, createVideoModelDropdown(), aspect, resolution, duration, selected tag row
-```
-
-### Control Adapters
-
-The NodeView uses an adapter pattern to bridge ProseMirror node attributes with UI controls. Each control receives getter/setter functions that read/write `aiModel`, `aiImageModel`, and `imageGenerationSize` via `setNodeMarkup` transactions:
-
-```typescript
-const modelControls: AiModelControls = {
-    getCurrentAiModel: () => getNodeAttr(view, getPos, 'aiModel'),
-    setAiModel: (aiModel) => setNodeAttr(view, getPos, 'aiModel', aiModel),
-}
-```
-
-This keeps the controls stateless — the ProseMirror document is the single source of truth. The bottom control row only shows the model settings trigger and submit button by default; model dropdowns live in the shared `BubbleMenu` surface. Each model section header keeps the title and help tooltip together on the left, with the per-section multi-model switch on the right. When a section is in multi-model mode and has selected models, a content-tight tag-pill row is rendered below that section's controls grid, so video model options stay on their existing row while selected models can wrap horizontally beneath it. Section help uses the reusable `helpTooltip` TypeScript-html component, which positions its tooltip against the visible viewport instead of assuming there is room on one side. When `createContextTray()` is supplied, the returned element is inserted before the editable content so context previews occupy the white input area and increase composer height without changing the gradient border container.
-
-### State Synchronization
-
-- **Empty state:** `data-empty` attribute on the wrapper toggles placeholder visibility via SCSS. Updated on every `update()` call.
-- **Placeholder owner:** The NodeView copies `placeholderText` onto `.ai-prompt-input-content`, so injected context previews can push the editable content down while the placeholder stays aligned with the text insertion point.
-- **Receiving state:** The `receiving` CSS class on `.ai-prompt-input-controls` is polled every 200ms via `options.isReceiving()`. This external state comes from `AiPromptInputController.isReceiving()` which tracks which thread IDs are currently streaming.
-
-### NodeView Lifecycle
-
-- **`ignoreMutation()`** — Returns `true` for mutations inside the controls container, preventing ProseMirror from recreating the NodeView when dropdowns or buttons change.
-- **`stopEvent()`** — Returns `true` for events targeting the controls container or injected context preview strip, preventing ProseMirror from stealing focus/clicks from dropdowns, buttons, and context preview remove controls.
-- **`update()`** — Accepts updates only for `aiPromptInput` nodes. Syncs empty state, receiving state, and calls `update()` on every model dropdown.
-- **`destroy()`** — Clears the receiving poll interval, destroys the model `BubbleMenu`, and calls `destroy()` on dropdowns.
-
-## Plugin Internals
-
-### Helper Functions
-
-**`extractContentJSON(state)`** — Walks the document to find the `aiPromptInput` node, returns its children as a JSON array. Returns `null` if the node isn't found or has no text content.
-
-**`getInputAttrs(state)`** — Reads model, image generation, and video generation attributes from the `aiPromptInput` node.
-
-**`clearInputContent(view)`** — Replaces all content inside the `aiPromptInput` node with a single empty paragraph and positions the cursor at the start.
-
-**`KeyboardHandler.isModEnter(event)`** — Returns `true` when Cmd+Enter (macOS) or Ctrl+Enter (Windows/Linux) is pressed.
-
-### Plugin Configuration
-
-```typescript
+```ts
 createAiPromptInputPlugin({
-    onSubmit: (data) => { /* { contentJSON, aiModel, imageOptions } */ },
-    onStop: () => { /* stop streaming */ },
-    isReceiving: () => boolean,
-    createContextTray: () => HTMLElement | null,
-    createModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
-    createModelMultiSelect: (controls, dropdownId) => ({ dom, update, destroy }),
-    createImageModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
-    createImageModelMultiSelect: (controls, dropdownId) => ({ dom, update, destroy }),
-    createImageSizeDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
-    createVideoModelDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
-    createVideoModelMultiSelect: (controls, dropdownId) => ({ dom, update, destroy }),
-    createVideoAspectDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
-    createVideoResolutionDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
-    createVideoDurationDropdown: (controls, dropdownId) => ({ dom, update, destroy }),
-    createSubmitButton: (controls) => HTMLElement,
+    onSubmit: data => this.onPromptSubmit?.(data),
+    onStop: () => this.onPromptStop?.(),
+    isReceiving: () => this.isPromptReceiving?.() ?? false,
+    createContextTray: this.promptControlFactories?.createContextTray,
+    createModelDropdown: this.promptControlFactories?.createModelDropdown,
+    createModelMultiSelect: this.promptControlFactories?.createModelMultiSelect,
+    createImageModelDropdown: this.promptControlFactories?.createImageModelDropdown,
+    createImageModelMultiSelect: this.promptControlFactories?.createImageModelMultiSelect,
+    createImageSizeDropdown: this.promptControlFactories?.createImageSizeDropdown,
+    createVideoModelDropdown: this.promptControlFactories?.createVideoModelDropdown,
+    createVideoModelMultiSelect: this.promptControlFactories?.createVideoModelMultiSelect,
+    createVideoAspectDropdown: this.promptControlFactories?.createVideoAspectDropdown,
+    createVideoResolutionDropdown: this.promptControlFactories?.createVideoResolutionDropdown,
+    createVideoDurationDropdown: this.promptControlFactories?.createVideoDurationDropdown,
+    createSubmitButton: this.promptControlFactories?.createSubmitButton,
     placeholderText: 'Talk to me...',
 })
 ```
 
-The `create*MultiSelect` factories are optional fallbacks for hosts that have not wired multi-select controls yet. When a per-section switch is off, the NodeView mounts the single-select dropdown for that section. When the switch is on, it mounts the matching multi-select factory if supplied, otherwise it falls back to the single-select dropdown while preserving the ProseMirror multi-model attrs.
+```mermaid
+sequenceDiagram
+    participant User
+    participant Plugin as aiPromptInputPlugin
+    participant NodeView as aiPromptInputNodeView
+    participant Controller as AiPromptInputController
+    participant Thread as aiChatThreadPlugin
 
-### Transaction Meta Signals
+    User->>NodeView: compose prompt
+    User->>Plugin: submit
+    Plugin->>Plugin: extract content JSON and attrs
+    Plugin->>Controller: onSubmit(payload)
+    Controller->>Thread: insert aiUserMessage and dispatch USE_AI_CHAT_META
+    Thread->>Controller: receiving state changes
+    Controller->>NodeView: isReceiving() poll
+```
 
-The plugin supports meta-driven submit/stop via `appendTransaction`:
-- **`submit:aiPrompt`** (`SUBMIT_AI_PROMPT_META`) — Triggers content extraction and `onSubmit` callback when set on a transaction.
-- **`stop:aiPrompt`** (`STOP_AI_PROMPT_META`) — Triggers the `onStop` callback.
+## Schema Node
 
-These metas allow external code to programmatically submit or stop without simulating keyboard events.
+### `aiPromptInput`
 
-### Decoration System
+Prompt composer node.
 
-A single decoration layer: **placeholder decoration**. When the `aiPromptInput` node has no text content, a `Decoration.node` is applied with:
-- Class: `empty-node-placeholder`
-- Attribute: `data-placeholder` set to the configured `placeholderText`
+- Content: `(paragraph | block)+`
+- Group: `block`
+- Draggable: `false`
+- Selectable: `false`
+- Isolating: `true`
+- Document mode: `doc -> aiPromptInput`
+- DOM: `div.ai-prompt-input-wrapper`
 
-The visible placeholder is rendered by `.ai-prompt-input-content::before`. The
-NodeView copies `placeholderText` onto the content element so the placeholder
-belongs to the editable text area, not to the wrapper that can also contain
-injected context previews.
+Attrs declared in `aiPromptInputNode.ts`:
 
-## Integration with WorkspaceCanvas
+- `aiModel`
+- `aiModels`
+- `useMultipleModels`
+- `useMultipleReasoningModels`
+- `useMultipleImageModels`
+- `useMultipleVideoModels`
+- `aiImageModel`
+- `aiImageModels`
+- `imageGenerationSize`
+- `aiVideoModel`
+- `aiVideoModels`
+- `videoAspectRatio`
+- `videoResolution`
+- `videoDuration`
 
-The workspace creates two types of floating input editors:
+`aiModels`, `aiImageModels`, and `aiVideoModels` are JSON-serialized ordered model-id arrays. `parseAiModelSelectionAttr()` accepts array values or serialized arrays and filters empty entries. `serializeAiModelSelectionAttr()` deduplicates non-empty model ids.
+
+`useMultipleModels` is the aggregate multi-model flag. The section-specific flags control reasoning, image, and video sections independently. When a section switch is enabled and its model-list attr is empty, the scalar model attr is used as the single selected model for that section.
+
+## NodeView Structure
+
+`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, injected dropdowns, selected-model tag rows, and injected submit button.
+
+```text
+div.ai-prompt-input-wrapper[data-empty]
+├── [context tray from createContextTray()]
+├── div.ai-prompt-input-content
+└── div.ai-prompt-input-controls
+    ├── button.ai-prompt-model-menu-trigger
+    ├── [submit button from createSubmitButton()]
+    └── div.bubble-menu.ai-prompt-model-menu-info-bubble
+        └── div.ai-prompt-model-menu-content
+            ├── section.ai-prompt-model-menu-section  Reasoning model
+            ├── section.ai-prompt-model-menu-section  Image model
+            └── section.ai-prompt-model-menu-section  Video model
+```
+
+The reasoning section mounts a model selector and a multi-model switch.
+
+The image section mounts a model selector, image-size dropdown, and a multi-model switch.
+
+The video section mounts a model selector, aspect-ratio dropdown, resolution dropdown, duration dropdown, and a multi-model switch.
+
+## Control Adapters
+
+Controls read and write ProseMirror node attrs through small adapter objects. Each adapter exposes getter/setter callbacks for the scalar model attr, the serialized model-list attr, or the media option attr it controls.
+
+Single-select controls update the scalar attr and serialize that value into the matching model-list attr.
+
+Multi-select controls update the scalar attr to the first selected model and serialize the full ordered selection into the matching model-list attr.
+
+`ModeAwareModelSelector` swaps between the single-select and multi-select dropdown for each section based on the section's multi-model flag. If a multi-select factory is omitted, the selector mounts the section's single-select dropdown.
+
+`SelectedModelTagsRow` subscribes to `aiModelsStore`, renders selected model tag pills while multi-model mode is enabled, and removes ids through the matching adapter when a tag is closed.
+
+## Model Settings Menu
+
+The model settings button is created by `createModelMenuTrigger()` and opens a shared `BubbleMenu` anchored to the trigger.
+
+The menu content is built from three `ai-prompt-model-menu-section` blocks:
+
+- `Reasoning model`
+- `Image model`
+- `Video model`
+
+Each section has a title, help tooltip, section switch, one or more controls, and an optional selected-model tag row.
+
+`settings.aiPromptInput.modelMenu.styles` is copied to CSS custom properties on the NodeView root by `applyModelMenuStyleSettings()`. Layout rules stay in `ai-prompt-input.scss`.
+
+The NodeView hides the model menu on document `mousedown` outside the controls row. It removes that listener in `destroy()`.
+
+## Submit And Stop
+
+Keyboard submission uses `KeyboardHandler.isModEnter(event)`, which accepts Cmd+Enter and Ctrl+Enter.
+
+The injected submit button receives:
+
+```ts
+{
+    onSubmit,
+    onStop,
+    isReceiving,
+}
+```
+
+`handleSubmit()` exits when the input text is empty. For non-empty input it builds the submit payload, calls `onSubmit()`, replaces the input content with one empty paragraph, and sets the cursor at the paragraph start.
+
+`STOP_AI_PROMPT_META` calls `onStop()` through `appendTransaction()`.
+
+## Plugin State And Decorations
+
+Plugin state stores a mapped `DecorationSet`.
+
+Decoration output:
+
+- `empty-node-placeholder` on empty `aiPromptInput`
+- `data-placeholder` with the configured placeholder text
+
+The visible placeholder is rendered by `.ai-prompt-input-content::before`. The NodeView also writes the placeholder text to `.ai-prompt-input-content` so injected context trays can occupy wrapper space without moving placeholder ownership away from the editable area.
+
+The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"` on the wrapper.
+
+Receiving state is external. The NodeView polls `options.isReceiving()` every 200ms and toggles `.receiving` on `.ai-prompt-input-controls`.
+
+## NodeView Lifecycle
+
+- `ignoreMutation()` returns `true` for mutations inside the controls row and injected context tray.
+- `stopEvent()` returns `true` for events inside the controls row and injected context tray.
+- `update()` accepts `aiPromptInput` nodes, syncs empty state, syncs receiving state, and updates every mounted dropdown/tag row.
+- `destroy()` clears the receiving poll interval, removes the document mouse listener, destroys the model menu content, destroys the `BubbleMenu`, and destroys mounted toggles, dropdowns, and tag rows.
+
+## Workspace Surfaces
+
+`WorkspaceCanvas.ts` mounts this plugin in three prompt surfaces.
 
 ### AI Chat Panel Composer
-The active composer lives in the workspace AI Chat panel. The detached prompt input that used to appear below selected canvas nodes is deprecated and hidden by `WorkspaceCanvas.ts`.
 
-Legacy `aiPromptInput` schema and controller code still exists because older editor flows and tests depend on it, but current workspace chat sends from the panel composer rather than creating a new AI chat thread canvas node.
+- Container: `.ai-prompt-input-floating.workspace-ai-chat-floating-panel-prompt.nopan`
+- Host layout: `workspace-canvas.scss`
+- Draft persistence: `canvasState.aiChatPanel.drafts`
+- Context tray: `createAiChatPanelContextTrayElement`
+- Receiving lookup: `promptInputController.isReceiving(panelThreadId ?? undefined)`
+- Submit path: extraction tabs call extraction submit logic; chat tabs call `promptInputController.submitMessage()`
 
-The active panel composer:
-- Uses `documentType: 'aiPromptInput'` for the `ProseMirrorEditor`
-- Receives the shared model, image, video, and submit controls from `primitives/aiControls/`
-- Renders inside a `.ai-prompt-input-floating.workspace-ai-chat-floating-panel-prompt` container with optional shifting gradient background (controlled by `settings.aiPromptInput.useShiftingGradientBackground`; see [Visual Effects](../../../../../../../documentation/canvas/VISUAL-EFFECTS.md))
-- Model settings menu colors, radii, divider styling, and shadows are configured through `settings.aiPromptInput.modelMenu.styles`. Layout mechanics such as grid shape, padding, width limits, z-index, and tooltip sizing stay in `ai-prompt-input.scss`.
+### Single Floating Input
+
+- Container: `.ai-prompt-input-floating.nopan`
+- Target: selected non-thread canvas node
+- Position: below the selected node
+- Submit path: `promptInputController.submitMessage()`
+- Stop path: `promptInputController.stopStreaming()`
+
+### Per-Thread Persistent Input
+
+- Container: `.ai-prompt-input-floating.ai-prompt-input-thread-persistent.nopan`
+- Target: one AI chat thread canvas node
+- Position: below the thread node
+- Submit path: sets controller target to that thread, then calls `promptInputController.submitMessage()`
+- Stop path: sets controller target to that thread, then calls `promptInputController.stopStreaming()`
+- Saved model attrs from the thread document are restored into the prompt input editor when supplied by the caller.
+
+All three surfaces use `documentType: 'aiPromptInput'` and prompt control factories from `getPromptControlFactories()` or equivalent inline factory objects.
 
 ## Styling
 
-SCSS lives in `ai-prompt-input.scss`. Key class hierarchy:
+SCSS lives in `ai-prompt-input.scss`.
 
-```
-.ai-prompt-input-floating            ← absolute-positioned floating container
-├── .shifting-gradient-canvas         ← optional gradient background
-└── .floating-input-editor            ← editor mount point
-    └── .ai-prompt-input-wrapper      ← NodeView root (white glassmorphism card)
-        ├── .ai-prompt-input-content  ← editable content area (flex: 1)
-        └── .ai-prompt-input-controls ← controls bar (flex-end)
-            ├── .ai-prompt-model-menu-trigger    ← opens model settings bubble menu
-            ├── .ai-submit-button     ← submit/stop button (32px circle)
-            │   ├── .button-default   ← send icon (normal state)
-            │   ├── .button-hover     ← send icon (hover state)
-            │   └── .button-receiving ← stop icon (streaming state)
+```text
+.ai-prompt-input-floating
+├── .shifting-gradient-canvas
+└── .floating-input-editor
+    └── .ai-prompt-input-wrapper
+        ├── .ai-prompt-input-content
+        └── .ai-prompt-input-controls
+            ├── .ai-prompt-model-menu-trigger
+            ├── .ai-submit-button
+            │   ├── .button-default
+            │   ├── .button-hover
+            │   └── .button-receiving
             └── .ai-prompt-model-menu-info-bubble
                 └── .ai-prompt-model-menu-content
                     └── .ai-prompt-model-menu-section
 ```
 
-**State-driven styling:**
-- `[data-empty="true"]` — Shows placeholder pseudo-element, dims controls
-- `[data-empty="false"]` — Fills submit icon with `$nightBlue`, active dropdown text
-- `.receiving` on controls — Swaps send icon for stop icon, shows receiving animation
+State hooks:
 
-**Visual Details:**
-- White glassmorphism card: `rgba(255, 255, 255, 0.9)` with `backdrop-filter: blur(10px)`
-- 4px margin creates a visible gradient "border" between the card and the floating container
-- Content area: 250px max-height with overflow-y scroll
-- Submit button: 32px circle with 3-layer state system (default → hover → receiving)
-- Model menu positioning: shared `BubbleMenu` anchored to `.ai-prompt-model-menu-trigger`
-- Dropdown positioning: `.info-bubble-wrapper.static-position` overrides InfoBubble's fixed positioning for canvas-embedded dropdowns inside the bubble menu
+- `[data-empty="true"]`: placeholder visible
+- `[data-empty="false"]`: active submit and dropdown styling
+- `.receiving` on controls: submit button displays the stop state
+- `.ai-prompt-model-menu-trigger.is-active`: model settings menu open
+- `.ai-prompt-selected-model-tags-row[data-visible="true"]`: selected model tags visible
 
-## Files in this plugin
+Settings hooks:
 
-- **`aiPromptInputNode.ts`** — Node spec and NodeView factory:
-  - Exports `aiPromptInputNodeType`, `aiPromptInputNodeSpec`, `createAiPromptInputNodeView`
-  - NodeView builds DOM with content area + controls bar
-  - Adapter pattern bridges node attrs to UI control getter/setters
-  - Polling-based receiving state sync (200ms interval)
+- `settings.aiPromptInput.useShiftingGradientBackground`
+- `settings.aiPromptInput.modelMenu.styles`
 
-- **`aiPromptInputPlugin.ts`** — Plugin orchestration:
-  - Exports `createAiPromptInputPlugin`
-  - Keyboard handler for prompt submission
-  - Content extraction, attribute reading, and input clearing
-  - Placeholder decoration system
-  - Meta-driven submit/stop via `appendTransaction`
-  - Wires NodeView to plugin via `editorViewRef`
+## Transaction Meta
 
-- **`aiPromptInputPluginConstants.ts`** — Shared `PluginKey` and meta constants:
-  - `AI_PROMPT_INPUT_PLUGIN_KEY` — Unique plugin key
-  - `SUBMIT_AI_PROMPT_META` — `'submit:aiPrompt'`
-  - `STOP_AI_PROMPT_META` — `'stop:aiPrompt'`
+- `SUBMIT_AI_PROMPT_META` (`submit:aiPrompt`): extracts content and attrs from `newState`, then calls `onSubmit()`.
+- `STOP_AI_PROMPT_META` (`stop:aiPrompt`): calls `onStop()`.
 
-- **`ai-prompt-input.scss`** — All styling for the floating input and its contents
+## Files
 
-- **`index.ts`** — Barrel exports for all public APIs
+- `aiPromptInputPlugin.ts`: plugin creation, submit payload construction, content extraction, attr reading, clearing, placeholder decorations, keydown handling, meta handling.
+- `aiPromptInputNode.ts`: node spec, attr parsing/serialization helpers, NodeView, model menu, control adapters, multi-model selectors, selected tag rows, lifecycle handling.
+- `aiPromptInputPluginConstants.ts`: `AI_PROMPT_INPUT_PLUGIN_KEY`, `SUBMIT_AI_PROMPT_META`, `STOP_AI_PROMPT_META`.
+- `ai-prompt-input.scss`: floating prompt input, wrapper, editable content, controls row, submit states, model settings menu, selected-model tag row styles.
+- `index.ts`: public exports.
 
-- **`aiPromptInputPlugin.test.ts`** — Comprehensive test suite covering:
-  - Node spec (content expression, attributes, parseDOM/toDOM)
-  - NodeView (DOM structure, empty state, stopEvent, ignoreMutation, update, destroy)
-  - Control adapters (ProseMirror attr read/write)
-  - Plugin (creation, placeholder decorations, keyboard shortcuts, image options, meta handling)
-  - SCSS visual expectations (class hierarchy, sizing, proportions)
-  - Receiving state synchronization
+## Related Modules
 
-## Related Components
-
-- **`$src/services/ai-prompt-input-controller.ts`** — `AiPromptInputController` class that routes submitted messages to the correct thread. Handles target tracking, thread auto-creation, pending message queuing, and receiving state.
-- **`$src/components/proseMirror/plugins/primitives/aiControls/`** — Factory functions for the reusable UI controls (model dropdown, image option dropdown, submit button).
-- **`$src/components/proseMirror/plugins/aiChatThreadPlugin/`** — The thread plugin that handles AI streaming, response insertion, and conversation rendering. Receives messages from this plugin via `USE_AI_CHAT_META`.
-- **`$src/infographics/workspace/WorkspaceCanvas.ts`** — Creates and positions the floating input editors, manages the `AiPromptInputController` lifecycle.
-- **`$src/components/proseMirror/components/editor.js`** — `ProseMirrorEditor` class that instantiates the plugin with `documentType: 'aiPromptInput'`.
+- `$src/services/ai-prompt-input-controller.ts`: routes submitted prompt content to AI chat threads, creates threads for non-thread targets, queues pending messages, tracks receiving thread ids.
+- `$src/components/proseMirror/plugins/primitives/aiControls/`: reusable model, media, multi-select, and submit controls.
+- `$src/components/proseMirror/plugins/aiChatThreadPlugin/`: thread log and streaming response plugin.
+- `$src/infographics/workspace/WorkspaceCanvas.ts`: mounts prompt surfaces and wires controller callbacks.
+- `$src/components/proseMirror/components/editor.ts`: creates the `aiPromptInput` schema and plugin stack.

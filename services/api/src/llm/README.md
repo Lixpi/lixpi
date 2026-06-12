@@ -62,7 +62,7 @@ src/llm/
         google-provider.ts       # Google generateContentStream + native image generation + VEO submit/poll/download
         byteplus-provider.ts     # BytePlus ModelArk Seedance 2.0 (video-only: create/poll/download)
         byteplus-video-types.ts  # Typed ModelArk REST client + buildSeedanceContent + pollVideoGenerationTask
-        stability-provider.ts    # Stability v2beta REST (multipart, no streaming)
+        stability-provider.ts    # Stability v2beta REST (multipart, no streaming, reference pixel-cap resizing)
     orchestration/
         media-generation-matrix.ts # Normalizes multi-model media requests, resolves model metadata, runs shared preflight, starts grouped reasoning runs
     tools/
@@ -118,7 +118,7 @@ Top-level chat requests publish `START_STREAM` before graph invocation. This kee
 
 When the text provider emits `generate_image`, `BaseProvider.executeImageGeneration()` builds and publishes an `IMAGE_GENERATION_TRACE` payload before calling `ImageRouter`. When it emits `generate_video`, `BaseProvider.executeVideoGeneration()` builds and publishes `VIDEO_GENERATION_TRACE` before calling `VideoRouter`. The router and trace builders share prompt helpers so the prompt shown in chat is the exact prompt routed to the transient media provider, including `/use` feature-transfer wrapping when present. Traces must never carry inline image data. Branch references point back to workspace media objects, and `/use` feature sample references point to the authenticated feature sample route, so persisted chat history can render reference thumbnails after a page reload without storing image bytes in NATS stream payloads or ProseMirror state.
 
-For multi-model media matrix requests, `MediaGenerationMatrixOrchestrator` resolves the selected models, runs workspace context, `/use` feature, and branch resolution once, then passes the resolved state into every reasoning child with `preflightResolved`. Each reasoning child keeps its own `generationRun.reasoningRunId`; when a media tool call is emitted, the shared provider path fans out across the selected media models and gives each router call a `mediaRunId`. Transient media providers use those run ids in their instance keys, trace events, partial events, complete events, and usage metadata so parallel variants do not collide.
+For multi-model media matrix requests, `MediaGenerationMatrixOrchestrator` resolves the selected models, runs workspace context, `/use` feature, and branch resolution once, then passes the resolved state into every reasoning child with `preflightResolved`, including the narrowed `imageBranchCandidateSnapshot` used later by generation traces to render stored reference previews. Each reasoning child keeps its own `generationRun.reasoningRunId`; when a media tool call is emitted, the shared provider path fans out across the selected media models and gives each router call a `mediaRunId`. Transient media providers use those run ids in their instance keys, trace events, partial events, complete events, and usage metadata so parallel variants do not collide.
 
 Each provider subclasses `BaseProvider` and implements `streamImpl(state)` — everything else is shared.
 

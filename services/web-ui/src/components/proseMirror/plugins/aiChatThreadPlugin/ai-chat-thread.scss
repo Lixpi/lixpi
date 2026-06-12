@@ -729,6 +729,11 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         object-fit: cover;
     }
 
+    .ai-image-generation-reference-image[hidden],
+    .ai-image-generation-reference-unavailable[hidden] {
+        display: none;
+    }
+
     .ai-image-generation-reference-unavailable,
     .ai-image-generation-empty-references {
         display: flex;

@@ -175,8 +175,20 @@ function getReasoningRunKey(generationRun?: MediaGenerationRunMeta): string {
     return generationRun?.reasoningRunId || 'legacy'
 }
 
-function getMediaOrReasoningRunKey(generationRun?: MediaGenerationRunMeta): string {
-    return generationRun?.mediaRunId || getReasoningRunKey(generationRun)
+function getReasoningOnlyGenerationRun(generationRun?: MediaGenerationRunMeta): MediaGenerationRunMeta | undefined {
+    if (!generationRun) return undefined
+
+    return {
+        generationRequestId: generationRun.generationRequestId,
+        reasoningRunId: generationRun.reasoningRunId,
+        reasoningModelId: generationRun.reasoningModelId,
+        reasoningIndex: generationRun.reasoningIndex,
+    }
+}
+
+function getReasoningModelProvider(modelId: string): string | undefined {
+    const [provider] = modelId.split(':')
+    return provider || undefined
 }
 
 function getThreadScopedRunKey(threadId: string, generationRun?: MediaGenerationRunMeta): string {
@@ -531,8 +543,7 @@ class PositionFinder {
     }
 
     static collapsibleMatchesGenerationRun(attrs: Record<string, any>, generationRun?: MediaGenerationRunMeta): boolean {
-        if (!generationRun?.reasoningRunId && !generationRun?.mediaRunId) return true
-        if (generationRun?.mediaRunId) return attrs?.mediaRunId === generationRun.mediaRunId
+        if (!generationRun?.reasoningRunId) return true
         return attrs?.reasoningRunId === generationRun.reasoningRunId && !attrs?.mediaRunId
     }
 
@@ -599,6 +610,44 @@ class PositionFinder {
                     }
                 })
                 return false // Stop after finding thread
+            })
+        }
+
+        return bestEndPos !== undefined
+            ? { found: true, endOfNodePos: bestEndPos, childCount: bestChildCount, nodePos: bestNodePos }
+            : { found: false }
+    }
+
+    static findUnassignedReceivingResponseNode(
+        state: EditorState,
+        threadId?: string,
+        reasoningModelId?: string
+    ): {
+        found: boolean
+        endOfNodePos?: number
+        childCount?: number
+        nodePos?: number
+    } {
+        let bestEndPos: number | undefined
+        let bestChildCount: number | undefined
+        let bestNodePos: number | undefined
+
+        if (threadId) {
+            state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+                if (node.type.name !== aiChatThreadNodeType || node.attrs?.threadId !== threadId) return
+
+                node.descendants((child: ProseMirrorNode, relPos: number) => {
+                    if (child.type.name !== aiResponseMessageNodeType) return
+                    if (child.attrs?.reasoningRunId) return
+                    if (!child.attrs?.isReceivingAnimation && !child.attrs?.isInitialRenderAnimation) return
+                    if (reasoningModelId && child.attrs?.reasoningModelId && child.attrs.reasoningModelId !== reasoningModelId) return
+
+                    bestNodePos = pos + relPos + 1
+                    bestEndPos = bestNodePos + child.nodeSize
+                    bestChildCount = child.childCount
+                    return false
+                })
+                return false
             })
         }
 
@@ -926,7 +975,7 @@ class AiChatThreadPluginClass {
     }
 
     private upsertImageCompleteInChat(view: EditorView, event: SegmentEvent): string {
-        const { aiChatThreadId, revisedPrompt } = event
+        const { aiChatThreadId } = event
         if (!aiChatThreadId) return ''
 
         const { state, dispatch } = view
@@ -964,20 +1013,8 @@ class AiChatThreadPluginClass {
             tr.delete(range.from, range.to)
         }
 
-        let imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
-        let insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
-
-        if (revisedPrompt && (!existingImage || existingImage.node.attrs.isPartial)) {
-            const revisedPromptNode = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-            const revisedPromptInsertionPos = imageNodePos ?? insertionPos
-            tr.insert(revisedPromptInsertionPos, revisedPromptNode)
-
-            if (imageNodePos !== undefined) {
-                imageNodePos = tr.mapping.map(imageNodePos, 1)
-            } else {
-                insertionPos += revisedPromptNode.nodeSize
-            }
-        }
+        const imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
+        const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
 
         if (imageNodeType) {
             const imageAttrs = this.buildGeneratedImageAttrs(event, false, partialIndex, existingImage?.node.attrs)
@@ -1100,7 +1137,7 @@ class AiChatThreadPluginClass {
     }
 
     private upsertVideoCompleteInChat(view: EditorView, event: SegmentEvent): string {
-        const { aiChatThreadId, revisedPrompt } = event
+        const { aiChatThreadId } = event
         if (!aiChatThreadId) return ''
 
         const { state, dispatch } = view
@@ -1116,20 +1153,8 @@ class AiChatThreadPluginClass {
             responseId: event.responseId,
         })
         const tr = state.tr
-        let videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
-        let insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
-
-        if (revisedPrompt && (!existingVideo || existingVideo.node.attrs.isPending)) {
-            const revisedPromptNode = state.schema.nodes.paragraph.create(null, state.schema.text(revisedPrompt))
-            const revisedPromptInsertionPos = videoNodePos ?? insertionPos
-            tr.insert(revisedPromptInsertionPos, revisedPromptNode)
-
-            if (videoNodePos !== undefined) {
-                videoNodePos = tr.mapping.map(videoNodePos, 1)
-            } else {
-                insertionPos += revisedPromptNode.nodeSize
-            }
-        }
+        const videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
+        const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
 
         const videoAttrs = this.buildGeneratedVideoAttrs(event, false, '', existingVideo?.node.attrs)
         if (videoNodePos !== undefined) {
@@ -1197,7 +1222,7 @@ class AiChatThreadPluginClass {
 
             // Handle image generation events
             if (type === 'image_generation_trace') {
-                this.ensureReceivingResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
+                this.ensureGenerationTraceResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
                 this.handleImageGenerationTrace(view, event)
                 return
             }
@@ -1236,7 +1261,7 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'video_generation_trace') {
-                this.ensureReceivingResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
+                this.ensureGenerationTraceResponseNode(view.state, (tr) => view.dispatch(tr), aiProvider, effectiveThreadId, event.generationRun)
                 this.handleVideoGenerationTrace(view, event)
                 return
             }
@@ -1291,6 +1316,7 @@ class AiChatThreadPluginClass {
 
             // Handle collapsible block events
             if (type === 'collapsible_start') {
+                this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, getReasoningOnlyGenerationRun(event.generationRun))
                 this.handleCollapsibleStart(view, event)
                 return
             }
@@ -1475,6 +1501,20 @@ class AiChatThreadPluginClass {
     // trace. Shared by the image and video trace handlers — the only difference
     // between them is which trace attr + title they pass in. The generalized
     // aiCollapsibleBlock renderer picks image vs video by which trace is set.
+    private ensureGenerationTraceResponseNode(
+        state: EditorState,
+        dispatch: (tr: Transaction) => void,
+        aiProvider?: string,
+        threadId?: string,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
+        const reasoningGenerationRun = getReasoningOnlyGenerationRun(generationRun)
+        const existingInfo = PositionFinder.findResponseNode(state, threadId, reasoningGenerationRun)
+        if (existingInfo.found) return
+
+        this.ensureReceivingResponseNode(state, dispatch, aiProvider, threadId, reasoningGenerationRun)
+    }
+
     private applyGenerationTraceCollapsible(
         view: EditorView,
         threadId: string,
@@ -1486,8 +1526,9 @@ class AiChatThreadPluginClass {
         if (!threadInfo) return
 
         const tr = state.tr
-        const runAttrs = buildGeneratedRunAttrs(generationRun)
-        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId, generationRun)
+        const reasoningGenerationRun = getReasoningOnlyGenerationRun(generationRun)
+        const runAttrs = buildGeneratedRunAttrs(reasoningGenerationRun)
+        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId, reasoningGenerationRun)
 
         if (collapsibleInfo.found && collapsibleInfo.nodePos !== undefined) {
             const collapsibleNode = state.doc.nodeAt(collapsibleInfo.nodePos)
@@ -1499,7 +1540,7 @@ class AiChatThreadPluginClass {
                 })
             }
         } else {
-            const responseInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
+            const responseInfo = PositionFinder.findResponseNode(state, threadId, reasoningGenerationRun)
             if (!responseInfo.found || !responseInfo.endOfNodePos) return
             const collapsibleNode = state.schema.nodes[aiCollapsibleBlockNodeType].create({
                 ...attrs,
@@ -1507,8 +1548,6 @@ class AiChatThreadPluginClass {
             })
             tr.insert(responseInfo.endOfNodePos - 1, collapsibleNode)
         }
-
-        tr.setMeta('setCollapsible', { threadId, active: false, runKey: getMediaOrReasoningRunKey(generationRun) })
 
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
@@ -1618,6 +1657,26 @@ class AiChatThreadPluginClass {
             }
         }
 
+        const pendingInfo = PositionFinder.findUnassignedReceivingResponseNode(state, threadId, generationRun?.reasoningModelId)
+        if (pendingInfo.found && pendingInfo.nodePos !== undefined) {
+            const pendingNode = state.doc.nodeAt(pendingInfo.nodePos)
+            if (pendingNode?.type.name === aiResponseMessageNodeType) {
+                const tr = state.tr.setNodeMarkup(pendingInfo.nodePos, undefined, {
+                    ...pendingNode.attrs,
+                    isInitialRenderAnimation: true,
+                    isReceivingAnimation: true,
+                    aiProvider: pendingNode.attrs.aiProvider || aiProvider,
+                    ...buildGeneratedRunAttrs(generationRun, pendingNode.attrs),
+                })
+                if (threadId) {
+                    tr.setMeta('setReceiving', { threadId, receiving: true, runKey: getReasoningRunKey(generationRun) })
+                }
+                tr.setMeta('skipDispatch', true)
+                dispatch(tr)
+                return
+            }
+        }
+
         const responseMessageId = `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
         const aiResponseNode = state.schema.nodes[aiResponseMessageNodeType].create({
             id: responseMessageId,
@@ -1667,16 +1726,20 @@ class AiChatThreadPluginClass {
 
         // Check if we're inside a collapsible block for this thread
         const pluginState = PLUGIN_KEY.getState(state)
-        const isInsideCollapsible = threadId && pluginState?.collapsibleRunKeys.has(getThreadScopedRunKey(threadId, generationRun))
+        const reasoningGenerationRun = getReasoningOnlyGenerationRun(generationRun)
+        const isInsideCollapsible = threadId && (
+            pluginState?.collapsibleRunKeys.has(getThreadScopedRunKey(threadId, reasoningGenerationRun))
+            || pluginState?.collapsibleThreadIds.has(threadId)
+        )
 
         let targetInfo: { found: boolean; endOfNodePos?: number; childCount?: number }
 
         if (isInsideCollapsible) {
             // Insert into the collapsible node
-            targetInfo = PositionFinder.findCollapsibleNode(state, threadId, generationRun)
+            targetInfo = PositionFinder.findCollapsibleNode(state, threadId, reasoningGenerationRun)
             if (!targetInfo.found) {
                 // Fallback to response node if collapsible not found
-                targetInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
+                targetInfo = PositionFinder.findResponseNode(state, threadId, reasoningGenerationRun)
             }
         } else {
             targetInfo = PositionFinder.findResponseNode(state, threadId, generationRun)
@@ -1776,7 +1839,8 @@ class AiChatThreadPluginClass {
         const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
         if (!threadInfo) return
 
-        const responseInfo = PositionFinder.findResponseNode(state, threadId, event.generationRun)
+        const reasoningGenerationRun = getReasoningOnlyGenerationRun(event.generationRun)
+        const responseInfo = PositionFinder.findResponseNode(state, threadId, reasoningGenerationRun)
         if (!responseInfo.found || !responseInfo.endOfNodePos) return
 
         const tr = state.tr
@@ -1784,7 +1848,7 @@ class AiChatThreadPluginClass {
             title: collapsibleTitle || 'Image generation prompt',
             isOpen: false,
             isStreaming: true,
-            ...buildGeneratedRunAttrs(event.generationRun),
+            ...buildGeneratedRunAttrs(reasoningGenerationRun),
         })
 
         // Insert collapsible block at end of response message content
@@ -1792,7 +1856,7 @@ class AiChatThreadPluginClass {
         tr.insert(insertPos, collapsibleNode)
 
         // Track that this thread is now inside a collapsible block
-        tr.setMeta('setCollapsible', { threadId, active: true, runKey: getReasoningRunKey(event.generationRun) })
+        tr.setMeta('setCollapsible', { threadId, active: true, runKey: getReasoningRunKey(reasoningGenerationRun) })
 
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
@@ -1809,7 +1873,8 @@ class AiChatThreadPluginClass {
         if (!threadInfo) return
 
         // Mark collapsible as no longer streaming
-        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId, event.generationRun)
+        const reasoningGenerationRun = getReasoningOnlyGenerationRun(event.generationRun)
+        const collapsibleInfo = PositionFinder.findCollapsibleNode(state, threadId, reasoningGenerationRun)
         if (!collapsibleInfo.found || collapsibleInfo.nodePos === undefined) return
 
         const tr = state.tr
@@ -1822,7 +1887,7 @@ class AiChatThreadPluginClass {
         }
 
         // Clear collapsible tracking for this thread
-        tr.setMeta('setCollapsible', { threadId, active: false, runKey: getReasoningRunKey(event.generationRun) })
+        tr.setMeta('setCollapsible', { threadId, active: false, runKey: getReasoningRunKey(reasoningGenerationRun) })
 
         if (tr.docChanged) {
             tr.setMeta('skipDispatch', true)
@@ -1944,7 +2009,43 @@ class AiChatThreadPluginClass {
         return tr
     }
 
-    private handleChatRequest(newState: EditorState, transaction: Transaction): void {
+    private createLocalReceivingResponseTransaction(
+        state: EditorState,
+        threadId: string,
+        aiProvider: string | undefined,
+        reasoningModelIds: string[],
+    ): Transaction | null {
+        const threadInfo = PositionFinder.findThreadInsertionPoint(state, threadId)
+        if (!threadInfo) return null
+
+        const existingReceiving = PositionFinder.findUnassignedReceivingResponseNode(state, threadId)
+        if (existingReceiving.found) return null
+
+        const responseNodeType = state.schema.nodes[aiResponseMessageNodeType]
+        if (!responseNodeType) return null
+
+        const placeholderModelIds = reasoningModelIds.length > 0 ? reasoningModelIds : ['']
+        let tr = state.tr
+        let insertPos = threadInfo.insertPos
+
+        for (const modelId of placeholderModelIds) {
+            const responseMessageId = `resp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+            const responseNode = responseNodeType.create({
+                id: responseMessageId,
+                isInitialRenderAnimation: true,
+                isReceivingAnimation: true,
+                aiProvider: getReasoningModelProvider(modelId) || aiProvider,
+                reasoningModelId: modelId,
+            })
+            tr = tr.insert(insertPos, responseNode)
+            insertPos += responseNode.nodeSize
+        }
+
+        tr.setMeta('skipDispatch', true)
+        return tr
+    }
+
+    private handleChatRequest(newState: EditorState, transaction: Transaction): Transaction | null {
         const meta = transaction.getMeta(USE_AI_CHAT_META)
         const { threadId: threadIdFromMeta, nodePos } = meta || {}
 
@@ -1955,7 +2056,7 @@ class AiChatThreadPluginClass {
 
         if (!threadNode) {
             console.warn('[aiChatThreadPlugin] handleChatRequest: thread node not found')
-            return
+            return null
         }
 
         // Extract thread attributes including image + video generation settings
@@ -2011,7 +2112,7 @@ class AiChatThreadPluginClass {
         // Validate AI model selected
         if (!effectiveAiModel) {
             alert('Please select an AI model from the dropdown before submitting.')
-            return
+            return null
         }
 
         // Extract and send content
@@ -2039,7 +2140,7 @@ class AiChatThreadPluginClass {
             ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
         } : undefined
 
-        this.sendAiRequestHandler({
+        const requestPayload = {
             messages,
             aiModel: effectiveAiModel,
             aiModels: reasoningModelIds,
@@ -2047,7 +2148,22 @@ class AiChatThreadPluginClass {
             imageOptions,
             videoOptions,
             referencedFeatureIds,
+        }
+
+        const responseTransaction = this.createLocalReceivingResponseTransaction(
+            newState,
+            threadId,
+            getReasoningModelProvider(effectiveAiModel),
+            reasoningModelIds.length > 0 ? reasoningModelIds : [effectiveAiModel],
+        )
+
+        queueMicrotask(() => {
+            void Promise.resolve(this.sendAiRequestHandler(requestPayload)).catch((error) => {
+                console.error('[aiChatThreadPlugin] AI chat request failed:', error)
+            })
         })
+
+        return responseTransaction
     }
 
     private handleStopRequest(transaction: Transaction): void {
@@ -2199,7 +2315,8 @@ class AiChatThreadPluginClass {
                 // Handle AI chat requests
                 const chatTransaction = transactions.find(tr => tr.getMeta(USE_AI_CHAT_META))
                 if (chatTransaction) {
-                    this.handleChatRequest(newState, chatTransaction)
+                    const responseTransaction = this.handleChatRequest(newState, chatTransaction)
+                    if (responseTransaction) return responseTransaction
                 }
 
                 // Handle AI chat stop requests

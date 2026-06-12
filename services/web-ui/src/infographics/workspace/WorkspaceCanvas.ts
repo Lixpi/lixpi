@@ -35,6 +35,7 @@ import {
     type WorkspaceContextResolution,
     type WorkspaceContextSelection,
     type MediaGenerationRunMeta,
+    type ImageGenerationTraceReference,
     MEDIA_DESCRIPTOR_VERSION,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
@@ -44,7 +45,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -129,10 +130,19 @@ type CollisionPlan = {
     entries: Map<string, CollisionEntry>
     shouldResolvePair: (a: CollisionBox, b: CollisionBox) => boolean
 }
+type BaseNodeInteractionOptions = {
+    renderResizeHandles?: boolean
+    allowSelection?: boolean
+    allowDrag?: boolean
+    onClick?: () => void
+}
+type GeneratedMediaInfoPanelOptions = {
+    className?: string
+    includeDescriptor?: boolean
+}
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
-const BRANCH_ORIGIN_NODE_DIMENSIONS = { width: 72, height: 72 }
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
 const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-tooltip-background',
@@ -150,6 +160,11 @@ const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-popover-title-color',
     '--workspace-ai-chat-panel-context-preview-popover-text-color',
 ]
+
+function getBranchOriginNodeDimensions(): { width: number; height: number } {
+    const size = settings.imageBranchLineage.branchOrigin.size
+    return { width: size, height: size }
+}
 
 function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
     promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
@@ -302,6 +317,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const connectorStyles = settings.connector.styles
     const selectionStyles = settings.selection.styles
     const imageNodeStyles = settings.imageNode.styles
+    const branchOriginSettings = settings.imageBranchLineage.branchOrigin
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
@@ -314,6 +330,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
     paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
     paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)
+    paneEl.style.setProperty('--workspace-branch-origin-icon-size', `${branchOriginSettings.iconSize}px`)
+    paneEl.style.setProperty('--workspace-branch-origin-background-color', branchOriginSettings.styles.backgroundColor)
+    paneEl.style.setProperty('--workspace-branch-origin-border-color', branchOriginSettings.styles.borderColor)
+    paneEl.style.setProperty('--workspace-branch-origin-icon-color', branchOriginSettings.styles.iconColor)
+    paneEl.style.setProperty('--workspace-branch-origin-box-shadow', branchOriginSettings.styles.boxShadow)
 
     let currentCanvasState: CanvasState | null = options.canvasState
     let currentDocuments: Document[] = options.documents
@@ -335,6 +356,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
     const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
+    const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const videoControlsHideTimers: Map<string, number> = new Map()
     const VIDEO_CONTROLS_HEIGHT = 52
@@ -975,6 +997,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
+        const generatedMediaNodes = getBranchOriginGeneratedMediaNodes(branchOriginNodeId)
+        const generatedMediaWidth = Math.max(
+            0,
+            ...generatedMediaNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.dimensions.width)
+        )
+        return generatedMediaWidth || settings.imageBranchLineage.generatedImageSize
+    }
+
+    function applyBranchOriginInfoChromeGeometry(
+        chromeEl: HTMLElement,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number },
+        panelWidth: number
+    ): void {
+        applyStyle(chromeEl, {
+            left: `${position.x}px`,
+            top: `${position.y + dimensions.height + 10}px`,
+            width: `${panelWidth}px`,
+        })
+    }
+
     function getVideoControlsChromeLayout(nodeWidth: number): { insetX: number; width: number } {
         const insetX = nodeWidth >= 260 ? VIDEO_CONTROLS_HORIZONTAL_INSET : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
         return {
@@ -1043,12 +1087,46 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (chromeEl) applyGeneratedImageChromeGeometry(chromeEl, position, dimensions)
         const videoChromeEl = imageChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions)
+        const branchOriginChromeEl = imageChromeViewportEl?.querySelector(`[data-branch-origin-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        if (branchOriginChromeEl) applyBranchOriginInfoChromeGeometry(
+            branchOriginChromeEl,
+            position,
+            dimensions,
+            getBranchOriginInfoPanelWidth(nodeId),
+        )
     }
 
     function appendTextParagraph(host: HTMLElement, text: string, fallbackText: string): void {
         const value = text.trim()
         const className = value ? 'canvas-generated-image-info-text' : 'canvas-generated-image-info-empty'
         host.replaceChildren(html`<p className=${className}>${value || fallbackText}</p>`)
+    }
+
+    function getCanvasTraceReferenceImageSources(reference: ImageGenerationTraceReference): string[] {
+        if (!currentCanvasState || !reference.nodeId) return []
+        const node = currentCanvasState.nodes.find((candidate: CanvasNode) => candidate.nodeId === reference.nodeId)
+        if (node?.type === 'image') {
+            const imageNode = node as ImageCanvasNode
+            return [
+                imageNode.src,
+                imageNode.workspaceId && imageNode.fileId
+                    ? `/api/images/${encodeURIComponent(imageNode.workspaceId)}/${encodeURIComponent(imageNode.fileId)}`
+                    : '',
+            ]
+        }
+        if (node?.type === 'video') {
+            const videoNode = node as VideoCanvasNode
+            return [
+                videoNode.frameFileId && videoNode.workspaceId
+                    ? `/api/images/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.frameFileId)}`
+                    : '',
+                videoNode.posterSrc,
+                videoNode.workspaceId && videoNode.posterFileId
+                    ? `/api/images/${encodeURIComponent(videoNode.workspaceId)}/${encodeURIComponent(videoNode.posterFileId)}`
+                    : '',
+            ]
+        }
+        return []
     }
 
     // The node's compact descriptor (summary + tags) — shown for ALL media,
@@ -1087,9 +1165,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // the node carries generation context it shows the prompt/response shells and
     // the reusable generation-trace details (image OR video trace); for every
     // media object it appends the compact descriptor.
-    function createGeneratedMediaInfoPanel(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
+    function createGeneratedMediaInfoPanel(
+        node: ImageCanvasNode | VideoCanvasNode,
+        options: GeneratedMediaInfoPanelOptions = {}
+    ): HTMLElement {
         const generatedBy = node.generatedBy
-        const panel = html`<div className="canvas-generated-image-info-panel nopan"></div>` as HTMLElement
+        const panelClassName = ['canvas-generated-image-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
+        const panel = html`<div className=${panelClassName}></div>` as HTMLElement
 
         if (generatedBy) {
             const thread = currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === generatedBy.aiChatThreadId)
@@ -1118,6 +1200,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const traceDetails = createImageGenerationTraceDetails({
                     className: 'canvas-generated-image-trace-details',
                     renderReferencesWhenClosed: true,
+                    getAdditionalReferenceImageSources: getCanvasTraceReferenceImageSources,
                 })
                 traceDetails.dom.open = true
                 traceDetails.render({
@@ -1137,8 +1220,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        const descriptorSection = buildMediaDescriptorSection(node.descriptor)
-        if (descriptorSection) panel.appendChild(descriptorSection)
+        if (options.includeDescriptor !== false) {
+            const descriptorSection = buildMediaDescriptorSection(node.descriptor)
+            if (descriptorSection) panel.appendChild(descriptorSection)
+        }
 
         return panel
     }
@@ -1150,6 +1235,57 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedGeneratedImageInfoNodeIds.add(nodeId)
         }
         syncGeneratedImageChrome(currentCanvasState)
+    }
+
+    function getBranchOriginGeneratedMediaNodes(branchOriginNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
+        return (currentCanvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+                (node.type === 'image' || node.type === 'video')
+                && node.generatedBy?.branchOriginNodeId === branchOriginNodeId)
+            .sort((a: ImageCanvasNode | VideoCanvasNode, b: ImageCanvasNode | VideoCanvasNode) => {
+                const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
+                const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
+                if (aVariant !== bVariant) return aVariant - bVariant
+                return (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
+            })
+    }
+
+    function toggleBranchOriginGeneratedMediaInfo(branchOriginNodeId: string): void {
+        if (expandedBranchOriginInfoNodeIds.has(branchOriginNodeId)) {
+            expandedBranchOriginInfoNodeIds.delete(branchOriginNodeId)
+        } else {
+            expandedBranchOriginInfoNodeIds.add(branchOriginNodeId)
+        }
+        syncGeneratedImageChrome(currentCanvasState)
+    }
+
+    function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
+        const generatedMediaNode = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)[0]
+        if (!generatedMediaNode) return null
+        return createGeneratedMediaInfoPanel(generatedMediaNode, {
+            className: 'canvas-branch-origin-info-panel',
+            includeDescriptor: false,
+        })
+    }
+
+    function createBranchOriginInfoChrome(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
+        if (!expandedBranchOriginInfoNodeIds.has(branchOriginNode.nodeId)) return null
+
+        const panel = createBranchOriginInfoPanel(branchOriginNode)
+        if (!panel) return null
+
+        const chromeEl = html`
+            <div className="workspace-branch-origin-info-chrome" data=${{ branchOriginChromeNodeId: branchOriginNode.nodeId }}>
+                ${panel}
+            </div>
+        ` as HTMLElement
+        applyBranchOriginInfoChromeGeometry(
+            chromeEl,
+            getNodeWorldPosition(branchOriginNode),
+            branchOriginNode.dimensions,
+            getBranchOriginInfoPanelWidth(branchOriginNode.nodeId),
+        )
+        return chromeEl
     }
 
     // Shared info (i) button used by both image and video chrome. Pulses while
@@ -1166,7 +1302,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 aria-expanded=${String(isExpanded)}
                 title=${title}
             >
-                <span innerHTML=${infoCircleIcon}></span>
+                <span innerHTML=${infoCircleFilledIcon}></span>
             </button>
         ` as HTMLButtonElement
         button.addEventListener('click', (event: MouseEvent) => {
@@ -1350,6 +1486,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
                 && Boolean((node as ImageCanvasNode | VideoCanvasNode).generatedBy || (node as ImageCanvasNode | VideoCanvasNode).descriptor))
+        const branchOriginNodes = (canvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is BranchOriginCanvasNode => node.type === 'branchOrigin')
 
         destroyVideoControlInstances()
 
@@ -1367,9 +1505,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const expandedNodeId of Array.from(expandedGeneratedImageInfoNodeIds)) {
             if (!infoNodeIds.has(expandedNodeId)) expandedGeneratedImageInfoNodeIds.delete(expandedNodeId)
         }
+        const branchOriginNodeIds = new Set<string>(branchOriginNodes.map((node: BranchOriginCanvasNode) => node.nodeId))
+        for (const expandedNodeId of Array.from(expandedBranchOriginInfoNodeIds)) {
+            if (!branchOriginNodeIds.has(expandedNodeId)) expandedBranchOriginInfoNodeIds.delete(expandedNodeId)
+        }
+        const branchOriginInfoChromeEls = branchOriginNodes
+            .map(createBranchOriginInfoChrome)
+            .filter((el): el is HTMLElement => Boolean(el))
 
         imageChromeViewportEl.replaceChildren(
             ...mediaInfoNodes.map(createGeneratedMediaChrome),
+            ...branchOriginInfoChromeEls,
             ...videoChromeEls,
         )
     }
@@ -1749,7 +1895,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function selectionRectIntersectsNode(rect: Rect, node: CanvasNode): boolean {
+        if (!isSelectableCanvasNode(node)) return false
         return rectsOverlap(rect, getSelectionBoundsForNode(node))
+    }
+
+    function isSelectableCanvasNode(node: CanvasNode): boolean {
+        return node.type !== 'branchOrigin'
+    }
+
+    function filterSelectableNodeIds(nodeIds: Set<string>): Set<string> {
+        if (!currentCanvasState) return nodeIds
+        const selectableNodeIds = new Set(currentCanvasState.nodes
+            .filter(isSelectableCanvasNode)
+            .map((node: CanvasNode) => node.nodeId))
+        return new Set(Array.from(nodeIds).filter((nodeId) => selectableNodeIds.has(nodeId)))
     }
 
     function getSelectableNodeIdsInRect(rect: Rect): string[] {
@@ -1841,7 +2000,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!currentCanvasState || !shouldShowSelectionGroupOverlay()) return null
         if (marqueeSelection) return null
 
-        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         const overlayNodeIds = new Set<string>()
         for (const nodeId of selectedNodeIds) {
             overlayNodeIds.add(nodeId)
@@ -1850,10 +2008,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const overlayNodes = currentCanvasState.nodes.filter((node: CanvasNode) => overlayNodeIds.has(node.nodeId))
         if (overlayNodes.length === 0) return null
 
-        const threadMap = new Map<string, AiChatThread>(currentAiChatThreads.map((thread) => [thread.threadId, thread]))
-
         const bounds = overlayNodes.map((node: CanvasNode) => {
-            const rect = getSelectionOverlayBoundsForNode(node, nodesById, threadMap)
+            const rect = getSelectionOverlayBoundsForNode(node)
             return {
                 left: rect.x,
                 top: rect.y,
@@ -1971,14 +2127,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void {
         const prevSelectedNodeIds = selectedNodeIds
-        selectedNodeIds = nextSelectedNodeIds
-        selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0
+        selectedNodeIds = filterSelectableNodeIds(nextSelectedNodeIds)
+        selectionIsFromMarquee = fromMarquee && selectedNodeIds.size > 0
         if (currentCanvasState) connectionManager?.syncEdges(currentCanvasState.edges)
-        if (nextSelectedNodeIds.size > 0) clearSelectedEdgeSelection()
+        if (selectedNodeIds.size > 0) clearSelectedEdgeSelection()
         updateNodeSelectionClasses(prevSelectedNodeIds, selectedNodeIds)
         updateSelectionGroupOverlayElement()
         updateSelectionDrivenUi()
-        pixiMediaLayer?.setSelectedImageNodes(nextSelectedNodeIds)
+        pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
         scheduleEdgesRender()
         // Selecting canvas nodes while the panel is open force-includes them as
         // explicit composer previews. Only newly-selected ids are added so a
@@ -2805,6 +2961,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function addContextChips(nodeIds: Iterable<string>): void {
         if (!currentCanvasState) return
         const eligibleNodeIds = new Set(currentCanvasState.nodes
+            .filter((node: CanvasNode) => node.type === 'image' || node.type === 'video' || node.type === 'document' || node.type === 'aiChatThread')
             .map((node) => node.nodeId))
         const chipNodeIds = new Set(aiChatPanelState.contextChips)
         const nextChips = [...aiChatPanelState.contextChips]
@@ -4412,15 +4569,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const generationRequestId = generationRun?.generationRequestId ?? `legacy-${threadId}`
         const nodeId = `branch-origin-${placement.branchId}`
+        const dimensions = getBranchOriginNodeDimensions()
         const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
             ?? getCenteredInsertionPosition({ width: getGeneratedImageInsertionSize(), height: mediaHeight })
         const position = {
-            x: referencePosition.x - settings.imageBranchLineage.imageToImageGap - BRANCH_ORIGIN_NODE_DIMENSIONS.width,
-            y: referencePosition.y + (mediaHeight - BRANCH_ORIGIN_NODE_DIMENSIONS.height) / 2,
+            x: referencePosition.x - settings.imageBranchLineage.imageToImageGap - dimensions.width,
+            y: referencePosition.y + (mediaHeight - dimensions.height) / 2,
         }
 
-        // TODO temporary branch-start marker for fresh multi-model generations.
-        // Replace this robot-face placeholder when final branch-origin UX is designed.
         const branchOriginNode: BranchOriginCanvasNode = {
             nodeId,
             type: 'branchOrigin',
@@ -4430,7 +4586,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 ? { promptFingerprint: placement.imageBranchCandidateSnapshot.promptFingerprint }
                 : {}),
             position,
-            dimensions: BRANCH_ORIGIN_NODE_DIMENSIONS,
+            dimensions,
             temporary: true,
         }
 
@@ -4456,9 +4612,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncPixiGeneratingImageNodes()
     }
 
-    function clearGeneratingReferencesOnFirstPixels(placementKey: string, generationRun?: MediaGenerationRunMeta): void {
-        if (generationRun?.generationRequestId) return
-        clearGeneratingReferenceNodeIds(placementKey)
+    function clearGeneratingReferenceNodeIdsForPromptHandoff(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        const keysToClear = new Set<string>([
+            threadId,
+            getGeneratedMediaPlacementKey(threadId, generationRun),
+        ])
+        let didClear = false
+        for (const key of keysToClear) {
+            didClear = generatingReferenceNodeIdsByThread.delete(key) || didClear
+        }
+        if (didClear) syncPixiGeneratingImageNodes()
+    }
+
+    function clearGeneratingReferencesOnFirstPixels(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        clearGeneratingReferenceNodeIdsForPromptHandoff(threadId, generationRun)
+    }
+
+    function clearGeneratingReferencesAfterPromptHandoff(threadId: string, generationRun?: MediaGenerationRunMeta): void {
+        clearGeneratingReferenceNodeIdsForPromptHandoff(threadId, generationRun)
     }
 
     function getThreadContentForBranchSnapshot(threadId: string): unknown {
@@ -5095,6 +5266,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         onImageGenerationTraceToCanvas: ({ threadId, generationRun }) => {
             registerGeneratedMediaRun(threadId, generationRun)
+            clearGeneratingReferencesAfterPromptHandoff(threadId, generationRun)
         },
 
         onImageErrorToCanvas: ({ threadId, generationRun }) => {
@@ -5141,7 +5313,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (existing) {
                 if (imageUrl && currentCanvasState) {
-                    clearGeneratingReferencesOnFirstPixels(placementKey, generationRun)
+                    clearGeneratingReferencesOnFirstPixels(threadId, generationRun)
                     const imageSrc = buildImageSrc(imageUrl, '', false)
                     const updatedNodes = currentCanvasState.nodes.map((node: CanvasNode) => {
                         if (node.nodeId !== existing.nodeId) return node
@@ -5222,7 +5394,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             const placedImageNode = (rebalancedNodes.find((n: CanvasNode) => n.nodeId === nodeId) as ImageCanvasNode) ?? imageNode
             appendImageNodeToDOM(placedImageNode)
-            if (imageUrl) clearGeneratingReferencesOnFirstPixels(placementKey, generationRun)
+            if (imageUrl) clearGeneratingReferencesOnFirstPixels(threadId, generationRun)
         },
 
         onImageCompleteToCanvas: (data) => {
@@ -5567,6 +5739,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         onVideoGenerationTraceToCanvas: ({ threadId, generationRun }) => {
             registerGeneratedMediaRun(threadId, generationRun)
+            clearGeneratingReferencesAfterPromptHandoff(threadId, generationRun)
         },
 
         onVideoCompleteToCanvas: (data) => {
@@ -5828,7 +6001,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         node: CanvasNode,
         extraClasses?: string,
         extraDataAttrs?: Record<string, string>,
-        interactionOptions: { renderResizeHandles?: boolean; onClick?: () => void } = {}
+        interactionOptions: BaseNodeInteractionOptions = {}
     ): { nodeEl: HTMLElement; dragOverlay: HTMLElement } {
         const nodeWorldPosition = getNodeWorldPosition(node)
         const nodeElStyle = {
@@ -5864,11 +6037,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
 
             if (isModSelectionEvent(e)) {
-                toggleNodeSelection(node.nodeId)
+                if (interactionOptions.allowSelection !== false) {
+                    toggleNodeSelection(node.nodeId)
+                } else {
+                    interactionOptions.onClick?.()
+                }
                 return
             }
 
-            selectNode(node.nodeId)
+            if (interactionOptions.allowSelection !== false) {
+                selectNode(node.nodeId)
+            }
             interactionOptions.onClick?.()
         })
 
@@ -5880,7 +6059,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        const dragOverlay = html`<div className="node-drag-overlay nopan" onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}></div>` as HTMLDivElement
+        const dragOverlay = html`
+            <div
+                className="node-drag-overlay nopan"
+                onmousedown=${(e: MouseEvent) => {
+                    if (interactionOptions.allowDrag === false) {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        return
+                    }
+                    handleDragStart(e, node.nodeId, {
+                        allowSelection: interactionOptions.allowSelection !== false,
+                        onClick: interactionOptions.onClick,
+                    })
+                }}
+            ></div>
+        ` as HTMLDivElement
         nodeEl.appendChild(dragOverlay)
 
         return { nodeEl, dragOverlay }
@@ -6273,6 +6467,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!dragDidMove) {
                 // No drag occurred — this was a click. Collision logic can
                 // legitimately move nearby nodes and must only run after movement.
+                if (options.onClick) {
+                    suppressNextNodeClick = true
+                    window.setTimeout(() => {
+                        suppressNextNodeClick = false
+                    }, 0)
+                }
                 if (allowSelection) selectNode(nodeId)
                 if (options.suppressPaneClick) suppressNextPaneClick = true
                 options.onClick?.()
@@ -6713,13 +6913,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 branchId: node.branchId,
                 generationRequestId: node.generationRequestId,
             },
-            { renderResizeHandles: false }
+            {
+                renderResizeHandles: false,
+                allowSelection: false,
+                onClick: () => toggleBranchOriginGeneratedMediaInfo(node.nodeId),
+            }
         )
         dragOverlay.className = 'branch-origin-drag-overlay nopan'
 
-        // TODO temporary branch-start marker for fresh multi-model generations.
-        // Replace this robot-face placeholder when final branch-origin UX is designed.
-        const icon = html`<div className="workspace-branch-origin-icon" innerHTML=${'&#129302;'}></div>` as HTMLDivElement
+        const icon = html`<div className="workspace-branch-origin-icon" innerHTML=${branchMidIcon}></div>` as HTMLDivElement
         nodeEl.insertBefore(icon, dragOverlay)
 
         return nodeEl
@@ -7313,6 +7515,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             imageChromeViewportEl?.remove()
             imageChromeViewportEl = null
             expandedGeneratedImageInfoNodeIds.clear()
+            expandedBranchOriginInfoNodeIds.clear()
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
             if (panZoom) {

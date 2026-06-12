@@ -894,7 +894,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const modelMenuContent = createModelMenuContent([
             {
                 title: 'Reasoning model',
-                helpText: 'This model works on your message before anything is made. It looks at what you wrote and any images or notes you selected, then turns that into a clearer prompt for the image or video model.',
+                helpText: 'Reasoning model works on your prompt, resolves the most relevant items on canvas, crafts a detailed prompt for media model and passed it to the media model with the reference items included.',
                 headingControl: reasoningMultipleModelsToggle.dom,
                 selectedModelTags: reasoningSelectedModelTags.dom,
                 controls: [
@@ -903,7 +903,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             },
             {
                 title: 'Image model',
-                helpText: 'Use this when you want a picture. The model choice decides which image generator will draw it. The second option controls the shape or exact size of the image, depending on what that model supports.',
+                helpText: 'In this section you can configure image generation options. The model choice decides which image generator will draw it. The second option controls the shape or exact size of the image, depending on what that model supports.',
                 headingControl: imageMultipleModelsToggle.dom,
                 selectedModelTags: imageSelectedModelTags.dom,
                 controls: [
@@ -913,7 +913,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             },
             {
                 title: 'Video model',
-                helpText: 'Use this when you want a short video instead of a still image. These options choose the video generator, the frame shape, the output quality, and how long the clip should be.',
+                helpText: 'In this section you can configure video generation options. These options choose the video generator, the frame shape, the output quality, and how long the clip should be.',
                 headingControl: videoMultipleModelsToggle.dom,
                 selectedModelTags: videoSelectedModelTags.dom,
                 controls: [
