@@ -379,6 +379,9 @@ services:
             lixpi-api:
                 condition: service_healthy
                 restart: true
+            lixpi-nex-1:
+                condition: service_healthy
+                restart: true
 
     lixpi-api:
         container_name: lixpi-api
@@ -427,6 +430,7 @@ services:
             NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
 
             # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
             OPENAI_API_KEY: ${OPENAI_API_KEY}

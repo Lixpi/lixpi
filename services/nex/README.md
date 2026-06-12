@@ -21,9 +21,10 @@ binary. On start, [`entrypoint.sh`](./entrypoint.sh):
 
 1. `pnpm install` — resolves the workload's `@lixpi/*` + provider-SDK deps from
    the pnpm workspace (mirrors `services/api`).
-2. `nex node up` — connects to the NATS `NEX` account (nkey auth), starts the
-   bundled **native nexlet**, and mints the NEX nkey for the nexlet/workloads
-   (`--issuer-nkey`). Runs in the background.
+2. `nex node up` — connects with the NEX nkey; the API auth callout verifies the
+   raw NKey challenge response and issues a NATS user JWT for the `NEX` account.
+   The node starts the bundled **native nexlet** and mints the same NEX nkey for
+   the nexlet/workloads (`--issuer-nkey`). Runs in the background.
 3. Deploys `ai-models-sync` via `nex workload start`, **injecting** the runtime
    env (`ORG_NAME`, `STAGE`, `AWS_*`, `DYNAMODB_ENDPOINT`, provider keys, …) into
    the start-request — the native nexlet does **not** inherit the container env.
@@ -47,6 +48,17 @@ Required env (supplied by `docker-compose.yml` from `.env.<stage>`):
 `ORG_NAME`, `STAGE`, `AWS_REGION`, `AWS_PROFILE`, `DYNAMODB_ENDPOINT`,
 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`. Optional:
 `LIXPI_SYNC_INTERVAL_MS` (default `3600000`).
+
+Credential ownership matters:
+
+- `NATS_NEX_NODE_NKEY_SEED` is secret and belongs only in this NEX container.
+- `NATS_NEX_NODE_NKEY_PUBLIC` is used here as the public half of the native NATS
+  NKey credential and in `services/api` as verification material for auth
+  callout.
+- The NATS server config also lists the NEX public key so the server advertises
+  the nonce required by native NKey auth. That static entry is not the final
+  authorization decision; the API auth callout verifies the raw NKey challenge
+  response and NATS enforces the returned `NEX` account user JWT.
 
 ## Operate
 

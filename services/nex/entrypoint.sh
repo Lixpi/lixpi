@@ -33,18 +33,46 @@ SERVICE_DIR="${SERVICE_DIR:-/usr/src/service}"
 WORKLOAD_NAME="${LIXPI_WORKLOAD_NAME:-ai-models-sync}"
 WORKLOAD_ENTRY="${LIXPI_WORKLOAD_ENTRY:-${SERVICE_DIR}/workloads/ai-models-synchronization/index.ts}"
 
-# --- Optional TLS to the cluster ----------------------------------------------
+# --- NEX command wrapper -------------------------------------------------------
 # Locally the client port (4222) is PLAIN nats:// (no top-level tls block in
 # nats-server.conf), so no CA is required and NATS_SERVERS uses nats:// URLs.
 # On AWS the cluster terminates real TLS on 4222 — set NATS_TLS_CA_FILE (and
 # optionally NATS_TLS_FIRST=true) and use tls:// URLs in NATS_SERVERS.
-TLS_FLAGS=""
-if [ -n "${NATS_TLS_CA_FILE:-}" ]; then
-    TLS_FLAGS="${TLS_FLAGS} --nats.tlsca ${NATS_TLS_CA_FILE}"
-fi
-if [ "${NATS_TLS_FIRST:-false}" = "true" ]; then
-    TLS_FLAGS="${TLS_FLAGS} --nats.tlsfirst"
-fi
+run_nex() {
+    if [ -n "${NATS_TLS_CA_FILE:-}" ] && [ "${NATS_TLS_FIRST:-false}" = "true" ]; then
+        nex \
+            --nats.servers "${NATS_SERVERS}" \
+            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
+            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
+            --nats.jsdomain "${NATS_JS_DOMAIN}" \
+            --nats.tlsca "${NATS_TLS_CA_FILE}" \
+            --nats.tlsfirst \
+            "$@"
+    elif [ -n "${NATS_TLS_CA_FILE:-}" ]; then
+        nex \
+            --nats.servers "${NATS_SERVERS}" \
+            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
+            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
+            --nats.jsdomain "${NATS_JS_DOMAIN}" \
+            --nats.tlsca "${NATS_TLS_CA_FILE}" \
+            "$@"
+    elif [ "${NATS_TLS_FIRST:-false}" = "true" ]; then
+        nex \
+            --nats.servers "${NATS_SERVERS}" \
+            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
+            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
+            --nats.jsdomain "${NATS_JS_DOMAIN}" \
+            --nats.tlsfirst \
+            "$@"
+    else
+        nex \
+            --nats.servers "${NATS_SERVERS}" \
+            --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
+            --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
+            --nats.jsdomain "${NATS_JS_DOMAIN}" \
+            "$@"
+    fi
+}
 
 # --- Install the workload's Node dependencies ---------------------------------
 # Mirrors lixpi-api: @lixpi/* packages are bind-mounted; resolve them with pnpm
@@ -74,19 +102,14 @@ echo "Connecting to: ${NATS_SERVERS}"
 # re-deploys the workload on every boot (idempotent), which would double-run the
 # workload if KV also replayed it — and a random per-boot node id would leak a
 # new KV bucket each restart.
-nex \
+run_nex \
     --namespace "${NEX_NAMESPACE}" \
     node up \
-    --nats.servers "${NATS_SERVERS}" \
-    --nats.nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
-    --nats.seed "${NATS_NEX_NODE_NKEY_SEED}" \
-    --nats.jsdomain "${NATS_JS_DOMAIN}" \
     --node-name "${NEX_NODE_NAME}" \
     --events nats \
     --tags app=lixpi \
     --issuer-nkey "${NATS_NEX_NODE_NKEY_PUBLIC}" \
-    --issuer-nkey-seed "${NATS_NEX_NODE_NKEY_SEED}" \
-    ${TLS_FLAGS} &
+    --issuer-nkey-seed "${NATS_NEX_NODE_NKEY_SEED}" &
 NODE_PID=$!
 
 # Forward termination to the node for a clean shutdown (compose stop_signal=SIGTERM).
@@ -132,12 +155,21 @@ if [ -f "${WORKLOAD_ENTRY}" ]; then
     deployed=0
     while [ "$i" -lt 30 ]; do
         i=$((i + 1))
-        if nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start \
+        if DEPLOY_OUTPUT="$(run_nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start \
             --type native --lifecycle service --name "${WORKLOAD_NAME}" \
-            --start-request "${START_REQUEST}"; then
-            echo "✅ Workload '${WORKLOAD_NAME}' deployed"
-            deployed=1
-            break
+            --start-request "${START_REQUEST}" 2>&1)"; then
+            printf '%s\n' "${DEPLOY_OUTPUT}"
+            case "${DEPLOY_OUTPUT}" in
+                *"error:"*|*"no NATS connection available"*)
+                    ;;
+                *)
+                    echo "✅ Workload '${WORKLOAD_NAME}' deployed"
+                    deployed=1
+                    break
+                    ;;
+            esac
+        else
+            printf '%s\n' "${DEPLOY_OUTPUT}"
         fi
         echo "... node not ready yet (attempt ${i}); retrying in 2s"
         sleep 2

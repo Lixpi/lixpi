@@ -1,13 +1,13 @@
 ---
 title: Authentication
-description: Lixpi's dual authentication model — Auth0/LocalAuth0 RS256 JWTs for users, Ed25519 NKey-signed JWTs for internal services — and the NATS auth callout that enforces it.
+description: Lixpi's authentication model — Auth0/LocalAuth0 RS256 JWTs for users, Ed25519 NKey service credentials for internal clients, and the NATS auth callout that enforces them.
 ---
 
 # Authentication
 
 Authentication in Lixpi is split across two checks that work together. NATS handles connection-level permissions through an auth callout. The API also verifies the user JWT on each browser-originated NATS request before running the subject handler.
 
-NATS does keep static credentials for trusted backend connections such as the system user and the API service. Browser users and future internal-service JWT clients are the ones delegated to the auth callout.
+NATS keeps static credentials for trusted backend connections such as the system user and the API service account that runs the callout responder. Browser users, self-issued internal-service JWT clients, and NATS-native internal tools such as NEX are delegated to the auth callout.
 
 This page explains the conceptual auth model. The AWS-specific certificate and TLS wiring lives in [NATS Cluster](./deployment/NATS-CLUSTER.md) and is linked where relevant.
 
@@ -19,8 +19,11 @@ Lixpi authenticates two fundamentally different kinds of clients, using two diff
 |--------|-----------|-----------|------------------|
 | **Users** (browser) | Auth0 / LocalAuth0 JWT | RS256 (asymmetric) | The identity provider's JWKS endpoint |
 | **Internal services** | NKey-signed JWT | Ed25519 | A locally configured NKey public key — no external dependency |
+| **NATS-native internal tools** | Raw NATS NKey challenge-response | Ed25519 | A locally configured NKey public key in the API auth callout |
 
 Both paths converge on `@lixpi/auth-service`, the shared verifier described below, and both result in a NATS connection scoped to exactly the subjects that principal is allowed to use.
+
+NEX is the current NATS-native internal tool. Its seed, `NATS_NEX_NODE_NKEY_SEED`, belongs only in the NEX runtime. Its public key, `NATS_NEX_NODE_NKEY_PUBLIC`, is used in three places: NEX passes it to the NATS client as the public half of the native NKey credential, the NATS server config lists it so the server advertises a nonce for native NKey challenge signing, and the API auth callout uses it to verify the raw NKey signature. The NATS config entry is protocol support, not the final authorization decision; centralized auth callout still returns the user JWT that lands NEX in the `NEX` account.
 
 ## Authentication Flow
 
