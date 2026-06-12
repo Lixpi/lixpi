@@ -11,6 +11,7 @@ import DynamoDBService from '@lixpi/dynamodb-service'
 import SSMService from '@lixpi/ssm-service'
 import NATS_Service from '@lixpi/nats-service'
 import { startNatsAuthCalloutService } from '@lixpi/nats-auth-callout-service'
+import type { ServiceAuthConfig } from '@lixpi/auth-service'
 
 import { createServer } from 'http'
 
@@ -38,7 +39,6 @@ import workspaceExportRoutes from './routes/workspace-export-routes.ts'
 import featureRoutes from './routes/feature-routes.ts'
 import mediaLibraryRoutes from './routes/media-library-routes.ts'
 
-import { AiModelsSync } from './workloads/functions/ai-models-synchronization/ai-models-synchronization.ts'
 import { createLlmModule } from './llm/index.ts'
 import { storeWorkspaceImage } from './services/image-storage.ts'
 import { storeWorkspaceVideo } from './services/video-storage.ts'
@@ -100,13 +100,10 @@ global.dynamoDBService = new DynamoDBService({
 // ])
 // sqsPollingService.startPolling()
 
-// Initialize AI Models Synchronization service and synchronize models on startup
-const aiModelsSync = new AiModelsSync({
-    dynamoDBService: global.dynamoDBService
-})
-
-// Synchronize AI models on startup
-await aiModelsSync.synchronizeModels()
+// AI models synchronization runs hourly on the NATS NEX execution-engine node
+// (services/nex). The API reads the AI_MODELS_LIST table live (model::AiModel
+// .getAvailableAiModels) and does not run the sync itself. See
+// documentation/platform/deployment/NEX-EXECUTION-ENGINE.md.
 
 const subscriptions = [
     ...userSubjects,
@@ -123,6 +120,107 @@ const subscriptions = [
     ...extractionSubjects,
     ...mediaDescriptorSubjects,
 ]
+
+// Registered NATS-internal identities that the auth callout can authenticate
+// without Auth0.
+//
+// This is the API-side registry consumed by
+// `@lixpi/nats-auth-callout-service`. Keep the operational explanation in sync
+// with documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md.
+//
+// Why this lives in the API:
+// - `services/api` owns the NATS auth-callout responder on `$SYS.REQ.USER.AUTH`.
+// - NATS forwards connection attempts here, and this process returns the final
+//   NATS user JWT that decides which account and subjects the client receives.
+// - Public NKeys are verification material, not secrets, so the API only needs
+//   the public half of any registered internal identity. The matching seed stays
+//   with the service that is proving its identity.
+const serviceAuthConfigs: ServiceAuthConfig[] = []
+
+if (env.NATS_NEX_NODE_NKEY_PUBLIC) {
+    // NEX is a NATS-native tool, not a browser or normal API client. It connects
+    // with standard NATS NKey auth (`--nats.nkey` + `--nats.seed`), which means
+    // it sends a public NKey plus a signature over the server nonce instead of a
+    // Lixpi/Auth0 JWT in `connect_opts.auth_token`.
+    //
+    // With centralized auth_callout enabled, the static `users` section in a
+    // NATS account is not the path that authenticates this client. NATS asks the
+    // API auth callout to decide, so the API must know the NEX public key. The
+    // callout verifies the raw NKey signature, then mints a NATS user JWT for
+    // the account configured below.
+    //
+    // See documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md,
+    // especially the "NATS-native NKey variation" and the longer-term
+    // decentralized NATS JWT/operator option documented there.
+    serviceAuthConfigs.push({
+        // Public user NKey for the NEX node. The seed remains only in the NEX
+        // runtime environment. This value lets the auth callout verify that the
+        // raw NKey challenge response was signed by the real node credential.
+        publicKey: env.NATS_NEX_NODE_NKEY_PUBLIC,
+        // Stable Lixpi service identity used as the subject of the NATS user JWT
+        // returned by the auth callout. This is not an Auth0 user id.
+        userId: 'svc:nex-node',
+        // NEX must land in the dedicated NATS `NEX` account, not the default
+        // auth account. That keeps `$NEX.>` control-plane subjects and NEX feed
+        // subjects isolated from normal application traffic in `AUTH`.
+        account: 'NEX',
+        // These permissions are the complete NATS allowlist for the NEX node,
+        // its bundled native nexlet, and the workloads that the node credentials
+        // mint. Anything not listed here should be rejected by NATS.
+        permissions: {
+            pub: {
+                allow: [
+                    // NEX node/nexlet control-plane subjects: auctions,
+                    // registration, lifecycle, and feed publishing inside the
+                    // NEX account.
+                    '$NEX.>',
+                    // NEX uses NATS micro/service subjects for runtime
+                    // coordination. Keep this in the NEX account only.
+                    '$SRV.>',
+                    // Request/reply inboxes used by NEX CLI/node operations.
+                    '_INBOX.>',
+                    // JetStream API subjects. State persistence is currently
+                    // disabled for the node, but NEX and future workload
+                    // artifacts may touch KV/Object Store APIs in this account.
+                    '$JS.API.>',
+                    '$JS.lixpi.API.>',
+                    // JetStream flow-control and acknowledgement subjects used
+                    // by consumers/producers when JetStream is involved.
+                    '$JS.FC.>',
+                    '$JS.ACK.>',
+                    // Completion event published by the ai-models-sync workload
+                    // in the NEX account and exported/imported into AUTH for the
+                    // API subscriber.
+                    'aiModels.syncCompleted',
+                ],
+            },
+            sub: {
+                allow: [
+                    // Subscribe to NEX control-plane and feed subjects.
+                    '$NEX.>',
+                    // Subscribe to NATS micro/service subjects used by NEX
+                    // coordination.
+                    '$SRV.>',
+                    // Receive request/reply responses.
+                    '_INBOX.>',
+                    // Allow JetStream API responses and account-scoped domain
+                    // responses if NEX starts using persisted state/artifacts.
+                    '$JS.API.>',
+                    '$JS.lixpi.API.>',
+                    // Allow JetStream flow-control and acknowledgements.
+                    '$JS.FC.>',
+                    '$JS.ACK.>',
+                ],
+            },
+        },
+    })
+} else {
+    // Local and production NEX authentication depends on this public key being
+    // present in the API environment. Without it, the NEX node can still sign
+    // the NATS challenge, but the auth callout has no registered key to verify
+    // against and must reject the connection.
+    warn('NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout')
+}
 
 // Initialize with your NATS server connection
 await NATS_Service.init({
@@ -149,9 +247,16 @@ await startNatsAuthCalloutService({
     algorithms: ['RS256'],
     jwksUri: env.MOCK_AUTH0 === 'true' ? env.MOCK_AUTH0_JWKS_URI : `${env.AUTH0_DOMAIN}/.well-known/jwks.json`,
     natsAuthAccount: env.NATS_AUTH_ACCOUNT,
-    // For internal-service authentication patterns (NKey-signed JWTs),
-    // see documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md.
-    serviceAuthConfigs: [],
+    // Service registrations are passed into the generic auth-callout package so
+    // the package stays reusable. The auth package knows how to verify Auth0
+    // JWTs, self-issued service JWTs, and raw NATS NKey challenge responses; it
+    // does not hardcode that NEX exists. This API startup file decides which
+    // internal service identities are active for this deployment.
+    //
+    // See documentation/knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md for the
+    // full service-auth model, including why raw NKey NEX auth is the short-term
+    // fix and decentralized NATS JWT/operator auth is the larger future option.
+    serviceAuthConfigs,
 })
 
 // Initialize the in-process LLM module. The LangGraph workflow that previously
@@ -197,12 +302,12 @@ app.use('/api/media-library', mediaLibraryRoutes)
 // Health check endpoint
 app.get('/health-check', (req, res) => {
     // Perform other necessary health checks
-    const isHealthy = httpServer.listening     //TODO: is there a better way to check if socket.io is alive?
+    const isHealthy = httpServer.listening
 
     if (isHealthy) {
-        res.json({ status: 'healthy', services: { socketIo: 'running' } })
+        res.json({ status: 'healthy', services: { httpServer: 'running' } })
     } else {
-        res.status(503).json({ status: 'unhealthy', services: { socketIo: 'not running' } })
+        res.status(503).json({ status: 'unhealthy', services: { httpServer: 'not running' } })
     }
 })
 

@@ -32,13 +32,11 @@ export const subscriptionSubjects = [
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
-            const user = socket?.user
+            const user = data.user
             if (!user || Object.keys(user).length === 0) {
-                ack && ack('No user found')
-                return
+                return { error: 'No user found' }
             }
 
-            // const userId = socket?.user?.userId
             const {
                 userId,
                 stripeCustomerId
@@ -67,10 +65,9 @@ export const subscriptionSubjects = [
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
-            const user = socket?.user
+            const user = data.user
             if (!user || Object.keys(user).length === 0) {
-                ack && ack('No user found')
-                return
+                return { error: 'No user found' }
             }
 
             const {
@@ -79,7 +76,7 @@ export const subscriptionSubjects = [
             } = user
 
             infoStr([
-                chalk.green('Socket.IO -> '),
+                chalk.green('NATS -> '),
                 chalk.green(USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS),
                 ', ',
                 chalk.grey('userId::'),
@@ -104,10 +101,9 @@ export const subscriptionSubjects = [
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
-            const user = socket?.user
+            const user = data.user
             if (!user || Object.keys(user).length === 0) {
-                ack && ack('No user found')
-                return
+                return { error: 'No user found' }
             }
 
             const {
@@ -135,13 +131,11 @@ export const subscriptionSubjects = [
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
-            const user = socket?.user
+            const user = data.user
             if (!user || Object.keys(user).length === 0) {
-                ack && ack('No user found')
-                return
+                return { error: 'No user found' }
             }
 
-            // const userId = socket?.user?.userId
             const {
                 userId,
                 stripeCustomerId

@@ -103,6 +103,7 @@ services:
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
             NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -149,6 +150,7 @@ services:
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
             NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -195,6 +197,7 @@ services:
             NATS_AUTH_NKEY_ISSUER_PUBLIC: ${NATS_AUTH_NKEY_ISSUER_PUBLIC}
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
             NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
             NATS_ALLOWED_ORIGINS: ${NATS_ALLOWED_ORIGINS}
             # Certificate management (always required for TLS)
@@ -228,6 +231,86 @@ services:
         stop_signal: SIGTERM
         networks:
             - nats
+
+    lixpi-nex-1:
+        container_name: lixpi-nex-1
+        profiles: ["main"]
+        image: lixpi/nex
+        build:
+            dockerfile: services/nex/Dockerfile
+            context: .
+        environment:
+            # Force color output in the terminal, required for chalk.js to work
+            FORCE_COLOR: 1
+
+            # Pulumi/app config also consumed by the workload
+            ORG_NAME: ${ORG_NAME}
+            STAGE: ${STAGE}
+            ENVIRONMENT: ${ENVIRONMENT}
+
+            # AWS credentials, used only for local development
+            AWS_REGION: ${AWS_REGION}
+            AWS_PROFILE: ${AWS_PROFILE}
+
+            # DynamoDB config (the workload writes the AI_MODELS_LIST table)
+            DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT}
+
+            # NEX node -> NATS connection. The client port (4222) is plain nats://
+            # locally (no TLS on 4222), so the Go nex client must use nats:// URLs.
+            NATS_SERVERS: "nats://lixpi-nats-1:4222,nats://lixpi-nats-2:4222,nats://lixpi-nats-3:4222"
+            NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_JS_DOMAIN: lixpi
+            NEX_NAMESPACE: system
+            NEX_NODE_NAME: lixpi-nex-1
+
+            # nex stores its resource/config dir under $XDG_CONFIG_HOME/nex; point
+            # it at the persistent volume so it survives container restarts.
+            XDG_CONFIG_HOME: /data
+
+            # AI provider keys used by the models-sync workload
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+            GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+
+        volumes:
+            - aws-config:/root/.aws:cached    # AWS SSO credentials
+            - ./.aws/config:/root/.aws/config:cached    # AWS SSO credentials
+            - caddy-certs:/opt/nex/certs:ro    # Cluster CA (only needed when 4222 uses TLS, e.g. AWS)
+            - nex-1-data:/data                 # Persistent nex resource/config dir across restarts
+
+            # @lixpi workspace packages the workload imports (mirrors lixpi-api)
+            - ./packages/lixpi/constants:/usr/src/service/packages/lixpi/constants:cached
+            - ./packages/lixpi/debug-tools:/usr/src/service/packages/lixpi/debug-tools:cached
+            - ./packages/lixpi/dynamodb-service:/usr/src/service/packages/lixpi/dynamodb-service:cached
+            - ./packages/lixpi/ssm-service:/usr/src/service/packages/lixpi/ssm-service:cached
+            - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
+
+        networks:
+            - nats
+
+        working_dir: /usr/src/service
+        stop_signal: SIGTERM
+        healthcheck:
+            test: ["CMD-SHELL", "pidof nex >/dev/null 2>&1 || exit 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        depends_on:
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-1:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-2:
+                condition: service_healthy
+                restart: true
+            lixpi-nats-3:
+                condition: service_healthy
+                restart: true
 
     lixpi-web-ui:
         container_name: lixpi-web-ui
@@ -296,6 +379,9 @@ services:
             lixpi-api:
                 condition: service_healthy
                 restart: true
+            lixpi-nex-1:
+                condition: service_healthy
+                restart: true
 
     lixpi-api:
         container_name: lixpi-api
@@ -344,6 +430,7 @@ services:
             NATS_AUTH_XKEY_ISSUER_SEED: ${NATS_AUTH_XKEY_ISSUER_SEED}
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
 
             # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
             OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -471,6 +558,9 @@ services:
             NATS_AUTH_XKEY_ISSUER_PUBLIC: ${NATS_AUTH_XKEY_ISSUER_PUBLIC}
             NATS_LLM_SERVICE_NKEY_SEED: ${NATS_LLM_SERVICE_NKEY_SEED}
             NATS_LLM_SERVICE_NKEY_PUBLIC: ${NATS_LLM_SERVICE_NKEY_PUBLIC}
+            # NEX node nkey — passed through so `createNexNodeService` can put it in the node's task definition
+            NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
+            NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
 
             # App host addresses
@@ -541,6 +631,7 @@ volumes:
     nats-1-data:   # Persistent JetStream storage for NATS node 1
     nats-2-data:   # Persistent JetStream storage for NATS node 2
     nats-3-data:   # Persistent JetStream storage for NATS node 3
+    nex-1-data:    # Persistent nex resource/config dir for the NEX node
 
 networks:
     nats:

@@ -57,6 +57,7 @@ export interface NatsClusterServiceArgs {
         NATS_SERVER_NAME_BASE: string
         NATS_AUTH_NKEY_ISSUER_PUBLIC: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
+        NATS_NEX_NODE_NKEY_PUBLIC: string
         NATS_SAME_ORIGIN: string
         NATS_ALLOWED_ORIGINS: string
         NATS_DEBUG_MODE: string
@@ -338,6 +339,10 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
                     {
                         name: 'NATS_AUTH_XKEY_ISSUER_PUBLIC',
                         value: environment.NATS_AUTH_XKEY_ISSUER_PUBLIC,
+                    },
+                    {
+                        name: 'NATS_NEX_NODE_NKEY_PUBLIC',
+                        value: environment.NATS_NEX_NODE_NKEY_PUBLIC,
                     },
                     {
                         name: 'NATS_SAME_ORIGIN',

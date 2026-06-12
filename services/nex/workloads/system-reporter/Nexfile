@@ -1,0 +1,19 @@
+# Nexfile — system-reporter (native / service): the canonical NEX smoke test.
+#
+# A trivial, dependency-free workload that proves the substrate end to end
+# (deploy -> run -> logs) before trusting the real ai-models-sync workload.
+# It needs no env, so it can be deployed directly with `-f`.
+#
+# Deploy manually against a running node (see services/nex/README.md):
+#   docker exec lixpi-nex-1 nex --namespace lixpi workload start -f \
+#     /usr/src/service/workloads/system-reporter/Nexfile
+# Its stdout streams on $NEX.FEED.lixpi.logs.> within the NEX account.
+name: system-reporter
+description: Reports system stats every 30 seconds
+type: native
+lifecycle: service
+start_request:
+  uri: "file:///bin/sh"
+  argv:
+    - "-c"
+    - "while true; do echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Uptime: $(uptime)\"; sleep 30; done"

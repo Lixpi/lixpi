@@ -1,0 +1,29 @@
+{
+    "name": "lixpi-nex",
+    "type": "module",
+    "version": "0.1.0",
+    "description": "Lixpi NATS NEX execution-engine node — runs Lixpi background workloads on NATS",
+    "author": "Lixpi <lixpi@lixpi.com>",
+    "license": "",
+    "main": "workloads/ai-models-synchronization/index.ts",
+    "scripts": {
+        "test:run": "vitest run",
+        "test": "vitest"
+    },
+    "dependencies": {
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/debug-tools": "workspace:*",
+        "@lixpi/dynamodb-service": "workspace:*",
+        "@nats-io/nats-core": "*",
+        "@nats-io/transport-node": "*",
+        "openai": "*",
+        "@anthropic-ai/sdk": "*",
+        "@google/genai": "*",
+        "type-fest": "*"
+    },
+    "devDependencies": {
+        "vitest": "latest",
+        "@types/node": "*"
+    },
+    "packageManager": "pnpm@9.15.0"
+}

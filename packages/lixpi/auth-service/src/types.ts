@@ -20,6 +20,7 @@ export type NKeyVerificationResult = {
 export type ServiceAuthConfig = {
     publicKey: string
     userId: string
+    account?: string
     permissions: {
         pub: { allow: string[] }
         sub: { allow: string[] }

@@ -40,7 +40,6 @@
         "jsonwebtoken": "*",
         "multer": "*",
         "uuid": "*",
-        "socket.io": "*",
         "jwks-rsa": "*",
         "openai": "*",
         "@anthropic-ai/sdk": "*",
