@@ -105,6 +105,7 @@ flowchart TB
 |-----------|--------------|---------|
 | `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
 | `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (token streaming, image generation, vendor SDK egress) |
+| `nex` | ECS/Fargate (private subnets, 1 task) | NATS NEX node — runs background workloads (the hourly AI-models sync), writes the `AI_MODELS_LIST` table. See [NEX Execution Engine](./NEX-EXECUTION-ENGINE.md) |
 | `nats` | ECS/Fargate (public subnets, 3 tasks) | Message bus — clients connect directly |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
 | `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |

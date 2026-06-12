@@ -2,7 +2,10 @@
 
 This document describes how internal services authenticate to NATS in the Lixpi system. Use this pattern whenever you add a new internal service (worker, daemon, scheduler) that needs to publish or subscribe on NATS subjects.
 
-The first consumer of this pattern was the `services/llm-api` Python service, which was removed after its workflow was absorbed into `services/api`. The pattern itself is generic and lives on as the recommended way to authenticate internal services.
+The first consumer of this pattern was the `services/llm-api` Python service, which was removed after its workflow was absorbed into `services/api`. The pattern itself is generic and lives on as the recommended way to authenticate internal services. It now has two concrete forms:
+
+- **Self-issued service JWTs** for Lixpi-owned services that can set `auth_token` during connect.
+- **Raw NATS NKey challenge-response** for NATS-native tools such as NEX, where the client already signs the server nonce with a user nkey.
 
 ## When to use it
 
@@ -10,11 +13,14 @@ The first consumer of this pattern was the `services/llm-api` Python service, wh
 |---|---|---|
 | Web UI / browser users | Auth0 OAuth2/OIDC, RS256 JWTs | Auth0 JWKS endpoint |
 | Internal backend services | Self-issued NKey-signed JWTs, Ed25519 | Service signs its own |
+| NATS-native internal tools, such as NEX | Raw NATS NKey challenge-response | Client signs the server nonce; auth callout verifies `nkey` + `sig` |
 
 Use **NKey JWTs** for any service that:
 - Originates traffic from your own infrastructure (ECS task, Lambda, cron job, etc.)
 - Should not depend on Auth0 reachability for its own functioning
 - Needs a narrow, declarative permissions allowlist on NATS subjects
+
+Use **raw NATS NKey auth through the callout** when the client is a NATS-native tool that cannot practically send a Lixpi self-issued JWT but already supports the standard `nkey` + `sig` connect handshake. The `services/nex` execution-engine node is the current example.
 
 Do **not** use this for traffic that originates from external clients. The auth callout treats anything signed with a registered service public key as fully trusted within the configured permissions, with no per-user identity check beyond the `sub` claim.
 
@@ -84,9 +90,36 @@ sequenceDiagram
 
 The flow is the same regardless of whether the service is written in Python or TypeScript — both sides of the wire use the same JWT shape.
 
-## The exact code samples
+## NATS-native NKey variation
 
-The samples below are extracted verbatim from the existing implementation. If you need to read the full files:
+NEX does not follow the self-issued JWT flow above. The `nex` CLI and node connect with native NATS NKey credentials:
+
+```bash
+nex --nats.nkey "$NATS_NEX_NODE_NKEY_PUBLIC" --nats.seed "$NATS_NEX_NODE_NKEY_SEED" ...
+```
+
+With centralized auth callout enabled, the NATS server still forwards that connection attempt to `services/api`. The auth request contains the client's public `nkey`, the client's `sig`, and the server nonce. The callout finds a matching `serviceAuthConfig`, verifies that `sig` is a valid Ed25519 signature over the nonce, then issues the user JWT for the configured account.
+
+For NEX, that config sets `account: 'NEX'`. This keeps the node's `$NEX.>` control plane in the dedicated NEX account while still using the same centralized auth-callout service as app users and service JWT clients.
+
+The NEX key variables have different owners:
+
+- `NATS_NEX_NODE_NKEY_SEED` is secret and should only be present in the NEX node runtime.
+- `NATS_NEX_NODE_NKEY_PUBLIC` is safe verification material. NEX needs it for the native NATS client flags, the NATS server config needs it to advertise the nonce required by native NKey auth, and `services/api` needs it in `serviceAuthConfigs` so the auth callout can verify the raw NKey signature.
+- The NATS server's static nkey user entry is not the final authorization decision in the current centralized auth-callout design. It enables the native NKey challenge; NATS forwards the auth decision to the API and enforces the returned user JWT.
+
+Local private-repo NEX workloads should currently use `file://` artifacts placed
+in the shared Docker volume mounted at `/opt/nex/private-workloads`, not
+`nats://` Object Store artifacts. NEX 0.4.1 can fetch Object Store artifacts in
+compatible credential setups, but the `--issuer-nkey` path used by Lixpi mints
+NKey credentials while the native artifact fetcher connects with
+`UserJWTAndSeed`. With centralized auth callout enabled, that artifact-fetch
+connection has no usable `auth_token` or raw `nkey` challenge fields and is
+rejected.
+
+## Code samples
+
+The samples below show the concrete implementation shape. If you need to read the full files:
 - `packages/lixpi/nats-service/python/nats_service.py:45-101` — Python signing
 - `packages/lixpi/nats-service/ts/nats-service.ts:86-138` — TypeScript signing
 - `packages/lixpi/auth-service/src/nkey-verifier.ts` — TS verification
@@ -216,6 +249,7 @@ await startNatsAuthCalloutService({
         {
             publicKey: env.NATS_MY_SERVICE_NKEY_PUBLIC,    // UA... (matches `iss` in service JWTs)
             userId: 'svc:my-service',                       // Must match service's user_id / sub claim
+            account: 'AUTH',                                // Optional; defaults to natsAuthAccount
             permissions: {
                 pub: {
                     allow: [
@@ -238,7 +272,7 @@ await startNatsAuthCalloutService({
 })
 ```
 
-The `userId` field in `serviceAuthConfigs` must exactly match the `sub` claim in the JWT the service generates. The `publicKey` must match the `iss` claim. If either mismatches, the callout rejects the connection.
+The `userId` field in `serviceAuthConfigs` must exactly match the `sub` claim in the JWT the service generates. The `publicKey` must match the `iss` claim. If either mismatches, the callout rejects the connection. `account` is optional and defaults to `natsAuthAccount`; set it when the issued NATS user JWT should target another configured account such as `NEX`.
 
 ### Step 5: Callout verifies the service (TypeScript)
 
@@ -405,6 +439,7 @@ serviceAuthConfigs: [
     {
         publicKey: env.NATS_MY_SERVICE_NKEY_PUBLIC,
         userId: 'svc:my-service',
+        account: 'AUTH',
         permissions: {
             pub: { allow: ['my.service.responses.>'] },
             sub: { allow: ['my.service.requests', '_INBOX.>'] },
@@ -437,6 +472,20 @@ natsService.publish('not.in.allowlist', { hello: 'world' })
 
 The publish should fail with a permissions error visible in the NATS server logs.
 
+## Longer-term option: decentralized NATS JWT auth
+
+NATS also supports decentralized JWT/operator auth: an operator signs account JWTs, each account signs user JWTs, and clients connect with standard NATS credentials generated by `nsc` or an equivalent issuer workflow. That model is a better long-term fit if Lixpi wants NATS itself to own most account/user credential issuance instead of routing every service identity through the API auth callout.
+
+What would change:
+
+- Create and distribute an operator JWT, account JWTs for `AUTH`, `NEX`, `SYS`, and any future service accounts, plus scoped user creds per service.
+- Configure the NATS cluster with a resolver or mounted JWT artifacts instead of relying on config-file users plus centralized auth callout for service identities.
+- Rotate service credentials through the NATS account issuer workflow rather than by editing `serviceAuthConfigs` in `services/api`.
+- Keep cross-account exports/imports, such as `NEX` exporting `aiModels.syncCompleted` to `AUTH`, but define users and permissions in account JWTs.
+- Decide whether browser/Auth0 users still use auth callout, or whether only internal services move to decentralized JWT credentials first.
+
+Trade-off: decentralized JWT auth removes some custom callout logic and matches NATS-native account boundaries more closely, but it is an infrastructure migration. It touches local env generation, Docker NATS bootstrapping, Pulumi/ECS secrets, rotation playbooks, and probably developer tooling. For the NEX branch, extending the current callout to verify raw NKey challenge responses is the smaller change.
+
 ## Security & operational notes
 
 ### Seeds are secrets
@@ -463,6 +512,8 @@ A compromised service credential can only do what its `permissions` allow. Defin
 If `services/api` is down, no NATS clients (web-ui, internal services) can authenticate. Plan recovery scenarios accordingly:
 - Long-running connections established before the callout went down stay connected (NATS doesn't re-validate).
 - New connections fail until the callout is back.
+
+With centralized auth callout enabled, do not assume static config-file users in another account will authenticate independently. Register internal service public keys in `serviceAuthConfigs` and have the callout issue the user JWT for the target account.
 
 ### Why we don't use Auth0 for internal services
 - **No external dependency** on Auth0 reachability for internal traffic. The auth callout never has to call out to Auth0 for service tokens.

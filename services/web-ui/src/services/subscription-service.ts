@@ -2,7 +2,6 @@
 
 import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
 
-// import SocketService from '$src/services/socket.io-service.ts'
 import { subscriptionStore } from '$src/stores/subscriptionStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 
@@ -10,7 +9,6 @@ const { USER_SUBSCRIPTION_SUBJECTS } = NATS_SUBJECTS
 
 class SubscriptionService {
     constructor() {
-        // Listens to `session-${userId}` room in the initializeEvents() in the socket.io-connections-manager.js
         // SocketService.on({ event: USER_SUBSCRIPTION_SUBJECTS.GET_PAYMENT_METHOD_SETUP_INTENT_RESPONSE, callback: (response: any) => this._getPaymentMethodSetupIntent(response) })
         // SocketService.on({ event: USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS_RESPONSE, callback: (response: any) => this._getCustomerPaymentMethods(response) })
         // SocketService.on({ event: USER_SUBSCRIPTION_SUBJECTS.DELETE_USER_PAYMENT_METHOD_RESPONSE, callback: (response: any) => this._deletePaymentMethod(response) })

@@ -88,7 +88,6 @@
         "prosemirror-schema-list": "*",
         "prosemirror-state": "*",
         "prosemirror-view": "*",
-        "socket.io-client": "*",
         "htm": "*"
     },
     "packageManager": "pnpm@9.15.0"

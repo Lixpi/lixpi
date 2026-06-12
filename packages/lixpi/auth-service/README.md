@@ -128,6 +128,7 @@ type NKeyVerificationResult = {
 type ServiceAuthConfig = {
     publicKey: string    // NKey public key (UA...)
     userId: string       // Expected sub claim (e.g., 'svc:llm-workers')
+    account?: string     // Optional NATS account for the issued user JWT; defaults to AUTH
     permissions: {
         pub: { allow: string[] }
         sub: { allow: string[] }

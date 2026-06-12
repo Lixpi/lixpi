@@ -60,7 +60,7 @@ export const authenticateTokenOnRequest = async ({ token, eventName }: { token: 
 //             err(`
 // calling  await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }) in the authenticateTokenOnRequest method.'
 // this is wrong and very quick hack just to make it work temporarily'
-// it used to be called in authenticateTokenOnConnect() when Socket.io was around, but with NATS it makes no sense'
+// it used to be called on the connection-auth path in the previous transport, but with NATS it makes no sense'
 // the issue must be addressed when registration flow is complete'
 // const { user, error } = await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }
 //             `)
