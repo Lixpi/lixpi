@@ -1177,7 +1177,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const thread = currentAiChatThreads.find((candidate: AiChatThread) => candidate.threadId === generatedBy.aiChatThreadId)
             // Pass the image's reasoning model so its history resolves to that
             // model's section only, never another model's in the same response.
-            const turnInfo = getGeneratedImageTurnInfoFromThreadContent(thread?.content, generatedBy.responseMessageId, generatedBy.reasoningModelId)
+            const turnInfo = getGeneratedImageTurnInfoFromThreadContent(thread?.content, {
+                responseMessageId: generatedBy.responseMessageId,
+                reasoningRunId: generatedBy.reasoningRunId,
+                reasoningModelId: generatedBy.reasoningModelId,
+                mediaRunId: generatedBy.mediaRunId,
+            })
             const modelName = node.type === 'video'
                 ? String((generatedBy as VideoCanvasNode['generatedBy'])?.videoModel || '')
                 : String((generatedBy as ImageCanvasNode['generatedBy'])?.aiModel || '')
@@ -1213,6 +1218,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         imageGenerationTrace: isVideoTrace ? null : turnInfo!.imageGenerationTrace,
                         videoGenerationTrace: isVideoTrace ? turnInfo!.videoGenerationTrace : null,
                         imageGenerationTraceId: null,
+                        reasoningModelId: generatedBy.reasoningModelId,
                     },
                     childCount: turnInfo!.imageGenerationPromptText ? 1 : 0,
                     forceToolPromptFallback: true,

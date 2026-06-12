@@ -4,6 +4,8 @@
 // its own aiReasoningSection holding that model's reply text, its image/video
 // generation collapsible, and its generated media — kept separate so the
 // concurrently-streaming models never interleave their content.
+import { html } from '$src/utils/domTemplates.ts'
+
 export const aiReasoningSectionNodeType = 'aiReasoningSection'
 
 export const aiReasoningSectionNodeSpec = {
@@ -53,18 +55,23 @@ function parseReasoningIndex(value) {
 }
 
 export const aiReasoningSectionNodeView = (node) => {
-    const dom = document.createElement('div')
-    dom.className = 'ai-reasoning-section'
-    dom.setAttribute('data-reasoning-run-id', node.attrs.reasoningRunId || '')
+    const dom = html`
+        <div
+            className="ai-reasoning-section"
+            data=${{
+                generationRequestId: node.attrs.generationRequestId || '',
+                reasoningRunId: node.attrs.reasoningRunId || '',
+                reasoningModelId: node.attrs.reasoningModelId || '',
+                reasoningIndex: node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
+            }}
+        >
+            <div className="ai-reasoning-section-content"></div>
+            <div className="ai-reasoning-section-spinner" aria-hidden="true"></div>
+        </div>
+    ` as HTMLElement
 
-    const contentDOM = document.createElement('div')
-    contentDOM.className = 'ai-reasoning-section-content'
-    dom.appendChild(contentDOM)
-
-    const spinner = document.createElement('div')
-    spinner.className = 'ai-reasoning-section-spinner'
-    spinner.setAttribute('aria-hidden', 'true')
-    dom.appendChild(spinner)
+    const contentDOM = dom.querySelector('.ai-reasoning-section-content') as HTMLElement
+    const spinner = dom.querySelector('.ai-reasoning-section-spinner') as HTMLElement
 
     const syncState = (current) => {
         const isWaiting = current.childCount === 0 && current.attrs.isReceivingAnimation
@@ -80,7 +87,10 @@ export const aiReasoningSectionNodeView = (node) => {
         update: (updatedNode) => {
             if (updatedNode.type.name !== aiReasoningSectionNodeType) return false
             node = updatedNode
-            dom.setAttribute('data-reasoning-run-id', node.attrs.reasoningRunId || '')
+            dom.dataset.generationRequestId = node.attrs.generationRequestId || ''
+            dom.dataset.reasoningRunId = node.attrs.reasoningRunId || ''
+            dom.dataset.reasoningModelId = node.attrs.reasoningModelId || ''
+            dom.dataset.reasoningIndex = node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex)
             syncState(node)
             return true
         },

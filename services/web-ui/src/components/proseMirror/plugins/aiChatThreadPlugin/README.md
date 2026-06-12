@@ -11,7 +11,7 @@
 
 ## What It Does
 
-- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiCollapsibleBlock`, and `aiGeneratedVideo`.
+- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiCollapsibleBlock`, and `aiGeneratedVideo`.
 - Parses `aiUserInput` through the schema compatibility path, then removes those children in `appendTransaction()`.
 - Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
@@ -102,11 +102,20 @@ Sent user message bubble inserted by `AiPromptInputController`.
 
 Assistant response node created as the request is submitted, then filled by stream events.
 
-- Content: `(paragraph | block)*`
-- Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`, `currentFrame`
-- Run metadata attrs: `generationRequestId`, `reasoningRunId`, `mediaRunId`, `reasoningModelId`, `mediaModelId`, `mediaType`, `variantIndex`
+- Content: `(paragraph | block)*`; multi-model media requests store one `aiReasoningSection` child per reasoning run.
+- Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
+- Request metadata attrs: `generationRequestId`
 - Empty receiving responses show the shell spinner until the first content arrives.
-- Anthropic responses animate the provider avatar by updating `currentFrame`.
+- Response nodes in the chat thread do not render an assistant avatar; model attribution lives on each generation-details collapsible.
+
+### `aiReasoningSection`
+
+Per-model section inside one `aiResponseMessage` for media-generation matrix requests.
+
+- Content: `(paragraph | block)*`
+- Attrs: `generationRequestId`, `reasoningRunId`, `reasoningModelId`, `reasoningIndex`, `isReceivingAnimation`
+- Created as local placeholders on submit when the request includes image/video generation, then adopted by streamed `generationRun` metadata.
+- Owns only that reasoning run's prose, generation-details collapsible, and generated media thumbnail, so canvas provenance/details can resolve by `reasoningRunId` or `mediaRunId`.
 
 ### `aiGeneratedImage`
 
@@ -203,11 +212,11 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 
 `PositionFinder.findThreadInsertionPoint(state, threadId)` returns the end of the matching thread. A supplied `threadId` scopes the lookup to that thread.
 
-`PositionFinder.findResponseNode(state, threadId, generationRun)` searches within the matching thread and prefers:
+`PositionFinder.findResponseNode(state, threadId, generationRun)` searches within the matching thread and resolves media matrix runs to `aiReasoningSection` targets. It prefers:
 
-1. receiving responses
-2. initial-render responses
-3. any response, with newest winning ties
+1. exact `reasoningRunId` section matches
+2. provisional local section templates matching `reasoningModelId` and `reasoningIndex`
+3. legacy receiving/initial-render responses, with newest winning ties
 
 That scoping keeps concurrent streams routed to the correct thread and model variant.
 
@@ -233,6 +242,7 @@ Decoration output:
 
 - `aiChatThreadNodeView`
 - `aiResponseMessageNodeView`
+- `aiReasoningSectionNodeView`
 - `aiUserMessageNodeView`
 - `aiCollapsibleBlockNodeView`
 - `aiGeneratedVideoNodeView`
@@ -244,7 +254,8 @@ Generated-image rendering is handled by `imageSelectionPlugin`.
 - `aiChatThreadPlugin.ts`: orchestration, stream handling, request construction, decorations, plugin state, NodeView registration.
 - `aiChatThreadNode.ts`: thread schema and minimal wrapper NodeView.
 - `aiUserMessageNode.ts`: sent-user-message schema and shell NodeView.
-- `aiResponseMessageNode.ts`: assistant response schema, shell NodeView, provider avatar animation, run metadata pills.
+- `aiResponseMessageNode.ts`: assistant response schema, shell NodeView, and response-level metadata.
+- `aiReasoningSectionNode.ts`: per-reasoning-run section schema and NodeView for one shared media response message.
 - `aiGeneratedImageNode.ts`: generated-image schema, callback surface, and exported NodeView.
 - `aiGeneratedVideoNode.ts`: generated-video schema, callback surface, in-chat video NodeView.
 - `aiCollapsibleBlockNode.ts`: trace disclosure schema and NodeView.
@@ -269,7 +280,7 @@ Add new streamed block types in `StreamingInserter.insertBlockContent()`.
 
 Add new inline stream segment behavior in `StreamingInserter.insertInlineContent()`.
 
-Add provider avatar behavior in `aiResponseMessageNodeView()` or the shared shell helpers.
+Add provider/model attribution in the generation-details summary or the shared shell helpers.
 
 Add generated-media canvas behavior through `imageCallbacks` or `videoCallbacks` in the `createAiChatThreadPlugin()` call site.
 

@@ -75,6 +75,7 @@ export class GoogleProvider extends BaseProvider {
 
         const hasVideoModel = !!state.videoModelVersion
         const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
+        let mediaFanoutAllowedFunctionNames: string[] = []
 
         // Resolve message content (so reference-image extraction sees data URLs)
         // and convert each message to a Google `Content` object.
@@ -111,21 +112,7 @@ export class GoogleProvider extends BaseProvider {
                 functionDeclarations.push({ name: VIDEO_TOOL_NAME, description: videoToolDef.description, parameters: videoToolDef.parameters })
             }
             config.tools = [{ functionDeclarations }]
-
-            // In an explicit media-generation run (the matrix fans this reasoning
-            // model out to image/video models) the model MUST emit the tool call —
-            // its prompt is the whole point of the run, and without it that variant
-            // produces no media. Gemini in AUTO mode sometimes answers in prose and
-            // skips the call, so force it here. Outside the matrix (opportunistic
-            // chat image-gen) we leave AUTO so plain replies still work.
-            if (state.mediaFanoutPlan) {
-                config.toolConfig = {
-                    functionCallingConfig: {
-                        mode: 'ANY',
-                        allowedFunctionNames: functionDeclarations.map((declaration) => declaration.name),
-                    },
-                }
-            }
+            mediaFanoutAllowedFunctionNames = functionDeclarations.map((declaration) => declaration.name)
         }
 
         let systemInstruction: string | undefined
@@ -230,30 +217,65 @@ export class GoogleProvider extends BaseProvider {
                     update.generatedImages = [final]
                 }
             } else if (injectTool || injectVideoTool) {
-                const stream = await this.client.models.generateContentStream({
-                    model: modelVersion,
-                    contents: contents as any,
-                    config: config as any,
-                })
-                let detectedImage: string | undefined
-                let detectedVideo: string | undefined
-                for await (const chunk of stream) {
-                    if (this.shouldStop) break
-                    if (chunk.usageMetadata) usageMetadata = chunk.usageMetadata
-                    for (const candidate of chunk.candidates ?? []) {
-                        if (!candidate.content?.parts) continue
-                        for (const part of candidate.content.parts) {
-                            const fnCall = (part as any).functionCall ?? (part as any).function_call
-                            if (fnCall && fnCall.name === TOOL_NAME) {
-                                detectedImage = (fnCall.args ?? {}).prompt ?? ''
-                            } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
-                                detectedVideo = (fnCall.args ?? {}).prompt ?? ''
-                            } else if ((part as any).text) {
-                                this.publisher.chunk((part as any).text)
+                const runToolStream = async (
+                    streamConfig: Record<string, any>,
+                    publishText: boolean,
+                ): Promise<{ detectedImage?: string; detectedVideo?: string; usageMetadata?: any }> => {
+                    const stream = await this.client.models.generateContentStream({
+                        model: modelVersion,
+                        contents: contents as any,
+                        config: streamConfig as any,
+                    })
+                    let detectedImage: string | undefined
+                    let detectedVideo: string | undefined
+                    let streamUsageMetadata: any = null
+
+                    for await (const chunk of stream) {
+                        if (this.shouldStop) break
+                        if (chunk.usageMetadata) streamUsageMetadata = chunk.usageMetadata
+                        for (const candidate of chunk.candidates ?? []) {
+                            if (!candidate.content?.parts) continue
+                            for (const part of candidate.content.parts) {
+                                const fnCall = (part as any).functionCall ?? (part as any).function_call
+                                if (fnCall && fnCall.name === TOOL_NAME) {
+                                    detectedImage = (fnCall.args ?? {}).prompt ?? ''
+                                } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
+                                    detectedVideo = (fnCall.args ?? {}).prompt ?? ''
+                                } else if (publishText && (part as any).text) {
+                                    this.publisher.chunk((part as any).text)
+                                }
                             }
                         }
                     }
+
+                    return { detectedImage, detectedVideo, usageMetadata: streamUsageMetadata }
                 }
+
+                let toolStreamResult = await runToolStream(config, true)
+                usageMetadata = toolStreamResult.usageMetadata ?? usageMetadata
+                let detectedImage = toolStreamResult.detectedImage
+                let detectedVideo = toolStreamResult.detectedVideo
+
+                if (state.mediaFanoutPlan
+                    && !this.shouldStop
+                    && !detectedImage
+                    && !detectedVideo
+                    && mediaFanoutAllowedFunctionNames.length > 0) {
+                    warn(`[Google:${this.instanceKey}] media fanout AUTO mode skipped the tool; retrying with forced function call`)
+                    toolStreamResult = await runToolStream({
+                        ...config,
+                        toolConfig: {
+                            functionCallingConfig: {
+                                mode: 'ANY',
+                                allowedFunctionNames: mediaFanoutAllowedFunctionNames,
+                            },
+                        },
+                    }, false)
+                    usageMetadata = toolStreamResult.usageMetadata ?? usageMetadata
+                    detectedImage = toolStreamResult.detectedImage
+                    detectedVideo = toolStreamResult.detectedVideo
+                }
+
                 if (detectedVideo) {
                     update.generatedVideoPrompt = detectedVideo
                     info(`[Google:${this.instanceKey}] generate_video tool call ${JSON.stringify({
