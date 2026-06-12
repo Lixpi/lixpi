@@ -241,6 +241,7 @@ const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuStyleSet
     ['--ai-prompt-model-menu-trigger-active-color', 'triggerActiveColor'],
     ['--ai-prompt-model-menu-trigger-active-background', 'triggerActiveBackground'],
     ['--ai-prompt-model-menu-trigger-focus-outline', 'triggerFocusOutline'],
+    ['--ai-prompt-model-menu-info-bubble-width', 'infoBubbleWidth'],
     ['--ai-prompt-model-menu-info-bubble-border-radius', 'infoBubbleBorderRadius'],
     ['--ai-prompt-model-menu-info-bubble-background', 'infoBubbleBackground'],
     ['--ai-prompt-model-menu-info-bubble-box-shadow', 'infoBubbleBoxShadow'],
@@ -518,7 +519,9 @@ class SelectedModelTagsRow implements DropdownView {
     private readonly tagPills: TagPillInstance[] = []
     private readonly unsubscribe: () => void
     private modelLabelsById = new Map<string, string>()
+    private modelIconsById = new Map<string, string>()
     private currentSignature = ''
+    private builtConnected = false
 
     constructor(private readonly controls: SelectedModelTagsControls) {
         this.dom = html`<div className="ai-prompt-selected-model-tags-row" data-visible="false" contenteditable="false"></div>` as HTMLElement
@@ -534,10 +537,15 @@ class SelectedModelTagsRow implements DropdownView {
     private syncModelLabels(models: any[]): void {
         const options = transformModelsToOptions(models)
         this.modelLabelsById = new Map(options.map((option: AiModelDropdownOption) => [option.aiModel, option.title]))
+        this.modelIconsById = new Map(options.map((option: AiModelDropdownOption) => [option.aiModel, option.icon]))
     }
 
     private getModelLabel(modelId: string): string {
         return this.modelLabelsById.get(modelId) ?? modelId.split(':').at(-1) ?? modelId
+    }
+
+    private getModelIcon(modelId: string): string {
+        return this.modelIconsById.get(modelId) ?? ''
     }
 
     private destroyTagPills(): void {
@@ -558,11 +566,15 @@ class SelectedModelTagsRow implements DropdownView {
             .node() as SVGSVGElement
 
         const tagSvg = select(svgEl)
+        const tagStyles = settings.aiPromptInput.modelMenu.styles
         const tagPill = createTagPill(tagSvg, {
             id: modelId,
             x: 0,
             y: 0,
             label,
+            icon: this.getModelIcon(modelId),
+            iconColor: tagStyles.selectedModelTagIconColor,
+            textColor: tagStyles.selectedModelTagTextColor,
             selected: true,
             closable: true,
             className: 'ai-prompt-selected-model-tag-pill',
@@ -582,8 +594,13 @@ class SelectedModelTagsRow implements DropdownView {
             : []
         const labels = modelIds.map((modelId) => this.getModelLabel(modelId))
         const nextSignature = JSON.stringify({ modelIds, labels })
-        if (nextSignature === this.currentSignature) return
+        const connected = this.dom.isConnected
+        // Rebuild when the selection changes, or when an earlier build happened while
+        // the row was detached. Auto-sized pills measure the rendered label, which
+        // only reports a real width once the row is attached to the document.
+        if (nextSignature === this.currentSignature && (this.builtConnected || !connected)) return
         this.currentSignature = nextSignature
+        this.builtConnected = connected || modelIds.length === 0
 
         this.destroyTagPills()
         if (modelIds.length === 0) {

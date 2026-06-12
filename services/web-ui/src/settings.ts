@@ -144,6 +144,7 @@ export type AiPromptInputModelMenuSettings = {
         triggerActiveColor: string
         triggerActiveBackground: string
         triggerFocusOutline: string
+        infoBubbleWidth: string
         infoBubbleBorderRadius: string
         infoBubbleBackground: string
         infoBubbleBoxShadow: string
@@ -153,6 +154,8 @@ export type AiPromptInputModelMenuSettings = {
         sectionDividerBorderRadius: string
         sectionTitleColor: string
         controlLabelColor: string
+        selectedModelTagTextColor: string
+        selectedModelTagIconColor: string
         helpTooltipTriggerBorder: string
         helpTooltipTriggerBackground: string
         helpTooltipTriggerColor: string
@@ -429,6 +432,7 @@ export const settings: Settings = {
                 triggerActiveColor: colorPalette.nightBlue,
                 triggerActiveBackground: '#eef0f4',
                 triggerFocusOutline: '2px solid #b8bec8',
+                infoBubbleWidth: '410px',
                 infoBubbleBorderRadius: '12px',
                 infoBubbleBackground: '#fff',
                 infoBubbleBoxShadow: '0 14px 32px rgba(66, 73, 79, 0.12), 0 2px 10px rgba(66, 73, 79, 0.08), inset 0 0 1px 1px rgba(66, 73, 79, 0.2)',
@@ -438,6 +442,9 @@ export const settings: Settings = {
                 sectionDividerBorderRadius: '999px',
                 sectionTitleColor: '#59626b',
                 controlLabelColor: '#9299a1',
+                // Text and icon share one color, matching the dropdown value text (the menu panel foreground).
+                selectedModelTagTextColor: colorPalette.nightBlue,
+                selectedModelTagIconColor: colorPalette.nightBlue,
                 helpTooltipTriggerBorder: 'none',
                 helpTooltipTriggerBackground: 'transparent',
                 helpTooltipTriggerColor: '#8d949d',

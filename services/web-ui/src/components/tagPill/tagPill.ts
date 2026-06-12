@@ -15,6 +15,8 @@ export type TagPillSizing = {
     closeSize?: number
     closeIconSize?: number
     closeGap?: number
+    iconSize?: number
+    iconGap?: number
     textWidthFactor?: number
 }
 
@@ -25,6 +27,9 @@ export type TagPillConfig = TagPillSizing & {
     width?: number
     height?: number
     label: string
+    icon?: string
+    iconColor?: string
+    textColor?: string
     selected?: boolean
     hovered?: boolean
     disabled?: boolean
@@ -43,6 +48,9 @@ export type TagPillConfig = TagPillSizing & {
 export type TagPillRenderState = Partial<Pick<
     TagPillConfig,
     | 'label'
+    | 'icon'
+    | 'iconColor'
+    | 'textColor'
     | 'selected'
     | 'hovered'
     | 'disabled'
@@ -60,6 +68,8 @@ export type TagPillRenderState = Partial<Pick<
     | 'closeSize'
     | 'closeIconSize'
     | 'closeGap'
+    | 'iconSize'
+    | 'iconGap'
     | 'textWidthFactor'
 >> & {
     width?: number
@@ -81,6 +91,10 @@ const HORIZONTAL_PADDING = 4
 const CLOSE_SIZE = 14
 const CLOSE_ICON_SIZE = 7
 const CLOSE_GAP = 6
+// Icons default to the label cap height (~0.9em) so a glyph never exceeds the
+// capital letters next to it.
+const ICON_CAP_HEIGHT_RATIO = 0.9
+const ICON_GAP = 3
 const TEXT_WIDTH_FACTOR = 0.58
 
 const COLORS = {
@@ -161,6 +175,11 @@ class TagPill implements TagPillInstance {
     private closeSize: number
     private closeIconSize: number
     private closeGap: number
+    private icon: string
+    private iconSize: number
+    private iconGap: number
+    private iconColor: string
+    private textColor: string
     private textWidthFactor: number
     private labelWidth: number
     private autoWidthSignature = ''
@@ -168,6 +187,7 @@ class TagPill implements TagPillInstance {
     private readonly group: any
     private readonly background: any
     private readonly text: any
+    private readonly iconGroup: any
     private readonly closeGroup: any
     private readonly closeBackground: any
     private readonly closeIcon: any
@@ -194,6 +214,11 @@ class TagPill implements TagPillInstance {
         this.closeSize = config.closeSize ?? CLOSE_SIZE
         this.closeIconSize = config.closeIconSize ?? CLOSE_ICON_SIZE
         this.closeGap = config.closeGap ?? CLOSE_GAP
+        this.icon = config.icon ?? ''
+        this.iconSize = config.iconSize ?? Math.round(this.fontSize * ICON_CAP_HEIGHT_RATIO)
+        this.iconGap = config.iconGap ?? ICON_GAP
+        this.iconColor = config.iconColor ?? ''
+        this.textColor = config.textColor ?? ''
         this.textWidthFactor = config.textWidthFactor ?? TEXT_WIDTH_FACTOR
         this.labelWidth = estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)
         this.explicitWidth = config.width !== undefined
@@ -217,6 +242,9 @@ class TagPill implements TagPillInstance {
             .attr('font-weight', this.fontWeight)
             .attr('dominant-baseline', 'central')
 
+        this.iconGroup = this.group.append('g')
+            .attr('class', 'tag-pill-icon')
+
         this.closeGroup = this.group.append('g')
             .attr('class', 'tag-pill-close')
             .attr('role', 'button')
@@ -233,8 +261,9 @@ class TagPill implements TagPillInstance {
     }
 
     private estimateCurrentWidth(labelWidth: number = estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)): number {
+        const iconReserve = this.icon ? this.iconSize + this.iconGap : 0
         return estimateTagPillWidthFromLabelWidth(
-            labelWidth,
+            labelWidth + iconReserve,
             this.minWidth,
             this.closable,
             this.horizontalPadding,
@@ -242,6 +271,25 @@ class TagPill implements TagPillInstance {
             this.closeGap,
             this.labelAlign
         )
+    }
+
+    // Measure the actual rendered label so auto-sized pills keep identical padding
+    // for every label. The character-count estimate over-reserves space for narrow
+    // glyphs (spaces, digits, i/l), and the overshoot grows with label length, which
+    // is what leaves longer pills with more whitespace than short ones. Falls back to
+    // the estimate when the text node cannot be measured yet (detached or unsupported,
+    // e.g. jsdom).
+    private measureLabelWidth(): number {
+        try {
+            const measured = (this.text.node?.() as SVGTextElement | null)?.getComputedTextLength?.()
+            if (typeof measured === 'number' && Number.isFinite(measured) && measured > 0) {
+                return Math.ceil(measured)
+            }
+        } catch {
+            // getComputedTextLength is unavailable in non-rendering environments (e.g. jsdom);
+            // fall through to the character-based estimate.
+        }
+        return estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)
     }
 
     private getAutoWidthSignature(): string {
@@ -255,6 +303,9 @@ class TagPill implements TagPillInstance {
             closeSize: this.closeSize,
             closeGap: this.closeGap,
             labelAlign: this.labelAlign,
+            hasIcon: this.icon.length > 0,
+            iconSize: this.iconSize,
+            iconGap: this.iconGap,
             textWidthFactor: this.textWidthFactor,
         })
     }
@@ -340,20 +391,25 @@ class TagPill implements TagPillInstance {
         this.closeSize = state.closeSize ?? this.closeSize
         this.closeIconSize = state.closeIconSize ?? this.closeIconSize
         this.closeGap = state.closeGap ?? this.closeGap
+        this.icon = state.icon ?? this.icon
+        this.iconSize = state.iconSize ?? this.iconSize
+        this.iconGap = state.iconGap ?? this.iconGap
+        this.iconColor = state.iconColor ?? this.iconColor
+        this.textColor = state.textColor ?? this.textColor
         this.textWidthFactor = state.textWidthFactor ?? this.textWidthFactor
 
         const palette = COLORS[this.variant]
         this.text
             .attr('font-size', this.fontSize)
             .attr('font-weight', this.fontWeight)
-            .attr('fill', palette.text)
+            .attr('fill', this.textColor || palette.text)
             .attr('opacity', this.disabled ? 0.58 : 1)
             .text(this.label)
 
         if (!this.explicitWidth) {
             const nextAutoWidthSignature = this.getAutoWidthSignature()
             if (nextAutoWidthSignature !== this.autoWidthSignature) {
-                this.labelWidth = estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)
+                this.labelWidth = this.measureLabelWidth()
                 this.width = this.estimateCurrentWidth(this.labelWidth)
                 this.autoWidthSignature = nextAutoWidthSignature
             }
@@ -367,9 +423,17 @@ class TagPill implements TagPillInstance {
             ? this.horizontalPadding + this.closeSize / 2
             : this.width - this.horizontalPadding - this.closeSize / 2
         const closeY = this.height / 2
+        const iconReserve = this.icon ? this.iconSize + this.iconGap : 0
         const textStartX = this.horizontalPadding + (this.closePlacement === 'start' ? closeReserve : 0)
-        const textX = this.labelAlign === 'center' ? this.width / 2 : textStartX
+        // Center keeps the icon + label centered as one block (icon shifts the label
+        // right by half its reserve); start places the icon first, then the label.
+        const textX = this.labelAlign === 'center'
+            ? this.width / 2 + iconReserve / 2
+            : textStartX + iconReserve
         const textAnchor = this.labelAlign === 'center' ? 'middle' : 'start'
+        const iconCenterX = this.labelAlign === 'center'
+            ? textX - this.labelWidth / 2 - this.iconGap - this.iconSize / 2
+            : textStartX + this.iconSize / 2
         const fill = this.surface === 'content'
             ? !this.selected && this.hovered ? CONTENT_HOVER_FILL : 'transparent'
             : this.selected ? palette.fillActive : this.hovered ? palette.fillHover : palette.fill
@@ -420,8 +484,21 @@ class TagPill implements TagPillInstance {
             x: -this.closeIconSize / 2,
             y: -this.closeIconSize / 2,
             size: this.closeIconSize,
-            fill: palette.text,
+            fill: this.textColor || palette.text,
         })
+
+        if (this.icon) {
+            appendSvgPathIcon(this.iconGroup, this.icon, {
+                x: iconCenterX - this.iconSize / 2,
+                y: this.height / 2 - this.iconSize / 2,
+                size: this.iconSize,
+                fill: this.iconColor || palette.text,
+            })
+            this.iconGroup.attr('display', null)
+        } else {
+            this.iconGroup.selectAll('*').remove()
+            this.iconGroup.attr('display', 'none')
+        }
     }
 
     resize(x: number, y: number, width: number, height: number = this.height): void {
