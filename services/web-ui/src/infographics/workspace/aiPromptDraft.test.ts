@@ -59,4 +59,4 @@ describe('AI prompt draft model settings', () => {
         expect(draftAttrs.useMultipleImageModels).toBe(true)
         expect(draftAttrs.useMultipleVideoModels).toBe(true)
     })
-}
+})

@@ -105,6 +105,7 @@ const SYSTEM_PROMPT = [
     'You are Lixpi\'s workspace context relevance resolver.',
     'Rank workspace nodes for the next AI chat turn using compact text descriptors only. Never assume pixels or full document content beyond the metadata provided.',
     'Explicit chips and edge-forced nodes are sacred force-includes. You may include them in your selections when relevant, but the system will force-include them regardless.',
+    'Generated media whose isCurrentThreadGenerated flag is true belongs to this chat turn\'s active thread. For deictic follow-ups like "it", "this", "that", "now make it", or "make this", prefer current-thread generated media over generated media from other threads unless the prompt explicitly names the other content or the node is a forced chip/edge.',
     'Select only nodes that materially help answer or generate the user request. Exclude unrelated distractors aggressively.',
     'Mark needsBetterDescriptor=true when a promising node has a missing, failed, analyzing, one-word, or ambiguous descriptor.',
     'Return strict JSON using the tool schema. Use nodeId values exactly as given.',
@@ -135,6 +136,8 @@ const compactNodeForPrompt = (node: WorkspaceContextNode): Record<string, unknow
     entityTags: node.entityTags ?? [],
     styleTags: node.styleTags ?? [],
     branchId: node.branchId ?? '',
+    sourceThreadId: node.sourceThreadId ?? '',
+    isCurrentThreadGenerated: node.isCurrentThreadGenerated === true,
     hasMediaReference: Boolean(node.imageUrl || node.fileId),
     isExplicitChip: node.isExplicitChip,
     isEdgeForced: node.isEdgeForced,
@@ -530,6 +533,8 @@ const buildSelectedContextMessage = async (
                     entityTags: node.entityTags ?? [],
                     styleTags: node.styleTags ?? [],
                     branchId: node.branchId ?? '',
+                    sourceThreadId: node.sourceThreadId ?? '',
+                    isCurrentThreadGenerated: node.isCurrentThreadGenerated === true,
                 }),
             })
             if (node.imageUrl) {
@@ -544,6 +549,47 @@ const buildSelectedContextMessage = async (
         return { role: 'user', content: Array.isArray(resolvedBlocks) ? resolvedBlocks : blocks }
     }
     return { role: 'user', content: blocks }
+}
+
+const isMediaWorkspaceNode = (node: WorkspaceContextNode | undefined): node is WorkspaceContextNode =>
+    Boolean(node && (node.type === 'image' || node.type === 'video'))
+
+const mediaNodeIdsFromSelections = (
+    selections: WorkspaceContextSelection[],
+    nodeById: Map<string, WorkspaceContextNode>,
+): string[] => selections
+    .map((selection) => nodeById.get(selection.nodeId))
+    .filter(isMediaWorkspaceNode)
+    .map((node) => node.nodeId)
+
+const filterAutoMediaOutsideExistingBranchSnapshot = (
+    state: ProviderState,
+    resolution: WorkspaceContextResolution,
+): WorkspaceContextResolution => {
+    const snapshot = state.workspaceContextSnapshot
+    const branchSnapshot = state.imageBranchCandidateSnapshot
+    if (!snapshot || !branchSnapshot) return resolution
+
+    const branchCandidateNodeIds = new Set(branchSnapshot.candidates.map((candidate) => candidate.nodeId))
+    if (branchCandidateNodeIds.size === 0) return resolution
+
+    const nodeById = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
+    let changed = false
+    const selections = resolution.selections.filter((selection) => {
+        const node = nodeById.get(selection.nodeId)
+        if (!isMediaWorkspaceNode(node)) return true
+        if (branchCandidateNodeIds.has(selection.nodeId)) return true
+        if (selection.role === 'forced-chip' || selection.role === 'forced-edge') return true
+        changed = true
+        return false
+    })
+
+    if (!changed) return resolution
+    return {
+        ...resolution,
+        selections,
+        narrowedMediaNodeIds: mediaNodeIdsFromSelections(selections, nodeById),
+    }
 }
 
 const buildCandidateFromWorkspaceNode = (
@@ -580,24 +626,27 @@ const buildNarrowedImageBranchSnapshot = (
     const snapshot = state.workspaceContextSnapshot
     if (!snapshot) return state.imageBranchCandidateSnapshot
 
-    const selectedMediaNodeIds = new Set(resolution.narrowedMediaNodeIds)
-    if (!state.imageBranchCandidateSnapshot && selectedMediaNodeIds.size === 0) return undefined
-
     const nodeById = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
     const existingSnapshot = state.imageBranchCandidateSnapshot
     const existingByNodeId = new Map((existingSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]))
+    const selectedMediaSelections = resolution.selections.filter((selection) => isMediaWorkspaceNode(nodeById.get(selection.nodeId)))
+    if (!existingSnapshot && selectedMediaSelections.length === 0) return undefined
+
     const candidates: ImageBranchCandidateImage[] = []
 
-    for (const nodeId of selectedMediaNodeIds) {
-        const existing = existingByNodeId.get(nodeId)
+    for (const selection of selectedMediaSelections) {
+        const existing = existingByNodeId.get(selection.nodeId)
         if (existing) {
             candidates.push(existing)
             continue
         }
-        const node = nodeById.get(nodeId)
+        if (existingSnapshot && selection.role !== 'forced-chip' && selection.role !== 'forced-edge') continue
+        const node = nodeById.get(selection.nodeId)
         const candidate = node ? buildCandidateFromWorkspaceNode(node, state.workspaceId) : undefined
         if (candidate) candidates.push(candidate)
     }
+
+    if (existingSnapshot && candidates.length === 0) return existingSnapshot
 
     const activeTargetNodeId = existingSnapshot?.activeTargetNodeId && candidates.some((candidate) => candidate.nodeId === existingSnapshot.activeTargetNodeId)
         ? existingSnapshot.activeTargetNodeId
@@ -609,7 +658,7 @@ const buildNarrowedImageBranchSnapshot = (
         regionNodeId: existingSnapshot?.regionNodeId ?? snapshot.threadId,
         ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
         promptText: existingSnapshot?.promptText ?? snapshot.promptText,
-        promptFingerprint: existingSnapshot?.promptFingerprint ?? `workspace-context:${snapshot.threadId}:${snapshot.promptText}:${Array.from(selectedMediaNodeIds).join(',')}`,
+        promptFingerprint: existingSnapshot?.promptFingerprint ?? `workspace-context:${snapshot.threadId}:${snapshot.promptText}:${selectedMediaSelections.map((selection) => selection.nodeId).join(',')}`,
         candidates,
         transcriptContext: existingSnapshot?.transcriptContext ?? 'Workspace context selected media candidates.',
     }
@@ -669,6 +718,7 @@ export const resolveWorkspaceContext = async (
             }
         }
 
+        resolution = filterAutoMediaOutsideExistingBranchSnapshot(effectiveState, resolution)
         const contextMessage = await buildSelectedContextMessage(effectiveState, deps, resolution)
         const imageBranchCandidateSnapshot = buildNarrowedImageBranchSnapshot(effectiveState, resolution)
 

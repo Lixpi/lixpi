@@ -369,6 +369,7 @@ export abstract class BaseProvider {
 
         const imageResult = await this.deps.runImageRouter(state)
         if (imageResult.error) {
+            this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
             this.streamPublisher?.error(imageResult.error, imageResult.errorCode, imageResult.errorType)
         }
         return imageResult
@@ -477,8 +478,10 @@ export abstract class BaseProvider {
             const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
             fanoutState = { ...fanoutState, ...promptValidationPatch }
             if (fanoutState.error || !fanoutState.generatedImagePrompt) {
+                const error = fanoutState.error ?? 'Image prompt validation failed for selected image model.'
+                this.streamPublisher?.imageGenerationError(error, generationRun)
                 return {
-                    error: fanoutState.error ?? 'Image prompt validation failed for selected image model.',
+                    error,
                     errorCode: fanoutState.errorCode,
                     errorType: fanoutState.errorType,
                     generatedImages: [],
@@ -495,6 +498,9 @@ export abstract class BaseProvider {
             }
 
             const imageResult = await this.deps.runImageRouter(fanoutState)
+            if (imageResult.error) {
+                this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
+            }
             return {
                 error: imageResult.error,
                 errorCode: imageResult.errorCode,

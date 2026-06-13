@@ -284,6 +284,16 @@ export default class AiInteractionService {
                 return
             }
 
+            if (content.status === STREAM_STATUS.IMAGE_ERROR) {
+                console.log('[AI_INTERACTION] IMAGE_ERROR received:', content)
+                this.segmentsReceiver.receiveSegment({
+                    type: 'image_error',
+                    error: content.error || 'Image generation failed',
+                    ...segmentBase,
+                })
+                return
+            }
+
             // Video generation events (VEO). PENDING creates the canvas placeholder
             // and starts the PIXI traveling outline; GENERATING is a keepalive ping
             // emitted during the multi-minute poll loop; COMPLETE finalizes the

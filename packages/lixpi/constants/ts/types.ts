@@ -190,6 +190,8 @@ export type WorkspaceContextNode = {
     fileId?: string
     imageUrl?: string
     branchId?: string
+    sourceThreadId?: string
+    isCurrentThreadGenerated?: boolean
     isExplicitChip: boolean
     isEdgeForced: boolean
 }
@@ -357,6 +359,13 @@ export type ImageGenerationTraceStreamPayload = {
     aiProvider: string
     generationRun?: MediaGenerationRunMeta
     imageGenerationTrace: ImageGenerationTrace
+}
+
+export type ImageGenerationErrorStreamPayload = {
+    status: 'IMAGE_ERROR'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    error: string
 }
 
 // Mirrors ImageGenerationTrace but for VEO video generation. Reuses the same

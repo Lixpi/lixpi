@@ -374,7 +374,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, 'img-dot-bounce')
 		expectSourceNotToContain(scss, '.workspace-image-progress-viewport')
 		expectExcerptNotToContain(partialHandler, 'partialImageTracker.delete', 'partial image handler')
-		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(threadId)')
+		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(runKey)')
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
 	})
 
@@ -428,10 +428,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)')
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)')
 		// Re-tidies on delete only when the removed node was a lineage member.
-		expectSourceToContain(ts, 'deletedNode && isGeneratedMediaNode(deletedNode)')
-		expectSourceToContain(ts, 'rebalanceGeneratedMediaTrees(remainingNodes, updatedEdges)')
+		expectSourceToContain(ts, 'deletedNode && isBranchTreeCanvasNode(deletedNode)')
+		expectSourceToContain(ts, 'resolveGeneratedMediaTreeState(remainingNodes, updatedEdges)')
 		expectSourceNotToContain(ts, ['stripLegacy', 'Branch', 'Origin', 'Nodes'].join(''))
-		expectSourceNotToContain(ts, ['branch', 'Origin'].join(''))
 	})
 
 })
@@ -1571,12 +1570,12 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'function destroyContextPreviewTooltips(): void')
 		expectSourceToContain(ts, 'contextKind: \'explicit\'')
 		expectSourceToContain(ts, 'function patchWorkspaceContextImprovedDescriptors(improvedDescriptors: Record<string, ContentDescriptor> | undefined): void')
-		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution): void')
+		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution, generationRun?: MediaGenerationRunMeta): void')
 		expectSourceToContain(ts, 'patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)')
-		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)')
+		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
 		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
-		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(threadId, referenceNodeIds)')
-		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ threadId, resolution }) =>')
+		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
+		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ threadId, resolution, generationRun }) =>')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-explicit')
 		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-context-chip-auto')
 	})
@@ -1615,24 +1614,24 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()')
 		expectSourceToContain(ts, '...aiChatPanelState.contextChips,')
 		expectSourceToContain(ts, '...Array.from(selectedNodeIds),')
-		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0]')
+		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]')
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
-		expectSourceToContain(ts, 'referenceNodeIds,')
+		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
 		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
-		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId)')
-		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)')
-		expectSourceToContain(ts, 'partialImageTracker.set(threadId, { nodeId, fileId: fileId || \'\', ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })')
-		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)')
+		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId, generationRun)')
+		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode')
+		expectSourceToContain(ts, 'partialImageTracker.set(runKey, { nodeId, fileId: fileId || \'\', placementKey, ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })')
+		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
 		expectSourceToContain(ts, 'getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
 		expectSourceToContain(ts, 'if (!node || !isGeneratedMediaNode(node)) continue')
 		expectSourceToContain(ts, "resolution.mode === 'edit-active-branch'")
 		expectSourceToContain(ts, "resolution.operationKind === 'edit_existing'")
 		expectSourceToContain(ts, 'Boolean(resolution.branchId && node.generatedBy?.branchId === resolution.branchId)')
 		expectSourceToContain(ts, 'const parentImageNodeId = resolution\n            ? getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
-		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string): Rect | undefined')
-		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number): { x: number; y: number } | undefined')
+		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
+		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
 		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
-		expectSourceToContain(ts, 'const position = getGeneratedMediaInsertionPosition(threadId, imageHeight)')
+		expectSourceToContain(ts, 'const position = getGeneratedMediaInsertionPosition(threadId, imageHeight, generationRun)')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
 
@@ -1646,10 +1645,15 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(aiInteractionService, 'workspaceContextResolution')
 		expectSourceToContain(aiInteractionService, 'content.status === STREAM_STATUS.CONTEXT_RELEVANCE_ERROR')
 		expectSourceToContain(aiInteractionService, "type: 'context_relevance_error'")
+		expectSourceToContain(aiInteractionService, 'content.status === STREAM_STATUS.IMAGE_ERROR')
+		expectSourceToContain(aiInteractionService, "type: 'image_error'")
 		expectSourceToContain(aiChatThreadPlugin, "type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'")
+		expectSourceToContain(aiChatThreadPlugin, "if (type === 'image_error')")
+		expectSourceToContain(aiChatThreadPlugin, 'this.handleImageError(view, event)')
 		expectSourceToContain(aiChatThreadPlugin, "if (type === 'context_relevance_resolved')")
 		expectSourceToContain(aiChatThreadPlugin, 'callbacks.onWorkspaceContextResolvedToCanvas?.({')
 		expectSourceToContain(aiGeneratedImageNode, 'onWorkspaceContextResolvedToCanvas?: (data: {')
+		expectSourceToContain(aiGeneratedImageNode, 'onImageErrorToCanvas?: (data: {')
 		expectSourceToContain(aiGeneratedImageNode, 'resolution: WorkspaceContextResolution')
 	})
 
@@ -1829,7 +1833,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 		// setSelectedNodes accepts a fromMarquee parameter
 		expectSourceToContain(ts, 'function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void')
-		expectSourceToContain(ts, 'selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0')
+		expectSourceToContain(ts, 'selectionIsFromMarquee = fromMarquee && selectedNodeIds.size > 0')
 	})
 
 	it('shouldShowSelectionGroupOverlay returns true for multi-select or marquee, false for plain click', () => {
@@ -2035,7 +2039,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
 		// The drag overlay must pass the original nodeId so handleDragStart can
 		// preserve the original for the click path.
-		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceToContain(ts, 'handleDragStart(e, node.nodeId, {')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
@@ -2289,7 +2293,7 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// of the image.
 		//
 		// Invariant: dragOverlay must pass node.nodeId directly
-		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceToContain(ts, 'handleDragStart(e, node.nodeId, {')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
@@ -2386,45 +2390,45 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 })
 
 // =============================================================================
-// Image error placeholder — uses brokenImageIcon from svgIcons
+// Image generation error cleanup
 // =============================================================================
 
-describe('Image error placeholder — SVG icon from svgIcons', () => {
+describe('Image generation error cleanup', () => {
 	const ts = loadTs()
 
-	it('imports brokenImageIcon from svgIcons', () => {
-		expectSourceToContain(ts, 'brokenImageIcon')
-		expect(ts).toMatch(/import\s*\{[^}]*brokenImageIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
+	function getImageErrorHandler(): string {
+		const start = ts.indexOf('onImageErrorToCanvas: ({ threadId, generationRun }) => {')
+		expect(start, 'WorkspaceCanvas.ts should contain onImageErrorToCanvas handler').toBeGreaterThan(-1)
+		const end = ts.indexOf('onImagePartialToCanvas:', start)
+		expect(end, 'onImageErrorToCanvas handler should end before onImagePartialToCanvas').toBeGreaterThan(start)
+		return ts.slice(start, end)
+	}
+
+	it('does not keep the old broken-image placeholder path', () => {
+		expectSourceNotToContain(ts, 'showImageErrorPlaceholder')
+		expectSourceNotToContain(ts, 'brokenImageIcon')
+		expectSourceNotToContain(ts, 'image-error-placeholder')
 	})
 
-	it('showImageErrorPlaceholder uses innerHTML to inject brokenImageIcon (not raw interpolation)', () => {
-		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
+	it('removes the failed partial image node from state and DOM immediately', () => {
+		const handler = getImageErrorHandler()
 
-		expectExcerptToContain(fnBody, 'innerHTML=${brokenImageIcon}')
-		// brokenImageIcon should only appear inside an innerHTML= binding
-		const allOccurrences = fnBody.match(/brokenImageIcon/g) || []
-		const inlineHtmlOccurrences = fnBody.match(/innerHTML=\$\{brokenImageIcon\}/g) || []
-		expect(allOccurrences.length).toBe(inlineHtmlOccurrences.length)
+		expectExcerptToContain(handler, 'partialImageTracker.delete(runKey)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'selectedNodeIds.delete(existing.nodeId)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const remainingNodes = currentCanvasState.nodes.filter', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const remainingEdges = currentCanvasState.edges.filter', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'commitCanvasStatePreservingEditors(nextState)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'nodeEl?.remove()', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'finishGeneratedMediaRun(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptNotToContain(handler, 'setTimeout', 'onImageErrorToCanvas')
 	})
 
-	it('showImageErrorPlaceholder deduplicates (checks for existing placeholder before appending)', () => {
-		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
+	it('keeps cleanup scoped to the matching generation run key', () => {
+		const handler = getImageErrorHandler()
 
-		expectExcerptToContain(fnBody, "nodeEl.querySelector('.image-error-placeholder')")
-		expectExcerptToContain(fnBody, 'return')
-	})
-
-	it('no inline SVG markup in showImageErrorPlaceholder', () => {
-		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expectExcerptNotToContain(fnBody, '<svg')
-		expectExcerptNotToContain(fnBody, 'viewBox')
+		expectExcerptToContain(handler, 'const runKey = getGeneratedMediaRunKey(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const existing = partialImageTracker.get(runKey)', 'onImageErrorToCanvas')
 	})
 })
 

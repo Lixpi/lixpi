@@ -45,7 +45,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, brokenImageIcon, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -4809,16 +4809,46 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const promptText = getPromptTextFromMessages(messages)
         const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()
-        const placementAnchorNodeId = referenceNodeIds[0]
+        const activeTargetNodeId = referenceNodeIds.length === 1 ? referenceNodeIds[0] : undefined
+        const imageBranchCandidateSnapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: `standalone:${threadId}`,
+            threadId,
+            activeTargetNodeId,
+            nodes: currentCanvasState?.nodes ?? [],
+            edges: currentCanvasState?.edges ?? [],
+            prompt: promptText,
+            contextMediaNodeIds: referenceNodeIds,
+            generatedImageTextByNodeId: getGeneratedImageTextByNodeIdForThread(threadId),
+        })
+        const candidateNodeIds = imageBranchCandidateSnapshot.candidates.map((candidate: ImageBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId)
+        if (candidateNodeIds.length === 0) {
+            pendingGeneratedImagePlacements.set(threadId, {
+                referenceNodeIds,
+                promptText,
+                branchId: `branch-${uuidv4()}`,
+                createdAt: Date.now(),
+            })
+            setGeneratingReferenceNodeIds(threadId, referenceNodeIds)
+            return { promptText }
+        }
+        const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]
         pendingGeneratedImagePlacements.set(threadId, {
             ...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),
-            referenceNodeIds,
+            referenceNodeIds: candidateNodeIds,
             promptText,
             branchId: `branch-${uuidv4()}`,
+            imageBranchCandidateSnapshot,
             createdAt: Date.now(),
         })
-        setGeneratingReferenceNodeIds(threadId, referenceNodeIds)
-        return { promptText }
+        setGeneratingReferenceNodeIds(threadId, candidateNodeIds)
+        console.info('[CANVAS] standalone image branch candidate snapshot', {
+            threadId,
+            candidateCount: imageBranchCandidateSnapshot.candidates.length,
+            promptFingerprint: imageBranchCandidateSnapshot.promptFingerprint,
+            activeTargetNodeId: imageBranchCandidateSnapshot.activeTargetNodeId,
+            candidateNodeIds,
+        })
+        return { promptText, imageBranchCandidateSnapshot }
     }
 
     function getPendingGeneratedImageLineage(
@@ -5127,17 +5157,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return `data:image/png;base64,${imageUrl}`
     }
 
-    function showImageErrorPlaceholder(nodeEl: HTMLElement): void {
-        if (nodeEl.querySelector('.image-error-placeholder')) return
-
-        nodeEl.appendChild(html`
-            <div className="image-error-placeholder">
-                <span innerHTML=${brokenImageIcon}></span>
-                <span>Image unavailable</span>
-            </div>
-        `)
-    }
-
     // Append an image node to the DOM directly without a full renderNodes() cycle.
     // This preserves active editors and their streaming state.
     function appendImageNodeToDOM(imageNode: ImageCanvasNode): void {
@@ -5303,28 +5322,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             selectedNodeIds.delete(existing.nodeId)
             syncPixiGeneratingImageNodes()
 
-            // Show error placeholder on the node so the user sees what failed,
-            // then remove it from the canvas state (and DOM) after a short delay.
-            const nodeEl = viewportEl?.querySelector(`[data-node-id="${existing.nodeId}"]`) as HTMLElement | null
-            if (nodeEl) showImageErrorPlaceholder(nodeEl)
-
             const errorNodeId = existing.nodeId
-            setTimeout(() => {
-                if (!currentCanvasState) return
-                const remainingNodes = currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId)
-                const remainingEdges = currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
-                    edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
-                )
-                const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)
-                const nextState: CanvasState = {
-                    ...currentCanvasState,
-                    viewport: currentCanvasState.viewport,
-                    nodes: resolvedTreeState.nodes,
-                    edges: resolvedTreeState.edges,
-                }
-                commitCanvasStatePreservingEditors(nextState)
-                nodeEl?.remove()
-            }, 4000)
+            const remainingNodes = currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId)
+            const remainingEdges = currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
+                edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
+            )
+            const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)
+            const nextState: CanvasState = {
+                ...currentCanvasState,
+                viewport: currentCanvasState.viewport,
+                nodes: resolvedTreeState.nodes,
+                edges: resolvedTreeState.edges,
+            }
+            commitCanvasStatePreservingEditors(nextState)
+            const nodeEl = viewportEl?.querySelector(`[data-node-id="${errorNodeId}"]`) as HTMLElement | null
+            nodeEl?.remove()
             finishGeneratedMediaRun(threadId, generationRun)
         },
 

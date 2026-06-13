@@ -335,6 +335,18 @@ export class StreamPublisher {
         })
     }
 
+    imageGenerationError(message: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.IMAGE_ERROR,
+                aiProvider: this.provider,
+                error: message,
+                ...(generationRun ? { generationRun } : {}),
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
     videoGenerationTrace(trace: VideoGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {

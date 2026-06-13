@@ -188,6 +188,7 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - stream errors
 - `image_partial`
 - `image_complete`
+- `image_error`
 - `image_branch_resolved`
 - `image_branch_resolution_error`
 - `image_generation_trace`

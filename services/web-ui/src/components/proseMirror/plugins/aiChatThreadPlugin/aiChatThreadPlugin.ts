@@ -69,7 +69,7 @@ type VideoOptions = {
 type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { aiModels?: string[]; imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
-type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
+type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
@@ -1445,6 +1445,11 @@ class AiChatThreadPluginClass {
                 return
             }
 
+            if (type === 'image_error') {
+                this.handleImageError(view, event)
+                return
+            }
+
             // Video generation events — VEO is async (submit/poll), no partial
             // frames. PENDING creates the placeholder, GENERATING is a keepalive
             // heartbeat, COMPLETE finalizes the same canvas node, ERROR cleans up.
@@ -1567,6 +1572,20 @@ class AiChatThreadPluginClass {
             this.removePartialImagesInChat(view, threadId, generationRun)
         }
         this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), threadId, generationRun)
+    }
+
+    private handleImageError(view: EditorView, event: SegmentEvent): void {
+        const threadId = event.threadId || event.aiChatThreadId
+        if (!threadId) return
+
+        this.removePartialImagesInChat(view, threadId, event.generationRun)
+        const callbacks = getAiGeneratedImageCallbacks()
+        callbacks.onImageErrorToCanvas?.({
+            threadId,
+            error: event.error || 'Image generation failed',
+            generationRun: event.generationRun,
+        })
+        this.handleStreamEnd(view.state, (tr) => view.dispatch(tr), threadId, event.generationRun)
     }
 
     private handleImagePartial(view: EditorView, event: SegmentEvent): void {

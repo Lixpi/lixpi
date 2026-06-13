@@ -613,12 +613,13 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(reasoningTagsRow.getAttribute('data-visible')).toBe('true')
             expect(imageTagsRow.getAttribute('data-visible')).toBe('false')
             expect(reasoningLabels()).toEqual(['Sonnet 4.6', 'Opus 4.8'])
-            expect(reasoningTagsRow.querySelector('.tag-pill-label')!.getAttribute('text-anchor')).toBe('start')
+            expect(reasoningTagsRow.querySelector('.tag-pill-label')!.getAttribute('text-anchor')).toBe('middle')
             expect(reasoningTagsRow.querySelector('.tag-pill-close')!.getAttribute('transform')).toBe('translate(11, 12)')
             expect(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('stroke')).toBe('rgba(105, 115, 133, 0.12)')
-            expect(Number(
-                reasoningTagsRow.querySelectorAll('.tag-pill-background')[1]!.getAttribute('width')
-            )).toBeLessThan(96)
+            const initialPillWidths = Array.from(reasoningTagsRow.querySelectorAll('.tag-pill-background'))
+                .map((element) => Number(element.getAttribute('width')))
+            expect(initialPillWidths[1]).toBeLessThan(initialPillWidths[0]!)
+            expect(initialPillWidths[1]).toBeGreaterThan(0)
 
             reasoningTagsRow.querySelector('.tag-pill-close')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
             nv.update!(mockView.state.doc.firstChild!)
@@ -626,7 +627,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(mockView.state.doc.firstChild!.attrs.aiModel).toBe('Anthropic:opus-4-8')
             expect(mockView.state.doc.firstChild!.attrs.aiModels).toBe(JSON.stringify(['Anthropic:opus-4-8']))
             expect(reasoningLabels()).toEqual(['Opus 4.8'])
-            expect(Number(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('width'))).toBeLessThan(96)
+            expect(Number(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('width'))).toBe(initialPillWidths[1])
 
             nv.destroy!()
             aiModelsStore.setAiModels([])

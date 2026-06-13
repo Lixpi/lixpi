@@ -34,6 +34,26 @@ import { join } from 'node:path'
 
 type VeoImageInput = { imageBytes: string; mimeType: string }
 
+const getGooglePartSummary = (part: any): Record<string, unknown> => {
+    const text = typeof part?.text === 'string' ? part.text : ''
+    return {
+        hasText: text.length > 0,
+        textPreview: text ? text.slice(0, 240) : '',
+        hasInlineData: Boolean(part?.inlineData?.data || part?.inline_data?.data),
+        hasFunctionCall: Boolean(part?.functionCall || part?.function_call),
+    }
+}
+
+export const getGoogleImageResponseSummary = (response: any): Record<string, unknown> => ({
+    promptFeedback: response?.promptFeedback ?? response?.prompt_feedback,
+    candidates: (response?.candidates ?? []).map((candidate: any, index: number) => ({
+        index,
+        finishReason: candidate?.finishReason ?? candidate?.finish_reason,
+        safetyRatings: candidate?.safetyRatings ?? candidate?.safety_ratings,
+        partTypes: (candidate?.content?.parts ?? []).map(getGooglePartSummary),
+    })),
+})
+
 export function buildVeoReferenceImages(refs: VeoImageInput[]): Array<{ image: VeoImageInput; referenceType: 'asset' }> {
     return refs.map(image => ({ image, referenceType: 'asset' }))
 }
@@ -201,7 +221,7 @@ export class GoogleProvider extends BaseProvider {
 
                 if (imageParts.length === 0) {
                     const errMsg = `Google image model ${modelVersion} returned no inline image data.`
-                    err(`[Google:${this.instanceKey}] ${errMsg}`)
+                    err(`[Google:${this.instanceKey}] ${errMsg} ${JSON.stringify(getGoogleImageResponseSummary(response), null, 0)}`)
                     update.error = errMsg
                 } else {
                     for (let i = 0; i < imageParts.length - 1; i++) {

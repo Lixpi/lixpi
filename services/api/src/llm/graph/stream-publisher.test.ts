@@ -246,4 +246,30 @@ describe('StreamPublisher extraction progress', () => {
         }))
     })
 
+    it('publishes image generation errors with media run metadata', () => {
+        const nats = makeFakeNats()
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            mediaRunId: 'reasoning-1:image:0',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:gemini-2.5-flash-image',
+            mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+        } as const
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
+
+        publisher.imageGenerationError('no inline image data')
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toEqual({
+            status: STREAM_STATUS.IMAGE_ERROR,
+            aiProvider: 'Anthropic',
+            error: 'no inline image data',
+            generationRun,
+        })
+    })
+
 })
