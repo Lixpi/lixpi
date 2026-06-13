@@ -531,12 +531,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 // Re-tidy only when a lineage member left a tree. Deleting an
                 // unrelated, non-tree node must never trigger tree layout (loose
                 // nodes and trees interact only as rigid blocks, never by snapping).
-                const updatedNodes = deletedNode && isBranchTreeCanvasNode(deletedNode)
-                    ? rebalanceGeneratedMediaTrees(remainingNodes, updatedEdges)
-                    : remainingNodes
+                const resolvedTreeState = deletedNode && isBranchTreeCanvasNode(deletedNode)
+                    ? resolveGeneratedMediaTreeState(remainingNodes, updatedEdges)
+                    : { nodes: remainingNodes, edges: updatedEdges }
 
                 selectNode(null)
-                commitCanvasState({ ...currentCanvasState, nodes: updatedNodes, edges: updatedEdges })
+                commitCanvasState({ ...currentCanvasState, nodes: resolvedTreeState.nodes, edges: resolvedTreeState.edges })
             },
             onDownloadMedia: (nodeId) => {
                 const node = currentCanvasState?.nodes.find((candidate: CanvasNode) => candidate.nodeId === nodeId)
@@ -4881,6 +4881,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return isGeneratedMediaNode(node) || node.type === 'branchOrigin'
     }
 
+    function pruneOrphanBranchOrigins(nodes: CanvasNode[], edges: WorkspaceEdge[]): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
+        const referencedOriginNodeIds = new Set<string>()
+        for (const node of nodes) {
+            if (node.type !== 'image' && node.type !== 'video') continue
+            if (node.generatedBy?.branchOriginNodeId) referencedOriginNodeIds.add(node.generatedBy.branchOriginNodeId)
+        }
+
+        const removedOriginNodeIds = new Set<string>()
+        const prunedNodes = nodes.filter((node: CanvasNode) => {
+            const shouldRemove = node.type === 'branchOrigin' && !referencedOriginNodeIds.has(node.nodeId)
+            if (shouldRemove) removedOriginNodeIds.add(node.nodeId)
+            return !shouldRemove
+        })
+        if (removedOriginNodeIds.size === 0) return { nodes, edges }
+
+        return {
+            nodes: prunedNodes,
+            edges: edges.filter((edge: WorkspaceEdge) =>
+                !removedOriginNodeIds.has(edge.sourceNodeId) && !removedOriginNodeIds.has(edge.targetNodeId)
+            ),
+        }
+    }
+
+    function resolveGeneratedMediaTreeState(nodes: CanvasNode[], edges: WorkspaceEdge[]): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
+        const pruned = pruneOrphanBranchOrigins(nodes, edges)
+        return {
+            nodes: rebalanceGeneratedMediaTrees(pruned.nodes, pruned.edges),
+            edges: pruned.edges,
+        }
+    }
+
     // Compose a media descriptor for AI-generated media for free from the branch
     // resolver's summaries already carried on generatedBy — no extra model call.
     // Uploaded media has no generatedBy and is captioned separately (see
@@ -5280,13 +5311,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const errorNodeId = existing.nodeId
             setTimeout(() => {
                 if (!currentCanvasState) return
+                const remainingNodes = currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId)
+                const remainingEdges = currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
+                    edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
+                )
+                const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)
                 const nextState: CanvasState = {
                     ...currentCanvasState,
                     viewport: currentCanvasState.viewport,
-                    nodes: currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId),
-                    edges: currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
-                        edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
-                    ),
+                    nodes: resolvedTreeState.nodes,
+                    edges: resolvedTreeState.edges,
                 }
                 commitCanvasStatePreservingEditors(nextState)
                 nodeEl?.remove()
@@ -5831,12 +5865,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const errorNodeId = existing.nodeId
             setTimeout(() => {
                 if (!currentCanvasState) return
+                const remainingNodes = currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId)
+                const remainingEdges = currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
+                    edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
+                )
+                const resolvedTreeState = resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)
                 const nextState: CanvasState = {
                     ...currentCanvasState,
-                    nodes: currentCanvasState.nodes.filter((node: CanvasNode) => node.nodeId !== errorNodeId),
-                    edges: currentCanvasState.edges.filter((edge: WorkspaceEdge) =>
-                        edge.sourceNodeId !== errorNodeId && edge.targetNodeId !== errorNodeId
-                    ),
+                    nodes: resolvedTreeState.nodes,
+                    edges: resolvedTreeState.edges,
                 }
                 commitCanvasStatePreservingEditors(nextState)
                 const nodeEl = viewportEl?.querySelector(`[data-node-id="${errorNodeId}"]`) as HTMLElement | null

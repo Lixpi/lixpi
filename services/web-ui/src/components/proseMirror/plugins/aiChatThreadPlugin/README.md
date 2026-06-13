@@ -105,7 +105,7 @@ Assistant response node created as the request is submitted, then filled by stre
 - Content: `(paragraph | block)*`; multi-model media requests store one `aiReasoningSection` child per reasoning run.
 - Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
 - Request metadata attrs: `generationRequestId`
-- Empty receiving responses show the shell ring loading indicator until the first content arrives.
+- Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting bubble stays compact without clipping the spinner.
 - Response nodes in the chat thread do not render an assistant avatar; model attribution lives on each generation-details collapsible.
 
 ### `aiReasoningSection`
@@ -207,6 +207,7 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - Media nodes are grouped by `mediaRunId`.
 - Generation trace collapsibles are grouped by `reasoningRunId`.
 - `receivingThreadIds` is thread-level, while `receivingRunKeysByThread` keeps sibling reasoning runs active independently.
+- Local `aiReasoningSection` placeholders are created only for media-generation matrix requests, matching the service path that emits `generationRun`. Scalar single-model media requests use a plain `aiResponseMessage` so the normal stream lifecycle owns the loading indicator.
 
 ## Positioning Helpers
 

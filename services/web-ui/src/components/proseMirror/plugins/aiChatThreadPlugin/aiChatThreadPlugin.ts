@@ -2499,6 +2499,13 @@ class AiChatThreadPluginClass {
             ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
         } : undefined
 
+        const selectedReasoningModelCount = reasoningModelIds.length > 0 ? reasoningModelIds.length : effectiveAiModel ? 1 : 0
+        const selectedImageModelCount = imageModelIds.length > 0 ? imageModelIds.length : effectiveImageModel ? 1 : 0
+        const selectedVideoModelCount = videoModelIds.length > 0 ? videoModelIds.length : effectiveVideoModel ? 1 : 0
+        const selectedModelCount = selectedReasoningModelCount + selectedImageModelCount + selectedVideoModelCount
+        const scalarModelCount = (effectiveAiModel ? 1 : 0) + (effectiveImageModel ? 1 : 0) + (effectiveVideoModel ? 1 : 0)
+        const usesMediaGenerationMatrix = selectedModelCount > scalarModelCount
+
         const requestPayload = {
             messages,
             aiModel: effectiveAiModel,
@@ -2514,7 +2521,7 @@ class AiChatThreadPluginClass {
             threadId,
             getReasoningModelProvider(effectiveAiModel),
             reasoningModelIds.length > 0 ? reasoningModelIds : [effectiveAiModel],
-            Boolean(imageOptions || videoOptions),
+            usesMediaGenerationMatrix,
         )
 
         queueMicrotask(() => {
