@@ -352,7 +352,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             padding-top: 0rem;
         }
 
-        // Bubble wrapper contains spinner and content
+        // Bubble wrapper contains the loading indicator and content
         .ai-response-message-bubble {
             display: flex;
             flex-direction: column;
@@ -362,10 +362,10 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             margin-left: 0.75rem;
             width: calc(100% - 0.75rem);
             min-height: $aiResponseMessageEmptyNodeMinHeight;
-            min-width: 5rem; // Ensure space for spinner
+            min-width: 5rem;
             position: relative;
             box-sizing: border-box;
-            overflow: visible; // Prevent clipping spinner dots
+            overflow: visible;
             transition: max-width 0.3s ease-in-out;
 
             @include speechBubbleTail((
@@ -378,26 +378,20 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 background-color: var(--ai-response-bubble-color, #f7f7fd);
             }
 
-            // Spinner inside the bubble
-            .ai-response-message-spinner {
+            .ai-response-loading-spinner {
                 display: none;
                 pointer-events: none;
             }
 
-            &.is-waiting .ai-response-message-spinner {
+            &.is-waiting .ai-response-loading-spinner {
                 display: block;
-                height: 1.5rem;
-                width: 3rem; // Space for the 3 dots
-                margin: 0.5rem 1.5rem 0.5rem 2.5rem; // Extra left margin for ::before
-                @include horizontalSpinnerAnimation((
-                    size: .5rem,
-                    color: $aiResponseMessageIndicatorColor,
-                    duration: 1000ms,
-                    delayStep: 150ms,
-                    gap: 1rem,
-                    shadowOffset: -0.85rem,
-                    fontSize: 20px
-                ));
+                width: 14px;
+                height: 14px;
+                margin: 0.75rem 1rem 0.25rem 1rem;
+                border: 2px solid rgba(42, 45, 47, 0.15);
+                border-top-color: rgba(42, 45, 47, 0.55);
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
             }
         }
 

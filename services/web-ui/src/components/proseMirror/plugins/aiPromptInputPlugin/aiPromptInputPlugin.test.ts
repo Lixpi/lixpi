@@ -1414,6 +1414,42 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         // After submit, dispatch should have been called to clear content
         expect(mockView.dispatch).toHaveBeenCalled()
     })
+
+    it('preserves model settings attrs when clearing input after submit', () => {
+        const { options } = createPluginOptions()
+        const plugin = createAiPromptInputPlugin(options)
+        const selectedModels = ['Google:gemini-flash-latest', 'Anthropic:sonnet-4-6']
+        const serializedModels = JSON.stringify(selectedModels)
+
+        const testDoc = doc(promptInput({
+            aiModel: selectedModels[0],
+            aiModels: serializedModels,
+            useMultipleModels: true,
+            useMultipleReasoningModels: true,
+            aiImageModel: 'Google:gemini-2.5-flash-image',
+            imageGenerationSize: 'auto',
+        }, p('Hello world')))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+
+        const mockView = {
+            state,
+            dispatch: vi.fn((tr: Transaction) => {
+                (mockView as any).state = (mockView as any).state.apply(tr)
+            }),
+        } as unknown as EditorView
+
+        const event = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true })
+        plugin.props.handleDOMEvents!.keydown!(mockView, event)
+
+        const inputNode = (mockView as any).state.doc.firstChild!
+        expect(inputNode.textContent).toBe('')
+        expect(inputNode.attrs.aiModel).toBe(selectedModels[0])
+        expect(inputNode.attrs.aiModels).toBe(serializedModels)
+        expect(inputNode.attrs.useMultipleModels).toBe(true)
+        expect(inputNode.attrs.useMultipleReasoningModels).toBe(true)
+        expect(inputNode.attrs.aiImageModel).toBe('Google:gemini-2.5-flash-image')
+        expect(inputNode.attrs.imageGenerationSize).toBe('auto')
+    })
 })
 
 // =============================================================================

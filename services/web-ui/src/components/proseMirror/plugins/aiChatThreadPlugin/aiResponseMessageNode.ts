@@ -91,7 +91,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     // Get references to the nested elements for manipulation
     const parentWrapper = responseShell.wrapper
     const aiResponseMessageContainer = responseShell.messageEl
-    const spinnerElement = responseShell.spinnerEl
+    const loadingElement = responseShell.loadingEl
     const bubbleElement = responseShell.bubbleEl
     const responseMessageContent = responseShell.contentEl
     const runMetaElement = html`<div className="ai-response-run-meta"></div>`
@@ -111,19 +111,19 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
     // Response nodes no longer carry an avatar, so the only "animation" left is the
     // one-shot content reveal on first render. The "receiving" state is conveyed by
-    // the in-bubble spinner (see updateSpinnerState), not an animated avatar.
+    // the in-bubble loading indicator (see updateLoadingState), not an animated avatar.
     const updateAnimation = () => {
         responseMessageContent.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
     }
 
-    const updateSpinnerState = () => {
+    const updateLoadingState = () => {
         const isWaitingForContent = node.childCount === 0 && node.attrs.isReceivingAnimation
 
         bubbleElement.classList.toggle('is-waiting', isWaitingForContent)
         aiResponseMessageContainer.classList.toggle('is-empty', isWaitingForContent)
 
-        if (spinnerElement) {
-            spinnerElement.classList.toggle('is-active', isWaitingForContent)
+        if (loadingElement) {
+            loadingElement.classList.toggle('is-active', isWaitingForContent)
         }
     }
 
@@ -144,7 +144,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     }
 
     updateAnimation()
-    updateSpinnerState()
+    updateLoadingState()
     updateRunMeta()
 
     // Return the node view object
@@ -169,7 +169,7 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
             node = updatedNode    // Update the node reference and refresh the animation
             responseShell.setMessageId(node.attrs.id)
             updateAnimation()    // Update the content-reveal animation state
-            updateSpinnerState()
+            updateLoadingState()
             updateRunMeta()
 
             return true    // Indicate successful update

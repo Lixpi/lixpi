@@ -105,7 +105,7 @@ Assistant response node created as the request is submitted, then filled by stre
 - Content: `(paragraph | block)*`; multi-model media requests store one `aiReasoningSection` child per reasoning run.
 - Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
 - Request metadata attrs: `generationRequestId`
-- Empty receiving responses show the shell spinner until the first content arrives.
+- Empty receiving responses show the shell ring loading indicator until the first content arrives.
 - Response nodes in the chat thread do not render an assistant avatar; model attribution lives on each generation-details collapsible.
 
 ### `aiReasoningSection`

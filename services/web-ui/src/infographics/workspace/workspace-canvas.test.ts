@@ -876,6 +876,11 @@ describe('Workspace AI chat panel — session history interactions', () => {
 		expectExcerptToContain(submitBody, "const submittedDraftTabId = submittedTab?.type === 'draft' ? submittedTab.tabId : null", 'createStandaloneThreadAndSubmit')
 		expectExcerptToContain(submitBody, 'replaceAiChatDraftSidebarTab(submittedDraftTabId, threadId)', 'createStandaloneThreadAndSubmit')
 		expectExcerptToContain(submitBody, 'activeAiChatSidebarTabId = `thread:${threadId}`', 'createStandaloneThreadAndSubmit')
+		expectSourceToContain(ts, 'buildAiPromptDraftAttrsFromSubmitData,')
+		expectSourceToContain(ts, 'buildAiPromptDraftFromText,')
+		expectExcerptToContain(submitBody, 'const submittedThreadDraftKey = `thread:${threadId}`', 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, "const submittedThreadDraft = buildAiPromptDraftFromText('', buildAiPromptDraftAttrsFromSubmitData(data))", 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, '[submittedThreadDraftKey]: { content: submittedThreadDraft }', 'createStandaloneThreadAndSubmit')
 	})
 
 	it('keeps thread sessions renderable with message count and status metadata', () => {

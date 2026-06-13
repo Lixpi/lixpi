@@ -26,6 +26,34 @@ function loadScss(): string {
 	)
 }
 
+function loadSource(filename: string): string {
+	return readFileSync(
+		resolve(__dirname, filename),
+		'utf-8'
+	)
+}
+
+function loadAnimationsScss(): string {
+	return readFileSync(
+		resolve(__dirname, '../../../../sass/components/_animations.scss'),
+		'utf-8'
+	)
+}
+
+function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
+	expect(
+		source.includes(snippet),
+		`${label} should contain:\n${snippet}`
+	).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string, label = 'source excerpt'): void {
+	expect(
+		source.includes(snippet),
+		`${label} should not contain:\n${snippet}`
+	).toBe(false)
+}
+
 // =============================================================================
 // aiResponseMessage — id attribute
 // =============================================================================
@@ -176,10 +204,10 @@ describe('aiResponseMessage — parseDOM spec', () => {
 // aiResponseMessageNodeView — ignoreMutation
 // =============================================================================
 
-function createResponseNodeView(attrs: Record<string, unknown> = {}) {
+function createResponseNodeView(attrs: Record<string, unknown> = {}, content: any = schema.nodes.paragraph.create(null, schema.text('Hello'))) {
 	const node = schema.nodes.aiResponseMessage.create(
 		{ id: 'test-msg-1', aiProvider: 'Anthropic', ...attrs },
-		schema.nodes.paragraph.create(null, schema.text('Hello'))
+		content
 	)
 
 	const mockView = {
@@ -348,6 +376,34 @@ describe('aiResponseMessageNodeView — DOM structure', () => {
 		expect(dom.querySelector('.user-avatar')).toBeNull()
 	})
 
+	it('shows the ring loading indicator while an empty response is receiving', () => {
+		const { nodeView } = createResponseNodeView({ isReceivingAnimation: true }, null)
+		const dom = nodeView.dom as HTMLElement
+		const bubble = dom.querySelector('.ai-response-message-bubble') as HTMLElement
+		const loadingIndicator = dom.querySelector('.ai-response-loading-spinner') as HTMLElement
+
+		expect(loadingIndicator).not.toBeNull()
+		expect(bubble.classList.contains('is-waiting')).toBe(true)
+		expect(loadingIndicator.classList.contains('is-active')).toBe(true)
+		expect(dom.querySelector(`.${['ai-response', 'message', 'spinner'].join('-')}`)).toBeNull()
+	})
+
+	it('clears the loading indicator after content arrives', () => {
+		const { nodeView } = createResponseNodeView({ isReceivingAnimation: true }, null)
+		const dom = nodeView.dom as HTMLElement
+		const bubble = dom.querySelector('.ai-response-message-bubble') as HTMLElement
+		const loadingIndicator = dom.querySelector('.ai-response-loading-spinner') as HTMLElement
+		const updatedNode = schema.nodes.aiResponseMessage.create(
+			{ id: 'test-msg-1', aiProvider: 'Anthropic', isReceivingAnimation: false },
+			schema.nodes.paragraph.create(null, schema.text('Ready'))
+		)
+
+		nodeView.update!(updatedNode, [], null as any)
+
+		expect(bubble.classList.contains('is-waiting')).toBe(false)
+		expect(loadingIndicator.classList.contains('is-active')).toBe(false)
+	})
+
 	it('keeps the provider avatar compact so the bubble can use full width', () => {
 		const scss = loadScss()
 		const avatarBlock = scss.match(/\.user-avatar \{[\s\S]*?\n    \}/)
@@ -383,5 +439,29 @@ describe('aiResponseMessageNodeView — DOM structure', () => {
 		const result = nodeView.update!(wrongNode, [], null as any)
 
 		expect(result).toBe(false)
+	})
+})
+
+// =============================================================================
+// aiResponseMessageNodeView — loading indicator source guard
+// =============================================================================
+
+describe('aiResponseMessageNodeView — loading indicator source guard', () => {
+	it('uses the ring loading contract and removes the legacy dot loader contract', () => {
+		const oldSpinnerClass = ['ai-response', 'message', 'spinner'].join('-')
+		const oldSpinnerMixin = ['horizontal', 'Spinner', 'Animation'].join('')
+		const shellSource = loadSource('aiChatMessageShells.ts')
+		const responseNodeSource = loadSource('aiResponseMessageNode.ts')
+		const threadScss = loadScss()
+		const animationScss = loadAnimationsScss()
+
+		expectSourceToContain(shellSource, 'ai-response-loading-spinner', 'response shell source')
+		expectSourceToContain(threadScss, '.ai-response-loading-spinner', 'thread SCSS')
+		expectSourceToContain(threadScss, 'animation: spin 0.8s linear infinite;', 'thread SCSS')
+		expectSourceNotToContain(shellSource, oldSpinnerClass, 'response shell source')
+		expectSourceNotToContain(responseNodeSource, oldSpinnerClass, 'response node source')
+		expectSourceNotToContain(threadScss, oldSpinnerClass, 'thread SCSS')
+		expectSourceNotToContain(threadScss, oldSpinnerMixin, 'thread SCSS')
+		expectSourceNotToContain(animationScss, oldSpinnerMixin, 'shared animations SCSS')
 	})
 })

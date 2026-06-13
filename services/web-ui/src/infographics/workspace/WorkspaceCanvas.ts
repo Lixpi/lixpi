@@ -114,6 +114,10 @@ import {
     getAiChatPanelState,
     setAiChatPanelState,
 } from '$src/infographics/workspace/aiChatPanelState.ts'
+import {
+    buildAiPromptDraftAttrsFromSubmitData,
+    buildAiPromptDraftFromText,
+} from '$src/infographics/workspace/aiPromptDraft.ts'
 import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 import {
     createSlidingTabsSwitch,
@@ -1193,7 +1197,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const responseShell = createAiResponseMessageShell({
                 provider: responseProvider,
                 wrapperClassName: 'canvas-generated-image-response',
-                includeSpinner: false,
+                includeLoadingIndicator: false,
             })
             panel.appendChild(userShell.wrapper)
             panel.appendChild(responseShell.wrapper)
@@ -3159,44 +3163,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         persistAiChatSidebarState()
     }
 
-    function buildAiPromptDraftFromText(promptText: string, attrs: Record<string, any> = {}): object {
-        const text = promptText.trim()
-        const paragraph = text
-            ? { type: 'paragraph', content: [{ type: 'text', text }] }
-            : { type: 'paragraph' }
-        const legacyUseMultipleModels = attrs.useMultipleModels === true || attrs.useMultipleModels === 'true'
-        const rawUseMultipleReasoningModels = attrs.useMultipleReasoningModels === true || attrs.useMultipleReasoningModels === 'true'
-        const rawUseMultipleImageModels = attrs.useMultipleImageModels === true || attrs.useMultipleImageModels === 'true'
-        const rawUseMultipleVideoModels = attrs.useMultipleVideoModels === true || attrs.useMultipleVideoModels === 'true'
-        const hasSectionModelMode = rawUseMultipleReasoningModels || rawUseMultipleImageModels || rawUseMultipleVideoModels
-        const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
-        return {
-            type: 'doc',
-            content: [
-                {
-                    type: 'aiPromptInput',
-                    attrs: {
-                        aiModel: attrs.aiModel || '',
-                        aiModels: attrs.aiModels || '',
-                        useMultipleModels: legacyUseMultipleModels || hasSectionModelMode,
-                        useMultipleReasoningModels: rawUseMultipleReasoningModels || useLegacyModeFallback,
-                        useMultipleImageModels: rawUseMultipleImageModels || useLegacyModeFallback,
-                        useMultipleVideoModels: rawUseMultipleVideoModels || useLegacyModeFallback,
-                        aiImageModel: attrs.aiImageModel || '',
-                        aiImageModels: attrs.aiImageModels || '',
-                        imageGenerationSize: attrs.imageGenerationSize || 'auto',
-                        aiVideoModel: attrs.aiVideoModel || '',
-                        aiVideoModels: attrs.aiVideoModels || '',
-                        videoAspectRatio: attrs.videoAspectRatio || '',
-                        videoResolution: attrs.videoResolution || '',
-                        videoDuration: attrs.videoDuration || '',
-                    },
-                    content: [paragraph],
-                },
-            ],
-        }
-    }
-
     function getActiveAiPromptInputAttrs(): Record<string, any> {
         const view = activeAiChatPromptEditor?.editorView
         const attrs: Record<string, any> = {}
@@ -3493,7 +3459,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         activeAiChatSidebarTabId = `thread:${threadId}`
         activeAiChatThreadId = threadId
         activeAiChatRootNodeId = null
-        aiChatPanelState = { ...aiChatPanelState, isOpen: true }
+        const submittedThreadDraftKey = `thread:${threadId}`
+        const submittedThreadDraft = buildAiPromptDraftFromText('', buildAiPromptDraftAttrsFromSubmitData(data))
+        aiChatPanelState = {
+            ...aiChatPanelState,
+            isOpen: true,
+            drafts: {
+                ...(aiChatPanelState.drafts ?? {}),
+                [submittedThreadDraftKey]: { content: submittedThreadDraft },
+            },
+        }
         persistAiChatSidebarState()
         renderActiveAiChatPanel(undefined, thread)
         promptInputController.setTarget({

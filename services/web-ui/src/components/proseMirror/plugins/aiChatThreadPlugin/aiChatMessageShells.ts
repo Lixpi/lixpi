@@ -15,7 +15,7 @@ export type AiResponseMessageShell = {
     contentEl: HTMLElement
     metaEl: HTMLElement
     avatarEl: HTMLElement | null
-    spinnerEl: HTMLElement | null
+    loadingEl: HTMLElement | null
     setMessageId: (messageId: string) => void
     setProvider: (provider: string | null | undefined, iconOverride?: string | null) => void
 }
@@ -27,7 +27,7 @@ type MessageShellOptions = {
 type ResponseMessageShellOptions = MessageShellOptions & {
     provider?: string | null
     messageId?: string
-    includeSpinner?: boolean
+    includeLoadingIndicator?: boolean
     includeAvatar?: boolean
 }
 
@@ -52,9 +52,9 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
     const wrapperClassName = ['ai-response-message-wrapper', options.wrapperClassName].filter(Boolean).join(' ')
     const provider = options.provider ?? ''
     const providerIcon = getAiProviderIcon(provider)
-    const spinner = options.includeSpinner === false
+    const loadingIndicator = options.includeLoadingIndicator === false
         ? null
-        : html`<div className="ai-response-message-spinner" aria-hidden="true"></div>`
+        : html`<div className="ai-response-loading-spinner" aria-hidden="true"></div>`
     const avatar = options.includeAvatar === false
         ? null
         : html`<div className=${`user-avatar assistant-${getAiProviderClassSuffix(provider)}`} innerHTML=${providerIcon ?? ''}></div>`
@@ -62,7 +62,7 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
         <div className=${wrapperClassName} data=${{ messageId: options.messageId ?? '' }}>
             <div className="ai-response-message">
                 <div className="ai-response-message-bubble">
-                    ${spinner}
+                    ${loadingIndicator}
                     <div className="ai-response-message-content"></div>
                 </div>
             </div>
@@ -89,7 +89,7 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
         contentEl: wrapper.querySelector('.ai-response-message-content') as HTMLElement,
         metaEl: wrapper.querySelector('.ai-response-message-meta') as HTMLElement,
         avatarEl: wrapper.querySelector('.user-avatar') as HTMLElement | null,
-        spinnerEl: wrapper.querySelector('.ai-response-message-spinner') as HTMLElement | null,
+        loadingEl: wrapper.querySelector('.ai-response-loading-spinner') as HTMLElement | null,
         setMessageId: (messageId: string) => {
             wrapper.dataset.messageId = messageId
         },
