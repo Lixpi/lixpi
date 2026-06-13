@@ -27,6 +27,14 @@ Agents MUST NOT run project setup, package scripts, build scripts, docs builds, 
 
 If the Dockerized command is not documented or the required container is unavailable, stop and ask instead of falling back to a host command.
 
+## File Deletion
+
+Agents MUST NOT delete repository files silently.
+
+If cleanup, reverting accidental edits, restoring a diff, replacing a file, moving a file, renaming a file, or "undoing my changes" would delete repository files, stop and ask the user to confirm deletion of the exact file path(s) before applying that change. This includes delete-file patches, shell commands that remove files, and any edit that would make `git status` show deleted files.
+
+After the user confirms, delete only the confirmed path(s). If the user does not confirm, keep the files and report them as cleanup candidates. A direct user request to delete exact path(s) in the current thread counts as confirmation for those path(s). When undoing agent-created changes, restore previous file contents instead of deleting files unless the user confirms deletion.
+
 ## Documentation
 
 Start at the documentation index, then read [Maintaining Documentation](documentation/MAINTAINING-DOCUMENTATION.md) before reorganizing, moving, deleting, or adding developer docs. Each folder may contain a separate `README.md`. When working on code, look for and read nearby README files. If you update a component, also update the README in that directory (or the parent if changes affect parent code). Do not create README files that don't already exist.

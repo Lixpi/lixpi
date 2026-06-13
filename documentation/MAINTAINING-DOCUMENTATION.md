@@ -156,6 +156,8 @@ The docs build generates heading IDs and validates anchor fragments. If you link
 
 ## Moving or Renaming Pages
 
+Do not delete documentation files silently. If cleanup, reverting agent edits, moving content, or replacing docs would delete files, ask the user to confirm the exact file path(s) first. If the user does not confirm, keep the files and report them as cleanup candidates.
+
 When reorganizing documentation:
 
 1. Map old pages to their new homes before deleting anything.

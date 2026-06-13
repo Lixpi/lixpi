@@ -1,0 +1,10 @@
+packages:
+  - "packages/lixpi/constants/ts"
+  - "packages/lixpi/debug-tools/ts"
+  - "packages/lixpi/nats-service/ts"
+
+allowBuilds:
+  "@parcel/watcher": true
+  browser-tabs-lock: true
+  esbuild: true
+  svelte-preprocess: true

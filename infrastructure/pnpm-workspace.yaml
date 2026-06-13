@@ -1,0 +1,10 @@
+packages:
+  - "pulumi"
+  - "../packages/lixpi/constants/ts"
+  - "../packages/lixpi/debug-tools/ts"
+
+allowBuilds:
+  "@pulumi/aws": true
+  "@pulumi/command": true
+  "@pulumi/docker-build": true
+  "@pulumi/pulumi": true
