@@ -14,8 +14,8 @@ export type AiResponseMessageShell = {
     bubbleEl: HTMLElement
     contentEl: HTMLElement
     metaEl: HTMLElement
-    avatarEl: HTMLElement
-    spinnerEl: HTMLElement | null
+    avatarEl: HTMLElement | null
+    loadingEl: HTMLElement | null
     setMessageId: (messageId: string) => void
     setProvider: (provider: string | null | undefined, iconOverride?: string | null) => void
 }
@@ -27,7 +27,8 @@ type MessageShellOptions = {
 type ResponseMessageShellOptions = MessageShellOptions & {
     provider?: string | null
     messageId?: string
-    includeSpinner?: boolean
+    includeLoadingIndicator?: boolean
+    includeAvatar?: boolean
 }
 
 export function createAiUserMessageShell(options: MessageShellOptions = {}): AiUserMessageShell {
@@ -51,31 +52,32 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
     const wrapperClassName = ['ai-response-message-wrapper', options.wrapperClassName].filter(Boolean).join(' ')
     const provider = options.provider ?? ''
     const providerIcon = getAiProviderIcon(provider)
-    const spinner = options.includeSpinner === false
+    const loadingIndicator = options.includeLoadingIndicator === false
         ? null
-        : html`<div className="ai-response-message-spinner" aria-hidden="true"></div>`
+        : html`<div className="ai-response-loading-spinner" aria-hidden="true"></div>`
+    const avatar = options.includeAvatar === false
+        ? null
+        : html`<div className=${`user-avatar assistant-${getAiProviderClassSuffix(provider)}`} innerHTML=${providerIcon ?? ''}></div>`
     const wrapper = html`
         <div className=${wrapperClassName} data=${{ messageId: options.messageId ?? '' }}>
             <div className="ai-response-message">
                 <div className="ai-response-message-bubble">
-                    ${spinner}
+                    ${loadingIndicator}
                     <div className="ai-response-message-content"></div>
                 </div>
             </div>
             <div className="ai-response-message-meta">
-                <div
-                    className=${`user-avatar assistant-${getAiProviderClassSuffix(provider)}`}
-                    innerHTML=${providerIcon ?? ''}
-                ></div>
+                ${avatar}
             </div>
         </div>
     ` as HTMLElement
 
     const bubbleEl = wrapper.querySelector('.ai-response-message-bubble') as HTMLElement
-    bubbleEl.style.setProperty('--ai-response-bubble-color', settings.aiChatThread.responseMessageBubbleColor)
+    bubbleEl.style.setProperty('--ai-response-bubble-color', settings.aiChatThread.styles.responseMessageBubbleColor)
 
     const setProvider = (nextProvider: string | null | undefined, iconOverride?: string | null): void => {
-        const avatarEl = wrapper.querySelector('.user-avatar') as HTMLElement
+        const avatarEl = wrapper.querySelector('.user-avatar') as HTMLElement | null
+        if (!avatarEl) return
         avatarEl.className = `user-avatar assistant-${getAiProviderClassSuffix(nextProvider)}`
         avatarEl.innerHTML = iconOverride ?? getAiProviderIcon(nextProvider) ?? ''
     }
@@ -86,8 +88,8 @@ export function createAiResponseMessageShell(options: ResponseMessageShellOption
         bubbleEl,
         contentEl: wrapper.querySelector('.ai-response-message-content') as HTMLElement,
         metaEl: wrapper.querySelector('.ai-response-message-meta') as HTMLElement,
-        avatarEl: wrapper.querySelector('.user-avatar') as HTMLElement,
-        spinnerEl: wrapper.querySelector('.ai-response-message-spinner') as HTMLElement | null,
+        avatarEl: wrapper.querySelector('.user-avatar') as HTMLElement | null,
+        loadingEl: wrapper.querySelector('.ai-response-loading-spinner') as HTMLElement | null,
         setMessageId: (messageId: string) => {
             wrapper.dataset.messageId = messageId
         },

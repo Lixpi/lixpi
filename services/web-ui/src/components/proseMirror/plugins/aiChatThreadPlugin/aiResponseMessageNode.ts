@@ -1,7 +1,6 @@
 // @ts-nocheck
-// Import SVG icons for various UI elements
-import { claudeAnimatedFrameIcon, claudeIcon } from '$src/svgIcons/index.ts'
 import { createAiResponseMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
+import { html } from '$src/utils/domTemplates.ts'
 
 // Define the unique type name for this custom node
 export const aiResponseMessageNodeType = 'aiResponseMessage'
@@ -15,7 +14,13 @@ export const aiResponseMessageNodeSpec = {
         isInitialRenderAnimation: { default: false }, // Flag for initial render animation
         isReceivingAnimation: { default: false }, // Flag for receiving message animation
         aiProvider: { default: '' }, // AI provider (Anthropic or OpenAI)
-        currentFrame: { default: 0 }, // Current frame for Claude's animation
+        generationRequestId: { default: '' },
+        reasoningRunId: { default: '' },
+        mediaRunId: { default: '' },
+        reasoningModelId: { default: '' },
+        mediaModelId: { default: '' },
+        mediaType: { default: '' },
+        variantIndex: { default: null },
     },
     // Content allowed inside this node (paragraphs or other block elements)
     // Allow zero-or-more so we can create an empty shell on START_STREAM
@@ -35,6 +40,13 @@ export const aiResponseMessageNodeSpec = {
                     id: dom.getAttribute('id'),
                     style: dom.getAttribute('style'),
                     aiProvider: dom.getAttribute('data-ai-provider'),
+                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
+                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
+                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
+                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
+                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
+                    mediaType: dom.getAttribute('data-media-type') || '',
+                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
                 }
             },
         },
@@ -45,28 +57,45 @@ export const aiResponseMessageNodeSpec = {
             id: node.attrs.id,
             style: node.attrs.style,
             class: 'ai-response-message',
-            'data-ai-provider': node.attrs.aiProvider
+            'data-ai-provider': node.attrs.aiProvider,
+            'data-generation-request-id': node.attrs.generationRequestId,
+            'data-reasoning-run-id': node.attrs.reasoningRunId,
+            'data-media-run-id': node.attrs.mediaRunId,
+            'data-reasoning-model-id': node.attrs.reasoningModelId,
+            'data-media-model-id': node.attrs.mediaModelId,
+            'data-media-type': node.attrs.mediaType,
+            'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
         }, 0] // 0 is a placeholder for the node's content
     },
 }
 
+function parseVariantIndex(value) {
+    if (!value) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatVariantLabel(variantIndex) {
+    if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
+    return `Variant ${Number(variantIndex) + 1}`
+}
+
 // Define the node view for custom rendering and behavior
 export const aiResponseMessageNodeView = (node, view, getPos) => {
-    let animationInterval
-    const totalFrames = 8    // Total frames in Claude's animation
-
     const responseShell = createAiResponseMessageShell({
         provider: node.attrs.aiProvider,
         messageId: node.attrs.id,
+        includeAvatar: false,
     })
 
     // Get references to the nested elements for manipulation
     const parentWrapper = responseShell.wrapper
     const aiResponseMessageContainer = responseShell.messageEl
-    const userAvatarContainer = responseShell.avatarEl
-    const spinnerElement = responseShell.spinnerEl
+    const loadingElement = responseShell.loadingEl
     const bubbleElement = responseShell.bubbleEl
     const responseMessageContent = responseShell.contentEl
+    const runMetaElement = html`<div className="ai-response-run-meta"></div>`
+    responseShell.metaEl.appendChild(runMetaElement)
 
     // // Create an accept button
     // const acceptButton = document.createElement('button')
@@ -80,56 +109,43 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
     // deleteButton.innerHTML = trashBinIcon
     // aiResponseMessageContainer.appendChild(deleteButton)
 
-    // Function to update the animation state
+    // Response nodes no longer carry an avatar, so the only "animation" left is the
+    // one-shot content reveal on first render. The "receiving" state is conveyed by
+    // the in-bubble loading indicator (see updateLoadingState), not an animated avatar.
     const updateAnimation = () => {
-        if (node.attrs.aiProvider === 'Anthropic') {
-            if (node.attrs.isReceivingAnimation) {
-                // Set up Claude's animated avatar
-                if (!userAvatarContainer.querySelector('.animated-frame-claude')) {
-                    userAvatarContainer.innerHTML = claudeAnimatedFrameIcon
-                }
-
-                const svg = userAvatarContainer.querySelector('svg')
-                svg.setAttribute('viewBox', `0 ${node.attrs.currentFrame * 100} 100 100`)
-                userAvatarContainer.setAttribute('data-frame', node.attrs.currentFrame.toString())    // Set data-frame attribute for animation tracking and external interaction
-
-                // Start the animation interval if not already running
-                if (!animationInterval) {
-                    animationInterval = setInterval(() => {
-                        const newFrame = (node.attrs.currentFrame + 1) % totalFrames
-                        // Update the node's attributes with the new frame
-                        // IMPORTANT: This triggers an update to the node in the ProseMirror document, I couldn't find a better way to do this :(
-                        view.dispatch(view.state.tr.setNodeMarkup(getPos(), null, {...node.attrs, currentFrame: newFrame}))
-                    }, 90) // Change frame every 90ms
-                }
-            } else {
-                // Stop the animation when not receiving
-                clearInterval(animationInterval)
-                animationInterval = null
-                userAvatarContainer.innerHTML = claudeIcon    // Reset to the static avatar
-            }
-        } else {
-            responseShell.setProvider(node.attrs.aiProvider)
-        }
-
-        // Toggle classes for animations
         responseMessageContent.classList.toggle('node-render-animation', node.attrs.isInitialRenderAnimation)
-        userAvatarContainer.classList.toggle('node-receiving-animation', node.attrs.isReceivingAnimation)
     }
 
-    const updateSpinnerState = () => {
+    const updateLoadingState = () => {
         const isWaitingForContent = node.childCount === 0 && node.attrs.isReceivingAnimation
 
         bubbleElement.classList.toggle('is-waiting', isWaitingForContent)
         aiResponseMessageContainer.classList.toggle('is-empty', isWaitingForContent)
 
-        if (spinnerElement) {
-            spinnerElement.classList.toggle('is-active', isWaitingForContent)
+        if (loadingElement) {
+            loadingElement.classList.toggle('is-active', isWaitingForContent)
         }
     }
 
+    // The reasoning model is identified inside the image/video generation
+    // collapsible header (visible even while collapsed), not as a pill beside the
+    // avatar — so the only run-meta pill here is the variant marker (which image/
+    // video variant this is when several media models run for one reasoning model).
+    const updateRunMeta = () => {
+        const variantLabel = formatVariantLabel(node.attrs.variantIndex)
+        runMetaElement.replaceChildren()
+
+        if (variantLabel) {
+            const variantPill = html`<span className="ai-response-run-pill is-variant">${variantLabel}</span>`
+            runMetaElement.appendChild(variantPill)
+        }
+
+        runMetaElement.hidden = runMetaElement.childElementCount === 0
+    }
+
     updateAnimation()
-    updateSpinnerState()
+    updateLoadingState()
+    updateRunMeta()
 
     // Return the node view object
     return {
@@ -152,14 +168,12 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
 
             node = updatedNode    // Update the node reference and refresh the animation
             responseShell.setMessageId(node.attrs.id)
-            responseShell.setProvider(node.attrs.aiProvider)
-            updateAnimation()    // Update the animation state
-            updateSpinnerState()
+            updateAnimation()    // Update the content-reveal animation state
+            updateLoadingState()
+            updateRunMeta()
 
             return true    // Indicate successful update
         },
-        destroy: () => {
-            clearInterval(animationInterval)    // Clean up the animation interval when the node is removed
-        }
+        destroy: () => {},
     }
 }

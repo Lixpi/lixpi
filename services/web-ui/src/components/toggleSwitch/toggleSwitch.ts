@@ -3,15 +3,17 @@
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
+import 'd3-transition'
 // @ts-ignore - runtime import
-import { easeCubicOut, easeCubicIn } from 'd3-ease'
-import { ENTRANCE_ANIMATION_DURATION } from '$src/infographics/animationConstants.ts'
+import { easeCubicOut } from 'd3-ease'
 import { checkMarkIcon } from '$src/svgIcons/index.ts'
 
 type ToggleSwitchConfig = {
     id: string
     x: number
     y: number
+    width?: number
+    height?: number
     size?: number
     checked?: boolean
     disabled?: boolean
@@ -32,28 +34,25 @@ type ToggleSwitchInstance = {
     destroy: () => void
 }
 
-// Toggle switch dimensions (based on standard toggle proportions)
-// Width is ~2x height for proper pill shape
-const TOGGLE_HEIGHT_RATIO = 1.0  // Height relative to size
-const TOGGLE_WIDTH_RATIO = 1.8   // Width relative to size
+// Toggle switch dimensions. `height`/`width` are pixels; `size` remains as
+// the legacy pixel-height alias for existing callers.
+const TOGGLE_WIDTH_RATIO = 1.8
 const KNOB_SIZE_RATIO = 0.7      // Knob size relative to toggle height
 const KNOB_PADDING = 0.15        // Padding around knob (as ratio of toggle height)
 
 // Color constants
 const COLORS = {
     active: {
-        fill: 'rgba(85, 150, 124, 0.95)',
-        fillHover: 'rgba(85, 150, 124, 1)',
-        stroke: 'rgba(85, 150, 124, 1)'
+        fill: '#55967c',
+        stroke: '#55967c'
     },
     inactive: {
-        fill: 'rgba(128, 128, 128, 0.4)',
-        fillHover: 'rgba(128, 128, 128, 0.5)',
-        stroke: 'rgba(128, 128, 128, 0.6)'
+        fill: '#d6d7d8',
+        stroke: '#9ea3a8'
     },
     knob: {
-        fill: 'rgba(255, 255, 255, 0.98)',
-        stroke: 'rgba(255, 255, 255, 0.2)'
+        fill: '#ffffff',
+        stroke: '#ffffff'
     }
 }
 
@@ -66,6 +65,8 @@ export function createToggleSwitch(
         id,
         x,
         y,
+        width,
+        height,
         size = 24,
         checked = false,
         disabled = false,
@@ -79,8 +80,8 @@ export function createToggleSwitch(
     }
 
     // Calculate toggle dimensions
-    const toggleHeight = size * TOGGLE_HEIGHT_RATIO
-    const toggleWidth = size * TOGGLE_WIDTH_RATIO
+    const toggleHeight = height ?? size
+    const toggleWidth = width ?? toggleHeight * TOGGLE_WIDTH_RATIO
     const knobSize = toggleHeight * KNOB_SIZE_RATIO
     const knobPadding = toggleHeight * KNOB_PADDING
     const knobRadius = knobSize / 2
@@ -91,13 +92,15 @@ export function createToggleSwitch(
     const knobUncheckedX = trackRadius  // Aligned to left
     const knobCheckedX = toggleWidth - trackRadius  // Aligned to right
 
-    // Create toggle group - start invisible and off-screen
+    // Create toggle group visible at its final position. The prompt model menu
+    // mounts inside ProseMirror DOM where transition setup can be skipped during
+    // hot updates; visibility must not depend on the entrance animation.
     const toggleGroup = parent.append('g')
         .attr('class', `toggle-switch-group toggle-switch ${className}`)
-        .attr('transform', `translate(${x - 30}, ${y})`)  // Start 30px left
+        .attr('transform', `translate(${x}, ${y})`)
         .attr('data-toggle-switch-id', id)
         .style('cursor', disabled ? 'not-allowed' : 'pointer')
-        .style('opacity', 0)  // Start invisible
+        .style('opacity', 1)
 
     // Track (pill-shaped background)
     const track = toggleGroup.append('rect')
@@ -142,25 +145,6 @@ export function createToggleSwitch(
         .attr('d', checkmarkPath)
         .attr('fill', COLORS.active.fill)
         .attr('transform', `translate(${(state.checked ? knobCheckedX : knobUncheckedX) - knobRadius + checkmarkOffsetX}, ${knobCenterY - knobRadius + checkmarkOffsetY}) scale(${checkmarkScale})`)
-
-    // Animate toggle into view with entrance transition
-    toggleGroup
-        .transition()
-        .duration(ENTRANCE_ANIMATION_DURATION)
-        .ease(easeCubicIn)
-        .attr('transform', `translate(${x}, ${y})`)  // Slide to final position
-        .style('opacity', 1)  // Fade in
-
-    // Hover effect (only if not disabled)
-    if (!state.disabled) {
-        toggleGroup
-            .on('mouseenter', () => {
-                track.attr('fill', state.checked ? COLORS.active.fillHover : COLORS.inactive.fillHover)
-            })
-            .on('mouseleave', () => {
-                track.attr('fill', state.checked ? COLORS.active.fill : COLORS.inactive.fill)
-            })
-    }
 
     // Click handler
     if (!state.disabled && onChange) {
@@ -221,8 +205,6 @@ export function createToggleSwitch(
         // Re-attach event handlers if needed
         if (disabled) {
             toggleGroup.on('click', null)
-            toggleGroup.on('mouseenter', null)
-            toggleGroup.on('mouseleave', null)
         } else if (onChange) {
             toggleGroup.on('click', (event: MouseEvent) => {
                 event.stopPropagation()
@@ -230,13 +212,6 @@ export function createToggleSwitch(
                 setChecked(newChecked)
                 onChange(newChecked, id)
             })
-            toggleGroup
-                .on('mouseenter', () => {
-                    track.attr('fill', state.checked ? COLORS.active.fillHover : COLORS.inactive.fillHover)
-                })
-                .on('mouseleave', () => {
-                    track.attr('fill', state.checked ? COLORS.active.fill : COLORS.inactive.fill)
-                })
         }
     }
 

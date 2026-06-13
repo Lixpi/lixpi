@@ -135,37 +135,50 @@ const extractTraceImageUrlsFromMessages = (messages: ProviderState['messages']):
     return urls
 }
 
-const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
-    const referenceImages = state.referenceImages ?? []
+const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
     const resolution = state.imageBranchResolution
-    const branchReferenceNodeIds = resolution?.referenceImageNodeIds ?? []
-    const featureReferenceImagesCount = state.featureReferenceImages?.length ?? 0
-    const featureReferenceImageTraceUrls = state.featureReferenceImageTraceUrls ?? []
-    const messageTraceImageUrls = extractTraceImageUrlsFromMessages(state.messages)
+    if (!resolution) return []
+
     const candidatesByNodeId = new Map(
         (state.imageBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.nodeId, candidate]),
     )
     const decisionsByNodeId = getDecisionByNodeId(resolution?.decisions)
 
-    return referenceImages.map((imageUrl, index) => {
-        const branchNodeId = branchReferenceNodeIds[index]
-        if (branchNodeId) {
-            return buildBranchReference({
-                imageUrl,
-                index,
-                nodeId: branchNodeId,
-                candidate: candidatesByNodeId.get(branchNodeId),
-                decision: decisionsByNodeId.get(branchNodeId),
-            })
-        }
+    return resolution.referenceImageNodeIds.map((nodeId, index) => buildBranchReference({
+        imageUrl: '',
+        index,
+        nodeId,
+        candidate: candidatesByNodeId.get(nodeId),
+        decision: decisionsByNodeId.get(nodeId),
+    }))
+}
 
-        const featureIndex = index - branchReferenceNodeIds.length
-        if (featureIndex >= 0 && featureIndex < featureReferenceImagesCount) {
-            return buildFeatureReferenceWithTraceUrl(imageUrl, featureReferenceImageTraceUrls[featureIndex] ?? messageTraceImageUrls[index], featureIndex)
-        }
-
-        return buildMessageReference(imageUrl, index, messageTraceImageUrls[index])
+const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
+    const referenceImages = state.referenceImages ?? []
+    const branchReferences = buildBranchReferenceTrace(state)
+    const featureReferenceImages = state.featureReferenceImages ?? []
+    const featureReferenceImagesCount = featureReferenceImages.length
+    const featureReferenceImageTraceUrls = state.featureReferenceImageTraceUrls ?? []
+    const messageTraceImageUrls = extractTraceImageUrlsFromMessages(state.messages)
+    const featureStartIndex = branchReferences.length
+    const messageStartIndex = featureStartIndex + featureReferenceImagesCount
+    const featureReferences = featureReferenceImages.map((imageUrl, featureIndex) =>
+        buildFeatureReferenceWithTraceUrl(
+            imageUrl,
+            featureReferenceImageTraceUrls[featureIndex] ?? messageTraceImageUrls[featureStartIndex + featureIndex],
+            featureIndex,
+        )
+    )
+    const messageReferences = referenceImages.slice(messageStartIndex).map((imageUrl, index) => {
+        const sourceIndex = messageStartIndex + index
+        return buildMessageReference(imageUrl, sourceIndex, messageTraceImageUrls[sourceIndex])
     })
+
+    return [
+        ...branchReferences,
+        ...featureReferences,
+        ...messageReferences,
+    ]
 }
 
 const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedReference[] => {
@@ -204,6 +217,7 @@ export const buildImageGenerationTrace = (state: ProviderState): ImageGeneration
 
     return {
         traceVersion: 'image-generation-trace-v1',
+        generationRun: state.generationRun,
         chatModelProvider: state.provider,
         chatModelId: state.modelVersion,
         imageModelProvider: imageProvider,

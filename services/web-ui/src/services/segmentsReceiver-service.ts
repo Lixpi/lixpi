@@ -42,7 +42,8 @@ class SegmentsReceiver {
         }
     }
 
-    // Dispatch segment to the thread-specific listeners only
+    // Dispatch segment to the thread-specific listeners only. The full chunk is
+    // forwarded intact so run-level metadata can survive thread routing.
     receiveSegment(chunk) {
         const threadId = chunk.aiChatThreadId || chunk.threadId
         if (!threadId) {

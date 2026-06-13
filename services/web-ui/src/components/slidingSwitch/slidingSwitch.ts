@@ -112,7 +112,6 @@ const DEFAULT_DISTANCE_SPEEDUP_FACTOR = 0.28
 const DEFAULT_HEIGHT = 26
 const FONT_SIZE = 12
 const FONT_WEIGHT = 400
-const TEXT_WIDTH_FACTOR = 0.58
 const CLOSE_SIZE = 14
 const CLOSE_ICON_SIZE = 7
 const CLOSE_GAP = 6
@@ -129,13 +128,6 @@ const COLORS = {
     optionTextActive: '#1a2744',
     optionTextDisabled: 'rgba(49, 59, 78, 0.32)',
     closeHover: 'rgba(26, 39, 68, 0.1)',
-}
-
-function truncateLabel(label: string, maxWidth: number): string {
-    const maxChars = Math.max(0, Math.floor(maxWidth / (FONT_SIZE * TEXT_WIDTH_FACTOR)))
-    if (label.length <= maxChars) return label
-    if (maxChars <= 3) return label.slice(0, maxChars)
-    return `${label.slice(0, maxChars - 3)}...`
 }
 
 class SlidingSwitch<Value extends string = string> implements SlidingSwitchInstance<Value> {
@@ -387,7 +379,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             : 0
         const containerWidth = clientWidth > 0
             ? clientWidth
-            : measureElement?.getBoundingClientRect().width
+            : measureElement?.getBoundingClientRect().width ?? 0
         if (!Number.isFinite(containerWidth) || containerWidth <= 0) return
         if (Math.abs(containerWidth - this.requestedWidth) < 0.5) return
         this.resize(this.x, this.y, containerWidth, this.height)
@@ -574,7 +566,6 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             : state.selected || state.hovered ? COLORS.optionTextActive : COLORS.optionText
         const closeVisible = state.closable && state.hovered
         const closeReserve = state.closable ? CLOSE_SIZE + CLOSE_GAP : 0
-        const textMaxWidth = Math.max(0, state.width - closeReserve - 12)
         const textCenterX = state.x + closeReserve + (state.width - closeReserve) / 2
         const closeCenterX = state.x + CLOSE_SIZE / 2 + 4
         const closeCenterY = state.y + state.height / 2
@@ -583,7 +574,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             ?.attr('x', textCenterX)
             .attr('y', state.y + state.height / 2)
             .attr('fill', textColor)
-            .text(truncateLabel(state.option.label, textMaxWidth))
+            .text(state.option.label)
 
         view.closeGroup
             ?.attr('transform', `translate(${closeCenterX}, ${closeCenterY})`)

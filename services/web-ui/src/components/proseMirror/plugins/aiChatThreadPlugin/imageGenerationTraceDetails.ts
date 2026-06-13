@@ -21,6 +21,10 @@ export type ImageGenerationTraceDetailsAttrs = {
     imageGenerationTrace?: ImageGenerationTrace | null
     imageGenerationTraceId?: string | null
     videoGenerationTrace?: VideoGenerationTrace | null
+    // The reasoning model that produced this generation prompt. Shown in the
+    // collapsible summary (even while collapsed) so each run is attributable to
+    // its model without a separate pill beside the avatar.
+    reasoningModelId?: string | null
 }
 
 type RenderImageGenerationTraceDetailsParams = {
@@ -33,6 +37,7 @@ type RenderImageGenerationTraceDetailsParams = {
 type ImageGenerationTraceDetailsOptions = {
     className?: string
     renderReferencesWhenClosed?: boolean
+    getAdditionalReferenceImageSources?: (reference: ImageGenerationTraceReference) => string[]
 }
 
 export type ImageGenerationTraceDetails = {
@@ -64,18 +69,44 @@ export const formatImageGenerationTraceRole = (role: string): string => {
     return role.split(/[-_]/).map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ')
 }
 
-const buildAuthenticatedImageUrl = async (path: string): Promise<string> => {
-    const token = await AuthService.getTokenSilently()
-    const API_BASE_URL = import.meta.env.VITE_API_URL || ''
-    const separator = path.includes('?') ? '&' : '?'
-    return `${API_BASE_URL}${path}${token ? `${separator}token=${encodeURIComponent(token)}` : ''}`
+// Reasoning model ids arrive as `Provider:model` (e.g. `Anthropic:claude-sonnet-4-6`);
+// the summary shows just the model segment.
+export const formatTraceModelLabel = (modelId?: string | null): string => {
+    if (!modelId) return ''
+    const parts = String(modelId).split(':')
+    return parts[1] || parts[0] || ''
 }
 
-const getNatsWorkspaceImagePath = (imageUrl: string, reference: ImageGenerationTraceReference): string | null => {
+const appendAuthenticatedToken = async (imageUrl: string): Promise<string> => {
+    const token = await AuthService.getTokenSilently()
+    if (!token) return imageUrl
+    const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(imageUrl)
+
+    try {
+        const url = isAbsoluteUrl ? new URL(imageUrl) : new URL(imageUrl, window.location.origin)
+        url.searchParams.set('token', token)
+        if (isAbsoluteUrl) return url.toString()
+        return `${url.pathname}${url.search}${url.hash}`
+    } catch {
+        const separator = imageUrl.includes('?') ? '&' : '?'
+        return `${imageUrl}${separator}token=${encodeURIComponent(token)}`
+    }
+}
+
+const buildAuthenticatedImageUrl = async (path: string): Promise<string> => {
+    const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+    const sourceUrl = path.startsWith('http') || !apiBaseUrl ? path : `${apiBaseUrl}${path}`
+    return appendAuthenticatedToken(sourceUrl)
+}
+
+const getReferenceWorkspaceImagePath = (reference: ImageGenerationTraceReference): string | null => {
     if (reference.fileId && reference.workspaceId) {
         return `/api/images/${encodeURIComponent(reference.workspaceId)}/${encodeURIComponent(reference.fileId)}`
     }
+    return null
+}
 
+const getNatsWorkspaceImagePath = (imageUrl: string): string | null => {
     const match = /^nats-obj:\/\/workspace-(.+)-files\/(.+)$/.exec(imageUrl)
     if (!match) return null
 
@@ -84,26 +115,71 @@ const getNatsWorkspaceImagePath = (imageUrl: string, reference: ImageGenerationT
     return `/api/images/${encodeURIComponent(workspaceId)}/${encodeURIComponent(objectKey)}`
 }
 
-const resolveReferenceImageSrc = async (reference: ImageGenerationTraceReference): Promise<string> => {
-    const imageUrl = reference.imageUrl
+const isApiHttpUrl = (imageUrl: string): boolean => {
+    try {
+        return new URL(imageUrl).pathname.startsWith('/api/')
+    } catch {
+        return imageUrl.includes('/api/')
+    }
+}
+
+const uniqueImageSources = (sources: string[]): string[] => {
+    const seen = new Set<string>()
+    return sources.filter((source) => {
+        if (!source || seen.has(source)) return false
+        seen.add(source)
+        return true
+    })
+}
+
+const getReferenceImageSources = (
+    reference: ImageGenerationTraceReference,
+    options: ImageGenerationTraceDetailsOptions,
+): string[] => {
+    return uniqueImageSources([
+        (reference.imageUrl ?? '').trim(),
+        getReferenceWorkspaceImagePath(reference) ?? '',
+        ...(options.getAdditionalReferenceImageSources?.(reference) ?? []),
+    ])
+}
+
+const resolveReferenceImageSrc = async (imageUrl: string): Promise<string> => {
     if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) return imageUrl
     if (imageUrl.startsWith('/api/')) return buildAuthenticatedImageUrl(imageUrl)
-    if (imageUrl.startsWith('http') && imageUrl.includes('/api/images/')) {
-        const stripped = imageUrl.replace(/[?&]token=[^&]+/, '')
-        const token = await AuthService.getTokenSilently()
-        return `${stripped}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+    if (imageUrl.startsWith('http') && isApiHttpUrl(imageUrl)) {
+        return appendAuthenticatedToken(imageUrl)
     }
     if (imageUrl.startsWith('http')) return imageUrl
     if (imageUrl.startsWith('nats-obj://')) {
-        const path = getNatsWorkspaceImagePath(imageUrl, reference)
+        const path = getNatsWorkspaceImagePath(imageUrl)
         return path ? buildAuthenticatedImageUrl(path) : ''
     }
     return imageUrl
 }
 
-const createReferenceTile = (reference: ImageGenerationTraceReference): HTMLElement => {
+const resolveReferenceImageSources = async (
+    reference: ImageGenerationTraceReference,
+    options: ImageGenerationTraceDetailsOptions,
+): Promise<string[]> => {
+    const resolvedSources: string[] = []
+    for (const source of getReferenceImageSources(reference, options)) {
+        const resolvedSource = await resolveReferenceImageSrc(source)
+        if (resolvedSource) resolvedSources.push(resolvedSource)
+    }
+    return uniqueImageSources(resolvedSources)
+}
+
+const createReferenceTile = (
+    reference: ImageGenerationTraceReference,
+    options: ImageGenerationTraceDetailsOptions,
+): HTMLElement => {
     const role = formatImageGenerationTraceRole(reference.role)
-    const image = html`<img className="ai-image-generation-reference-image" alt=${reference.label} loading="lazy" />` as HTMLImageElement
+    // The tile starts hidden and reveals itself in `onload` (so the multi-source
+    // retry chain never flashes a broken image). `loading="lazy"` must NOT be used
+    // here: a hidden image is `display:none`, never intersects the viewport, so a
+    // lazy image would never load — `onload` would never fire and the tile would
+    // stay blank. Eager loading loads regardless of visibility.
+    const image = html`<img className="ai-image-generation-reference-image" alt=${reference.label} />` as HTMLImageElement
     const unavailable = html`<span className="ai-image-generation-reference-unavailable">Unavailable</span>` as HTMLSpanElement
     const tile = html`
         <figure className="ai-image-generation-reference" data=${{ source: reference.source, role: reference.role }}>
@@ -118,29 +194,62 @@ const createReferenceTile = (reference: ImageGenerationTraceReference): HTMLElem
         </figure>
     ` as HTMLElement
 
+    image.hidden = true
     unavailable.hidden = true
-    image.onerror = () => {
+    let sourceIndex = 0
+    let resolvedSourcesPromise: Promise<string[]> | null = null
+
+    const getResolvedSources = (): Promise<string[]> => {
+        resolvedSourcesPromise ??= resolveReferenceImageSources(reference, options)
+        return resolvedSourcesPromise
+    }
+
+    const showUnavailable = () => {
         image.hidden = true
         unavailable.hidden = false
         tile.classList.add('is-unavailable')
     }
+
+    image.onload = () => {
+        image.hidden = false
+        unavailable.hidden = true
+        tile.classList.remove('is-unavailable')
+    }
+    image.onerror = () => {
+        const retryNextSource = async () => {
+            sourceIndex += 1
+            const sources = await getResolvedSources()
+            const nextSource = sources[sourceIndex]
+            if (nextSource) {
+                image.src = nextSource
+                return
+            }
+            showUnavailable()
+        }
+        retryNextSource().catch(showUnavailable)
+    }
     const loadImage = async () => {
         try {
-            const src = await resolveReferenceImageSrc(reference)
+            const sources = await getResolvedSources()
+            const src = sources[sourceIndex]
             if (!src) {
-                image.hidden = true
-                unavailable.hidden = false
-                tile.classList.add('is-unavailable')
+                showUnavailable()
                 return
             }
             image.src = src
         } catch {
-            image.hidden = true
-            unavailable.hidden = false
-            tile.classList.add('is-unavailable')
+            showUnavailable()
         }
     }
 
+    const resetImage = () => {
+        sourceIndex = 0
+        image.hidden = true
+        unavailable.hidden = true
+        tile.classList.remove('is-unavailable')
+    }
+
+    resetImage()
     void loadImage()
 
     return tile
@@ -211,7 +320,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         if (renderedReferenceTrace === trace) return
 
         if (trace.referenceImages.length > 0) {
-            referenceGrid.replaceChildren(...trace.referenceImages.map(createReferenceTile))
+            referenceGrid.replaceChildren(...trace.referenceImages.map((reference) => createReferenceTile(reference, options)))
         } else {
             referenceGrid.replaceChildren(html`
                 <div className="ai-image-generation-empty-references">No reference images were sent.</div>
@@ -247,9 +356,11 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         renderedTrace = trace
 
         summaryTitle.textContent = getImageGenerationSummaryTitle(attrs)
-        summaryMeta.textContent = trace
+        const modelLabel = formatTraceModelLabel(attrs.reasoningModelId)
+        const referenceMeta = trace
             ? `${trace.referenceImages.length} reference${trace.referenceImages.length === 1 ? '' : 's'}`
             : ''
+        summaryMeta.textContent = [modelLabel, referenceMeta].filter(Boolean).join(' · ')
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
         toolPromptSection.classList.toggle('has-trace', hasTrace)

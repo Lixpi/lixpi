@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin'
 
 type CanvasNodePosition = {
     x: number
@@ -190,6 +190,8 @@ export type WorkspaceContextNode = {
     fileId?: string
     imageUrl?: string
     branchId?: string
+    sourceThreadId?: string
+    isCurrentThreadGenerated?: boolean
     isExplicitChip: boolean
     isEdgeForced: boolean
 }
@@ -257,24 +259,45 @@ export type ImageBranchVlmResolution = {
 export type ImageBranchResolvedStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLVED'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     resolution: ImageBranchVlmResolution
 }
 
 export type ImageBranchResolutionErrorStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     error: string
+}
+
+export type MediaGenerationRequestStartedPayload = {
+    status: 'MEDIA_GENERATION_REQUEST_STARTED'
+    aiProvider: string
+    generationRequestId: string
+    reasoningModelIds: AiModelId[]
+    imageModelIds: AiModelId[]
+    videoModelIds: AiModelId[]
+    expectedReasoningRuns: number
+    expectedMediaRunsUpperBound: number
+}
+
+export type MediaGenerationRequestCompletePayload = {
+    status: 'MEDIA_GENERATION_REQUEST_COMPLETE'
+    aiProvider: string
+    generationRequestId: string
 }
 
 export type ContextRelevanceResolvedStreamPayload = {
     status: 'CONTEXT_RELEVANCE_RESOLVED'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     workspaceContextResolution: WorkspaceContextResolution
 }
 
 export type ContextRelevanceErrorStreamPayload = {
     status: 'CONTEXT_RELEVANCE_ERROR'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     error: string
 }
 
@@ -305,6 +328,7 @@ export type ImageGenerationTraceExcludedReference = {
 
 export type ImageGenerationTrace = {
     traceVersion: 'image-generation-trace-v1'
+    generationRun?: MediaGenerationRunMeta
     chatModelProvider: string
     chatModelId: string
     imageModelProvider: string
@@ -333,7 +357,15 @@ export type ImageGenerationTrace = {
 export type ImageGenerationTraceStreamPayload = {
     status: 'IMAGE_GENERATION_TRACE'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     imageGenerationTrace: ImageGenerationTrace
+}
+
+export type ImageGenerationErrorStreamPayload = {
+    status: 'IMAGE_ERROR'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    error: string
 }
 
 // Mirrors ImageGenerationTrace but for VEO video generation. Reuses the same
@@ -341,6 +373,7 @@ export type ImageGenerationTraceStreamPayload = {
 // candidates the same way it does for images.
 export type VideoGenerationTrace = {
     traceVersion: 'video-generation-trace-v1'
+    generationRun?: MediaGenerationRunMeta
     chatModelProvider: string
     chatModelId: string
     videoModelProvider: string
@@ -371,10 +404,34 @@ export type VideoGenerationTrace = {
 export type VideoGenerationTraceStreamPayload = {
     status: 'VIDEO_GENERATION_TRACE'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     videoGenerationTrace: VideoGenerationTrace
 }
 
-export type ImageGeneratedByMetadata = {
+export type MediaGenerationRunMeta = {
+    generationRequestId: string
+    reasoningRunId: string
+    mediaRunId?: string
+    reasoningModelId: AiModelId
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    reasoningIndex: number
+    mediaIndex?: number
+    variantIndex?: number
+}
+
+export type GeneratedMediaVariantMetadata = {
+    generationRequestId?: string
+    reasoningRunId?: string
+    mediaRunId?: string
+    reasoningModelId?: AiModelId
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    variantIndex?: number
+    branchOriginNodeId?: string
+}
+
+export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     aiChatThreadId: string
     responseId: string
     aiModel: AiModelId
@@ -447,7 +504,7 @@ export type ImageCanvasNode = CanvasNodeParentingFields & {
 // Provenance + lineage for an AI-generated video node. Mirrors
 // ImageGeneratedByMetadata and reuses the same branch-lineage audit field
 // names so the structured VLM resolver output maps over without translation.
-export type VideoGeneratedByMetadata = {
+export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     aiChatThreadId: string
     responseId: string
     videoModel: AiModelId
@@ -517,7 +574,18 @@ export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     descriptor?: ContentDescriptor
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode
+export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'branchOrigin'
+    branchId: string
+    generationRequestId: string
+    promptFingerprint?: string
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    temporary: true
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -925,7 +993,7 @@ export type ExtractionRun = {
 
 export type CanvasAiChatSidebarTab = {
     tabId: string
-    type: 'thread' | 'extraction'
+    type: 'thread' | 'extraction' | 'draft'
     refId: string
     title: string
 }
@@ -1051,9 +1119,32 @@ export type AiInteractionChatSendMessagePayload = {
     threadId: string
     referencedFeatureIds?: string[]
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
+    mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Whole-workspace, descriptors-only index sent each turn; consumed by the
     // API `resolveWorkspaceContext` relevance stage (later phase).
     workspaceContextSnapshot?: WorkspaceContextSnapshot
+}
+
+export type AiInteractionMediaGenerationRequest = {
+    requestVersion: 'media-generation-matrix-v1'
+    generationRequestId: string
+    reasoningModelIds: AiModelId[]
+    imageModelIds: AiModelId[]
+    videoModelIds: AiModelId[]
+    imageOptions?: {
+        imageSize: ImageGenerationSize
+    }
+    videoOptions?: {
+        aspectRatio?: string
+        resolution?: string
+        duration?: string
+        sourceVideoNodeId?: string
+        sourceForExtension?: string
+    }
+}
+
+export type AiInteractionChatSendMessagePayloadV2 = AiInteractionChatSendMessagePayload & {
+    mediaGenerationRequest: AiInteractionMediaGenerationRequest
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
@@ -1064,6 +1155,7 @@ export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePa
 
 export type AiInteractionChatStopMessagePayload = {
     threadId: string
+    generationRequestId?: string
 }
 
 export type AiModel = {

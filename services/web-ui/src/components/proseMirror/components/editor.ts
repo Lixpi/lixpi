@@ -33,7 +33,10 @@ import {
     aiGeneratedVideoNodeView,
     aiCollapsibleBlockNodeType,
     aiCollapsibleBlockNodeSpec,
-    aiCollapsibleBlockNodeView
+    aiCollapsibleBlockNodeView,
+    aiReasoningSectionNodeType,
+    aiReasoningSectionNodeSpec,
+    aiReasoningSectionNodeView
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
 // aiUserInput is kept in the schema for legacy content migration but no longer imported here
 import { aiUserInputNodeType, aiUserInputNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
@@ -217,7 +220,8 @@ export class ProseMirrorEditor {
                 [aiUserMessageNodeType]: aiUserMessageNodeSpec,
                 [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec,
                 [aiGeneratedVideoNodeType]: aiGeneratedVideoNodeSpec,
-                [aiCollapsibleBlockNodeType]: aiCollapsibleBlockNodeSpec
+                [aiCollapsibleBlockNodeType]: aiCollapsibleBlockNodeSpec,
+                [aiReasoningSectionNodeType]: aiReasoningSectionNodeSpec
             }
         } else if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
             allNodes = {
@@ -277,10 +281,14 @@ export class ProseMirrorEditor {
                     onSubmit: (data) => this.onPromptSubmit?.(data),
                     onStop: () => this.onPromptStop?.(),
                     isReceiving: () => this.isPromptReceiving?.() ?? false,
+                    createContextTray: this.promptControlFactories?.createContextTray,
                     createModelDropdown: this.promptControlFactories?.createModelDropdown,
+                    createModelMultiSelect: this.promptControlFactories?.createModelMultiSelect,
                     createImageModelDropdown: this.promptControlFactories?.createImageModelDropdown,
+                    createImageModelMultiSelect: this.promptControlFactories?.createImageModelMultiSelect,
                     createImageSizeDropdown: this.promptControlFactories?.createImageSizeDropdown,
                     createVideoModelDropdown: this.promptControlFactories?.createVideoModelDropdown,
+                    createVideoModelMultiSelect: this.promptControlFactories?.createVideoModelMultiSelect,
                     createVideoAspectDropdown: this.promptControlFactories?.createVideoAspectDropdown,
                     createVideoResolutionDropdown: this.promptControlFactories?.createVideoResolutionDropdown,
                     createVideoDurationDropdown: this.promptControlFactories?.createVideoDurationDropdown,

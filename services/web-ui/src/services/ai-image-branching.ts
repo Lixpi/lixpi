@@ -36,6 +36,7 @@ type BuildImageBranchCandidateSnapshotParams = {
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
     prompt: string
+    contextMediaNodeIds?: string[]
     generatedImageTextByNodeId?: Record<string, string>
 }
 
@@ -175,8 +176,11 @@ function collectImageBranchAncestors(
 
         const incomingEdge = edges.find((edge) => edge.targetNodeId === current?.nodeId)
         if (incomingEdge && incomingEdge.sourceNodeId !== regionNodeId) {
-            current = mediaById.get(incomingEdge.sourceNodeId)
-            if (current) continue
+            const sourceMedia = mediaById.get(incomingEdge.sourceNodeId)
+            if (sourceMedia) {
+                current = sourceMedia
+                continue
+            }
         }
 
         const parentImageNodeId = current.generatedBy?.parentImageNodeId
@@ -379,9 +383,13 @@ export function buildImageBranchCandidateSnapshot({
     nodes,
     edges,
     prompt,
+    contextMediaNodeIds = [],
     generatedImageTextByNodeId = {},
 }: BuildImageBranchCandidateSnapshotParams): ImageBranchCandidateSnapshot {
-    const sourceContextNodeIds = getSourceContextNodeIds(nodes, edges, regionNodeId)
+    const sourceContextNodeIds = uniqueValues([
+        ...getSourceContextNodeIds(nodes, edges, regionNodeId),
+        ...contextMediaNodeIds,
+    ])
     const contextMedia = getContextMediaNodes(nodes, sourceContextNodeIds)
     const generatedMedia = getGeneratedMediaForThread(nodes, threadId)
     const generatedMediaById = new Map(generatedMedia.map((node) => [node.nodeId, node]))
@@ -436,6 +444,7 @@ type BuildWorkspaceContextSnapshotParams = {
 
 function toWorkspaceContextNode(
     node: WorkspaceContextCanvasNode,
+    threadId: string,
     chipNodeIds: Set<string>,
     edgeForcedNodeIds: Set<string>,
     titlesByNodeId: Record<string, string>
@@ -471,8 +480,13 @@ function toWorkspaceContextNode(
         if (fileId) contextNode.fileId = fileId
         const imageUrl = getMediaUrl(node)
         if (imageUrl) contextNode.imageUrl = imageUrl
-        const branchId = node.generatedBy?.branchId
+        const generatedBy = node.generatedBy
+        const branchId = generatedBy?.branchId
         if (branchId) contextNode.branchId = branchId
+        if (generatedBy?.aiChatThreadId) {
+            contextNode.sourceThreadId = generatedBy.aiChatThreadId
+            if (generatedBy.aiChatThreadId === threadId) contextNode.isCurrentThreadGenerated = true
+        }
     }
 
     return contextNode
@@ -504,7 +518,7 @@ export function buildWorkspaceContextSnapshot({
         promptText: prompt,
         nodes: nodes
             .filter(isWorkspaceContextCanvasNode)
-            .map((node) => toWorkspaceContextNode(node, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
+            .map((node) => toWorkspaceContextNode(node, threadId, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
     }
 }
 

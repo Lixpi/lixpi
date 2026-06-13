@@ -50,7 +50,9 @@ export class ImageRouter {
             return {}
         }
 
-        const instanceKey = `${workspaceId}:${aiChatThreadId}:image`
+        const instanceKey = state.generationRun?.mediaRunId
+            ? `${workspaceId}:${aiChatThreadId}:${state.generationRun.mediaRunId}`
+            : `${workspaceId}:${aiChatThreadId}:image`
         const referenceImages = state.referenceImages ?? []
         const featureReferenceImages = state.featureReferenceImages ?? []
         const hasFeatureReferences = featureReferenceImages.length > 0
@@ -110,6 +112,7 @@ export class ImageRouter {
                 aiChatThreadId,
                 enableImageGeneration: true,
                 imageSize,
+                generationRun: state.generationRun,
                 eventMeta: state.eventMeta,
             }
 
@@ -142,6 +145,8 @@ export class ImageRouter {
             const message = e?.message ?? String(e)
             err(`[ImageRouter] Image generation failed: ${message}`)
             return { error: message }
+        } finally {
+            this.registry.remove?.(instanceKey)
         }
     }
 }

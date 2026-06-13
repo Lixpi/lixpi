@@ -1,0 +1,15 @@
+packages:
+  - "packages/lixpi/auth-service"
+  - "packages/lixpi/constants/ts"
+  - "packages/lixpi/debug-tools/ts"
+  - "packages/lixpi/dynamodb-service"
+  - "packages/lixpi/lambda-service"
+  - "packages/lixpi/nats-auth-callout-service"
+  - "packages/lixpi/nats-service/ts"
+  - "packages/lixpi/sns-service"
+  - "packages/lixpi/sqs-service"
+  - "packages/lixpi/ssm-service"
+
+allowBuilds:
+  "@google/genai": true
+  protobufjs: true

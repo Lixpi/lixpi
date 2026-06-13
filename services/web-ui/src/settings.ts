@@ -38,21 +38,31 @@ export type ModelSelectorDropdownSettings = {
 }
 
 export type DropdownSettings = {
-    popoverBoxShadow: string
+    styles: {
+        popoverBoxShadow: string
+    }
 }
 
 export type GradientSettings = {
-    shiftingColors: [string, string, string, string]
+    styles: {
+        shiftingColors: [string, string, string, string]
+    }
+}
+
+export type HelpTooltipSettings = {
+    interactiveHideDelayMs: number
 }
 
 export type AiChatThreadRailSettings = {
-    gradient: string
-    width: string
     offset: number
     edgeMargin: number
     minSlideHeight: number
-    boundaryCircleColors: [string, string, string]
     dragGrabWidth: number
+    styles: {
+        gradient: string
+        width: string
+        boundaryCircleColors: [string, string, string]
+    }
 }
 
 export type AiChatThreadPanelTabsSettings = {
@@ -61,94 +71,103 @@ export type AiChatThreadPanelTabsSettings = {
     transitionDurationMs: number
     transitionMinDurationMs: number
     transitionDistanceSpeedupFactor: number
-    activeTabBoxShadow: string
-    activeTabInsetShadow: {
-        topColor: string
-        bottomColor: string
+    styles: {
+        activeTabBoxShadow: string
+        activeTabInsetShadow: {
+            topColor: string
+            bottomColor: string
+        }
+    }
+}
+
+export type AiChatThreadSessionHistorySettings = {
+    styles: {
+        controlColor: string
+        controlHoverColor: string
+        historyToggleHoverBackground: string
+        actionHoverBackground: string
+        actionHoverColor: string
+        deleteColor: string
+        hoverBackgroundImage: string
+        threadMarkerBackground: string
+        threadMarkerBoxShadow: string
+    }
+}
+
+export type AiChatThreadContextPreviewSettings = {
+    styles: {
+        controlsColor: string
+        chipBackground: string
+        triggerBorderRadius: string
+        previewBorderRadius: string
+        tooltipBackground: string
+        tooltipBorder: string
+        tooltipBorderRadius: string
+        tooltipBoxShadow: string
+        tooltipColor: string
+        videoBackground: string
+        videoGlyphBackground: string
+        videoGlyphColor: string
+        documentColor: string
+        documentSkeletonLineBorderRadius: string
+        documentSkeletonLineBackground: string
+        documentIconColor: string
+        documentTextColor: string
+        popoverTitleColor: string
+        popoverTextColor: string
+        removeButtonBackground: string
+        removeButtonColor: string
+        removeButtonBoxShadow: string
     }
 }
 
 export type AiChatThreadSettings = {
-    responseMessageBubbleColor: string
-    nodeBoxShadow: string
-    nodeBorder: string
     showHeader: boolean
     useShiftingGradientBackground: boolean
     defaultDimensions: { width: number; height: number }
     adjacentNodeGap: number
     panelTabs: AiChatThreadPanelTabsSettings
+    sessionHistory: AiChatThreadSessionHistorySettings
+    contextPreview: AiChatThreadContextPreviewSettings
     rail: AiChatThreadRailSettings
+    styles: {
+        responseMessageBubbleColor: string
+        nodeBoxShadow: string
+        nodeBorder: string
+        panelSectionDividerBorder: string
+    }
 }
 
 export type AiPromptInputModelMenuSettings = {
-    openPromptZIndex: string
-    infoBubbleZIndex: string
-    triggerSize: string
-    triggerIconSize: string
-    triggerColor: string
-    triggerActiveColor: string
-    triggerActiveBackground: string
-    triggerFocusOutline: string
-    triggerFocusOutlineOffset: string
-    triggerTransition: string
-    infoBubbleWidth: string
-    infoBubbleMaxWidth: string
-    infoBubbleMobileMaxWidth: string
-    infoBubblePadding: string
-    infoBubbleBorderRadius: string
-    infoBubbleBackground: string
-    infoBubbleBoxShadow: string
-    infoBubbleColor: string
-    contentGap: string
-    sectionGap: string
-    sectionDividerPaddingTop: string
-    sectionDividerWidth: string
-    sectionDividerHeight: string
-    sectionDividerGradient: string
-    sectionDividerBorderRadius: string
-    sectionHeadingGap: string
-    sectionHeadingJustifyContent: string
-    sectionTitleColor: string
-    sectionTitleFontSize: string
-    sectionTitleFontWeight: string
-    sectionTitleLineHeight: string
-    controlsGridTemplateColumns: string
-    controlsMobileGridTemplateColumns: string
-    controlsGap: string
-    controlsMaxWidth: string
-    controlsMobileMaxWidth: string
-    controlGap: string
-    controlLabelColor: string
-    controlLabelInset: string
-    controlLabelFontSize: string
-    controlLabelFontWeight: string
-    controlLabelLineHeight: string
-    dropdownButtonMaxWidth: string
-    dropdownButtonMobileMaxWidth: string
-    nestedDropdownGap: string
-    helpTooltipTriggerSize: string
-    helpTooltipTriggerBorder: string
-    helpTooltipTriggerBackground: string
-    helpTooltipTriggerColor: string
-    helpTooltipTriggerHoverBackground: string
-    helpTooltipTriggerHoverColor: string
-    helpTooltipIconSize: string
-    helpTooltipTriggerFocusOutline: string
-    helpTooltipTriggerFocusOutlineOffset: string
-    helpTooltipOffset: string
-    helpTooltipViewportMargin: string
-    helpTooltipWidth: string
-    helpTooltipMaxWidth: string
-    helpTooltipPadding: string
-    helpTooltipBackground: string
-    helpTooltipBorder: string
-    helpTooltipBorderRadius: string
-    helpTooltipBoxShadow: string
-    helpTooltipColor: string
-    helpTooltipFontSize: string
-    helpTooltipFontWeight: string
-    helpTooltipLineHeight: string
-    helpTooltipContentZIndex: string
+    styles: {
+        triggerColor: string
+        triggerActiveColor: string
+        triggerActiveBackground: string
+        triggerFocusOutline: string
+        infoBubbleWidth: string
+        infoBubbleBorderRadius: string
+        infoBubbleBackground: string
+        infoBubbleBoxShadow: string
+        infoBubbleColor: string
+        sectionDividerGradient: string
+        sectionDividerHeight: string
+        sectionDividerBorderRadius: string
+        sectionTitleColor: string
+        controlLabelColor: string
+        selectedModelTagTextColor: string
+        selectedModelTagIconColor: string
+        helpTooltipTriggerBorder: string
+        helpTooltipTriggerBackground: string
+        helpTooltipTriggerColor: string
+        helpTooltipTriggerHoverBackground: string
+        helpTooltipTriggerHoverColor: string
+        helpTooltipTriggerFocusOutline: string
+        helpTooltipBackground: string
+        helpTooltipBorder: string
+        helpTooltipBorderRadius: string
+        helpTooltipBoxShadow: string
+        helpTooltipColor: string
+    }
 }
 
 export type AiPromptInputSettings = {
@@ -157,42 +176,50 @@ export type AiPromptInputSettings = {
 }
 
 export type ConnectorSettings = {
-    lineDefaultColor: string
-    lineFocusColor: string
     lineCurve: WorkspaceEdgePathType
     lineClickAreaWidth: number
     useZoomCompensatedScaling: boolean
     proximityConnectThreshold: number
     menuConnectionSnapRadius: number
+    styles: {
+        lineDefaultColor: string
+        lineFocusColor: string
+    }
 }
 
 export type SelectionSettings = {
-    marqueeBorderColor: string
-    marqueeBackgroundColor: string
-    overlayBorderColor: string
-    overlayBackgroundColor: string
-    outlineColor: string
+    styles: {
+        marqueeBorderColor: string
+        marqueeBackgroundColor: string
+        overlayBorderColor: string
+        overlayBackgroundColor: string
+        outlineColor: string
+    }
 }
 
 export type ImageNodeSettings = {
-    defaultBoxShadow: string
-    selectedBoxShadow: string
     defaultInsertionWidth: number
-    borderRadius: number
     generationBorder: {
         radius: number
         trackWidth: number
-        trackColor: string
-        trackAlpha: number
         snakeWidth: number
         snakeLengthFraction: number
-        snakeTailAlpha: number
         snakeSegmentCount: number
-        snakeColors: [string, string, string, string, string]
         animationDurationMs: number
+        styles: {
+            trackColor: string
+            trackAlpha: number
+            snakeTailAlpha: number
+            snakeColors: [string, string, string, string, string]
+        }
     }
-    modelBadgeBoxShadow: string
     useZoomCompensatedResizeHandleScaling: boolean
+    styles: {
+        defaultBoxShadow: string
+        selectedBoxShadow: string
+        borderRadius: number
+        modelBadgeBoxShadow: string
+    }
 }
 
 export type ImageBranchLineageSettings = {
@@ -201,6 +228,16 @@ export type ImageBranchLineageSettings = {
     branchToBranchGap: number
     imageToImageGap: number
     branchFanoutDepthGap: number
+    branchOrigin: {
+        size: number
+        iconSize: number
+        styles: {
+            backgroundColor: string
+            borderColor: string
+            iconColor: string
+            boxShadow: string
+        }
+    }
 }
 
 export type MediaLibrarySettings = {
@@ -218,6 +255,8 @@ export type Settings = {
     dropdown: DropdownSettings
 
     gradient: GradientSettings
+
+    helpTooltip: HelpTooltipSettings
 
     aiChatThread: AiChatThreadSettings
 
@@ -245,24 +284,28 @@ export const settings: Settings = {
 
     // Shared dropdown surface settings.
     dropdown: {
-        // Shadow for dropdown popover menus. Increasing it raises menus visually from their backdrop.
-        popoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
+        styles: {
+            // Shadow for dropdown popover menus. Increasing it raises menus visually from their backdrop.
+            popoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
+        },
     },
 
     // Shared generated-gradient settings.
     gradient: {
-        // Colors used by shifting backgrounds and animated border overlays. Editing them changes the shared pastel palette.
-        shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
+        styles: {
+            // Colors used by shifting backgrounds and animated border overlays. Editing them changes the shared pastel palette.
+            shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
+        },
+    },
+
+    // Shared TypeScript-html tooltip settings.
+    helpTooltip: {
+        // Delay before an interactive tooltip closes after the pointer leaves its trigger/content.
+        interactiveHideDelayMs: 80,
     },
 
     // AI chat thread presentation and interaction settings.
     aiChatThread: {
-        // Background color for AI response message bubbles and their pigtail.
-        responseMessageBubbleColor: '#f7f7fd',
-        // Box shadow around the AI chat thread canvas node. Use `none` for a flat panel surface.
-        nodeBoxShadow: 'none',
-        // Border around the AI chat thread canvas node. Use `none` to remove the browser-default border.
-        nodeBorder: 'none',
         // Hide or show the document title inside AI chat thread nodes on the workspace canvas.
         showHeader: false,
         // Enable the shifting gradient background on AI chat thread canvas nodes.
@@ -284,31 +327,107 @@ export const settings: Settings = {
             transitionMinDurationMs: 100,
             // Per-tab distance speedup. Higher values compress long jumps more.
             transitionDistanceSpeedupFactor: 0.28,
-            // Active tab outer shadow. Keep this setting isolated from dropdown shadows.
-            activeTabBoxShadow: 'none',
-            // Active tab inset shadow overlay. Keep this setting isolated from dropdown shadows.
-            activeTabInsetShadow: {
-                topColor: 'rgba(255, 255, 255, 0.86)',
-                bottomColor: 'rgba(0, 0, 0, 0)',
+            styles: {
+                // Active tab outer shadow. Keep this setting isolated from dropdown shadows.
+                activeTabBoxShadow: 'none',
+                // Active tab inset shadow overlay. Keep this setting isolated from dropdown shadows.
+                activeTabInsetShadow: {
+                    topColor: 'rgba(255, 255, 255, 0.86)',
+                    bottomColor: 'rgba(0, 0, 0, 0)',
+                },
+            },
+        },
+
+        // AI Chat panel session history presentation.
+        sessionHistory: {
+            styles: {
+                // Default color for panel session controls.
+                controlColor: '#697388',
+                // Hover/focus color for panel session controls.
+                controlHoverColor: '#39455d',
+                // Hover/focus background for the session-history toggle.
+                historyToggleHoverBackground: 'rgba(105, 115, 136, 0.1)',
+                // Shared prominent hover background for destructive session actions.
+                actionHoverBackground: colorPalette.steelBlue,
+                // Shared prominent hover fill/color for destructive session action icons.
+                actionHoverColor: colorPalette.offWhite,
+                // Default color for session delete controls.
+                deleteColor: '#7a8497',
+                // Hover/focus gradient for session rows. Uses the dropdown hover structure with light blue stops.
+                hoverBackgroundImage: 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)',
+                // Dot color for submitted chat sessions in the history list.
+                threadMarkerBackground: '#5f8fcf',
+                // Ring around the submitted chat session dot.
+                threadMarkerBoxShadow: '0 0 0 3px rgba(95, 143, 207, 0.14)',
+            },
+        },
+
+        // AI Chat panel composer context-preview tray and popover presentation.
+        contextPreview: {
+            styles: {
+                // Color for the top context controls row.
+                controlsColor: '#39455d',
+                // Background for compact context preview chip surfaces.
+                chipBackground: 'transparent',
+                // Radius for context preview triggers.
+                triggerBorderRadius: '6px',
+                // Radius for context preview media/document surfaces.
+                previewBorderRadius: '6px',
+                // Context preview popover surface.
+                tooltipBackground: '#fff',
+                tooltipBorder: 'none',
+                tooltipBorderRadius: '8px',
+                tooltipBoxShadow: '0 16px 38px rgba(57, 69, 93, 0.18), 0 2px 8px rgba(57, 69, 93, 0.12)',
+                tooltipColor: '#1a3a47',
+                // Video preview colors.
+                videoBackground: '#0f1721',
+                videoGlyphBackground: 'rgba(255, 255, 255, 0.84)',
+                videoGlyphColor: '#1a3a47',
+                // Document/thread preview colors and skeleton styling.
+                documentColor: '#243045',
+                documentSkeletonLineBorderRadius: '999px',
+                documentSkeletonLineBackground: 'rgba(105, 115, 136, 0.32)',
+                documentIconColor: '#697388',
+                documentTextColor: 'rgba(57, 69, 93, 0.76)',
+                // Popover metadata colors.
+                popoverTitleColor: '#1a3a47',
+                popoverTextColor: 'rgba(57, 69, 93, 0.82)',
+                // Remove-context button presentation.
+                removeButtonBackground: '#fff',
+                removeButtonColor: '#39455d',
+                removeButtonBoxShadow: '0 0 4px rgba(0, 0, 0, 0.32)',
             },
         },
 
         // Vertical rail presentation and hit-target settings for AI chat threads.
         rail: {
-            // Background gradient painted on the visible rail line.
-            gradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
-            // Visible line width; this does not change the draggable hit target.
-            width: '3px',
             // Horizontal offset in pixels from the thread node's left edge.
             offset: -2,
             // Fractional top and bottom margin where connector anchors stop sliding along the rail.
             edgeMargin: 0.065,
             // Minimum rail height in pixels before connectors can slide away from the center.
             minSlideHeight: 120,
-            // Colors for the boundary circle's outer fill, ring, and inner fill.
-            boundaryCircleColors: ['#F3E4F2', '#C5C0EE', 'rgb(202, 180, 201)'],
             // Screen-pixel width of the invisible rail drag hit target. Lower values require a more precise grab.
             dragGrabWidth: 20,
+            styles: {
+                // Background gradient painted on the visible rail line.
+                gradient: 'linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%)',
+                // Visible line width; this does not change the draggable hit target.
+                width: '3px',
+                // Colors for the boundary circle's outer fill, ring, and inner fill.
+                boundaryCircleColors: ['#F3E4F2', '#C5C0EE', 'rgb(202, 180, 201)'],
+            },
+        },
+
+        styles: {
+            // Background color for AI response message bubbles and their pigtail.
+            responseMessageBubbleColor: '#f7f7fd',
+            // Box shadow around the AI chat thread canvas node. Use `none` for a flat panel surface.
+            nodeBoxShadow: 'none',
+            // Border around the AI chat thread canvas node. Use `none` to remove the browser-default border.
+            nodeBorder: 'none',
+            // Border used by AI Chat panel section dividers.
+            panelSectionDividerBorder: '1px solid rgba(26, 39, 68, 0.09)',
         },
     },
 
@@ -318,84 +437,42 @@ export const settings: Settings = {
         useShiftingGradientBackground: true,
         // Model settings menu presentation. The infoBubble shadow is configured separately from dropdown popovers.
         modelMenu: {
-            openPromptZIndex: '10000',
-            infoBubbleZIndex: '10080',
-            triggerSize: '32px',
-            triggerIconSize: '18px',
-            triggerColor: colorPalette.steelBlue,
-            triggerActiveColor: colorPalette.nightBlue,
-            triggerActiveBackground: '#eef0f4',
-            triggerFocusOutline: '2px solid #b8bec8',
-            triggerFocusOutlineOffset: '2px',
-            triggerTransition: 'background 150ms ease, color 150ms ease',
-            infoBubbleWidth: 'max-content',
-            infoBubbleMaxWidth: 'min(640px, calc(100vw - 20px))',
-            infoBubbleMobileMaxWidth: 'calc(100vw - 16px)',
-            infoBubblePadding: '12px 14px',
-            infoBubbleBorderRadius: '12px',
-            infoBubbleBackground: '#fff',
-            infoBubbleBoxShadow: '0 14px 32px rgba(66, 73, 79, 0.12), 0 2px 10px rgba(66, 73, 79, 0.08), inset 0 0 1px 1px rgba(66, 73, 79, 0.2)',
-            infoBubbleColor: colorPalette.nightBlue,
-            contentGap: '12px',
-            sectionGap: '8px',
-            sectionDividerPaddingTop: '14px',
-            sectionDividerWidth: '92%',
-            sectionDividerHeight: '2px',
-            sectionDividerGradient: 'linear-gradient(90deg, #fff 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, #fff 100%)',
-            sectionDividerBorderRadius: '999px',
-            sectionHeadingGap: '6px',
-            sectionHeadingJustifyContent: 'space-between',
-            sectionTitleColor: '#59626b',
-            sectionTitleFontSize: '13px',
-            sectionTitleFontWeight: '700',
-            sectionTitleLineHeight: '1.2',
-            controlsGridTemplateColumns: 'repeat(4, max-content)',
-            controlsMobileGridTemplateColumns: 'repeat(2, max-content)',
-            controlsGap: '8px',
-            controlsMaxWidth: 'min(612px, calc(100vw - 48px))',
-            controlsMobileMaxWidth: 'calc(100vw - 36px)',
-            controlGap: '3px',
-            controlLabelColor: '#9299a1',
-            controlLabelInset: '7px',
-            controlLabelFontSize: '10px',
-            controlLabelFontWeight: '600',
-            controlLabelLineHeight: '1.2',
-            dropdownButtonMaxWidth: '190px',
-            dropdownButtonMobileMaxWidth: '150px',
-            nestedDropdownGap: '8px',
-            helpTooltipTriggerSize: '14px',
-            helpTooltipTriggerBorder: 'none',
-            helpTooltipTriggerBackground: 'transparent',
-            helpTooltipTriggerColor: '#8d949d',
-            helpTooltipTriggerHoverBackground: 'transparent',
-            helpTooltipTriggerHoverColor: '#59626b',
-            helpTooltipIconSize: '12px',
-            helpTooltipTriggerFocusOutline: '2px solid #b8bec8',
-            helpTooltipTriggerFocusOutlineOffset: '2px',
-            helpTooltipOffset: '8px',
-            helpTooltipViewportMargin: '8px',
-            helpTooltipWidth: '240px',
-            helpTooltipMaxWidth: 'min(260px, calc(100vw - 48px))',
-            helpTooltipPadding: '8px 10px',
-            helpTooltipBackground: colorPalette.steelBlue,
-            helpTooltipBorder: 'none',
-            helpTooltipBorderRadius: '8px',
-            // Outer shadow value intentionally duplicates dropdown.popoverBoxShadow; keep this setting separate.
-            helpTooltipBoxShadow: `0 2px 12px rgba(0, 0, 0, 0.1), 0 10px 26px rgba(35, 41, 45, 0.22), inset 0 0 1px 1px rgba(0, 0, 0, 0.1)`,
-            helpTooltipColor: colorPalette.offWhite,
-            helpTooltipFontSize: '11px',
-            helpTooltipFontWeight: '500',
-            helpTooltipLineHeight: '1.35',
-            helpTooltipContentZIndex: '10120',
+            styles: {
+                triggerColor: colorPalette.steelBlue,
+                triggerActiveColor: colorPalette.nightBlue,
+                triggerActiveBackground: '#eef0f4',
+                triggerFocusOutline: '2px solid #b8bec8',
+                infoBubbleWidth: '410px',
+                infoBubbleBorderRadius: '12px',
+                infoBubbleBackground: '#fff',
+                infoBubbleBoxShadow: '0 14px 32px rgba(66, 73, 79, 0.12), 0 2px 10px rgba(66, 73, 79, 0.08), inset 0 0 1px 1px rgba(66, 73, 79, 0.2)',
+                infoBubbleColor: colorPalette.nightBlue,
+                sectionDividerGradient: 'linear-gradient(90deg, #fff 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, #fff 100%)',
+                sectionDividerHeight: '2px',
+                sectionDividerBorderRadius: '999px',
+                sectionTitleColor: '#59626b',
+                controlLabelColor: '#9299a1',
+                // Text and icon share one color, matching the dropdown value text (the menu panel foreground).
+                selectedModelTagTextColor: colorPalette.nightBlue,
+                selectedModelTagIconColor: colorPalette.nightBlue,
+                helpTooltipTriggerBorder: 'none',
+                helpTooltipTriggerBackground: 'transparent',
+                helpTooltipTriggerColor: '#8d949d',
+                helpTooltipTriggerHoverBackground: 'transparent',
+                helpTooltipTriggerHoverColor: '#59626b',
+                helpTooltipTriggerFocusOutline: '2px solid #b8bec8',
+                helpTooltipBackground: colorPalette.steelBlue,
+                helpTooltipBorder: 'none',
+                helpTooltipBorderRadius: '8px',
+                // Outer shadow value intentionally duplicates dropdown.popoverBoxShadow; keep this setting separate.
+                helpTooltipBoxShadow: `0 2px 12px rgba(0, 0, 0, 0.1), 0 10px 26px rgba(35, 41, 45, 0.22), inset 0 0 1px 1px rgba(0, 0, 0, 0.1)`,
+                helpTooltipColor: colorPalette.offWhite,
+            },
         },
     },
 
     // Canvas edge and node-connection interaction settings.
     connector: {
-        // Default color for connector lines between nodes.
-        lineDefaultColor: colorPalette.steelBlue,
-        // Focus and selection color for connector lines.
-        lineFocusColor: '#000',
         // Default curve used for connector lines between nodes.
         lineCurve: 'horizontal-bezier',
         // Screen-pixel width of the invisible selection hit area around connector lines.
@@ -406,51 +483,63 @@ export const settings: Settings = {
         proximityConnectThreshold: 700,
         // Renderer-coordinate distance at which menu-driven connection placement snaps to a target.
         menuConnectionSnapRadius: 110,
+        styles: {
+            // Default color for connector lines between nodes.
+            lineDefaultColor: colorPalette.steelBlue,
+            // Focus and selection color for connector lines.
+            lineFocusColor: '#000',
+        },
     },
 
     // Canvas selection overlay settings.
     selection: {
-        // Border color for the drag-to-select marquee rectangle.
-        marqueeBorderColor: 'rgba(176, 173, 224, 0.88)',
-        // Fill color for the drag-to-select marquee rectangle.
-        marqueeBackgroundColor: 'rgba(230, 233, 246, 0.38)',
-        // Border color for the persistent multi-selection overlay.
-        overlayBorderColor: 'rgba(197, 192, 238, 0.62)',
-        // Fill color for the persistent multi-selection overlay.
-        overlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
-        // Outline color for a selected thread's floating prompt input.
-        outlineColor: 'rgba(197, 192, 238, 0.75)',
+        styles: {
+            // Border color for the drag-to-select marquee rectangle.
+            marqueeBorderColor: 'rgba(176, 173, 224, 0.88)',
+            // Fill color for the drag-to-select marquee rectangle.
+            marqueeBackgroundColor: 'rgba(230, 233, 246, 0.38)',
+            // Border color for the persistent multi-selection overlay.
+            overlayBorderColor: 'rgba(197, 192, 238, 0.62)',
+            // Fill color for the persistent multi-selection overlay.
+            overlayBackgroundColor: 'rgba(230, 233, 246, 0.42)',
+            // Outline color for a selected thread's floating prompt input.
+            outlineColor: 'rgba(197, 192, 238, 0.75)',
+        },
     },
 
     // Canvas image node settings. These values style image-node chrome and selection states.
     imageNode: {
-        // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
-        defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
-        // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
-        selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
         // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
         defaultInsertionWidth: 600,
-        // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
-        borderRadius: 8,
 
         // PIXI-rendered animated outline shown only while an AI-generated image is receiving partials.
         generationBorder: {
             radius: 10,
             trackWidth: 3,
-            trackColor: '#D0D6E1',
-            trackAlpha: 0.72,
             snakeWidth: 4,
             snakeLengthFraction: 0.24,
-            snakeTailAlpha: 0.25,
             snakeSegmentCount: 72,
-            snakeColors: ['#1D57CB', '#2474FF', '#7C4DFF', '#D63FF0', '#FF9933'],
             animationDurationMs: 3200,
+            styles: {
+                trackColor: '#D0D6E1',
+                trackAlpha: 0.72,
+                snakeTailAlpha: 0.25,
+                snakeColors: ['#1D57CB', '#2474FF', '#7C4DFF', '#D63FF0', '#FF9933'],
+            },
         },
 
-        // Shadow behind the generated-image model badge. Increasing it improves badge separation on busy image pixels.
-        modelBadgeBoxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
         // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
         useZoomCompensatedResizeHandleScaling: true,
+        styles: {
+            // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
+            defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
+            // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
+            selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+            // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
+            borderRadius: 8,
+            // Shadow behind the generated-image model badge. Increasing it improves badge separation on busy image pixels.
+            modelBadgeBoxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+        },
     },
 
     // Media Library panel layout settings.
@@ -471,6 +560,19 @@ export const settings: Settings = {
         imageToImageGap: 512,
         // Canvas-unit extra horizontal gap added for each child after the first when a generated-media node forks. Increasing it gives large branch fans more curve room.
         branchFanoutDepthGap: 96,
+        // Temporary root marker used when a fresh multi-model branch has no real source node.
+        branchOrigin: {
+            // Canvas-unit diameter of the branch-origin circle.
+            size: 96,
+            // Canvas-unit size for the centered branch icon.
+            iconSize: 52,
+            styles: {
+                backgroundColor: colorPalette.steelBlue,
+                borderColor: colorPalette.steelBlue,
+                iconColor: colorPalette.offWhite,
+                boxShadow: '0 8px 24px rgba(42, 48, 57, 0.22)',
+            },
+        },
     },
 
     // Document / chat-thread descriptor generation (the text "meta" the workspace relevance engine ranks on).

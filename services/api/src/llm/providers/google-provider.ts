@@ -34,6 +34,26 @@ import { join } from 'node:path'
 
 type VeoImageInput = { imageBytes: string; mimeType: string }
 
+const getGooglePartSummary = (part: any): Record<string, unknown> => {
+    const text = typeof part?.text === 'string' ? part.text : ''
+    return {
+        hasText: text.length > 0,
+        textPreview: text ? text.slice(0, 240) : '',
+        hasInlineData: Boolean(part?.inlineData?.data || part?.inline_data?.data),
+        hasFunctionCall: Boolean(part?.functionCall || part?.function_call),
+    }
+}
+
+export const getGoogleImageResponseSummary = (response: any): Record<string, unknown> => ({
+    promptFeedback: response?.promptFeedback ?? response?.prompt_feedback,
+    candidates: (response?.candidates ?? []).map((candidate: any, index: number) => ({
+        index,
+        finishReason: candidate?.finishReason ?? candidate?.finish_reason,
+        safetyRatings: candidate?.safetyRatings ?? candidate?.safety_ratings,
+        partTypes: (candidate?.content?.parts ?? []).map(getGooglePartSummary),
+    })),
+})
+
 export function buildVeoReferenceImages(refs: VeoImageInput[]): Array<{ image: VeoImageInput; referenceType: 'asset' }> {
     return refs.map(image => ({ image, referenceType: 'asset' }))
 }
@@ -75,6 +95,7 @@ export class GoogleProvider extends BaseProvider {
 
         const hasVideoModel = !!state.videoModelVersion
         const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
+        let mediaFanoutAllowedFunctionNames: string[] = []
 
         // Resolve message content (so reference-image extraction sees data URLs)
         // and convert each message to a Google `Content` object.
@@ -111,6 +132,7 @@ export class GoogleProvider extends BaseProvider {
                 functionDeclarations.push({ name: VIDEO_TOOL_NAME, description: videoToolDef.description, parameters: videoToolDef.parameters })
             }
             config.tools = [{ functionDeclarations }]
+            mediaFanoutAllowedFunctionNames = functionDeclarations.map((declaration) => declaration.name)
         }
 
         let systemInstruction: string | undefined
@@ -199,7 +221,7 @@ export class GoogleProvider extends BaseProvider {
 
                 if (imageParts.length === 0) {
                     const errMsg = `Google image model ${modelVersion} returned no inline image data.`
-                    err(`[Google:${this.instanceKey}] ${errMsg}`)
+                    err(`[Google:${this.instanceKey}] ${errMsg} ${JSON.stringify(getGoogleImageResponseSummary(response), null, 0)}`)
                     update.error = errMsg
                 } else {
                     for (let i = 0; i < imageParts.length - 1; i++) {
@@ -215,30 +237,65 @@ export class GoogleProvider extends BaseProvider {
                     update.generatedImages = [final]
                 }
             } else if (injectTool || injectVideoTool) {
-                const stream = await this.client.models.generateContentStream({
-                    model: modelVersion,
-                    contents: contents as any,
-                    config: config as any,
-                })
-                let detectedImage: string | undefined
-                let detectedVideo: string | undefined
-                for await (const chunk of stream) {
-                    if (this.shouldStop) break
-                    if (chunk.usageMetadata) usageMetadata = chunk.usageMetadata
-                    for (const candidate of chunk.candidates ?? []) {
-                        if (!candidate.content?.parts) continue
-                        for (const part of candidate.content.parts) {
-                            const fnCall = (part as any).functionCall ?? (part as any).function_call
-                            if (fnCall && fnCall.name === TOOL_NAME) {
-                                detectedImage = (fnCall.args ?? {}).prompt ?? ''
-                            } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
-                                detectedVideo = (fnCall.args ?? {}).prompt ?? ''
-                            } else if ((part as any).text) {
-                                this.publisher.chunk((part as any).text)
+                const runToolStream = async (
+                    streamConfig: Record<string, any>,
+                    publishText: boolean,
+                ): Promise<{ detectedImage?: string; detectedVideo?: string; usageMetadata?: any }> => {
+                    const stream = await this.client.models.generateContentStream({
+                        model: modelVersion,
+                        contents: contents as any,
+                        config: streamConfig as any,
+                    })
+                    let detectedImage: string | undefined
+                    let detectedVideo: string | undefined
+                    let streamUsageMetadata: any = null
+
+                    for await (const chunk of stream) {
+                        if (this.shouldStop) break
+                        if (chunk.usageMetadata) streamUsageMetadata = chunk.usageMetadata
+                        for (const candidate of chunk.candidates ?? []) {
+                            if (!candidate.content?.parts) continue
+                            for (const part of candidate.content.parts) {
+                                const fnCall = (part as any).functionCall ?? (part as any).function_call
+                                if (fnCall && fnCall.name === TOOL_NAME) {
+                                    detectedImage = (fnCall.args ?? {}).prompt ?? ''
+                                } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
+                                    detectedVideo = (fnCall.args ?? {}).prompt ?? ''
+                                } else if (publishText && (part as any).text) {
+                                    this.publisher.chunk((part as any).text)
+                                }
                             }
                         }
                     }
+
+                    return { detectedImage, detectedVideo, usageMetadata: streamUsageMetadata }
                 }
+
+                let toolStreamResult = await runToolStream(config, true)
+                usageMetadata = toolStreamResult.usageMetadata ?? usageMetadata
+                let detectedImage = toolStreamResult.detectedImage
+                let detectedVideo = toolStreamResult.detectedVideo
+
+                if (state.mediaFanoutPlan
+                    && !this.shouldStop
+                    && !detectedImage
+                    && !detectedVideo
+                    && mediaFanoutAllowedFunctionNames.length > 0) {
+                    warn(`[Google:${this.instanceKey}] media fanout AUTO mode skipped the tool; retrying with forced function call`)
+                    toolStreamResult = await runToolStream({
+                        ...config,
+                        toolConfig: {
+                            functionCallingConfig: {
+                                mode: 'ANY',
+                                allowedFunctionNames: mediaFanoutAllowedFunctionNames,
+                            },
+                        },
+                    }, false)
+                    usageMetadata = toolStreamResult.usageMetadata ?? usageMetadata
+                    detectedImage = toolStreamResult.detectedImage
+                    detectedVideo = toolStreamResult.detectedVideo
+                }
+
                 if (detectedVideo) {
                     update.generatedVideoPrompt = detectedVideo
                     info(`[Google:${this.instanceKey}] generate_video tool call ${JSON.stringify({

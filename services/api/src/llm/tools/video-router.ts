@@ -65,7 +65,9 @@ export class VideoRouter {
             return {}
         }
 
-        const instanceKey = `${workspaceId}:${aiChatThreadId}:video`
+        const instanceKey = state.generationRun?.mediaRunId
+            ? `${workspaceId}:${aiChatThreadId}:${state.generationRun.mediaRunId}`
+            : `${workspaceId}:${aiChatThreadId}:video`
         const videoReferenceImages = buildRoutedVideoReferenceImages(state)
         const featureReferenceImages = state.featureReferenceImages ?? []
         const featureUsagePrompt = state.featureUsagePrompt?.trim()
@@ -111,6 +113,7 @@ export class VideoRouter {
                 videoFirstFrameImage: state.videoFirstFrameImage,
                 videoReferenceImages,
                 videoSourceForExtension: state.videoSourceForExtension,
+                generationRun: state.generationRun,
                 eventMeta: state.eventMeta,
             }
 
@@ -145,6 +148,8 @@ export class VideoRouter {
             const message = e?.message ?? String(e)
             err(`[VideoRouter] Video generation failed: ${message}`)
             return { error: message }
+        } finally {
+            this.registry.remove?.(instanceKey)
         }
     }
 }

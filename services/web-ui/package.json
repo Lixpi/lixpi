@@ -51,7 +51,7 @@
         "d3-transition": "*",
         "@types/d3-selection": "*",
         "@types/d3-transition": "*",
-        "@lixpi/markdown-stream-parser": "*"
+        "@lixpi/markdown-stream-parser": "latest"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
@@ -90,5 +90,5 @@
         "prosemirror-view": "*",
         "htm": "*"
     },
-    "packageManager": "pnpm@9.15.0"
+    "packageManager": "pnpm@11.6.0"
 }

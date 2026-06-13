@@ -27,7 +27,7 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 1. Use this index for the main product and platform entry points.
 2. Use the generated docs-site sidebar for the complete current file list.
 3. Search by the concept you are changing, then read nearby pages before editing.
-4. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
+4. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread. If cleanup or an edit would delete repository files, ask the user to confirm the exact file path(s) first; if the user does not confirm, keep the files and report them as cleanup candidates.
 5. For `services/web-ui` TypeScript UI work, [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) and [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) are mandatory before editing.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
@@ -66,7 +66,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | Page | What it covers |
 |------|----------------|
 | [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | The workspace-owned AI chat panel, standalone chats, tabs, Sessions, extraction sessions, persistence |
-| [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md) | Descriptor-first workspace relevance, the resolver, explicit/auto chips, data contracts, context-region removal |
+| [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md) | Descriptor-first workspace relevance, the resolver, explicit chips, automatic selections, data contracts, context-region removal |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 
 ## Media Generation

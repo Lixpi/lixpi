@@ -217,7 +217,7 @@ Edge styling:
 
 ## Routing
 
-`WorkspaceConnectionManager` handles edge state and path planning, while `pixiEdgeRenderer.ts` draws committed edges as PIXI graphics. The routing style is configured in `settings.connector.connectionStyle`; the current default is `horizontal-bezier`.
+`WorkspaceConnectionManager` handles edge state and path planning, while `pixiEdgeRenderer.ts` draws committed edges as PIXI graphics. The routing style is configured in `settings.connector.lineCurve`; the current default is `horizontal-bezier`.
 
 | Behavior | Rule |
 |----------|------|

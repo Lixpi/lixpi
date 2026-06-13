@@ -20,6 +20,13 @@ export type GeneratedImageTurnInfo = {
     imageGenerationPromptText: string
 }
 
+export type GeneratedMediaTurnLocator = {
+    responseMessageId?: string
+    reasoningRunId?: string
+    reasoningModelId?: string
+    mediaRunId?: string
+}
+
 type CollectTextOptions = {
     excludedNodeTypes?: string[]
 }
@@ -79,12 +86,47 @@ export function collectResponseTextById(root: ProseMirrorJsonNode): Record<strin
     return responseTextById
 }
 
-function getFirstGenerationTrace(responseNode: ProseMirrorJsonNode): {
+// A multi-model response holds one aiReasoningSection per reasoning model; the
+// content owner for a given image/video is the section whose model produced it
+// (so each image's history shows ONLY its own model, never the other models').
+// Legacy single-model responses have no sections, so the message itself is used.
+function sectionContainsMediaRun(section: ProseMirrorJsonNode, mediaRunId: string): boolean {
+    for (const child of section.content ?? []) {
+        if ((child.type === 'aiGeneratedImage' || child.type === 'aiGeneratedVideo') && child.attrs?.mediaRunId === mediaRunId) {
+            return true
+        }
+    }
+    return false
+}
+
+function getReasoningContainer(responseNode: ProseMirrorJsonNode, locator: GeneratedMediaTurnLocator): ProseMirrorJsonNode {
+    const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
+    if (sections.length === 0) return responseNode
+
+    if (locator.reasoningRunId) {
+        const matched = sections.find((section) => section.attrs?.reasoningRunId === locator.reasoningRunId)
+        if (matched) return matched
+    }
+
+    if (locator.mediaRunId) {
+        const matched = sections.find((section) => sectionContainsMediaRun(section, locator.mediaRunId!))
+        if (matched) return matched
+    }
+
+    if (locator.reasoningModelId) {
+        const matched = sections.find((section) => section.attrs?.reasoningModelId === locator.reasoningModelId)
+        if (matched) return matched
+    }
+
+    return sections[0]
+}
+
+function getFirstGenerationTrace(container: ProseMirrorJsonNode): {
     imageTrace: ImageGenerationTrace | null
     videoTrace: VideoGenerationTrace | null
     promptText: string
 } {
-    for (const child of responseNode.content ?? []) {
+    for (const child of container.content ?? []) {
         if (child.type !== 'aiCollapsibleBlock') continue
         return {
             imageTrace: (child.attrs?.imageGenerationTrace as ImageGenerationTrace | undefined) ?? null,
@@ -98,10 +140,14 @@ function getFirstGenerationTrace(responseNode: ProseMirrorJsonNode): {
 
 export function getGeneratedImageTurnInfoFromThreadContent(
     threadContent: unknown,
-    responseMessageId: string | undefined
+    responseMessageIdOrLocator: string | GeneratedMediaTurnLocator | undefined,
+    reasoningModelId?: string
 ): GeneratedImageTurnInfo | null {
     const root = parseProseMirrorJsonContent(threadContent)
     if (!root) return null
+    const locator: GeneratedMediaTurnLocator = typeof responseMessageIdOrLocator === 'object'
+        ? responseMessageIdOrLocator
+        : { responseMessageId: responseMessageIdOrLocator, reasoningModelId }
 
     let latestUserMessage: ProseMirrorJsonNode | null = null
     let fallbackResponse: GeneratedImageTurnInfo | null = null
@@ -115,10 +161,11 @@ export function getGeneratedImageTurnInfoFromThreadContent(
 
             if (child.type === 'aiResponseMessage') {
                 const responseId = typeof child.attrs?.id === 'string' ? child.attrs.id : ''
-                const { imageTrace, videoTrace, promptText } = getFirstGenerationTrace(child)
+                const container = getReasoningContainer(child, locator)
+                const { imageTrace, videoTrace, promptText } = getFirstGenerationTrace(container)
                 const info: GeneratedImageTurnInfo = {
                     userPromptText: collectProseMirrorText(latestUserMessage ?? undefined).trim(),
-                    responseText: collectProseMirrorText(child, {
+                    responseText: collectProseMirrorText(container, {
                         excludedNodeTypes: ['aiCollapsibleBlock', 'aiGeneratedImage'],
                     }).trim(),
                     responseMessageId: responseId,
@@ -129,7 +176,7 @@ export function getGeneratedImageTurnInfoFromThreadContent(
                 }
 
                 fallbackResponse = info
-                if (responseMessageId && responseId === responseMessageId) return info
+                if (locator.responseMessageId && responseId === locator.responseMessageId) return info
                 continue
             }
 
@@ -141,5 +188,5 @@ export function getGeneratedImageTurnInfoFromThreadContent(
     }
 
     const exactMatch = visitContainer(root)
-    return exactMatch ?? (!responseMessageId ? fallbackResponse : null)
+    return exactMatch ?? (!locator.responseMessageId ? fallbackResponse : null)
 }

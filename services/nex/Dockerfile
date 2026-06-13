@@ -42,7 +42,7 @@ WORKDIR /usr/src/service
 # ./packages and the entrypoint re-installs; for AWS/Pulumi (no mounts) the baked
 # install below is what ships.
 COPY services/nex/package.json ./package.json
-COPY pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY services/nex/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY packages ./packages
 COPY services/nex/workloads ./workloads
 RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store

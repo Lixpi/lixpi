@@ -17,7 +17,7 @@ import { settings } from '$src/settings.ts'
 import type { EditorView } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 
-type AiModelDropdownOption = {
+export type AiModelDropdownOption = {
     title: string
     icon: string
     color: string
@@ -72,7 +72,7 @@ const AI_AVATAR_ICONS: Record<string, string> = {
     stabilityIcon,
 }
 
-function transformModelsToOptions(models: any[]): AiModelDropdownOption[] {
+export function transformModelsToOptions(models: any[]): AiModelDropdownOption[] {
     return models.map((aiModel: any) => ({
         title: aiModel.shortTitle,
         icon: AI_AVATAR_ICONS[aiModel.iconName],

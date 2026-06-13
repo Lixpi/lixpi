@@ -280,13 +280,23 @@ services:
             - caddy-certs:/opt/nex/certs:ro    # Cluster CA (only needed when 4222 uses TLS, e.g. AWS)
             - nex-1-data:/data                 # Persistent nex resource/config dir across restarts
             - nex-workloads:/opt/nex/private-workloads:ro # Private repos place native workload binaries here
+            - ./services/nex/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
 
             # @lixpi workspace packages the workload imports (mirrors lixpi-api)
-            - ./packages/lixpi/constants:/usr/src/service/packages/lixpi/constants:cached
-            - ./packages/lixpi/debug-tools:/usr/src/service/packages/lixpi/debug-tools:cached
-            - ./packages/lixpi/dynamodb-service:/usr/src/service/packages/lixpi/dynamodb-service:cached
-            - ./packages/lixpi/ssm-service:/usr/src/service/packages/lixpi/ssm-service:cached
-            - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
+            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:ro,cached
+            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:ro,cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
 
         networks:
             - nats
@@ -337,7 +347,7 @@ services:
             - ./services/web-ui/jsconfig.json:/usr/src/service/jsconfig.json:cached
             - ./services/web-ui/package.json:/usr/src/service/package.json:cached
 
-            # - ./pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml
+            - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
             - ./services/web-ui/postcss.config.js:/usr/src/service/postcss.config.js:cached    # Tailwind 4 doesn't require postcss, but fucking shadcn DOES :( :( :(
 
             - ./services/web-ui/public:/usr/src/service/public:cached
@@ -353,9 +363,16 @@ services:
             - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached
 
 
-            - ./packages/lixpi/constants:/usr/src/service/packages/lixpi/constants:cached
-            - ./packages/lixpi/debug-tools:/usr/src/service/packages/lixpi/debug-tools:cached
-            - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
             - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
@@ -445,6 +462,7 @@ services:
             - aws-config:/root/.aws:cached    # AWS SSO credentials
             - ./.aws/config:/root/.aws/config:cached    # AWS SSO credentials
             - ./services/api/package.json:/usr/src/service/package.json:cached
+            - ./services/api/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
             - ./services/api/nodemon.json:/usr/src/service/nodemon.json:cached
 
             # tsconfig.json is needed for the IDE to understand the project structure, but NOT used by default by Node.js
@@ -454,16 +472,30 @@ services:
             - ./services/api/src:/usr/src/service/src:cached
             - ./services/api/temp-ai-responses:/usr/src/service/temp-ai-responses:cached
 
-            # - ./packages:/usr/src/service/packages
-            - ./packages/lixpi/constants:/usr/src/service/packages/lixpi/constants:cached
-            - ./packages/lixpi/debug-tools:/usr/src/service/packages/lixpi/debug-tools:cached
-            - ./packages/lixpi/dynamodb-service:/usr/src/service/packages/lixpi/dynamodb-service:cached
-            - ./packages/lixpi/lambda-service:/usr/src/service/packages/lixpi/lambda-service:cached
-            - ./packages/lixpi/sqs-service:/usr/src/service/packages/lixpi/sqs-service:cached
-            - ./packages/lixpi/ssm-service:/usr/src/service/packages/lixpi/ssm-service:cached
-            - ./packages/lixpi/sns-service:/usr/src/service/packages/lixpi/sns-service:cached
-            - ./packages/lixpi/nats-service:/usr/src/service/packages/lixpi/nats-service:cached
-            - ./packages/lixpi/nats-auth-callout-service:/usr/src/service/packages/lixpi/nats-auth-callout-service:cached
+            - ./packages/lixpi/auth-service/package.json:/usr/src/service/packages/lixpi/auth-service/package.json:ro,cached
+            - ./packages/lixpi/auth-service/src:/usr/src/service/packages/lixpi/auth-service/src:ro,cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
+            - ./packages/lixpi/lambda-service/package.json:/usr/src/service/packages/lixpi/lambda-service/package.json:ro,cached
+            - ./packages/lixpi/lambda-service/src:/usr/src/service/packages/lixpi/lambda-service/src:ro,cached
+            - ./packages/lixpi/sqs-service/package.json:/usr/src/service/packages/lixpi/sqs-service/package.json:ro,cached
+            - ./packages/lixpi/sqs-service/src:/usr/src/service/packages/lixpi/sqs-service/src:ro,cached
+            - ./packages/lixpi/ssm-service/package.json:/usr/src/service/packages/lixpi/ssm-service/package.json:ro,cached
+            - ./packages/lixpi/ssm-service/src:/usr/src/service/packages/lixpi/ssm-service/src:ro,cached
+            - ./packages/lixpi/sns-service/package.json:/usr/src/service/packages/lixpi/sns-service/package.json:ro,cached
+            - ./packages/lixpi/sns-service/src:/usr/src/service/packages/lixpi/sns-service/src:ro,cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/packages/lixpi/nats-auth-callout-service/package.json:ro,cached
+            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/packages/lixpi/nats-auth-callout-service/src:ro,cached
 
         networks:
             - nats
