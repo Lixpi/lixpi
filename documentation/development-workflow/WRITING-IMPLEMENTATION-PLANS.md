@@ -10,7 +10,7 @@ This is the source of truth for how to author an implementation plan, technical 
 - Research methodology before you draft.
 - The iteration protocol with the user.
 - Mermaid diagram conventions.
-- What happens after the plan is approved (GitHub sync, cleanup).
+- What happens after the plan is approved (issue-tracker sync, cleanup).
 - Anti-patterns to avoid.
 - An end-to-end checklist.
 
@@ -32,7 +32,7 @@ All proposals and implementation plans live in `documentation/memory/<NAME>.md`.
 
 - **Naming**: ALL-CAPS-DASH-SEPARATED, matching the parent `documentation/` convention (`PRODUCT-OVERVIEW.md`, `SYSTEM-ARCHITECTURE.md`, `WORKSPACE-MODEL.md`, etc.). Do not invent a different naming style.
 - **Lifecycle**: a file is created when planning begins, lives there during implementation, and is deleted when the feature has fully landed. The `documentation/memory/` directory is **not** a historical archive — it is live planning context for in-flight work. Treat it that way.
-- **GitHub sync**: every plan must also exist as a GitHub issue with the identical body. The issue is where reviewers comment; the markdown file is where the plan is iterated on locally. Both are kept in sync until the file is deleted; once the feature ships, the issue is closed and the file is removed.
+- **Issue-tracker sync**: every plan must also exist in the repository's issue tracker with the identical body. The issue is where reviewers comment; the markdown file is where the plan is iterated on locally. Both are kept in sync until the file is deleted; once the feature ships, the issue is closed and the file is removed.
 
 ## Mandatory document structure
 
@@ -40,7 +40,7 @@ Every plan must contain the following sections, in this order. Sections marked *
 
 ### 1. Title (H1) — required
 
-Use the same title as the GitHub issue title. Concise, capitalized like a product feature name.
+Use the same title as the matching issue-tracker entry. Concise, capitalized like a product feature name.
 
 ### 2. TL;DR — required
 
@@ -118,7 +118,7 @@ Show the JSON additions to `packages/lixpi/constants/nats-subjects.json`. Group 
 ### 13. Architecture changes — required
 
 - Backend graph topology changes (mermaid diagram).
-- Tool/handler additions.
+- Handler, workflow, or integration additions.
 - Cross-service implications.
 - Cite specific files with markdown links + line ranges.
 
@@ -174,7 +174,7 @@ A markdown task list that mirrors the phases. Each task is one phase's deliverab
 
 ### 21. References — required when external sources are cited
 
-Bullet list of every URL referenced in the document. Group by domain (vendor docs, arXiv, internal Lixpi docs, GitHub repos).
+Bullet list of every URL referenced in the document. Group by domain or source category, such as vendor docs, arXiv, internal Lixpi docs, and repository references.
 
 ## Research methodology
 
@@ -193,24 +193,24 @@ If you skip this step you will misuse a primitive that already exists. That mist
 
 ### Parallel codebase exploration
 
-When the feature touches multiple areas of the codebase, spawn parallel exploration in a single tool-call batch. Use the Cursor `Task` tool with `subagent_type: "explore"` and `readonly: true`. Each subagent gets one focused area, for example:
+When the feature touches multiple areas of the codebase, explore those areas in parallel whenever the environment provides a safe way to do so. Use read-only exploration for independent areas, and give each exploration one focused question, for example:
 
 - "Find the current handler for X and trace its call chain end-to-end, citing files and line ranges."
 - "Map the LangGraph workflow + every registered tool + the streaming pipeline."
 - "List the DynamoDB tables, the data access layer, and the existing scope/ACL patterns."
 - "Find the prior-art ProseMirror plugin in the deprecated dumpster, if any."
 
-Run these *in parallel* in one message — never sequentially. Each subagent's output becomes input to your next decision.
+Parallel exploration is an efficiency rule, not a harness requirement. If the environment cannot run parallel workers, gather the same evidence sequentially and keep the scopes separate. Each exploration result becomes input to your next decision.
 
 ### Parallel web research
 
-For external prior art, frameworks, and academic papers, run `WebSearch` calls in the same parallel batch as the explorations. Useful query patterns:
+For external prior art, frameworks, and academic papers, use the available web-research capability in parallel with codebase exploration when possible. Useful query patterns:
 
 - Comparison: "X vs Y when to use each <year>"
 - Vendor docs: "<product> custom <feature> documentation <year>"
 - Academic prior art: "<problem> <approach> <year>"
 
-Follow up with `WebFetch` on the highest-value URLs the search returned (vendor docs, primary papers).
+Open the highest-value URLs the search returns, prioritizing vendor docs, primary papers, standards, and official API references over summaries.
 
 ### Read existing patterns deeply
 
@@ -236,9 +236,9 @@ Include line ranges or function names where possible. Vague references slow revi
 
 ## Iterating with the user
 
-### Switch to Plan mode
+### Use a planning posture
 
-When you receive a planning request, switch to Plan mode immediately. Plan mode is read-only and surfaces the proper review tools (`CreatePlan`).
+When you receive a planning request, treat the work as planning-only until the user approves implementation. Do not edit product code, run migrations, or make behavior changes while drafting the plan unless the user explicitly changes the task.
 
 ### Ask narrow, multi-choice questions
 
@@ -279,19 +279,11 @@ Diagrams without the project theme render off-brand and signal carelessness — 
 
 ### Local file
 
-Write to `documentation/memory/<NAME>.md`. Confirm with the user that the local copy is good before pushing to GitHub.
+Write to `documentation/memory/<NAME>.md`. Confirm with the user that the local copy is good before syncing it to the repository's issue tracker.
 
-### GitHub issue
+### Issue tracker entry
 
-Once the user approves, create or update the GitHub issue with the same body:
-
-```bash
-# new
-gh issue create --title "<Title>" --body-file documentation/memory/<NAME>.md --assignee @me
-
-# existing
-gh issue edit <number> --repo <owner>/<repo> --body-file documentation/memory/<NAME>.md
-```
+Once the user approves, create or update the matching issue-tracker entry with the same title and body as the local markdown file. Use whichever approved repository workflow is available in the current environment.
 
 Both must always be in sync. If you edit the file, push the issue update. If you edit the issue (rare — usually the file leads), pull the changes back into the file.
 
@@ -320,10 +312,11 @@ These are real failure modes from past planning sessions. Avoid:
 
 When you start a new planning task, work through this list in order:
 
-- [ ] Read `AGENTS.md` and `.cursor/rules/` (or equivalent) for always-applied workspace rules.
+- [ ] Read `AGENTS.md` and any always-applied workspace rules available in the current environment.
 - [ ] Read `documentation/PRODUCT-OVERVIEW.md` and any `documentation/knowledge/*.md` files relevant to the area.
-- [ ] Switch to Plan mode.
-- [ ] Spawn parallel `Task` exploration subagents (typically 3–4) in a single message, plus parallel `WebSearch` / `WebFetch` calls in the same message.
+- [ ] Keep the task in a planning-only posture until the user approves implementation.
+- [ ] Run focused codebase exploration in parallel when the environment supports it; otherwise run the same scopes sequentially.
+- [ ] Run focused external research in parallel when current facts, vendor behavior, standards, pricing, or prior art matter.
 - [ ] Identify the architectural axes the user's brief leaves open.
 - [ ] Ask 1–4 multi-choice clarification questions per round, with concrete trade-offs and a "Pick for me" option. Iterate rounds until every axis is locked.
 - [ ] Read existing patterns deeply for every primitive you'll add (DB table, NATS subject, ProseMirror plugin, LangGraph tool, etc.).
@@ -332,7 +325,7 @@ When you start a new planning task, work through this list in order:
 - [ ] Include the end-to-end happy-path narrative.
 - [ ] Save to `documentation/memory/<NAME>.md`.
 - [ ] Get user approval on the local copy.
-- [ ] Create or update the matching GitHub issue with the same body.
+- [ ] Create or update the matching issue-tracker entry with the same body.
 - [ ] Wait for the user to confirm before deleting any temp/intermediate artifacts.
 
 If you ship a plan that misses any of these steps, treat that as a failure mode and add it to your next pre-flight check.
