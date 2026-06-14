@@ -294,6 +294,7 @@ export default class AiInteractionService {
                     revisedPrompt: content.revisedPrompt,
                     aiProvider: aiProvider || '',
                     imageModelProvider: content.imageModelProvider || content.aiProvider || '',
+                    imageModelId: content.imageModelId || '',
                     ...(generationRun ? { generationRun } : {}),
                     aiChatThreadId: this.aiChatThreadId
                 })

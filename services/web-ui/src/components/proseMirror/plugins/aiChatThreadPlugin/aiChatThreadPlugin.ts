@@ -85,6 +85,7 @@ type SegmentEvent = {
     type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
     aiProvider?: string
     imageModelProvider?: string
+    imageModelId?: string
     videoModelProvider?: string
     threadId?: string
     aiChatThreadId?: string
@@ -1649,7 +1650,7 @@ class AiChatThreadPluginClass {
     }
 
     private handleImageComplete(view: EditorView, event: SegmentEvent): void {
-        const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider, imageModelProvider } = event
+        const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider, imageModelProvider, imageModelId } = event
         if (!imageUrl || !aiChatThreadId) return
 
         const { state } = view
@@ -1671,6 +1672,7 @@ class AiChatThreadPluginClass {
             revisedPrompt: revisedPrompt || '',
             aiModel: aiProvider || '',
             imageModelProvider: imageModelProvider || '',
+            imageModelId: imageModelId || '',
             responseMessageId,
             generationRun: event.generationRun,
         })

@@ -127,6 +127,7 @@ export type AiGeneratedImageCallbacks = {
         revisedPrompt: string
         aiModel: string
         imageModelProvider: string
+        imageModelId?: string
         responseMessageId: string
         generationRun?: MediaGenerationRunMeta
     }) => void

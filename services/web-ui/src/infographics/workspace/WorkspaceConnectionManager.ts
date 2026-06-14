@@ -619,7 +619,7 @@ export class WorkspaceConnectionManager {
 	private reconnectingEdge: { edgeId: string; edgeUpdaterType: HandleType } | null = null
 
 	private proximityCandidate: ProximityCandidate | null = null
-	private currentEdgeClickAreaWidth = settings.connector.lineClickAreaWidth
+	private currentEdgeClickAreaWidth = settings.connector.scaling.clickAreaWidth
 
 	private menuConnectionCleanup: (() => void) | null = null
 
@@ -1295,14 +1295,21 @@ export class WorkspaceConnectionManager {
 		// Get current zoom for proportional scaling
 		const transform = this.config.getTransform()
 		const zoom = transform[2]
+		const connectorScaling = settings.connector.scaling
 
 		// Calculate scaled sizes for edges
 		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } =
 			settings.connector.useZoomCompensatedScaling
-				? getEdgeScaledSizes(zoom, { baseClickAreaWidth: settings.connector.lineClickAreaWidth })
-				: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: settings.connector.lineClickAreaWidth }
-		const pixiStrokeWidth = 2
-		const pixiMarkerSize = 16
+				? getEdgeScaledSizes(zoom, {
+					baseStrokeWidth: connectorScaling.strokeWidth,
+					baseMarkerSize: connectorScaling.markerSize,
+					baseMarkerOffset: connectorScaling.markerOffset,
+					baseClickAreaWidth: connectorScaling.clickAreaWidth,
+					zoomScaling: connectorScaling.zoomScaling,
+				})
+				: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth }
+		const pixiStrokeWidth = connectorScaling.strokeWidth
+		const pixiMarkerSize = connectorScaling.markerSize
 		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
 
 		// Read CSS connector colors for PIXI rendering (set as CSS custom props on paneEl)
@@ -1526,9 +1533,16 @@ export class WorkspaceConnectionManager {
 	public recomputePixiEdgesOnly(zoom: number): boolean {
 		if (!this.cachedPixiEdgeConfigs || !this.cachedPixiWorldNodeMap || !this.config.onPixiEdgesReady) return false
 
+		const connectorScaling = settings.connector.scaling
 		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } = settings.connector.useZoomCompensatedScaling
-			? getEdgeScaledSizes(zoom)
-			: { markerOffset: { source: 6, target: 19 }, clickAreaWidth: settings.connector.lineClickAreaWidth }
+			? getEdgeScaledSizes(zoom, {
+				baseStrokeWidth: connectorScaling.strokeWidth,
+				baseMarkerSize: connectorScaling.markerSize,
+				baseMarkerOffset: connectorScaling.markerOffset,
+				baseClickAreaWidth: connectorScaling.clickAreaWidth,
+				zoomScaling: connectorScaling.zoomScaling,
+			})
+			: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth }
 		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
 
 		const pixiEdgeData: PixiEdgeRenderDatum[] = []
@@ -1536,7 +1550,7 @@ export class WorkspaceConnectionManager {
 			const pixiDatum = computePixiEdgeDatum(
 				edgeConfig, this.cachedPixiWorldNodeMap, isSelected,
 				this.cachedPixiDefaultColor, this.cachedPixiFocusColor,
-				2, 16, scaledMarkerOffset
+				connectorScaling.strokeWidth, connectorScaling.markerSize, scaledMarkerOffset
 			)
 			if (pixiDatum) pixiEdgeData.push(pixiDatum)
 		}

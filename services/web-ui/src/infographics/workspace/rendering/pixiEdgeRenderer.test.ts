@@ -51,8 +51,10 @@ describe('pixiEdgeRenderer — path isolation regression guards', () => {
         const edgeDatumKey = extractTopLevelFunction(source, 'edgeDatumKey')
 
         expect(paintEdge).toContain('width: screenStrokeWidth')
-        expect(paintEdge).toContain('scaleCanvasChromeToScreenForZoom(edge.strokeWidth, viewport.zoom)')
-        expect(drawArrowhead).toContain('scaleCanvasChromeToScreenForZoom(arrow.size, viewport.zoom)')
+        expect(paintEdge).toContain('scaleCanvasChromeToScreenForZoom(')
+        expect(paintEdge).toContain('settings.connector.scaling.zoomScaling')
+        expect(drawArrowhead).toContain('scaleCanvasChromeToScreenForZoom(')
+        expect(drawArrowhead).toContain('settings.connector.scaling.zoomScaling')
         expect(paintEdge).toContain('drawArrowhead(g, edge.arrowEnd, edge.strokeColor, viewport)')
         expect(edgeDatumKey).toContain('${viewport.x},${viewport.y},${viewport.zoom}')
     })

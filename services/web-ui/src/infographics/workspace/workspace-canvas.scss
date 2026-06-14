@@ -366,6 +366,13 @@
     z-index: 3;
 }
 
+.workspace-generated-media-chrome-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+}
+
 .workspace-generated-image-chrome {
     position: absolute;
     display: flex;
@@ -373,6 +380,7 @@
     align-items: flex-start;
     gap: 6px;
     pointer-events: none;
+    transform-origin: top left;
 }
 
 .workspace-branch-origin-info-chrome,
@@ -427,62 +435,84 @@
 .workspace-generated-image-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 0;
     width: 100%;
     pointer-events: auto;
 }
 
 .image-model-badge {
-    width: 52px;
-    height: 52px;
-    background: rgba(255, 255, 255, 0.94);
-    border: 1px solid rgba(34, 40, 49, 0.08);
-    border-radius: 50%;
+    min-width: 0;
+    height: 34px;
+    flex: 1 1 auto;
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 6px;
     color: #4d5963;
-    box-shadow: var(--workspace-image-model-badge-box-shadow);
-
-    svg {
-        width: 30px;
-        height: 30px;
-        fill: currentColor;
-    }
+    line-height: 1;
 
     pointer-events: none;
 }
 
+.image-model-badge-icon,
+.image-model-badge svg {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    fill: currentColor;
+}
+
+.image-model-badge-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-model-badge-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #4d5963;
+    font-size: 13px;
+    font-weight: 600;
+}
+
 .image-info-button {
-    width: 52px;
-    height: 52px;
-    background: rgba(255, 255, 255, 0.94);
-    border: 1px solid rgba(34, 40, 49, 0.08);
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    margin-left: auto;
+    background: transparent;
+    border: none;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #4d5963;
-    box-shadow: var(--workspace-image-model-badge-box-shadow);
     padding: 0;
+    outline: none;
     cursor: pointer;
     pointer-events: auto;
 
     svg {
-        width: 30px;
-        height: 30px;
+        width: 34px;
+        height: 34px;
         fill: currentColor;
     }
 
     &:hover {
-        color: #252b33;
-        background: rgba(255, 255, 255, 0.98);
+        color: #4d5963;
+        background: transparent;
     }
 
     &.is-active {
-        color: #fff;
-        background: $steelBlue;
-        border-color: $steelBlue;
+        color: #4d5963;
+        background: transparent;
+    }
+
+    &:focus,
+    &:focus-visible {
+        outline: none;
     }
 
     // Unobtrusive pulse while a freshly uploaded media object is being analyzed

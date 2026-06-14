@@ -246,10 +246,14 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 	it('.workspace-image-node base uses the theme-configured default box-shadow', () => {
 		expect(imageNodeBlock).toMatch(/^\s*box-shadow:\s*var\(--workspace-image-default-box-shadow\);/m)
+	})
 
-		// Generated-image chrome provider badge shadow remains allowed.
+	it('keeps generated media model chrome free of badge and button shadows', () => {
 		const badgeBlock = extractBlock(scss, '.image-model-badge')
-		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(1)
+		const infoButtonBlock = extractBlock(scss, '.image-info-button')
+
+		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(0)
+		expect(extractBoxShadowValues(infoButtonBlock)).toHaveLength(0)
 	})
 
 	it('uses a theme-configured shadow for selected image nodes', () => {
@@ -258,11 +262,14 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
 	})
 
-	it('sizes generated-image chrome to the full image width with large active controls', () => {
+	it('uses helper-driven bounded zoom layout for generated media chrome', () => {
 		const ts = loadTs()
+		const chromeLayerBlock = extractBlock(scss, '.workspace-generated-media-chrome-layer')
 		const actionsBlock = extractBlock(scss, '.workspace-generated-image-actions')
 		const badgeBlock = extractBlock(scss, '.image-model-badge')
+		const badgeIconBlock = extractBlockContainingSelector(scss, '.image-model-badge-icon,\n.image-model-badge svg')
 		const infoButtonBlock = extractBlock(scss, '.image-info-button')
+		const infoIconBlock = extractBlock(infoButtonBlock, 'svg')
 		const panelBlock = extractBlock(scss, '.canvas-generated-image-info-panel')
 		const traceDetailsBlock = extractBlock(scss, '.canvas-generated-media-projection-editor .canvas-generated-image-trace-details')
 		const promptAndFinalFallbackBlock = scss.match(
@@ -270,17 +277,50 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		)?.[0] ?? ''
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
-		expectSourceToContain(ts, 'width: `${dimensions.width}px`,')
+		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
+		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
+		expectSourceToContain(ts, 'viewport,\n            worldPosition: position,\n            worldDimensions: dimensions,')
+		expectSourceToContain(ts, 'baseGap: settings.imageNode.generatedMediaChrome.topGap,')
+		expectSourceToContain(ts, 'zoomScaling: settings.imageNode.generatedMediaChrome.zoomScaling,')
+		expectSourceToContain(ts, 'left: `${chromeLayout.left}px`,')
+		expectSourceToContain(ts, 'top: `${chromeLayout.top}px`,')
+		expectSourceToContain(ts, 'width: `${chromeLayout.layoutWidth}px`,')
+		expectSourceToContain(ts, 'transform: `scale(${chromeLayout.screenScale})`,')
+		expectSourceToContain(ts, 'getVisualScale: () => scaleCanvasChromeToScreenForZoom(')
+		expectSourceToContain(ts, 'settings.canvasBubbleMenu.zoomScaling,')
+		expectSourceToContain(ts, 'updateGeneratedImageChromeLiveTransform(node.nodeId, position, dimensions, viewport)')
+		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout(vp)')
+		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
+		expectSourceToContain(ts, 'imageChromeViewportEl.replaceChildren(')
+		expectSourceToContain(ts, "return modelMeta?.title ?? ''")
+		expectSourceNotToContain(ts, 'getCanvasChromeZoomMultiplier')
+		expectSourceNotToContain(ts, 'const localScale = scaleCanvasChromeForZoom(1, zoom)')
+		expectSourceNotToContain(ts, 'getTransformedCanvasChromeLayout')
+		expectSourceNotToContain(ts, 'zoom: getCurrentViewportZoom(),')
+		expectSourceNotToContain(ts, 'zoom: number = getCurrentViewportZoom()')
+		expectSourceNotToContain(ts, 'pendingGeneratedMediaChromeZoom')
+		expectSourceNotToContain(ts, 'updateGeneratedMediaChromeZoomScaling')
 		expectSourceNotToContain(ts, 'function getGeneratedImageInfoWidth')
+		expectExcerptToContain(chromeLayerBlock, 'position: absolute', 'generated media chrome layer block')
+		expectExcerptToContain(chromeLayerBlock, 'inset: 0', 'generated media chrome layer block')
+		expectExcerptToContain(chromeLayerBlock, 'pointer-events: none', 'generated media chrome layer block')
 		expectExcerptToContain(actionsBlock, 'width: 100%', 'generated image actions block')
-		expectExcerptToContain(badgeBlock, 'width: 52px', 'image model badge block')
-		expectExcerptToContain(badgeBlock, 'height: 52px', 'image model badge block')
-		expectExcerptToContain(badgeBlock, 'width: 30px', 'image model badge icon block')
-		expectExcerptToContain(infoButtonBlock, 'width: 52px', 'image info button block')
-		expectExcerptToContain(infoButtonBlock, 'height: 52px', 'image info button block')
-		expectExcerptToContain(infoButtonBlock, 'width: 30px', 'image info icon block')
-		expectExcerptToContain(activeBlock, 'background: $steelBlue', 'active image info button block')
-		expectExcerptToContain(activeBlock, 'border-color: $steelBlue', 'active image info button block')
+		expectExcerptToContain(actionsBlock, 'gap: 0', 'generated image actions block')
+		expectExcerptToContain(badgeBlock, 'height: 34px', 'image model badge block')
+		expectExcerptToContain(badgeIconBlock, 'width: 34px', 'image model badge icon block')
+		expectExcerptToContain(badgeIconBlock, 'height: 34px', 'image model badge icon block')
+		expectExcerptNotToContain(badgeBlock, 'border:', 'image model badge block')
+		expectExcerptNotToContain(badgeBlock, 'box-shadow:', 'image model badge block')
+		expectExcerptToContain(infoButtonBlock, 'width: 34px', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'height: 34px', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'border: none', 'image info button block')
+		expectExcerptToContain(infoIconBlock, 'width: 34px', 'image info icon block')
+		expectExcerptToContain(infoIconBlock, 'height: 34px', 'image info icon block')
+		expectExcerptNotToContain(infoIconBlock, 'transform:', 'image info icon block')
+		expectExcerptToContain(activeBlock, 'color: #4d5963', 'active image info button block')
+		expectExcerptToContain(activeBlock, 'background: transparent', 'active image info button block')
+		expectExcerptNotToContain(activeBlock, '$steelBlue', 'active image info button block')
+		expectExcerptNotToContain(activeBlock, 'border-color:', 'active image info button block')
 		expectExcerptToContain(panelBlock, 'overflow: visible', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'max-height: 440px', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'overflow: auto', 'generated image info panel block')
@@ -550,7 +590,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 	it('renders the info button + panel in the below-node media chrome (image+video parity)', () => {
 		// The shared media chrome (a strip below the node) carries the info button
 		// and descriptor panel for BOTH images and videos.
-		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode, viewport: Viewport)')
 		const chromeEnd = ts.indexOf('function createVideoControlsChrome', chromeStart)
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
 		expect(chromeStart).toBeGreaterThan(-1)
@@ -573,7 +613,8 @@ describe('Workspace canvas — generated video canvas state', () => {
 	})
 
 	it('renders media info chrome for both image and video nodes', () => {
-		expectSourceToContain(ts, '...mediaInfoNodes.map(createGeneratedMediaChrome),')
+		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
+		expectSourceToContain(ts, '...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaChrome(node, viewport)),')
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
 	})
 })
@@ -1989,8 +2030,17 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)")
 			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)")
 			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)")
+			expectSourceNotToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)")
 			expect(scss).toMatch(/border-radius:\s*var\(--workspace-image-border-radius\)/)
+	})
+
+	it('wires resize handles through configured bounded zoom scaling', () => {
+		expectSourceToContain(ts, 'const resizeHandleSettings = settings.imageNode.resizeHandle')
+		expectSourceToContain(ts, 'baseSize: resizeHandleSettings.size,')
+		expectSourceToContain(ts, 'baseOffset: resizeHandleSettings.offset,')
+		expectSourceToContain(ts, 'minSize: resizeHandleSettings.minSize,')
+		expectSourceToContain(ts, 'zoomScaling: resizeHandleSettings.zoomScaling,')
+		expectSourceNotToContain(ts, ': { size: 24, offset: 6 }')
 	})
 
 	// -------------------------------------------------------------------------

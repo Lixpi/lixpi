@@ -70,6 +70,18 @@ describe('settings - grouped configuration', () => {
 		expect(settings.aiPromptInput.useShiftingGradientBackground).toBe(true)
 		expect(settings.connector.proximityConnectThreshold).toBeGreaterThan(0)
 		expect(settings.connector.menuConnectionSnapRadius).toBe(110)
+		expect(settings.connector.scaling.strokeWidth).toBe(2)
+		expect(settings.connector.scaling.markerSize).toBe(16)
+		expect(settings.connector.scaling.markerOffset).toEqual({ source: 6, target: 19 })
+		expect(settings.connector.scaling.clickAreaWidth).toBe(24)
+		expect(settings.connector.scaling.zoomScaling.minZoom).toBe(0.4)
+		expect(settings.canvasBubbleMenu.zoomScaling.minZoom).toBe(0.4)
+		expect(settings.imageNode.generatedMediaChrome.topGap).toBe(6)
+		expect(settings.imageNode.generatedMediaChrome.zoomScaling.minZoom).toBe(0.4)
+		expect(settings.imageNode.resizeHandle.size).toBe(24)
+		expect(settings.imageNode.resizeHandle.offset).toBe(6)
+		expect(settings.imageNode.resizeHandle.minSize).toBe(10)
+		expect(settings.imageNode.resizeHandle.zoomScaling.minZoom).toBe(0.4)
 		expect(settings.connector.styles.lineDefaultColor).toBe('#5d656d')
 		expect(settings.aiChatThread.rail.dragGrabWidth).toBe(20)
 		expect(settings.connector.styles.lineFocusColor).toBe('#000')
@@ -122,7 +134,7 @@ describe('settings - grouped configuration', () => {
 		expectNoOwnKeys(settings.aiChatThread, ['responseMessageBubbleColor', 'nodeBoxShadow', 'nodeBorder', 'panelSectionDividerBorder'])
 		expectNoOwnKeys(settings.aiChatThread.panelTabs, ['activeTabBoxShadow', 'activeTabInsetShadow'])
 		expectNoOwnKeys(settings.aiChatThread.rail, ['gradient', 'width', 'boundaryCircleColors'])
-		expectNoOwnKeys(settings.connector, ['lineDefaultColor', 'lineFocusColor'])
+		expectNoOwnKeys(settings.connector, ['lineDefaultColor', 'lineFocusColor', 'lineClickAreaWidth'])
 		expectNoOwnKeys(settings.selection, [
 			'marqueeBorderColor',
 			'marqueeBackgroundColor',

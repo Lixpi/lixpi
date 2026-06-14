@@ -544,6 +544,49 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
 		}
 	})
 
+	it('uses configured connector scaling in normal render and zoom-only recompute', () => {
+		const originalScaling = structuredClone(settings.connector.scaling)
+		let zoom = 1
+		const onPixiEdgesReady = vi.fn()
+
+		try {
+			settings.connector.scaling = {
+				...settings.connector.scaling,
+				strokeWidth: 5,
+				markerSize: 22,
+				markerOffset: { source: 8, target: 21 },
+				clickAreaWidth: 32,
+				zoomScaling: { minZoom: 0.5 },
+			}
+
+			const config = {
+				...createMockConfig(),
+				getTransform: () => [0, 0, zoom] as [number, number, number],
+				onPixiEdgesReady,
+			}
+			const manager = new WorkspaceConnectionManager(config)
+			const sourceNode = makeNode({ nodeId: 'source-configured', type: 'image', position: { x: 0, y: 0 }, dimensions: { width: 120, height: 120 } })
+			const targetNode = makeNode({ nodeId: 'target-configured', type: 'image', position: { x: 500, y: 0 }, dimensions: { width: 120, height: 120 } })
+			const edge = makeEdge({ edgeId: 'edge-configured', sourceNodeId: sourceNode.nodeId, targetNodeId: targetNode.nodeId })
+
+			manager.syncNodes([sourceNode, targetNode])
+			manager.syncEdges([edge])
+
+			let pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ strokeWidth: number; arrowEnd: { size: number } | null }>
+			expect(pixiEdges[0].strokeWidth).toBe(5)
+			expect(pixiEdges[0].arrowEnd?.size).toBe(22)
+
+			zoom = 0.25
+			expect(manager.recomputePixiEdgesOnly(zoom)).toBe(true)
+
+			pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ strokeWidth: number; arrowEnd: { size: number } | null }>
+			expect(pixiEdges[0].strokeWidth).toBe(5)
+			expect(pixiEdges[0].arrowEnd?.size).toBe(22)
+		} finally {
+			settings.connector.scaling = originalScaling
+		}
+	})
+
 	it('renders rectangular node edge endpoints and recomputes them after resize', () => {
 		const onPixiEdgesReady = vi.fn()
 		const config = {

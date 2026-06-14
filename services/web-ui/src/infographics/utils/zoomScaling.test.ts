@@ -5,11 +5,16 @@ import {
 	getAdaptiveZoomMultiplier,
 	scaleCanvasChromeForZoom,
 	scaleCanvasChromeToScreenForZoom,
+	getCanvasChromeScreenLayout,
 	scaleForZoom,
 	getEdgeScaledSizes,
 	getResizeHandleScaledSizes,
 } from '$src/infographics/utils/zoomScaling.ts'
 import { worldSizeToScreenSize } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
+
+const boundedZoomScaling = { minZoom: 0.4 }
+const edgeScalingConfig = { zoomScaling: boundedZoomScaling }
+const resizeHandleScalingConfig = { zoomScaling: boundedZoomScaling }
 
 // =============================================================================
 // getAdaptiveZoomMultiplier
@@ -82,12 +87,93 @@ describe('scaleForZoom', () => {
 })
 
 // =============================================================================
+// getCanvasChromeScreenLayout
+// =============================================================================
+
+describe('getCanvasChromeScreenLayout', () => {
+	const viewport = { x: 120, y: -45, zoom: 1 }
+	const worldPosition = { x: 200, y: 320 }
+	const worldDimensions = { width: 640, height: 360 }
+	const baseGap = 6
+	const baseIconSize = 34
+	const minZoom = 0.4
+
+	function getLayout(zoom: number) {
+		return getCanvasChromeScreenLayout({
+			viewport: { ...viewport, zoom },
+			worldPosition,
+			worldDimensions,
+			baseGap,
+			zoomScaling: boundedZoomScaling,
+		})
+	}
+
+	it('keeps screen-space DOM chrome visually identical throughout the scaling band', () => {
+		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const layout = getLayout(zoom)
+
+			expect(layout.screenScale).toBeCloseTo(1, 10)
+			expect(baseIconSize * layout.screenScale).toBeCloseTo(baseIconSize, 10)
+			expect(layout.screenGap).toBeCloseTo(baseGap, 10)
+		}
+	})
+
+	it('freezes the scaling curve below the lower breakpoint so overview zooms thin chrome deterministically', () => {
+		let previousScreenIconSize = 0
+
+		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const layout = getLayout(zoom)
+			const screenIconSize = baseIconSize * layout.screenScale
+
+			expect(layout.screenScale).toBeCloseTo(zoom / minZoom, 10)
+			expect(screenIconSize).toBeCloseTo(baseIconSize * zoom / minZoom, 10)
+			expect(screenIconSize).toBeLessThan(baseIconSize)
+			expect(screenIconSize).toBeGreaterThan(previousScreenIconSize)
+			expect(layout.screenGap).toBeCloseTo(baseGap * zoom / minZoom, 10)
+
+			previousScreenIconSize = screenIconSize
+		}
+	})
+
+	it('keeps the chrome right edge aligned with the projected media right edge', () => {
+		for (let zoomStep = 1; zoomStep <= 500; zoomStep += 1) {
+			const zoom = zoomStep / 100
+			const layout = getLayout(zoom)
+
+			expect(layout.layoutWidth * layout.screenScale).toBeCloseTo(worldDimensions.width * zoom, 10)
+			expect(layout.left + layout.layoutWidth * layout.screenScale)
+				.toBeCloseTo(viewport.x + (worldPosition.x + worldDimensions.width) * zoom, 10)
+		}
+	})
+
+	it('projects the chrome top from the media bottom plus bounded screen gap', () => {
+		for (const zoom of [0.18, 0.4, 0.42, 1.05, 2]) {
+			const layout = getLayout(zoom)
+			const expectedMediaBottom = viewport.y + (worldPosition.y + worldDimensions.height) * zoom
+
+			expect(layout.top).toBeCloseTo(expectedMediaBottom + layout.screenGap, 10)
+		}
+	})
+
+	it('matches connector chrome screen scaling at representative zooms', () => {
+		for (const zoom of [0.15, 0.18, 0.39, 0.4, 0.45, 0.56, 1, 1.61, 3]) {
+			const layout = getLayout(zoom)
+
+			expect(layout.screenScale).toBeCloseTo(scaleCanvasChromeToScreenForZoom(1, zoom, boundedZoomScaling), 10)
+			expect(layout.screenGap).toBeCloseTo(scaleCanvasChromeToScreenForZoom(baseGap, zoom, boundedZoomScaling), 10)
+		}
+	})
+})
+
+// =============================================================================
 // getEdgeScaledSizes
 // =============================================================================
 
 describe('getEdgeScaledSizes', () => {
 	it('at zoom = 1.0 returns default base values', () => {
-		const sizes = getEdgeScaledSizes(1)
+		const sizes = getEdgeScaledSizes(1, edgeScalingConfig)
 		expect(sizes.strokeWidth).toBe(2)
 		expect(sizes.markerSize).toBe(16)
 		expect(sizes.markerOffset.source).toBe(6)
@@ -96,7 +182,7 @@ describe('getEdgeScaledSizes', () => {
 
 	it('markerOffset target (19) is larger than source (6) at any zoom', () => {
 		for (const zoom of [0.2, 0.5, 1.0, 1.5, 2.0, 3.0]) {
-			const sizes = getEdgeScaledSizes(zoom)
+			const sizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
 			expect(sizes.markerOffset.target).toBeGreaterThan(sizes.markerOffset.source)
 		}
 	})
@@ -112,7 +198,7 @@ describe('getEdgeScaledSizes', () => {
 
 		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
 			const zoom = zoomStep / 100
-			const sizes = getEdgeScaledSizes(zoom)
+			const sizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
 
 			expect(sizes.strokeWidth * zoom).toBeCloseTo(base.strokeWidth, 10)
 			expect(sizes.markerSize * zoom).toBeCloseTo(base.markerSize, 10)
@@ -126,7 +212,7 @@ describe('getEdgeScaledSizes', () => {
 		const baseStroke = 2
 		for (let zoomStep = 100; zoomStep <= 500; zoomStep += 1) {
 			const zoom = zoomStep / 100
-			const sizes = getEdgeScaledSizes(zoom)
+			const sizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
 			const visual = sizes.strokeWidth * zoom
 			expect(visual).toBeCloseTo(baseStroke, 10)
 		}
@@ -138,7 +224,7 @@ describe('getEdgeScaledSizes', () => {
 
 		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
 			const zoom = zoomStep / 100
-			const sizes = getEdgeScaledSizes(zoom)
+			const sizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
 			const visualStrokeWidth = sizes.strokeWidth * zoom
 
 			expect(sizes.strokeWidth).toBeCloseTo(2 / minZoom, 10)
@@ -156,7 +242,7 @@ describe('getEdgeScaledSizes', () => {
 
 	it('does not change visual connector sizes at any zoom above the lower threshold', () => {
 		for (const zoom of [0.4, 0.41, 0.48, 0.5, 0.84, 1.0, 1.04, 1.93, 2.0, 2.5, 3.0, 5.0]) {
-			const sizes = getEdgeScaledSizes(zoom)
+			const sizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
 			expect(sizes.strokeWidth * zoom).toBeCloseTo(2, 10)
 			expect(sizes.markerSize * zoom).toBeCloseTo(16, 10)
 		}
@@ -166,7 +252,7 @@ describe('getEdgeScaledSizes', () => {
 		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
 			const zoom = zoomStep / 100
 			const viewport = { x: 17, y: -29, zoom }
-			const sizes = getEdgeScaledSizes(zoom)
+			const sizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
 
 			expect(worldSizeToScreenSize(sizes.strokeWidth, viewport)).toBeCloseTo(2, 10)
 			expect(worldSizeToScreenSize(sizes.markerSize, viewport)).toBeCloseTo(16, 10)
@@ -180,8 +266,8 @@ describe('getEdgeScaledSizes', () => {
 		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
 			const zoom = zoomStep / 100
 
-			expect(scaleCanvasChromeToScreenForZoom(2, zoom)).toBeCloseTo(2, 10)
-			expect(scaleCanvasChromeToScreenForZoom(16, zoom)).toBeCloseTo(16, 10)
+			expect(scaleCanvasChromeToScreenForZoom(2, zoom, boundedZoomScaling)).toBeCloseTo(2, 10)
+			expect(scaleCanvasChromeToScreenForZoom(16, zoom, boundedZoomScaling)).toBeCloseTo(16, 10)
 		}
 	})
 
@@ -190,7 +276,7 @@ describe('getEdgeScaledSizes', () => {
 		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
 			const zoom = zoomStep / 100
 			const viewport = { x: 0, y: 0, zoom }
-			const sizes = getEdgeScaledSizes(zoom)
+			const sizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
 			const stroke = worldSizeToScreenSize(sizes.strokeWidth, viewport)
 
 			expect(stroke).toBeCloseTo(2 * zoom / 0.4, 10)
@@ -204,7 +290,7 @@ describe('getEdgeScaledSizes', () => {
 		let previousStroke = 0
 		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
 			const zoom = zoomStep / 100
-			const stroke = scaleCanvasChromeToScreenForZoom(2, zoom)
+			const stroke = scaleCanvasChromeToScreenForZoom(2, zoom, boundedZoomScaling)
 
 			expect(stroke).toBeCloseTo(2 * zoom / 0.4, 10)
 			expect(stroke).toBeLessThan(2)
@@ -218,14 +304,14 @@ describe('getEdgeScaledSizes', () => {
 
 		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
 			const zoom = zoomStep / 100
-			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom) * zoom).toBeCloseTo(baseTitleFontSize, 10)
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeCloseTo(baseTitleFontSize, 10)
 		}
 
 		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
 			const zoom = zoomStep / 100
-			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom)).toBeCloseTo(baseTitleFontSize / 0.4, 10)
-			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom) * zoom).toBeCloseTo(baseTitleFontSize * zoom / 0.4, 10)
-			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom) * zoom).toBeLessThan(baseTitleFontSize)
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling)).toBeCloseTo(baseTitleFontSize / 0.4, 10)
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeCloseTo(baseTitleFontSize * zoom / 0.4, 10)
+			expect(scaleCanvasChromeForZoom(baseTitleFontSize, zoom, boundedZoomScaling) * zoom).toBeLessThan(baseTitleFontSize)
 		}
 	})
 
@@ -234,6 +320,7 @@ describe('getEdgeScaledSizes', () => {
 			baseStrokeWidth: 4,
 			baseMarkerSize: 20,
 			baseMarkerOffset: { source: 10, target: 10 },
+			zoomScaling: boundedZoomScaling,
 		})
 
 		expect(sizes.strokeWidth).toBe(4)
@@ -249,27 +336,35 @@ describe('getEdgeScaledSizes', () => {
 
 describe('getResizeHandleScaledSizes', () => {
 	it('at zoom = 1.0 returns default sizes', () => {
-		const sizes = getResizeHandleScaledSizes(1)
+		const sizes = getResizeHandleScaledSizes(1, resizeHandleScalingConfig)
 		expect(sizes.size).toBe(24)
 		expect(sizes.offset).toBe(6)
 	})
 
 	it('uses constant (inverse) scaling', () => {
-		const sizes = getResizeHandleScaledSizes(0.5)
+		const sizes = getResizeHandleScaledSizes(0.5, resizeHandleScalingConfig)
 		expect(sizes.size).toBe(48)  // 24 / 0.5
 		expect(sizes.offset).toBe(12) // 6 / 0.5
 	})
 
 	it('enforces minimum size', () => {
 		// At very high zoom, the scaled size would shrink. The default min is 10.
-		const sizes = getResizeHandleScaledSizes(100)
+		const sizes = getResizeHandleScaledSizes(100, resizeHandleScalingConfig)
 		expect(sizes.size).toBeGreaterThanOrEqual(10)
 	})
 
 	it('handles near-zero zoom safely', () => {
 		// Should not throw or produce Infinity
-		const sizes = getResizeHandleScaledSizes(0.001)
+		const sizes = getResizeHandleScaledSizes(0.001, resizeHandleScalingConfig)
 		expect(Number.isFinite(sizes.size)).toBe(true)
 		expect(Number.isFinite(sizes.offset)).toBe(true)
+	})
+
+	it('freezes resize handle world sizes below the lower breakpoint', () => {
+		const sizes = getResizeHandleScaledSizes(0.18, resizeHandleScalingConfig)
+
+		expect(sizes.size).toBeCloseTo(24 / boundedZoomScaling.minZoom, 10)
+		expect(sizes.offset).toBeCloseTo(6 / boundedZoomScaling.minZoom, 10)
+		expect(sizes.size * 0.18).toBeLessThan(24)
 	})
 })

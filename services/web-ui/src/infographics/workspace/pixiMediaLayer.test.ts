@@ -235,6 +235,11 @@ vi.mock('$src/settings.ts', () => ({
         dropdown: {
             styles: { popoverBoxShadow: '' },
         },
+        connector: {
+            scaling: {
+                zoomScaling: { minZoom: 0.4 },
+            },
+        },
         aiChatThread: {
             panel: {
                 actions: {

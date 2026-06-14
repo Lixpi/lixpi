@@ -53,6 +53,14 @@ export type HelpTooltipSettings = {
     interactiveHideDelayMs: number
 }
 
+export type BoundedZoomScalingSettings = {
+    minZoom: number
+}
+
+export type CanvasBubbleMenuSettings = {
+    zoomScaling: BoundedZoomScalingSettings
+}
+
 export type AiChatThreadRailSettings = {
     offset: number
     edgeMargin: number
@@ -177,8 +185,14 @@ export type AiPromptInputSettings = {
 
 export type ConnectorSettings = {
     lineCurve: WorkspaceEdgePathType
-    lineClickAreaWidth: number
     useZoomCompensatedScaling: boolean
+    scaling: {
+        strokeWidth: number
+        markerSize: number
+        markerOffset: { source: number; target: number }
+        clickAreaWidth: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
     proximityConnectThreshold: number
     menuConnectionSnapRadius: number
     styles: {
@@ -199,6 +213,10 @@ export type SelectionSettings = {
 
 export type ImageNodeSettings = {
     defaultInsertionWidth: number
+    generatedMediaChrome: {
+        topGap: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
     generationBorder: {
         radius: number
         trackWidth: number
@@ -214,11 +232,16 @@ export type ImageNodeSettings = {
         }
     }
     useZoomCompensatedResizeHandleScaling: boolean
+    resizeHandle: {
+        size: number
+        offset: number
+        minSize: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
     styles: {
         defaultBoxShadow: string
         selectedBoxShadow: string
         borderRadius: number
-        modelBadgeBoxShadow: string
     }
 }
 
@@ -257,6 +280,8 @@ export type Settings = {
     gradient: GradientSettings
 
     helpTooltip: HelpTooltipSettings
+
+    canvasBubbleMenu: CanvasBubbleMenuSettings
 
     aiChatThread: AiChatThreadSettings
 
@@ -302,6 +327,12 @@ export const settings: Settings = {
     helpTooltip: {
         // Delay before an interactive tooltip closes after the pointer leaves its trigger/content.
         interactiveHideDelayMs: 80,
+    },
+
+    // Canvas bubble menu zoom scaling settings.
+    canvasBubbleMenu: {
+        // Lower zoom breakpoint for canvas bubble-menu chrome. Above this zoom, visual size stays constant; below it, world scaling freezes so the menu thins with the overview.
+        zoomScaling: { minZoom: 0.4 },
     },
 
     // AI chat thread presentation and interaction settings.
@@ -475,10 +506,21 @@ export const settings: Settings = {
     connector: {
         // Default curve used for connector lines between nodes.
         lineCurve: 'horizontal-bezier',
-        // Screen-pixel width of the invisible selection hit area around connector lines.
-        lineClickAreaWidth: 24,
         // Keep connector stroke, marker, and hit-area sizes usable as the canvas zoom changes.
         useZoomCompensatedScaling: true,
+        // Connector screen-space base sizes and zoom breakpoint.
+        scaling: {
+            // Screen-pixel connector stroke width while zoom is at or above the lower breakpoint.
+            strokeWidth: 2,
+            // Screen-pixel arrowhead size while zoom is at or above the lower breakpoint.
+            markerSize: 16,
+            // Screen-pixel source/target marker offsets while zoom is at or above the lower breakpoint.
+            markerOffset: { source: 6, target: 19 },
+            // Screen-pixel width of the invisible selection hit area around connector lines.
+            clickAreaWidth: 24,
+            // Lower zoom breakpoint for connector chrome. Above this zoom, visual size stays constant; below it, world scaling freezes so connectors thin with the overview.
+            zoomScaling: { minZoom: 0.4 },
+        },
         // Renderer-coordinate distance at which dragging a node near a thread shows a proximity connection.
         proximityConnectThreshold: 700,
         // Renderer-coordinate distance at which menu-driven connection placement snaps to a target.
@@ -512,6 +554,14 @@ export const settings: Settings = {
         // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
         defaultInsertionWidth: 600,
 
+        // Generated-media model label and info-button chrome below image/video nodes.
+        generatedMediaChrome: {
+            // Screen-pixel gap between the media bottom edge and generated-media chrome.
+            topGap: 6,
+            // Lower zoom breakpoint for generated-media chrome. Above this zoom, visual size stays constant; below it, world scaling freezes so chrome thins with the overview.
+            zoomScaling: { minZoom: 0.4 },
+        },
+
         // PIXI-rendered animated outline shown only while an AI-generated image is receiving partials.
         generationBorder: {
             radius: 10,
@@ -530,6 +580,17 @@ export const settings: Settings = {
 
         // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
         useZoomCompensatedResizeHandleScaling: true,
+        // Resize-handle base sizes and zoom breakpoint.
+        resizeHandle: {
+            // Screen-pixel size of each resize handle while zoom is at or above the lower breakpoint.
+            size: 24,
+            // Screen-pixel offset from the node corner while zoom is at or above the lower breakpoint.
+            offset: 6,
+            // Minimum handle size in canvas units after zoom compensation.
+            minSize: 10,
+            // Lower zoom breakpoint for resize handles. Above this zoom, visual size stays constant; below it, world scaling freezes so handles thin with the overview.
+            zoomScaling: { minZoom: 0.4 },
+        },
         styles: {
             // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
             defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
@@ -537,8 +598,6 @@ export const settings: Settings = {
             selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
             // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
             borderRadius: 8,
-            // Shadow behind the generated-image model badge. Increasing it improves badge separation on busy image pixels.
-            modelBadgeBoxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
         },
     },
 

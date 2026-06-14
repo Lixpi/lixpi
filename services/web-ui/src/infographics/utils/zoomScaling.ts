@@ -14,7 +14,34 @@ export type ZoomScalingOptions = AdaptiveZoomScalingOptions & {
 }
 
 export type BoundedZoomScalingOptions = {
-	minZoom?: number
+	minZoom: number
+}
+
+export type CanvasChromeScreenLayoutConfig = {
+	viewport: {
+		x: number
+		y: number
+		zoom: number
+	}
+	worldPosition: {
+		x: number
+		y: number
+	}
+	worldDimensions: {
+		width: number
+		height: number
+	}
+	baseGap: number
+	zoomScaling: BoundedZoomScalingOptions
+}
+
+export type CanvasChromeScreenLayout = {
+	left: number
+	top: number
+	layoutWidth: number
+	screenScale: number
+	screenGap: number
+	screenWidth: number
 }
 
 const defaultOptions: Required<ZoomScalingOptions> = {
@@ -23,17 +50,6 @@ const defaultOptions: Required<ZoomScalingOptions> = {
 	highZoomGrowth: 0.5,
 	minMultiplier: 0,
 	maxMultiplier: Number.POSITIVE_INFINITY
-}
-
-const canvasChromeZoomScalingOptions: Required<AdaptiveZoomScalingOptions> = {
-	lowZoomPower: 0.4,
-	highZoomGrowth: 0.5,
-	minMultiplier: 0.55,
-	maxMultiplier: 1.4
-}
-
-const canvasChromeZoomBounds: Required<BoundedZoomScalingOptions> = {
-	minZoom: 0.4
 }
 
 function safeZoom(zoom: number): number {
@@ -64,25 +80,13 @@ export function getAdaptiveZoomMultiplier(
 	return clamp(multiplier, minMultiplier, maxMultiplier)
 }
 
-// Shared visual-scale curve for floating canvas chrome that lives outside the
-// transformed viewport, like bubble menus.
-export function getCanvasChromeZoomMultiplier(
-	zoom: number,
-	options?: AdaptiveZoomScalingOptions
-): number {
-	return getAdaptiveZoomMultiplier(zoom, {
-		...canvasChromeZoomScalingOptions,
-		...options
-	})
-}
-
 export function scaleCanvasChromeForZoom(
 	baseSize: number,
 	zoom: number,
-	options?: BoundedZoomScalingOptions
+	options: BoundedZoomScalingOptions
 ): number {
 	const z = safeZoom(zoom)
-	const { minZoom } = { ...canvasChromeZoomBounds, ...options }
+	const { minZoom } = options
 	const effectiveZoom = Math.max(z, minZoom)
 	return baseSize / effectiveZoom
 }
@@ -90,12 +94,34 @@ export function scaleCanvasChromeForZoom(
 export function scaleCanvasChromeToScreenForZoom(
 	baseSize: number,
 	zoom: number,
-	options?: BoundedZoomScalingOptions
+	options: BoundedZoomScalingOptions
 ): number {
 	const z = safeZoom(zoom)
-	const { minZoom } = { ...canvasChromeZoomBounds, ...options }
+	const { minZoom } = options
 	const effectiveZoom = Math.max(z, minZoom)
 	return baseSize * (z / effectiveZoom)
+}
+
+// Geometry for floating DOM chrome mounted outside the transformed viewport.
+// World coordinates are projected once into screen coordinates. The returned
+// layout width is expanded when low-zoom chrome thins so its transformed right
+// edge still matches the projected media right edge.
+export function getCanvasChromeScreenLayout(
+	config: CanvasChromeScreenLayoutConfig
+): CanvasChromeScreenLayout {
+	const { viewport, worldPosition, worldDimensions, baseGap, zoomScaling } = config
+	const screenScale = scaleCanvasChromeToScreenForZoom(1, viewport.zoom, zoomScaling)
+	const screenGap = scaleCanvasChromeToScreenForZoom(baseGap, viewport.zoom, zoomScaling)
+	const screenWidth = worldDimensions.width * safeZoom(viewport.zoom)
+
+	return {
+		left: viewport.x + worldPosition.x * safeZoom(viewport.zoom),
+		top: viewport.y + (worldPosition.y + worldDimensions.height) * safeZoom(viewport.zoom) + screenGap,
+		layoutWidth: screenWidth / screenScale,
+		screenScale,
+		screenGap,
+		screenWidth,
+	}
 }
 
 function getZoomScalingOptions(options?: ZoomScalingOptions): Required<ZoomScalingOptions> {
@@ -137,7 +163,7 @@ export type EdgeScalingConfig = {
 	baseMarkerSize?: number
 	baseMarkerOffset?: { source: number; target: number }
 	baseClickAreaWidth?: number
-	zoomScaling?: BoundedZoomScalingOptions
+	zoomScaling: BoundedZoomScalingOptions
 }
 
 const defaultEdgeConfig = {
@@ -152,13 +178,13 @@ const defaultEdgeConfig = {
 // world size freezes so overview zooms naturally render chrome thinner.
 export function getEdgeScaledSizes(
 	zoom: number,
-	config?: EdgeScalingConfig
+	config: EdgeScalingConfig
 ): EdgeScalingSizes {
 	const { baseStrokeWidth, baseMarkerSize, baseMarkerOffset, baseClickAreaWidth } = {
 		...defaultEdgeConfig,
 		...config
 	}
-	const zoomScaling = config?.zoomScaling
+	const { zoomScaling } = config
 
 	return {
 		strokeWidth: scaleCanvasChromeForZoom(baseStrokeWidth, zoom, zoomScaling),
@@ -180,9 +206,10 @@ export type ResizeHandleScalingConfig = {
 	baseSize?: number
 	baseOffset?: number
 	minSize?: number
+	zoomScaling: BoundedZoomScalingOptions
 }
 
-const defaultResizeHandleConfig: Required<ResizeHandleScalingConfig> = {
+const defaultResizeHandleConfig = {
 	baseSize: 24,
 	baseOffset: 6,
 	minSize: 10
@@ -192,17 +219,16 @@ const defaultResizeHandleConfig: Required<ResizeHandleScalingConfig> = {
 // Both size and offset use constant visual size (inversely scaled).
 export function getResizeHandleScaledSizes(
 	zoom: number,
-	config?: ResizeHandleScalingConfig
+	config: ResizeHandleScalingConfig
 ): ResizeHandleScalingSizes {
 	const { baseSize, baseOffset, minSize } = {
 		...defaultResizeHandleConfig,
 		...config
 	}
-
-	const safeZoom = Math.max(zoom, 0.01)
+	const { zoomScaling } = config
 
 	return {
-		size: Math.max(minSize, scaleForZoom(baseSize, safeZoom, { mode: 'constant' })),
-		offset: scaleForZoom(baseOffset, safeZoom, { mode: 'constant' })
+		size: Math.max(minSize, scaleCanvasChromeForZoom(baseSize, zoom, zoomScaling)),
+		offset: scaleCanvasChromeForZoom(baseOffset, zoom, zoomScaling)
 	}
 }

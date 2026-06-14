@@ -6,6 +6,7 @@ import {
     type PixiEdgeRenderDatum,
 } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 import { scaleCanvasChromeToScreenForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { settings } from '$src/settings.ts'
 
 export type PixiEdgeRenderer = {
     render: (edges: PixiEdgeRenderDatum[], viewport: CanvasViewport) => void
@@ -107,7 +108,12 @@ function drawArrowhead(g: Graphics, arrow: PixiEdgeArrow, color: string, viewpor
     const x = point.x
     const y = point.y
     const angle = arrow.angle
-    const s = scaleCanvasChromeToScreenForZoom(arrow.size, viewport.zoom) / 256  // scale factor: markerWidth=size maps to 256px viewBox
+    // scale factor: markerWidth=size maps to 256px viewBox
+    const s = scaleCanvasChromeToScreenForZoom(
+        arrow.size,
+        viewport.zoom,
+        settings.connector.scaling.zoomScaling,
+    ) / 256
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
 
@@ -156,7 +162,11 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
     }
 
     function paintEdge(g: Graphics, edge: PixiEdgeRenderDatum, viewport: CanvasViewport): void {
-        const screenStrokeWidth = scaleCanvasChromeToScreenForZoom(edge.strokeWidth, viewport.zoom)
+        const screenStrokeWidth = scaleCanvasChromeToScreenForZoom(
+            edge.strokeWidth,
+            viewport.zoom,
+            settings.connector.scaling.zoomScaling,
+        )
         g.clear()
         g.beginPath()
         drawSvgPath(g, edge.svgPath, viewport)

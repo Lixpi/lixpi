@@ -61,7 +61,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/workspaceViewportStatePlan.ts` | Pure stale viewport-only render guard; keeps delayed store viewport updates from overriding the live transform |
 | `workspace/WorkspaceConnectionManager.ts` | Edge creation, proximity connect, candidate detection, and the data feed for `pixiEdgeRenderer` |
 | `connectors/index.ts` | Connector exports for path helpers and connection utilities |
-| `utils/zoomScaling.ts` | Zoom-compensated handle scaling |
+| `utils/zoomScaling.ts` | Shared bounded zoom-scaling helpers for connector chrome, canvas bubble menus, generated-media chrome, and resize handles |
 
 Use the incremental canvas architecture documented here as the implementation recipe: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.
 
@@ -118,8 +118,10 @@ flowchart TB
             FG[fgLayer: selection outlines, marquee, group overlay]
         end
         subgraph ImageChrome[".workspace-image-chrome-viewport (z-index 3, CSS-transformed)"]
-            IMG_CHROME[Generated-image provider badge<br/>info button + provenance panel]
             VIDEO_CHROME[Visible video surface<br/>shared SVG controls]
+        end
+        subgraph GeneratedChrome[".workspace-generated-media-chrome-layer (z-index 4, screen-space)"]
+            IMG_CHROME[Generated-media model label<br/>info button + provenance panel]
         end
     end
 
@@ -129,9 +131,10 @@ flowchart TB
     WORLD --> GEN_BORDER
     WORLD --> FG
     PixiCanvas --> ImageChrome
+    PixiCanvas --> GeneratedChrome
 ```
 
-The PIXI media canvas sits **above** the DOM viewport. Generated-image provider badges, info buttons, full-width provenance panels, and completed video DOM surfaces sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform but is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
+The PIXI media canvas sits **above** the DOM viewport. Completed video DOM surfaces sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Generated media model labels, info buttons, and full-width provenance panels sit in `.workspace-generated-media-chrome-layer`, a screen-space DOM overlay projected from the live viewport with the same bounded screen-size curve as connector chrome. The lower zoom breakpoint and related size knobs for each zoom-compensated canvas-chrome family live in `settings.ts`: `settings.connector.scaling`, `settings.canvasBubbleMenu.zoomScaling`, `settings.imageNode.generatedMediaChrome`, and `settings.imageNode.resizeHandle`. Provenance panels use the projected media width and expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform as the media world and is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
 1. They host core interaction chrome — drag overlay and resize handles.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
