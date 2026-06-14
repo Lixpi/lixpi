@@ -43,6 +43,7 @@ Do not add coding-agent `Co-authored-by:` trailers or other agent attribution to
 - Use title format `LIX-<issue-id> # <description>`.
 - Target `develop` unless instructed otherwise.
 - Assign the pull request to the current user.
+- Never open draft pull requests. Pull requests are opened ready for review.
 
 ### Update The Issue
 
