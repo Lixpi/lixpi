@@ -1799,7 +1799,8 @@
     background: transparent;
 }
 
-.workspace-branch-origin-node {
+.workspace-branch-origin-node,
+.workspace-branch-fork-node {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1812,7 +1813,8 @@
     cursor: move;
 }
 
-.workspace-branch-origin-icon {
+.workspace-branch-origin-icon,
+.workspace-branch-fork-icon {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1829,7 +1831,8 @@
     }
 }
 
-.branch-origin-drag-overlay {
+.branch-origin-drag-overlay,
+.branch-fork-drag-overlay {
     position: absolute;
     inset: 0;
     cursor: move;

@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin' | 'branchFork'
 
 type CanvasNodePosition = {
     x: number
@@ -429,6 +429,7 @@ export type GeneratedMediaVariantMetadata = {
     mediaType?: 'image' | 'video'
     variantIndex?: number
     branchOriginNodeId?: string
+    branchForkNodeId?: string
 }
 
 export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
@@ -585,7 +586,22 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     temporary: true
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode
+export type BranchForkCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'branchFork'
+    branchId: string
+    generationRequestId: string
+    reasoningRunId?: string
+    reasoningModelId?: AiModelId
+    reasoningIndex?: number
+    parentBranchNodeId?: string
+    promptFingerprint?: string
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    temporary: true
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode
 
 export type CanvasViewport = {
     x: number
