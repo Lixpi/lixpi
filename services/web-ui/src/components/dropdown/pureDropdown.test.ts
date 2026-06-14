@@ -112,6 +112,86 @@ describe('pureDropdown — outside click behavior', () => {
     })
 })
 
+describe('pureDropdown — selection and API updates', () => {
+    it('updates selected option, closes dropdown, and notifies parent callback on click', () => {
+        const { dropdown, onSelect } = createTestDropdown()
+        document.body.appendChild(dropdown.dom)
+
+        const trigger = dropdown.dom.querySelector('button') as HTMLButtonElement
+        const optionItems = dropdown.dom.querySelectorAll('.submenu li')
+
+        trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        optionItems[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+        const title = dropdown.dom.querySelector('.title')
+        expect(title?.textContent).toBe('Model B')
+        expect(onSelect).toHaveBeenCalledTimes(1)
+        expect(onSelect).toHaveBeenCalledWith(defaultOptions[1])
+        expect(dropdown.dom.classList.contains('dropdown-open')).toBe(false)
+    })
+
+    it('updates selected display from public update()', () => {
+        const { dropdown } = createTestDropdown()
+
+        const title = dropdown.dom.querySelector('.title') as HTMLElement
+        expect(title.textContent).toBe('Model A')
+
+        dropdown.update(defaultOptions[1])
+
+        expect(title.textContent).toBe('Model B')
+    })
+
+    it('replaces options and selected value via setOptions()', () => {
+        const previousModalityFilter = settings.modelSelectorDropdown.useModalityFilter
+        settings.modelSelectorDropdown.useModalityFilter = true
+
+        try {
+            const { dropdown } = createModalityDropdown()
+            const replacementOptions = [
+                { title: 'Text 2', value: 'text-2', tags: ['text'] },
+                { title: 'Image 2', value: 'image-2', tags: ['image'] },
+                { title: 'Video 2', value: 'video-2', tags: ['video'] },
+            ]
+
+            dropdown.setOptions({
+                options: replacementOptions,
+                availableTags: ['video'],
+                selectedValue: replacementOptions[2],
+            })
+
+            const title = dropdown.dom.querySelector('.title') as HTMLElement
+            const optionItems = dropdown.dom.querySelectorAll('.submenu li')
+
+            expect(optionItems).toHaveLength(replacementOptions.length)
+            expect(title.textContent).toBe('Video 2')
+        } finally {
+            settings.modelSelectorDropdown.useModalityFilter = previousModalityFilter
+        }
+    })
+})
+
+describe('pureDropdown — modality filter flag', () => {
+    const previousModalityFilter = settings.modelSelectorDropdown.useModalityFilter
+
+    beforeEach(() => {
+        settings.modelSelectorDropdown.useModalityFilter = false
+        document.body.innerHTML = ''
+    })
+
+    afterEach(() => {
+        settings.modelSelectorDropdown.useModalityFilter = previousModalityFilter
+        document.body.innerHTML = ''
+    })
+
+    it('does not render tag filter UI when global modality filter flag is off', () => {
+        const { dropdown } = createModalityDropdown()
+        document.body.appendChild(dropdown.dom)
+
+        expect(dropdown.dom.querySelector('.tag-filter')).toBeNull()
+        expect(dropdown.dom.querySelectorAll('.tag-filter-item')).toHaveLength(0)
+    })
+})
+
 describe('pureDropdown — modality filter behavior', () => {
     const previousModalityFilter = settings.modelSelectorDropdown.useModalityFilter
 

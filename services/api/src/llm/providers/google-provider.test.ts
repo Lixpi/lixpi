@@ -1,8 +1,20 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { type BaseProviderDeps } from './base-provider.ts'
 import { buildVeoReferenceImages, getGoogleImageResponseSummary } from './google-provider.ts'
+import { GoogleProvider } from './google-provider.ts'
+
+const { generateContent } = vi.hoisted(() => ({
+    generateContent: vi.fn(),
+}))
+
+vi.mock('@google/genai', () => ({
+    GoogleGenAI: vi.fn(function() {
+        return { models: { generateContent } }
+    }),
+}))
 
 describe('buildVeoReferenceImages', () => {
     it('uses the VEO 3.1 asset reference type for every reference image', () => {
@@ -60,5 +72,58 @@ describe('getGoogleImageResponseSummary', () => {
                 },
             ],
         })
+    })
+})
+
+describe('GoogleProvider rewrite flow', () => {
+    const createDeps = (): BaseProviderDeps => ({
+        natsService: { publish: vi.fn() } as any,
+        storeWorkspaceImage: vi.fn(),
+        storeWorkspaceVideo: vi.fn(),
+        usageReporter: {} as any,
+        runImageRouter: vi.fn(),
+        runVideoRouter: vi.fn(),
+    }) as unknown as BaseProviderDeps
+
+    beforeEach(() => {
+        process.env.GOOGLE_API_KEY = 'test-key'
+        generateContent.mockReset()
+    })
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+        delete process.env.GOOGLE_API_KEY
+    })
+
+    it('requires GOOGLE_API_KEY to instantiate provider', () => {
+        delete process.env.GOOGLE_API_KEY
+        expect(() => new GoogleProvider('ws-1:thread-1', createDeps()))
+            .toThrow('GOOGLE_API_KEY environment variable is required')
+    })
+
+    it('rewrites image prompts from direct model text responses', async () => {
+        generateContent.mockResolvedValueOnce({ text: '  concise rephrase  ' })
+        const provider = new GoogleProvider('ws-1:thread-1', createDeps())
+        const state = { modelVersion: 'gemini-2.5-flash-image' } as any
+
+        const rewritten = await (provider as any).rewriteImagePromptToFitLimit(state, 'Too verbose prompt', 64)
+
+        expect(rewritten).toBe('concise rephrase')
+        expect(generateContent).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to collecting text parts when direct text is missing', async () => {
+        generateContent.mockResolvedValueOnce({
+            candidates: [
+                { content: { parts: [{ text: 'first' }, { text: 'second', extra: true }] } },
+            ],
+        })
+        const provider = new GoogleProvider('ws-1:thread-1', createDeps())
+        const state = { modelVersion: 'gemini-2.5-flash-image' } as any
+
+        const rewritten = await (provider as any).rewriteImagePromptToFitLimit(state, 'Too verbose prompt', 64)
+
+        expect(rewritten).toBe('first\nsecond')
+        expect(generateContent).toHaveBeenCalledTimes(1)
     })
 })

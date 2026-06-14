@@ -95,6 +95,40 @@ describe('helpTooltip', () => {
         expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
     })
 
+    it('hides immediately on pointer leave for non-interactive tooltips', () => {
+        const { tooltip, trigger } = createTooltip()
+        document.body.appendChild(tooltip.dom)
+
+        trigger.getBoundingClientRect = () => ({
+            left: 0,
+            right: 24,
+            top: 0,
+            bottom: 24,
+            width: 24,
+            height: 24,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+        }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () => ({
+            left: 0,
+            right: 180,
+            top: 24,
+            bottom: 64,
+            width: 180,
+            height: 40,
+            x: 0,
+            y: 24,
+            toJSON: () => ({}),
+        }) as DOMRect
+
+        trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
+        expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+
+        trigger.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }))
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+    })
+
     it('destroys tooltip DOM and detached listeners cleanly', () => {
         const { tooltip, trigger } = createTooltip({
             interactive: true,
@@ -323,6 +357,7 @@ describe('helpTooltip', () => {
             global.ResizeObserver = originalResizeObserver
         }
     })
+
 
     it('supports array and element content for the tooltip body', () => {
         const first = document.createElement('span')

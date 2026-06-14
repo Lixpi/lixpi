@@ -227,6 +227,17 @@ describe('ShiftingGradientRenderer — initial state', () => {
 		expect(r.imageData.data.length).toBe(BITMAP_WIDTH * BITMAP_HEIGHT * 4)
 	})
 
+	it('falls back to HTMLCanvasElement when OffscreenCanvas is unavailable', () => {
+		getRenderer().destroy()
+
+		vi.stubGlobal('OffscreenCanvas', undefined)
+		const renderer = getShiftingGradientRenderer() as RendererAny
+
+		expect(renderer.offscreenCanvas).toBeInstanceOf(HTMLCanvasElement)
+		expect(renderer.offscreenCanvas.width).toBe(BITMAP_WIDTH)
+		expect(renderer.offscreenCanvas.height).toBe(BITMAP_HEIGHT)
+	})
+
 	it('has no subscribers initially', () => {
 		const r = getRenderer()
 		expect(r.subscribedCanvases.size).toBe(0)
@@ -690,6 +701,47 @@ describe('ShiftingGradientRenderer — subscribe / unsubscribe', () => {
 		expect(r.isAnimating).toBe(true)
 		expect(r.subscribedCanvases.size).toBe(1)
 	})
+
+	it('does not subscribe when a canvas context cannot be created', () => {
+		const r = getRenderer()
+		const canvas = document.createElement('canvas') as HTMLCanvasElement
+		canvas.getContext = (() => null) as typeof canvas.getContext
+
+		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+		r.subscribe(canvas)
+
+		expect(r.subscribedCanvases.has(canvas)).toBe(false)
+		expect(r.isAnimating).toBe(false)
+		expect(consoleSpy).toHaveBeenCalledWith('Failed to get 2D context for canvas')
+
+		consoleSpy.mockRestore()
+	})
+
+	it('updates only visible canvases during internal canvas refresh pass', () => {
+		const r = getRenderer()
+		const visibleCanvas = createSubscriberCanvas()
+		const hiddenCanvas = createSubscriberCanvas()
+
+		r.subscribe(visibleCanvas)
+		r.subscribe(hiddenCanvas)
+		r.setVisibility(hiddenCanvas, false)
+
+		const visibleEntry = r.subscribedCanvases.get(visibleCanvas)
+		const hiddenEntry = r.subscribedCanvases.get(hiddenCanvas)
+		expect(visibleEntry).toBeDefined()
+		expect(hiddenEntry).toBeDefined()
+
+		const visibleDrawImage = vi.spyOn(visibleEntry!.ctx, 'drawImage')
+		const hiddenDrawImage = vi.spyOn(hiddenEntry!.ctx, 'drawImage')
+		visibleDrawImage.mockClear()
+		hiddenDrawImage.mockClear()
+
+		;(r as RendererAny).updateSubscribedCanvases()
+
+		expect(visibleDrawImage).toHaveBeenCalledTimes(1)
+		expect(hiddenDrawImage).not.toHaveBeenCalled()
+	})
 })
 
 // =============================================================================
@@ -779,6 +831,43 @@ describe('ShiftingGradientRenderer — pattern', () => {
 		})
 
 		await expect(r.setPattern({ url: 'bad.png' })).rejects.toThrow('Failed to load pattern image')
+	})
+
+	it('does not draw overlay when pattern image is not loaded yet', () => {
+		const r = getRenderer()
+		const canvas = createSubscriberCanvas()
+		r.subscribe(canvas)
+		const entry = r.subscribedCanvases.get(canvas)
+		expect(entry).toBeDefined()
+
+		entry!.ctx.drawImage = vi.fn()
+		entry!.ctx.save = vi.fn()
+		entry!.ctx.restore = vi.fn()
+
+		r.pattern = {
+			image: {
+				complete: false,
+				naturalWidth: 16,
+				naturalHeight: 16,
+			} as HTMLImageElement,
+			options: {
+				url: 'unused',
+				alpha: 0.5,
+				blendMode: 'soft-light',
+				tintColor: undefined,
+				scale: 1,
+			},
+		}
+
+		entry!.ctx.drawImage.mockClear()
+		entry!.ctx.save.mockClear()
+		entry!.ctx.restore.mockClear()
+
+		;(r as RendererAny).drawPatternOverlay(entry!.ctx, canvas.width, canvas.height)
+
+		expect(entry!.ctx.drawImage).not.toHaveBeenCalled()
+		expect(entry!.ctx.save).not.toHaveBeenCalled()
+		expect(entry!.ctx.restore).not.toHaveBeenCalled()
 	})
 })
 
@@ -1150,6 +1239,52 @@ describe('createShiftingGradientBackground', () => {
 		expect(result.canvas.height).toBe(300)
 		expect(drawImage).not.toHaveBeenCalled()
 
+		result.destroy()
+	})
+
+	it('parses CSS pattern variables and forwards normalized setPattern options', async () => {
+		const container = document.createElement('div')
+		Object.defineProperty(container, 'getBoundingClientRect', {
+			value: () => ({ width: 400, height: 300, top: 0, left: 0, right: 400, bottom: 300 }),
+		})
+
+		const style = {
+			getPropertyValue: (key: string) => {
+				switch (key) {
+					case '--gradient-pattern-url':
+						return 'url("https://example.com/pattern.png")'
+					case '--gradient-pattern-alpha':
+						return '0.33'
+					case '--gradient-pattern-tint':
+						return 'rgba(10, 20, 30, 0.4)'
+					case '--gradient-pattern-scale':
+						return '2'
+					default:
+						return ''
+				}
+			},
+		} as CSSStyleDeclaration
+
+		const styleSpy = vi.spyOn(window, 'getComputedStyle').mockReturnValue(style)
+
+		const renderer = getShiftingGradientRenderer()
+		const setPatternSpy = vi
+			.spyOn(renderer, 'setPattern')
+			.mockResolvedValue(undefined as unknown as Promise<void>)
+
+		const result = createShiftingGradientBackground(container)
+
+		await new Promise(resolve => setTimeout(resolve, 0))
+		expect(setPatternSpy).toHaveBeenCalledTimes(1)
+
+		expect(setPatternSpy).toHaveBeenCalledWith({
+			url: 'https://example.com/pattern.png',
+			alpha: 0.33,
+			tintColor: 'rgba(10, 20, 30, 0.4)',
+			scale: 2,
+		})
+
+		styleSpy.mockRestore()
 		result.destroy()
 	})
 })

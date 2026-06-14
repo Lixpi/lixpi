@@ -151,3 +151,60 @@ describe('StabilityProvider reference image resizing', () => {
         await expectUploadedImageWithinStabilityLimit(formData, 'style_image')
     })
 })
+
+describe('StabilityProvider stream validation', () => {
+    it('reports a provider-configuration error when the API key is missing', async () => {
+        const providerDeps = makeDeps()
+        const provider = new StabilityProvider('ws-1:thread-1', providerDeps)
+        const previousApiKey = process.env.STABLE_DIFFUSION_API_KEY
+        delete process.env.STABLE_DIFFUSION_API_KEY
+
+        try {
+            const result = await provider.process({
+                workspaceId: 'ws-1',
+                aiChatThreadId: 'thread-1',
+                enableImageGeneration: true,
+                aiModelMetaInfo: { provider: 'Stability', model: 'sd3.5-large', modelVersion: 'sd3.5-large' },
+                messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
+            })
+            expect(result.error).toBe('STABLE_DIFFUSION_API_KEY is not configured')
+        } finally {
+            if (previousApiKey === undefined) {
+                delete process.env.STABLE_DIFFUSION_API_KEY
+            } else {
+                process.env.STABLE_DIFFUSION_API_KEY = previousApiKey
+            }
+        }
+    })
+
+    it('returns unknown-model errors for unsupported Stability models', async () => {
+        const providerDeps = makeDeps()
+        const provider = new StabilityProvider('ws-1:thread-1', providerDeps)
+        vi.stubGlobal('fetch', vi.fn())
+
+        const result = await provider.process({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            enableImageGeneration: true,
+            aiModelMetaInfo: { provider: 'Stability', model: 'unsupported', modelVersion: 'unsupported' },
+            messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
+        })
+
+        expect(result.error).toBe('Unknown Stability model: unsupported')
+    })
+
+    it('returns missing-prompt error when no user prompt text exists', async () => {
+        const providerDeps = makeDeps()
+        const provider = new StabilityProvider('ws-1:thread-1', providerDeps)
+
+        const result = await provider.process({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            enableImageGeneration: true,
+            aiModelMetaInfo: { provider: 'Stability', model: 'stability-ultra', modelVersion: 'stability-ultra' },
+            messages: [{ role: 'assistant', content: [{ type: 'text', text: 'I can help' }] }],
+        })
+
+        expect(result.error).toBe('No prompt found in messages')
+    })
+})
