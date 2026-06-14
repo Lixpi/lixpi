@@ -7,6 +7,7 @@ import type {
     AiInteractionChatStopMessagePayload,
     ImageGenerationTrace,
     ImageGenerationSize,
+    MediaBranchLineagePlan,
     MediaGenerationRunMeta,
     VideoGenerationTrace,
     WorkspaceContextResolution
@@ -251,6 +252,21 @@ export default class AiInteractionService {
                 this.segmentsReceiver.receiveSegment({
                     type: 'image_branch_resolved',
                     imageBranchResolution: content.resolution,
+                    ...segmentBase,
+                })
+                return
+            }
+
+            if (content.status === STREAM_STATUS.MEDIA_LINEAGE_PLANNED) {
+                const lineagePlan = content.lineagePlan as MediaBranchLineagePlan
+                console.log('[AI_INTERACTION] MEDIA_LINEAGE_PLANNED received:', {
+                    generationRequestId: lineagePlan?.generationRequestId,
+                    branchForkCount: lineagePlan?.branchForks.length ?? 0,
+                    runAssignmentCount: lineagePlan?.runAssignments.length ?? 0,
+                })
+                this.segmentsReceiver.receiveSegment({
+                    type: 'media_lineage_planned',
+                    mediaBranchLineagePlan: lineagePlan,
                     ...segmentBase,
                 })
                 return

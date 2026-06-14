@@ -256,11 +256,95 @@ export type ImageBranchVlmResolution = {
     decisions: ImageBranchVlmReferenceDecision[]
 }
 
+export type BranchOriginProvenance = {
+    kind: 'branch-root-fork-decision'
+    promptText: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    operationKind?: ImageGenerationOperationKind
+    resolverRationale?: string
+    forked: boolean
+    forkCount: number
+}
+
+export type BranchForkProvenance = {
+    kind: 'reasoning-run'
+    promptText: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    reasoningRunId: string
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+}
+
+export type BranchOriginLineagePlan = {
+    nodeId: string
+    generationRequestId: string
+    branchId: string
+    promptFingerprint?: string
+    provenance: BranchOriginProvenance
+}
+
+export type BranchForkLineagePlan = {
+    nodeId: string
+    generationRequestId: string
+    branchId: string
+    parentBranchNodeId: string
+    reasoningRunId: string
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+    promptFingerprint?: string
+    provenance: BranchForkProvenance
+}
+
+export type MediaRunLineageAssignment = {
+    generationRequestId: string
+    reasoningRunId?: string
+    mediaRunId?: string
+    reasoningModelId?: AiModelId
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    branchId: string
+    parentImageNodeId?: string
+    branchOriginNodeId?: string
+    branchForkNodeId?: string
+    lineageParentNodeId?: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    operationKind?: ImageGenerationOperationKind
+    promptText: string
+    promptFingerprint?: string
+    createdAt: number
+}
+
+export type MediaBranchLineagePlan = {
+    planVersion: 'media-branch-lineage-v1'
+    generationRequestId: string
+    branchId: string
+    promptText: string
+    promptFingerprint?: string
+    sourceNodeId?: string
+    placementAnchorNodeId?: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    branchOrigin?: BranchOriginLineagePlan
+    branchForks: BranchForkLineagePlan[]
+    runAssignments: MediaRunLineageAssignment[]
+    createdAt: number
+}
+
 export type ImageBranchResolvedStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLVED'
     aiProvider: string
     generationRun?: MediaGenerationRunMeta
     resolution: ImageBranchVlmResolution
+}
+
+export type MediaLineagePlannedStreamPayload = {
+    status: 'MEDIA_LINEAGE_PLANNED'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    lineagePlan: MediaBranchLineagePlan
 }
 
 export type ImageBranchResolutionErrorStreamPayload = {
@@ -409,6 +493,7 @@ export type VideoGenerationTraceStreamPayload = {
 }
 
 export type MediaGenerationRunMeta = {
+    requestKind?: 'single-media' | 'media-generation-matrix'
     generationRequestId: string
     reasoningRunId: string
     mediaRunId?: string
@@ -418,6 +503,7 @@ export type MediaGenerationRunMeta = {
     reasoningIndex: number
     mediaIndex?: number
     variantIndex?: number
+    lineageAssignment?: MediaRunLineageAssignment
 }
 
 export type GeneratedMediaVariantMetadata = {
@@ -428,6 +514,8 @@ export type GeneratedMediaVariantMetadata = {
     mediaModelId?: AiModelId
     mediaType?: 'image' | 'video'
     variantIndex?: number
+    // API-assigned lineage marker IDs. The browser applies these to canvas
+    // state and may compute layout, but it must not derive branch topology.
     branchOriginNodeId?: string
     branchForkNodeId?: string
 }
@@ -581,6 +669,7 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     branchId: string
     generationRequestId: string
     promptFingerprint?: string
+    provenance?: BranchOriginProvenance
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     temporary: true
@@ -596,6 +685,7 @@ export type BranchForkCanvasNode = CanvasNodeParentingFields & {
     reasoningIndex?: number
     parentBranchNodeId?: string
     promptFingerprint?: string
+    provenance?: BranchForkProvenance
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     temporary: true

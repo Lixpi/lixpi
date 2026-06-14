@@ -629,6 +629,56 @@
         background: rgba(34, 40, 49, 0.06);
         border-radius: 10px;
     }
+
+    .canvas-branch-origin-provenance-section {
+        margin: 0.65rem 0 0;
+    }
+
+    .canvas-branch-origin-provenance-label {
+        display: block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgba(0, 0, 0, 0.5);
+        margin: 0 0 0.3rem;
+    }
+
+    .canvas-branch-origin-reference-list {
+        display: grid;
+        gap: 0.35rem;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+    }
+
+    .canvas-branch-origin-reference-item {
+        display: grid;
+        gap: 0.15rem;
+        padding: 0.45rem 0.5rem;
+        background: rgba(34, 40, 49, 0.045);
+        border-radius: 6px;
+    }
+
+    .canvas-branch-origin-reference-id {
+        font-size: 0.66rem;
+        color: rgba(0, 0, 0, 0.46);
+        overflow-wrap: anywhere;
+    }
+
+    .canvas-branch-origin-reference-label,
+    .canvas-branch-origin-rationale {
+        margin: 0;
+        font-size: 0.76rem;
+        line-height: 1.4;
+        color: #36414a;
+        overflow-wrap: anywhere;
+    }
+
+    .canvas-branch-origin-rationale {
+        margin-top: 0.4rem;
+        color: rgba(0, 0, 0, 0.58);
+    }
 }
 
 .canvas-branch-origin-info-panel,

@@ -528,6 +528,31 @@ const buildResolvedBranchMessage = (
     return { role: 'user', content: blocks }
 }
 
+const buildFreshBranchResolution = (state: ProviderState): ImageBranchVlmResolution => {
+    const snapshot = state.imageBranchCandidateSnapshot
+    if (!snapshot) throw new Error('Image branch candidate snapshot is required')
+    return {
+        resolverKind: RESOLVER_KIND,
+        resolverVersion: snapshot.resolverVersion,
+        resolverModelProvider: state.provider,
+        resolverModelId: state.modelVersion,
+        mode: 'fresh-branch',
+        operationKind: 'fresh_branch',
+        targetImageNodeId: null,
+        branchId: `branch-${randomUUID()}`,
+        includeGeneratedNodeIds: [],
+        referenceImageNodeIds: [],
+        sourceContextNodeIds: [],
+        styleReferenceNodeIds: [],
+        excludedNodeIds: [],
+        entityTags: [],
+        styleTags: [],
+        confidence: 1,
+        rationale: 'No candidate media was supplied; starting a fresh generated branch.',
+        decisions: [],
+    }
+}
+
 export const resolveImageBranch = async (state: ProviderState, deps: ResolveImageBranchDeps): Promise<Partial<ProviderState>> => {
     // The resolver runs for both image AND video generation: VEO image-to-video
     // and reference-conditioned video both need the same VLM grounding that
@@ -540,6 +565,17 @@ export const resolveImageBranch = async (state: ProviderState, deps: ResolveImag
             : 'Image branch candidate snapshot is required for image generation.'
         deps.publisher.imageBranchResolutionError(message)
         throw new Error(message)
+    }
+    if (snapshot.candidates.length === 0) {
+        const resolution = buildFreshBranchResolution(state)
+        deps.publisher.imageBranchResolved(resolution)
+        info(`[ImageBranchResolver] resolved fresh branch ${JSON.stringify({
+            workspaceId: state.workspaceId,
+            aiChatThreadId: state.aiChatThreadId,
+            branchId: resolution.branchId,
+            rationale: resolution.rationale,
+        }, null, 0)}`)
+        return { imageBranchResolution: resolution }
     }
 
     const { provider, modelVersion } = getResolverModel(state)

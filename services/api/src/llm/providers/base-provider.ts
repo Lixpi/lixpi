@@ -1,10 +1,11 @@
 'use strict'
 
+import { randomUUID } from 'crypto'
 import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import type { AiModelId, MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
+import type { AiModelId, MediaGenerationRunMeta, MediaRunLineageAssignment, ProviderName } from '@lixpi/constants'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
@@ -21,6 +22,7 @@ import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
+import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
@@ -64,7 +66,7 @@ const normalizeModelOption = (
 // chat stream owns it.
 //
 // Topology:
-//   START → resolveWorkspaceContext → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional]
+//   START → resolveWorkspaceContext → resolveFeatures → resolveImageBranch → planMediaBranchLineage → validateRequest → streamTokens → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -80,6 +82,7 @@ export abstract class BaseProvider {
     protected imagePublisher: ImagePublisher | undefined
     protected videoPublisher: VideoPublisher | undefined
     public readonly instanceKey: string
+    private readonly mediaBranchLineagePlanner = new MediaBranchLineagePlanner()
 
     constructor(
         protected readonly _instanceKey: string,
@@ -102,6 +105,7 @@ export abstract class BaseProvider {
                 publisher: this.publisher,
                 abortSignal: this.signal,
             }))
+            .addNode('planMediaBranchLineage', async (s: ProviderState) => s.preflightResolved ? {} : this.planMediaBranchLineage(s))
             .addNode('validateRequest', async (s: ProviderState) => this.validateRequest(s))
             .addNode('streamTokens', async (s: ProviderState) => this.streamTokens(s))
             .addNode('validateImagePrompt', async (s: ProviderState) => this.validateImagePromptNode(s))
@@ -113,7 +117,8 @@ export abstract class BaseProvider {
         graph.addEdge(START, 'resolveWorkspaceContext' as any)
         graph.addEdge('resolveWorkspaceContext' as any, 'resolveFeatures' as any)
         graph.addEdge('resolveFeatures' as any, 'resolveImageBranch' as any)
-        graph.addEdge('resolveImageBranch' as any, 'validateRequest' as any)
+        graph.addEdge('resolveImageBranch' as any, 'planMediaBranchLineage' as any)
+        graph.addEdge('planMediaBranchLineage' as any, 'validateRequest' as any)
         graph.addEdge('validateRequest' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
             'streamTokens' as any,
@@ -187,6 +192,7 @@ export abstract class BaseProvider {
             workspaceContextResolution: requestData.workspaceContextResolution,
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
             imageBranchResolution: requestData.imageBranchResolution,
+            mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
             referencedFeatureIds: requestData.referencedFeatureIds,
             featureReferenceImages: requestData.featureReferenceImages,
             featureReferenceImageTraceUrls: requestData.featureReferenceImageTraceUrls,
@@ -245,6 +251,45 @@ export abstract class BaseProvider {
     }
 
     // -- Workflow nodes (shared) --
+
+    protected async planMediaBranchLineage(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (!state.imageModelVersion && !state.videoModelVersion) return {}
+        if (state.mediaBranchLineagePlan) return {}
+
+        const generationRun = this.buildSingleMediaGenerationRun(state)
+        const lineagePlan = this.mediaBranchLineagePlanner.buildPlan({
+            generationRequestId: generationRun.generationRequestId,
+            reasoningModelIds: [generationRun.reasoningModelId],
+            imageBranchCandidateSnapshot: state.imageBranchCandidateSnapshot,
+            imageBranchResolution: state.imageBranchResolution,
+            workspaceContextSnapshot: state.workspaceContextSnapshot,
+            createdAt: Date.now(),
+        })
+        const lineageAssignment = lineagePlan.runAssignments.find(
+            assignment => assignment.reasoningRunId === generationRun.reasoningRunId
+        )
+        const nextGenerationRun: MediaGenerationRunMeta = {
+            ...generationRun,
+            ...(lineageAssignment ? { lineageAssignment } : {}),
+        }
+
+        this.streamPublisher?.mediaLineagePlanned(lineagePlan, nextGenerationRun)
+        info(`[BaseProvider] media branch lineage planned ${JSON.stringify({
+            workspaceId: state.workspaceId,
+            aiChatThreadId: state.aiChatThreadId,
+            generationRequestId: lineagePlan.generationRequestId,
+            branchId: lineagePlan.branchId,
+            branchOriginNodeId: lineagePlan.branchOrigin?.nodeId,
+            branchForkCount: lineagePlan.branchForks.length,
+            runAssignmentCount: lineagePlan.runAssignments.length,
+        }, null, 0)}`)
+
+        return {
+            mediaBranchLineagePlan: lineagePlan,
+            generationRun: nextGenerationRun,
+            eventMeta: this.buildGenerationRunEventMeta(state.eventMeta, nextGenerationRun),
+        }
+    }
 
     protected async validateRequest(state: ProviderState): Promise<Partial<ProviderState>> {
         if (!state.modelVersion) throw new Error('modelVersion is required')
@@ -423,13 +468,75 @@ export abstract class BaseProvider {
     ): MediaGenerationRunMeta | undefined {
         if (!state.generationRun) return undefined
         const mediaModelId = `${mediaModel.provider}:${mediaModel.model}` as AiModelId
+        const mediaRunId = `${state.generationRun.reasoningRunId}:${mediaType}:${mediaIndex}`
+        const lineageAssignment = this.buildMediaRunLineageAssignment(
+            state.generationRun.lineageAssignment,
+            mediaRunId,
+            mediaModelId,
+            mediaType,
+        )
         return {
             ...state.generationRun,
-            mediaRunId: `${state.generationRun.reasoningRunId}:${mediaType}:${mediaIndex}`,
+            mediaRunId,
             mediaModelId,
             mediaType,
             mediaIndex,
             variantIndex: state.generationRun.reasoningIndex * mediaModelCount + mediaIndex,
+            ...(lineageAssignment ? { lineageAssignment } : {}),
+        }
+    }
+
+    private buildMediaRunLineageAssignment(
+        assignment: MediaRunLineageAssignment | undefined,
+        mediaRunId: string,
+        mediaModelId: AiModelId,
+        mediaType: 'image' | 'video',
+    ): MediaRunLineageAssignment | undefined {
+        if (!assignment) return undefined
+        return {
+            ...assignment,
+            mediaRunId,
+            mediaModelId,
+            mediaType,
+        }
+    }
+
+    private buildSingleMediaGenerationRun(state: ProviderState): MediaGenerationRunMeta {
+        if (state.generationRun) return state.generationRun
+
+        const generationRequestId = this.getEventMetaString(state.eventMeta.generationRequestId) ?? `media-${randomUUID()}`
+        const reasoningRunId = this.getEventMetaString(state.eventMeta.reasoningRunId) ?? `${generationRequestId}:reasoning:0`
+        const reasoningModelId = this.getReasoningModelId(state)
+        const reasoningIndex = typeof state.eventMeta.reasoningIndex === 'number' ? state.eventMeta.reasoningIndex : 0
+
+        return {
+            requestKind: 'single-media',
+            generationRequestId,
+            reasoningRunId,
+            reasoningModelId,
+            reasoningIndex,
+        }
+    }
+
+    private getReasoningModelId(state: ProviderState): AiModelId {
+        const model = state.aiModelMetaInfo.model || state.modelVersion
+        return `${state.provider}:${model}` as AiModelId
+    }
+
+    private getEventMetaString(value: unknown): string | undefined {
+        return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+    }
+
+    private buildGenerationRunEventMeta(
+        eventMeta: ProviderState['eventMeta'],
+        generationRun: MediaGenerationRunMeta,
+    ): ProviderState['eventMeta'] {
+        return {
+            ...eventMeta,
+            generationRequestId: generationRun.generationRequestId,
+            reasoningRunId: generationRun.reasoningRunId,
+            reasoningModelId: generationRun.reasoningModelId,
+            reasoningIndex: generationRun.reasoningIndex,
         }
     }
 

@@ -44,15 +44,22 @@ stateDiagram-v2
 
 The router after `streamTokens` is the authoritative **3-way `routeAfterStream`**. Its precedence is fixed: a video prompt wins, then an image prompt, then skip. The image branch has an extra `validateImagePrompt` step that the video branch does not — VEO prompts have no strict length limit, so there is no video prompt-validation node.
 
+## Frontend Boundary
+
+The API owns AI-generation decisions. Do not put model routing, reasoning fanout, context relevance, image/video branch resolution, media lineage topology, fork/origin marker creation, generated-media parentage, provenance, usage, authorization, or persistence ownership in `services/web-ui`.
+
+The browser can send user input and non-authoritative snapshots, then render API stream events and persisted state. If the UI needs a new decision to render correctly, add a typed API state field or stream event. Do not infer it in Svelte, ProseMirror plugins, canvas stores, `WorkspaceCanvas.ts`, or web-ui services.
+
 ### Node Responsibilities
 
-The three pre-stream resolvers are large features in their own right; each gets a one-line description here and a link to its dedicated page. The streaming, routing, execution, usage, and cleanup nodes are fully described below.
+The pre-stream resolvers and planner are large features in their own right; each gets a one-line description here and a link to its dedicated page. The streaming, routing, execution, usage, and cleanup nodes are fully described below.
 
 | Node | Job |
 |------|-----|
 | `resolveWorkspaceContext` | Ranks the descriptors-only workspace snapshot, force-includes explicit chips and edge-connected nodes, self-heals weak descriptors once, and narrows the media candidate set. Runs on every text, image, and video turn. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md). |
 | `resolveFeatures` | Always-on pre-stage. Resolves `/use` feature references at send time, fetching each feature (ACL-checked) and injecting its instructions, parameters, and content-free source crops as system context. See [Using Features](../library/USING-FEATURES.md). |
 | `resolveImageBranch` | Structured VLM resolver that assigns visual roles (target, base-context, style-reference, comparison-target, excluded) to the narrowed candidate media. Shared by image *and* video; a no-op when no media model is selected. See [Branch Lineage](../media-generation/BRANCH-LINEAGE.md). |
+| `planMediaBranchLineage` / `MediaBranchLineagePlanner` | API-side planner used after branch resolution for media-enabled requests. It assigns branch origin/fork marker IDs, lineage parent IDs, neutral branch-root provenance, and per-run lineage assignments before reasoning/media fanout. Matrix requests run the same planner once in shared preflight and pass the plan to every child run. |
 | `validateRequest` | Validates required request fields and extracts model metadata (text model, and any image/video model pricing + capabilities) before streaming begins. |
 | `streamTokens` | Runs the text model's `_stream_impl()`. Injects the media tool(s) and augments the system prompt when a media model is selected, streams the response (text chunks to the browser), then extracts any `generate_image` / `generate_video` tool call into state. |
 | `routeAfterStream` | The post-stream conditional. Precedence: `generatedVideoPrompt` → video branch; else `generatedImagePrompt` → image branch; else `skip` to usage. The model normally emits at most one media tool call per turn. |
@@ -64,6 +71,10 @@ The three pre-stream resolvers are large features in their own right; each gets 
 
 {% callout type="note" %}
 `resolveImageBranch` keeps its image-centric name even though it now grounds references for video too. Its gate runs whenever an image **or** video model is selected, and it requires the browser-built `imageBranchCandidateSnapshot`; a missing snapshot for a media-enabled request fails the graph visibly rather than guessing.
+
+Empty candidate snapshots are valid. The resolver synthesizes a fresh-branch resolution in the API without calling the VLM, then `planMediaBranchLineage` assigns the branch topology.
+
+For media-enabled requests, branch resolution is immediately followed by API lineage planning. The planner emits `MEDIA_LINEAGE_PLANNED` and copies each run's `MediaRunLineageAssignment` into `generationRun.lineageAssignment`, so browser code applies topology instead of deriving branchOrigin/branchFork decisions from local state. Matrix requests run this once in shared preflight; single media requests run it as the `planMediaBranchLineage` graph node.
 {% /callout %}
 
 ## Provider State

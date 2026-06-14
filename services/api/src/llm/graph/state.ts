@@ -3,6 +3,7 @@
 import type {
     ImageBranchCandidateSnapshot,
     ImageBranchVlmResolution,
+    MediaBranchLineagePlan,
     MediaGenerationRunMeta,
     ProviderName,
     WorkspaceContextResolution,
@@ -134,6 +135,7 @@ export type ProviderState = {
     workspaceContextResolution?: WorkspaceContextResolution | undefined
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot | undefined
     imageBranchResolution?: ImageBranchVlmResolution | undefined
+    mediaBranchLineagePlan?: MediaBranchLineagePlan | undefined
 
     // Video generation (VEO) — async submit/poll routing. Mirrors the image
     // fields above; the VLM branch resolution is shared (reused for first-frame
@@ -205,6 +207,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     workspaceContextResolution: { reducer: keep },
     imageBranchCandidateSnapshot: { reducer: keep },
     imageBranchResolution: { reducer: keep },
+    mediaBranchLineagePlan: { reducer: keep },
     enableVideoGeneration: { reducer: keep, default: () => false },
     videoModelMetaInfo: { reducer: keep },
     videoModelVersion: { reducer: keep },

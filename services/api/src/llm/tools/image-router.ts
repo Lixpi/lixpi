@@ -1,6 +1,7 @@
 'use strict'
 
 import { info, warn, err } from '@lixpi/debug-tools'
+import type { AiModelId, MediaGenerationRunMeta, MediaRunLineageAssignment } from '@lixpi/constants'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
@@ -41,6 +42,12 @@ export class ImageRouter {
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
         const imageSize = normalizeImageSize(imageProvider, state.imageSize)
+        const mediaModelId = imageProvider && imageModel
+            ? this.buildMediaModelId(imageProvider, imageMeta.model, imageModel)
+            : undefined
+        const generationRun = mediaModelId
+            ? this.buildImageGenerationRun(state.generationRun, mediaModelId)
+            : state.generationRun
 
         if (!imageProvider || !imageModel || !prompt) {
             err(
@@ -50,8 +57,8 @@ export class ImageRouter {
             return {}
         }
 
-        const instanceKey = state.generationRun?.mediaRunId
-            ? `${workspaceId}:${aiChatThreadId}:${state.generationRun.mediaRunId}`
+        const instanceKey = generationRun?.mediaRunId
+            ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:image`
         const referenceImages = state.referenceImages ?? []
         const featureReferenceImages = state.featureReferenceImages ?? []
@@ -112,8 +119,8 @@ export class ImageRouter {
                 aiChatThreadId,
                 enableImageGeneration: true,
                 imageSize,
-                generationRun: state.generationRun,
-                eventMeta: state.eventMeta,
+                generationRun,
+                eventMeta: this.buildEventMeta(state.eventMeta, generationRun),
             }
 
             const finalState = await provider.process(requestData)
@@ -147,6 +154,66 @@ export class ImageRouter {
             return { error: message }
         } finally {
             this.registry.remove?.(instanceKey)
+        }
+    }
+
+    private buildMediaModelId(provider: string, model: unknown, fallbackModel: string): AiModelId {
+        const modelName = typeof model === 'string' && model.trim().length > 0 ? model.trim() : fallbackModel
+        return `${provider}:${modelName}` as AiModelId
+    }
+
+    private buildImageGenerationRun(
+        generationRun: MediaGenerationRunMeta | undefined,
+        mediaModelId: AiModelId,
+    ): MediaGenerationRunMeta | undefined {
+        if (!generationRun) return undefined
+        const mediaRunId = generationRun.mediaRunId ?? `${generationRun.reasoningRunId}:image:0`
+        const lineageAssignment = this.buildMediaRunLineageAssignment(
+            generationRun.lineageAssignment,
+            mediaRunId,
+            mediaModelId,
+        )
+        return {
+            ...generationRun,
+            mediaRunId,
+            mediaModelId,
+            mediaType: 'image',
+            mediaIndex: generationRun.mediaIndex ?? 0,
+            variantIndex: generationRun.variantIndex ?? 0,
+            ...(lineageAssignment ? { lineageAssignment } : {}),
+        }
+    }
+
+    private buildMediaRunLineageAssignment(
+        assignment: MediaRunLineageAssignment | undefined,
+        mediaRunId: string,
+        mediaModelId: AiModelId,
+    ): MediaRunLineageAssignment | undefined {
+        if (!assignment) return undefined
+        return {
+            ...assignment,
+            mediaRunId,
+            mediaModelId,
+            mediaType: 'image',
+        }
+    }
+
+    private buildEventMeta(
+        eventMeta: ProviderState['eventMeta'],
+        generationRun: MediaGenerationRunMeta | undefined,
+    ): ProviderState['eventMeta'] {
+        if (!generationRun) return eventMeta
+        return {
+            ...eventMeta,
+            generationRequestId: generationRun.generationRequestId,
+            reasoningRunId: generationRun.reasoningRunId,
+            mediaRunId: generationRun.mediaRunId,
+            reasoningModelId: generationRun.reasoningModelId,
+            mediaModelId: generationRun.mediaModelId,
+            mediaType: generationRun.mediaType,
+            reasoningIndex: generationRun.reasoningIndex,
+            mediaIndex: generationRun.mediaIndex,
+            variantIndex: generationRun.variantIndex,
         }
     }
 }

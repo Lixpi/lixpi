@@ -8,6 +8,9 @@ import type {
     AiModel,
     AiModelId,
     ImageGenerationSize,
+    MediaBranchLineagePlan,
+    MediaGenerationRunMeta,
+    MediaRunLineageAssignment,
     ProviderName,
 } from '@lixpi/constants'
 
@@ -16,6 +19,7 @@ import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
+import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 
@@ -142,6 +146,8 @@ const buildReasoningInstanceKey = (requestGroupKey: string, reasoningIndex: numb
     `${requestGroupKey}:reasoning:${reasoningIndex}`
 
 export class MediaGenerationMatrixOrchestrator {
+    private readonly lineagePlanner = new MediaBranchLineagePlanner()
+
     constructor(
         private readonly registry: ProviderRegistry,
         private readonly natsService: NatsService,
@@ -175,6 +181,7 @@ export class MediaGenerationMatrixOrchestrator {
         await Promise.all(normalized.reasoningModels.map((reasoningModel, reasoningIndex) => {
             const reasoningRunId = buildReasoningRunId(normalized.generationRequestId, reasoningIndex)
             const instanceKey = buildReasoningInstanceKey(normalized.requestGroupKey, reasoningIndex)
+            const lineageAssignment = this.getRunLineageAssignment(sharedPreflightState.mediaBranchLineagePlan, reasoningRunId)
             return this.registry.process(instanceKey, reasoningModel.provider, {
                 ...requestData,
                 aiModelMetaInfo: reasoningModel.meta,
@@ -188,6 +195,7 @@ export class MediaGenerationMatrixOrchestrator {
                 workspaceContextResolution: sharedPreflightState.workspaceContextResolution,
                 imageBranchCandidateSnapshot: sharedPreflightState.imageBranchCandidateSnapshot,
                 imageBranchResolution: sharedPreflightState.imageBranchResolution,
+                mediaBranchLineagePlan: sharedPreflightState.mediaBranchLineagePlan,
                 messages: sharedPreflightState.messages,
                 featureReferenceImages: sharedPreflightState.featureReferenceImages,
                 featureReferenceImageTraceUrls: sharedPreflightState.featureReferenceImageTraceUrls,
@@ -219,10 +227,12 @@ export class MediaGenerationMatrixOrchestrator {
                     },
                 },
                 generationRun: {
+                    requestKind: 'media-generation-matrix',
                     generationRequestId: normalized.generationRequestId,
                     reasoningRunId,
                     reasoningModelId: reasoningModel.modelId,
                     reasoningIndex,
+                    ...(lineageAssignment ? { lineageAssignment } : {}),
                 },
                 eventMeta: {
                     ...(requestData.eventMeta ?? {}),
@@ -334,7 +344,8 @@ export class MediaGenerationMatrixOrchestrator {
     }): Promise<Partial<ProviderState>> {
         const reasoningModel = normalized.reasoningModels[0]
         const abortController = new AbortController()
-        const generationRun = {
+        const generationRun: MediaGenerationRunMeta = {
+            requestKind: 'media-generation-matrix',
             generationRequestId: normalized.generationRequestId,
             reasoningRunId: buildReasoningRunId(normalized.generationRequestId, 0),
             reasoningModelId: reasoningModel.modelId,
@@ -391,8 +402,36 @@ export class MediaGenerationMatrixOrchestrator {
             publisher,
             abortSignal: abortController.signal,
         }))
+        const mediaBranchLineagePlan = this.lineagePlanner.buildPlan({
+            generationRequestId: normalized.generationRequestId,
+            reasoningModelIds: normalized.reasoningModelIds,
+            imageBranchCandidateSnapshot: state.imageBranchCandidateSnapshot,
+            imageBranchResolution: state.imageBranchResolution,
+            workspaceContextSnapshot: state.workspaceContextSnapshot,
+            createdAt: Date.now(),
+        })
+        const firstLineageAssignment = this.getRunLineageAssignment(mediaBranchLineagePlan, generationRun.reasoningRunId)
+        const lineageGenerationRun = firstLineageAssignment
+            ? { ...generationRun, lineageAssignment: firstLineageAssignment }
+            : generationRun
+        publisher.mediaLineagePlanned(mediaBranchLineagePlan, lineageGenerationRun)
+        info('[MEDIA_MATRIX] Media branch lineage planned', {
+            generationRequestId: mediaBranchLineagePlan.generationRequestId,
+            branchId: mediaBranchLineagePlan.branchId,
+            branchOriginNodeId: mediaBranchLineagePlan.branchOrigin?.nodeId,
+            branchForkCount: mediaBranchLineagePlan.branchForks.length,
+            runAssignmentCount: mediaBranchLineagePlan.runAssignments.length,
+        })
+        state = this.applyStatePatch(state, { mediaBranchLineagePlan })
 
         return state
+    }
+
+    private getRunLineageAssignment(
+        lineagePlan: MediaBranchLineagePlan | undefined,
+        reasoningRunId: string,
+    ): MediaRunLineageAssignment | undefined {
+        return lineagePlan?.runAssignments.find(assignment => assignment.reasoningRunId === reasoningRunId)
     }
 
     private applyStatePatch(state: ProviderState, patch: Partial<ProviderState>): ProviderState {

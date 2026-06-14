@@ -204,11 +204,11 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 
 `generationRun` metadata scopes parallel model outputs:
 
-- Text responses are grouped by `reasoningRunId`.
+- Matrix text responses are grouped by `reasoningRunId`.
 - Media nodes are grouped by `mediaRunId`.
-- Generation trace collapsibles are grouped by `reasoningRunId`.
+- Matrix generation trace collapsibles are grouped by `reasoningRunId`; scalar media traces stay in the plain response message.
 - `receivingThreadIds` is thread-level, while `receivingRunKeysByThread` keeps sibling reasoning runs active independently.
-- Local `aiReasoningSection` placeholders are created only for media-generation matrix requests, matching the service path that emits `generationRun`. Scalar single-model media requests use a plain `aiResponseMessage` so the normal stream lifecycle owns the loading indicator.
+- Local `aiReasoningSection` placeholders are created only for media-generation matrix requests. Scalar single-model media requests can still carry `generationRun` lineage metadata for canvas/media provenance, but they use a plain `aiResponseMessage` so the normal stream lifecycle owns the loading indicator.
 
 ## Positioning Helpers
 
