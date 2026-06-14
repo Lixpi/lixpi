@@ -3,9 +3,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+    getPromptTextFromMessages,
     buildImageBranchCandidateSnapshot,
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
+    isChatRootNode,
 } from '$src/services/ai-image-branching.ts'
 import type { CanvasNode, WorkspaceEdge } from '@lixpi/constants'
 
@@ -364,6 +366,31 @@ describe('buildImageBranchCandidateSnapshot', () => {
         expect(branchLeaf?.promptText).toContain('make the same man orange monochrome')
         expect(branchLeaf?.promptText).toContain('thread image prompt text')
         expect(branchLeaf?.visualEntitySummary).toBe('orange monochrome portrait of the same man with glasses')
+    })
+})
+
+describe('getPromptTextFromMessages', () => {
+    it('returns the latest user prompt from mixed message content formats', () => {
+        expect(
+            getPromptTextFromMessages([
+                { role: 'assistant', content: [{ type: 'text', text: 'ignore this' }] },
+                { role: 'user', content: [{ type: 'text', text: 'older prompt' }] },
+                { role: 'user', content: [{ type: 'input_text', text: 'newest prompt' }, { type: 'text', text: 'with details' }] },
+            ]),
+            'newest prompt\nwith details',
+        ).toBe('newest prompt\nwith details')
+    })
+
+    it('returns an empty string when no user message content is available', () => {
+        expect(getPromptTextFromMessages([{ role: 'assistant', content: 'hello' }])).toBe('')
+    })
+})
+
+describe('isChatRootNode', () => {
+    it('returns true only for ai chat thread nodes', () => {
+        expect(isChatRootNode({ type: 'aiChatThread', nodeId: 'thread' } as CanvasNode)).toBe(true)
+        expect(isChatRootNode({ type: 'image', nodeId: 'image' } as CanvasNode)).toBe(false)
+        expect(isChatRootNode({ type: 'document', nodeId: 'doc' } as CanvasNode)).toBe(false)
     })
 })
 

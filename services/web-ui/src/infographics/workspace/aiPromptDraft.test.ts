@@ -59,4 +59,35 @@ describe('AI prompt draft model settings', () => {
         expect(draftAttrs.useMultipleImageModels).toBe(true)
         expect(draftAttrs.useMultipleVideoModels).toBe(true)
     })
+
+    it('filters non-string aiModels before serializing the attrs', () => {
+        const attrs = buildAiPromptDraftAttrsFromSubmitData({
+            aiModel: 'Google:gemini-flash-latest',
+            aiModels: ['Google:gemini-flash-latest', null, 'Anthropic:sonnet-4-6', undefined] as any,
+        })
+
+        expect(JSON.parse(attrs.aiModels)).toEqual(['Google:gemini-flash-latest', 'Anthropic:sonnet-4-6'])
+    })
+
+    it('interprets "false" string flag as disabled when parsing legacy multi-model mode', () => {
+        const attrs = buildAiPromptDraftAttrsFromSubmitData({
+            aiModel: 'Google:gemini-flash-latest',
+            aiModels: ['Google:gemini-flash-latest'],
+            useMultipleModels: 'false',
+        })
+
+        expect(attrs.useMultipleModels).toBe(false)
+        expect(attrs.useMultipleReasoningModels).toBe(false)
+        expect(attrs.useMultipleImageModels).toBe(false)
+        expect(attrs.useMultipleVideoModels).toBe(false)
+    })
+
+    it('does not emit a text paragraph when prompt is only whitespace', () => {
+        const draft = buildAiPromptDraftFromText('   \t\n   ')
+        const promptInput = draft.content[0] as Record<string, any>
+
+        expect(promptInput.content).toHaveLength(1)
+        expect(promptInput.content[0].type).toBe('paragraph')
+        expect(promptInput.content[0].content).toBeUndefined()
+    })
 })

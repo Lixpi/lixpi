@@ -7,7 +7,12 @@ vi.mock('$src/components/dropdown/index.ts', () => ({
 }))
 
 import { createPureDropdown } from '$src/components/dropdown/index.ts'
-import { createGenericImageSizeDropdown } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
+import { transformModelsToOptions } from '$src/components/proseMirror/plugins/primitives/aiControls/aiControls.ts'
+import {
+    createGenericImageSizeDropdown,
+    createGenericImageModelDropdown,
+    createGenericVideoModelDropdown,
+} from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
 
 type DropdownInstance = {
     dom: HTMLDivElement
@@ -17,6 +22,15 @@ type DropdownInstance = {
 }
 
 const createPureDropdownMock = vi.mocked(createPureDropdown)
+let lastConfig: Parameters<typeof createPureDropdown>[0] | null = null
+
+function resetMockDropdown() {
+    createPureDropdownMock.mockReset()
+    createPureDropdownMock.mockImplementation((config) => {
+        lastConfig = config
+        return createMockDropdown()
+    })
+}
 
 function createMockDropdown(): DropdownInstance {
     return {
@@ -41,15 +55,9 @@ function createControls(overrides: {
 }
 
 describe('createGenericImageSizeDropdown', () => {
-    let lastConfig: Parameters<typeof createPureDropdown>[0] | null = null
-
     beforeEach(() => {
         aiModelsStore.setAiModels([])
-        createPureDropdownMock.mockReset()
-        createPureDropdownMock.mockImplementation((config) => {
-            lastConfig = config
-            return createMockDropdown()
-        })
+        resetMockDropdown()
     })
 
     it('uses Resolution label and size list when model emits WxH values', () => {
@@ -184,6 +192,115 @@ describe('createGenericImageSizeDropdown', () => {
 
         expect(controls.setImageGenerationSize).toHaveBeenCalledWith('tiny')
 
+        dropdown.destroy()
+    })
+})
+
+describe('transformModelsToOptions', () => {
+    beforeEach(() => {
+        resetMockDropdown()
+        aiModelsStore.setAiModels([])
+    })
+
+    it('maps model records into dropdown-ready dropdown options', () => {
+        const options = transformModelsToOptions([
+            {
+                provider: 'openai',
+                model: 'gpt-4o',
+                iconName: 'gpt',
+                modalities: [],
+                shortTitle: 'GPT-4o',
+            },
+            {
+                provider: 'google',
+                model: 'gemini',
+                iconName: 'gemini',
+                modalities: [],
+                shortTitle: 'Gemini',
+            },
+        ])
+
+        expect(options[0].aiModel).toBe('openai:gpt-4o')
+        expect(options[0].title).toBe('GPT-4o')
+        expect(options[1].aiModel).toBe('google:gemini')
+        expect(options[1].title).toBe('Gemini')
+        expect(options[0].tags).toEqual([])
+        expect(options[1].tags).toEqual([])
+    })
+})
+
+describe('createGenericImageModelDropdown', () => {
+    beforeEach(() => {
+        resetMockDropdown()
+    })
+
+    it('auto-selects first image model when current model is empty', () => {
+        aiModelsStore.setAiModels([
+            {
+                provider: 'google',
+                model: 'imagen-3',
+                iconName: 'gpt',
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [],
+            },
+        ] as any)
+
+        const controls = {
+            getCurrentImageModel: vi.fn(() => ''),
+            setImageModel: vi.fn(),
+        }
+
+        vi.useFakeTimers()
+        const dropdown = createGenericImageModelDropdown(controls, 'image-model')
+        vi.advanceTimersToNextTimer()
+        vi.useRealTimers()
+
+        expect(controls.setImageModel).toHaveBeenCalledWith('google:imagen-3')
+        dropdown.destroy()
+    })
+})
+
+describe('createGenericVideoModelDropdown', () => {
+    beforeEach(() => {
+        resetMockDropdown()
+    })
+
+    it('filters to video-generation models only', () => {
+        aiModelsStore.setAiModels([
+            {
+                provider: 'google',
+                model: 'veo',
+                iconName: 'gpt',
+                shortTitle: 'Veo',
+                modalities: [{ modality: 'video_generation' }],
+                videoAspectRatios: [{ value: '16:9', label: '16:9' }],
+                videoResolutions: [{ value: '1080p', label: '1080p' }],
+                videoDurations: [{ value: '30s', label: '30s' }],
+            },
+            {
+                provider: 'openai',
+                model: 'gpt-4',
+                modalities: [{ modality: 'text_generation' }],
+                imageSizes: [],
+            },
+        ] as any)
+
+        const controls = {
+            getCurrentVideoModel: vi.fn(() => ''),
+            setVideoModel: vi.fn(),
+        }
+
+        const dropdown = createGenericVideoModelDropdown(controls, 'video-model')
+        expect(lastConfig?.options).toEqual([
+            expect.objectContaining({
+                title: 'Veo',
+                aiModel: 'google:veo',
+                provider: 'google',
+                model: 'veo',
+            }),
+        ])
+
+        dropdown.update()
         dropdown.destroy()
     })
 })

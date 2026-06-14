@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { select, selection } from 'd3-selection'
-import { createSlidingTabsSwitch } from '$src/components/slidingTabsSwitch/slidingTabsSwitch.ts'
+import { createSlidingTabsSwitch, type SlidingTabsSwitchConfig } from '$src/components/slidingTabsSwitch/slidingTabsSwitch.ts'
 
 // Keep transition behavior synchronous in happy-dom.
 const makeChain = (): any => {
@@ -22,7 +22,12 @@ const tabs = [
     { label: 'Timeline', value: 'timeline' as Tab },
 ]
 
-function mount(selectedValue: Tab = 'list', onChange = vi.fn(), onClose = vi.fn()) {
+function mount(
+    selectedValue: Tab = 'list',
+    onChange = vi.fn(),
+    onClose = vi.fn(),
+    config: Partial<SlidingTabsSwitchConfig<Tab>> = {}
+) {
     const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
     document.body.appendChild(svg)
     const tabsSwitch = createSlidingTabsSwitch<Tab>(select(svg), {
@@ -35,6 +40,7 @@ function mount(selectedValue: Tab = 'list', onChange = vi.fn(), onClose = vi.fn(
         selectedValue,
         onChange,
         onClose,
+        ...config,
     })
     return { svg, tabsSwitch, onChange, onClose }
 }
@@ -92,5 +98,36 @@ describe('createSlidingTabsSwitch', () => {
 
         tabsSwitch.setValue('timeline')
         expect(tabsSwitch.getValue()).toBe('timeline')
+    })
+
+    it('forwards styling class and render/resize methods to underlying switch', () => {
+        const { svg, tabsSwitch } = mount('list', vi.fn(), vi.fn(), { className: 'chat-tabs-strip' })
+
+        expect(svg.querySelector('.sliding-switch-group')?.getAttribute('class')).toContain('chat-tabs-strip')
+
+        tabsSwitch.resize(0, 0, 350, 30)
+        expect(tabsSwitch.getContentWidth()).toBe(350)
+        expect(tabsSwitch.getOuterHeight()).toBe(30)
+
+        expect(() => tabsSwitch.render()).not.toThrow()
+    })
+
+    it('forwards shadow configuration to underlying switch', () => {
+        const { tabsSwitch } = mount('list', vi.fn(), vi.fn(), {
+            activeTabBoxShadow: '0 0 8px rgba(0, 0, 0, 0.25)',
+            activeTabInsetShadow: {
+                topColor: 'rgba(255, 255, 255, 0.8)',
+                bottomColor: 'rgba(0, 0, 0, 0)',
+            },
+        })
+
+        expect(tabsSwitch.getOuterHeight()).toBe(36)
+    })
+
+    it('destroys the underlying sliding switch', () => {
+        const { svg, tabsSwitch } = mount()
+
+        tabsSwitch.destroy()
+        expect(svg.querySelector('.sliding-switch-group')).toBeNull()
     })
 })

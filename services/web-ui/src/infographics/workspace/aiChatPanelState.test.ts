@@ -194,4 +194,50 @@ describe('AI chat panel persisted state', () => {
         expect(normalized.aiChatSidebarTabs).toEqual([])
         expect(normalized.activeAiChatSidebarTabId).toBeUndefined()
     })
+
+    it('preserves panel width when persisted width is provided and normalizes zero correctly', () => {
+        const state = makeCanvasState()
+        const persisted = setAiChatPanelState(state, {
+            ...createDefaultAiChatPanelState(),
+            width: 0,
+        })
+
+        expect(getAiChatPanelState(persisted).width).toBe(0)
+    })
+
+    it('rejects unknown tabs and preserves valid ones in insertion order', () => {
+        const state = getAiChatPanelState(makeCanvasState({
+            aiChatPanel: {
+                ...createDefaultAiChatPanelState(),
+                tabs: [
+                    { tabId: '', type: 'thread', refId: 'a', title: 'Blank' },
+                    { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'A' },
+                    { tabId: 'draft:thread-a', type: 'draft', refId: 'draft-a', title: 'Draft A' },
+                    { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'Duplicate' },
+                ],
+            },
+        }))
+
+        expect(state.tabs).toEqual([
+            { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'A' },
+            { tabId: 'draft:thread-a', type: 'draft', refId: 'draft-a', title: 'Draft A' },
+        ])
+    })
+
+    it('deduplicates tabs in persisted state and drops unsupported types', () => {
+        const state = getAiChatPanelState(makeCanvasState({
+            aiChatPanel: {
+                ...createDefaultAiChatPanelState(),
+                tabs: [
+                    { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'A' },
+                    { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'A Duplicate' },
+                    { tabId: 'bad:thread-b', type: 'bad' as 'thread', refId: 'thread-b', title: 'Bad' } as any,
+                ],
+            },
+        }))
+
+        expect(state.tabs).toEqual([
+            { tabId: 'thread:thread-a', type: 'thread', refId: 'thread-a', title: 'A' },
+        ])
+    })
 })

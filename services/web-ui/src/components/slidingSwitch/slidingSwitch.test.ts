@@ -47,6 +47,7 @@ function mount(
 const hitRects = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.sliding-switch-hit'))
 const labels = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.sliding-switch-option'))
 const optionGroups = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.sliding-switch-option-group'))
+const closeGroups = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.sliding-switch-option-close'))
 const indicatorX = (svg: SVGSVGElement) => svg.querySelector('.sliding-switch-indicator')!.getAttribute('x')
 
 describe('createSlidingSwitch', () => {
@@ -151,6 +152,75 @@ describe('createSlidingSwitch', () => {
         expect(onChange).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode')
     })
 
+    it('supports Home and End keyboard selection', () => {
+        const { svg, slidingSwitch, onChange } = mount('grid')
+
+        optionGroups(svg)[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+
+        expect(slidingSwitch.getValue()).toBe('list')
+        expect(onChange).toHaveBeenCalledTimes(1)
+        expect(onChange).toHaveBeenLastCalledWith('list', 'view-mode')
+
+        onChange.mockClear()
+        optionGroups(svg)[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
+
+        expect(slidingSwitch.getValue()).toBe('timeline')
+        expect(onChange).toHaveBeenCalledTimes(1)
+        expect(onChange).toHaveBeenLastCalledWith('timeline', 'view-mode')
+    })
+
+    it('fires close via keyboard on the close control', () => {
+        const onChange = vi.fn()
+        const onClose = vi.fn()
+        const { svg, slidingSwitch } = mount('list', onChange, {
+            options: options.map((option) => ({ ...option, closable: option.value === 'grid' })),
+            onClose,
+        })
+        slidingSwitch.setValue('list')
+
+        closeGroups(svg)[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        expect(slidingSwitch.getValue()).toBe('list')
+        expect(onChange).not.toHaveBeenCalled()
+        expect(onClose).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode', expect.objectContaining({ value: 'grid' }))
+    })
+
+    it('does not dispatch selection when a click event is already default-prevented', () => {
+        const { slidingSwitch, onChange } = mount('list')
+        const option = { value: 'grid' as View }
+        const event = { defaultPrevented: true } as Event
+
+        ;(slidingSwitch as any).selectOption(option, event)
+
+        expect(slidingSwitch.getValue()).toBe('list')
+        expect(onChange).not.toHaveBeenCalled()
+    })
+
+    it('does not close disabled options', () => {
+        const onClose = vi.fn()
+        const { svg, slidingSwitch, onChange } = mount('list', vi.fn(), {
+            options: options.map((option, index) => ({
+                ...option,
+                closable: true,
+                disabled: index === 1,
+            })),
+            onClose,
+        })
+
+        closeGroups(svg)[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+        expect(slidingSwitch.getValue()).toBe('list')
+        expect(onChange).not.toHaveBeenCalled()
+        expect(onClose).toHaveBeenCalledTimes(0)
+    })
+
+    it('ignores setValue calls for values that are not represented', () => {
+        const { slidingSwitch, onChange } = mount('grid', vi.fn())
+        slidingSwitch.setValue('missing' as View)
+
+        expect(slidingSwitch.getValue()).toBe('grid')
+        expect(onChange).not.toHaveBeenCalled()
+    })
+
     it('does not select disabled options and wraps through keyboard to the next enabled option', () => {
         const onChange = vi.fn()
         const { svg, slidingSwitch } = mount('list', onChange, {
@@ -248,6 +318,13 @@ describe('createSlidingSwitch', () => {
 
         svg.querySelectorAll('.tag-pill-close')[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         expect(onClose).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode', expect.objectContaining({ value: 'grid' }))
+    })
+
+    it('keeps render safe after destroy', () => {
+        const { svg, slidingSwitch } = mount()
+        slidingSwitch.destroy()
+        expect(() => slidingSwitch.render()).not.toThrow()
+        expect(svg.querySelector('.sliding-switch-group')).toBeNull()
     })
 
     it('removes its group on destroy', () => {

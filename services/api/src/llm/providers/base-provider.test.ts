@@ -115,3 +115,68 @@ describe('BaseProvider image fanout errors', () => {
         })
     })
 })
+
+describe('BaseProvider request validation', () => {
+    it('validates required model and thread identity fields', async () => {
+        const deps = {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {
+                reportTokensUsage: vi.fn(),
+                reportImageUsage: vi.fn(),
+                reportVideoUsage: vi.fn(),
+            } as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+
+        const provider = new TestProvider('ws-1:thread-1', deps)
+        const baseState = {
+            messages: [{ role: 'user', content: 'make it blue' }],
+            aiModelMetaInfo: {},
+            eventMeta: {},
+            workspaceId: '',
+            aiChatThreadId: '',
+            instanceKey: 'ws-1:thread-1',
+            provider: 'Anthropic',
+            modelVersion: '',
+            temperature: 0.7,
+            streamActive: false,
+            aiRequestReceivedAt: Date.now(),
+        } as ProviderState
+
+        await expect((provider as any).validateRequest(baseState)).rejects.toThrow('modelVersion is required')
+        await expect((provider as any).validateRequest({
+            ...baseState,
+            modelVersion: 'claude',
+            workspaceId: 'ws-1',
+        })).rejects.toThrow('aiChatThreadId is required')
+    })
+
+    it('returns provider state with validation errors without throwing from process', async () => {
+        const deps = {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {
+                reportTokensUsage: vi.fn(),
+                reportImageUsage: vi.fn(),
+                reportVideoUsage: vi.fn(),
+            } as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps
+
+        const provider = new TestProvider('ws-1:thread-1', deps)
+        const result = await provider.process({
+            workspaceId: 'ws-1',
+            aiChatThreadId: '',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'Claude', modelVersion: 'claude' },
+            messages: [{ role: 'user', content: 'make it green' }],
+        })
+
+        expect(result.error).toBe('aiChatThreadId is required')
+        expect(result.streamActive).toBe(false)
+    })
+})
