@@ -1823,10 +1823,19 @@
 
     svg {
         display: block;
-        width: var(--workspace-branch-origin-icon-size);
-        height: var(--workspace-branch-origin-icon-size);
+        width: calc(var(--workspace-branch-origin-icon-size) * 0.9);
+        height: calc(var(--workspace-branch-origin-icon-size) * 0.9);
         fill: currentColor;
+        transform-origin: center;
     }
+}
+
+.workspace-branch-origin-icon svg {
+    transform: translate(2px, 2px);
+}
+
+.workspace-branch-fork-icon svg {
+    transform: translate(3px, 2px);
 }
 
 .branch-origin-drag-overlay,

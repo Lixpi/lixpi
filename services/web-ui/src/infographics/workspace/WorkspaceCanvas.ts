@@ -1269,6 +1269,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedImageChrome(currentCanvasState)
     }
 
+    function hasOpenGeneratedMediaInfoPanels(): boolean {
+        return expandedGeneratedImageInfoNodeIds.size > 0
+            || expandedBranchOriginInfoNodeIds.size > 0
+            || expandedBranchForkInfoNodeIds.size > 0
+    }
+
+    function clearGeneratedMediaInfoPanels(options: { preserveBranchInfo?: boolean } = {}): void {
+        if (!hasOpenGeneratedMediaInfoPanels()) return
+        expandedGeneratedImageInfoNodeIds.clear()
+        if (!options.preserveBranchInfo) {
+            expandedBranchOriginInfoNodeIds.clear()
+            expandedBranchForkInfoNodeIds.clear()
+        }
+        syncGeneratedImageChrome(currentCanvasState)
+    }
+
+    function shouldClearGeneratedMediaInfoForCanvasClick(target: EventTarget | null): boolean {
+        if (!hasOpenGeneratedMediaInfoPanels()) return false
+        if (!(target instanceof Element)) return false
+        if (!paneEl.contains(target)) return false
+        if (target.closest('.canvas-generated-image-info-panel')) return false
+        if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node')) return false
+        if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu')) return false
+        return true
+    }
+
     function compareGeneratedMediaByGenerationOrder(
         a: ImageCanvasNode | VideoCanvasNode,
         b: ImageCanvasNode | VideoCanvasNode,
@@ -2273,6 +2299,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             '.node-drag-overlay',
             '.bubble-menu',
             '.workspace-generated-image-chrome',
+            '.workspace-branch-origin-info-chrome',
+            '.workspace-branch-fork-info-chrome',
+            '.canvas-generated-image-info-panel',
         ].join(', '))
     }
 
@@ -6336,6 +6365,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 return
             }
 
+            clearGeneratedMediaInfoPanels({
+                preserveBranchInfo: node.type === 'branchOrigin' || node.type === 'branchFork',
+            })
+
             // Don't trigger node selection when clicking inside editor content
             // (ProseMirror, contenteditable areas) — let the editor handle the click
             const clickTarget = e.target as HTMLElement | null
@@ -7535,6 +7568,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (suppressNextPaneClick) {
             suppressNextPaneClick = false
             return
+        }
+
+        if (shouldClearGeneratedMediaInfoForCanvasClick(e.target)) {
+            clearGeneratedMediaInfoPanels()
         }
 
         if (isCanvasBackgroundTarget(e.target)) {
