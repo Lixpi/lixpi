@@ -1,10 +1,10 @@
 'use strict'
 
 import { info, warn, err } from '@lixpi/debug-tools'
-import type { AiModelId, MediaGenerationRunMeta, MediaRunLineageAssignment } from '@lixpi/constants'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
+import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
     buildImageModelPrompt,
     normalizeImageSize,
@@ -32,6 +32,8 @@ const fingerprintRef = (url: string): string => {
 // Spins up a transient provider keyed {ws}:{thread}:image with enableImageGeneration=true
 // so it skips its own START_STREAM/END_STREAM — the parent text stream owns the lifecycle.
 export class ImageRouter {
+    private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
+
     constructor(private readonly registry: ProviderRegistry) {}
 
     async execute(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -43,10 +45,14 @@ export class ImageRouter {
         const aiChatThreadId = state.aiChatThreadId
         const imageSize = normalizeImageSize(imageProvider, state.imageSize)
         const mediaModelId = imageProvider && imageModel
-            ? this.buildMediaModelId(imageProvider, imageMeta.model, imageModel)
+            ? this.mediaGenerationRunPlanner.buildMediaModelId(imageProvider, imageMeta.model, imageModel)
             : undefined
         const generationRun = mediaModelId
-            ? this.buildImageGenerationRun(state.generationRun, mediaModelId)
+            ? this.mediaGenerationRunPlanner.buildProviderMediaRun({
+                generationRun: state.generationRun,
+                mediaModelId,
+                mediaType: 'image',
+            })
             : state.generationRun
 
         if (!imageProvider || !imageModel || !prompt) {
@@ -120,7 +126,7 @@ export class ImageRouter {
                 enableImageGeneration: true,
                 imageSize,
                 generationRun,
-                eventMeta: this.buildEventMeta(state.eventMeta, generationRun),
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
 
             const finalState = await provider.process(requestData)
@@ -154,66 +160,6 @@ export class ImageRouter {
             return { error: message }
         } finally {
             this.registry.remove?.(instanceKey)
-        }
-    }
-
-    private buildMediaModelId(provider: string, model: unknown, fallbackModel: string): AiModelId {
-        const modelName = typeof model === 'string' && model.trim().length > 0 ? model.trim() : fallbackModel
-        return `${provider}:${modelName}` as AiModelId
-    }
-
-    private buildImageGenerationRun(
-        generationRun: MediaGenerationRunMeta | undefined,
-        mediaModelId: AiModelId,
-    ): MediaGenerationRunMeta | undefined {
-        if (!generationRun) return undefined
-        const mediaRunId = generationRun.mediaRunId ?? `${generationRun.reasoningRunId}:image:0`
-        const lineageAssignment = this.buildMediaRunLineageAssignment(
-            generationRun.lineageAssignment,
-            mediaRunId,
-            mediaModelId,
-        )
-        return {
-            ...generationRun,
-            mediaRunId,
-            mediaModelId,
-            mediaType: 'image',
-            mediaIndex: generationRun.mediaIndex ?? 0,
-            variantIndex: generationRun.variantIndex ?? 0,
-            ...(lineageAssignment ? { lineageAssignment } : {}),
-        }
-    }
-
-    private buildMediaRunLineageAssignment(
-        assignment: MediaRunLineageAssignment | undefined,
-        mediaRunId: string,
-        mediaModelId: AiModelId,
-    ): MediaRunLineageAssignment | undefined {
-        if (!assignment) return undefined
-        return {
-            ...assignment,
-            mediaRunId,
-            mediaModelId,
-            mediaType: 'image',
-        }
-    }
-
-    private buildEventMeta(
-        eventMeta: ProviderState['eventMeta'],
-        generationRun: MediaGenerationRunMeta | undefined,
-    ): ProviderState['eventMeta'] {
-        if (!generationRun) return eventMeta
-        return {
-            ...eventMeta,
-            generationRequestId: generationRun.generationRequestId,
-            reasoningRunId: generationRun.reasoningRunId,
-            mediaRunId: generationRun.mediaRunId,
-            reasoningModelId: generationRun.reasoningModelId,
-            mediaModelId: generationRun.mediaModelId,
-            mediaType: generationRun.mediaType,
-            reasoningIndex: generationRun.reasoningIndex,
-            mediaIndex: generationRun.mediaIndex,
-            variantIndex: generationRun.variantIndex,
         }
     }
 }

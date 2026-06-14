@@ -1,11 +1,11 @@
 'use strict'
 
 import { info, warn, err } from '@lixpi/debug-tools'
-import type { AiModelId, MediaGenerationRunMeta, MediaRunLineageAssignment } from '@lixpi/constants'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { getVideoMaxReferenceImages } from '../graph/state.ts'
+import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
 
 const fingerprintRef = (url: string): string => {
@@ -47,6 +47,8 @@ const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undef
 // provider runs the async VEO submit/poll path and skips its own stream
 // lifecycle — the parent chat stream owns START_STREAM/END_STREAM.
 export class VideoRouter {
+    private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
+
     constructor(private readonly registry: ProviderRegistry) {}
 
     async execute(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -58,10 +60,14 @@ export class VideoRouter {
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
         const mediaModelId = videoProvider && videoModel
-            ? this.buildMediaModelId(videoProvider, videoMeta.model, videoModel)
+            ? this.mediaGenerationRunPlanner.buildMediaModelId(videoProvider, videoMeta.model, videoModel)
             : undefined
         const generationRun = mediaModelId
-            ? this.buildVideoGenerationRun(state.generationRun, mediaModelId)
+            ? this.mediaGenerationRunPlanner.buildProviderMediaRun({
+                generationRun: state.generationRun,
+                mediaModelId,
+                mediaType: 'video',
+            })
             : state.generationRun
 
         if (!videoProvider || !videoModel || !prompt) {
@@ -121,7 +127,7 @@ export class VideoRouter {
                 videoReferenceImages,
                 videoSourceForExtension: state.videoSourceForExtension,
                 generationRun,
-                eventMeta: this.buildEventMeta(state.eventMeta, generationRun),
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
 
             const finalState = await provider.process(requestData)
@@ -157,66 +163,6 @@ export class VideoRouter {
             return { error: message }
         } finally {
             this.registry.remove?.(instanceKey)
-        }
-    }
-
-    private buildMediaModelId(provider: string, model: unknown, fallbackModel: string): AiModelId {
-        const modelName = typeof model === 'string' && model.trim().length > 0 ? model.trim() : fallbackModel
-        return `${provider}:${modelName}` as AiModelId
-    }
-
-    private buildVideoGenerationRun(
-        generationRun: MediaGenerationRunMeta | undefined,
-        mediaModelId: AiModelId,
-    ): MediaGenerationRunMeta | undefined {
-        if (!generationRun) return undefined
-        const mediaRunId = generationRun.mediaRunId ?? `${generationRun.reasoningRunId}:video:0`
-        const lineageAssignment = this.buildMediaRunLineageAssignment(
-            generationRun.lineageAssignment,
-            mediaRunId,
-            mediaModelId,
-        )
-        return {
-            ...generationRun,
-            mediaRunId,
-            mediaModelId,
-            mediaType: 'video',
-            mediaIndex: generationRun.mediaIndex ?? 0,
-            variantIndex: generationRun.variantIndex ?? 0,
-            ...(lineageAssignment ? { lineageAssignment } : {}),
-        }
-    }
-
-    private buildMediaRunLineageAssignment(
-        assignment: MediaRunLineageAssignment | undefined,
-        mediaRunId: string,
-        mediaModelId: AiModelId,
-    ): MediaRunLineageAssignment | undefined {
-        if (!assignment) return undefined
-        return {
-            ...assignment,
-            mediaRunId,
-            mediaModelId,
-            mediaType: 'video',
-        }
-    }
-
-    private buildEventMeta(
-        eventMeta: ProviderState['eventMeta'],
-        generationRun: MediaGenerationRunMeta | undefined,
-    ): ProviderState['eventMeta'] {
-        if (!generationRun) return eventMeta
-        return {
-            ...eventMeta,
-            generationRequestId: generationRun.generationRequestId,
-            reasoningRunId: generationRun.reasoningRunId,
-            mediaRunId: generationRun.mediaRunId,
-            reasoningModelId: generationRun.reasoningModelId,
-            mediaModelId: generationRun.mediaModelId,
-            mediaType: generationRun.mediaType,
-            reasoningIndex: generationRun.reasoningIndex,
-            mediaIndex: generationRun.mediaIndex,
-            variantIndex: generationRun.variantIndex,
         }
     }
 }

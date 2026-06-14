@@ -5,9 +5,10 @@
 // (image/video carrying generatedBy.branchId, no parentId) and temporary
 // branch-origin / branch-fork markers linked by lineage. A generated member's
 // in-tree parent is its generatedBy.branchForkNodeId when that points at
-// another member, then its generatedBy.parentImageNodeId, then its
-// generatedBy.branchOriginNodeId, otherwise the source of its incoming lineage
-// edge when that source is a member; if neither, the member is a tree root.
+// another member, then its generatedBy.parentMediaNodeId, then the legacy
+// generatedBy.parentImageNodeId alias, then its generatedBy.branchOriginNodeId,
+// otherwise the source of its incoming lineage edge when that source is a
+// member; if neither, the member is a tree root.
 //
 // This module is pure: it reads node positions/sizes + lineage edges and returns
 // new node arrays. It never touches PIXI, the DOM, or canvas closures — it reuses
@@ -70,6 +71,7 @@ function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
 function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
     return [
         node.generatedBy?.branchForkNodeId,
+        node.generatedBy?.parentMediaNodeId,
         node.generatedBy?.parentImageNodeId,
         node.generatedBy?.branchOriginNodeId,
     ]
@@ -88,16 +90,16 @@ function firstExistingMemberId(candidates: Array<string | undefined>, memberIds:
 }
 
 // Build the generated-media forest from canvas nodes + lineage edges. Trees are
-// derived from graph connectivity (parentImageNodeId / lineage edges), never by
-// grouping on branchId, so a forked branchId is still one correct tree.
+// derived from API lineage fields and legacy lineage edges, never by grouping on
+// branchId, so a forked branchId is still one correct tree.
 export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): BranchTree[] {
     const members = nodes.filter(isBranchTreeMember)
     if (members.length === 0) return []
 
     const memberIds = new Set(members.map((node: BranchTreeMemberNode) => node.nodeId))
 
-    // First incoming lineage-edge source per node — the fallback parent used when
-    // generatedBy.parentImageNodeId is absent (mirrors the anchor lookup).
+    // First incoming lineage-edge source per node — the fallback parent used for
+    // older persisted nodes without API-assigned parent media fields.
     const edgeSourceByTarget = new Map<string, string>()
     for (const edge of edges) {
         if (!edgeSourceByTarget.has(edge.targetNodeId)) {

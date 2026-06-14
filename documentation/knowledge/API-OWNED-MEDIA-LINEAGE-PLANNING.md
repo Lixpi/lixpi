@@ -19,6 +19,8 @@ The browser sends useful context:
 
 These inputs are non-authoritative. They exist so the API can make a grounded decision with the current request state. The browser may use them for pending outlines and placement hints, but it must not turn them into branch/fork decisions.
 
+Uploaded media, media-library media, first-frame images, style references, and workspace-relevance selections are references unless the API verifies that the selected node is already a generated-media branch member. They can anchor placement, but they must not become generated-output connector parents. Reference-only requests must be rooted through API lineage structure such as `branchOrigin`, not through the referenced source media.
+
 The API owns the decisions:
 
 - `resolveWorkspaceContext` narrows the workspace context.
@@ -35,9 +37,9 @@ The API owns the decisions:
 - `branchOrigin.nodeId` and neutral root provenance
 - `branchForks[].nodeId` and `branchForks[].parentBranchNodeId`
 - per-run `MediaRunLineageAssignment`
-- generated-media lineage fields: `parentImageNodeId`, `branchOriginNodeId`, `branchForkNodeId`, references, source context, operation kind, prompt text, prompt fingerprint, and creation ordering
+- generated-media lineage fields: `parentMediaNodeId`, legacy `parentImageNodeId`, `branchOriginNodeId`, `branchForkNodeId`, references, source context, operation kind, prompt text, prompt fingerprint, and creation ordering
 
-Matrix requests run the planner once in shared preflight, then pass the plan to every reasoning child. Single media requests run the same planner as the `planMediaBranchLineage` graph node. Image and video routers attach the run's lineage assignment to transient media-provider events, including partials, completions, traces, and errors.
+Matrix requests run the planner once in shared preflight, then pass the plan to every reasoning child. Single media requests run the same planner as the `planMediaBranchLineage` graph node. `MediaGenerationRunPlanner` is the shared media-agnostic run layer used by single requests, matrix reasoning runs, image routers, and video routers to assign stable reasoning/media run IDs and attach lineage assignments. No image/video provider-specific code should decide lineage parentage or marker topology.
 
 ## Branch-Root Provenance
 
@@ -59,7 +61,7 @@ It must not include a child reasoning model's prompt rewrite, response text, med
 - compute marker/media positions from visible canvas geometry,
 - run branch-tree tidy layout and collision cleanup.
 
-Those are presentation responsibilities. The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentImageNodeId`, lineage-parent selection, fork count, or marker provenance from selected models, prompt text, selected nodes, local canvas order, or candidate-snapshot contents.
+Those are presentation responsibilities. The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, legacy `parentImageNodeId`, lineage-parent selection, fork count, or marker provenance from selected models, prompt text, selected nodes, local canvas order, or candidate-snapshot contents.
 
 ## Extension Rule
 

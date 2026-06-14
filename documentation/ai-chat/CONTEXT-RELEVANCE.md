@@ -59,8 +59,9 @@ context, not connector parentage. See
 [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 
 **Lineage Source** — A verified connector source for a generated output: only a
-chat thread root or a real generated branch continuation can become the parent
-edge. Reference/style images cannot become lineage parents by themselves. See
+chat thread root, API lineage marker, or API-selected existing generated-media
+branch member can become the parent edge. Reference/style/source media cannot
+become lineage parents by themselves. See
 [Branch Lineage](../media-generation/BRANCH-LINEAGE.md).
 
 ## Why This Exists
@@ -95,9 +96,10 @@ The design keeps three boundaries clear:
 - **One pixel authority.** The workspace relevance stage never decides
   target/style/reference visual roles for media. The structured VLM branch
   resolver does that.
-- **References are context, not lineage.** Reference, style, and
+- **References are context, not lineage.** Reference, style, source, and
   relevance-selected media may affect prompt routing and placement, but they do
-  not become connector parents unless the resolver verifies a real continuation.
+  not become connector parents unless the API lineage plan selects an existing
+  generated-media branch member as the parent.
 - **Branch roots record births.** The first generated image or video in a branch
   stores the prompt, references, and resolver metadata on `generatedBy`.
   Continuations attach to the existing branch and do not create another

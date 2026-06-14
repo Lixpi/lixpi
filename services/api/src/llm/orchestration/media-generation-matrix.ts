@@ -9,7 +9,6 @@ import type {
     AiModelId,
     ImageGenerationSize,
     MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
     MediaRunLineageAssignment,
     ProviderName,
 } from '@lixpi/constants'
@@ -20,6 +19,7 @@ import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
+import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 
@@ -139,14 +139,12 @@ export const buildMediaGenerationThreadGroupPrefix = (
     aiChatThreadId: string,
 ): string => `${workspaceId}:${aiChatThreadId}:`
 
-const buildReasoningRunId = (generationRequestId: string, reasoningIndex: number): string =>
-    `${generationRequestId}:reasoning:${reasoningIndex}`
-
 const buildReasoningInstanceKey = (requestGroupKey: string, reasoningIndex: number): string =>
     `${requestGroupKey}:reasoning:${reasoningIndex}`
 
 export class MediaGenerationMatrixOrchestrator {
     private readonly lineagePlanner = new MediaBranchLineagePlanner()
+    private readonly runPlanner = new MediaGenerationRunPlanner()
 
     constructor(
         private readonly registry: ProviderRegistry,
@@ -179,9 +177,16 @@ export class MediaGenerationMatrixOrchestrator {
         })
 
         await Promise.all(normalized.reasoningModels.map((reasoningModel, reasoningIndex) => {
-            const reasoningRunId = buildReasoningRunId(normalized.generationRequestId, reasoningIndex)
+            const reasoningRunId = this.runPlanner.buildReasoningRunId(normalized.generationRequestId, reasoningIndex)
             const instanceKey = buildReasoningInstanceKey(normalized.requestGroupKey, reasoningIndex)
             const lineageAssignment = this.getRunLineageAssignment(sharedPreflightState.mediaBranchLineagePlan, reasoningRunId)
+            const generationRun = this.runPlanner.buildMatrixReasoningRun({
+                generationRequestId: normalized.generationRequestId,
+                reasoningRunId,
+                reasoningModelId: reasoningModel.modelId,
+                reasoningIndex,
+                ...(lineageAssignment ? { lineageAssignment } : {}),
+            })
             return this.registry.process(instanceKey, reasoningModel.provider, {
                 ...requestData,
                 aiModelMetaInfo: reasoningModel.meta,
@@ -226,21 +231,8 @@ export class MediaGenerationMatrixOrchestrator {
                         ...(normalized.videoSourceForExtension ? { sourceForExtension: normalized.videoSourceForExtension } : {}),
                     },
                 },
-                generationRun: {
-                    requestKind: 'media-generation-matrix',
-                    generationRequestId: normalized.generationRequestId,
-                    reasoningRunId,
-                    reasoningModelId: reasoningModel.modelId,
-                    reasoningIndex,
-                    ...(lineageAssignment ? { lineageAssignment } : {}),
-                },
-                eventMeta: {
-                    ...(requestData.eventMeta ?? {}),
-                    generationRequestId: normalized.generationRequestId,
-                    reasoningRunId,
-                    reasoningModelId: reasoningModel.modelId,
-                    reasoningIndex,
-                },
+                generationRun,
+                eventMeta: this.runPlanner.buildEventMeta(requestData.eventMeta ?? {}, generationRun),
             }, { requestGroupKey: normalized.requestGroupKey })
         }))
     }
@@ -344,13 +336,12 @@ export class MediaGenerationMatrixOrchestrator {
     }): Promise<Partial<ProviderState>> {
         const reasoningModel = normalized.reasoningModels[0]
         const abortController = new AbortController()
-        const generationRun: MediaGenerationRunMeta = {
-            requestKind: 'media-generation-matrix',
+        const generationRun = this.runPlanner.buildMatrixReasoningRun({
             generationRequestId: normalized.generationRequestId,
-            reasoningRunId: buildReasoningRunId(normalized.generationRequestId, 0),
+            reasoningRunId: this.runPlanner.buildReasoningRunId(normalized.generationRequestId, 0),
             reasoningModelId: reasoningModel.modelId,
             reasoningIndex: 0,
-        }
+        })
         const publisher = new StreamPublisher(
             this.natsService,
             requestData.workspaceId,

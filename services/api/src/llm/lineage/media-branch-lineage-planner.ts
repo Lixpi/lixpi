@@ -11,6 +11,7 @@ import type {
     MediaRunLineageAssignment,
     WorkspaceContextSnapshot,
 } from '@lixpi/constants'
+import { MediaGenerationRunPlanner } from './media-generation-run-planner.ts'
 
 export type MediaBranchLineagePlannerInput = {
     generationRequestId: string
@@ -24,21 +25,19 @@ export type MediaBranchLineagePlannerInput = {
 type SourceDecision = {
     sourceNodeId?: string
     placementAnchorNodeId?: string
-    parentImageNodeId?: string
+    parentMediaNodeId?: string
 }
 
 const PLAN_VERSION: MediaBranchLineagePlan['planVersion'] = 'media-branch-lineage-v1'
 
-/**
- * Converts API-owned media routing decisions into the topology contract consumed
- * by the browser. This class owns branch/fork marker IDs, lineage parent IDs,
- * and marker provenance; the browser only applies the plan and computes layout.
- */
+// Converts API-owned media routing decisions into the topology contract consumed
+// by the browser. This class owns branch/fork marker IDs, lineage parent IDs,
+// and marker provenance; the browser only applies the plan and computes layout.
 export class MediaBranchLineagePlanner {
-    /**
-     * Builds one immutable lineage plan for a media request before reasoning or
-     * media-provider fanout emits partial/complete events.
-     */
+    private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
+
+    // Builds one immutable lineage plan for a media request before reasoning or
+    // media-provider fanout emits partial/complete events.
     buildPlan(input: MediaBranchLineagePlannerInput): MediaBranchLineagePlan {
         const resolution = input.imageBranchResolution
         const snapshot = input.imageBranchCandidateSnapshot
@@ -116,7 +115,7 @@ export class MediaBranchLineagePlanner {
             return {
                 sourceNodeId,
                 placementAnchorNodeId: sourceNodeId,
-                parentImageNodeId: sourceNodeId,
+                parentMediaNodeId: sourceNodeId,
             }
         }
 
@@ -145,12 +144,23 @@ export class MediaBranchLineagePlanner {
         for (const nodeId of [resolution.targetImageNodeId, resolution.parentImageNodeId]) {
             if (!nodeId) continue
             const candidate = candidateByNodeId.get(nodeId)
+            if (!this.isGeneratedLineageCandidate(candidate)) continue
             const continuesSelectedBranch = resolution.mode === 'edit-active-branch'
                 || resolution.operationKind === 'edit_existing'
                 || Boolean(resolution.branchId && candidate?.branchId === resolution.branchId)
             if (continuesSelectedBranch) return nodeId
         }
         return undefined
+    }
+
+    private isGeneratedLineageCandidate(candidate: ImageBranchCandidateImage | undefined): boolean {
+        if (!candidate) return false
+        return candidate.roleHints.includes('generated-variant')
+            || candidate.roleHints.includes('branch-leaf')
+            || candidate.roleHints.includes('branch-ancestor')
+            || Boolean(candidate.branchId)
+            || Boolean(candidate.parentMediaNodeId)
+            || Boolean(candidate.parentImageNodeId)
     }
 
     private buildBranchOrigin(args: {
@@ -174,12 +184,6 @@ export class MediaBranchLineagePlanner {
                 promptText: args.promptText,
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
-                ...(args.input.imageBranchResolution?.operationKind
-                    ? { operationKind: args.input.imageBranchResolution.operationKind }
-                    : {}),
-                ...(args.input.imageBranchResolution?.rationale
-                    ? { resolverRationale: args.input.imageBranchResolution.rationale }
-                    : {}),
                 forked: args.input.reasoningModelIds.length > 1,
                 forkCount,
             },
@@ -201,7 +205,7 @@ export class MediaBranchLineagePlanner {
         if (!parentBranchNodeId) return []
 
         return args.input.reasoningModelIds.map((reasoningModelId, reasoningIndex) => {
-            const reasoningRunId = this.buildReasoningRunId(args.input.generationRequestId, reasoningIndex)
+            const reasoningRunId = this.mediaGenerationRunPlanner.buildReasoningRunId(args.input.generationRequestId, reasoningIndex)
             return {
                 nodeId: `branch-fork-${args.input.generationRequestId}-reasoning-${reasoningIndex}`,
                 generationRequestId: args.input.generationRequestId,
@@ -238,7 +242,7 @@ export class MediaBranchLineagePlanner {
     }): MediaRunLineageAssignment[] {
         const forkByReasoningRunId = new Map(args.branchForks.map(fork => [fork.reasoningRunId, fork]))
         return args.input.reasoningModelIds.map((reasoningModelId, reasoningIndex) => {
-            const reasoningRunId = this.buildReasoningRunId(args.input.generationRequestId, reasoningIndex)
+            const reasoningRunId = this.mediaGenerationRunPlanner.buildReasoningRunId(args.input.generationRequestId, reasoningIndex)
             const branchFork = forkByReasoningRunId.get(reasoningRunId)
             const lineageParentNodeId = branchFork?.nodeId
                 ?? args.sourceDecision.sourceNodeId
@@ -248,7 +252,12 @@ export class MediaBranchLineagePlanner {
                 reasoningRunId,
                 reasoningModelId,
                 branchId: args.branchId,
-                ...(args.sourceDecision.parentImageNodeId ? { parentImageNodeId: args.sourceDecision.parentImageNodeId } : {}),
+                ...(args.sourceDecision.parentMediaNodeId
+                    ? {
+                        parentMediaNodeId: args.sourceDecision.parentMediaNodeId,
+                        parentImageNodeId: args.sourceDecision.parentMediaNodeId,
+                    }
+                    : {}),
                 ...(args.branchOrigin ? { branchOriginNodeId: args.branchOrigin.nodeId } : {}),
                 ...(branchFork ? { branchForkNodeId: branchFork.nodeId } : {}),
                 ...(lineageParentNodeId ? { lineageParentNodeId } : {}),
@@ -264,7 +273,4 @@ export class MediaBranchLineagePlanner {
         })
     }
 
-    private buildReasoningRunId(generationRequestId: string, reasoningIndex: number): string {
-        return `${generationRequestId}:reasoning:${reasoningIndex}`
-    }
 }

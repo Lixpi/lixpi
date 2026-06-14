@@ -74,7 +74,9 @@ The pre-stream resolvers and planner are large features in their own right; each
 
 Empty candidate snapshots are valid. The resolver synthesizes a fresh-branch resolution in the API without calling the VLM, then `planMediaBranchLineage` assigns the branch topology.
 
-For media-enabled requests, branch resolution is immediately followed by API lineage planning. The planner emits `MEDIA_LINEAGE_PLANNED` and copies each run's `MediaRunLineageAssignment` into `generationRun.lineageAssignment`, so browser code applies topology instead of deriving branchOrigin/branchFork decisions from local state. Matrix requests run this once in shared preflight; single media requests run it as the `planMediaBranchLineage` graph node.
+For media-enabled requests, branch resolution is immediately followed by API lineage planning. The planner emits `MEDIA_LINEAGE_PLANNED` and copies each run's `MediaRunLineageAssignment` into `generationRun.lineageAssignment`, so browser code applies topology instead of deriving branchOrigin/branchFork decisions from local state. Matrix requests run this once in shared preflight; single media requests run it as the `planMediaBranchLineage` graph node. Only existing AI-generated branch members can become generated-media parents; uploaded/source/reference media are references and placement anchors, not connector parents.
+
+`MediaGenerationRunPlanner` is the shared run metadata layer for single requests, matrix reasoning runs, image routers, and video routers. It assigns stable reasoning/media run IDs and attaches the API lineage assignment to each concrete media run. Provider-specific image/video code must not implement separate branching, parent selection, or marker-topology logic.
 {% /callout %}
 
 ## Provider State
@@ -226,6 +228,8 @@ When a media model is selected, the text model's system prompt is augmented (`ge
 ## ImageRouter and VideoRouter
 
 The routers bridge the text model's tool call to the transient media provider. They are siblings: `ImageRouter` ([`image-router.ts`](../../services/api/src/llm/tools/image-router.ts)) and `VideoRouter` ([`video-router.ts`](../../services/api/src/llm/tools/video-router.ts)).
+
+Both routers receive already-planned run metadata from `MediaGenerationRunPlanner`. They may choose provider-specific request fields, but they must not implement separate branch/source/fork decisions or rewrite lineage assignments themselves.
 
 Each router:
 

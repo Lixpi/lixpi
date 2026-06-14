@@ -19,7 +19,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Branch** — A lineage of generated media nodes that represent edits or variants of the same visual artifact. Descendants share a `branchId` when the VLM resolves a prompt as continuing an existing target.
 
-**Parent Image** — The generated media node selected as the edit parent for a new generation. Stored as `generatedBy.parentImageNodeId` and used for canvas edge placement.
+**Parent Media** — The generated media node selected as the edit parent for a new generation. Stored as API-assigned `generatedBy.parentMediaNodeId`; `generatedBy.parentImageNodeId` exists only as a legacy alias for older image-named consumers.
 
 **Base Context** — Images, videos, documents, and thread content force-included through workspace edges, explicit panel context chips, or automatic workspace relevance. Base context narrows candidates and can also be selected by the VLM as visual reference material. See [Context Relevance](../ai-chat/CONTEXT-RELEVANCE.md).
 
@@ -35,7 +35,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Branch Fork** — A reusable lineage split marker inside a branch tree. A `branchFork` node represents a deliberate child lineage under the user current lineage source, such as one fork per reasoning model in a multi-reasoning media request. It renders as the same circular lineage chrome as a branch origin, using `branchForkfIcon`, opens generated branch provenance scoped to its own generated descendants, and is never treated as chat context.
 
-**Lineage Source** — A *verified connector parent.* References, style images, and workspace-relevance selections can guide routing or placement, but they do not become connector parents unless the resolver is continuing an existing generated branch, or the output is rooted on a chat thread.
+**Lineage Source** — A *verified connector parent.* References, style images, uploaded/source media, and workspace-relevance selections can guide routing or placement, but they do not become connector parents. A media node can be the lineage source only when it is already an AI-generated branch member selected by the API as a continuation target; otherwise the API roots the request on a chat thread or an API-planned `branchOrigin` marker.
 
 **Placement Anchor** — A media node used only to *position* a fresh/reference-only generation on the canvas. Placement anchors and reference IDs are context; they never create connector parentage.
 
@@ -76,9 +76,11 @@ The browser builds non-authoritative candidate and workspace-context snapshots a
 
 ## Hard Frontend Boundary
 
-Do not put branch-lineage decision logic in `services/web-ui`. The browser is allowed to render, animate, collect input, build non-authoritative snapshots, and compute layout. It is not allowed to decide branch IDs, `branchOrigin` creation, `branchFork` creation, lineage parentage, generated-media `parentImageNodeId`, model/fork fanout, resolver outcomes, or marker provenance.
+Do not put branch-lineage decision logic in `services/web-ui`. The browser is allowed to render, animate, collect input, build non-authoritative snapshots, and compute layout. It is not allowed to decide branch IDs, `branchOrigin` creation, `branchFork` creation, lineage parentage, generated-media `parentMediaNodeId` or legacy `parentImageNodeId`, model/fork fanout, resolver outcomes, or marker provenance.
 
 Those decisions must be made in `services/api` and streamed or persisted through typed contracts such as `IMAGE_BRANCH_RESOLVED`, `MEDIA_LINEAGE_PLANNED`, and `MediaRunLineageAssignment`. This rule exists because lineage is distributed system state: multiple browsers, retries, reloads, and collaborators must converge on the same graph without relying on one client's local canvas state.
+
+If a request uses an uploaded image, uploaded video, media-library item, style reference, or any other non-generated source as visual input, that item is a reference and placement anchor only. The API must create or reuse generated-media lineage structure separately; the browser must never draw generated-output lineage directly from that source media just because it was selected or included as a first frame/reference.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -221,6 +223,7 @@ export type ImageBranchCandidateImage = {
     mediaKind?: 'image' | 'video'
     roleHints: ImageBranchCandidateRoleHint[]
     branchId?: string
+    parentMediaNodeId?: string
     parentImageNodeId?: string
     ancestorNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -289,9 +292,9 @@ The plan assigns:
 - branch-origin marker ID and neutral root provenance when a fresh standalone request needs a visible root,
 - branchFork marker IDs, parent marker/source IDs, and reasoning-run provenance,
 - per-run `MediaRunLineageAssignment` entries copied into `generationRun.lineageAssignment`,
-- generated-media `branchOriginNodeId`, `branchForkNodeId`, `parentImageNodeId`, selected references, operation kind, prompt text, prompt fingerprint, and created-at ordering.
+- generated-media `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, legacy `parentImageNodeId`, selected references, operation kind, prompt text, prompt fingerprint, and created-at ordering.
 
-The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentImageNodeId`, lineage parent selection, or marker provenance from model counts, prompt text, selected nodes, or local canvas state. It may compute marker/media positions from the plan and the visible canvas.
+The browser must not derive `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, legacy `parentImageNodeId`, lineage parent selection, or marker provenance from model counts, prompt text, selected nodes, or local canvas state. It may compute marker/media positions from the plan and the visible canvas.
 
 ### Persisted Generated Metadata
 
@@ -300,7 +303,8 @@ Generated media nodes store resolver output in `ImageGeneratedByMetadata` so fut
 | Field | Meaning |
 |-------|---------|
 | `branchId` | Stable ID for one generated-media lineage. |
-| `parentImageNodeId` | Media node selected as edit parent or placement parent. |
+| `parentMediaNodeId` | API-selected generated-media edit parent. Reference/source media never populate this field unless they are themselves generated branch members. |
+| `parentImageNodeId` | Legacy alias for `parentMediaNodeId`; do not add new lineage logic that depends on the image-named field. |
 | `branchOriginNodeId` | Temporary branch-origin marker that roots fresh multi-model siblings when no real source exists. |
 | `branchForkNodeId` | Temporary branchFork marker that groups generated descendants for a reasoning run or other nested lineage split. |
 | `sourceContextNodeIds` | Context nodes relevant to generation. |
@@ -367,7 +371,7 @@ The router's reference fingerprints should match the resolution's `referenceImag
 
 ## Canvas Placement and Provenance
 
-This is where one resolver decision becomes a positioned, parented, provenance-bearing canvas artifact. The rules below are **shared by image and video**; the only modality difference is the event names that drive each step (progressive `IMAGE_PARTIAL` for images vs. `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` for video).
+This is where the API lineage plan becomes a positioned, parented, provenance-bearing canvas artifact. The rules below are **shared by image and video**; the only modality difference is the event names that drive each step (progressive `IMAGE_PARTIAL` for images vs. `VIDEO_PENDING` / `VIDEO_GENERATING` / `VIDEO_COMPLETE` for video).
 
 [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) stores pending visual progress by `generationRequestId` plus API run metadata, with a legacy thread-ID fallback for older single-run events. Standalone AI Chat panel generations no longer require a source `aiChatThread` canvas node.
 
@@ -453,7 +457,7 @@ flowchart TB
 
 ## Balanced Branch-Tree Layout
 
-A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentImageNodeId` or marker IDs. Fresh multi-model requests with no source/thread node use an API-planned temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated children still carry prompt, references, and visual summaries on `generatedBy`. When a request has multiple reasoning models, each reasoning run gets an API-planned `branchFork` child marker and the generated media for that run descend from that fork, so model lineage stays visible even when every run targets the same image/video models.
+A branch lineage is a **tree** of generated media: the first generated image/video is normally the root, and each later edit/variant descends from a parent via API-assigned `generatedBy.parentMediaNodeId` or marker IDs. Fresh multi-model requests with no source/thread node use an API-planned temporary `branchOrigin` marker as the root so every sibling has the same explicit graph parent; the generated children still carry prompt, references, and visual summaries on `generatedBy`. When a request has multiple reasoning models, each reasoning run gets an API-planned `branchFork` child marker and the generated media for that run descend from that fork, so model lineage stays visible even when every run targets the same image/video models.
 
 On every generated-media add/remove the affected tree is laid out deterministically and then rigid-separated from its neighbors:
 
@@ -469,7 +473,7 @@ A branch tree is a connected component of **top-level generated media** plus tem
 - temporary origins: `type: 'branchOrigin'`, with `branchId`, `temporary: true`, and no `parentId`
 - temporary forks: `type: 'branchFork'`, with `branchId`, `temporary: true`, optional reasoning-run metadata, and no `parentId`
 
-A generated node's in-tree parent is resolved from API-assigned `generatedBy.branchForkNodeId` first, then `generatedBy.parentImageNodeId`, then `generatedBy.branchOriginNodeId`; incoming lineage-edge fallback exists only for older persisted state. A `branchFork` parent is resolved from its API-assigned `parentBranchNodeId`. If neither exists, the generated node is a root. This lets one tree mix images and videos, lets a single branch fork into multiple children, gives fresh multi-model siblings a shared explicit root when no source node exists, and lets nested branchFork markers split any current lineage source for future features.
+A generated node's in-tree parent is resolved from API-assigned `generatedBy.branchForkNodeId` first, then `generatedBy.parentMediaNodeId`, then the legacy `generatedBy.parentImageNodeId` alias, then `generatedBy.branchOriginNodeId`; incoming lineage-edge fallback exists only for older persisted state. A `branchFork` parent is resolved from its API-assigned `parentBranchNodeId`. If neither exists, the generated node is a root. This lets one tree mix images and videos, lets a single branch fork into multiple children, gives fresh multi-model siblings a shared explicit root when no source node exists, and lets nested branchFork markers split any current lineage source for future features.
 
 Reference/style media and workspace-relevance selections can anchor placement and become model references, but they are not tree members unless they are themselves generated media in the lineage. Parented nodes are also excluded from tree layout, matching the canvas rule that containment is handled separately from top-level branch placement.
 

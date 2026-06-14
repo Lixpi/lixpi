@@ -151,6 +151,7 @@ export type ImageBranchCandidateImage = {
     mediaKind?: 'image' | 'video'
     roleHints: ImageBranchCandidateRoleHint[]
     branchId?: string
+    parentMediaNodeId?: string
     parentImageNodeId?: string
     ancestorNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -261,8 +262,6 @@ export type BranchOriginProvenance = {
     promptText: string
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
-    operationKind?: ImageGenerationOperationKind
-    resolverRationale?: string
     forked: boolean
     forkCount: number
 }
@@ -305,6 +304,9 @@ export type MediaRunLineageAssignment = {
     mediaModelId?: AiModelId
     mediaType?: 'image' | 'video'
     branchId: string
+    parentMediaNodeId?: string
+    // Legacy alias retained for older image-named consumers. New lineage code
+    // must use parentMediaNodeId so image/video/future media share one contract.
     parentImageNodeId?: string
     branchOriginNodeId?: string
     branchForkNodeId?: string
@@ -516,6 +518,7 @@ export type GeneratedMediaVariantMetadata = {
     variantIndex?: number
     // API-assigned lineage marker IDs. The browser applies these to canvas
     // state and may compute layout, but it must not derive branch topology.
+    parentMediaNodeId?: string
     branchOriginNodeId?: string
     branchForkNodeId?: string
 }
@@ -528,6 +531,7 @@ export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     revisedPrompt: string
     responseMessageId?: string
     branchId?: string
+    // Legacy alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
@@ -609,6 +613,7 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
     // reused branch-lineage audit fields (identical names to images)
     branchId?: string
+    // Legacy alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]

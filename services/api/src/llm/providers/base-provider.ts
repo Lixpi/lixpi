@@ -1,11 +1,10 @@
 'use strict'
 
-import { randomUUID } from 'crypto'
 import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import type { AiModelId, MediaGenerationRunMeta, MediaRunLineageAssignment, ProviderName } from '@lixpi/constants'
+import type { MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
@@ -23,6 +22,7 @@ import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
+import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
@@ -83,6 +83,7 @@ export abstract class BaseProvider {
     protected videoPublisher: VideoPublisher | undefined
     public readonly instanceKey: string
     private readonly mediaBranchLineagePlanner = new MediaBranchLineagePlanner()
+    private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
 
     constructor(
         protected readonly _instanceKey: string,
@@ -256,7 +257,13 @@ export abstract class BaseProvider {
         if (!state.imageModelVersion && !state.videoModelVersion) return {}
         if (state.mediaBranchLineagePlan) return {}
 
-        const generationRun = this.buildSingleMediaGenerationRun(state)
+        const generationRun = this.mediaGenerationRunPlanner.buildSingleReasoningRun({
+            existingRun: state.generationRun,
+            eventMeta: state.eventMeta,
+            provider: state.provider,
+            modelName: state.aiModelMetaInfo.model,
+            modelVersion: state.modelVersion,
+        })
         const lineagePlan = this.mediaBranchLineagePlanner.buildPlan({
             generationRequestId: generationRun.generationRequestId,
             reasoningModelIds: [generationRun.reasoningModelId],
@@ -287,7 +294,7 @@ export abstract class BaseProvider {
         return {
             mediaBranchLineagePlan: lineagePlan,
             generationRun: nextGenerationRun,
-            eventMeta: this.buildGenerationRunEventMeta(state.eventMeta, nextGenerationRun),
+            eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, nextGenerationRun),
         }
     }
 
@@ -466,78 +473,18 @@ export abstract class BaseProvider {
         mediaIndex: number,
         mediaModelCount: number,
     ): MediaGenerationRunMeta | undefined {
-        if (!state.generationRun) return undefined
-        const mediaModelId = `${mediaModel.provider}:${mediaModel.model}` as AiModelId
-        const mediaRunId = `${state.generationRun.reasoningRunId}:${mediaType}:${mediaIndex}`
-        const lineageAssignment = this.buildMediaRunLineageAssignment(
-            state.generationRun.lineageAssignment,
-            mediaRunId,
-            mediaModelId,
-            mediaType,
+        const mediaModelId = this.mediaGenerationRunPlanner.buildMediaModelId(
+            mediaModel.provider,
+            mediaModel.model,
+            mediaModel.modelVersion,
         )
-        return {
-            ...state.generationRun,
-            mediaRunId,
+        return this.mediaGenerationRunPlanner.buildProviderMediaRun({
+            generationRun: state.generationRun,
             mediaModelId,
             mediaType,
             mediaIndex,
-            variantIndex: state.generationRun.reasoningIndex * mediaModelCount + mediaIndex,
-            ...(lineageAssignment ? { lineageAssignment } : {}),
-        }
-    }
-
-    private buildMediaRunLineageAssignment(
-        assignment: MediaRunLineageAssignment | undefined,
-        mediaRunId: string,
-        mediaModelId: AiModelId,
-        mediaType: 'image' | 'video',
-    ): MediaRunLineageAssignment | undefined {
-        if (!assignment) return undefined
-        return {
-            ...assignment,
-            mediaRunId,
-            mediaModelId,
-            mediaType,
-        }
-    }
-
-    private buildSingleMediaGenerationRun(state: ProviderState): MediaGenerationRunMeta {
-        if (state.generationRun) return state.generationRun
-
-        const generationRequestId = this.getEventMetaString(state.eventMeta.generationRequestId) ?? `media-${randomUUID()}`
-        const reasoningRunId = this.getEventMetaString(state.eventMeta.reasoningRunId) ?? `${generationRequestId}:reasoning:0`
-        const reasoningModelId = this.getReasoningModelId(state)
-        const reasoningIndex = typeof state.eventMeta.reasoningIndex === 'number' ? state.eventMeta.reasoningIndex : 0
-
-        return {
-            requestKind: 'single-media',
-            generationRequestId,
-            reasoningRunId,
-            reasoningModelId,
-            reasoningIndex,
-        }
-    }
-
-    private getReasoningModelId(state: ProviderState): AiModelId {
-        const model = state.aiModelMetaInfo.model || state.modelVersion
-        return `${state.provider}:${model}` as AiModelId
-    }
-
-    private getEventMetaString(value: unknown): string | undefined {
-        return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
-    }
-
-    private buildGenerationRunEventMeta(
-        eventMeta: ProviderState['eventMeta'],
-        generationRun: MediaGenerationRunMeta,
-    ): ProviderState['eventMeta'] {
-        return {
-            ...eventMeta,
-            generationRequestId: generationRun.generationRequestId,
-            reasoningRunId: generationRun.reasoningRunId,
-            reasoningModelId: generationRun.reasoningModelId,
-            reasoningIndex: generationRun.reasoningIndex,
-        }
+            mediaModelCount,
+        })
     }
 
     private getErrorMessage(error: unknown): string {
@@ -549,22 +496,6 @@ export abstract class BaseProvider {
             if (result.status === 'fulfilled') return result.value
             return { error: this.getErrorMessage(result.reason) }
         })
-    }
-
-    private buildFanoutEventMeta(state: ProviderState, generationRun: MediaGenerationRunMeta | undefined): ProviderState['eventMeta'] {
-        if (!generationRun) return state.eventMeta
-        return {
-            ...state.eventMeta,
-            generationRequestId: generationRun.generationRequestId,
-            reasoningRunId: generationRun.reasoningRunId,
-            mediaRunId: generationRun.mediaRunId,
-            reasoningModelId: generationRun.reasoningModelId,
-            mediaModelId: generationRun.mediaModelId,
-            mediaType: generationRun.mediaType,
-            reasoningIndex: generationRun.reasoningIndex,
-            mediaIndex: generationRun.mediaIndex,
-            variantIndex: generationRun.variantIndex,
-        }
     }
 
     private async executeImageFanout(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -580,7 +511,7 @@ export abstract class BaseProvider {
                 imageModelVersion: imageModelMetaInfo.modelVersion,
                 imageProviderName: imageModelMetaInfo.provider as ProviderName,
                 imageSize: state.mediaFanoutPlan?.imageSize ?? state.imageSize,
-                eventMeta: this.buildFanoutEventMeta(state, generationRun),
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
             const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
             fanoutState = { ...fanoutState, ...promptValidationPatch }
@@ -694,7 +625,7 @@ export abstract class BaseProvider {
                 videoResolution: normalizedVideoResolution,
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
-                eventMeta: this.buildFanoutEventMeta(state, generationRun),
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
 
             const trace = buildVideoGenerationTrace(fanoutState)
