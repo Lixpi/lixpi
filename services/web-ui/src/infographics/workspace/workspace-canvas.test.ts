@@ -264,7 +264,10 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const badgeBlock = extractBlock(scss, '.image-model-badge')
 		const infoButtonBlock = extractBlock(scss, '.image-info-button')
 		const panelBlock = extractBlock(scss, '.canvas-generated-image-info-panel')
-		const traceDetailsBlock = extractBlock(panelBlock, '.canvas-generated-image-trace-details')
+		const traceDetailsBlock = extractBlock(scss, '.canvas-generated-media-projection-editor .canvas-generated-image-trace-details')
+		const promptAndFinalFallbackBlock = scss.match(
+			/\.canvas-generated-media-projection-editor \.ai-image-generation-tool-prompt-fallback,[\s\S]*?\.canvas-generated-media-projection-editor \.ai-image-generation-final-prompt \{[\s\S]*?\}/
+		)?.[0] ?? ''
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
 		expectSourceToContain(ts, 'width: `${dimensions.width}px`,')
@@ -281,8 +284,9 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectExcerptToContain(panelBlock, 'overflow: visible', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'max-height: 440px', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'overflow: auto', 'generated image info panel block')
-		expectExcerptToContain(traceDetailsBlock, 'max-height: none', 'canvas trace details block')
-		expectExcerptToContain(traceDetailsBlock, 'overflow: visible', 'canvas trace details block')
+		expectExcerptToContain(traceDetailsBlock, 'margin: 0.65rem 0 0', 'canvas trace details block')
+		expect(promptAndFinalFallbackBlock).toContain('max-height: none')
+		expect(promptAndFinalFallbackBlock).toContain('overflow: visible')
 	})
 
 })
