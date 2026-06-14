@@ -24,7 +24,8 @@ whether or not the task changes tests:
 - Never write, modify, or run tests unless the user explicitly asks for tests in the current thread.
 - Never run `svelte-check`, directly or indirectly through a package script or wrapper. It is prohibited for agents.
 - Never open the application in a browser or use browser automation, screenshots, or manual visual inspection to verify work.
-- For `services/web-ui` work, verify test behavior only with the Dockerized Vitest commands in `TypeScript/web-ui/TESTING-GUIDE.md`.
+- For TypeScript tests, follow the shared conventions in `TypeScript/TESTING-GUIDE.md`.
+- For `services/web-ui` work, also follow `TypeScript/web-ui/TESTING-GUIDE.md`, and verify test behavior only with its Dockerized Vitest commands.
 
 If tests were not explicitly requested, do not report missing test execution as
 a verification failure. If tests were explicitly requested and the permitted
