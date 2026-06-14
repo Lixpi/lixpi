@@ -3788,7 +3788,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 hasMediaModel,
                                 reasoningModelIds
                             )
-                            : rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel, reasoningModelIds)
+                            : rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)
+                        if (!rootNode) {
+                            setPendingGeneratedMediaReasoningModels(panelThreadId, undefined, reasoningModelIds)
+                        }
                         const imageBranchCandidateSnapshot = imagePlacement.imageBranchCandidateSnapshot
 
                         // Whole-workspace, descriptors-only index for the API relevance stage.
@@ -4447,6 +4450,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
+    function setPendingGeneratedMediaReasoningModels(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        reasoningModelIds: string[],
+    ): void {
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        if (!placement) return
+        setPendingGeneratedMediaPlacement(threadId, generationRun, {
+            ...placement,
+            reasoningModelIds,
+        })
+    }
+
     function finishGeneratedMediaRun(threadId: string, generationRun?: MediaGenerationRunMeta): void {
         const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
         const placement = pendingGeneratedImagePlacements.get(placementKey)
@@ -4548,6 +4564,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ?? findCanvasNodeById(pendingSourceNodeId)
             ?? findSourceThreadNode(threadId)
             ?? findCanvasNodeById(pendingOriginNodeId)
+    }
+
+    function getDefaultGeneratedMediaEdgeSourceNode(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        branchOriginNode: BranchOriginCanvasNode | undefined,
+    ): CanvasNode | undefined {
+        const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+        return edgeSourceNode
     }
 
     function getBranchForkParentNode(
@@ -5523,7 +5548,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const imageHeight = imageWidth
             const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, imageHeight)
             const branchForkNode = ensureBranchForkForGeneratedMedia(threadId, generationRun, branchOriginNode)
-            const edgeSourceNode = branchForkNode ?? getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+            const edgeSourceNode = branchForkNode ?? getDefaultGeneratedMediaEdgeSourceNode(threadId, generationRun, branchOriginNode)
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
             const nodeId = `node-${fileId || uuidv4()}`
@@ -5662,7 +5687,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const imageHeight = imageWidth
                 const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, imageHeight)
                 const branchForkNode = ensureBranchForkForGeneratedMedia(threadId, generationRun, branchOriginNode)
-                const edgeSourceNode = branchForkNode ?? getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+                const edgeSourceNode = branchForkNode ?? getDefaultGeneratedMediaEdgeSourceNode(threadId, generationRun, branchOriginNode)
                 const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
                 const nodeId = `node-${fileId || uuidv4()}`
@@ -5871,7 +5896,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const placeholderHeight = placeholderWidth
             const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, placeholderHeight)
             const branchForkNode = ensureBranchForkForGeneratedMedia(threadId, generationRun, branchOriginNode)
-            const edgeSourceNode = branchForkNode ?? getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+            const edgeSourceNode = branchForkNode ?? getDefaultGeneratedMediaEdgeSourceNode(threadId, generationRun, branchOriginNode)
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
             const nodeId = `node-${uuidv4()}`
