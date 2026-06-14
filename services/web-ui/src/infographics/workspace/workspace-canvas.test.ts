@@ -183,6 +183,34 @@ function extractFunctionBody(source: string, functionName: string): string {
 	return source.slice(functionIndex, endIndex + 1)
 }
 
+function extractNodeElClickHandler(source: string): string {
+	const listener = "nodeEl.addEventListener('click',"
+	const listenerIndex = source.indexOf(listener)
+	if (listenerIndex === -1) return ''
+
+	const callbackStart = source.indexOf('(e) => {', listenerIndex)
+	if (callbackStart === -1) return ''
+
+	const openIndex = source.indexOf('{', callbackStart)
+	if (openIndex === -1) return ''
+
+	let depth = 0
+	let endIndex = openIndex
+
+	for (let i = openIndex + 1; i < source.length; i++) {
+		if (source[i] === '{') depth++
+		if (source[i] === '}') {
+			if (depth === 0) {
+				endIndex = i
+				break
+			}
+			depth--
+		}
+	}
+
+	return source.slice(listenerIndex, endIndex + 1)
+}
+
 // =============================================================================
 // workspace-image-node — consistent box-shadow
 // =============================================================================
@@ -557,9 +585,21 @@ describe('Workspace canvas — video node interaction', () => {
 		// Without these the transparent drag overlay has no box, so pointer events
 		// fall through to the canvas and a node drag becomes a canvas pan.
 		const overlay = extractBlock(scss, '.video-drag-overlay')
+		const imageOverlay = extractBlock(scss, '.image-drag-overlay')
 		expectExcerptToContain(overlay, 'position: absolute', '.video-drag-overlay')
 		expectExcerptToContain(overlay, 'z-index: 15', '.video-drag-overlay')
-		expectExcerptToContain(overlay, 'cursor: move', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'top: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'left: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'right: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'bottom: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'background: transparent', '.video-drag-overlay')
+		// Keep drag-hit parity with image drag overlays.
+		expectExcerptToContain(imageOverlay, 'position: absolute', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'z-index: 15', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'top: 0', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'left: 0', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'right: 0', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'bottom: 0', '.image-drag-overlay')
 		const nodeBlock = extractBlock(scss, '.workspace-video-node')
 		expectExcerptToContain(nodeBlock, '&.is-dragging', '.workspace-video-node')
 	})
@@ -1622,12 +1662,15 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode')
 		expectSourceToContain(ts, 'partialImageTracker.set(runKey, { nodeId, fileId: fileId || \'\', placementKey, ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })')
 		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
-		expectSourceToContain(ts, 'getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
-		expectSourceToContain(ts, 'if (!node || !isGeneratedMediaNode(node)) continue')
-		expectSourceToContain(ts, "resolution.mode === 'edit-active-branch'")
-		expectSourceToContain(ts, "resolution.operationKind === 'edit_existing'")
-		expectSourceToContain(ts, 'Boolean(resolution.branchId && node.generatedBy?.branchId === resolution.branchId)')
-		expectSourceToContain(ts, 'const parentImageNodeId = resolution\n            ? getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
+		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
+		expectSourceToContain(ts, 'branchId: resolution.branchId ?? placement.branchId')
+		expectSourceToContain(ts, 'imageBranchResolution: resolution')
+		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
+		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)')
+		expectSourceToContain(ts, 'operationKind: resolution.operationKind')
+		expectSourceToContain(ts, 'referenceImageNodeIds: resolution.referenceImageNodeIds')
+		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
+		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
 		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
 		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
 		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
@@ -1762,9 +1805,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('plain click on node selects the node directly', () => {
 		// The click handler must call selectNode(node.nodeId) — the original
 		// node, with no pre-resolution through deprecated placement state.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		expectExcerptToContain(clickHandler, 'selectNode(node.nodeId)')
 		expectExcerptNotToContain(clickHandler, 'selectNode(selectionTargetNodeId)')
@@ -1784,9 +1826,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		// CRITICAL: clicks inside AI chat thread content must reach ProseMirror
 		// editors without triggering selectNode, which would cause the selection
 		// overlay and resize handles to appear, blocking text editing.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		// Must check all three selectors to cover:
 		// - contenteditable: any contenteditable element (ProseMirror root)
@@ -1805,9 +1846,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 	it('Mod-click triggers selection toggling from node chrome', () => {
 		// Mod-click on node chrome toggles selection from the click handler.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		expectExcerptToContain(clickHandler, 'if (isModSelectionEvent(e))', 'node click handler')
 		expectExcerptToContain(clickHandler, 'toggleNodeSelection(node.nodeId)', 'node click handler')
@@ -1902,9 +1942,10 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 			expectSourceNotToContain(ts, ['getContext', 'Region', 'Cl', 'oudBounds'].join(''))
 			expectSourceToContain(ts, 'updateSelectionGroupOverlayElement()')
 			expectSourceToContain(scss, '.workspace-selection-group-overlay')
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*cursor:\s*move/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*box-sizing:\s*border-box/s)
+			const selectionGroupOverlay = extractBlock(scss, '.workspace-selection-group-overlay')
+			expectExcerptToContain(selectionGroupOverlay, 'position: absolute', 'selection group overlay')
+			expectExcerptToContain(selectionGroupOverlay, 'z-index: 10000', 'selection group overlay')
+			expectExcerptToContain(selectionGroupOverlay, 'box-sizing: border-box', 'selection group overlay')
 	})
 
 	it('uses the selection overlay as a drag surface for the whole selected group', () => {
@@ -2257,9 +2298,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		//
 		// Invariant: clicks on contenteditable, .ProseMirror, or
 		// .ai-chat-thread-wrapper elements must bail out before selectNode
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		// All three checks must be present — they cover overlapping DOM trees
 		expectExcerptToContain(clickHandler, 'clickTarget.isContentEditable')
@@ -2276,9 +2316,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// Invariant: click handler must call selectNode(node.nodeId) with
 		// the original nodeId, never pre-resolving through deprecated
 		// generated-image placement state.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		expectExcerptToContain(clickHandler, 'selectNode(node.nodeId)')
 		expectExcerptNotToContain(clickHandler, 'selectNode(selectionTargetNodeId)')
