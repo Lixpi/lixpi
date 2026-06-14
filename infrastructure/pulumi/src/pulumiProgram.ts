@@ -51,6 +51,8 @@ const {
     NATS_AUTH_XKEY_ISSUER_PUBLIC,
     GOOGLE_API_KEY,
     STABLE_DIFFUSION_API_KEY,
+    ARK_API_KEY,
+    BYTEPLUS_ARK_API_KEY,
     LLM_TIMEOUT_SECONDS,
     NATS_SAME_ORIGIN,
     NATS_ALLOWED_ORIGINS,
@@ -336,6 +338,10 @@ export const createInfrastructure = async () => {
             ANTHROPIC_API_KEY: ANTHROPIC_API_KEY!,
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
+            // BytePlus ModelArk (Seedance video). Accept either env name and emit the
+            // canonical ARK_API_KEY on the task def; || (not ??) so an empty string from
+            // one name falls through to the other. The provider reads ARK_API_KEY as a fallback.
+            ARK_API_KEY: ARK_API_KEY || BYTEPLUS_ARK_API_KEY || '',
             LLM_TIMEOUT_SECONDS: LLM_TIMEOUT_SECONDS ?? '1200',
         },
         dockerBuildContext: '/usr/src/service',
@@ -380,6 +386,9 @@ export const createInfrastructure = async () => {
             ANTHROPIC_API_KEY: ANTHROPIC_API_KEY!,
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
+            // Forwarded for parity with the API task def + nex entrypoint key set; the
+            // models-sync workload injects Seedance statically and makes no BytePlus call.
+            ARK_API_KEY: ARK_API_KEY || BYTEPLUS_ARK_API_KEY || '',
         },
         dockerBuildContext: '/usr/src/service',
         dockerfilePath: '/usr/src/service/services/nex/Dockerfile',

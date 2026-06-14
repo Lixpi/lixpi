@@ -273,6 +273,11 @@ services:
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+            # BytePlus ModelArk (Seedance) — forwarded for parity with the API/entrypoint key
+            # set (entrypoint.sh relays ARK_API_KEY to the nexlet). The models-sync workload
+            # injects Seedance statically and makes no BytePlus call, so this is future-proofing.
+            ARK_API_KEY: ${ARK_API_KEY:-}
+            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY:-}
 
         volumes:
             - aws-config:/root/.aws:cached    # AWS SSO credentials
@@ -310,9 +315,6 @@ services:
             retries: 5
             start_period: 30s
         depends_on:
-            lixpi-dynamodb:
-                condition: service_healthy
-                restart: true
             lixpi-nats-1:
                 condition: service_healthy
                 restart: true
@@ -320,6 +322,12 @@ services:
                 condition: service_healthy
                 restart: true
             lixpi-nats-3:
+                condition: service_healthy
+                restart: true
+            lixpi-dynamodb:
+                condition: service_healthy
+                restart: true
+            lixpi-api:
                 condition: service_healthy
                 restart: true
 
@@ -455,6 +463,11 @@ services:
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+            # BytePlus ModelArk (Seedance 2.0 video). The provider reads BYTEPLUS_ARK_API_KEY
+            # or ARK_API_KEY; forward both so whichever name the .env sets reaches the
+            # container (the unset one defaults to empty and is ignored by the provider's ||).
+            ARK_API_KEY: ${ARK_API_KEY:-}
+            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY:-}
             LLM_TIMEOUT_SECONDS: 1200
             SAVE_LLM_RESPONSES_TO_DEBUG_DIR: ${SAVE_LLM_RESPONSES_TO_DEBUG_DIR}
 
@@ -610,6 +623,10 @@ services:
             ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
+            # BytePlus ModelArk (Seedance) — passed through so Pulumi can put it on the
+            # deployed API task definition (see pulumiProgram.ts). Both names forwarded.
+            ARK_API_KEY: ${ARK_API_KEY:-}
+            BYTEPLUS_ARK_API_KEY: ${BYTEPLUS_ARK_API_KEY:-}
 
             # Web-UI config
             VITE_API_URL: ${VITE_API_URL}
