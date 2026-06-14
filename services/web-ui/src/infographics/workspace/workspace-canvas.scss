@@ -375,7 +375,8 @@
     pointer-events: none;
 }
 
-.workspace-branch-origin-info-chrome {
+.workspace-branch-origin-info-chrome,
+.workspace-branch-fork-info-chrome {
     position: absolute;
     display: flex;
     flex-direction: column;
@@ -630,7 +631,8 @@
     }
 }
 
-.canvas-branch-origin-info-panel {
+.canvas-branch-origin-info-panel,
+.canvas-branch-fork-info-panel {
     width: 100%;
 }
 
@@ -650,7 +652,6 @@
     // drag hit target and has no visible styling.
     position: absolute;
     z-index: 10000;
-    cursor: move;
     box-sizing: border-box;
 }
 
@@ -1760,7 +1761,6 @@
     left: 0;
     right: 0;
     bottom: 0;
-    cursor: move;
     z-index: 15;
     background: transparent;
 }
@@ -1794,7 +1794,6 @@
     left: 0;
     right: 0;
     bottom: 0;
-    cursor: move;
     z-index: 15;
     background: transparent;
 }
@@ -1810,7 +1809,6 @@
     box-shadow: var(--workspace-branch-origin-box-shadow);
     overflow: visible;
     padding: 0;
-    cursor: move;
 }
 
 .workspace-branch-origin-icon,
@@ -1835,7 +1833,6 @@
 .branch-fork-drag-overlay {
     position: absolute;
     inset: 0;
-    cursor: move;
     z-index: 15;
     background: transparent;
     border-radius: 50%;
@@ -1990,7 +1987,6 @@
     left: 0;
     right: 0;
     height: 20px;
-    cursor: move;
     z-index: 15;
     background: transparent;
 }

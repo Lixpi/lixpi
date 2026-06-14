@@ -33,7 +33,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Branch Root** — The first generated image/video of a `branchId`. It normally carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. Fresh multi-model generations with no source/thread node persist a `branchOrigin` marker so every generated sibling has the same explicit graph parent; this marker opens the generated branch provenance/details panel below the marker and is never treated as chat context.
 
-**Branch Fork** — A reusable lineage split marker inside a branch tree. A `branchFork` node represents a deliberate child lineage under the user current lineage source, such as one fork per reasoning model in a multi-reasoning media request. It renders as the same circular lineage chrome as a branch origin, using `branchForkfIcon`, and is never treated as chat context.
+**Branch Fork** — A reusable lineage split marker inside a branch tree. A `branchFork` node represents a deliberate child lineage under the user current lineage source, such as one fork per reasoning model in a multi-reasoning media request. It renders as the same circular lineage chrome as a branch origin, using `branchForkfIcon`, opens generated branch provenance scoped to its own generated descendants, and is never treated as chat context.
 
 **Lineage Source** — A *verified connector parent.* References, style images, and workspace-relevance selections can guide routing or placement, but they do not become connector parents unless the resolver is continuing an existing generated branch, or the output is rooted on a chat thread.
 
@@ -413,6 +413,8 @@ The finalized generated node also gets canvas provenance chrome rendered in a de
 
 - The **provider badge** and **info button** render in the media chrome overlay.
 - The **info panel** opens at the exact media-node width and expands to its full content height without cropping long prompts or reference metadata. It uses `generatedBy.responseMessageId` plus the persisted chat thread to reconstruct the original user prompt, the producing AI response, and the same generation-trace metadata shown in chat history. It reuses the same chat message shells and the `ImageGenerationTrace` / generation-trace detail renderer used by the AI chat history.
+- Fresh multi-model branch origins open the same generated branch provenance/details panel below the temporary `branchOrigin` marker. The marker chooses the first generated child under that origin and reconstructs the originating prompt and AI response from that child's `generatedBy` metadata, while staying out of chat context/reference routing.
+- Multi-reasoning `branchFork` markers open that same provenance/details panel below the fork marker. The marker chooses a generated child with `generatedBy.branchForkNodeId` equal to the fork node id, so chat reconstruction is filtered by that child's `reasoningRunId` / `reasoningModelId` and shows only the relevant reasoning model response.
 
 (The DOM-overlay-vs-PIXI ownership split is owned by [Rendering Engine](../canvas/RENDERING-ENGINE.md); the post-placement de-overlap pass is owned by [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).)
 

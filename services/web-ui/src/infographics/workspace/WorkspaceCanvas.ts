@@ -366,6 +366,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedEdgeId: string | null = null
     const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
     const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
+    const expandedBranchForkInfoNodeIds: Set<string> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const videoControlsHideTimers: Map<string, number> = new Map()
     const VIDEO_CONTROLS_HEIGHT = 52
@@ -1006,13 +1007,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
-        const generatedMediaNodes = getBranchOriginGeneratedMediaNodes(branchOriginNodeId)
+    function getGeneratedMediaInfoPanelWidth(generatedMediaNodes: Array<ImageCanvasNode | VideoCanvasNode>): number {
         const generatedMediaWidth = Math.max(
             0,
             ...generatedMediaNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.dimensions.width)
         )
         return generatedMediaWidth || settings.imageBranchLineage.generatedImageSize
+    }
+
+    function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
+        return getGeneratedMediaInfoPanelWidth(getBranchOriginGeneratedMediaNodes(branchOriginNodeId))
+    }
+
+    function getBranchForkInfoPanelWidth(branchForkNodeId: string): number {
+        return getGeneratedMediaInfoPanelWidth(getBranchForkGeneratedMediaNodes(branchForkNodeId))
     }
 
     function applyBranchOriginInfoChromeGeometry(
@@ -1102,6 +1110,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             position,
             dimensions,
             getBranchOriginInfoPanelWidth(nodeId),
+        )
+        const branchForkChromeEl = imageChromeViewportEl?.querySelector(`[data-branch-fork-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        if (branchForkChromeEl) applyBranchOriginInfoChromeGeometry(
+            branchForkChromeEl,
+            position,
+            dimensions,
+            getBranchForkInfoPanelWidth(nodeId),
         )
     }
 
@@ -1254,17 +1269,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedImageChrome(currentCanvasState)
     }
 
+    function compareGeneratedMediaByGenerationOrder(
+        a: ImageCanvasNode | VideoCanvasNode,
+        b: ImageCanvasNode | VideoCanvasNode,
+    ): number {
+        const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
+        const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
+        if (aVariant !== bVariant) return aVariant - bVariant
+        return (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
+    }
+
     function getBranchOriginGeneratedMediaNodes(branchOriginNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
         return (currentCanvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
                 && node.generatedBy?.branchOriginNodeId === branchOriginNodeId)
-            .sort((a: ImageCanvasNode | VideoCanvasNode, b: ImageCanvasNode | VideoCanvasNode) => {
-                const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
-                const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
-                if (aVariant !== bVariant) return aVariant - bVariant
-                return (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
-            })
+            .sort(compareGeneratedMediaByGenerationOrder)
+    }
+
+    function getBranchForkGeneratedMediaNodes(branchForkNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
+        return (currentCanvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+                (node.type === 'image' || node.type === 'video')
+                && node.generatedBy?.branchForkNodeId === branchForkNodeId)
+            .sort(compareGeneratedMediaByGenerationOrder)
     }
 
     function toggleBranchOriginGeneratedMediaInfo(branchOriginNodeId: string): void {
@@ -1272,6 +1300,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             expandedBranchOriginInfoNodeIds.delete(branchOriginNodeId)
         } else {
             expandedBranchOriginInfoNodeIds.add(branchOriginNodeId)
+        }
+        syncGeneratedImageChrome(currentCanvasState)
+    }
+
+    function toggleBranchForkGeneratedMediaInfo(branchForkNodeId: string): void {
+        if (expandedBranchForkInfoNodeIds.has(branchForkNodeId)) {
+            expandedBranchForkInfoNodeIds.delete(branchForkNodeId)
+        } else {
+            expandedBranchForkInfoNodeIds.add(branchForkNodeId)
         }
         syncGeneratedImageChrome(currentCanvasState)
     }
@@ -1301,6 +1338,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             getNodeWorldPosition(branchOriginNode),
             branchOriginNode.dimensions,
             getBranchOriginInfoPanelWidth(branchOriginNode.nodeId),
+        )
+        return chromeEl
+    }
+
+    function createBranchForkInfoPanel(branchForkNode: BranchForkCanvasNode): HTMLElement | null {
+        const generatedMediaNode = getBranchForkGeneratedMediaNodes(branchForkNode.nodeId)[0]
+        if (!generatedMediaNode) return null
+        return createGeneratedMediaInfoPanel(generatedMediaNode, {
+            className: 'canvas-branch-fork-info-panel',
+            includeDescriptor: false,
+        })
+    }
+
+    function createBranchForkInfoChrome(branchForkNode: BranchForkCanvasNode): HTMLElement | null {
+        if (!expandedBranchForkInfoNodeIds.has(branchForkNode.nodeId)) return null
+
+        const panel = createBranchForkInfoPanel(branchForkNode)
+        if (!panel) return null
+
+        const chromeEl = html`
+            <div className="workspace-branch-fork-info-chrome" data=${{ branchForkChromeNodeId: branchForkNode.nodeId }}>
+                ${panel}
+            </div>
+        ` as HTMLElement
+        applyBranchOriginInfoChromeGeometry(
+            chromeEl,
+            getNodeWorldPosition(branchForkNode),
+            branchForkNode.dimensions,
+            getBranchForkInfoPanelWidth(branchForkNode.nodeId),
         )
         return chromeEl
     }
@@ -1406,7 +1472,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             showVideoControls(node.nodeId)
             if (isControlsEvent(event)) return
             const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
-            chromeEl.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : 'move'
+            chromeEl.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : ''
         })
         chromeEl.addEventListener('mouseleave', () => {
             chromeEl.style.cursor = ''
@@ -1505,6 +1571,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 && Boolean((node as ImageCanvasNode | VideoCanvasNode).generatedBy || (node as ImageCanvasNode | VideoCanvasNode).descriptor))
         const branchOriginNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is BranchOriginCanvasNode => node.type === 'branchOrigin')
+        const branchForkNodes = (canvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is BranchForkCanvasNode => node.type === 'branchFork')
 
         destroyVideoControlInstances()
 
@@ -1526,13 +1594,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const expandedNodeId of Array.from(expandedBranchOriginInfoNodeIds)) {
             if (!branchOriginNodeIds.has(expandedNodeId)) expandedBranchOriginInfoNodeIds.delete(expandedNodeId)
         }
+        const branchForkNodeIds = new Set<string>(branchForkNodes.map((node: BranchForkCanvasNode) => node.nodeId))
+        for (const expandedNodeId of Array.from(expandedBranchForkInfoNodeIds)) {
+            if (!branchForkNodeIds.has(expandedNodeId)) expandedBranchForkInfoNodeIds.delete(expandedNodeId)
+        }
         const branchOriginInfoChromeEls = branchOriginNodes
             .map(createBranchOriginInfoChrome)
+            .filter((el): el is HTMLElement => Boolean(el))
+        const branchForkInfoChromeEls = branchForkNodes
+            .map(createBranchForkInfoChrome)
             .filter((el): el is HTMLElement => Boolean(el))
 
         imageChromeViewportEl.replaceChildren(
             ...mediaInfoNodes.map(createGeneratedMediaChrome),
             ...branchOriginInfoChromeEls,
+            ...branchForkInfoChromeEls,
             ...videoChromeEls,
         )
     }
@@ -7176,6 +7252,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             {
                 renderResizeHandles: false,
                 allowSelection: false,
+                onClick: () => toggleBranchForkGeneratedMediaInfo(node.nodeId),
             }
         )
         dragOverlay.className = 'branch-fork-drag-overlay nopan'
@@ -7777,6 +7854,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             imageChromeViewportEl = null
             expandedGeneratedImageInfoNodeIds.clear()
             expandedBranchOriginInfoNodeIds.clear()
+            expandedBranchForkInfoNodeIds.clear()
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
             if (panZoom) {
