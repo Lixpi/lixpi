@@ -129,7 +129,9 @@ export class ProseMirrorEditor {
         onPromptStop,
         isPromptReceiving,
         promptControlFactories,
-        onReceivingStateChange
+        onReceivingStateChange,
+        readOnly = false,
+        aiChatThreadRenderContext
     }) {
         this.onEditorChange = onEditorChange
         this.onProjectTitleChange = onProjectTitleChange
@@ -141,6 +143,11 @@ export class ProseMirrorEditor {
         this.promptControlFactories = promptControlFactories
         this.onReceivingStateChange = onReceivingStateChange
         this.isDisabled = isDisabled
+        this.readOnly = readOnly
+        this.aiChatThreadRenderContext = {
+            ...(aiChatThreadRenderContext ?? {}),
+            readOnly,
+        }
         this.documentType = documentType
         this.threadId = threadId
         this.editorSchema = this.createSchema()
@@ -152,7 +159,7 @@ export class ProseMirrorEditor {
                 doc: initialDocContent,    // initialVal is the initial content of the editor
                 plugins: this.createPlugins(initialVal, isDisabled)
             }),
-            editable: () => !isDisabled
+            editable: () => this.isEditorEditable()
         })
     }
 
@@ -269,7 +276,8 @@ export class ProseMirrorEditor {
                         titlePlaceholder: 'New document',
                         paragraphPlaceholder: 'I\'m your new document...'
                     },
-                    onReceivingStateChange: this.onReceivingStateChange
+                    onReceivingStateChange: this.onReceivingStateChange,
+                    renderContext: this.aiChatThreadRenderContext
                 })
             )
         }
@@ -301,13 +309,17 @@ export class ProseMirrorEditor {
         return basePlugins
     }
 
+    isEditorEditable() {
+        return !this.isDisabled && !this.readOnly
+    }
+
     updateEditorFocusState(focusedState) {
         if (!this.editorView) { return }
-        this.editorView.setProps({ editable: () => !this.isDisabled })
+        this.editorView.setProps({ editable: () => this.isEditorEditable() })
     }
 
     dispatchStateChange(json) {
-        this.onEditorChange(json)
+        this.onEditorChange?.(json)
     }
 
     destroy() {

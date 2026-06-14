@@ -194,6 +194,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     const handleClick = (event: MouseEvent) => {
         event.preventDefault()
         event.stopPropagation()
+        if (!view.editable) return
 
         const pos = getPos()
         if (pos === undefined) return

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { v4 as uuidv4 } from 'uuid'
 import { TextSelection } from 'prosemirror-state'
+import { html } from '$src/utils/domTemplates.ts'
 
 export const aiChatThreadNodeType = 'aiChatThread'
 
@@ -134,18 +135,13 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
     // Ensure node has a proper threadId for initial render
     const threadId = node.attrs.threadId || defaultAttrs.threadId()
 
-    // Create DOM structure - the plugin will apply decoration classes like 'receiving' and 'thread-boundary-visible' to this DOM element
-    const dom = document.createElement('div')
-    dom.className = 'ai-chat-thread-wrapper'
-    dom.setAttribute('data-thread-id', threadId)
-    dom.setAttribute('data-status', node.attrs.status)
-
-    // Create content container
-    const contentDOM = document.createElement('div')
-    contentDOM.className = 'ai-chat-thread-content'
-
-    // Append all elements to main wrapper
-    dom.appendChild(contentDOM)
+    // The plugin applies decoration classes like receiving/thread boundary to this wrapper.
+    const dom = html`
+        <div className="ai-chat-thread-wrapper" data=${{ threadId, status: node.attrs.status }}>
+            <div className="ai-chat-thread-content"></div>
+        </div>
+    `
+    const contentDOM = dom.querySelector('.ai-chat-thread-content')
 
     // Setup content focus handling
     setupContentFocus(contentDOM, view, getPos)
@@ -174,11 +170,11 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
             // which breaks event listeners and state.
 
             // Update attributes if changed
-            dom.setAttribute('data-thread-id', updatedNode.attrs.threadId)
-            dom.setAttribute('data-status', updatedNode.attrs.status)
+            dom.dataset.threadId = updatedNode.attrs.threadId
+            dom.dataset.status = updatedNode.attrs.status
 
             // Auto-assign threadId if missing
-            if (!updatedNode.attrs.threadId) {
+            if (!updatedNode.attrs.threadId && view.editable) {
                 const pos = getPos()
                 if (pos !== undefined) {
                     const newThreadId = defaultAttrs.threadId()
@@ -202,6 +198,8 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
 // Helper function to setup content focus
 function setupContentFocus(contentDOM, view, getPos) {
     contentDOM.addEventListener('mousedown', () => {
+        if (!view.editable) return
+
         view.focus()
         const pos = getPos()
         if (pos !== undefined) {
