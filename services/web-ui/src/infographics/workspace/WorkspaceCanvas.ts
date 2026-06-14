@@ -46,7 +46,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon, branchOffIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon, branchForkfIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -7180,7 +7180,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'branch-fork-drag-overlay nopan'
 
-        const icon = html`<div className="workspace-branch-fork-icon" innerHTML=${branchOffIcon}></div>` as HTMLDivElement
+        const icon = html`<div className="workspace-branch-fork-icon" innerHTML=${branchForkfIcon}></div>` as HTMLDivElement
         nodeEl.insertBefore(icon, dragOverlay)
 
         return nodeEl

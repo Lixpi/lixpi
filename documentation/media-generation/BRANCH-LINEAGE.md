@@ -33,7 +33,7 @@ This feature is part of Lixpi's artifact-piping architecture (see [Product Overv
 
 **Branch Root** — The first generated image/video of a `branchId`. It normally carries the originating prompt, references, and visual summaries on its own `generatedBy` metadata, and its info panel reconstructs them. Fresh multi-model generations with no source/thread node persist a `branchOrigin` marker so every generated sibling has the same explicit graph parent; this marker opens the generated branch provenance/details panel below the marker and is never treated as chat context.
 
-**Branch Fork** — A reusable lineage split marker inside a branch tree. A `branchFork` node represents a deliberate child lineage under the user current lineage source, such as one fork per reasoning model in a multi-reasoning media request. It renders as the same circular lineage chrome as a branch origin, using `branchOffIcon`, and is never treated as chat context.
+**Branch Fork** — A reusable lineage split marker inside a branch tree. A `branchFork` node represents a deliberate child lineage under the user current lineage source, such as one fork per reasoning model in a multi-reasoning media request. It renders as the same circular lineage chrome as a branch origin, using `branchForkfIcon`, and is never treated as chat context.
 
 **Lineage Source** — A *verified connector parent.* References, style images, and workspace-relevance selections can guide routing or placement, but they do not become connector parents unless the resolver is continuing an existing generated branch, or the output is rooted on a chat thread.
 
