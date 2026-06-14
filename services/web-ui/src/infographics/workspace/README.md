@@ -64,8 +64,9 @@ All of this happens without the Svelte component knowing the details. It just pa
 ### Branch Lineage Trees
 - Generated images/videos that share a lineage form a **branch tree**; the first generated image/video is normally the branch root and carries the originating prompt + references in its own `generatedBy` metadata
 - Fresh multi-model generations with no source/thread node create a temporary `branchOrigin` root marker, rendered as a configured branch icon and referenced by every child output through `generatedBy.branchOriginNodeId`; the marker is draggable lineage chrome rather than chat context, so it is not selectable or context-chip eligible, and clicking it opens the generated branch provenance/details panel below the marker
+- Multi-reasoning media requests create one temporary `branchFork` marker per reasoning run under the current lineage source; generated media from that reasoning run persist `generatedBy.branchForkNodeId` and edge from that fork, so the canvas shows separate reasoning-model lineages before the image/video variants fan out. Fresh standalone runs with no source still render the `branchOrigin` first, then the `branchFork` split marker
 - On every generated-media add/remove the affected tree re-tidies via `rebalanceBranchTreesAndResolve` in `branchTreeLayout.ts`, which lays each lineage out as a balanced left-to-right tidy tree using the pure `utils/layoutTree.ts` algorithm
-- Removing the last generated image/video that references a `branchOrigin` also removes that origin marker and any incident lineage edges, so temporary origins cannot remain as unreachable canvas chrome
+- Removing the last generated image/video that references a `branchOrigin` or `branchFork` also removes the temporary marker and any incident lineage edges, so lineage chrome cannot remain as unreachable canvas nodes
 - Depth spacing uses `settings.imageBranchLineage.imageToImageGap`, plus `branchFanoutDepthGap` for each extra child when a node forks; sibling spacing uses `branchToBranchGap`. The root keeps its anchor, children fan out symmetrically around its vertical center, and linear chains stay collinear. Final image/video aspect-ratio updates preserve the node center, then re-tidy the tree so resolved media proportions cannot collapse a fork back onto the predecessor center line
 - The whole tree is then rigid-separated from neighbors by the unchanged resolver (one bounding box per tree), so a tree moves as a block and never loses its internal balance — see [`documentation/canvas/COLLISION-RESOLUTION.md`](../../../../../documentation/canvas/COLLISION-RESOLUTION.md)
 - Dragging a tree node runs only the existing per-node overlap cleanup and does not snap back; the next add/remove re-tidies deterministically
@@ -319,7 +320,7 @@ The selection group overlay (z-index 10000) appears based on two conditions:
 | 1 node selected via plain click | **No** |
 | 0 nodes selected | No |
 
-This is controlled by the `selectionIsFromMarquee` flag. `setSelectedNodes(ids, fromMarquee)` stores the flag after filtering out non-selectable lineage chrome; `shouldShowSelectionGroupOverlay()` checks `size > 1 || selectionIsFromMarquee`. `branchOrigin` markers are not selectable nodes and cannot become AI chat context chips.
+This is controlled by the `selectionIsFromMarquee` flag. `setSelectedNodes(ids, fromMarquee)` stores the flag after filtering out non-selectable lineage chrome; `shouldShowSelectionGroupOverlay()` checks `size > 1 || selectionIsFromMarquee`. `branchOrigin` and `branchFork` markers are not selectable nodes and cannot become AI chat context chips.
 
 #### Deferred Selection in Drag
 
@@ -476,6 +477,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `.workspace-document-node` | Individual document card |
 | `.workspace-image-node` | Individual image card |
 | `.workspace-branch-origin-node` | Temporary fresh-branch origin marker for generated-media lineage |
+| `.workspace-branch-fork-node` | Temporary lineage split marker for generated-media branchFork groups |
 | `.workspace-ai-chat-thread-node` | Canvas-owned floating AI chat panel styling |
 | `.document-drag-overlay` | Top bar for dragging documents |
 | `.ai-chat-thread-drag-overlay` | Top bar for dragging AI chat threads |
