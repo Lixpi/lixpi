@@ -85,6 +85,7 @@ export type MainApiServiceArgs = {
         ANTHROPIC_API_KEY: string
         GOOGLE_API_KEY: string
         STABLE_DIFFUSION_API_KEY: string
+        ARK_API_KEY: string
         LLM_TIMEOUT_SECONDS: string
     }
 

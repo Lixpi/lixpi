@@ -54,6 +54,113 @@ describe('MediaGenerationMatrixOrchestrator key helpers', () => {
 })
 
 describe('MediaGenerationMatrixOrchestrator', () => {
+    it('dispatches one child per reasoning model and propagates shared lineage assignments', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-3-opus-20240229') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-3-opus-20240229',
+                    modelVersion: 'claude-3-opus-20240229',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            if (model === 'claude-3-sonnet-20240229') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-3-sonnet-20240229',
+                    modelVersion: 'claude-3-sonnet-20240229',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            if (model === 'gemini-2.5-flash-image') {
+                return {
+                    provider: 'Google',
+                    model: 'gemini-2.5-flash-image',
+                    modelVersion: 'gemini-2.5-flash-image',
+                    modalities: [{ modality: 'image_generation' }],
+                    maxCompletionSize: 4096,
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model: 'veo-3.1-generate-preview',
+                modelVersion: 'veo-3.1-generate-preview',
+                modalities: [{ modality: 'video_generation' }],
+            } as any
+        })
+
+        const workspaceContextSpy = vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext')
+        const resolveFeaturesSpy = vi.spyOn(featureResolver, 'resolveFeatures')
+        const resolveImageBranchSpy = vi.spyOn(imageBranchResolver, 'resolveImageBranch')
+
+        workspaceContextSpy.mockResolvedValue({})
+        resolveFeaturesSpy.mockResolvedValue({})
+        resolveImageBranchSpy.mockResolvedValue({})
+
+        await orchestrator.process(createRequest({
+            aiModel: undefined,
+            aiImageModel: 'Google:gemini-2.5-flash-image',
+            aiVideoModel: undefined,
+            mediaGenerationRequest: {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: 'request-2',
+                reasoningModelIds: [
+                    'Anthropic:claude-3-opus-20240229',
+                    'Anthropic:claude-3-sonnet-20240229',
+                ],
+                imageModelIds: ['Google:gemini-2.5-flash-image'],
+                videoModelIds: [],
+                imageOptions: { imageSize: '1024x1024' },
+                videoOptions: {},
+            },
+        }))
+
+        expect(registry.process).toHaveBeenCalledTimes(2)
+        const state0 = registry.process.mock.calls[0]?.[2] as any
+        const state1 = registry.process.mock.calls[1]?.[2] as any
+
+        expect(state0.preflightResolved).toBe(true)
+        expect(state0.mediaFanoutPlan.imageModels).toHaveLength(1)
+        expect(state0.mediaFanoutPlan.videoModels).toHaveLength(0)
+        expect(state0.generationRun.reasoningRunId).toBe('request-2:reasoning:0')
+        expect(state0.generationRun.reasoningIndex).toBe(0)
+        expect(state1.generationRun.reasoningRunId).toBe('request-2:reasoning:1')
+        expect(state1.generationRun.reasoningIndex).toBe(1)
+        expect(state0.generationRun.lineageAssignment?.reasoningRunId).toBe('request-2:reasoning:0')
+        expect(state1.generationRun.lineageAssignment?.reasoningRunId).toBe('request-2:reasoning:1')
+        expect(state0.generationRun.lineageAssignment?.branchForkNodeId).toBe('branch-fork-request-2-reasoning-0')
+    })
+
+    it('rejects requests that resolve to neither image nor video generation models', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+
+        await expect(
+            orchestrator.process(
+                createRequest({
+                    aiModel: 'Anthropic:claude-sonnet-4-6',
+                    aiImageModel: undefined,
+                    aiVideoModel: undefined,
+                    mediaGenerationRequest: {
+                        requestVersion: 'media-generation-matrix-v1',
+                        generationRequestId: 'request-3',
+                        reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+                        imageModelIds: [],
+                        videoModelIds: [],
+                        imageOptions: { imageSize: '1024x1024' },
+                        videoOptions: {},
+                    },
+                } as any),
+            ),
+        ).rejects.toThrow('requires at least one image or video generation model')
+
+        expect(registry.process).not.toHaveBeenCalled()
+    })
+
     it('rejects requests with no reasoning model ids', async () => {
         const registry = createRegistry()
         const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)

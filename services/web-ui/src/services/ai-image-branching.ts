@@ -152,8 +152,8 @@ function getLeafGeneratedMedia(media: MediaCanvasNode[], edges: WorkspaceEdge[])
     )
 
     for (const node of media) {
-        const parentImageNodeId = node.generatedBy?.parentImageNodeId
-        if (parentImageNodeId && mediaIds.has(parentImageNodeId)) sourceIdsWithGeneratedChildren.add(parentImageNodeId)
+        const parentMediaNodeId = node.generatedBy?.parentMediaNodeId ?? node.generatedBy?.parentImageNodeId
+        if (parentMediaNodeId && mediaIds.has(parentMediaNodeId)) sourceIdsWithGeneratedChildren.add(parentMediaNodeId)
     }
 
     const leaves = media.filter((node) => !sourceIdsWithGeneratedChildren.has(node.nodeId))
@@ -183,8 +183,8 @@ function collectImageBranchAncestors(
             }
         }
 
-        const parentImageNodeId = current.generatedBy?.parentImageNodeId
-        current = parentImageNodeId ? mediaById.get(parentImageNodeId) : undefined
+        const parentMediaNodeId = current.generatedBy?.parentMediaNodeId ?? current.generatedBy?.parentImageNodeId
+        current = parentMediaNodeId ? mediaById.get(parentMediaNodeId) : undefined
     }
 
     return branchNodeIds
@@ -297,6 +297,7 @@ function getCandidateStillFileId(node: MediaCanvasNode): string | undefined {
 
 function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: string | undefined): ImageBranchCandidateImage {
     const generatedBy = media.generatedBy
+    const parentMediaNodeId = generatedBy?.parentMediaNodeId ?? generatedBy?.parentImageNodeId
     const roleHints: ImageBranchCandidateRoleHint[] = ['base-context']
     if (generatedBy) roleHints.push('generated-variant')
 
@@ -308,8 +309,9 @@ function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: 
         mediaKind: media.type,
         roleHints: addActiveTargetHint(roleHints, media.nodeId, activeTargetNodeId),
         branchId: generatedBy?.branchId,
-        parentImageNodeId: generatedBy?.parentImageNodeId,
-        ancestorNodeIds: generatedBy?.parentImageNodeId ? [generatedBy.parentImageNodeId, media.nodeId] : [media.nodeId],
+        parentMediaNodeId,
+        parentImageNodeId: parentMediaNodeId,
+        ancestorNodeIds: parentMediaNodeId ? [parentMediaNodeId, media.nodeId] : [media.nodeId],
         sourceContextNodeIds: [media.nodeId],
         sourceMessageId: generatedBy?.responseMessageId,
         promptText: getMediaPromptText(media),
@@ -333,6 +335,7 @@ function createGeneratedCandidate(args: {
 }): ImageBranchCandidateImage {
     const ancestorNodeIds = collectImageBranchAncestors(args.media, args.mediaById, args.edges, args.regionNodeId)
     const generatedBy = args.media.generatedBy
+    const parentMediaNodeId = generatedBy?.parentMediaNodeId ?? generatedBy?.parentImageNodeId
     const roleHints: ImageBranchCandidateRoleHint[] = ['generated-variant']
     roleHints.push(args.leafNodeIds.has(args.media.nodeId) ? 'branch-leaf' : 'branch-ancestor')
 
@@ -344,7 +347,8 @@ function createGeneratedCandidate(args: {
         mediaKind: args.media.type,
         roleHints: addActiveTargetHint(roleHints, args.media.nodeId, args.activeTargetNodeId),
         branchId: getBranchIdForMedia(args.media, ancestorNodeIds, args.mediaById),
-        parentImageNodeId: generatedBy?.parentImageNodeId,
+        parentMediaNodeId,
+        parentImageNodeId: parentMediaNodeId,
         ancestorNodeIds,
         sourceContextNodeIds: uniqueValues([...(generatedBy?.sourceContextNodeIds ?? []), ...args.sourceContextNodeIds]),
         sourceMessageId: generatedBy?.responseMessageId,

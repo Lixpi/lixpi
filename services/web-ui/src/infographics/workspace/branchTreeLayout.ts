@@ -3,10 +3,12 @@
 //
 // A "branch tree" is a connected component of top-level generated-media nodes
 // (image/video carrying generatedBy.branchId, no parentId) and temporary
-// branch-origin markers linked by lineage. A member's in-tree parent is its
-// generatedBy.parentImageNodeId when that points at another member, then its
-// generatedBy.branchOriginNodeId, otherwise the source of its incoming lineage
-// edge when that source is a member; if neither, the member is a tree root.
+// branch-origin / branch-fork markers linked by lineage. A generated member's
+// in-tree parent is its generatedBy.branchForkNodeId when that points at
+// another member, then its generatedBy.parentMediaNodeId, then the legacy
+// generatedBy.parentImageNodeId alias, then its generatedBy.branchOriginNodeId,
+// otherwise the source of its incoming lineage edge when that source is a
+// member; if neither, the member is a tree root.
 //
 // This module is pure: it reads node positions/sizes + lineage edges and returns
 // new node arrays. It never touches PIXI, the DOM, or canvas closures — it reuses
@@ -16,6 +18,7 @@
 import type {
     CanvasNode,
     BranchOriginCanvasNode,
+    BranchForkCanvasNode,
     ImageCanvasNode,
     VideoCanvasNode,
     WorkspaceEdge,
@@ -26,7 +29,8 @@ import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeWorldPosition, buildNodesById } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
-type BranchTreeMemberNode = GeneratedMediaNode | BranchOriginCanvasNode
+type BranchTreeMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode
+type BranchTreeMemberNode = GeneratedMediaNode | BranchTreeMarkerNode
 type Point = { x: number; y: number }
 type Rect = { x: number; y: number; width: number; height: number }
 type CollisionBox = { id: string; x: number; y: number; width: number; height: number }
@@ -56,21 +60,46 @@ function isBranchOriginMember(node: CanvasNode): node is BranchOriginCanvasNode 
     return node.type === 'branchOrigin' && !node.parentId && Boolean(node.branchId)
 }
 
+function isBranchForkMember(node: CanvasNode): node is BranchForkCanvasNode {
+    return node.type === 'branchFork' && !node.parentId && Boolean(node.branchId)
+}
+
 function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
-    return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node)
+    return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node) || isBranchForkMember(node)
+}
+
+function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
+    return [
+        node.generatedBy?.branchForkNodeId,
+        node.generatedBy?.parentMediaNodeId,
+        node.generatedBy?.parentImageNodeId,
+        node.generatedBy?.branchOriginNodeId,
+    ]
+}
+
+function getBranchMarkerParentCandidates(node: BranchTreeMarkerNode): Array<string | undefined> {
+    if (node.type !== 'branchFork') return []
+    return [node.parentBranchNodeId]
+}
+
+function firstExistingMemberId(candidates: Array<string | undefined>, memberIds: Set<string>): string | null {
+    for (const candidate of candidates) {
+        if (candidate && memberIds.has(candidate)) return candidate
+    }
+    return null
 }
 
 // Build the generated-media forest from canvas nodes + lineage edges. Trees are
-// derived from graph connectivity (parentImageNodeId / lineage edges), never by
-// grouping on branchId, so a forked branchId is still one correct tree.
+// derived from API lineage fields and legacy lineage edges, never by grouping on
+// branchId, so a forked branchId is still one correct tree.
 export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): BranchTree[] {
     const members = nodes.filter(isBranchTreeMember)
     if (members.length === 0) return []
 
     const memberIds = new Set(members.map((node: BranchTreeMemberNode) => node.nodeId))
 
-    // First incoming lineage-edge source per node — the fallback parent used when
-    // generatedBy.parentImageNodeId is absent (mirrors the anchor lookup).
+    // First incoming lineage-edge source per node — the fallback parent used for
+    // older persisted nodes without API-assigned parent media fields.
     const edgeSourceByTarget = new Map<string, string>()
     for (const edge of edges) {
         if (!edgeSourceByTarget.has(edge.targetNodeId)) {
@@ -80,16 +109,11 @@ export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): B
 
     const inTreeParentById = new Map<string, string | null>()
     for (const node of members) {
-        const metadataParent = isGeneratedMediaBranchMember(node) ? node.generatedBy?.parentImageNodeId : undefined
-        const originParent = isGeneratedMediaBranchMember(node) ? node.generatedBy?.branchOriginNodeId : undefined
         const edgeParent = edgeSourceByTarget.get(node.nodeId)
-        const parentId = metadataParent && memberIds.has(metadataParent)
-            ? metadataParent
-            : originParent && memberIds.has(originParent)
-                ? originParent
-                : edgeParent && memberIds.has(edgeParent)
-                    ? edgeParent
-                    : null
+        const parentCandidates = isGeneratedMediaBranchMember(node)
+            ? getGeneratedMediaParentCandidates(node)
+            : getBranchMarkerParentCandidates(node)
+        const parentId = firstExistingMemberId([...parentCandidates, edgeParent], memberIds)
         inTreeParentById.set(node.nodeId, parentId)
     }
 
@@ -129,12 +153,20 @@ export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): B
     // Deterministic sibling order: matrix variant order first, then oldest first
     // (createdAt asc), then nodeId tie-break.
     const variantIndexById = new Map<string, number | undefined>()
+    const reasoningIndexById = new Map<string, number | undefined>()
     const createdAtById = new Map<string, number>()
     for (const node of members) {
         variantIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.variantIndex : undefined)
+        reasoningIndexById.set(node.nodeId, isBranchForkMember(node) ? node.reasoningIndex : undefined)
         createdAtById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.createdAt ?? 0 : 0)
     }
     const compareSiblings = (a: string, b: string): number => {
+        const reasoningA = reasoningIndexById.get(a)
+        const reasoningB = reasoningIndexById.get(b)
+        if (reasoningA !== undefined || reasoningB !== undefined) {
+            const reasoningDelta = (reasoningA ?? Number.MAX_SAFE_INTEGER) - (reasoningB ?? Number.MAX_SAFE_INTEGER)
+            if (reasoningDelta !== 0) return reasoningDelta
+        }
         const variantA = variantIndexById.get(a)
         const variantB = variantIndexById.get(b)
         if (variantA !== undefined || variantB !== undefined) {

@@ -6,6 +6,12 @@ Use this guide when building UI components in `services/web-ui` that are not pur
 
 This guide does not replace the PIXI rendering rules for canvas scene content. If the element is part of the canvas world and can be rendered naturally in PIXI, PIXI is the first choice. Use this guide for UI that sits outside PIXI or for canvas-adjacent controls that need DOM/SVG semantics.
 
+## Frontend Boundary
+
+`services/web-ui` is a presentational and interaction layer. It must not own distributed-system decisions or product-domain orchestration. Frontend code may collect user input, build non-authoritative snapshots for the API, render streamed API state, compute local geometry, and handle direct UI interaction. It must not decide branch topology, generated-media parentage, fork/origin marker creation, reasoning-run routing, model fanout, context relevance, resolver outcomes, lineage provenance, billing, authorization, persistence ownership, or any other API-owned workflow state.
+
+If a feature needs a decision that must stay correct across reloads, concurrent editors, multiple clients, retries, workers, or service restarts, the decision belongs in `services/api` or a shared backend service. The browser receives that decision through a typed API response, stream event, or persisted state contract, then applies it visually. Do not hide these decisions in Svelte components, ProseMirror plugins, `WorkspaceCanvas.ts`, canvas utilities, stores, or client services.
+
 ## Rendering Decision
 
 Choose the rendering approach by where the UI lives and what it does.
@@ -346,7 +352,7 @@ If a D3 component uses only `.on(...)` listeners on SVG elements that are remove
 
 ## Tests
 
-Follow [`documentation/testing/TypeScript/web-ui/TESTING-GUIDE.md`](../testing/TypeScript/web-ui/TESTING-GUIDE.md).
+Follow the [`TypeScript Testing Guide`](../testing/TypeScript/TESTING-GUIDE.md) for shared conventions and the [`Web-UI Testing Guide`](../testing/TypeScript/web-ui/TESTING-GUIDE.md) for `services/web-ui` specifics.
 
 For D3 SVG UI:
 

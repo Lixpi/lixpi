@@ -32,6 +32,7 @@ import type {
     ImageGenerationTrace,
     ImageGenerationSize,
     MarkdownParsedSegment,
+    MediaBranchLineagePlan,
     MediaGenerationRunMeta,
     StreamStatus,
     WorkspaceContextResolution,
@@ -73,9 +74,10 @@ type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'im
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
 type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'
+type MediaLineageSegmentType = 'media_lineage_planned'
 type SegmentEvent = {
     status?: StreamStatus
-    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType
+    type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
     aiProvider?: string
     imageModelProvider?: string
     videoModelProvider?: string
@@ -94,6 +96,7 @@ type SegmentEvent = {
     responseId?: string
     revisedPrompt?: string
     imageBranchResolution?: ImageBranchVlmResolution
+    mediaBranchLineagePlan?: MediaBranchLineagePlan
     workspaceContextResolution?: WorkspaceContextResolution
     imageGenerationTrace?: ImageGenerationTrace
     // Video segment fields (mirror VideoPublisher payloads)
@@ -172,14 +175,21 @@ function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previous
     }
 }
 
+function usesReasoningSection(
+    generationRun?: MediaGenerationRunMeta
+): generationRun is MediaGenerationRunMeta & { requestKind: 'media-generation-matrix' } {
+    return generationRun?.requestKind === 'media-generation-matrix'
+}
+
 function getReasoningRunKey(generationRun?: MediaGenerationRunMeta): string {
-    return generationRun?.reasoningRunId || 'legacy'
+    return usesReasoningSection(generationRun) ? generationRun?.reasoningRunId || 'legacy' : 'legacy'
 }
 
 function getReasoningOnlyGenerationRun(generationRun?: MediaGenerationRunMeta): MediaGenerationRunMeta | undefined {
-    if (!generationRun) return undefined
+    if (!generationRun || !usesReasoningSection(generationRun)) return undefined
 
     return {
+        requestKind: generationRun.requestKind,
         generationRequestId: generationRun.generationRequestId,
         reasoningRunId: generationRun.reasoningRunId,
         reasoningModelId: generationRun.reasoningModelId,
@@ -590,12 +600,12 @@ class ContentExtractor {
 // Document position and insertion utilities
 class PositionFinder {
     static responseMatchesGenerationRun(attrs: Record<string, any>, generationRun?: MediaGenerationRunMeta): boolean {
-        if (!generationRun?.reasoningRunId) return true
+        if (!usesReasoningSection(generationRun)) return true
         return attrs?.reasoningRunId === generationRun.reasoningRunId
     }
 
     static collapsibleMatchesGenerationRun(attrs: Record<string, any>, generationRun?: MediaGenerationRunMeta): boolean {
-        if (!generationRun?.reasoningRunId) return true
+        if (!usesReasoningSection(generationRun)) return true
         return attrs?.reasoningRunId === generationRun.reasoningRunId && !attrs?.mediaRunId
     }
 
@@ -626,7 +636,7 @@ class PositionFinder {
         return result
     }
 
-    // The content target for a run. A multi-model run (with a reasoningRunId)
+    // The content target for a run. A matrix run (with a reasoningRunId)
     // streams into its per-reasoning-run aiReasoningSection inside the single
     // shared response message; a legacy text/single-model run streams into the
     // aiResponseMessage itself. Callers (streaming, collapsible, media placement)
@@ -638,7 +648,7 @@ class PositionFinder {
         nodePos?: number
         responseMessagePos?: number
     } {
-        if (generationRun?.reasoningRunId) {
+        if (usesReasoningSection(generationRun)) {
             return PositionFinder.findReasoningSection(state, threadId, generationRun)
         }
 
@@ -786,7 +796,7 @@ class PositionFinder {
                     child.forEach((sectionNode: ProseMirrorNode) => {
                         if (matchingSectionFound) return
                         if (sectionNode.type.name !== aiReasoningSectionNodeType) return
-                        if (generationRun?.reasoningRunId && !reasoningTemplateMatchesGenerationRun(sectionNode.attrs, generationRun)) return
+                        if (usesReasoningSection(generationRun) && !reasoningTemplateMatchesGenerationRun(sectionNode.attrs, generationRun)) return
                         matchingSectionFound = true
                     })
 
@@ -1492,6 +1502,18 @@ class AiChatThreadPluginClass {
                 return
             }
 
+            if (type === 'media_lineage_planned') {
+                const callbacks = getAiGeneratedImageCallbacks()
+                if (effectiveThreadId && event.mediaBranchLineagePlan) {
+                    callbacks.onMediaLineagePlannedToCanvas?.({
+                        threadId: effectiveThreadId,
+                        lineagePlan: event.mediaBranchLineagePlan,
+                        generationRun: event.generationRun,
+                    })
+                }
+                return
+            }
+
             if (type === 'context_relevance_resolved') {
                 this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
                 const callbacks = getAiGeneratedImageCallbacks()
@@ -1915,7 +1937,7 @@ class AiChatThreadPluginClass {
         threadId?: string,
         generationRun?: MediaGenerationRunMeta
     ): void {
-        if (generationRun?.reasoningRunId) {
+        if (usesReasoningSection(generationRun)) {
             this.ensureReceivingResponseSection(state, dispatch, aiProvider, threadId, generationRun)
             return
         }
@@ -2047,7 +2069,7 @@ class AiChatThreadPluginClass {
             console.warn('[aiChatThreadPlugin] no response node found; creating one', { threadId })
 
             const { insertPos } = threadInfo
-            if (generationRun?.reasoningRunId) {
+            if (usesReasoningSection(generationRun)) {
                 const sectionNode = state.schema.nodes[aiReasoningSectionNodeType].create(buildReasoningSectionAttrs(generationRun))
                 const messageInfo = PositionFinder.findResponseMessage(state, threadId, generationRun)
                 if (messageInfo.found && messageInfo.nodePos !== undefined && messageInfo.contentEndPos !== undefined) {

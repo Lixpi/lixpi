@@ -20,6 +20,7 @@ import {
     type VideoCanvasNode,
     type AiChatThreadCanvasNode,
     type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
     type AiChatThread,
     type WorkspaceEdge,
     type CanvasAiChatSidebarTab,
@@ -30,6 +31,8 @@ import {
     type MediaLibraryVideoMeta,
     type ImageBranchCandidateSnapshot,
     type ImageBranchVlmResolution,
+    type MediaBranchLineagePlan,
+    type MediaRunLineageAssignment,
     type MediaDescriptor,
     type ContentDescriptor,
     type WorkspaceContextResolution,
@@ -45,7 +48,7 @@ import { getGeneratedImageTurnInfoFromThreadContent } from '$src/components/pros
 import { createAiResponseMessageShell, createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import { createImageGenerationTraceDetails } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon, branchForkfIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -168,6 +171,10 @@ const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
     return { width: size, height: size }
+}
+
+function getBranchForkNodeDimensions(): { width: number; height: number } {
+    return getBranchOriginNodeDimensions()
 }
 
 function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
@@ -361,6 +368,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let selectedEdgeId: string | null = null
     const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
     const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
+    const expandedBranchForkInfoNodeIds: Set<string> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const videoControlsHideTimers: Map<string, number> = new Map()
     const VIDEO_CONTROLS_HEIGHT = 52
@@ -901,7 +909,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         for (let i = currentCanvasState.nodes.length - 1; i >= 0; i--) {
             const node = currentCanvasState.nodes[i]
-            if (node.type !== 'image' && node.type !== 'video' && node.type !== 'document' && node.type !== 'aiChatThread' && node.type !== 'branchOrigin') continue
+            if (node.type !== 'image' && node.type !== 'video' && node.type !== 'document' && node.type !== 'aiChatThread' && node.type !== 'branchOrigin' && node.type !== 'branchFork') continue
             const rect = getNodeWorldRect(node, nodesById)
             if (rectContainsCanvasPoint(rect, point)) return node
         }
@@ -1001,13 +1009,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
-        const generatedMediaNodes = getBranchOriginGeneratedMediaNodes(branchOriginNodeId)
+    function getGeneratedMediaInfoPanelWidth(generatedMediaNodes: Array<ImageCanvasNode | VideoCanvasNode>): number {
         const generatedMediaWidth = Math.max(
             0,
             ...generatedMediaNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.dimensions.width)
         )
         return generatedMediaWidth || settings.imageBranchLineage.generatedImageSize
+    }
+
+    function getBranchOriginInfoPanelWidth(branchOriginNodeId: string): number {
+        return getGeneratedMediaInfoPanelWidth(getBranchOriginGeneratedMediaNodes(branchOriginNodeId))
+    }
+
+    function getBranchForkInfoPanelWidth(branchForkNodeId: string): number {
+        return getGeneratedMediaInfoPanelWidth(getBranchForkGeneratedMediaNodes(branchForkNodeId))
     }
 
     function applyBranchOriginInfoChromeGeometry(
@@ -1097,6 +1112,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             position,
             dimensions,
             getBranchOriginInfoPanelWidth(nodeId),
+        )
+        const branchForkChromeEl = imageChromeViewportEl?.querySelector(`[data-branch-fork-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        if (branchForkChromeEl) applyBranchOriginInfoChromeGeometry(
+            branchForkChromeEl,
+            position,
+            dimensions,
+            getBranchForkInfoPanelWidth(nodeId),
         )
     }
 
@@ -1249,17 +1271,56 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedImageChrome(currentCanvasState)
     }
 
+    function hasOpenGeneratedMediaInfoPanels(): boolean {
+        return expandedGeneratedImageInfoNodeIds.size > 0
+            || expandedBranchOriginInfoNodeIds.size > 0
+            || expandedBranchForkInfoNodeIds.size > 0
+    }
+
+    function clearGeneratedMediaInfoPanels(options: { preserveBranchInfo?: boolean } = {}): void {
+        if (!hasOpenGeneratedMediaInfoPanels()) return
+        expandedGeneratedImageInfoNodeIds.clear()
+        if (!options.preserveBranchInfo) {
+            expandedBranchOriginInfoNodeIds.clear()
+            expandedBranchForkInfoNodeIds.clear()
+        }
+        syncGeneratedImageChrome(currentCanvasState)
+    }
+
+    function shouldClearGeneratedMediaInfoForCanvasClick(target: EventTarget | null): boolean {
+        if (!hasOpenGeneratedMediaInfoPanels()) return false
+        if (!(target instanceof Element)) return false
+        if (!paneEl.contains(target)) return false
+        if (target.closest('.canvas-generated-image-info-panel')) return false
+        if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node')) return false
+        if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu')) return false
+        return true
+    }
+
+    function compareGeneratedMediaByGenerationOrder(
+        a: ImageCanvasNode | VideoCanvasNode,
+        b: ImageCanvasNode | VideoCanvasNode,
+    ): number {
+        const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
+        const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
+        if (aVariant !== bVariant) return aVariant - bVariant
+        return (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
+    }
+
     function getBranchOriginGeneratedMediaNodes(branchOriginNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
         return (currentCanvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
                 && node.generatedBy?.branchOriginNodeId === branchOriginNodeId)
-            .sort((a: ImageCanvasNode | VideoCanvasNode, b: ImageCanvasNode | VideoCanvasNode) => {
-                const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
-                const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
-                if (aVariant !== bVariant) return aVariant - bVariant
-                return (a.generatedBy?.createdAt ?? 0) - (b.generatedBy?.createdAt ?? 0)
-            })
+            .sort(compareGeneratedMediaByGenerationOrder)
+    }
+
+    function getBranchForkGeneratedMediaNodes(branchForkNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
+        return (currentCanvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+                (node.type === 'image' || node.type === 'video')
+                && node.generatedBy?.branchForkNodeId === branchForkNodeId)
+            .sort(compareGeneratedMediaByGenerationOrder)
     }
 
     function toggleBranchOriginGeneratedMediaInfo(branchOriginNodeId: string): void {
@@ -1271,13 +1332,85 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedImageChrome(currentCanvasState)
     }
 
+    function toggleBranchForkGeneratedMediaInfo(branchForkNodeId: string): void {
+        if (expandedBranchForkInfoNodeIds.has(branchForkNodeId)) {
+            expandedBranchForkInfoNodeIds.delete(branchForkNodeId)
+        } else {
+            expandedBranchForkInfoNodeIds.add(branchForkNodeId)
+        }
+        syncGeneratedImageChrome(currentCanvasState)
+    }
+
+    function createBranchOriginReferenceLabel(nodeId: string): string {
+        const node = findCanvasNodeById(nodeId)
+        if (!node) return nodeId
+        if (node.type === 'image') return node.descriptor?.summary || `Image ${nodeId}`
+        if (node.type === 'video') return node.descriptor?.summary || `Video ${nodeId}`
+        if (node.type === 'document') return `Document ${nodeId}`
+        if (node.type === 'aiChatThread') return `Thread ${node.referenceId}`
+        return nodeId
+    }
+
+    function createBranchOriginReferencesSection(referenceNodeIds: string[]): HTMLElement {
+        const section = html`
+            <div className="canvas-branch-origin-provenance-section">
+                <span className="canvas-branch-origin-provenance-label">Provided references</span>
+            </div>
+        ` as HTMLElement
+        const uniqueReferenceNodeIds = uniqueStringValues(referenceNodeIds)
+        if (uniqueReferenceNodeIds.length === 0) {
+            section.appendChild(html`<p className="canvas-generated-image-info-empty">No provided references.</p>` as HTMLElement)
+            return section
+        }
+
+        const list = html`<ul className="canvas-branch-origin-reference-list"></ul>` as HTMLUListElement
+        for (const nodeId of uniqueReferenceNodeIds) {
+            list.appendChild(html`
+                <li className="canvas-branch-origin-reference-item">
+                    <span className="canvas-branch-origin-reference-id">${nodeId}</span>
+                    <span className="canvas-branch-origin-reference-label">${createBranchOriginReferenceLabel(nodeId)}</span>
+                </li>
+            ` as HTMLLIElement)
+        }
+        section.appendChild(list)
+        return section
+    }
+
+    function createBranchOriginDecisionSection(
+        branchOriginNode: BranchOriginCanvasNode,
+        generatedMediaNodes: Array<ImageCanvasNode | VideoCanvasNode>,
+    ): HTMLElement {
+        const forkNodeIds = uniqueStringValues(generatedMediaNodes
+            .map(node => node.generatedBy?.branchForkNodeId)
+            .filter((nodeId): nodeId is string => Boolean(nodeId)))
+        const provenance = branchOriginNode.provenance
+        const forkCount = provenance?.forkCount ?? forkNodeIds.length
+        const forked = provenance?.forked ?? forkCount > 0
+        const decisionText = forked
+            ? `Forked this request into ${forkCount} reasoning ${forkCount === 1 ? 'branch' : 'branches'}.`
+            : 'Created one branch root for this generation request.'
+        const section = html`
+            <div className="canvas-branch-origin-provenance-section">
+                <span className="canvas-branch-origin-provenance-label">Branch decision</span>
+                <p className="canvas-generated-image-info-text">${decisionText}</p>
+            </div>
+        ` as HTMLElement
+        return section
+    }
+
     function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
-        const generatedMediaNode = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)[0]
-        if (!generatedMediaNode) return null
-        return createGeneratedMediaInfoPanel(generatedMediaNode, {
-            className: 'canvas-branch-origin-info-panel',
-            includeDescriptor: false,
-        })
+        const generatedMediaNodes = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)
+        const promptText = branchOriginNode.provenance?.promptText ?? ''
+        const referenceNodeIds = branchOriginNode.provenance?.referenceNodeIds ?? []
+        if (!promptText && referenceNodeIds.length === 0 && generatedMediaNodes.length === 0) return null
+
+        const panel = html`<div className="canvas-generated-image-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
+        const userShell = createAiUserMessageShell({ wrapperClassName: 'canvas-generated-image-user' })
+        panel.appendChild(userShell.wrapper)
+        appendTextParagraph(userShell.contentEl, promptText, 'Original prompt unavailable.')
+        panel.appendChild(createBranchOriginReferencesSection(referenceNodeIds))
+        panel.appendChild(createBranchOriginDecisionSection(branchOriginNode, generatedMediaNodes))
+        return panel
     }
 
     function createBranchOriginInfoChrome(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
@@ -1296,6 +1429,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             getNodeWorldPosition(branchOriginNode),
             branchOriginNode.dimensions,
             getBranchOriginInfoPanelWidth(branchOriginNode.nodeId),
+        )
+        return chromeEl
+    }
+
+    function createBranchForkInfoPanel(branchForkNode: BranchForkCanvasNode): HTMLElement | null {
+        const generatedMediaNode = getBranchForkGeneratedMediaNodes(branchForkNode.nodeId)[0]
+        if (!generatedMediaNode) return null
+        return createGeneratedMediaInfoPanel(generatedMediaNode, {
+            className: 'canvas-branch-fork-info-panel',
+            includeDescriptor: false,
+        })
+    }
+
+    function createBranchForkInfoChrome(branchForkNode: BranchForkCanvasNode): HTMLElement | null {
+        if (!expandedBranchForkInfoNodeIds.has(branchForkNode.nodeId)) return null
+
+        const panel = createBranchForkInfoPanel(branchForkNode)
+        if (!panel) return null
+
+        const chromeEl = html`
+            <div className="workspace-branch-fork-info-chrome" data=${{ branchForkChromeNodeId: branchForkNode.nodeId }}>
+                ${panel}
+            </div>
+        ` as HTMLElement
+        applyBranchOriginInfoChromeGeometry(
+            chromeEl,
+            getNodeWorldPosition(branchForkNode),
+            branchForkNode.dimensions,
+            getBranchForkInfoPanelWidth(branchForkNode.nodeId),
         )
         return chromeEl
     }
@@ -1401,7 +1563,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             showVideoControls(node.nodeId)
             if (isControlsEvent(event)) return
             const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
-            chromeEl.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : 'move'
+            chromeEl.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : ''
         })
         chromeEl.addEventListener('mouseleave', () => {
             chromeEl.style.cursor = ''
@@ -1500,6 +1662,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 && Boolean((node as ImageCanvasNode | VideoCanvasNode).generatedBy || (node as ImageCanvasNode | VideoCanvasNode).descriptor))
         const branchOriginNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is BranchOriginCanvasNode => node.type === 'branchOrigin')
+        const branchForkNodes = (canvasState?.nodes ?? [])
+            .filter((node: CanvasNode): node is BranchForkCanvasNode => node.type === 'branchFork')
 
         destroyVideoControlInstances()
 
@@ -1521,13 +1685,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const expandedNodeId of Array.from(expandedBranchOriginInfoNodeIds)) {
             if (!branchOriginNodeIds.has(expandedNodeId)) expandedBranchOriginInfoNodeIds.delete(expandedNodeId)
         }
+        const branchForkNodeIds = new Set<string>(branchForkNodes.map((node: BranchForkCanvasNode) => node.nodeId))
+        for (const expandedNodeId of Array.from(expandedBranchForkInfoNodeIds)) {
+            if (!branchForkNodeIds.has(expandedNodeId)) expandedBranchForkInfoNodeIds.delete(expandedNodeId)
+        }
         const branchOriginInfoChromeEls = branchOriginNodes
             .map(createBranchOriginInfoChrome)
+            .filter((el): el is HTMLElement => Boolean(el))
+        const branchForkInfoChromeEls = branchForkNodes
+            .map(createBranchForkInfoChrome)
             .filter((el): el is HTMLElement => Boolean(el))
 
         imageChromeViewportEl.replaceChildren(
             ...mediaInfoNodes.map(createGeneratedMediaChrome),
             ...branchOriginInfoChromeEls,
+            ...branchForkInfoChromeEls,
             ...videoChromeEls,
         )
     }
@@ -1912,7 +2084,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function isSelectableCanvasNode(node: CanvasNode): boolean {
-        return node.type !== 'branchOrigin'
+        return node.type !== 'branchOrigin' && node.type !== 'branchFork'
     }
 
     function filterSelectableNodeIds(nodeIds: Set<string>): Set<string> {
@@ -2192,6 +2364,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             '.node-drag-overlay',
             '.bubble-menu',
             '.workspace-generated-image-chrome',
+            '.workspace-branch-origin-info-chrome',
+            '.workspace-branch-fork-info-chrome',
+            '.canvas-generated-image-info-panel',
         ].join(', '))
     }
 
@@ -3774,14 +3949,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             || videoOptions?.aiVideoModel
                             || videoOptions?.aiVideoModels?.length
                         )
+                        const reasoningModelIds = aiModels?.length ? aiModels : aiModel ? [aiModel] : []
                         const imagePlacement = rootNode
                             ? rememberGeneratedImagePlacement(
                                 rootNode.referenceId,
                                 rootNode,
                                 messages,
-                                hasMediaModel
+                                hasMediaModel,
+                                reasoningModelIds
                             )
                             : rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)
+                        if (!rootNode) {
+                            setPendingGeneratedMediaReasoningModels(panelThreadId, undefined, reasoningModelIds)
+                        }
                         const imageBranchCandidateSnapshot = imagePlacement.imageBranchCandidateSnapshot
 
                         // Whole-workspace, descriptors-only index for the API relevance stage.
@@ -4376,7 +4556,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         placementAnchorNodeId?: string
         referenceNodeIds?: string[]
         branchOriginNodeId?: string
+        branchForkNodeIdsByReasoningRunId?: Record<string, string>
+        lineageAssignmentsByReasoningRunId?: Record<string, MediaRunLineageAssignment>
+        lineagePlan?: MediaBranchLineagePlan
+        reasoningModelIds?: string[]
         promptText: string
+        // Non-authoritative visual fallback until IMAGE_BRANCH_RESOLVED or
+        // MEDIA_LINEAGE_PLANNED arrives. API assignments always win.
         branchId: string
         imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
         imageBranchResolution?: ImageBranchVlmResolution
@@ -4408,6 +4594,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const clonedPlacement: PendingGeneratedImagePlacement = {
             ...legacyPlacement,
+            branchForkNodeIdsByReasoningRunId: legacyPlacement.branchForkNodeIdsByReasoningRunId
+                ? { ...legacyPlacement.branchForkNodeIdsByReasoningRunId }
+                : undefined,
+            lineageAssignmentsByReasoningRunId: legacyPlacement.lineageAssignmentsByReasoningRunId
+                ? { ...legacyPlacement.lineageAssignmentsByReasoningRunId }
+                : undefined,
             activeRunKeys: legacyPlacement.activeRunKeys ? new Set(legacyPlacement.activeRunKeys) : undefined,
         }
         pendingGeneratedImagePlacements.set(placementKey, clonedPlacement)
@@ -4422,16 +4614,77 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         pendingGeneratedImagePlacements.set(getGeneratedMediaPlacementKey(threadId, generationRun), placement)
     }
 
+    function getMediaRunLineageAssignment(
+        threadId: string,
+        generationRun?: MediaGenerationRunMeta,
+    ): MediaRunLineageAssignment | undefined {
+        if (generationRun?.lineageAssignment) return generationRun.lineageAssignment
+        if (!generationRun?.reasoningRunId) return undefined
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        return placement?.lineageAssignmentsByReasoningRunId?.[generationRun.reasoningRunId]
+            ?? placement?.lineagePlan?.runAssignments.find(assignment => assignment.reasoningRunId === generationRun.reasoningRunId)
+    }
+
+    function applyMediaBranchLineagePlan(
+        threadId: string,
+        lineagePlan: MediaBranchLineagePlan,
+        generationRun?: MediaGenerationRunMeta,
+    ): void {
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        if (!placement) return
+
+        const branchForkNodeIdsByReasoningRunId: Record<string, string> = {}
+        for (const branchFork of lineagePlan.branchForks) {
+            branchForkNodeIdsByReasoningRunId[branchFork.reasoningRunId] = branchFork.nodeId
+        }
+
+        const lineageAssignmentsByReasoningRunId: Record<string, MediaRunLineageAssignment> = {}
+        for (const assignment of lineagePlan.runAssignments) {
+            if (!assignment.reasoningRunId) continue
+            lineageAssignmentsByReasoningRunId[assignment.reasoningRunId] = assignment
+        }
+
+        const nextPlacement: PendingGeneratedImagePlacement = {
+            ...placement,
+            lineagePlan,
+            lineageAssignmentsByReasoningRunId,
+            branchForkNodeIdsByReasoningRunId,
+            ...(lineagePlan.sourceNodeId ? { sourceNodeId: lineagePlan.sourceNodeId } : {}),
+            ...(lineagePlan.placementAnchorNodeId ? { placementAnchorNodeId: lineagePlan.placementAnchorNodeId } : {}),
+            referenceNodeIds: lineagePlan.referenceNodeIds,
+            branchId: lineagePlan.branchId,
+            ...(lineagePlan.branchOrigin ? { branchOriginNodeId: lineagePlan.branchOrigin.nodeId } : {}),
+        }
+        setPendingGeneratedMediaPlacement(threadId, generationRun, nextPlacement)
+        setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), lineagePlan.referenceNodeIds)
+    }
+
     function registerGeneratedMediaRun(threadId: string, generationRun?: MediaGenerationRunMeta): void {
         const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
         if (!placement) return
 
         const runKey = getGeneratedMediaRunKey(threadId, generationRun)
         const activeRunKeys = new Set(placement.activeRunKeys ?? [])
+        if (generationRun?.mediaRunId && generationRun.reasoningRunId) {
+            activeRunKeys.delete(generationRun.reasoningRunId)
+        }
         activeRunKeys.add(runKey)
         setPendingGeneratedMediaPlacement(threadId, generationRun, {
             ...placement,
             activeRunKeys,
+        })
+    }
+
+    function setPendingGeneratedMediaReasoningModels(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        reasoningModelIds: string[],
+    ): void {
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        if (!placement) return
+        setPendingGeneratedMediaPlacement(threadId, generationRun, {
+            ...placement,
+            reasoningModelIds,
         })
     }
 
@@ -4506,18 +4759,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ])
     }
 
-    function getGeneratedMediaLineageSourceNodeIdFromResolution(resolution: ImageBranchVlmResolution): string | undefined {
-        for (const nodeId of [resolution.targetImageNodeId, resolution.parentImageNodeId]) {
-            const node = findCanvasNodeById(nodeId ?? undefined)
-            if (!node || !isGeneratedMediaNode(node)) continue
-            const continuesSelectedBranch = resolution.mode === 'edit-active-branch'
-                || resolution.operationKind === 'edit_existing'
-                || Boolean(resolution.branchId && node.generatedBy?.branchId === resolution.branchId)
-            if (continuesSelectedBranch) return node.nodeId
-        }
-        return undefined
-    }
-
     function getGeneratedMediaPlacementNode(threadId: string, generationRun?: MediaGenerationRunMeta): CanvasNode | undefined {
         const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
         const anchorNode = findCanvasNodeById(placement?.sourceNodeId)
@@ -4526,17 +4767,76 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function getGeneratedMediaEdgeSourceNode(threadId: string, generationRun?: MediaGenerationRunMeta): CanvasNode | undefined {
-        const pendingSourceNodeId = getPendingGeneratedMediaPlacement(threadId, generationRun)?.sourceNodeId
-        const pendingOriginNodeId = getPendingGeneratedMediaPlacement(threadId, generationRun)?.branchOriginNodeId
-        return findCanvasNodeById(pendingSourceNodeId)
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        const lineageAssignment = getMediaRunLineageAssignment(threadId, generationRun)
+        if (lineageAssignment?.lineageParentNodeId) {
+            const plannedParentNode = findCanvasNodeById(lineageAssignment.lineageParentNodeId)
+            if (plannedParentNode) return plannedParentNode
+        }
+        const pendingSourceNodeId = placement?.sourceNodeId
+        const pendingForkNodeId = lineageAssignment?.branchForkNodeId
+        const pendingOriginNodeId = placement?.branchOriginNodeId
+        return findCanvasNodeById(pendingForkNodeId)
+            ?? findCanvasNodeById(pendingSourceNodeId)
             ?? findSourceThreadNode(threadId)
             ?? findCanvasNodeById(pendingOriginNodeId)
     }
 
-    function addBranchOriginNodeIfMissing(nodes: CanvasNode[], branchOriginNode: BranchOriginCanvasNode | undefined): CanvasNode[] {
-        if (!branchOriginNode) return nodes
-        if (nodes.some((node: CanvasNode) => node.nodeId === branchOriginNode.nodeId)) return nodes
-        return [...nodes, branchOriginNode]
+    function getDefaultGeneratedMediaEdgeSourceNode(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        branchOriginNode: BranchOriginCanvasNode | undefined,
+    ): CanvasNode | undefined {
+        const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+        return edgeSourceNode
+    }
+
+    function getBranchForkParentNode(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        branchOriginNode: BranchOriginCanvasNode | undefined,
+    ): CanvasNode | undefined {
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        const lineageAssignment = getMediaRunLineageAssignment(threadId, generationRun)
+        const forkPlan = placement?.lineagePlan?.branchForks.find(
+            branchFork => branchFork.reasoningRunId === generationRun?.reasoningRunId
+        )
+        return findCanvasNodeById(forkPlan?.parentBranchNodeId)
+            ?? findCanvasNodeById(lineageAssignment?.lineageParentNodeId)
+            ?? findCanvasNodeById(placement?.sourceNodeId)
+            ?? findSourceThreadNode(threadId)
+            ?? branchOriginNode
+            ?? findCanvasNodeById(placement?.branchOriginNodeId)
+    }
+
+    function addBranchLineageMarkerNodesIfMissing(
+        nodes: CanvasNode[],
+        ...markerNodes: Array<BranchOriginCanvasNode | BranchForkCanvasNode | undefined>
+    ): CanvasNode[] {
+        const existingNodeIds = new Set(nodes.map((node: CanvasNode) => node.nodeId))
+        const additions = markerNodes.filter((node): node is BranchOriginCanvasNode | BranchForkCanvasNode =>
+            Boolean(node && !existingNodeIds.has(node.nodeId))
+        )
+        return additions.length > 0 ? [...nodes, ...additions] : nodes
+    }
+
+    function createBranchForkEdge(branchForkNode: BranchForkCanvasNode): WorkspaceEdge | undefined {
+        if (!branchForkNode.parentBranchNodeId) return undefined
+        return {
+            edgeId: `edge-${branchForkNode.parentBranchNodeId}-${branchForkNode.nodeId}`,
+            sourceNodeId: branchForkNode.parentBranchNodeId,
+            targetNodeId: branchForkNode.nodeId,
+            sourceHandle: 'right',
+            targetHandle: 'left',
+        }
+    }
+
+    function addBranchForkEdgeIfMissing(edges: WorkspaceEdge[], branchForkNode: BranchForkCanvasNode | undefined): WorkspaceEdge[] {
+        if (!branchForkNode) return edges
+        const edge = createBranchForkEdge(branchForkNode)
+        if (!edge) return edges
+        if (edges.some((existing: WorkspaceEdge) => existing.edgeId === edge.edgeId)) return edges
+        return [...edges, edge]
     }
 
     function ensureBranchOriginForGeneratedMedia(
@@ -4545,21 +4845,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         mediaHeight: number,
     ): BranchOriginCanvasNode | undefined {
         const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
-        if (!placement || placement.sourceNodeId || findSourceThreadNode(threadId)) return undefined
+        const lineageAssignment = getMediaRunLineageAssignment(threadId, generationRun)
+        const branchOriginPlan = placement?.lineagePlan?.branchOrigin
+        const plannedBranchOriginNodeId = lineageAssignment?.branchOriginNodeId ?? branchOriginPlan?.nodeId
+        if (!placement || !plannedBranchOriginNodeId) return undefined
+        const branchId = branchOriginPlan?.branchId ?? lineageAssignment?.branchId ?? placement.lineagePlan?.branchId
+        if (!branchId) return undefined
 
-        const existing = findCanvasNodeById(placement.branchOriginNodeId)
+        const existing = findCanvasNodeById(plannedBranchOriginNodeId)
         if (existing?.type === 'branchOrigin') return existing as BranchOriginCanvasNode
 
-        const generationRequestId = generationRun?.generationRequestId ?? `legacy-${threadId}`
-        // One branch origin per user prompt: all reasoning-model variants of a
-        // single request share this origin so they render as siblings off one
-        // branch start. Keying by branchId would split them, because each run's
-        // resolution/branchId can diverge and the runs create the origin
-        // concurrently before `placement.branchOriginNodeId` is set. Legacy
-        // single-model runs (no requestId) keep the per-branchId origin.
-        const nodeId = generationRun?.generationRequestId
-            ? `branch-origin-${generationRun.generationRequestId}`
-            : `branch-origin-${placement.branchId}`
+        const generationRequestId = branchOriginPlan?.generationRequestId ?? generationRun?.generationRequestId ?? `legacy-${threadId}`
+        const nodeId = plannedBranchOriginNodeId
         const dimensions = getBranchOriginNodeDimensions()
         const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
             ?? getCenteredInsertionPosition({ width: getGeneratedImageInsertionSize(), height: mediaHeight })
@@ -4571,11 +4868,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const branchOriginNode: BranchOriginCanvasNode = {
             nodeId,
             type: 'branchOrigin',
-            branchId: placement.branchId,
+            branchId,
             generationRequestId,
-            ...(placement.imageBranchCandidateSnapshot?.promptFingerprint
-                ? { promptFingerprint: placement.imageBranchCandidateSnapshot.promptFingerprint }
+            ...(branchOriginPlan?.promptFingerprint ?? lineageAssignment?.promptFingerprint
+                ? { promptFingerprint: branchOriginPlan?.promptFingerprint ?? lineageAssignment?.promptFingerprint }
                 : {}),
+            ...(branchOriginPlan?.provenance ? { provenance: branchOriginPlan.provenance } : {}),
             position,
             dimensions,
             temporary: true,
@@ -4586,6 +4884,65 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             branchOriginNodeId: nodeId,
         })
         return branchOriginNode
+    }
+
+    function ensureBranchForkForGeneratedMedia(
+        threadId: string,
+        generationRun: MediaGenerationRunMeta | undefined,
+        branchOriginNode: BranchOriginCanvasNode | undefined,
+    ): BranchForkCanvasNode | undefined {
+        const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
+        const lineageAssignment = getMediaRunLineageAssignment(threadId, generationRun)
+        const branchForkNodeId = lineageAssignment?.branchForkNodeId
+        if (!placement || !generationRun || !branchForkNodeId) return undefined
+
+        const existing = findCanvasNodeById(branchForkNodeId)
+        if (existing?.type === 'branchFork') return existing as BranchForkCanvasNode
+
+        const nodeId = branchForkNodeId
+        const branchForkPlan = placement.lineagePlan?.branchForks.find(
+            branchFork => branchFork.reasoningRunId === generationRun.reasoningRunId
+        )
+        const parentNode = getBranchForkParentNode(threadId, generationRun, branchOriginNode)
+        const dimensions = getBranchForkNodeDimensions()
+        const parentRect = parentNode ? getNodeWorldRect(parentNode) : undefined
+        const fallbackPosition = getGeneratedMediaInsertionPosition(threadId, dimensions.height, generationRun)
+            ?? getCenteredInsertionPosition(dimensions)
+        const position = parentRect
+            ? computeLineageContinuationPositionToRightOfRect(
+                parentRect,
+                dimensions.height,
+                settings.imageBranchLineage.imageToImageGap
+            )
+            : fallbackPosition
+        const parentBranchNodeId = branchForkPlan?.parentBranchNodeId ?? parentNode?.nodeId
+
+        const branchForkNode: BranchForkCanvasNode = {
+            nodeId,
+            type: 'branchFork',
+            branchId: branchForkPlan?.branchId ?? lineageAssignment.branchId,
+            generationRequestId: branchForkPlan?.generationRequestId ?? generationRun.generationRequestId,
+            reasoningRunId: generationRun.reasoningRunId,
+            reasoningModelId: generationRun.reasoningModelId,
+            reasoningIndex: generationRun.reasoningIndex,
+            ...(parentBranchNodeId ? { parentBranchNodeId } : {}),
+            ...(branchForkPlan?.promptFingerprint ?? lineageAssignment.promptFingerprint
+                ? { promptFingerprint: branchForkPlan?.promptFingerprint ?? lineageAssignment.promptFingerprint }
+                : {}),
+            ...(branchForkPlan?.provenance ? { provenance: branchForkPlan.provenance } : {}),
+            position,
+            dimensions,
+            temporary: true,
+        }
+
+        setPendingGeneratedMediaPlacement(threadId, generationRun, {
+            ...placement,
+            branchForkNodeIdsByReasoningRunId: {
+                ...(placement.branchForkNodeIdsByReasoningRunId ?? {}),
+                [generationRun.reasoningRunId]: nodeId,
+            },
+        })
+        return branchForkNode
     }
 
     function setGeneratingReferenceNodeIds(threadId: string, nodeIds: Iterable<string | null | undefined>): void {
@@ -4763,7 +5120,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return titlesByNodeId
     }
 
-    function rememberGeneratedImagePlacement(threadId: string, rootNode: ChatRootNode, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
+    function rememberGeneratedImagePlacement(
+        threadId: string,
+        rootNode: ChatRootNode,
+        messages: any[],
+        hasImageModel: boolean,
+        reasoningModelIds: string[] = [],
+    ): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
         if (!hasImageModel) {
             clearPendingGeneratedMediaPlacementsForThread(threadId)
             return { promptText: '' }
@@ -4787,6 +5150,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             referenceNodeIds: imageBranchCandidateSnapshot.candidates.map((candidate: ImageBranchCandidateSnapshot['candidates'][number]) => candidate.nodeId),
             promptText,
             branchId,
+            reasoningModelIds,
             imageBranchCandidateSnapshot,
             createdAt: Date.now(),
         })
@@ -4801,7 +5165,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return { promptText, imageBranchCandidateSnapshot }
     }
 
-    function rememberStandaloneGeneratedImagePlacement(threadId: string, messages: any[], hasImageModel: boolean): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
+    function rememberStandaloneGeneratedImagePlacement(
+        threadId: string,
+        messages: any[],
+        hasImageModel: boolean,
+        reasoningModelIds: string[] = [],
+    ): { promptText: string; imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot } {
         if (!hasImageModel) {
             clearPendingGeneratedMediaPlacementsForThread(threadId)
             return { promptText: '' }
@@ -4826,10 +5195,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 referenceNodeIds,
                 promptText,
                 branchId: `branch-${uuidv4()}`,
+                reasoningModelIds,
+                imageBranchCandidateSnapshot,
                 createdAt: Date.now(),
             })
             setGeneratingReferenceNodeIds(threadId, referenceNodeIds)
-            return { promptText }
+            console.info('[CANVAS] standalone image branch candidate snapshot', {
+                threadId,
+                candidateCount: 0,
+                promptFingerprint: imageBranchCandidateSnapshot.promptFingerprint,
+                activeTargetNodeId: imageBranchCandidateSnapshot.activeTargetNodeId,
+                candidateNodeIds,
+            })
+            return { promptText, imageBranchCandidateSnapshot }
         }
         const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]
         pendingGeneratedImagePlacements.set(threadId, {
@@ -4837,6 +5215,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             referenceNodeIds: candidateNodeIds,
             promptText,
             branchId: `branch-${uuidv4()}`,
+            reasoningModelIds,
             imageBranchCandidateSnapshot,
             createdAt: Date.now(),
         })
@@ -4860,10 +5239,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!placement) return {}
 
         const resolution = placement.imageBranchResolution
-        const parentImageNodeId = resolution
-            ? getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)
-            : undefined
+        const lineageAssignment = getMediaRunLineageAssignment(threadId, generationRun)
+        const plannedParentMediaNodeId = lineageAssignment?.parentMediaNodeId
+            ?? lineageAssignment?.parentImageNodeId
+        const parentMediaNodeId = existingGeneratedBy?.parentMediaNodeId
+            ?? existingGeneratedBy?.parentImageNodeId
+            ?? plannedParentMediaNodeId
         const variantIndex = generationRun?.variantIndex ?? 0
+        const branchForkNodeId = generationRun?.reasoningRunId
+            ? placement.branchForkNodeIdsByReasoningRunId?.[generationRun.reasoningRunId]
+            : undefined
 
         return {
             generationRequestId: generationRun?.generationRequestId ?? existingGeneratedBy?.generationRequestId,
@@ -4873,14 +5258,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaModelId: generationRun?.mediaModelId ?? existingGeneratedBy?.mediaModelId,
             mediaType: generationRun?.mediaType ?? existingGeneratedBy?.mediaType,
             variantIndex: generationRun?.variantIndex ?? existingGeneratedBy?.variantIndex,
-            branchOriginNodeId: existingGeneratedBy?.branchOriginNodeId ?? placement.branchOriginNodeId,
-            branchId: existingGeneratedBy?.branchId ?? resolution?.branchId ?? placement.branchId,
-            parentImageNodeId: existingGeneratedBy?.parentImageNodeId ?? parentImageNodeId ?? undefined,
-            sourceContextNodeIds: resolution?.sourceContextNodeIds ?? [],
-            referenceImageNodeIds: resolution?.referenceImageNodeIds ?? [],
-            operationKind: resolution?.operationKind ?? (placement.branchOriginNodeId ? 'fresh_branch' : 'new_image'),
-            promptText: placement.promptText,
-            promptFingerprint: placement.imageBranchCandidateSnapshot?.promptFingerprint,
+            branchOriginNodeId: existingGeneratedBy?.branchOriginNodeId ?? lineageAssignment?.branchOriginNodeId ?? placement.branchOriginNodeId,
+            branchForkNodeId: existingGeneratedBy?.branchForkNodeId ?? lineageAssignment?.branchForkNodeId ?? branchForkNodeId,
+            branchId: existingGeneratedBy?.branchId ?? lineageAssignment?.branchId ?? resolution?.branchId ?? undefined,
+            parentMediaNodeId,
+            parentImageNodeId: existingGeneratedBy?.parentImageNodeId ?? plannedParentMediaNodeId ?? undefined,
+            sourceContextNodeIds: lineageAssignment?.sourceContextNodeIds ?? resolution?.sourceContextNodeIds ?? [],
+            referenceImageNodeIds: lineageAssignment?.referenceNodeIds ?? resolution?.referenceImageNodeIds ?? [],
+            operationKind: lineageAssignment?.operationKind ?? resolution?.operationKind ?? (placement.branchOriginNodeId ? 'fresh_branch' : 'new_image'),
+            promptText: lineageAssignment?.promptText ?? placement.promptText,
+            promptFingerprint: lineageAssignment?.promptFingerprint ?? placement.imageBranchCandidateSnapshot?.promptFingerprint,
             visualEntitySummary: resolution?.visualEntitySummary,
             visualStyleSummary: resolution?.visualStyleSummary,
             entitySummary: resolution?.visualEntitySummary,
@@ -4895,7 +5282,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             resolverRationale: resolution?.rationale,
             resolverConfidence: resolution?.confidence,
             resolverVersion: resolution?.resolverVersion ?? placement.imageBranchCandidateSnapshot?.resolverVersion,
-            createdAt: existingGeneratedBy?.createdAt ?? placement.createdAt + variantIndex,
+            createdAt: existingGeneratedBy?.createdAt ?? lineageAssignment?.createdAt ?? placement.createdAt + variantIndex,
         }
     }
 
@@ -4907,35 +5294,38 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy?.branchId)
     }
 
-    function isBranchTreeCanvasNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode | BranchOriginCanvasNode {
-        return isGeneratedMediaNode(node) || node.type === 'branchOrigin'
+    function isBranchTreeCanvasNode(node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode {
+        return isGeneratedMediaNode(node) || node.type === 'branchOrigin' || node.type === 'branchFork'
     }
 
-    function pruneOrphanBranchOrigins(nodes: CanvasNode[], edges: WorkspaceEdge[]): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
+    function pruneOrphanBranchMarkers(nodes: CanvasNode[], edges: WorkspaceEdge[]): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
         const referencedOriginNodeIds = new Set<string>()
+        const referencedForkNodeIds = new Set<string>()
         for (const node of nodes) {
             if (node.type !== 'image' && node.type !== 'video') continue
             if (node.generatedBy?.branchOriginNodeId) referencedOriginNodeIds.add(node.generatedBy.branchOriginNodeId)
+            if (node.generatedBy?.branchForkNodeId) referencedForkNodeIds.add(node.generatedBy.branchForkNodeId)
         }
 
-        const removedOriginNodeIds = new Set<string>()
+        const removedMarkerNodeIds = new Set<string>()
         const prunedNodes = nodes.filter((node: CanvasNode) => {
-            const shouldRemove = node.type === 'branchOrigin' && !referencedOriginNodeIds.has(node.nodeId)
-            if (shouldRemove) removedOriginNodeIds.add(node.nodeId)
+            const shouldRemove = (node.type === 'branchOrigin' && !referencedOriginNodeIds.has(node.nodeId))
+                || (node.type === 'branchFork' && !referencedForkNodeIds.has(node.nodeId))
+            if (shouldRemove) removedMarkerNodeIds.add(node.nodeId)
             return !shouldRemove
         })
-        if (removedOriginNodeIds.size === 0) return { nodes, edges }
+        if (removedMarkerNodeIds.size === 0) return { nodes, edges }
 
         return {
             nodes: prunedNodes,
             edges: edges.filter((edge: WorkspaceEdge) =>
-                !removedOriginNodeIds.has(edge.sourceNodeId) && !removedOriginNodeIds.has(edge.targetNodeId)
+                !removedMarkerNodeIds.has(edge.sourceNodeId) && !removedMarkerNodeIds.has(edge.targetNodeId)
             ),
         }
     }
 
     function resolveGeneratedMediaTreeState(nodes: CanvasNode[], edges: WorkspaceEdge[]): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
-        const pruned = pruneOrphanBranchOrigins(nodes, edges)
+        const pruned = pruneOrphanBranchMarkers(nodes, edges)
         return {
             nodes: rebalanceGeneratedMediaTrees(pruned.nodes, pruned.edges),
             edges: pruned.edges,
@@ -5185,6 +5575,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncPixiMediaLayer(currentCanvasState)
     }
 
+    function appendBranchForkNodeToDOM(branchForkNode: BranchForkCanvasNode): void {
+        if (viewportEl.querySelector(`[data-node-id="${branchForkNode.nodeId}"]`)) return
+        const nodeEl = createBranchForkNode(branchForkNode)
+        viewportEl.appendChild(nodeEl)
+        connectionManager?.registerNodeElement(branchForkNode.nodeId, nodeEl as HTMLDivElement)
+        syncPixiMediaLayer(currentCanvasState)
+    }
+
     // Persist canvas state without triggering a full re-render.
     // Updates internal state + persists via callback, then immediately updates the
     // structure key so the Svelte $effect's render() call sees no structural change
@@ -5267,16 +5665,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
             if (!placement) return
 
-            const sourceNodeId = getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)
             const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)
-            const placementAnchorNodeId = sourceNodeId
-                ?? placement.placementAnchorNodeId
-                ?? referenceNodeIds[0]
+            const placementAnchorNodeId = placement.placementAnchorNodeId ?? referenceNodeIds[0]
             setPendingGeneratedMediaPlacement(threadId, generationRun, {
                 ...placement,
                 placementAnchorNodeId,
                 referenceNodeIds,
-                ...(sourceNodeId ? { sourceNodeId } : {}),
                 branchId: resolution.branchId ?? placement.branchId,
                 imageBranchResolution: resolution,
             })
@@ -5285,7 +5679,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             console.info('[CANVAS] image branch VLM resolution', {
                 threadId,
                 mode: resolution.mode,
-                sourceNodeId,
                 branchId: resolution.branchId,
                 operationKind: resolution.operationKind,
                 referenceImageNodeIds: resolution.referenceImageNodeIds,
@@ -5293,6 +5686,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 confidence: resolution.confidence,
                 rationale: resolution.rationale,
             })
+        },
+
+        onMediaLineagePlannedToCanvas: ({ threadId, lineagePlan, generationRun }) => {
+            applyMediaBranchLineagePlan(threadId, lineagePlan, generationRun)
         },
 
         onWorkspaceContextResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
@@ -5373,7 +5770,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const imageWidth = getGeneratedImageInsertionSize()
             const imageHeight = imageWidth
             const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, imageHeight)
-            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+            const branchForkNode = ensureBranchForkForGeneratedMedia(threadId, generationRun, branchOriginNode)
+            const edgeSourceNode = branchForkNode ?? getDefaultGeneratedMediaEdgeSourceNode(threadId, generationRun, branchOriginNode)
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
             const nodeId = `node-${fileId || uuidv4()}`
@@ -5403,8 +5801,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 }
             }
 
-            const existingNodes = addBranchOriginNodeIfMissing(currentCanvasState?.nodes || [], branchOriginNode)
-            const existingEdges = currentCanvasState?.edges || []
+            const existingNodes = addBranchLineageMarkerNodesIfMissing(currentCanvasState?.nodes || [], branchOriginNode, branchForkNode)
+            const existingEdges = addBranchForkEdgeIfMissing(currentCanvasState?.edges || [], branchForkNode)
 
             const newEdges = edgeSourceNode
                 ? [
@@ -5428,6 +5826,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
                     ?? branchOriginNode
                 appendBranchOriginNodeToDOM(placedBranchOriginNode)
+            }
+            if (branchForkNode) {
+                const placedBranchForkNode =
+                    (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchForkNode.nodeId) as BranchForkCanvasNode | undefined)
+                    ?? branchForkNode
+                appendBranchForkNodeToDOM(placedBranchForkNode)
             }
             const placedImageNode = (rebalancedNodes.find((n: CanvasNode) => n.nodeId === nodeId) as ImageCanvasNode) ?? imageNode
             appendImageNodeToDOM(placedImageNode)
@@ -5505,7 +5909,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 const imageWidth = getGeneratedImageInsertionSize()
                 const imageHeight = imageWidth
                 const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, imageHeight)
-                const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+                const branchForkNode = ensureBranchForkForGeneratedMedia(threadId, generationRun, branchOriginNode)
+                const edgeSourceNode = branchForkNode ?? getDefaultGeneratedMediaEdgeSourceNode(threadId, generationRun, branchOriginNode)
                 const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
                 const nodeId = `node-${fileId || uuidv4()}`
@@ -5535,8 +5940,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     descriptor: buildDescriptorFromGeneratedBy(generatedBy),
                 }
 
-                const existingNodes = addBranchOriginNodeIfMissing(currentCanvasState?.nodes || [], branchOriginNode)
-                const existingEdges = currentCanvasState?.edges || []
+                const existingNodes = addBranchLineageMarkerNodesIfMissing(currentCanvasState?.nodes || [], branchOriginNode, branchForkNode)
+                const existingEdges = addBranchForkEdgeIfMissing(currentCanvasState?.edges || [], branchForkNode)
 
                 const newEdges = edgeSourceNode
                     ? [
@@ -5561,6 +5966,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         (resolvedNodes.find((node: CanvasNode) => node.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
                         ?? branchOriginNode
                     appendBranchOriginNodeToDOM(placedBranchOriginNode)
+                }
+                if (branchForkNode) {
+                    const placedBranchForkNode =
+                        (resolvedNodes.find((node: CanvasNode) => node.nodeId === branchForkNode.nodeId) as BranchForkCanvasNode | undefined)
+                        ?? branchForkNode
+                    appendBranchForkNodeToDOM(placedBranchForkNode)
                 }
                 appendImageNodeToDOM(resolvedImageNode)
 
@@ -5707,7 +6118,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const placeholderWidth = getGeneratedImageInsertionSize()
             const placeholderHeight = placeholderWidth
             const branchOriginNode = ensureBranchOriginForGeneratedMedia(threadId, generationRun, placeholderHeight)
-            const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode
+            const branchForkNode = ensureBranchForkForGeneratedMedia(threadId, generationRun, branchOriginNode)
+            const edgeSourceNode = branchForkNode ?? getDefaultGeneratedMediaEdgeSourceNode(threadId, generationRun, branchOriginNode)
             const promptText = getPendingGeneratedMediaPlacement(threadId, generationRun)?.promptText ?? ''
 
             const nodeId = `node-${uuidv4()}`
@@ -5738,8 +6150,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 },
             }
 
-            const existingNodes = addBranchOriginNodeIfMissing(currentCanvasState?.nodes || [], branchOriginNode)
-            const existingEdges = currentCanvasState?.edges || []
+            const existingNodes = addBranchLineageMarkerNodesIfMissing(currentCanvasState?.nodes || [], branchOriginNode, branchForkNode)
+            const existingEdges = addBranchForkEdgeIfMissing(currentCanvasState?.edges || [], branchForkNode)
             const newEdges = edgeSourceNode
                 ? [
                     ...existingEdges,
@@ -5762,6 +6174,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchOriginNode.nodeId) as BranchOriginCanvasNode | undefined)
                     ?? branchOriginNode
                 appendBranchOriginNodeToDOM(placedBranchOriginNode)
+            }
+            if (branchForkNode) {
+                const placedBranchForkNode =
+                    (rebalancedNodes.find((n: CanvasNode) => n.nodeId === branchForkNode.nodeId) as BranchForkCanvasNode | undefined)
+                    ?? branchForkNode
+                appendBranchForkNodeToDOM(placedBranchForkNode)
             }
             const placedVideoNode = (rebalancedNodes.find((n: CanvasNode) => n.nodeId === nodeId) as VideoCanvasNode) ?? videoNode
             appendVideoNodeToDOM(placedVideoNode)
@@ -6064,6 +6482,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 suppressNextNodeClick = false
                 return
             }
+
+            clearGeneratedMediaInfoPanels({
+                preserveBranchInfo: node.type === 'branchOrigin' || node.type === 'branchFork',
+            })
 
             // Don't trigger node selection when clicking inside editor content
             // (ProseMirror, contenteditable areas) — let the editor handle the click
@@ -6967,6 +7389,31 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    function createBranchForkNode(node: BranchForkCanvasNode): HTMLElement {
+        const { nodeEl, dragOverlay } = createBaseNodeElement(
+            node,
+            'workspace-branch-fork-node',
+            {
+                branchId: node.branchId,
+                generationRequestId: node.generationRequestId,
+                reasoningRunId: node.reasoningRunId ?? '',
+                reasoningModelId: node.reasoningModelId ?? '',
+                reasoningIndex: node.reasoningIndex == null ? '' : String(node.reasoningIndex),
+            },
+            {
+                renderResizeHandles: false,
+                allowSelection: false,
+                onClick: () => toggleBranchForkGeneratedMediaInfo(node.nodeId),
+            }
+        )
+        dragOverlay.className = 'branch-fork-drag-overlay nopan'
+
+        const icon = html`<div className="workspace-branch-fork-icon" innerHTML=${branchForkfIcon}></div>` as HTMLDivElement
+        nodeEl.insertBefore(icon, dragOverlay)
+
+        return nodeEl
+    }
+
     function handlePanePointerDown(event: PointerEvent): void {
         if (event.button !== 0 || !event.isPrimary) return
         if (!isCanvasBackgroundTarget(event.target)) return
@@ -7126,6 +7573,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 nodeEl = createVideoNode(node as VideoCanvasNode)
             } else if (node.type === 'branchOrigin') {
                 nodeEl = createBranchOriginNode(node as BranchOriginCanvasNode)
+            } else if (node.type === 'branchFork') {
+                nodeEl = createBranchForkNode(node as BranchForkCanvasNode)
             } else {
                 // Inert legacy guard: old workspaces may still contain
                 // `type: 'contextRegion'` nodes. Phase 1 intentionally does not
@@ -7237,6 +7686,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (suppressNextPaneClick) {
             suppressNextPaneClick = false
             return
+        }
+
+        if (shouldClearGeneratedMediaInfoForCanvasClick(e.target)) {
+            clearGeneratedMediaInfoPanels()
         }
 
         if (isCanvasBackgroundTarget(e.target)) {
@@ -7556,6 +8009,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             imageChromeViewportEl = null
             expandedGeneratedImageInfoNodeIds.clear()
             expandedBranchOriginInfoNodeIds.clear()
+            expandedBranchForkInfoNodeIds.clear()
             pixiMediaLayer?.destroy()
             pixiMediaLayer = null
             if (panZoom) {

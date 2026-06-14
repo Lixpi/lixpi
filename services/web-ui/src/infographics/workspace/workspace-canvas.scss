@@ -375,7 +375,8 @@
     pointer-events: none;
 }
 
-.workspace-branch-origin-info-chrome {
+.workspace-branch-origin-info-chrome,
+.workspace-branch-fork-info-chrome {
     position: absolute;
     display: flex;
     flex-direction: column;
@@ -628,9 +629,60 @@
         background: rgba(34, 40, 49, 0.06);
         border-radius: 10px;
     }
+
+    .canvas-branch-origin-provenance-section {
+        margin: 0.65rem 0 0;
+    }
+
+    .canvas-branch-origin-provenance-label {
+        display: block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgba(0, 0, 0, 0.5);
+        margin: 0 0 0.3rem;
+    }
+
+    .canvas-branch-origin-reference-list {
+        display: grid;
+        gap: 0.35rem;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+    }
+
+    .canvas-branch-origin-reference-item {
+        display: grid;
+        gap: 0.15rem;
+        padding: 0.45rem 0.5rem;
+        background: rgba(34, 40, 49, 0.045);
+        border-radius: 6px;
+    }
+
+    .canvas-branch-origin-reference-id {
+        font-size: 0.66rem;
+        color: rgba(0, 0, 0, 0.46);
+        overflow-wrap: anywhere;
+    }
+
+    .canvas-branch-origin-reference-label,
+    .canvas-branch-origin-rationale {
+        margin: 0;
+        font-size: 0.76rem;
+        line-height: 1.4;
+        color: #36414a;
+        overflow-wrap: anywhere;
+    }
+
+    .canvas-branch-origin-rationale {
+        margin-top: 0.4rem;
+        color: rgba(0, 0, 0, 0.58);
+    }
 }
 
-.canvas-branch-origin-info-panel {
+.canvas-branch-origin-info-panel,
+.canvas-branch-fork-info-panel {
     width: 100%;
 }
 
@@ -650,7 +702,6 @@
     // drag hit target and has no visible styling.
     position: absolute;
     z-index: 10000;
-    cursor: move;
     box-sizing: border-box;
 }
 
@@ -1760,7 +1811,6 @@
     left: 0;
     right: 0;
     bottom: 0;
-    cursor: move;
     z-index: 15;
     background: transparent;
 }
@@ -1794,12 +1844,12 @@
     left: 0;
     right: 0;
     bottom: 0;
-    cursor: move;
     z-index: 15;
     background: transparent;
 }
 
-.workspace-branch-origin-node {
+.workspace-branch-origin-node,
+.workspace-branch-fork-node {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1809,10 +1859,10 @@
     box-shadow: var(--workspace-branch-origin-box-shadow);
     overflow: visible;
     padding: 0;
-    cursor: move;
 }
 
-.workspace-branch-origin-icon {
+.workspace-branch-origin-icon,
+.workspace-branch-fork-icon {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1823,16 +1873,25 @@
 
     svg {
         display: block;
-        width: var(--workspace-branch-origin-icon-size);
-        height: var(--workspace-branch-origin-icon-size);
+        width: calc(var(--workspace-branch-origin-icon-size) * 0.9);
+        height: calc(var(--workspace-branch-origin-icon-size) * 0.9);
         fill: currentColor;
+        transform-origin: center;
     }
 }
 
-.branch-origin-drag-overlay {
+.workspace-branch-origin-icon svg {
+    transform: translate(2px, 2px);
+}
+
+.workspace-branch-fork-icon svg {
+    transform: translate(3px, 2px);
+}
+
+.branch-origin-drag-overlay,
+.branch-fork-drag-overlay {
     position: absolute;
     inset: 0;
-    cursor: move;
     z-index: 15;
     background: transparent;
     border-radius: 50%;
@@ -1987,7 +2046,6 @@
     left: 0;
     right: 0;
     height: 20px;
-    cursor: move;
     z-index: 15;
     background: transparent;
 }

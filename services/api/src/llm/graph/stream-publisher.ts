@@ -5,6 +5,7 @@ import {
     STREAM_STATUS,
     type ImageBranchVlmResolution,
     type ImageGenerationTrace,
+    type MediaBranchLineagePlan,
     type MediaGenerationRunMeta,
     type ProviderName,
     type StageTraceEvent,
@@ -32,6 +33,7 @@ export type ChunkPayload = {
         resolution?: ImageBranchVlmResolution
         workspaceContextResolution?: WorkspaceContextResolution
         imageGenerationTrace?: ImageGenerationTrace
+        lineagePlan?: MediaBranchLineagePlan
         videoGenerationTrace?: VideoGenerationTrace
         error?: string
         extractionStatus?: string
@@ -293,6 +295,18 @@ export class StreamPublisher {
                 status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
                 aiProvider: this.provider,
                 resolution,
+                ...(generationRun ? { generationRun } : {}),
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
+                aiProvider: this.provider,
+                lineagePlan,
                 ...(generationRun ? { generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,

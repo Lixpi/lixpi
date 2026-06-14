@@ -5,6 +5,7 @@ import { info, warn, err } from '@lixpi/debug-tools'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { getVideoMaxReferenceImages } from '../graph/state.ts'
+import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
 
 const fingerprintRef = (url: string): string => {
@@ -46,6 +47,8 @@ const buildRoutedVideoReferenceImages = (state: ProviderState): string[] | undef
 // provider runs the async VEO submit/poll path and skips its own stream
 // lifecycle — the parent chat stream owns START_STREAM/END_STREAM.
 export class VideoRouter {
+    private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
+
     constructor(private readonly registry: ProviderRegistry) {}
 
     async execute(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -56,6 +59,16 @@ export class VideoRouter {
         const videoModelPrompt = buildVideoModelPrompt(state)
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
+        const mediaModelId = videoProvider && videoModel
+            ? this.mediaGenerationRunPlanner.buildMediaModelId(videoProvider, videoMeta.model, videoModel)
+            : undefined
+        const generationRun = mediaModelId
+            ? this.mediaGenerationRunPlanner.buildProviderMediaRun({
+                generationRun: state.generationRun,
+                mediaModelId,
+                mediaType: 'video',
+            })
+            : state.generationRun
 
         if (!videoProvider || !videoModel || !prompt) {
             err(
@@ -65,8 +78,8 @@ export class VideoRouter {
             return {}
         }
 
-        const instanceKey = state.generationRun?.mediaRunId
-            ? `${workspaceId}:${aiChatThreadId}:${state.generationRun.mediaRunId}`
+        const instanceKey = generationRun?.mediaRunId
+            ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
             : `${workspaceId}:${aiChatThreadId}:video`
         const videoReferenceImages = buildRoutedVideoReferenceImages(state)
         const featureReferenceImages = state.featureReferenceImages ?? []
@@ -113,8 +126,8 @@ export class VideoRouter {
                 videoFirstFrameImage: state.videoFirstFrameImage,
                 videoReferenceImages,
                 videoSourceForExtension: state.videoSourceForExtension,
-                generationRun: state.generationRun,
-                eventMeta: state.eventMeta,
+                generationRun,
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
 
             const finalState = await provider.process(requestData)
