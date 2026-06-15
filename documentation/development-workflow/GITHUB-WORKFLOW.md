@@ -10,7 +10,13 @@ Never run any command from this workflow in the sandbox.
 
 All Git, GitHub, branch, commit, push, pull request, issue, and workflow-related commands in this document require unsandboxed execution. This includes `git`, `gh`, GitHub helper tools, shell snippets that wrap them, and any command used to inspect or mutate repository or GitHub state while following this workflow.
 
-If an agent needs to run one of these commands, it must request unsandboxed execution and run it in the user's authenticated host environment. Do not attempt a sandboxed run first.
+If an agent needs to run one of these commands, it must request unsandboxed execution and run it in the user's host environment. Do not attempt a sandboxed run first.
+
+## GitHub Authentication
+
+Assume GitHub authentication is already configured in the user's host environment. Do not run `gh auth status`, login probes, token checks, or other authentication preflights before normal GitHub work.
+
+Run the actual `gh` command required by the workflow. If that command fails because of authentication, missing credentials, keychain access, SSO authorization, or token scope, stop and report the failing command and error to the user. Do not attempt to log in, refresh credentials, or work around authentication state.
 
 ## Branch Naming
 
@@ -79,6 +85,7 @@ Include:
 ## Tools
 
 - Use local Git commands for status, staging, commits, checkouts, fetches, and pushes, and run them unsandboxed.
-- Never run `gh` commands in the sandbox. GitHub CLI operations require the user's authenticated host environment, network access, credential helpers, and browser or keychain integration. Always run `gh` with unsandboxed execution.
+- Never run `gh` commands in the sandbox. GitHub CLI operations require the user's host environment, network access, credential helpers, and browser or keychain integration. Always run `gh` with unsandboxed execution.
+- Do not run GitHub authentication preflight checks. Use required workflow commands directly and surface authentication failures only if they occur.
 - Use available GitHub integration tools for branches, pull requests, issue reads, issue updates, and assignment.
 - When sending Markdown through an API, provide real line breaks rather than literal `\n` text so GitHub renders the body correctly.
