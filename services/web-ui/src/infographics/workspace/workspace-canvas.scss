@@ -446,8 +446,8 @@
     flex: 1 1 auto;
     display: flex;
     align-items: center;
-    gap: 6px;
-    color: #4d5963;
+    gap: var(--workspace-media-model-badge-icon-gap, 3px);
+    color: var(--workspace-media-model-badge-provider-color, #4d5963);
     line-height: 1;
 
     pointer-events: none;
@@ -472,9 +472,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #4d5963;
-    font-size: 13px;
-    font-weight: 600;
+    color: var(--workspace-media-model-badge-provider-color, #4d5963);
+    font-size: var(--workspace-media-model-badge-name-font-size, 15px);
+    font-weight: var(--workspace-media-model-badge-name-font-weight, 400);
+    // Roomier line box than the badge's line-height: 1 so descenders (g, p, y)
+    // aren't clipped by overflow: hidden.
+    line-height: var(--workspace-media-model-badge-name-line-height, 1.5);
+}
+
+// Provider brand + separator inherit the provider color from .media-model-badge-name;
+// the model title uses its own darker token so it reads as primary.
+.media-model-badge-model {
+    color: var(--workspace-media-model-badge-model-color, #181e23);
 }
 
 .media-info-button {
@@ -488,7 +497,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #4d5963;
+    // Slightly muted by default; brightens to the full color on hover and while active.
+    color: var(--workspace-media-info-button-color, #6b757e);
+    transition: hoverTransition(color, 150ms);
     padding: 0;
     outline: none;
     cursor: pointer;
@@ -501,12 +512,12 @@
     }
 
     &:hover {
-        color: #4d5963;
+        color: var(--workspace-media-info-button-hover-color, #4d5963);
         background: transparent;
     }
 
     &.is-active {
-        color: #4d5963;
+        color: var(--workspace-media-info-button-hover-color, #4d5963);
         background: transparent;
     }
 

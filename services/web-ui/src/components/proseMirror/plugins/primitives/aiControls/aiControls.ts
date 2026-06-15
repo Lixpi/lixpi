@@ -6,6 +6,7 @@ import {
     claudeIcon,
     geminiIcon,
     stabilityIcon,
+    bytedanceIcon,
     imageIcon
 } from '$src/svgIcons/index.ts'
 
@@ -70,6 +71,7 @@ const AI_AVATAR_ICONS: Record<string, string> = {
     claudeIcon,
     geminiIcon,
     stabilityIcon,
+    bytedanceIcon,
 }
 
 export function transformModelsToOptions(models: any[]): AiModelDropdownOption[] {

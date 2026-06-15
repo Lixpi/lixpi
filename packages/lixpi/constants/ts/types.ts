@@ -1274,6 +1274,11 @@ export type AiModel = {
     model: string
     title: string
     shortTitle?: string
+    // Human-facing provider brand name, e.g. "OpenAI" or "ByteDance" (the provider field
+    // stays the internal key). Synced per model by ai-models-synchronization; consumers
+    // concatenate it with title for a provider-attributed name ("ByteDance Seedance 2.0"),
+    // or use it standalone where only the provider brand is needed.
+    providerTitle?: string
     modelVersion: string
     imagePromptMaxChars?: number
     contextWindow: number
@@ -1282,6 +1287,10 @@ export type AiModel = {
     supportsSystemPrompt: boolean
     color: string
     iconName: string
+    // Colored brand-icon variant key (e.g. geminiColorIcon). Synced per model by
+    // ai-models-synchronization, which falls back to iconName when a provider has
+    // no colored variant, so synced models always carry a usable value here.
+    colorIconName?: string
     sortingPosition: number
     modalities: Array<{ modality: string; title: string; shortTitle: string }>
     // Describes what imageSizes values mean for this image-generation model.
