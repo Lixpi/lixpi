@@ -39,7 +39,9 @@ Creates and renders a toggle switch within a D3 SVG selection.
     id: string              // Unique identifier
     x: number              // X position (left edge of track)
     y: number              // Y position (top edge of track)
-    size?: number          // Height in pixels (default: 24, width is ~1.8x)
+    width?: number         // Track width in pixels
+    height?: number        // Track height in pixels
+    size?: number          // Height alias in pixels when height is omitted (default: 24, width is ~1.8x)
     checked?: boolean      // Initial state (default: false)
     disabled?: boolean     // Disabled state (default: false)
     className?: string     // Additional CSS classes
@@ -71,7 +73,8 @@ const toggleSwitch = createToggleSwitch(g, {
     id: 'thread-1',
     x: 10,
     y: 50,
-    size: 14,
+    width: 30,
+    height: 18,
     checked: false,
     onChange: (checked, id) => {
         console.log(`Toggle ${id}: ${checked}`)
@@ -87,9 +90,10 @@ toggleSwitch.destroy()
 
 ## Dimensions
 
-The toggle switch uses relative proportions based on the `size` parameter:
-- **Height**: `size * 1.0`
-- **Width**: `size * 1.8`
+The toggle switch uses explicit `width`/`height` when supplied. If `height` is omitted, `size` is used as the track height. If `width` is omitted, width is derived from height.
+
+- **Height**: `height ?? size`
+- **Width**: `width ?? height * 1.8`
 - **Knob radius**: `height * 0.7 / 2`
 - **Track radius**: `height / 2`
 
@@ -115,11 +119,7 @@ The toggle switch uses relative proportions based on the `size` parameter:
 
 ## AI Chat Panel Integration
 
-The workspace AI Chat panel uses this SVG control for `Include Upstream Context`:
-
-1. It is rendered inside an SVG host so D3 can append SVG-native track and knob elements.
-2. Its checked state is persisted in `canvasState.aiChatPanel.includeUpstreamContext`.
-3. Its value applies to both Follow Selection and Pinned Context submissions.
+The workspace AI Chat panel no longer uses this component. The old `Include Upstream Context`, Follow Selection, and Pinned Context controls were removed when the panel moved to explicit context chips plus automatic workspace relevance. Use `toggleSwitch` for generic binary SVG controls only.
 
 
 ## Implementation Notes

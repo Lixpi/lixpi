@@ -3,6 +3,8 @@
 import type {
     ImageBranchCandidateSnapshot,
     ImageBranchVlmResolution,
+    MediaBranchLineagePlan,
+    MediaGenerationRunMeta,
     ProviderName,
     WorkspaceContextResolution,
     WorkspaceContextSnapshot,
@@ -55,6 +57,18 @@ export type AiModelMetaInfo = {
     videoMaxReferenceImages?: number
     pricing?: Record<string, any>
     [key: string]: unknown
+}
+
+export type MediaFanoutPlan = {
+    generationRequestId: string
+    imageModels: AiModelMetaInfo[]
+    videoModels: AiModelMetaInfo[]
+    imageSize?: string
+    videoAspectRatio?: string
+    videoResolution?: string
+    videoDuration?: string | number
+    videoDurationSeconds?: number
+    videoSourceForExtension?: string
 }
 
 // Reference-image cap for the selected video model. VEO accepts 3, Seedance 9.
@@ -121,6 +135,7 @@ export type ProviderState = {
     workspaceContextResolution?: WorkspaceContextResolution | undefined
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot | undefined
     imageBranchResolution?: ImageBranchVlmResolution | undefined
+    mediaBranchLineagePlan?: MediaBranchLineagePlan | undefined
 
     // Video generation (VEO) — async submit/poll routing. Mirrors the image
     // fields above; the VLM branch resolution is shared (reused for first-frame
@@ -151,6 +166,11 @@ export type ProviderState = {
     // counter incremented per emitted usage event (gap detection on the billing side).
     workflowId?: string | undefined
     workflowSeq?: number | undefined
+    
+    // Multi-model media generation request-group metadata.
+    generationRun?: MediaGenerationRunMeta | undefined
+    mediaFanoutPlan?: MediaFanoutPlan | undefined
+    preflightResolved?: boolean | undefined
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
@@ -193,6 +213,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     workspaceContextResolution: { reducer: keep },
     imageBranchCandidateSnapshot: { reducer: keep },
     imageBranchResolution: { reducer: keep },
+    mediaBranchLineagePlan: { reducer: keep },
     enableVideoGeneration: { reducer: keep, default: () => false },
     videoModelMetaInfo: { reducer: keep },
     videoModelVersion: { reducer: keep },
@@ -211,4 +232,8 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     featureUsagePrompt: { reducer: keep },
     workflowId: { reducer: keep },
     workflowSeq: { reducer: keep },
+    
+    generationRun: { reducer: keep },
+    mediaFanoutPlan: { reducer: keep },
+    preflightResolved: { reducer: keep, default: () => false },
 }

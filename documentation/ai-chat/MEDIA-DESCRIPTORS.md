@@ -145,7 +145,7 @@ inside the larger rank → force-include → assemble flow.
 ## Canvas Analyzing Indicator
 
 While media `status === 'analyzing'`, the media node's info button pulses
-(`.image-info-button.is-analyzing`, animation `workspace-media-analyzing-pulse`)
+(`.media-info-button.is-analyzing`, animation `workspace-media-analyzing-pulse`)
 and its title/aria-label explains what is happening. Opening the panel shows an
 "Analyzing media..." note. When ready, the same panel renders the summary and
 tags via `buildMediaDescriptorSection`.
@@ -166,7 +166,7 @@ and VEO anchoring.
 
 ## References
 
-- [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) — workspace relevance, self-heal, and auto chips
+- [Workspace Context Relevance](./CONTEXT-RELEVANCE.md) — workspace relevance, self-heal, and automatic selections
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md) — how descriptors/tags feed branch grounding
 - [Image Generation](../media-generation/IMAGE-GENERATION.md) — the generation trace generated-media descriptors derive from
 - [Video Generation](../media-generation/VIDEO-GENERATION.md) — mid-frame extraction and VEO image-to-video anchoring

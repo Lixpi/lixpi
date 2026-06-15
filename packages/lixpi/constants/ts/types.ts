@@ -70,7 +70,7 @@ export type DocumentFile = {
     uploadedAt: number
 }
 
-export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video'
+export type CanvasNodeType = 'document' | 'image' | 'aiChatThread' | 'video' | 'branchOrigin' | 'branchFork'
 
 type CanvasNodePosition = {
     x: number
@@ -151,6 +151,7 @@ export type ImageBranchCandidateImage = {
     mediaKind?: 'image' | 'video'
     roleHints: ImageBranchCandidateRoleHint[]
     branchId?: string
+    parentMediaNodeId?: string
     parentImageNodeId?: string
     ancestorNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -190,6 +191,8 @@ export type WorkspaceContextNode = {
     fileId?: string
     imageUrl?: string
     branchId?: string
+    sourceThreadId?: string
+    isCurrentThreadGenerated?: boolean
     isExplicitChip: boolean
     isEdgeForced: boolean
 }
@@ -254,27 +257,133 @@ export type ImageBranchVlmResolution = {
     decisions: ImageBranchVlmReferenceDecision[]
 }
 
+export type BranchOriginProvenance = {
+    kind: 'branch-root-fork-decision'
+    promptText: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    forked: boolean
+    forkCount: number
+}
+
+export type BranchForkProvenance = {
+    kind: 'reasoning-run'
+    promptText: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    reasoningRunId: string
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+}
+
+export type BranchOriginLineagePlan = {
+    nodeId: string
+    generationRequestId: string
+    branchId: string
+    promptFingerprint?: string
+    provenance: BranchOriginProvenance
+}
+
+export type BranchForkLineagePlan = {
+    nodeId: string
+    generationRequestId: string
+    branchId: string
+    parentBranchNodeId: string
+    reasoningRunId: string
+    reasoningModelId: AiModelId
+    reasoningIndex: number
+    promptFingerprint?: string
+    provenance: BranchForkProvenance
+}
+
+export type MediaRunLineageAssignment = {
+    generationRequestId: string
+    reasoningRunId?: string
+    mediaRunId?: string
+    reasoningModelId?: AiModelId
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    branchId: string
+    parentMediaNodeId?: string
+    // Legacy alias retained for older image-named consumers. New lineage code
+    // must use parentMediaNodeId so image/video/future media share one contract.
+    parentImageNodeId?: string
+    branchOriginNodeId?: string
+    branchForkNodeId?: string
+    lineageParentNodeId?: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    operationKind?: ImageGenerationOperationKind
+    promptText: string
+    promptFingerprint?: string
+    createdAt: number
+}
+
+export type MediaBranchLineagePlan = {
+    planVersion: 'media-branch-lineage-v1'
+    generationRequestId: string
+    branchId: string
+    promptText: string
+    promptFingerprint?: string
+    sourceNodeId?: string
+    placementAnchorNodeId?: string
+    referenceNodeIds: string[]
+    sourceContextNodeIds: string[]
+    branchOrigin?: BranchOriginLineagePlan
+    branchForks: BranchForkLineagePlan[]
+    runAssignments: MediaRunLineageAssignment[]
+    createdAt: number
+}
+
 export type ImageBranchResolvedStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLVED'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     resolution: ImageBranchVlmResolution
+}
+
+export type MediaLineagePlannedStreamPayload = {
+    status: 'MEDIA_LINEAGE_PLANNED'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    lineagePlan: MediaBranchLineagePlan
 }
 
 export type ImageBranchResolutionErrorStreamPayload = {
     status: 'IMAGE_BRANCH_RESOLUTION_ERROR'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     error: string
+}
+
+export type MediaGenerationRequestStartedPayload = {
+    status: 'MEDIA_GENERATION_REQUEST_STARTED'
+    aiProvider: string
+    generationRequestId: string
+    reasoningModelIds: AiModelId[]
+    imageModelIds: AiModelId[]
+    videoModelIds: AiModelId[]
+    expectedReasoningRuns: number
+    expectedMediaRunsUpperBound: number
+}
+
+export type MediaGenerationRequestCompletePayload = {
+    status: 'MEDIA_GENERATION_REQUEST_COMPLETE'
+    aiProvider: string
+    generationRequestId: string
 }
 
 export type ContextRelevanceResolvedStreamPayload = {
     status: 'CONTEXT_RELEVANCE_RESOLVED'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     workspaceContextResolution: WorkspaceContextResolution
 }
 
 export type ContextRelevanceErrorStreamPayload = {
     status: 'CONTEXT_RELEVANCE_ERROR'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     error: string
 }
 
@@ -305,6 +414,7 @@ export type ImageGenerationTraceExcludedReference = {
 
 export type ImageGenerationTrace = {
     traceVersion: 'image-generation-trace-v1'
+    generationRun?: MediaGenerationRunMeta
     chatModelProvider: string
     chatModelId: string
     imageModelProvider: string
@@ -333,7 +443,15 @@ export type ImageGenerationTrace = {
 export type ImageGenerationTraceStreamPayload = {
     status: 'IMAGE_GENERATION_TRACE'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     imageGenerationTrace: ImageGenerationTrace
+}
+
+export type ImageGenerationErrorStreamPayload = {
+    status: 'IMAGE_ERROR'
+    aiProvider: string
+    generationRun?: MediaGenerationRunMeta
+    error: string
 }
 
 // Mirrors ImageGenerationTrace but for VEO video generation. Reuses the same
@@ -341,6 +459,7 @@ export type ImageGenerationTraceStreamPayload = {
 // candidates the same way it does for images.
 export type VideoGenerationTrace = {
     traceVersion: 'video-generation-trace-v1'
+    generationRun?: MediaGenerationRunMeta
     chatModelProvider: string
     chatModelId: string
     videoModelProvider: string
@@ -371,10 +490,40 @@ export type VideoGenerationTrace = {
 export type VideoGenerationTraceStreamPayload = {
     status: 'VIDEO_GENERATION_TRACE'
     aiProvider: string
+    generationRun?: MediaGenerationRunMeta
     videoGenerationTrace: VideoGenerationTrace
 }
 
-export type ImageGeneratedByMetadata = {
+export type MediaGenerationRunMeta = {
+    requestKind?: 'single-media' | 'media-generation-matrix'
+    generationRequestId: string
+    reasoningRunId: string
+    mediaRunId?: string
+    reasoningModelId: AiModelId
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    reasoningIndex: number
+    mediaIndex?: number
+    variantIndex?: number
+    lineageAssignment?: MediaRunLineageAssignment
+}
+
+export type GeneratedMediaVariantMetadata = {
+    generationRequestId?: string
+    reasoningRunId?: string
+    mediaRunId?: string
+    reasoningModelId?: AiModelId
+    mediaModelId?: AiModelId
+    mediaType?: 'image' | 'video'
+    variantIndex?: number
+    // API-assigned lineage marker IDs. The browser applies these to canvas
+    // state and may compute layout, but it must not derive branch topology.
+    parentMediaNodeId?: string
+    branchOriginNodeId?: string
+    branchForkNodeId?: string
+}
+
+export type ImageGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     aiChatThreadId: string
     responseId: string
     aiModel: AiModelId
@@ -382,6 +531,7 @@ export type ImageGeneratedByMetadata = {
     revisedPrompt: string
     responseMessageId?: string
     branchId?: string
+    // Legacy alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
@@ -447,7 +597,7 @@ export type ImageCanvasNode = CanvasNodeParentingFields & {
 // Provenance + lineage for an AI-generated video node. Mirrors
 // ImageGeneratedByMetadata and reuses the same branch-lineage audit field
 // names so the structured VLM resolver output maps over without translation.
-export type VideoGeneratedByMetadata = {
+export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     aiChatThreadId: string
     responseId: string
     videoModel: AiModelId
@@ -463,6 +613,7 @@ export type VideoGeneratedByMetadata = {
     sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
     // reused branch-lineage audit fields (identical names to images)
     branchId?: string
+    // Legacy alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
     referenceImageNodeIds?: string[]
@@ -517,7 +668,35 @@ export type AiChatThreadCanvasNode = CanvasNodeParentingFields & {
     descriptor?: ContentDescriptor
 }
 
-export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode
+export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'branchOrigin'
+    branchId: string
+    generationRequestId: string
+    promptFingerprint?: string
+    provenance?: BranchOriginProvenance
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    temporary: true
+}
+
+export type BranchForkCanvasNode = CanvasNodeParentingFields & {
+    nodeId: string
+    type: 'branchFork'
+    branchId: string
+    generationRequestId: string
+    reasoningRunId?: string
+    reasoningModelId?: AiModelId
+    reasoningIndex?: number
+    parentBranchNodeId?: string
+    promptFingerprint?: string
+    provenance?: BranchForkProvenance
+    position: CanvasNodePosition
+    dimensions: CanvasNodeDimensions
+    temporary: true
+}
+
+export type CanvasNode = DocumentCanvasNode | ImageCanvasNode | AiChatThreadCanvasNode | VideoCanvasNode | BranchOriginCanvasNode | BranchForkCanvasNode
 
 export type CanvasViewport = {
     x: number
@@ -925,7 +1104,7 @@ export type ExtractionRun = {
 
 export type CanvasAiChatSidebarTab = {
     tabId: string
-    type: 'thread' | 'extraction'
+    type: 'thread' | 'extraction' | 'draft'
     refId: string
     title: string
 }
@@ -1051,9 +1230,32 @@ export type AiInteractionChatSendMessagePayload = {
     threadId: string
     referencedFeatureIds?: string[]
     imageBranchCandidateSnapshot?: ImageBranchCandidateSnapshot
+    mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Whole-workspace, descriptors-only index sent each turn; consumed by the
     // API `resolveWorkspaceContext` relevance stage (later phase).
     workspaceContextSnapshot?: WorkspaceContextSnapshot
+}
+
+export type AiInteractionMediaGenerationRequest = {
+    requestVersion: 'media-generation-matrix-v1'
+    generationRequestId: string
+    reasoningModelIds: AiModelId[]
+    imageModelIds: AiModelId[]
+    videoModelIds: AiModelId[]
+    imageOptions?: {
+        imageSize: ImageGenerationSize
+    }
+    videoOptions?: {
+        aspectRatio?: string
+        resolution?: string
+        duration?: string
+        sourceVideoNodeId?: string
+        sourceForExtension?: string
+    }
+}
+
+export type AiInteractionChatSendMessagePayloadV2 = AiInteractionChatSendMessagePayload & {
+    mediaGenerationRequest: AiInteractionMediaGenerationRequest
 }
 
 export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePayload & {
@@ -1064,6 +1266,7 @@ export type AiInteractionImageGenerationPayload = AiInteractionChatSendMessagePa
 
 export type AiInteractionChatStopMessagePayload = {
     threadId: string
+    generationRequestId?: string
 }
 
 export type AiModel = {
@@ -1071,6 +1274,11 @@ export type AiModel = {
     model: string
     title: string
     shortTitle?: string
+    // Human-facing provider brand name, e.g. "OpenAI" or "ByteDance" (the provider field
+    // stays the internal key). Synced per model by ai-models-synchronization; consumers
+    // concatenate it with title for a provider-attributed name ("ByteDance Seedance 2.0"),
+    // or use it standalone where only the provider brand is needed.
+    providerTitle?: string
     modelVersion: string
     imagePromptMaxChars?: number
     contextWindow: number
@@ -1079,6 +1287,10 @@ export type AiModel = {
     supportsSystemPrompt: boolean
     color: string
     iconName: string
+    // Colored brand-icon variant key (e.g. geminiColorIcon). Synced per model by
+    // ai-models-synchronization, which falls back to iconName when a provider has
+    // no colored variant, so synced models always carry a usable value here.
+    colorIconName?: string
     sortingPosition: number
     modalities: Array<{ modality: string; title: string; shortTitle: string }>
     // Describes what imageSizes values mean for this image-generation model.

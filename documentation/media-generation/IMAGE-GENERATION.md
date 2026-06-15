@@ -10,7 +10,7 @@ Image generation is the **image branch** of Lixpi's shared AI generation pipelin
 This page covers what is specific to image generation: the three image-model provider execution paths, how reference images are extracted from each provider's message format, the image system-prompt instructions, image sizes and hardcoded options, content-hash dedup, multi-turn editing, and the image-specific stream-event details. The shared LangGraph workflow, dual-model routing, tool schema, post-stream router, `ProviderState`, `ImageRouter`, and stream lifecycle are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 {% callout type="note" %}
-The shared workflow, dual-model routing, tool injection/extraction mechanism, and `ImageRouter` live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection live in [Branch Lineage](./BRANCH-LINEAGE.md). The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
+The shared workflow, dual-model routing, tool injection/extraction mechanism, and `ImageRouter` live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection live in [Branch Lineage](./BRANCH-LINEAGE.md). Uploaded/source/reference images can anchor placement, but only API-selected existing generated-media branch members become `parentMediaNodeId` connector parents. The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
 {% /callout %}
 
 ## Where Image Generation Sits

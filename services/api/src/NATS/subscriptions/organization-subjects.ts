@@ -21,7 +21,7 @@ export const organizationSubjects = [
         },
         handler: async (data, msg) => {
             const { organizationId } = data
-            const userId = socket?.user?.userId
+            const userId = data.user?.userId
 
             return await Organization.getOrganization({ organizationId, userId })
         }
@@ -37,7 +37,7 @@ export const organizationSubjects = [
         },
         handler: async (data, msg) => {
             const { name, availableModels } = data
-            const userId = socket?.user?.userId
+            const userId = data.user?.userId
 
             return await Organization.createOrganization({
                 name,
@@ -56,12 +56,12 @@ export const organizationSubjects = [
         },
         handler: async (data, msg) => {
             infoStr([
-                chalk.green('Socket.IO -> '),
+                chalk.green('NATS -> '),
                 chalk.green('update->organization')
             ])
 
             const { organizationId, name, availableModels } = data
-            const userId = socket?.user?.userId
+            const userId = data.user?.userId
 
             return await Organization.updateOrganization({
                 organizationId,
@@ -84,7 +84,7 @@ export const organizationSubjects = [
         },
         handler: async (data, msg) => {
             const { organizationId, name, color } = data
-            const userId = socket?.user?.userId
+            const userId = data.user?.userId
 
             return await Organization.createTag({ organizationId, name, color, userId })
         }
@@ -99,7 +99,7 @@ export const organizationSubjects = [
         },
         handler: async (data, msg) => {
             const { organizationId, tagId, name, color } = data
-            const userId = socket?.user?.userId
+            const userId = data.user?.userId
 
             return await Organization.updateTag({ organizationId, tagId, name, color, userId })
         }
@@ -114,7 +114,7 @@ export const organizationSubjects = [
         },
         handler: async (data, msg) => {
             const { organizationId, tagId } = data
-            const userId = socket?.user?.userId
+            const userId = data.user?.userId
 
             return await Organization.deleteTag({ organizationId, tagId, userId })
         }

@@ -6,6 +6,12 @@ Use this guide when building UI components in `services/web-ui` that are not pur
 
 This guide does not replace the PIXI rendering rules for canvas scene content. If the element is part of the canvas world and can be rendered naturally in PIXI, PIXI is the first choice. Use this guide for UI that sits outside PIXI or for canvas-adjacent controls that need DOM/SVG semantics.
 
+## Frontend Boundary
+
+`services/web-ui` is a presentational and interaction layer. It must not own distributed-system decisions or product-domain orchestration. Frontend code may collect user input, build non-authoritative snapshots for the API, render streamed API state, compute local geometry, and handle direct UI interaction. It must not decide branch topology, generated-media parentage, fork/origin marker creation, reasoning-run routing, model fanout, context relevance, resolver outcomes, lineage provenance, billing, authorization, persistence ownership, or any other API-owned workflow state.
+
+If a feature needs a decision that must stay correct across reloads, concurrent editors, multiple clients, retries, workers, or service restarts, the decision belongs in `services/api` or a shared backend service. The browser receives that decision through a typed API response, stream event, or persisted state contract, then applies it visually. Do not hide these decisions in Svelte components, ProseMirror plugins, `WorkspaceCanvas.ts`, canvas utilities, stores, or client services.
+
 ## Rendering Decision
 
 Choose the rendering approach by where the UI lives and what it does.
@@ -76,27 +82,35 @@ export type ExampleControlInstance = {
     destroy: () => void
 }
 
+class ExampleControl implements ExampleControlInstance {
+    private readonly group: any
+    private readonly background: any
+
+    constructor(parent: any, private readonly config: ExampleControlConfig) {
+        this.group = parent.append('g')
+            .attr('class', `example-control-group ${config.className ?? ''}`)
+            .attr('transform', `translate(${config.x}, ${config.y})`)
+            .attr('data-example-control-id', config.id)
+
+        this.background = this.group.append('rect')
+            .attr('class', 'example-control-background')
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('width', config.width)
+            .attr('height', config.height ?? 24)
+    }
+
+    render(): void {
+        this.background.attr('width', this.config.width)
+    }
+
+    destroy(): void {
+        this.group.remove()
+    }
+}
+
 export function createExampleControl(parent: any, config: ExampleControlConfig): ExampleControlInstance {
-    const group = parent.append('g')
-        .attr('class', `example-control-group ${config.className ?? ''}`)
-        .attr('transform', `translate(${config.x}, ${config.y})`)
-        .attr('data-example-control-id', config.id)
-
-    const background = group.append('rect')
-        .attr('class', 'example-control-background')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', config.width)
-        .attr('height', config.height ?? 24)
-
-    function render(): void {
-        background.attr('width', config.width)
-    }
-
-    return {
-        render,
-        destroy: () => group.remove(),
-    }
+    return new ExampleControl(parent, config)
 }
 ```
 
@@ -106,7 +120,7 @@ The public API should usually be `createX(parent, config)`. It appends one top-l
 
 Follow [`TYPESCRIPT.md`](./TYPESCRIPT.md) for class usage.
 
-Use a class when the component owns cohesive state, many selections, layout, lifecycle cleanup, global listeners, or a public imperative API. Keep the factory as the public entry point:
+Use a class by default for UI components. A component that owns cohesive state, selections, layout, lifecycle cleanup, listeners, or a public imperative API must be class-backed. Keep the factory as the public entry point:
 
 ```typescript
 class ExampleControl implements ExampleControlInstance {
@@ -119,7 +133,7 @@ export function createExampleControl(parent: any, config: ExampleControlConfig):
 }
 ```
 
-A closure-backed factory is fine for small controls with limited state and simple cleanup.
+Closure-backed factories are not acceptable for reusable UI components, D3/SVG controls, canvas chrome controls, controllers, menus, switches, sliders, popovers, tooltips, or editor-backed UI. Use plain functions only for pure utilities, tiny adapters, simple callbacks, and small mappers with no retained state or cleanup.
 
 Do not build deep inheritance hierarchies. Prefer composition and helper functions. Inheritance deeper than 3 levels is not allowed.
 
@@ -292,17 +306,15 @@ Use existing icons from [`svgIcons/index.ts`](../../services/web-ui/src/svgIcons
 
 For HTML/Svelte, inject icon markup through the existing DOM/template patterns.
 
-For D3 SVG controls, parse imported SVG markup and append paths into an SVG group:
+For D3 SVG controls, use `appendSvgPathIcon` from
+[`svgIconPaths.ts`](../../services/web-ui/src/components/svgIconPaths.ts) to
+parse imported SVG markup and append scaled paths into an SVG group:
 
 ```typescript
-function setIconPaths(iconGroup: any, svgMarkup: string, fill: string): void {
-    iconGroup.selectAll('*').remove()
-    for (const pathData of extractPathData(svgMarkup)) {
-        iconGroup.append('path')
-            .attr('d', pathData)
-            .attr('fill', fill)
-    }
-}
+import { appendSvgPathIcon } from '$src/components/svgIconPaths.ts'
+import { xIcon } from '$src/svgIcons/index.ts'
+
+appendSvgPathIcon(iconGroup, xIcon, { x: 0, y: 0, size: 14, fill: '#1a2744' })
 ```
 
 Cache parsed path data if an icon is large or updated frequently.
@@ -340,7 +352,7 @@ If a D3 component uses only `.on(...)` listeners on SVG elements that are remove
 
 ## Tests
 
-Follow [`documentation/testing/TypeScript/web-ui/TESTING-GUIDE.md`](../testing/TypeScript/web-ui/TESTING-GUIDE.md).
+Follow the [`TypeScript Testing Guide`](../testing/TypeScript/TESTING-GUIDE.md) for shared conventions and the [`Web-UI Testing Guide`](../testing/TypeScript/web-ui/TESTING-GUIDE.md) for `services/web-ui` specifics.
 
 For D3 SVG UI:
 

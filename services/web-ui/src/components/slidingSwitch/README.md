@@ -16,14 +16,44 @@ Appends an SVG group to a d3 selection of an SVG element.
     y: number
     width: number                       // overall width in SVG user units
     height?: number                     // default 26
-    options: { label: string; value: Value }[]
+    options: {
+        label: string
+        value: Value
+        closable?: boolean
+        disabled?: boolean
+        ariaLabel?: string
+        closeAriaLabel?: string
+    }[]
     selectedValue?: Value               // defaults to the first option
     className?: string
+    role?: string                       // default radiogroup
+    optionRole?: string                 // default radio
+    selectedAriaAttribute?: 'aria-checked' | 'aria-selected'
+    minOptionWidth?: number             // content width grows past host width when needed
+    observeParentResize?: boolean       // default true when minOptionWidth is provided
+    visualOverflowPadding?: {
+        top?: number
+        right?: number
+        bottom?: number
+        left?: number
+    }
+    indicatorBoxShadow?: string         // applied as an SVG drop-shadow filter to the active segment
+    indicatorInsetShadow?: {
+        topColor: string
+        bottomColor: string
+    }
+    transition?: {
+        durationMs?: number             // base slide duration
+        minDurationMs?: number          // lower bound for distant jumps
+        distanceSpeedupFactor?: number  // per-segment speedup for distant jumps
+    }
+    renderOption?: (parent, state) => SlidingSwitchOptionRenderInstance | void
     onChange?: (value: Value, id: string) => void
+    onClose?: (value: Value, id: string, option) => void
 }
 ```
 
-**Returns:** `{ render, setValue, getValue, destroy }`
+**Returns:** `{ render, resize, setValue, getValue, getContentWidth, getOuterHeight, destroy }`
 
 ## Usage
 
@@ -53,9 +83,52 @@ slidingSwitch.getValue()             // 'timeline'
 slidingSwitch.destroy()
 ```
 
+### Custom option rendering
+
+`renderOption` lets a host render each segment with another D3 SVG primitive while `slidingSwitch` keeps ownership of selection, keyboard navigation, the sliding indicator, and close callbacks. The callback receives the option geometry and state plus an `onClose(event)` helper. A custom renderer should append inside the provided segment group and return an object with optional `resize(x, y, width, height)`, `render(state)`, and `destroy()` methods. `resize` receives updated segment geometry whenever the switch recalculates width.
+
+```typescript
+import { createTagPill } from '$src/components/tagPill/index.ts'
+
+createSlidingSwitch(svg, {
+    id: 'chat-tabs',
+    x: 0,
+    y: 0,
+    width: 304,
+    height: 28,
+    role: 'tablist',
+    optionRole: 'tab',
+    selectedAriaAttribute: 'aria-selected',
+    options: tabs.map((tab) => ({ label: tab.title, value: tab.id, closable: true })),
+    renderOption: (parent, state) => createTagPill(parent, {
+        id: state.id,
+        x: state.x,
+        y: state.y,
+        width: state.width,
+        height: state.height,
+        label: state.option.label,
+        selected: state.selected,
+        hovered: state.hovered,
+        closable: state.closable,
+        surface: 'content',
+        closeVisibility: 'hover',
+        labelAlign: 'center',
+        onClose: (_id, event) => state.onClose(event),
+    }),
+})
+```
+
 ## Behavior
 
-- Renders an SVG track, a sliding indicator, and one centered text label + transparent hit area per option.
+- Renders an SVG track, a sliding indicator, and one centered text label + transparent hit area per option by default.
 - The indicator slides to the active option via a d3 transition on its `x` attribute (numeric — no CSS, no transform parsing).
+- Slide timing is configurable; distant jumps divide the base duration by `1 + (distance - 1) * distanceSpeedupFactor`, clamped by `minDurationMs`.
+- The indicator does not render a stroke; callers can add elevation with `indicatorBoxShadow` and an inset highlight/shade with `indicatorInsetShadow`.
+- When `indicatorBoxShadow` is set, the component adds top and side SVG padding for the active indicator shadow while clipping bottom overflow.
+- `resize(x, y, width, height)` treats `width` as the visible viewport width. If `minOptionWidth` is set, the switch computes a larger scrollable content width internally.
+- When mounted directly into an `<svg>`, the switch updates that SVG's `width`, `height`, `viewBox`, and visible overflow on initial render and resize.
 - Click selects an option and fires `onChange(value, id)`; hovering a non-active label highlights it via d3 handlers.
-- The consumer owns the host `<svg>` (size it via its own styles) and the meaning of each value.
+- `Enter`, `Space`, arrow keys, `Home`, and `End` update selection from the focused segment.
+- Closable options render the close button on the left on hover and call `onClose(value, id, option)` without changing selection.
+- Custom renderers inherit selection, hover, disabled, geometry, and close state through their `render(state)` method.
+- The consumer owns the meaning of each value. If the parent selection is not an `<svg>` root, the consumer remains responsible for sizing the outer SVG.

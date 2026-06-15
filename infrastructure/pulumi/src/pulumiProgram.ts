@@ -13,6 +13,7 @@ import { createNetworkInfrastructure } from './resources/network.ts'
 import { createEcsCluster } from './resources/ECS-cluster.ts'
 import { createNatsClusterService } from './resources/NATS-cluster/NATS-cluster.ts'
 import { createMainApiService } from './resources/main-api-service.ts'
+import { createNexNodeService } from './resources/nex-node/nex-node.ts'
 import { createCertificate } from './resources//certificate.ts'
 import { createDnsRecords, createHostedZone, createDelegationRecord, getOrCreateHostedZone } from './resources/dns-records.ts'
 import { createWebUI } from './resources/web-ui.ts'
@@ -42,12 +43,16 @@ const {
     NATS_AUTH_ACCOUNT,
     NATS_SYS_USER_PASSWORD,
     NATS_REGULAR_USER_PASSWORD,
+    NATS_NEX_NODE_NKEY_PUBLIC,
+    NATS_NEX_NODE_NKEY_SEED,
     NATS_AUTH_NKEY_ISSUER_SEED,
     NATS_AUTH_NKEY_ISSUER_PUBLIC,
     NATS_AUTH_XKEY_ISSUER_SEED,
     NATS_AUTH_XKEY_ISSUER_PUBLIC,
     GOOGLE_API_KEY,
     STABLE_DIFFUSION_API_KEY,
+    ARK_API_KEY,
+    BYTEPLUS_ARK_API_KEY,
     LLM_TIMEOUT_SECONDS,
     NATS_SAME_ORIGIN,
     NATS_ALLOWED_ORIGINS,
@@ -252,6 +257,7 @@ export const createInfrastructure = async () => {
             NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
             NATS_AUTH_NKEY_ISSUER_PUBLIC: NATS_AUTH_NKEY_ISSUER_PUBLIC!,
             NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
+            NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
             NATS_SAME_ORIGIN: NATS_SAME_ORIGIN!,
             NATS_ALLOWED_ORIGINS: NATS_ALLOWED_ORIGINS || "[]",
             NATS_DEBUG_MODE: NATS_DEBUG_MODE!,
@@ -320,6 +326,7 @@ export const createInfrastructure = async () => {
             NATS_AUTH_NKEY_ISSUER_PUBLIC: NATS_AUTH_NKEY_ISSUER_PUBLIC!,
             NATS_AUTH_XKEY_ISSUER_SEED: NATS_AUTH_XKEY_ISSUER_SEED!,
             NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
+            NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
             NATS_SYS_USER_PASSWORD: NATS_SYS_USER_PASSWORD!,
             NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
             ORIGIN_HOST_URL: ORIGIN_HOST_URL!,
@@ -331,10 +338,61 @@ export const createInfrastructure = async () => {
             ANTHROPIC_API_KEY: ANTHROPIC_API_KEY!,
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
+            // BytePlus ModelArk (Seedance video). Accept either env name and emit the
+            // canonical ARK_API_KEY on the task def; || (not ??) so an empty string from
+            // one name falls through to the other. The provider reads ARK_API_KEY as a fallback.
+            ARK_API_KEY: ARK_API_KEY || BYTEPLUS_ARK_API_KEY || '',
             LLM_TIMEOUT_SECONDS: LLM_TIMEOUT_SECONDS ?? '1200',
         },
         dockerBuildContext: '/usr/src/service',
         dockerfilePath: '/usr/src/service/services/api/Dockerfile',
+    })
+
+    // Deploy the NATS NEX execution-engine node (internal, single instance).
+    // Runs the hourly ai-models-sync workload. Connects to the cluster over the
+    // internal CloudMap URL — the Go nex client needs a plain nats:// endpoint
+    // (the :4222 client port is not TLS), so we pass natsUrl, NOT the tls://
+    // NATS_SERVERS env the JS API client tolerates.
+    const nexNodeService = await createNexNodeService({
+        ecsCluster: {
+            id: ecsCluster.outputs.clusterId,
+            arn: ecsCluster.outputs.clusterArn,
+            name: ecsCluster.outputs.clusterName,
+        },
+        vpc: networkInfrastructure.vpc,
+        privateSubnets: networkInfrastructure.privateSubnets,
+        serviceName: formatStageResourceName('nex', ORG_NAME!, STAGE!).toLowerCase(),
+        cpu: 512,
+        memory: 1024,
+        desiredCount: 1,
+        tables: {
+            aiModelsListTable: dynamoDBtables.aiModelsListTable,
+        },
+        environment: {
+            NATS_SERVERS: natsClusterService.outputs.natsUrl,   // internal plain nats:// CloudMap URL
+            NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
+            NATS_NEX_NODE_NKEY_SEED: NATS_NEX_NODE_NKEY_SEED!,
+            NATS_JS_DOMAIN: 'lixpi',
+            NEX_NAMESPACE: 'system',
+            NEX_NODE_NAME: 'lixpi-nex',
+            ORG_NAME: ORG_NAME!,
+            STAGE: STAGE!,
+            ENVIRONMENT: ENVIRONMENT!,
+            AWS_REGION: AWS_REGION!,
+            // No DYNAMODB_ENDPOINT / AWS_PROFILE on AWS: real DynamoDB via the task role
+            // (creds arrive through the ECS metadata endpoint, forwarded to the workload
+            // by the entrypoint via AWS_CONTAINER_CREDENTIALS_RELATIVE_URI).
+            OPENAI_API_KEY: OPENAI_API_KEY!,
+            ANTHROPIC_API_KEY: ANTHROPIC_API_KEY!,
+            GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
+            STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
+            // Forwarded for parity with the API task def + nex entrypoint key set; the
+            // models-sync workload injects Seedance statically and makes no BytePlus call.
+            ARK_API_KEY: ARK_API_KEY || BYTEPLUS_ARK_API_KEY || '',
+        },
+        dockerBuildContext: '/usr/src/service',
+        dockerfilePath: '/usr/src/service/services/nex/Dockerfile',
+        dependencies: [natsClusterService.ecsService],
     })
 
     // Deploy the web UI with CloudFront distribution
@@ -413,6 +471,7 @@ export const createInfrastructure = async () => {
         caddyCertManager,
         natsClusterService,
         mainApiService,
+        nexNodeService,
         webUI,
         certificateResources,
         dnsRecords,

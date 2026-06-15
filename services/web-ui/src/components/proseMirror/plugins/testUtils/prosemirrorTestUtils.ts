@@ -53,6 +53,15 @@ const builderResult = builders(testSchema, {
         isInitialRenderAnimation: false,
     },
 
+    reasoningSection: {
+        nodeType: 'aiReasoningSection',
+        generationRequestId: '',
+        reasoningRunId: '',
+        reasoningModelId: '',
+        reasoningIndex: null,
+        isReceivingAnimation: false,
+    },
+
     userMsg: {
         nodeType: 'aiUserMessage',
     },
@@ -76,7 +85,7 @@ const builderResult = builders(testSchema, {
 })
 
 // Export individual builders
-export const { doc, p, h1, h2, h3, img, aiImg, thread, response, userMsg, userInput, promptInput, blockquote, codeBlock, hr } = builderResult
+export const { doc, p, h1, h2, h3, img, aiImg, thread, response, reasoningSection, userMsg, userInput, promptInput, blockquote, codeBlock, hr } = builderResult
 export const schema = builderResult.schema
 
 // Helper to find position of a node by type

@@ -9,17 +9,49 @@ Lixpi documentation should be useful to a human developer first. It can help age
 
 Use this guide when creating, moving, deleting, or reorganizing documentation.
 
-## Start by Discovering the Current Shape
+## Start by Discovering the Live Shape
 
-Do not assume the current folders, page names, or architecture boundaries are permanent. Before changing documentation:
+Do not assume folders, page names, or architecture boundaries are permanent. Before changing documentation:
 
 1. Read the docs index at the root of the documentation tree.
-2. Check the generated docs-site navigation or list the current Markdown files.
+2. Check the generated docs-site navigation or list the Markdown files.
 3. Read the pages around the area you are changing.
 4. Read nearby source-code READMEs for the implementation area.
-5. Fact-check behavior against the current code before repeating or rewriting it.
+5. Fact-check behavior against the live code before repeating or rewriting it.
 
 The docs index is a map, not a contract. If the product shape changes, update the map to match the new shape. Avoid adding tiny "read this folder first" files whose only job is routing; put real guidance in this guide, in the relevant domain page, or in the docs index.
+
+## Document the Live System, Not a Timeline
+
+Hard rule: product and developer docs describe how the system works. They are
+not a history record, migration diary, before/after report, or commentary on
+what changed.
+
+Never frame normal documentation with phrases like:
+
+- "Current Responsibilities"
+- "Current State"
+- "now"
+- "previously"
+- "used to"
+- "no longer"
+- "old behavior"
+- "new behavior"
+- "deprecated path"
+- "legacy path"
+
+Write the contract directly:
+
+- Use "Responsibilities", not "Current Responsibilities".
+- Use "Input Flow", not "Current Flow".
+- Use "Schema", "Runtime Wiring", "Files", "Transaction Meta", and similar direct headings.
+- Say what the code does, not what it replaced.
+
+Mention removed or replaced behavior only in an explicit archive, migration
+plan, changelog, or compatibility section where that history is the subject. If
+a symbol remains for compatibility, document the live compatibility contract:
+"parses `aiUserInput` and removes it in `appendTransaction()`", not "this used
+to be the composer."
 
 ## Keep the Structure Flexible
 
@@ -32,25 +64,25 @@ Organize by stable product or engineering concerns, not by whatever filenames ha
 - How is it deployed or operated?
 - What conventions must implementation code follow?
 
-When the architecture changes, the documentation shape should change with it. Moving a page is fine. Splitting a page is fine. Deleting a page is fine if the content was moved or is no longer true.
+When the architecture changes, the documentation shape should change with it. Moving a page is fine. Splitting a page is fine. Deleting a page is fine if the content was moved or is false.
 
-Before deleting or replacing docs, compare against the previous version and account for every important concept:
+Before deleting or replacing docs, compare against the existing version and account for every important concept:
 
 - Keep still-true product behavior.
-- Drop behavior that no longer exists.
-- Mark historical context as historical instead of letting it masquerade as live behavior.
+- Drop false behavior.
+- Keep history out of normal docs unless the page is explicitly an archive, migration plan, changelog, or compatibility note.
 - Preserve useful rationale, constraints, and gotchas.
 - Remove stale route-finding breadcrumbs.
 
 ## Keep the Docs Honest
 
-Every factual claim should be easy to defend from the current code, infrastructure, tests, or linked external source.
+Every factual claim should be easy to defend from live code, infrastructure, tests, or linked external source.
 
 Prefer durable statements over brittle ones:
 
 - Say "application tables" instead of freezing a table count.
 - Say "configured by the deployment" instead of hardcoding a task count unless the exact number is the point.
-- Say "current default" when a setting can change.
+- Say "configured default" when a setting can change.
 - Say "computed and logged" if the code does not publish or persist something.
 - Say "future split needs worker subscription code" if the boundary exists but the implementation is not wired.
 
@@ -64,7 +96,7 @@ Avoid broad absolute claims unless the code enforces them:
 - "production-ready"
 - "no code changes"
 
-If the claim is a benchmark, capacity estimate, market comparison, legal/compliance statement, or vendor capability, either cite a current source or make it clear that it is a hypothesis that needs validation.
+If the claim is a benchmark, capacity estimate, market comparison, legal/compliance statement, or vendor capability, either cite an up-to-date source or make it clear that it is a hypothesis that needs validation.
 
 ## Write Like a Developer
 
@@ -124,6 +156,8 @@ The docs build generates heading IDs and validates anchor fragments. If you link
 
 ## Moving or Renaming Pages
 
+Do not delete documentation files silently. If cleanup, reverting agent edits, moving content, or replacing docs would delete files, ask the user to confirm the exact file path(s) first. If the user does not confirm, keep the files and report them as cleanup candidates.
+
 When reorganizing documentation:
 
 1. Map old pages to their new homes before deleting anything.
@@ -157,14 +191,19 @@ pnpm docs:build
 
 The build is the link and Markdoc compatibility gate. It should fail on Markdoc parse/validation errors, dangling documentation links, missing source-code link targets, and broken heading fragments.
 
-If documentation changes a tested source assertion, run the relevant test through the allowed project test command. For web UI tests, use Dockerized Vitest. Do not use `svelte-check`, browsers, screenshots, or manual visual inspection as substitutes for permitted tests.
+If documentation changes a tested source assertion, run the relevant test
+through the allowed project test command only when the user explicitly asks for
+tests in the current thread. For web UI tests, use Dockerized Vitest. Do not use
+`svelte-check`, browsers, screenshots, or manual visual inspection as
+substitutes for permitted tests.
 
 ## Before Calling It Done
 
 Check these:
 
-- The docs describe the current code, not the old architecture.
-- Historical behavior is clearly labeled as historical.
+- The docs describe the live code as the actual system.
+- Normal docs do not use before/after framing, "current" headings, or old-vs-new commentary.
+- Historical behavior appears only when the page is explicitly an archive, migration plan, changelog, or compatibility note.
 - Links work in the generated site, not only on GitHub.
 - Page names and headings are human-readable.
 - The docs index still gives a good starting point.

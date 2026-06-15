@@ -3,9 +3,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+    getPromptTextFromMessages,
     buildImageBranchCandidateSnapshot,
     buildWorkspaceContextSnapshot,
     getGeneratedImageTextByNodeIdFromThreadContent,
+    isChatRootNode,
 } from '$src/services/ai-image-branching.ts'
 import type { CanvasNode, WorkspaceEdge } from '@lixpi/constants'
 
@@ -169,6 +171,13 @@ const uploadedVideoNode = {
     },
 } satisfies CanvasNode
 
+const branchOriginNode = {
+    nodeId: 'branch-origin-1',
+    type: 'branchOrigin',
+    position: { x: 200, y: 0 },
+    dimensions: { width: 48, height: 48 },
+} satisfies CanvasNode
+
 const cubistDocNode = {
     nodeId: 'cubist-doc',
     type: 'document',
@@ -300,6 +309,22 @@ describe('buildImageBranchCandidateSnapshot', () => {
         })
     })
 
+    it('does not crash when a generated branch is connected through a non-media branch origin', () => {
+        const snapshot = buildImageBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            threadId: 'thread-1',
+            nodes: [rootNode, branchOriginNode, personGeneratedNode],
+            edges: [
+                { edgeId: 'edge-origin-person', sourceNodeId: 'branch-origin-1', targetNodeId: 'person-generated' },
+            ] as WorkspaceEdge[],
+            prompt: 'make this more cinematic',
+        })
+        const candidate = snapshot.candidates.find((item) => item.nodeId === 'person-generated')
+
+        expect(candidate?.ancestorNodeIds).toEqual(['person-generated'])
+        expect(candidate?.roleHints).toContain('branch-leaf')
+    })
+
     it('folds thread response text into generated branch prompt text', () => {
         const threadContent = {
             type: 'doc',
@@ -341,6 +366,31 @@ describe('buildImageBranchCandidateSnapshot', () => {
         expect(branchLeaf?.promptText).toContain('make the same man orange monochrome')
         expect(branchLeaf?.promptText).toContain('thread image prompt text')
         expect(branchLeaf?.visualEntitySummary).toBe('orange monochrome portrait of the same man with glasses')
+    })
+})
+
+describe('getPromptTextFromMessages', () => {
+    it('returns the latest user prompt from mixed message content formats', () => {
+        expect(
+            getPromptTextFromMessages([
+                { role: 'assistant', content: [{ type: 'text', text: 'ignore this' }] },
+                { role: 'user', content: [{ type: 'text', text: 'older prompt' }] },
+                { role: 'user', content: [{ type: 'input_text', text: 'newest prompt' }, { type: 'text', text: 'with details' }] },
+            ]),
+            'newest prompt\nwith details',
+        ).toBe('newest prompt\nwith details')
+    })
+
+    it('returns an empty string when no user message content is available', () => {
+        expect(getPromptTextFromMessages([{ role: 'assistant', content: 'hello' }])).toBe('')
+    })
+})
+
+describe('isChatRootNode', () => {
+    it('returns true only for ai chat thread nodes', () => {
+        expect(isChatRootNode({ type: 'aiChatThread', nodeId: 'thread' } as CanvasNode)).toBe(true)
+        expect(isChatRootNode({ type: 'image', nodeId: 'image' } as CanvasNode)).toBe(false)
+        expect(isChatRootNode({ type: 'document', nodeId: 'doc' } as CanvasNode)).toBe(false)
     })
 })
 
@@ -444,6 +494,8 @@ describe('buildWorkspaceContextSnapshot', () => {
 
         const generated = byId.get('person-generated')
         expect(generated?.branchId).toBe('branch-person')
+        expect(generated?.sourceThreadId).toBe('thread-1')
+        expect(generated?.isCurrentThreadGenerated).toBe(true)
         expect(generated?.imageUrl).toBe('nats-obj://workspace-workspace-1-files/person-generated-file')
         expect(generated?.descriptorSummary).toBeUndefined()
 
@@ -458,6 +510,28 @@ describe('buildWorkspaceContextSnapshot', () => {
 
         const thread = byId.get('thread-context')
         expect(thread?.referenceId).toBe('thread-context-ref')
+    })
+
+    it('marks generated media from other chats without treating it as current-thread output', () => {
+        const otherThreadImage = {
+            ...personGeneratedNode,
+            nodeId: 'other-thread-generated',
+            generatedBy: {
+                ...personGeneratedNode.generatedBy,
+                aiChatThreadId: 'thread-other',
+            },
+        } satisfies CanvasNode
+        const snapshot = buildWorkspaceContextSnapshot({
+            workspaceId: 'workspace-1',
+            threadId: 'thread-1',
+            prompt: 'now make it warmer',
+            nodes: [rootNode, otherThreadImage],
+            edges: [],
+        })
+        const generated = snapshot.nodes.find((node) => node.nodeId === 'other-thread-generated')
+
+        expect(generated?.sourceThreadId).toBe('thread-other')
+        expect(generated?.isCurrentThreadGenerated).toBeUndefined()
     })
 
     it('flags explicit chips and edge-forced nodes (edges + parent children)', () => {

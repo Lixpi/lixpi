@@ -31,14 +31,25 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     }
 }
 
-const createRouter = () => {
-    const process = vi.fn(async () => ({ generatedVideos: ['nats-obj://workspace-workspace-1-files/video-file'] }))
+const createRouter = (processResult: { generatedVideos?: string[]; error?: string } = { generatedVideos: ['nats-obj://workspace-workspace-1-files/video-file'] }) => {
+    const process = vi.fn(async () => processResult)
     const createTransient = vi.fn(() => ({ process }))
     const router = new VideoRouter({ createTransient } as any)
     return { router, createTransient, process }
 }
 
 describe('VideoRouter', () => {
+    it('returns empty object when required routing inputs are missing', async () => {
+        const { router, process } = createRouter()
+
+        const result = await router.execute(createState({
+            videoProviderName: undefined,
+        }))
+
+        expect(result).toEqual({})
+        expect(process).not.toHaveBeenCalled()
+    })
+
     it('routes the final VEO prompt and attaches feature references when reference images are allowed', async () => {
         const { router, createTransient, process } = createRouter()
 
@@ -95,5 +106,13 @@ describe('VideoRouter', () => {
         const requestData = process.mock.calls[0]?.[0]
         expect(requestData.videoReferenceImages).toHaveLength(9)
         expect(requestData.videoReferenceImages).toEqual(refs.slice(0, 9))
+    })
+
+    it('returns an error when provider completes without any generated videos', async () => {
+        const { router } = createRouter({ generatedVideos: [] })
+
+        const result = await router.execute(createState())
+
+        expect(result).toEqual({ error: 'Video generation failed: provider completed without a generated video' })
     })
 })

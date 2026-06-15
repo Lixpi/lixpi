@@ -72,6 +72,7 @@ export type MainApiServiceArgs = {
         NATS_AUTH_NKEY_ISSUER_PUBLIC: string
         NATS_AUTH_XKEY_ISSUER_SEED: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
+        NATS_NEX_NODE_NKEY_PUBLIC: string
 
         ORIGIN_HOST_URL: string
         API_HOST_URL: string
@@ -84,6 +85,7 @@ export type MainApiServiceArgs = {
         ANTHROPIC_API_KEY: string
         GOOGLE_API_KEY: string
         STABLE_DIFFUSION_API_KEY: string
+        ARK_API_KEY: string
         LLM_TIMEOUT_SECONDS: string
     }
 

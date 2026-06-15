@@ -24,4 +24,27 @@ describe('ProseMirrorEditor — AI prompt draft restoration', () => {
         expectSourceToContain("console.warn('[EDITOR] Invalid AI prompt draft, creating fresh input:', e)")
         expectSourceToContain('this.editorSchema.nodes[aiPromptInputNodeType].createAndFill()')
     })
+
+    it('forwards context tray control factory into the AI prompt input plugin', () => {
+        expectSourceToContain('createContextTray: this.promptControlFactories?.createContextTray,')
+        expectSourceToContain('createAiPromptInputPlugin({')
+        expectSourceToContain('onStop: () => this.onPromptStop?.()')
+        expectSourceToContain('promptControlFactories?.createModelDropdown,')
+    })
+
+    it('routes schema creation based on document type', () => {
+        expectSourceToContain('if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD)')
+        expectSourceToContain('if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT)')
+        expectSourceToContain('[aiPromptInputNodeType]: aiPromptInputNodeSpec')
+        expectSourceToContain('allNodes = {')
+        expectSourceToContain('return this.editorSchema.nodes.doc.create(null, [titleNode, threadNode])')
+        expectSourceToContain('return this.editorSchema.nodes.doc.create(null, [inputNode])')
+    })
+
+    it('adds AI prompt and AI chat plugins only in matching document modes', () => {
+        expectSourceToContain('createAiChatThreadPlugin({')
+        expectSourceToContain('createAiPromptInputPlugin({')
+        expectSourceToContain('if (this.documentType === DOCUMENT_TYPE.AI_CHAT_THREAD)')
+        expectSourceToContain('if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT)')
+    })
 })

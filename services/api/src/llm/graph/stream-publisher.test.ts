@@ -246,4 +246,98 @@ describe('StreamPublisher extraction progress', () => {
         }))
     })
 
+    it('publishes image generation errors with media run metadata', () => {
+        const nats = makeFakeNats()
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            mediaRunId: 'reasoning-1:image:0',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:gemini-2.5-flash-image',
+            mediaType: 'image',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+        } as const
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
+
+        publisher.imageGenerationError('no inline image data')
+
+        expect(nats.published).toHaveLength(1)
+        expect(nats.published[0]?.payload.content).toEqual({
+            status: STREAM_STATUS.IMAGE_ERROR,
+            aiProvider: 'Anthropic',
+            error: 'no inline image data',
+            generationRun,
+        })
+    })
+})
+
+describe('StreamPublisher trace payloads', () => {
+    it('propagates media generation metadata through image/video traces', () => {
+        const nats = makeFakeNats()
+        const generationRun = {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            mediaRunId: 'reasoning-1:video:0',
+            reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+            mediaModelId: 'Google:veo-3.1-generate-preview',
+            mediaType: 'video',
+            reasoningIndex: 0,
+            mediaIndex: 0,
+            variantIndex: 0,
+        } as const
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', generationRun)
+
+        publisher.imageGenerationTrace({
+            traceVersion: 'image-generation-trace-v1',
+            toolPrompt: 'build one',
+            finalPrompt: 'build one with transfer',
+            promptWasChanged: false,
+            referenceImages: [],
+            excludedReferences: [],
+            imageModelProvider: 'Google',
+            imageModelId: 'gemini-2.5-flash-image',
+            chatModelProvider: 'Anthropic',
+            chatModelId: 'claude-sonnet-4-6',
+            imageSize: '1:1',
+            generationRun: undefined,
+        } as any)
+        publisher.videoGenerationTrace({
+            traceVersion: 'video-generation-trace-v1',
+            toolPrompt: 'animate one',
+            finalPrompt: 'animate one with constraints',
+            promptWasChanged: false,
+            referenceImages: [],
+            excludedReferences: [],
+            videoModelProvider: 'Google',
+            videoModelId: 'veo-3.1-generate-preview',
+            chatModelProvider: 'Anthropic',
+            chatModelId: 'claude-sonnet-4-6',
+            aspectRatio: '16:9',
+            resolution: '720p',
+            durationSeconds: 6,
+            generationRun: generationRun,
+        } as any)
+
+        const imageTrace = nats.published[0]?.payload.content
+        const videoTrace = nats.published[1]?.payload.content
+
+        expect(imageTrace).toMatchObject({
+            status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
+            aiProvider: 'Anthropic',
+            imageGenerationTrace: expect.objectContaining({
+                generationRun,
+            }),
+            generationRun,
+        })
+        expect(videoTrace).toMatchObject({
+            status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
+            aiProvider: 'Anthropic',
+            videoGenerationTrace: expect.objectContaining({
+                generationRun,
+            }),
+            generationRun,
+        })
+    })
 })

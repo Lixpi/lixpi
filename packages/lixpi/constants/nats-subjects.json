@@ -1,6 +1,7 @@
 {
 	"AI_MODELS_SUBJECTS": {
-		"GET_AVAILABLE_MODELS": "aiModels.getAvailableModels"
+		"GET_AVAILABLE_MODELS": "aiModels.getAvailableModels",
+		"MODELS_SYNC_COMPLETED": "aiModels.syncCompleted"
 	},
 	"USER_SUBJECTS": {
 		"GET_USER": "user.get"

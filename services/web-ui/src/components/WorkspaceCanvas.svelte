@@ -55,7 +55,7 @@
 
     function getImageInsertionDimensions(aspectRatio: number): { width: number; height: number } {
         const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
-        const width = settings.imageNode.defaultInsertionWidth
+        const width = settings.mediaNode.image.defaultInsertionWidth
         return { width, height: width / safeAspectRatio }
     }
 

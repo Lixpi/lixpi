@@ -2,6 +2,7 @@ import {
     createImageGenerationTraceDetails,
     getImageGenerationSummaryTitle,
     type ImageGenerationTraceDetailsAttrs,
+    type ImageGenerationTraceDetailsOptions,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 
 export { cacheImageGenerationTrace } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
@@ -16,6 +17,13 @@ export const aiCollapsibleBlockNodeSpec = {
         imageGenerationTrace: { default: null },
         imageGenerationTraceId: { default: null },
         videoGenerationTrace: { default: null },
+        generationRequestId: { default: '' },
+        reasoningRunId: { default: '' },
+        mediaRunId: { default: '' },
+        reasoningModelId: { default: '' },
+        mediaModelId: { default: '' },
+        mediaType: { default: '' },
+        variantIndex: { default: null },
     },
     content: '(paragraph | block)*',
     group: 'block',
@@ -32,6 +40,13 @@ export const aiCollapsibleBlockNodeSpec = {
                     imageGenerationTrace: null,
                     imageGenerationTraceId: null,
                     videoGenerationTrace: null,
+                    generationRequestId: dom.getAttribute('data-generation-request-id') || '',
+                    reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
+                    mediaRunId: dom.getAttribute('data-media-run-id') || '',
+                    reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
+                    mediaModelId: dom.getAttribute('data-media-model-id') || '',
+                    mediaType: dom.getAttribute('data-media-type') || '',
+                    variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
                 }
             },
         },
@@ -42,6 +57,13 @@ export const aiCollapsibleBlockNodeSpec = {
             {
                 class: `ai-collapsible-block${node.attrs.isStreaming ? ' is-streaming' : ''}`,
                 ...(node.attrs.isOpen ? { open: 'true' } : {}),
+                'data-generation-request-id': node.attrs.generationRequestId,
+                'data-reasoning-run-id': node.attrs.reasoningRunId,
+                'data-media-run-id': node.attrs.mediaRunId,
+                'data-reasoning-model-id': node.attrs.reasoningModelId,
+                'data-media-model-id': node.attrs.mediaModelId,
+                'data-media-type': node.attrs.mediaType,
+                'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
             },
             ['summary', {}, getSummaryTitle(node.attrs)],
             ['div', { class: 'ai-collapsible-block-body' }, ['div', { class: 'ai-collapsible-block-content' }, 0]],
@@ -49,12 +71,27 @@ export const aiCollapsibleBlockNodeSpec = {
     },
 }
 
+function parseVariantIndex(value: string | null): number | null {
+    if (!value) return null
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
 const getSummaryTitle = (attrs: ImageGenerationTraceDetailsAttrs): string => {
     return getImageGenerationSummaryTitle(attrs)
 }
 
-export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => number | undefined) => {
-    const traceDetails = createImageGenerationTraceDetails()
+export type AiCollapsibleBlockNodeViewOptions = {
+    traceDetailsOptions?: ImageGenerationTraceDetailsOptions
+}
+
+export const aiCollapsibleBlockNodeView = (
+    node: any,
+    view: any,
+    getPos: () => number | undefined,
+    options: AiCollapsibleBlockNodeViewOptions = {},
+) => {
+    const traceDetails = createImageGenerationTraceDetails(options.traceDetailsOptions)
     const wrapper = traceDetails.dom
     const summary = traceDetails.summary
     const contentDom = traceDetails.contentDom
@@ -75,6 +112,8 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
         const newOpen = !wrapper.open
         wrapper.open = newOpen
         if (newOpen) renderTrace(node)
+
+        if (!view.editable) return
 
         const tr = view.state.tr.setNodeMarkup(pos, undefined, {
             ...view.state.doc.nodeAt(pos)?.attrs,

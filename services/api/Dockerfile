@@ -16,7 +16,7 @@ WORKDIR /usr/src/service
 # Copy the rest of app's source code
 COPY ./services/api .
 COPY ./packages ./packages
-COPY ./pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY ./services/api/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Install dependencies, redundant when running locally because starting service each time will install deps, but needed for deployment
 RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store

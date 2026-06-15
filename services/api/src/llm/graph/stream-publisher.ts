@@ -5,6 +5,8 @@ import {
     STREAM_STATUS,
     type ImageBranchVlmResolution,
     type ImageGenerationTrace,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
     type ProviderName,
     type StageTraceEvent,
     type StreamStatus,
@@ -31,12 +33,14 @@ export type ChunkPayload = {
         resolution?: ImageBranchVlmResolution
         workspaceContextResolution?: WorkspaceContextResolution
         imageGenerationTrace?: ImageGenerationTrace
+        lineagePlan?: MediaBranchLineagePlan
         videoGenerationTrace?: VideoGenerationTrace
         error?: string
         extractionStatus?: string
         extractionDetail?: string
         stageTraceEvent?: StageTraceEvent
         featureCard?: Record<string, any>
+        generationRun?: MediaGenerationRunMeta
     }
     aiChatThreadId: string
 }
@@ -73,11 +77,15 @@ export class TagAwareStream {
         private readonly workspaceId: string,
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
+        private readonly generationRun?: MediaGenerationRunMeta,
     ) {}
 
     private publish(content: ChunkPayload['content']): void {
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
-            content,
+            content: {
+                ...content,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
+            },
             aiChatThreadId: this.aiChatThreadId,
         })
     }
@@ -201,8 +209,9 @@ export class StreamPublisher {
         private readonly workspaceId: string,
         private readonly aiChatThreadId: string,
         private readonly provider: ProviderName,
+        private readonly generationRun?: MediaGenerationRunMeta,
     ) {
-        this.tagBuffer = new TagAwareStream(nats, workspaceId, aiChatThreadId, provider)
+        this.tagBuffer = new TagAwareStream(nats, workspaceId, aiChatThreadId, provider, generationRun)
     }
 
     start(): void {
@@ -215,6 +224,7 @@ export class StreamPublisher {
             content: {
                 status: STREAM_STATUS.START_STREAM,
                 aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -234,6 +244,7 @@ export class StreamPublisher {
                 text: '',
                 status: STREAM_STATUS.END_STREAM,
                 aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -246,6 +257,7 @@ export class StreamPublisher {
                 aiProvider: this.provider,
                 extractionStatus: status,
                 extractionDetail: detail,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -257,6 +269,7 @@ export class StreamPublisher {
                 status: STREAM_STATUS.STREAMING,
                 aiProvider: this.provider,
                 stageTraceEvent: event,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -270,28 +283,43 @@ export class StreamPublisher {
                 status: STREAM_STATUS.STREAMING,
                 aiProvider: this.provider,
                 featureCard: payload,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
     }
 
-    imageBranchResolved(resolution: ImageBranchVlmResolution): void {
+    imageBranchResolved(resolution: ImageBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
                 status: STREAM_STATUS.IMAGE_BRANCH_RESOLVED,
                 aiProvider: this.provider,
                 resolution,
+                ...(generationRun ? { generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
     }
 
-    contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution): void {
+    mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.MEDIA_LINEAGE_PLANNED,
+                aiProvider: this.provider,
+                lineagePlan,
+                ...(generationRun ? { generationRun } : {}),
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
                 status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
                 aiProvider: this.provider,
                 workspaceContextResolution,
+                ...(generationRun ? { generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -303,28 +331,43 @@ export class StreamPublisher {
                 status: STREAM_STATUS.CONTEXT_RELEVANCE_ERROR,
                 aiProvider: this.provider,
                 error: message,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
     }
 
-    imageGenerationTrace(trace: ImageGenerationTrace): void {
+    imageGenerationTrace(trace: ImageGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
                 status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
                 aiProvider: this.provider,
-                imageGenerationTrace: trace,
+                imageGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+                ...(generationRun ? { generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
     }
 
-    videoGenerationTrace(trace: VideoGenerationTrace): void {
+    imageGenerationError(message: string, generationRun: MediaGenerationRunMeta | undefined = this.generationRun): void {
+        this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
+            content: {
+                status: STREAM_STATUS.IMAGE_ERROR,
+                aiProvider: this.provider,
+                error: message,
+                ...(generationRun ? { generationRun } : {}),
+            },
+            aiChatThreadId: this.aiChatThreadId,
+        })
+    }
+
+    videoGenerationTrace(trace: VideoGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.generationRun): void {
         this.nats.publish(subject(this.workspaceId, this.aiChatThreadId), {
             content: {
                 status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
                 aiProvider: this.provider,
-                videoGenerationTrace: trace,
+                videoGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+                ...(generationRun ? { generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -336,6 +379,7 @@ export class StreamPublisher {
                 status: STREAM_STATUS.IMAGE_BRANCH_RESOLUTION_ERROR,
                 aiProvider: this.provider,
                 error: message,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })
@@ -355,6 +399,7 @@ export class StreamPublisher {
                 text: message,
                 status: STREAM_STATUS.ERROR,
                 aiProvider: this.provider,
+                ...(this.generationRun ? { generationRun: this.generationRun } : {}),
             },
             aiChatThreadId: this.aiChatThreadId,
         })

@@ -7,6 +7,8 @@ description: 'ALWAYS-ON enforcement: run read-only shell commands by wrapping th
 
 This skill is the discoverable companion to the always-on instructions file at [.github/instructions/terminal-via-pylance.instructions.md](.github/instructions/terminal-via-pylance.instructions.md).
 
+Before running any command, follow the Docker-only command rule in `AGENTS.md` and `documentation/development-workflow/AGENT-SKILLS.md`: never run `npm`, `npx`, `pnpm`, or `pnpx` on the host, including through Pylance.
+
 That instructions file is the source of truth. Read it for:
 
 - The full list of prohibited (mutating) command categories.

@@ -1,6 +1,5 @@
 'use strict'
 
-// import SocketService from '$src/services/socket.io-service.ts'
 import { organizationStore } from '$src/stores/organizationStore.ts'
 
 class OrganizationService {

@@ -92,4 +92,49 @@ describe('createToggleSwitch', () => {
         toggle.destroy()
         expect(svg.querySelector('.toggle-switch-group')).toBeNull()
     })
+
+    it('uses explicit dimensions and passes geometry to SVG attributes', () => {
+        const { svg, group } = mountToggle({
+            x: 7,
+            y: 11,
+            width: 40,
+            height: 16,
+            checked: false,
+            className: 'custom-toggle'
+        })
+
+        const track = svg.querySelector('.toggle-track') as SVGRectElement
+        const knob = svg.querySelector('.toggle-knob') as SVGCircleElement
+
+        expect(track.getAttribute('width')).toBe('40')
+        expect(track.getAttribute('height')).toBe('16')
+        expect(track.getAttribute('rx')).toBe('8')
+        expect(track.getAttribute('fill')).toBe('#d6d7d8')
+        expect(knob.getAttribute('r')).toBe('5.6')
+        expect(knob.getAttribute('cx')).toBe('8')
+        expect(group.getAttribute('transform')).toBe('translate(7, 11)')
+        expect(group.getAttribute('class')).toContain('custom-toggle')
+    })
+
+    it('derives width from size and starts checked geometry on the right', () => {
+        const { svg } = mountToggle({ size: 20, checked: true })
+
+        const track = svg.querySelector('.toggle-track') as SVGRectElement
+        const knob = svg.querySelector('.toggle-knob') as SVGCircleElement
+
+        expect(track.getAttribute('width')).toBe('36')
+        expect(track.getAttribute('height')).toBe('20')
+        expect(knob.getAttribute('cx')).toBe('26')
+        expect(track.getAttribute('fill')).toBe('#55967c')
+    })
+
+    it('re-enables click handling after setDisabled(false)', () => {
+        const { toggle, onChange, group } = mountToggle({ checked: false, disabled: true })
+
+        toggle.setDisabled(false)
+        clickGroup(group)
+
+        expect(toggle.getChecked()).toBe(true)
+        expect(onChange).toHaveBeenCalledExactlyOnceWith(true, 't1')
+    })
 })

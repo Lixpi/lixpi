@@ -115,6 +115,49 @@ describe('buildBranchTrees', () => {
         const trees = buildBranchTrees(nodes, [])
         expect(trees[0].childrenByParentId.get('R')).toEqual(['early', 'late'])
     })
+
+    it('orders children by variantIndex before createdAt when available', () => {
+        const nodes = [
+            genMedia('R', 0, 0, { createdAt: 1, branchId: 'v' }),
+            genMedia('v2', 0, 0, { parentImageNodeId: 'R', createdAt: 30, branchId: 'v' }),
+            genMedia('v1', 0, 0, { parentImageNodeId: 'R', createdAt: 20, branchId: 'v' }),
+        ]
+        nodes[1].generatedBy.variantIndex = 2
+        nodes[2].generatedBy.variantIndex = 1
+
+        const trees = buildBranchTrees(nodes, [])
+        expect(trees[0].childrenByParentId.get('R')).toEqual(['v1', 'v2'])
+    })
+
+    it('resolves branch members via branchOrigin fallback before lineage edge', () => {
+        const nodes = [
+            {
+                nodeId: 'branch-origin',
+                type: 'branchOrigin',
+                workspaceId: 'w',
+                dimensions: { width: SIZE, height: SIZE },
+                position: { x: 10, y: 20 },
+                fileId: 'branch-origin',
+                branchId: 'branch-1',
+                src: '',
+            },
+            genMedia('parent', 40, 50, { branchId: 'branch-1' }),
+            genMedia('child', 60, 70, {
+                branchId: 'branch-1',
+                createdAt: 2,
+                parentImageNodeId: undefined,
+            }),
+        ] as any
+        nodes[2].generatedBy.branchOriginNodeId = 'branch-origin'
+        const nodesWithEdge = [...nodes]
+        nodesWithEdge.push(edge('orphan', 'child'))
+
+        const trees = buildBranchTrees(nodesWithEdge, [edge('parent', 'branch-origin')])
+        expect(trees).toHaveLength(1)
+        expect(trees[0].rootId).toBe('parent')
+        expect(trees[0].childrenByParentId.get('parent')).toEqual(['branch-origin'])
+        expect(trees[0].childrenByParentId.get('branch-origin')).toEqual(['child'])
+    })
 })
 
 describe('applyBranchTreeLayout', () => {

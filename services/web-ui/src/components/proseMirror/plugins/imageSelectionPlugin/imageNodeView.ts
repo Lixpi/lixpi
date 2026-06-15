@@ -67,20 +67,17 @@ export class ImageNodeView implements NodeView {
     private originalAspectRatio = 1
     private isResizing = false
     private currentSrcAttr = '' // Track the original src attr to avoid redundant updates
+    private readonly resizeEnabled: boolean
 
     constructor({ node, view, getPos }: ImageNodeViewOptions) {
         this.node = node
         this.view = view
         this.getPos = getPos
         this.currentSrcAttr = getImageSrcAttr(node)
+        this.resizeEnabled = view.editable
 
-        // Create figure wrapper
-        this.figure = document.createElement('figure')
-        this.figure.className = this.buildClassName()
-        this.figure.draggable = true
-
-        // Create image element
-        this.img = document.createElement('img')
+        this.figure = html`<figure className=${this.buildClassName()} draggable=${this.resizeEnabled}></figure>` as HTMLElement
+        this.img = html`<img />` as HTMLImageElement
         // Set src asynchronously to handle auth token
         this.updateImageSrc(getImageSrcAttr(node))
         if (node.attrs.alt) this.img.alt = node.attrs.alt
@@ -88,12 +85,13 @@ export class ImageNodeView implements NodeView {
         if (node.attrs.fileId) this.img.dataset.fileId = node.attrs.fileId
         if (node.attrs.documentId) this.img.dataset.documentId = node.attrs.documentId
 
-        // Create resize handles for all four corners
-        const corners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-        for (const corner of corners) {
-            const handle = this.createResizeHandle(corner)
-            this.resizeHandles.set(corner, handle)
-            this.figure.appendChild(handle)
+        if (this.resizeEnabled) {
+            const corners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+            for (const corner of corners) {
+                const handle = this.createResizeHandle(corner)
+                this.resizeHandles.set(corner, handle)
+                this.figure.appendChild(handle)
+            }
         }
 
         // Apply width if set
@@ -158,6 +156,22 @@ export class ImageNodeView implements NodeView {
         return `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`
     }
 
+    private applyFigureClasses(): void {
+        this.figure.classList.remove(
+            'pm-image-align-left',
+            'pm-image-align-center',
+            'pm-image-align-right',
+            'pm-image-wrap-none',
+            'pm-image-wrap-left',
+            'pm-image-wrap-right',
+        )
+        this.figure.classList.add(
+            'pm-image-wrapper',
+            `pm-image-align-${this.node.attrs.alignment || 'left'}`,
+            `pm-image-wrap-${this.node.attrs.textWrap || 'none'}`,
+        )
+    }
+
     private syncPartialPlaceholder(): void {
         const shouldShowPlaceholder = Boolean(this.node.attrs.isPartial) && !getImageSrcAttr(this.node)
         this.figure.classList.toggle('is-partial', Boolean(this.node.attrs.isPartial))
@@ -187,10 +201,13 @@ export class ImageNodeView implements NodeView {
     }
 
     private createResizeHandle(corner: ResizeCorner): HTMLElement {
-        const handle = document.createElement('div')
-        handle.className = `pm-image-resize-handle pm-image-resize-${corner}`
-        handle.innerHTML = imageResizeCornerIcon
-        handle.dataset.corner = corner
+        const handle = html`
+            <div
+                className=${`pm-image-resize-handle pm-image-resize-${corner}`}
+                innerHTML=${imageResizeCornerIcon}
+                data=${{ corner }}
+            ></div>
+        ` as HTMLElement
         handle.addEventListener('mousedown', (e) => this.handleResizeStart(e, corner))
         return handle
     }
@@ -204,6 +221,7 @@ export class ImageNodeView implements NodeView {
     private handleClick = (event: MouseEvent): void => {
         event.preventDefault()
         event.stopPropagation()
+        if (!this.view.editable) return
 
         const pos = this.getPos()
         if (pos === undefined) return
@@ -217,6 +235,7 @@ export class ImageNodeView implements NodeView {
     private handleResizeStart = (event: MouseEvent, corner: ResizeCorner): void => {
         event.preventDefault()
         event.stopPropagation()
+        if (!this.view.editable) return
 
         this.isResizing = true
         this.figure.classList.add('is-resizing')
@@ -328,7 +347,7 @@ export class ImageNodeView implements NodeView {
         }
 
         // Update classes for alignment and text wrap
-        this.figure.className = this.buildClassName()
+        this.applyFigureClasses()
         this.figure.dataset.alignment = node.attrs.alignment || 'center'
         this.figure.dataset.textWrap = node.attrs.textWrap || 'none'
 

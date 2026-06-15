@@ -1,824 +1,304 @@
 # AI Chat Thread Plugin
 
-Provides the ProseMirror editor experience for AI chat threads on the workspace canvas. Each AI chat thread is a **standalone canvas node** with its own editor instance, AI service connection, and persistence. Users type messages, hit Cmd+Enter (or Ctrl+Enter on Windows), and get AI responses streamed back in real-time.
+`aiChatThreadPlugin` powers the ProseMirror editor inside an AI chat thread canvas node. The thread editor is a conversation log and streaming target. Composer UI is provided by `aiPromptInputPlugin`.
 
-This README reflects the current implementation where AI chat threads are first-class canvas nodes (not embedded in documents).
+## Input Flow
 
-## What it does
+1. `aiPromptInputPlugin` owns the composer editor and model controls.
+2. `AiPromptInputController` injects an `aiUserMessage` into the target thread editor.
+3. The controller dispatches `USE_AI_CHAT_META` with `{ threadId, nodePos }`.
+4. `aiChatThreadPlugin` extracts the thread messages, calls `sendAiRequestHandler`, and streams response nodes into the same thread.
 
-This plugin powers the editor inside AI chat thread canvas nodes. Each thread can contain:
-- Regular paragraphs (user messages)
-- Code blocks (for sharing code)
-- AI responses (streamed from your backend)
+## What It Does
 
-When a user hits Cmd+Enter or clicks the send button, the plugin:
-1. Grabs all the content from the current thread
-2. Calls your callback function with the messages
-3. Shows streaming AI responses as they come in
-4. Handles all the animations and visual feedback
+- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiCollapsibleBlock`, and `aiGeneratedVideo`.
+- Parses `aiUserInput` through the schema compatibility path, then removes those children in `appendTransaction()`.
+- Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
+- Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
+- Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
+- Blocks paste inside thread logs. Users paste into the separate prompt input surface.
+- Supports read-only generated-media provenance projections through the shared AI chat NodeViews without subscribing the preview editor to live stream events.
 
-AI chat threads live as independent canvas nodes alongside documents, images, and videos. Each thread has its own `AiInteractionService` instance for streaming, with routing based on `workspaceId` + `threadId`.
+## Runtime Wiring
 
-## Technical Architecture
-
-The plugin follows a modular architecture where each node type encapsulates its own UI and behavior using declarative DOM templates:
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-graph TD
-    A[AiChatThreadPluginClass] --> B[KeyboardHandler]
-    A --> C[ContentExtractor]
-    A --> D[PositionFinder]
-    A --> E[StreamingInserter]
-    A --> F[DecorationSystem]
-
-    N1[aiChatThreadNode.ts] --> NV1[aiChatThreadNodeView]
-    N2[aiResponseMessageNode.ts] --> NV2[aiResponseMessageNodeView]
-
-    DT[domTemplates.ts] --> DTB[DOMTemplateBuilder]
-    DTB --> HF[html function]
-
-    NV1 --> HF
-    NV2 --> HF
-
-    NV1 --> UI1[html`Thread Boundary`]
-    NV1 --> UI2[html`Submit Button`]
-
-    NV2 --> UI4[html`Provider Avatar`]
-    NV2 --> UI5[html`Message Wrapper`]
-    NV2 --> UI6[html`Boundary Strip`]
-
-    A --> N1
-    A --> N2
-
-    C --> C1[collectFormattedText]
-    C --> C2[getActiveThreadContent]
-    C --> C3[toMessages]
-
-    D --> D1[findThreadInsertionPoint]
-    D --> D2[findResponseNode]
-
-    E --> E1[insertBlockContent]
-    E --> E2[insertInlineContent]
-
-    F --> F1[PlaceholderDecorations]
-    F --> F2[KeyboardFeedbackDecorations]
-    F --> F3[BoundaryDecorations]
-```
-
-**Key Design Principles:**
-- **Self-contained nodes:** Each node type exports both spec AND NodeView (handles boundary indicator, focus, and per-thread dropdown controls)
-- **Declarative UI:** All DOM creation uses `html` template literals instead of verbose `createElement` chains
-- **Shared utilities:** `domTemplates.ts` provides consistent DOM building across all ProseMirror components
-- **Performance-focused:** htm/mini gives zero-runtime overhead with direct DOM element creation
-- **Clean separation:** Plugin orchestrates business logic while NodeViews handle UI via templates
-
-### Plugin State Machine
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-stateDiagram-v2
-    [*] --> Idle: Initialize plugin
-    Idle --> KeyboardFeedback: User presses Mod key
-    KeyboardFeedback --> KeyboardFeedback: Enter key pressed/released
-    KeyboardFeedback --> Idle: Mod key released
-    Idle --> Receiving: START_STREAM event
-    Receiving --> Receiving: STREAMING events
-    Receiving --> Idle: END_STREAM event
-
-    note right of KeyboardFeedback
-      Visual feedback states were removed. We now keep it simple.
-    end note
-
-    note right of Receiving
-        Streaming states:
-        - isReceiving: boolean
-        - Shows stop button
-        - Animates AI avatar
-        - Blocks new requests
-    end note
-```
-
-## Data Flow & Content Extraction
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
-sequenceDiagram
-  participant U as User
-  participant EV as EditorView
-  participant PL as Plugin
-  participant CE as ContentExtractor
-  participant AIS as AiInteractionService
-  participant NATS as NATS
-  participant API as API Service
-  participant LLM as API LLM module<br/>(in-process LangGraph)
-  participant SR as SegmentsReceiver
-  participant SI as StreamingInserter
-  Note over AIS: Subscribed to<br/>receiveMessage.{workspaceId}.{threadId}
-
-  %% ═══════════════════════════════════════════════════════════════
-  %% PHASE 1: PREPARE MESSAGE
-  %% ═══════════════════════════════════════════════════════════════
-  rect rgb(220, 236, 233)
-    Note over U, SI: PHASE 1 - PREPARE MESSAGE
-    U->>EV: Cmd+Enter or click send
-    activate EV
-    EV->>PL: Transaction with USE_AI_CHAT_META
-    activate PL
-    PL->>CE: getActiveThreadContent(state)
-    activate CE
-    CE->>CE: Extract all child blocks with collectFormattedText
-    CE->>CE: Convert to messages with toMessages()
-    CE-->>PL: ThreadContent[] → Messages[]
-    deactivate CE
-    deactivate EV
-  end
-
-  %% ═══════════════════════════════════════════════════════════════
-  %% PHASE 2: SEND
-  %% ═══════════════════════════════════════════════════════════════
-  rect rgb(195, 222, 221)
-    Note over U, SI: PHASE 2 - SEND
-    PL->>AIS: onAiChatSubmit({ messages, aiModel })
-    activate AIS
-    AIS->>NATS: publish(CHAT_SEND_MESSAGE, { workspaceId, aiChatThreadId, messages })
-    NATS->>API: Route to handler
-    activate API
-    API->>LLM: process(instanceKey, provider, payload)
-    deactivate API
-    activate LLM
-  end
-
-  %% ═══════════════════════════════════════════════════════════════
-  %% PHASE 3: STREAM
-  %% ═══════════════════════════════════════════════════════════════
-  rect rgb(246, 199, 179)
-    Note over U, SI: PHASE 3 - STREAM
-    loop Streaming Response
-      LLM->>NATS: publish(receiveMessage.{workspaceId}.{threadId}, chunk)
-      NATS->>AIS: Deliver to subscriber
-      AIS->>SR: Emit segment event
-      activate SR
-      SR->>PL: STREAMING event with segment
-      PL->>SI: insertBlockContent/insertInlineContent
-      activate SI
-      SI->>EV: Insert content into response node
-      deactivate SI
-      deactivate SR
-    end
-    deactivate LLM
-  end
-
-  %% ═══════════════════════════════════════════════════════════════
-  %% PHASE 4: COMPLETE
-  %% ═══════════════════════════════════════════════════════════════
-  rect rgb(242, 234, 224)
-    Note over U, SI: PHASE 4 - COMPLETE
-    LLM->>NATS: END_STREAM
-    NATS->>AIS: End signal
-    AIS->>SR: END_STREAM event
-    SR->>PL: END_STREAM
-    PL->>EV: Clear isReceiving + stop animations
-    deactivate AIS
-    deactivate PL
-  end
-```
-
-### Schema Nodes
-
-**`aiChatThread`** - Container for entire conversation
-- Content: `(aiUserMessage | aiResponseMessage)+` (pure conversation log, no inline composer)
-- Attributes:
-  - `threadId: string | null` - Unique identifier for the thread
-  - `status: 'active'|'paused'|'completed'` - Thread lifecycle state
-  - `aiModel: string` - Selected AI model (e.g., "Anthropic:claude-3-5-sonnet")
-- DOM: `div.ai-chat-thread-wrapper[data-thread-id][data-status][data-ai-model]`
-- **Note:** User input is handled by the separate `aiPromptInputPlugin` which renders as a floating canvas element below the selected node. See `aiPromptInputPlugin/` for details.
-
-**`aiUserMessage`** - Sent user message bubble
-- Content: `(paragraph | block)+`
-- Attributes: `id, createdAt`
-- DOM: `div.ai-user-message`
-
-**`aiUserInput`** - **DEPRECATED / LEGACY ONLY** — Previously the sticky composer at the end of the thread. Now replaced by the separate `aiPromptInputPlugin` which renders as a floating canvas element.
-- The node type spec is kept in the schema for legacy content migration — old thread documents that still contain `aiUserInput` will have it silently stripped in `appendTransaction`.
-- New threads no longer include `aiUserInput` in their content.
-
-**`aiResponseMessage`** - Individual AI responses
-- Content: `(paragraph | block)*` (empty allowed for streaming shell)
-- Attributes: `id, style, isInitialRenderAnimation, isReceivingAnimation, aiProvider, currentFrame`
-- DOM: `div.ai-response-message[data-ai-provider]`
-- Empty shells render a horizontal spinner placeholder so the layout keeps height while the first tokens stream in.
-
-**`aiGeneratedImage`** - AI-generated images (from DALL-E, etc.)
-
-**`aiGeneratedVideo`** - AI-generated videos (from VEO, etc.)
-- Renders pending and error states inline in the AI response body
-- On completion, displays a native-controls-disabled `<video>` element with the shared SVG `components/videoControls` bar overlaid at the bottom
-- Uses the same scrub semantics as canvas video nodes: pointer down pauses if needed, drag updates the requested timestamp continuously, and release resumes only when playback was active before the scrub
-- Uses the same authenticated URL resolution path as generated images for `/api/videos/...` and poster `/api/images/...` URLs
-- Emits canvas lifecycle callbacks for pending, generating, complete, error, branch-resolution, and trace events
-
-**`aiCollapsibleBlock`** - Collapsible disclosure block for image generation prompts
-- Content: `(paragraph | block)*`
-- Attributes: `title, isOpen, isStreaming, imageGenerationTrace, imageGenerationTraceId`
-- DOM: `details.ai-collapsible-block > summary + div.ai-collapsible-block-content`
-- Shows "Preparing image generation prompt" while the text-model prompt is streaming, then upgrades to "Image generation details" when the backend publishes `IMAGE_GENERATION_TRACE`
-- Collapsed by default; spinner indicator while streaming
-- The NodeView handles summary `mousedown` and `click` directly so the thread-level focus handler does not swallow the toggle interaction
-- The upgraded details view shows the streamed chat-model prompt, the final prompt sent to the image model when it differs, thumbnails for every reference image actually sent to the image model when the backend can provide a preview-safe URL, and structured resolver audit notes for excluded branch candidates. Trace events never embed inline image data; they persist NATS-backed workspace image URLs or authenticated feature sample URLs, so compact trace metadata can be stored in the ProseMirror document and rehydrated after page reload without making image bytes part of editor or NATS payload state.
-- Content: Empty (atom node)
-- Attributes:
-  - `imageData: string` - Image URL or base64 data
-  - `fileId: string` - Server-side file reference
-  - `workspaceId: string` - Workspace containing the image (for NATS object store access)
-  - `revisedPrompt: string` - The revised prompt used by the AI
-  - `responseId: string` - Response ID for tracking
-  - `aiModel: string` - Model that generated the image
-  - `isPartial: boolean` - True while image is still generating
-  - `width: string | null` - Width percentage (e.g., "50%")
-  - `alignment: 'left' | 'center' | 'right'` - Image alignment
-  - `textWrap: 'none' | 'left' | 'right'` - Text wrap mode
-- DOM: Rendered via `imageSelectionPlugin`'s `ImageNodeView` (NOT the legacy `aiGeneratedImageNodeView`)
-- **IMPORTANT:** The NodeView is registered in `imageSelectionPlugin`, not here. This enables bubble menu integration with alignment/wrap controls.
-- **CANVAS-BASED IMAGE GENERATION:** New AI-generated images are placed directly on the workspace canvas as `ImageCanvasNode` elements and mirrored in chat history as compact `aiGeneratedImage` references. The plugin delegates branch-resolution and image events to `WorkspaceCanvas.ts` via `onImageBranchResolvedToCanvas`, `onImageBranchResolutionErrorToCanvas`, `onImagePartialToCanvas`, and `onImageCompleteToCanvas` callbacks. `handleImagePartial` only guards on `!aiChatThreadId` (not `!imageUrl`), allowing early empty-URL `IMAGE_PARTIAL` events through so the canvas and chat history can create placeholder nodes before any pixel data arrives. Repeated partial events, including provider events with changing `partialIndex` values, update one chat placeholder; completion removes any stale partial placeholders and converts the active one into the final thumbnail so terminal trace metadata can persist and reload. A `WorkspaceEdge` with `sourceMessageId` connects the image to the specific `aiResponseMessage` that produced it, and the image appears to the right of the thread. The revised prompt text and a right-aligned thumbnail reference are inserted in the AI response message. The thumbnail uses the `aiGeneratedImage.alignment` attribute handled by `imageSelectionPlugin`, so the bubble menu can change it through the same alignment controls as other editor images.
-- **IMAGE GENERATION TRACE:** `AiInteractionService` bypasses markdown parsing for `IMAGE_GENERATION_TRACE` and forwards an `image_generation_trace` segment to the plugin. The plugin updates the current `aiCollapsibleBlock` in the receiving `aiResponseMessage` instead of adding a second disclosure, preserving the streamed prompt content and adding the backend-confirmed final prompt/reference audit metadata.
-- **MULTI-MODAL CONTEXT:** Connected canvas images are included in AI requests via the workspace edge system (`ai-chat-thread-service.ts` → `extractConnectedContext()`). Generated branch candidates are sent separately as an `ImageBranchCandidateSnapshot`; the API-side structured VLM resolver decides which candidate images become image-model references. Legacy inline `aiGeneratedImage` nodes in older threads are still extracted via `ContentExtractor.collectContentWithImages()` for backwards compatibility.
-
-## DOM Template System
-
-We use `htm` for declarative DOM in NodeViews. The shared helper lives at `$src/utils/domTemplates.ts`. Keep plugin-specific snippets here; generic patterns live in `$src/components/proseMirror/plugins/README.md` (see "Templating & NodeViews").
-
-More generic patterns and folder layout guidance: `$src/components/proseMirror/plugins/README.md`.
-
-Quick taste, this is how buttons are built now:
+`ProseMirrorEditor` adds this plugin only for `documentType: 'aiChatThread'`.
 
 ```ts
-import { html, applyStyle } from '$src/utils/domTemplates.ts'
-
-const button = html`
-  <div className="ai-submit-button" onclick=${handleClick}>
-    <span className="send-icon" innerHTML=${sendIcon}></span>
-  </div>
-`
-
-// To update styles on an existing element, use applyStyle:
-applyStyle(button, { left: `${x}px`, top: `${y}px` })
-```
-
-### Composer Controls
-
-The composer controls (AI model selector, image toggle, submit/stop button) have been **extracted into generic reusable factories** in `primitives/aiControls/`. They are now used by the separate `aiPromptInputPlugin` NodeView.
-
-The thread plugin no longer renders any composer controls — it is purely a conversation log renderer and streaming orchestrator.
-
-See `$src/components/proseMirror/plugins/aiPromptInputPlugin/` for the floating input implementation and `$src/components/proseMirror/plugins/primitives/aiControls/` for the reusable control factories.
-
-## Quick setup
-
-AI chat thread editors are created by `WorkspaceCanvas.ts` when rendering thread canvas nodes:
-
-```typescript
-// Each AI chat thread canvas node gets its own editor and service
-const aiService = new AiInteractionService({
-    workspaceId,
-    aiChatThreadId: node.referenceId
-})
-
-const editor = new ProseMirrorEditor({
-    editorMountElement: editorContainer,
-    initialVal: thread.content,
-    documentType: 'aiChatThread',  // Enables AI chat thread schema
-    threadId: node.referenceId,    // Required for fresh document creation with correct threadId
-    onAiChatSubmit: ({ messages, aiModel }) => {
-        aiService.sendChatMessage({ messages, aiModel })
+createAiChatThreadPlugin({
+    sendAiRequestHandler: val => this.onAiChatSubmit(val),
+    stopAiRequestHandler: val => this.onAiChatStop(val),
+    placeholders: {
+        titlePlaceholder: 'New document',
+        paragraphPlaceholder: 'I\'m your new document...',
     },
-    onAiChatStop: () => {
-        aiService.stopChatMessage()
-    }
+    onReceivingStateChange: this.onReceivingStateChange,
+    renderContext: {
+        readOnly: false,
+        traceDetailsOptions: undefined,
+    },
 })
 ```
 
-The `documentType: 'aiChatThread'` parameter configures the schema and keybindings for AI chat context. The `threadId` parameter is used when creating fresh documents (via `createAndFill()`) to ensure the `aiChatThread` node has the correct `threadId` attribute for streaming routing.
-
-## Streaming Protocol
-
-The plugin subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` and expects streaming events with:
-- **status**: START_STREAM, STREAMING, or END_STREAM
-- **aiProvider**: Which AI service is responding (Anthropic, OpenAI, etc.)
-- **threadId**: Identifies which thread this stream belongs to (enables concurrent streams)
-- **segment**: Contains the actual content (text, styles, type, block/inline flag, header level)
-
-### Streaming Lifecycle
+The factory also accepts optional `imageCallbacks` and `videoCallbacks`, which are stored through `setAiGeneratedImageCallbacks()` and `setAiGeneratedVideoCallbacks()`.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
-stateDiagram-v2
-  [*] --> WaitingForStream
-  WaitingForStream --> StreamStarted: START_STREAM
-
-  state StreamStarted {
-    [*] --> CreateResponseNode
-    CreateResponseNode --> InsertNode: aiResponseMessage created
-    InsertNode --> EnsureTrailingParagraph
-    EnsureTrailingParagraph --> SetReceivingState
-    SetReceivingState --> ReadyForContent
-  }
-
-  ReadyForContent --> ProcessingSegment: STREAMING event
-
-  state ProcessingSegment {
-    [*] --> CheckSegmentType
-    CheckSegmentType --> InsertBlock: isBlockDefining=true
-    CheckSegmentType --> InsertInline: isBlockDefining=false
-
-    state InsertBlock {
-      [*] --> CreateParagraph: type=paragraph
-      [*] --> CreateHeader: type=header
-      [*] --> CreateCodeBlock: type=codeBlock
-      CreateParagraph --> ApplyMarks
-      CreateHeader --> ApplyMarks
-      CreateCodeBlock --> ApplyMarks
-    }
-
-    state InsertInline {
-      [*] --> CreateTextNode: type=text
-      [*] --> CreateLineBreak: content=\n
-      CreateTextNode --> ApplyMarks
-      CreateLineBreak --> [*]
-    }
-
-    ApplyMarks --> [*]
-  }
-
-  ProcessingSegment --> ReadyForContent: Continue streaming
-  ReadyForContent --> StreamEnded: END_STREAM
-  StreamEnded --> [*]: Clear isReceiving, stop animations
-```
-
-**Content Type Handlers:**
-- `paragraph` - Creates paragraph node with text and marks
-- `header` - Creates heading node with specified level (1-6)
-- `codeBlock` - Creates code_block node
-- `text` - Inserts text with styling marks
-- `linebreak` - Inserts hard_break or new paragraph
-
-## User experience
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
-  participant U as User
-  participant E as Editor
-  participant P as Plugin
-  participant AIS as AiInteractionService
-  participant NATS as NATS → API LLM module
-  %% ═══════════════════════════════════════════════════════════════
-  %% PHASE 1: SUBMIT
-  %% ═══════════════════════════════════════════════════════════════
-  rect rgb(220, 236, 233)
-    Note over U, NATS: PHASE 1 - SUBMIT
-    U->>E: Types message and hits Cmd+Enter
-    activate E
-    E->>P: Extracts thread content
-    activate P
-    P->>AIS: sendChatMessage({ messages, aiModel })
-    activate AIS
-    deactivate E
-  end
+    participant User
+    participant Prompt as aiPromptInputPlugin
+    participant Controller as AiPromptInputController
+    participant Thread as aiChatThreadPlugin
+    participant Service as AiInteractionService
+    participant Receiver as SegmentsReceiver
 
-  %% ═══════════════════════════════════════════════════════════════
-  %% PHASE 2: STREAM
-  %% ═══════════════════════════════════════════════════════════════
-  rect rgb(195, 222, 221)
-    Note over U, NATS: PHASE 2 - STREAM
-    AIS->>NATS: Publish to backend
-    activate NATS
-    NATS-->>AIS: Stream response via receiveMessage.{workspaceId}.{threadId}
-    deactivate NATS
-    AIS-->>P: SegmentsReceiver events
-  end
-
-  %% ═══════════════════════════════════════════════════════════════
-  %% PHASE 3: RENDER
-  %% ═══════════════════════════════════════════════════════════════
-  rect rgb(242, 234, 224)
-    Note over U, NATS: PHASE 3 - RENDER
-    P->>E: Inserts AI response with animations
-    deactivate AIS
-    deactivate P
-  end
+    User->>Prompt: Cmd/Ctrl+Enter or submit button
+    Prompt->>Controller: onSubmit(contentJSON, model attrs, media opts)
+    Controller->>Thread: insert aiUserMessage + USE_AI_CHAT_META
+    Thread->>Thread: extract thread messages
+    Thread->>Service: sendAiRequestHandler(payload)
+    Service->>Receiver: stream events for workspaceId + threadId
+    Receiver->>Thread: START_STREAM / STREAMING / END_STREAM
+    Thread->>Thread: insert or update response/media nodes
 ```
 
-Users see:
-- A floating "send" button that appears on hover
-- Keyboard shortcuts (Cmd/Ctrl + Enter) with visual feedback
-- Different avatars for different AI providers
-- Smooth animations as responses stream in
-- A "stop" button while AI is responding (currently TODO)
+## Schema Nodes
 
-## Files in this plugin
+### `aiChatThread`
 
-- `aiChatThreadNode.ts` - Thread container node (self-contained):
-  - Exports node schema AND its NodeView implementation
-  - Content expression: `(aiUserMessage | aiResponseMessage)* aiUserInput`
-  - Uses `html` template literals for clean UI creation
-  - Handles hover events and focus management
-  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set canvas layout height
+Container for the conversation log.
 
-- `aiUserInputNode.ts` - Sticky composer node (self-contained):
-  - Exports node schema AND its NodeView implementation
-  - Always the last child of `aiChatThread`
-  - Content: `(paragraph | block)+` for rich-text input
-  - NodeView renders controls (model selector, image toggle, submit/stop) alongside `contentDOM`
-  - `createAiModelSelectorDropdown()` uses `createPureDropdown()` primitive
-  - `settings.modelSelectorDropdown.useModalityFilter` toggles the modality filter chips in the model selector dropdown (currently disabled)
-  - Dropdowns appended directly to controlsContainer (not inserted via transactions)
-  - `ignoreMutation()` prevents NodeView recreation when controls are manipulated
+- Spec content: `(aiUserMessage | aiResponseMessage)*`
+- Document mode: `doc -> documentTitle aiChatThread+`
+- Main DOM: `div.ai-chat-thread-wrapper > div.ai-chat-thread-content`
+- The NodeView auto-fills a missing `threadId` by dispatching `setNodeMarkup`.
+- The NodeView ignores `style` attribute mutations so canvas-driven sizing avoids ProseMirror wrapper recreation.
 
-- `aiUserMessageNode.ts` - Sent user message node (self-contained):
-  - Exports node schema AND its NodeView implementation
-  - Content: `(paragraph | block)+`
-  - Attributes: `id, createdAt` for message identification
-  - Rendered as a styled chat bubble (right-aligned)
-  - Created when user submits content from the composer
-  - `ignoreMutation()` returns `true` for style attribute changes for consistency with other thread NodeViews
+Attrs declared in `aiChatThreadNode.ts`:
 
-- `aiResponseMessageNode.ts` - AI response node (self-contained):
-  - Exports node schema AND its NodeView implementation
-  - Uses `html` template literals for structured DOM creation
-  - Provider-specific avatars (Claude, GPT) with animations
-  - Streaming animation states (receiving/idle)
-  - Boundary strip decoration
-  - `ignoreMutation()` returns `true` for style attribute changes to protect externally-set canvas layout margins
+- `threadId`
+- `status`
+- `aiModel`
+- `aiModels`
+- `useMultipleModels`
+- `useMultipleReasoningModels`
+- `useMultipleImageModels`
+- `useMultipleVideoModels`
+- `aiImageModel`
+- `aiImageModels`
+- `imageGenerationEnabled`
+- `imageGenerationSize`
+- `previousResponseId`
+- `aiVideoModel`
+- `aiVideoModels`
+- `videoAspectRatio`
+- `videoResolution`
+- `videoDuration`
+- `sourceVideoNodeId`
 
-- `aiGeneratedImageNode.ts` - AI-generated image node and canvas callback system:
-  - Exports ProseMirror node spec for `aiGeneratedImage` (atom node)
-  - Manages global `AiGeneratedImageCallbacks` via `setAiGeneratedImageCallbacks()` / `getAiGeneratedImageCallbacks()`
-  - Callbacks include `onImagePartialToCanvas`, `onImageCompleteToCanvas`, `onAddToCanvas`, `onEditInNewThread`
-  - `WorkspaceCanvas.ts` registers these callbacks to receive image events from the plugin
-  - The plugin calls `getAiGeneratedImageCallbacks()` during streaming to delegate image placement to the canvas
+### `aiUserMessage`
 
-- `aiCollapsibleBlockNode.ts` - Collapsible disclosure block for image generation prompts:
-  - Renders as `<details><summary>` with custom NodeView
-  - Attributes: `title` (label text), `isOpen` (expanded state), `isStreaming` (shows spinner while prompt streams in)
-  - Title transitions from "Preparing image generation prompt" (streaming) to "Image generation prompt" (done)
-  - Collapsed by default — user can expand to see the full prompt
-  - Streamed content inserts inside the collapsible block via `PositionFinder.findCollapsibleNode()`
-  - Backend detects `<image_prompt>` XML tags in the LLM stream and publishes `COLLAPSIBLE_START` / `COLLAPSIBLE_END` events
-- `imageGenerationTraceDetails.ts` - Shared renderer for image-generation trace metadata:
-  - Used by `aiCollapsibleBlockNode.ts` in chat history and by `WorkspaceCanvas.ts` for generated-image info blocks
-  - Shows the chat-model prompt, final image-model prompt, reference-image tiles, resolver audit summary, and excluded references from the same `ImageGenerationTrace` payload
-  - Canvas callers override the chat-history scroll caps so generated-image provenance panels show the full prompt and metadata content
-- `aiChatMessageShells.ts` - Shared user/assistant chat message DOM shells:
-  - Used by ProseMirror node views and canvas generated-image info blocks so message chrome, provider avatars, and bubble structure stay consistent
-- `aiChatThreadContentUtils.ts` - ProseMirror JSON helpers for generated-image provenance:
-  - Finds the user message and AI response that produced a canvas image by `responseMessageId`
-  - Extracts prompt text, response text, provider, collapsible prompt text, and inline `ImageGenerationTrace` metadata for reusable canvas rendering
+Sent user message bubble inserted by `AiPromptInputController`.
 
-- `aiChatThreadPlugin.ts` - Main orchestration logic:
-  - Plugin state and lifecycle management
-  - Content extraction and message conversion
-  - Streaming event handling and DOM insertion
-  - Image generation delegates to canvas via `getAiGeneratedImageCallbacks()` (partial previews and final images appear as canvas nodes, not inline)
-  - Decoration system (placeholders, boundaries)
-  - No UI rendering - delegates to node-specific NodeViews and primitive components
+- Content: `(paragraph | block)+`
+- Attrs: `id`, `createdAt`
+- DOM parse target: `div.ai-user-message`
+- NodeView shell comes from `createAiUserMessageShell()`.
 
-- `aiChatThreadControls.ts` - UI control factories:
-  - `createAiModelSelectorDropdown()` - AI model picker dropdown
-  - `createImageModelSelectorDropdown()` - Image model picker dropdown (with size selector)
-  - `createAiSubmitButton()` - Submit/stop button
+### `aiResponseMessage`
 
-- `aiChatThreadPluginConstants.ts` - Shared `PluginKey` to avoid identity mismatch and circular imports between NodeView and plugin. Import this key in both places and call `AI_CHAT_THREAD_PLUGIN_KEY.getState(view.state)` when needed.
+Assistant response node created as the request is submitted, then filled by stream events.
 
-- `$src/components/dropdown/` - Dropdown primitive (outside document schema):
-  - `pureDropdown.ts` - Factory function creating dropdowns with {dom, update, destroy} API
-  - Uses `infoBubble` primitive for state management
-  - `index.ts` - Clean exports
-  - Zero ProseMirror dependencies - framework-agnostic pure DOM
-  - Used by aiUserInputNode for AI model selector
-  - See `primitives/dropdown/README.md` for full documentation
+- Content: `(paragraph | block)*`; multi-model media requests store one `aiReasoningSection` child per reasoning run.
+- Attrs: `id`, `style`, `isInitialRenderAnimation`, `isReceivingAnimation`, `aiProvider`
+- Request metadata attrs: `generationRequestId`
+- Empty receiving responses show the shell ring loading indicator until the first content arrives; the empty content container keeps only a small bottom pad so the waiting bubble stays compact without clipping the spinner.
+- Response nodes in the chat thread do not render an assistant avatar; model attribution lives on each generation-details collapsible.
 
-- `$src/utils/domTemplates.ts` - Shared DOM template utilities:
-  - TypeScript class-based `DOMTemplateBuilder` with proper typing
-  - `html` template function using htm/mini for zero-overhead DOM creation
-  - Handles events, styles, data attributes, innerHTML
-  - Available across all components, not just ProseMirror plugins
+### `aiReasoningSection`
 
-- `ai-chat-thread.scss` - All the styling and animations
-- `index.ts` - Exports everything
+Per-model section inside one `aiResponseMessage` for media-generation matrix requests.
 
-**Architecture Note:** Each node type is a complete unit with its own UI built using declarative `html` templates. The plugin focuses on coordination and business logic without mixing UI concerns. The shared `domTemplates.ts` provides clean, performant DOM creation across the entire ProseMirror ecosystem.
+- Content: `(paragraph | block)*`
+- Attrs: `generationRequestId`, `reasoningRunId`, `reasoningModelId`, `reasoningIndex`, `isReceivingAnimation`
+- Created as local placeholders on submit when the request includes image/video generation, then adopted by streamed `generationRun` metadata.
+- Owns only that reasoning run's prose, generation-details collapsible, and generated media thumbnail, so canvas provenance/details can resolve by `reasoningRunId` or `mediaRunId`.
 
-## Core Helper Classes
+### `aiGeneratedImage`
 
-### ContentExtractor
-Handles thread content analysis and message conversion with multi-modal support:
+Atom node for compact generated-image references in the thread log.
 
-```typescript
-class ContentExtractor {
-  // Recursively extracts text while preserving code block formatting
-  static collectFormattedText(node: PMNode): string
+- Spec and exported NodeView live in `aiGeneratedImageNode.ts`.
+- Generated-image rendering is owned by `imageSelectionPlugin`.
+- `imageSelectionPlugin` owns the active image NodeView path so regular image selection, bubble-menu alignment, and wrap controls work consistently.
+- Partial and complete stream events are matched primarily with `mediaRunId` when available, then by file, response, or partial identifiers.
 
-  // Extracts text AND image references from a message block
-  static collectContentWithImages(node: PMNode): { text: string; images: ImageReference[] }
+### `aiGeneratedVideo`
 
-  // Simple text extraction fallback
-  static collectText(node: PMNode): string
+Atom node for generated-video status and previews in the thread log.
 
-  // Finds active thread by walking up DOM hierarchy from cursor
-  static getActiveThreadContent(state: EditorState): ThreadContent[]
+- Pending/generating/error/complete events update the in-thread video node.
+- Complete nodes render an authenticated video URL plus the shared SVG `videoControls` bar.
+- Poster file ids can be reused as still-image context when the thread log is converted into a later request.
+- Carries the same run metadata shape as generated images.
 
-  // Builds NATS object store URL for image reference
-  static buildImageUrl(ref: ImageReference): string
+### `aiCollapsibleBlock`
 
-  // Converts thread blocks to AI messages (multi-modal format when images present)
-  static toMessages(items: ThreadContent[]): Message[]
-}
+Disclosure block for generation traces.
+
+- Content: `(paragraph | block)*`
+- Attrs include `title`, `isOpen`, `isStreaming`, `imageGenerationTrace`, `imageGenerationTraceId`, `videoGenerationTrace`, and run metadata.
+- Used for image and video generation details.
+- The NodeView handles summary mouse/click events itself so thread focus handling does not steal the toggle.
+- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated workspace/API URLs, retry the stored workspace file path when trace URLs fail, and render an unavailable state instead of browser broken-image chrome when a stored image cannot be loaded.
+- The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
+- In read-only render context, summary toggles update the local `<details>` element only and do not dispatch `setNodeMarkup`.
+
+### `aiUserInput`
+
+Compatibility schema node.
+
+- `editor.ts` adds `aiUserInputNodeSpec` to the AI chat thread schema for stored thread document parsing.
+- `aiChatThreadPlugin.appendTransaction()` deletes `aiUserInput` children when they appear.
+- Thread creation inserts conversation nodes through `AiPromptInputController`.
+- The active composer lives in `aiPromptInputPlugin`.
+
+## Request Construction
+
+`handleChatRequest()` reads model and media attrs from the `aiChatThread` node after the controller injects the submitted user message.
+
+The request payload includes:
+
+- `messages`
+- `aiModel`
+- `aiModels`
+- `threadId`
+- `imageOptions`
+- `videoOptions`
+- `referencedFeatureIds`
+
+Model-list attrs are JSON-like strings parsed with `parseAiModelSelectionAttr()`. `useMultipleModels` is accepted as an aggregate multi-model flag when section-specific flags are absent.
+
+`ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and `aiResponseMessage` blocks. It preserves code blocks with triple backticks, converts hard breaks to newlines, collects inline generated-image references, reuses generated-video posters as image context, and collects `feature_reference` ids.
+
+`ContentExtractor.toMessages()` maps `aiUserMessage` to `user`, `aiResponseMessage` to `assistant`, merges adjacent text-only messages with the same role, and emits multimodal message parts when image references are present:
+
+```ts
+{ type: 'image_url', image_url: { url: 'nats-obj://workspace-{workspaceId}-files/{fileId}' } }
 ```
 
-**Message Conversion Logic:**
-1. Walk each top-level block in the thread (excluding `aiUserInput` composer)
-2. Extract formatted text AND AI-generated image references (with `fileId` and `workspaceId`)
-3. Determine role: `aiResponseMessage` → `assistant`, `aiUserMessage` → `user`
-4. Merge consecutive text-only blocks with same role
-5. For messages with images, return multi-modal content format:
-   - Text parts: `{ type: 'text', text: '...' }`
-   - Image parts: `{ type: 'image_url', image_url: { url: 'nats-obj://workspace-{workspaceId}-files/{fileId}' } }`
-6. Return message array ready for any LLM provider (provider-agnostic)
+## Streaming
 
-**Dual Image Context Paths:**
-- **Canvas edges (primary):** New AI-generated images live as `ImageCanvasNode` on the canvas, connected via `WorkspaceEdge` with `sourceMessageId`. The `ai-chat-thread-service.ts` → `extractConnectedContext()` traverses these edges and includes connected images in AI requests.
-- **Inline nodes (legacy/backwards compat):** Older threads may still contain inline `aiGeneratedImage` ProseMirror nodes. `collectContentWithImages()` extracts these as `nats-obj://` references. Both paths produce the same provider-agnostic format for the API LLM module.
+The plugin subscribes through `SegmentsReceiver` and handles these event families:
 
-### PositionFinder
-Document position utilities for content insertion:
+- `START_STREAM`
+- `STREAMING`
+- `END_STREAM`
+- stream errors
+- `image_partial`
+- `image_complete`
+- `image_error`
+- `image_branch_resolved`
+- `image_branch_resolution_error`
+- `image_generation_trace`
+- `context_relevance_resolved`
+- `context_relevance_error`
+- `video_pending`
+- `video_generating`
+- `video_complete`
+- `video_error`
+- `video_generation_trace`
+- `collapsible_start`
+- `collapsible_end`
 
-```typescript
-class PositionFinder {
-  // Finds where to insert new aiResponseMessage in active thread
-  static findThreadInsertionPoint(state: EditorState): {
-    insertPos: number
-    trailingEmptyParagraphPos: number | null
-  } | null
+`generationRun` metadata scopes parallel model outputs:
 
-  // Locates current streaming response node for content insertion
-  static findResponseNode(state: EditorState): {
-    found: boolean
-    endOfNodePos?: number
-    childCount?: number
-  }
-}
-```
+- Matrix text responses are grouped by `reasoningRunId`.
+- Media nodes are grouped by `mediaRunId`.
+- Matrix generation trace collapsibles are grouped by `reasoningRunId`; scalar media traces stay in the plain response message.
+- `receivingThreadIds` is thread-level, while `receivingRunKeysByThread` keeps sibling reasoning runs active independently.
+- Local `aiReasoningSection` placeholders are created only for media-generation matrix requests. Scalar single-model media requests can still carry `generationRun` lineage metadata for canvas/media provenance, but they use a plain `aiResponseMessage` so the normal stream lifecycle owns the loading indicator.
 
-### StreamingInserter
-Handles real-time content insertion during AI streaming:
+## Positioning Helpers
 
-```typescript
-class StreamingInserter {
-  // Inserts block-level content (headers, paragraphs, code blocks)
-  static insertBlockContent(
-    tr: Transaction,
-    type: string,
-    content: string,
-    level: number | undefined,
-    marks: any[] | null,
-    endOfNodePos: number,
-    childCount: number
-  ): void
+`PositionFinder.findThreadInsertionPoint(state, threadId)` returns the end of the matching thread. A supplied `threadId` scopes the lookup to that thread.
 
-  // Inserts inline content (text, marks, line breaks)
-  static insertInlineContent(
-    tr: Transaction,
-    type: string,
-    content: string,
-    marks: any[] | null,
-    endOfNodePos: number
-  ): void
-}
-```
+`PositionFinder.findResponseNode(state, threadId, generationRun)` searches within the matching thread and resolves media matrix runs to `aiReasoningSection` targets. It prefers:
 
-### Plugin State Management
+1. exact `reasoningRunId` section matches
+2. provisional local section templates matching `reasoningModelId` and `reasoningIndex`
+3. legacy receiving/initial-render responses, with newest winning ties
 
-The plugin maintains state for:
-- **receivingThreadIds**: Set of thread IDs currently receiving AI responses (supports concurrent streams)
-- **Code block parsing**: Backtick buffer and code block tracking
-- **Decorations**: Placeholders, boundaries, and visual feedback
-- **hoveredThreadId**: Which thread boundary is currently visible
+That scoping keeps concurrent streams routed to the correct thread and model variant.
 
-**Transaction Metadata** signals actions between components:
-- `setReceiving` - Toggle streaming state for specific thread
-- `hoverThread` - Thread boundary hover
-- `USE_AI_CHAT_META` - Trigger chat submission with thread context (threadId + nodePos)
-- `STOP_AI_CHAT_META` - Stop AI streaming for specific thread
-- `INSERT_THREAD_META` - Insert new thread
+## Decorations And Plugin State
 
-## NodeViews & UI Components
+Plugin state:
 
-### Thread NodeView (Template-Based)
-Creates the interactive thread container using declarative templates:
+- `receivingThreadIds`
+- `receivingRunKeysByThread`
+- code-block stream parser state: `insideBackticks`, `backtickBuffer`, `insideCodeBlock`, `codeBuffer`
+- `decorations`
+- `collapsibleThreadIds`
+- `collapsibleRunKeys`
 
-```typescript
-// Thread boundary with clean template syntax
-return html`
-  <div
-    className="ai-thread-boundary-indicator"
-    onmouseenter=${handleEnter}
-    onmouseleave=${handleLeave}
-  >
-    <div className="ai-thread-boundary-icon" innerHTML=${chatThreadBoundariesInfoIcon}></div>
-    ${createThreadInfoDropdown()}
-  </div>
-`
+Decoration output:
 
-// Submit button with multiple states
-return html`
-  <div className="ai-submit-button" onclick=${handleClick}>
-    <div className="button-default">
-      <span className="send-icon" innerHTML=${sendIcon}></span>
-    </div>
-    <div className="button-hover">
-      <span className="send-icon" innerHTML=${sendIcon}></span>
-    </div>
-    <div className="button-receiving">
-      <span className="stop-icon" innerHTML=${pauseIcon}></span>
-    </div>
-  </div>
-`
-```
+- title placeholder on empty `documentTitle`
+- receiving-state class on `aiChatThread` nodes while any run in that thread is active
 
-**Behavior:**
-- Auto-generates `threadId` if missing via `setNodeMarkup`
-- Focuses editor and positions cursor on mousedown
-- Hover events dispatch `hoverThread` metadata
-- Click handlers for send/stop functionality
-- **NEW:** All UI created via `html` templates for 70% less code and better readability
+## Registered NodeViews
 
-### Response NodeView (Template-Based)
-Renders AI responses using structured templates:
+`aiChatThreadPlugin.ts` registers:
 
-```typescript
-// Main wrapper created declaratively in one statement
-const parentWrapper = html`
-  <div className="ai-response-message-wrapper">
-    <div className="ai-response-message">
-      <div className="ai-response-message-bubble">
-        <div className="ai-response-message-content"></div>
-      </div>
-    </div>
-    <div className="ai-response-message-meta">
-      <div className="user-avatar assistant-${node.attrs.aiProvider.toLowerCase()}"></div>
-    </div>
-  </div>
-`
+- `aiChatThreadNodeView`
+- `aiResponseMessageNodeView`
+- `aiReasoningSectionNodeView`
+- `aiUserMessageNodeView`
+- `aiCollapsibleBlockNodeView`
+- `aiGeneratedVideoNodeView`
 
-// Get DOM references for dynamic updates
-const userAvatarContainer = parentWrapper.querySelector('.user-avatar')
-const responseMessageContent = parentWrapper.querySelector('.ai-response-message-content')
+Generated-image rendering is handled by `imageSelectionPlugin`.
 
-// The bubble spans the message width; the smaller provider avatar sits below it.
-```
+## Read-Only Provenance Projections
 
-**Anthropic Animation System:**
-- 8-frame sprite animation at 90ms intervals
-- Updates `currentFrame` attribute via `setNodeMarkup`
-- SVG viewBox manipulation: `0 ${frame * 100} 100 100`
-- Automatic cleanup on destroy
-- **NEW:** Initial DOM structure from templates, dynamic updates via querySelector references
+`readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `aiChatThreadContentUtils.ts` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, `mediaRunId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
 
-## Decoration System
+Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread persistence callbacks, and reject document-changing transactions. NodeViews that own local controls guard direct dispatches with `view.editable`, so collapsible toggles, image resize, image/video selection, and focus writebacks do not mutate the projected document.
 
-The plugin applies multiple independent decoration layers:
+## Files
 
-### 1. Placeholder Decorations
-```typescript
-// Document title placeholder
-if (node.type.name === documentTitleNodeType && node.content.size === 0) {
-  decorations.push(Decoration.node(pos, pos + node.nodeSize, {
-    class: 'empty-node-placeholder',
-    'data-placeholder': this.placeholderOptions.titlePlaceholder
-  }))
-}
+- `aiChatThreadPlugin.ts`: orchestration, stream handling, request construction, decorations, plugin state, NodeView registration.
+- `aiChatThreadNode.ts`: thread schema and minimal wrapper NodeView.
+- `aiUserMessageNode.ts`: sent-user-message schema and shell NodeView.
+- `aiResponseMessageNode.ts`: assistant response schema, shell NodeView, and response-level metadata.
+- `aiReasoningSectionNode.ts`: per-reasoning-run section schema and NodeView for one shared media response message.
+- `aiGeneratedImageNode.ts`: generated-image schema, callback surface, and exported NodeView.
+- `aiGeneratedVideoNode.ts`: generated-video schema, callback surface, in-chat video NodeView.
+- `aiCollapsibleBlockNode.ts`: trace disclosure schema and NodeView.
+- `imageGenerationTraceDetails.ts`: shared trace detail renderer.
+- `aiChatMessageShells.ts`: shared user/assistant message shells.
+- `aiChatThreadContentUtils.ts`: helpers for generated-media provenance.
+- `aiChatThreadPluginConstants.ts`: shared `PluginKey` and transaction meta constants.
+- `aiChatThreadPositionUtils.ts`, `aiChatThreadSend.ts`, `aiChatThreadControls.ts`, `aiUserInputNode.ts`: compatibility/helper modules outside the active prompt-input path.
+- `ai-chat-thread.scss`: thread-log, message, media, and compatibility styles.
 
-// Thread paragraph placeholder (single empty paragraph only)
-if (node.type.name === aiChatThreadNodeType && node.childCount === 1) {
-  const firstChild = node.firstChild
-  if (firstChild?.type.name === 'paragraph' && firstChild.content.size === 0) {
-    // Apply placeholder decoration
-  }
-}
-```
+## Transaction Meta
 
-### 2. Thread Boundary Decorations
-```typescript
-// Shows boundary line only for hovered thread
-if (node.type.name === 'aiChatThread' &&
-    pluginState.hoveredThreadId === node.attrs.threadId) {
-  decorations.push(Decoration.node(pos, pos + node.nodeSize, {
-    class: 'thread-boundary-visible'
-  }))
-}
-```
+- `USE_AI_CHAT_META` (`use:aiChat`): starts request construction for a thread. Expected payload is `{ threadId, nodePos }`.
+- `STOP_AI_CHAT_META` (`stop:aiChat`): calls `stopAiRequestHandler({ threadId })`.
+- `insert:aiChatThread`: inserts an empty thread node for command-driven thread creation.
+- Internal meta `setReceiving`: toggles receiving state per thread and run key.
+- Internal meta `setCollapsible`: tracks active trace collapsibles per thread and run key.
 
-### 3. Dropdown Open Decorations
-**Note:** Dropdown decorations are now handled by the dropdown primitive plugin (`services/web-ui/src/components/dropdown/dropdownPlugin.ts`), not by aiChatThreadPlugin.
+## Extension Points
 
-## Styling hooks (short version)
+Add new streamed block types in `StreamingInserter.insertBlockContent()`.
 
-SCSS lives in `ai-chat-thread.scss`. Relevant classes:
-- `.ai-chat-thread-wrapper` — container
-- `.ai-thread-boundary-indicator` / `-line` — boundary UI
-- `.ai-response-message-wrapper` — response layout
+Add new inline stream segment behavior in `StreamingInserter.insertInlineContent()`.
 
-State classes applied via decorations: `.receiving`, `.thread-boundary-visible`. No giant CSS dumps here — check the SCSS if you need details.
+Add provider/model attribution in the generation-details summary or the shared shell helpers.
 
-## Implementation Details & Edge Cases
+Add generated-media canvas behavior through `imageCallbacks` or `videoCallbacks` in the `createAiChatThreadPlugin()` call site.
 
-### Thread Selection Algorithm
+## Debugging
 
-`ContentExtractor.getActiveThreadContent()` walks up the document tree from the cursor position to find the containing thread, then extracts all child blocks.
-
-**Critical:** Cursor must be inside a thread for extraction to work. Plugin silently does nothing if cursor is outside all threads.
-
-### Response Node Targeting
-
-`PositionFinder.findResponseNode()` locates the AI response node to stream content into:
-- When **threadId provided**: searches only within that specific thread's container
-- When **threadId omitted**: searches globally across entire document
-- **Priority scoring**: isReceiving > isInitialRender > any response (newest wins ties)
-
-**Concurrent Stream Support:** The optional `threadId` parameter enables multiple concurrent AI streams in different threads without interference. Each thread's responses are isolated and independently managed.
-
-### Content Formatting Rules
-1. **Code blocks** - Wrapped in triple backticks when sent to AI
-2. **Hard breaks** - Converted to `\n` in message content
-3. **Role merging** - Consecutive blocks with same role merged with `\n` separator
-4. **Empty blocks** - Filtered out (no text content)
-
-### Threading & Async Gotchas
-
-**Thread ID Generation:** Auto-generates unique IDs using timestamp + random string, dispatched async to avoid initialization conflicts.
-
-**Animation State Management:** Anthropic responses use 8-frame sprite animation at 90ms intervals, updating node attrs via `setNodeMarkup` to trigger re-renders.
-
-### Implemented Features
-- ✅ **Multiple concurrent streams** - Each thread can have independent AI streaming via `threadId` scoping
-- ✅ **Stop streaming** - Stop button functionality implemented with `STOP_AI_CHAT_META`
-- ✅ **Thread isolation** - Responses correctly routed to their originating thread
-
-### Unimplemented Features
-- **Retry failed streams** - No error handling for failed segments
-- **Stream resume** - No persistence if browser refreshes mid-stream
-
-<!-- Removed noisy change logs. This README stays focused on how to use the plugin, not its history. -->
-
-## Extending it
-
-Want more content types? Add cases to `StreamingInserter.insertBlockContent()`:
-
-```typescript
-case 'blockquote': {
-  const textNode = tr.doc.type.schema.text(content)
-  const quoteNode = tr.doc.type.schema.nodes.blockquote.createAndFill(null, textNode)
-  tr.insert(insertPos, quoteNode)
-  break
-}
-```
-
-Want different AI providers? Add them to `aiResponseMessageNodeView()`:
-
-```typescript
-case 'Cohere':
-  userAvatarContainer.innerHTML = cohereIcon
-  break
-```
-
-Want to use templates in other ProseMirror components?
-
-```typescript
-import { html } from '$src/utils/domTemplates.ts'
-
-const myNodeView = html`
-  <div className="my-component" onclick=${handleClick}>
-    <span innerHTML=${myIcon}></span>
-    ${childElements}
-  </div>
-`
-```
-
-The styling system uses SCSS variables like `$steelBlue` and `$redPink`. Check `ProseMirrorMixings.scss` for the full list.
-
-## Operational notes for future contributors
-
-- **Dropdown rendering**: All dropdown UI, state, and events are handled by the dropdown primitive component in `services/web-ui/src/components/dropdown/`. Do NOT put dropdown layout/rendering logic in aiChatThreadNode.
-- The dropdown primitive follows the plugin state + decorations pattern. Never store UI state in NodeViews.
-- Never import the plugin module inside NodeViews; import only the shared `PluginKey` from `aiChatThreadPluginConstants.ts` and read state via `getState(view.state)`.
-- When subscribing to external stores (Svelte), keep references to DOM nodes and update textContent/innerHTML. Unsubscribe in `destroy()` and remove global listeners like `document.click`.
-
-## Debug mode
-
-Set `IS_RECEIVING_TEMP_DEBUG_STATE = true` at the top of the plugin to keep the "receiving" state active so you can inspect the CSS without needing to trigger actual AI responses.
-
----
-
-That's the plugin! It powers the editor experience for AI chat thread canvas nodes, handling content extraction, streaming responses, and the interactive UI. The `AiInteractionService` handles all NATS communication using the `workspaceId + threadId` routing pattern.
+`IS_RECEIVING_TEMP_DEBUG_STATE` can keep receiving styling active while inspecting CSS. Leave it `false` in normal development.

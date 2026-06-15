@@ -1,10 +1,16 @@
 # Web-UI Testing Guide
 
-Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`). Tests are no exception — always run them through Docker, never locally.
+Everything in `services/web-ui` runs inside a Docker container (`lixpi-web-ui`).
+Tests are no exception — when the user explicitly asks for tests, always run
+them through Docker, never locally.
+
+Follow the shared [`TypeScript Testing Guide`](../TESTING-GUIDE.md) for test structure, file naming, pure-function tests, source-shape helpers, and factory patterns. This guide covers what is specific to `services/web-ui`.
 
 ## Agent Verification Commands
 
-For web-ui changes, agents verify test behavior only through Dockerized Vitest runs:
+For web-ui changes, agents may run tests only after the user explicitly asks
+for tests in the current thread. When tests are requested, verify test behavior
+only through Dockerized Vitest runs:
 
 ```bash
 # Run all tests
@@ -22,11 +28,7 @@ docker exec lixpi-web-ui pnpm test:run -- src/infographics/utils/zoomScaling.tes
 
 ## Test Infrastructure
 
-Tests use **Vitest** with the `happy-dom` DOM environment. The configuration lives in `vitest.config.ts` (NOT in `vite.config.ts` — we keep them separate because the Svelte vite plugin crashes Vitest's internal server). Globals are enabled, so you can use `describe`, `it`, `expect`, `vi` etc. without importing them, but we **do import them explicitly** for clarity.
-
-```typescript
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-```
+Tests use **Vitest** with the `happy-dom` DOM environment. The configuration lives in `vitest.config.ts` (NOT in `vite.config.ts` — we keep them separate because the Svelte vite plugin crashes Vitest's internal server).
 
 ### Path Aliases
 
@@ -34,102 +36,6 @@ Two aliases are available in tests, same as in app code:
 
 - `$src` → `./src`
 - `$lib` → `./packages/shadcn-svelte/lib`
-
-### File Naming
-
-Test files are **colocated** with their source files. Put `MyThing.test.ts` right next to `MyThing.ts`. No separate `__tests__` directories, no `tests/` folder — the test lives where the code lives.
-
-```
-src/
-  infographics/
-    utils/
-      zoomScaling.ts
-      zoomScaling.test.ts        ← right here
-    workspace/
-      WorkspaceConnectionManager.ts
-      WorkspaceConnectionManager.test.ts   ← right here
-  components/
-    proseMirror/
-      plugins/
-        imageSelectionPlugin/
-          imageNodeView.ts
-          imageNodeView.test.ts  ← right here
-```
-
-## Test Structure
-
-We use `describe` blocks with section comment banners to organize tests visually. Each major area gets a banner:
-
-```typescript
-// =============================================================================
-// SOME LOGICAL GROUP OF TESTS
-// =============================================================================
-
-describe('SomeThing — behavior name', () => {
-    let manager: SomeThing
-
-    beforeEach(() => {
-        manager = createSomeThing()
-    })
-
-    it('does X when Y', () => {
-        // ...
-    })
-})
-```
-
-Nested `describe` blocks are fine for sub-grouping, but keep nesting shallow (2 levels max).
-
-## Testing Pure Functions
-
-The easiest tests — no mocking needed. Import the function, call it, assert the result.
-
-```typescript
-import { describe, it, expect } from 'vitest'
-import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
-
-describe('getEdgeScaledSizes', () => {
-    it('at zoom = 1.0 returns default base values', () => {
-        const sizes = getEdgeScaledSizes(1)
-        expect(sizes.strokeWidth).toBe(2)
-        expect(sizes.markerSize).toBe(16)
-    })
-})
-```
-
-Always prefer testing pure, exported functions. If a class has complex logic buried in a method that uses only `this.nodes` and `this.edges` (no DOM), you can still construct the class with minimal mock DOM elements to get at the logic.
-
-## Source-Shape Tests
-
-Some regression tests inspect source text directly when a behavior depends on code structure that is hard to exercise through a small unit test. Keep these assertions terse on failure.
-
-Never use direct `.toContain(...)` or `.not.toContain(...)` assertions on whole files or large extracted function/block strings. Vitest prints the entire received source when these fail, which makes failures noisy and hard to read.
-
-Required pattern:
-
-- If you are inspecting source text, wrap assertions through `.includes(...)` with a targeted error message.
-- Use dedicated helper functions for this style of check.
-
-Use this shape:
-
-```typescript
-function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
-    expect(
-        source.includes(snippet),
-        `${label} should contain:\n${snippet}`
-    ).toBe(true)
-}
-
-function expectSourceNotToContain(source: string, snippet: string, label = 'source excerpt'): void {
-    expect(
-        source.includes(snippet),
-        `${label} should not contain:\n${snippet}`
-    ).toBe(false)
-}
-```
-
-Use these helpers for extracted handlers, function bodies, SCSS blocks, and full-file source strings. This keeps failures focused on the missing or unexpected snippet instead of dumping the entire source excerpt.
-If a test can be written as a runtime behavior test, prefer that over source-shape checks.
 
 ## Testing Classes with DOM Dependencies
 
@@ -271,27 +177,6 @@ for (const { name, createNode } of imageNodeCases) {
 }
 ```
 
-## Helper Factory Patterns
-
-For non-ProseMirror tests, create typed factory functions that build test data with sensible defaults:
-
-```typescript
-function makeNode(overrides: Partial<CanvasNode> & { nodeId: string; type: CanvasNode['type'] }): CanvasNode {
-    const base = {
-        position: { x: 0, y: 0 },
-        dimensions: { width: 200, height: 100 },
-    }
-
-    if (overrides.type === 'image') {
-        return { ...base, fileId: 'file-1', workspaceId: 'ws-1', src: 'test.jpg', aspectRatio: 1, ...overrides } as CanvasNode
-    }
-
-    return { ...base, referenceId: 'ref-1', ...overrides } as CanvasNode
-}
-```
-
-The `overrides` pattern forces you to provide required discriminant fields (`nodeId`, `type`) while giving everything else a default. This keeps tests focused on what matters.
-
 ## What NOT To Do
 
 - **Don't test DOM rendering** — we don't render Svelte components in tests. Test the logic layer underneath.
@@ -299,6 +184,3 @@ The `overrides` pattern forces you to provide required discriminant fields (`nod
 - **Don't run tests outside Docker** — the container has the correct node_modules and environment. Your host machine doesn't.
 - **Don't run `svelte-check`** — directly or through another script; it is prohibited for agents.
 - **Don't use browser-based verification** — browsers, browser automation, screenshots, and manual visual inspection are prohibited for verifying agent work.
-- **Don't create `__tests__/` directories** — colocate. Always.
-- **Don't use JSDoc comments** — project-wide rule, tests included.
-- **Don't import with `.js` extensions** — always use `.ts` imports.

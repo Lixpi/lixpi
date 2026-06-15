@@ -217,19 +217,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
-    const generationBorder = settings.imageNode.generationBorder
+    const generationBorder = settings.mediaNode.generationBorder
+    const generationBorderStyles = generationBorder.styles
     const generatingBorderRenderer = new PixiTravelingOutlineRenderer({
         container: generatingBorderLayer,
         style: {
             radius: generationBorder.radius,
             trackWidth: generationBorder.trackWidth,
-            trackColor: generationBorder.trackColor,
-            trackAlpha: generationBorder.trackAlpha,
+            trackColor: generationBorderStyles.trackColor,
+            trackAlpha: generationBorderStyles.trackAlpha,
             segmentWidth: generationBorder.snakeWidth,
             segmentLengthFraction: generationBorder.snakeLengthFraction,
-            segmentTailAlpha: generationBorder.snakeTailAlpha,
+            segmentTailAlpha: generationBorderStyles.snakeTailAlpha,
             segmentCount: generationBorder.snakeSegmentCount,
-            segmentColors: generationBorder.snakeColors,
+            segmentColors: generationBorderStyles.snakeColors,
             durationMs: generationBorder.animationDurationMs,
         },
         onFrame: scheduleRender,
@@ -486,7 +487,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function getImageBorderRadius(width: number, height: number): number {
-        const borderRadius = settings.imageNode.borderRadius
+        const borderRadius = settings.mediaNode.image.styles.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }

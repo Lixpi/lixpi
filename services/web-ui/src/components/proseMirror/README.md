@@ -54,6 +54,7 @@ Custom nodes are intentionally split by responsibility:
   - `aiUserMessageNode` (`aiUserMessage`): sent user message bubble. Content: `(paragraph | block)+`. Attributes: `id, createdAt`.
   - `aiUserInputNode` (`aiUserInput`): **DEPRECATED** — kept in schema for legacy content migration only. Silently stripped from loaded documents.
   - `aiResponseMessageNode` (`aiResponseMessage`): assistant message. Content: `(paragraph | block)*` so it can start empty and be filled by streaming.
+  - `aiReasoningSectionNode` (`aiReasoningSection`): per-reasoning-run section inside one media response message. Content: `(paragraph | block)*`.
 
 - AI prompt input (separate `documentType: 'aiPromptInput'` via `plugins/aiPromptInputPlugin/`):
   - `aiPromptInputNode` (`aiPromptInput`): floating composer used to send messages to any selected canvas node. Content: `(paragraph | block)+`. Renders as a floating element below the active node.
@@ -299,7 +300,8 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 **Schema nodes managed by this plugin:**
 - `aiChatThread` - Container with content: `(aiUserMessage | aiResponseMessage)+` (pure conversation log)
 - `aiUserMessage` - Sent user message bubble with `id` and `createdAt` attributes
-- `aiResponseMessage` - AI response with provider avatar and streaming animations
+- `aiResponseMessage` - AI response container with streaming animations; media matrix responses contain one `aiReasoningSection` per reasoning run
+- `aiReasoningSection` - Per-model media response slice with its own prose, generation details, and generated thumbnail
 - `aiUserInput` - **DEPRECATED** — kept in schema for legacy migration only, silently stripped
 
 **User input is handled separately by `aiPromptInputPlugin`** — a floating canvas element that renders below the selected node, with its own `ProseMirrorEditor` instance. An `AiPromptInputController` service coordinates message injection between the floating input and thread editors.
@@ -312,9 +314,9 @@ The main plugin orchestrating AI chat functionality. All AI chat logic is consol
 
 **Streaming response handling:**
 - Subscribes to `SegmentsReceiver.subscribeToeceiveSegment()` for streaming events
-- START_STREAM: inserts empty `aiResponseMessage` at end of thread with animation flags
-- STREAMING: inserts text/blocks into the response node, handles marks and block types
-- END_STREAM: clears animation flags, finalizes response
+- START_STREAM: inserts or adopts an `aiResponseMessage`; media matrix streams target an `aiReasoningSection`
+- STREAMING: inserts text/blocks into the response or section node, handles marks and block types
+- END_STREAM: clears animation flags, finalizes the response or section
 
 See `plugins/aiChatThreadPlugin/README.md` for complete documentation.
 
@@ -429,7 +431,7 @@ flowchart LR
 - Regular document shape: The first node is always `documentTitle`, followed by one or more `block` nodes.
 - AI chat thread shape: The first node is always `documentTitle`, followed by one or more `aiChatThread` nodes.
 - Thread shape: `aiChatThread` content is `(aiUserMessage | aiResponseMessage)+`. The thread is a pure conversation log with no inline composer.
-- aiResponse streaming insertion locates the most recent `aiResponseMessage` within the target thread (identified by `threadId`) and calculates `endOfNodePos`. Only one empty paragraph is kept immediately after it, and the cursor is moved there on creation.
+- aiResponse streaming insertion locates the target node within the thread identified by `threadId`: legacy text streams target `aiResponseMessage`, while media matrix streams target the matching `aiReasoningSection` inside the shared response.
 - **Multiple concurrent streams ARE supported**: Each thread can have independent AI streaming via `threadId` parameter. The plugin maintains a `Set<string>` of active `receivingThreadIds` to track concurrent streams across different threads.
 - CodeMirror selection sync: Avoid infinite loops by guarding with `this.updating` and focus checks; keep `forwardUpdate` fast.
 - Mod-A behavior intentionally excludes the title from "select all" when cursor isn't in the title; consider that in bulk ops.

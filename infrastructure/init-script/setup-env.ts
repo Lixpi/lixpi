@@ -39,6 +39,8 @@ type EnvConfig = {
     natsAuthXkeyPublic: string
     natsLlmServiceNkeySeed: string
     natsLlmServiceNkeyPublic: string
+    natsNexNodeNkeySeed: string
+    natsNexNodeNkeyPublic: string
     natsSysUserPassword: string
     natsRegularUserPassword: string
 
@@ -147,6 +149,7 @@ function generateNatsKeys(): {
     authNkey: { seed: string; public: string }
     authXkey: { seed: string; public: string }
     llmServiceNkey: { seed: string; public: string }
+    nexNodeNkey: { seed: string; public: string }
 } {
     // createAccount() for NATS_AUTH_NKEY_* (seeds start with SA)
     const accountKey = createAccount()
@@ -172,7 +175,16 @@ function generateNatsKeys(): {
     }
     userKey.clear()
 
-    return { authNkey, authXkey, llmServiceNkey }
+    // createUser() for NATS_NEX_NODE_NKEY_* (seeds start with SU) — the NEX
+    // execution-engine node connects to the NEX account with this user nkey.
+    const nexNodeKey = createUser()
+    const nexNodeNkey = {
+        seed: new TextDecoder().decode(nexNodeKey.getSeed()),
+        public: nexNodeKey.getPublicKey(),
+    }
+    nexNodeKey.clear()
+
+    return { authNkey, authXkey, llmServiceNkey, nexNodeNkey }
 }
 
 function generateSecurePassword(length: number = 32): string {
@@ -369,6 +381,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
     prompts.log.success(`Auth NKey public: ${c.dim(natsKeys.authNkey.public)}`)
     prompts.log.success(`Auth XKey public: ${c.dim(natsKeys.authXkey.public)}`)
     prompts.log.success(`LLM Service NKey public: ${c.dim(natsKeys.llmServiceNkey.public)}`)
+    prompts.log.success(`NEX Node NKey public: ${c.dim(natsKeys.nexNodeNkey.public)}`)
 
     // -------------------------------------------------------------------------
     // AWS SSO Section
@@ -655,6 +668,8 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         natsAuthXkeyPublic: natsKeys.authXkey.public,
         natsLlmServiceNkeySeed: natsKeys.llmServiceNkey.seed,
         natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
+        natsNexNodeNkeySeed: natsKeys.nexNodeNkey.seed,
+        natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
         natsSysUserPassword,
         natsRegularUserPassword,
         configureAwsSso: configureAwsSso as boolean,
@@ -710,6 +725,8 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{NATS_AUTH_XKEY_PUBLIC}}': config.natsAuthXkeyPublic,
         '{{NATS_LLM_SERVICE_NKEY_SEED}}': config.natsLlmServiceNkeySeed,
         '{{NATS_LLM_SERVICE_NKEY_PUBLIC}}': config.natsLlmServiceNkeyPublic,
+        '{{NATS_NEX_NODE_NKEY_SEED}}': config.natsNexNodeNkeySeed,
+        '{{NATS_NEX_NODE_NKEY_PUBLIC}}': config.natsNexNodeNkeyPublic,
         '{{NATS_CORS_COMMENT}}': isLocal ? ' (local development - allow all origins)' : '',
         '{{ORIGIN_HOST_URL}}': isLocal ? 'http://localhost:3001' : `https://${config.domainName}`,
         '{{API_HOST_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
@@ -861,6 +878,8 @@ async function main(): Promise<void> {
             natsAuthXkeyPublic: natsKeys.authXkey.public,
             natsLlmServiceNkeySeed: natsKeys.llmServiceNkey.seed,
             natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
+            natsNexNodeNkeySeed: natsKeys.nexNodeNkey.seed,
+            natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
             natsSysUserPassword: generateSecurePassword(28),
             natsRegularUserPassword: generateSecurePassword(28),
             configureAwsSso: false,

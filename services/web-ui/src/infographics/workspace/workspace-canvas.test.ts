@@ -99,6 +99,10 @@ function loadSettings(): string {
 	return readSourceFile('../../settings.ts', 'settings.ts')
 }
 
+function loadSvgIcons(): string {
+	return readSourceFile('../../svgIcons/index.ts', 'svgIcons/index.ts')
+}
+
 function extractBlock(scss: string, selector: string): string {
 	const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 	const pattern = new RegExp(`${escapedSelector}\\s*\\{`)
@@ -152,6 +156,61 @@ function extractBoxShadowValues(block: string): string[] {
 	return matches.map(m => m[1].trim())
 }
 
+function extractFunctionBody(source: string, functionName: string): string {
+	const functionIndex = source.indexOf(`function ${functionName}`)
+	if (functionIndex === -1) return ''
+
+	const signatureCloseIndex = source.indexOf(')', functionIndex)
+	if (signatureCloseIndex === -1) return ''
+
+	const openIndex = source.indexOf('{', signatureCloseIndex)
+	if (openIndex === -1) return ''
+
+	let depth = 0
+	let endIndex = openIndex
+
+	for (let i = openIndex + 1; i < source.length; i++) {
+		if (source[i] === '{') depth++
+		if (source[i] === '}') {
+			if (depth === 0) {
+				endIndex = i
+				break
+			}
+			depth--
+		}
+	}
+
+	return source.slice(functionIndex, endIndex + 1)
+}
+
+function extractNodeElClickHandler(source: string): string {
+	const listener = "nodeEl.addEventListener('click',"
+	const listenerIndex = source.indexOf(listener)
+	if (listenerIndex === -1) return ''
+
+	const callbackStart = source.indexOf('(e) => {', listenerIndex)
+	if (callbackStart === -1) return ''
+
+	const openIndex = source.indexOf('{', callbackStart)
+	if (openIndex === -1) return ''
+
+	let depth = 0
+	let endIndex = openIndex
+
+	for (let i = openIndex + 1; i < source.length; i++) {
+		if (source[i] === '{') depth++
+		if (source[i] === '}') {
+			if (depth === 0) {
+				endIndex = i
+				break
+			}
+			depth--
+		}
+	}
+
+	return source.slice(listenerIndex, endIndex + 1)
+}
+
 // =============================================================================
 // workspace-image-node — consistent box-shadow
 // =============================================================================
@@ -187,10 +246,14 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 	it('.workspace-image-node base uses the theme-configured default box-shadow', () => {
 		expect(imageNodeBlock).toMatch(/^\s*box-shadow:\s*var\(--workspace-image-default-box-shadow\);/m)
+	})
 
-		// Generated-image chrome provider badge shadow remains allowed.
-		const badgeBlock = extractBlock(scss, '.image-model-badge')
-		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(1)
+	it('keeps generated media model chrome free of badge and button shadows', () => {
+		const badgeBlock = extractBlock(scss, '.media-model-badge')
+		const infoButtonBlock = extractBlock(scss, '.media-info-button')
+
+		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(0)
+		expect(extractBoxShadowValues(infoButtonBlock)).toHaveLength(0)
 	})
 
 	it('uses a theme-configured shadow for selected image nodes', () => {
@@ -199,31 +262,78 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
 	})
 
-	it('sizes generated-image chrome to the full image width with large active controls', () => {
+	it('renders generated media icon chrome with bounded screen-space zoom scaling', () => {
 		const ts = loadTs()
-		const actionsBlock = extractBlock(scss, '.workspace-generated-image-actions')
-		const badgeBlock = extractBlock(scss, '.image-model-badge')
-		const infoButtonBlock = extractBlock(scss, '.image-info-button')
-		const panelBlock = extractBlock(scss, '.canvas-generated-image-info-panel')
-		const traceDetailsBlock = extractBlock(panelBlock, '.canvas-generated-image-trace-details')
+		const chromeLayerBlock = extractBlock(scss, '.workspace-generated-media-chrome-layer')
+		const actionsBlock = extractBlock(scss, '.workspace-generated-media-actions')
+		const badgeBlock = extractBlock(scss, '.media-model-badge')
+		const badgeIconBlock = extractBlockContainingSelector(scss, '.media-model-badge-icon,\n.media-model-badge svg')
+		const infoButtonBlock = extractBlock(scss, '.media-info-button')
+		const infoIconBlock = extractBlock(infoButtonBlock, 'svg')
+		const panelBlock = extractBlock(scss, '.canvas-generated-media-info-panel')
+		const traceDetailsBlock = extractBlock(scss, '.canvas-generated-media-projection-editor .canvas-generated-media-trace-details')
+		const promptAndFinalFallbackBlock = scss.match(
+			/\.canvas-generated-media-projection-editor \.ai-image-generation-tool-prompt-fallback,[\s\S]*?\.canvas-generated-media-projection-editor \.ai-image-generation-final-prompt \{[\s\S]*?\}/
+		)?.[0] ?? ''
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
-		expectSourceToContain(ts, 'width: `${dimensions.width}px`,')
-		expectSourceNotToContain(ts, 'function getGeneratedImageInfoWidth')
+		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
+		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
+		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
+		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
+		expectSourceToContain(ts, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),')
+		expectSourceToContain(ts, 'left: `${chromeLayout.left}px`,')
+		expectSourceToContain(ts, 'top: `${chromeLayout.top}px`,')
+		expectSourceToContain(ts, 'width: `${chromeLayout.layoutWidth}px`,')
+		expectSourceToContain(ts, 'transform: `scale(${chromeLayout.screenScale})`,')
+		expectSourceToContain(ts, 'getVisualScale: () => scaleCanvasChromeToScreenForZoom(')
+		expectSourceToContain(ts, 'getAdaptiveBoundedZoomScalingOptions(settings.canvasBubbleMenu.zoomScaling),')
+		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.topGap,')
+		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.iconSize,')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom')
+		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())')
+		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout()')
+		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
+		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
+		expectSourceToContain(ts, "return modelMeta?.title ?? ''")
+		expectSourceNotToContain(ts, 'LIXPI_ZOOM_SCALING_DEBUG')
+		expectSourceNotToContain(ts, 'logGeneratedMediaChromeDebug')
+		expectSourceNotToContain(ts, 'getDebugRect')
+		expectSourceNotToContain(ts, 'getCanvasChromeZoomMultiplier')
+		expectSourceNotToContain(ts, 'const localScale = scaleCanvasChromeForZoom(1, zoom)')
+		expectSourceNotToContain(ts, 'getTransformedCanvasChromeLayout')
+		expectSourceNotToContain(ts, 'zoom: getCurrentViewportZoom(),')
+		expectSourceNotToContain(ts, 'zoom: number = getCurrentViewportZoom()')
+		expectSourceNotToContain(ts, 'pendingGeneratedMediaChromeZoom')
+		expectSourceNotToContain(ts, 'updateGeneratedMediaChromeZoomScaling')
+		expectSourceNotToContain(ts, 'function getGeneratedMediaInfoWidth')
+		expectExcerptToContain(chromeLayerBlock, 'position: absolute', 'generated media chrome layer block')
+		expectExcerptToContain(chromeLayerBlock, 'inset: 0', 'generated media chrome layer block')
+		expectExcerptToContain(chromeLayerBlock, 'pointer-events: none', 'generated media chrome layer block')
 		expectExcerptToContain(actionsBlock, 'width: 100%', 'generated image actions block')
-		expectExcerptToContain(badgeBlock, 'width: 52px', 'image model badge block')
-		expectExcerptToContain(badgeBlock, 'height: 52px', 'image model badge block')
-		expectExcerptToContain(badgeBlock, 'width: 30px', 'image model badge icon block')
-		expectExcerptToContain(infoButtonBlock, 'width: 52px', 'image info button block')
-		expectExcerptToContain(infoButtonBlock, 'height: 52px', 'image info button block')
-		expectExcerptToContain(infoButtonBlock, 'width: 30px', 'image info icon block')
-		expectExcerptToContain(activeBlock, 'background: $steelBlue', 'active image info button block')
-		expectExcerptToContain(activeBlock, 'border-color: $steelBlue', 'active image info button block')
+		expectExcerptToContain(actionsBlock, 'gap: 0', 'generated image actions block')
+		expectExcerptToContain(badgeBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge block')
+		expectExcerptToContain(badgeIconBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge icon block')
+		expectExcerptToContain(badgeIconBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge icon block')
+		expectExcerptNotToContain(badgeBlock, 'border:', 'image model badge block')
+		expectExcerptNotToContain(badgeBlock, 'box-shadow:', 'image model badge block')
+		expectExcerptToContain(infoButtonBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'border: none', 'image info button block')
+		expectExcerptToContain(infoIconBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info icon block')
+		expectExcerptToContain(infoIconBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info icon block')
+		expectExcerptNotToContain(infoIconBlock, 'transform:', 'image info icon block')
+		expectExcerptToContain(activeBlock, 'color: #4d5963', 'active image info button block')
+		expectExcerptToContain(activeBlock, 'background: transparent', 'active image info button block')
+		expectExcerptNotToContain(activeBlock, '$steelBlue', 'active image info button block')
+		expectExcerptNotToContain(activeBlock, 'border-color:', 'active image info button block')
 		expectExcerptToContain(panelBlock, 'overflow: visible', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'max-height: 440px', 'generated image info panel block')
 		expectExcerptNotToContain(panelBlock, 'overflow: auto', 'generated image info panel block')
-		expectExcerptToContain(traceDetailsBlock, 'max-height: none', 'canvas trace details block')
-		expectExcerptToContain(traceDetailsBlock, 'overflow: visible', 'canvas trace details block')
+		expectExcerptToContain(traceDetailsBlock, 'margin: 0.65rem 0 0', 'canvas trace details block')
+		expect(promptAndFinalFallbackBlock).toContain('max-height: none')
+		expect(promptAndFinalFallbackBlock).toContain('overflow: visible')
 	})
 
 })
@@ -260,7 +370,7 @@ describe('PIXI media layer — first sync geometry', () => {
 
 	it('clips PIXI image sprites with the configured image border radius', () => {
 		expectSourceToContain(ts, "import { settings } from '$src/settings.ts'")
-		expectSourceToContain(ts, 'settings.imageNode.borderRadius')
+		expectSourceToContain(ts, 'settings.mediaNode.image.styles.borderRadius')
 		expectSourceToContain(ts, 'sprite.mask = spriteMask')
 		expectSourceToContain(ts, 'function syncSpriteMask(entry: PixiImageEntry')
 		expectSourceToContain(ts, 'entry.spriteMask.roundRect(0, 0, width, height, radius)')
@@ -273,6 +383,19 @@ describe('PIXI media layer — first sync geometry', () => {
 		expectSourceToContain(ts, 'options: SelectionOverlayOptions = {}')
 		expectSourceToContain(ts, 'if (options.fill !== false) groupOverlayGraphics.fill({ color: selectionColors.groupOverlayFill })')
 		expectSourceToContain(ts, 'groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke')
+	})
+
+	it('reads generation-border colors from style tokens while keeping geometry tokens separate', () => {
+		expectSourceToContain(ts, 'const generationBorder = settings.mediaNode.generationBorder')
+		expectSourceToContain(ts, 'const generationBorderStyles = generationBorder.styles')
+		expectSourceToContain(ts, 'radius: generationBorder.radius')
+		expectSourceToContain(ts, 'trackWidth: generationBorder.trackWidth')
+		expectSourceToContain(ts, 'trackColor: generationBorderStyles.trackColor')
+		expectSourceToContain(ts, 'trackAlpha: generationBorderStyles.trackAlpha')
+		expectSourceToContain(ts, 'segmentTailAlpha: generationBorderStyles.snakeTailAlpha')
+		expectSourceToContain(ts, 'segmentColors: generationBorderStyles.snakeColors')
+		expectSourceNotToContain(ts, 'trackColor: generationBorder.trackColor')
+		expectSourceNotToContain(ts, 'segmentColors: generationBorder.snakeColors')
 	})
 })
 
@@ -330,7 +453,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceNotToContain(ts, 'img-dot-bounce')
 		expectSourceNotToContain(scss, '.workspace-image-progress-viewport')
 		expectExcerptNotToContain(partialHandler, 'partialImageTracker.delete', 'partial image handler')
-		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(threadId)')
+		expectExcerptToContain(completeHandler, 'partialImageTracker.delete(runKey)')
 		expectExcerptToContain(completeHandler, 'commitCanvasState({')
 	})
 
@@ -384,10 +507,9 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'const resolvedNodes = rebalanceGeneratedMediaTrees(allNodes, newEdges)')
 		expectSourceToContain(ts, 'const rebalancedNodes = rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)')
 		// Re-tidies on delete only when the removed node was a lineage member.
-		expectSourceToContain(ts, 'deletedNode && isGeneratedMediaNode(deletedNode)')
-		expectSourceToContain(ts, 'rebalanceGeneratedMediaTrees(remainingNodes, updatedEdges)')
+		expectSourceToContain(ts, 'deletedNode && isBranchTreeCanvasNode(deletedNode)')
+		expectSourceToContain(ts, 'resolveGeneratedMediaTreeState(remainingNodes, updatedEdges)')
 		expectSourceNotToContain(ts, ['stripLegacy', 'Branch', 'Origin', 'Nodes'].join(''))
-		expectSourceNotToContain(ts, ['branch', 'Origin'].join(''))
 	})
 
 })
@@ -440,7 +562,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 	it('syncs video chrome after video handler entries exist', () => {
 		const renderStart = ts.indexOf('render(newCanvasState: CanvasState | null')
 		const pixiSync = ts.indexOf('syncPixiMediaLayer(currentCanvasState)', renderStart)
-		const chromeSync = ts.indexOf('syncGeneratedImageChrome(currentCanvasState)', renderStart)
+		const chromeSync = ts.indexOf('syncGeneratedMediaChrome(currentCanvasState)', renderStart)
 
 		expect(renderStart).toBeGreaterThan(-1)
 		expect(pixiSync).toBeGreaterThan(-1)
@@ -472,16 +594,19 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(completeHandler, 'frameFileId: frameFileId || videoNode.frameFileId,', 'video complete handler')
 	})
 
-	it('renders the info button + panel in the below-node media chrome (image+video parity)', () => {
-		// The shared media chrome (a strip below the node) carries the info button
-		// and descriptor panel for BOTH images and videos.
+	it('keeps the bounded icon strip to badge + info button only, with the panel decoupled', () => {
+		// The screen-space chrome strip carries ONLY the provider badge + info
+		// button for BOTH images and videos. The expandable info panel is built
+		// separately as constant-size screen-space content, so the two affordances
+		// are fully decoupled.
 		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
-		const chromeEnd = ts.indexOf('function createVideoControlsChrome', chromeStart)
+		const chromeEnd = ts.indexOf('function createGeneratedMediaInfoPanelChrome', chromeStart)
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
 		expect(chromeStart).toBeGreaterThan(-1)
-		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome')
-		expectExcerptToContain(mediaChrome, 'createGeneratedMediaInfoPanel(node)', 'media chrome')
-		expectExcerptToContain(mediaChrome, 'applyGeneratedImageChromeGeometry(', 'media chrome')
+		expect(chromeEnd).toBeGreaterThan(chromeStart)
+		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome strip')
+		expectExcerptToContain(mediaChrome, 'applyGeneratedMediaChromeGeometry(', 'media chrome strip')
+		expectExcerptNotToContain(mediaChrome, 'createGeneratedMediaInfoPanel', 'media chrome strip')
 	})
 
 	it('keeps the video controls overlay free of the info button', () => {
@@ -494,12 +619,36 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const controlsChrome = ts.slice(chromeStart, chromeEnd)
 		expectExcerptToContain(controlsChrome, 'workspace-video-controls-host nopan', 'video controls chrome')
 		expectExcerptNotToContain(controlsChrome, 'createMediaInfoButton(node)', 'video controls chrome')
-		expectExcerptNotToContain(controlsChrome, 'workspace-generated-image-actions', 'video controls chrome')
+		expectExcerptNotToContain(controlsChrome, 'workspace-generated-media-actions', 'video controls chrome')
 	})
 
 	it('renders media info chrome for both image and video nodes', () => {
-		expectSourceToContain(ts, '...mediaInfoNodes.map(createGeneratedMediaChrome),')
+		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
+		expectSourceToContain(ts, '...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaChrome(node)),')
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
+	})
+
+	it('renders the info panel in a viewport-transformed decoupled layer', () => {
+		// The info panel is separate from the screen-space icon strip but still
+		// belongs to the viewport overlay, so its content scales naturally with
+		// the media node while the icon strip uses adaptive screen-space chrome.
+		const panelPositionStart = ts.indexOf('function updateGeneratedMediaInfoPanelPosition(')
+		const panelPositionEnd = ts.indexOf('// Video chrome', panelPositionStart)
+		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
+
+		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
+		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
+		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
+		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl.replaceChildren(')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom')
+		expectSourceToContain(ts, "transform: 'none',")
+		expect(panelPositionStart).toBeGreaterThan(-1)
+		expect(panelPositionEnd).toBeGreaterThan(panelPositionStart)
+		expectExcerptToContain(panelPosition, 'applyGeneratedMediaInfoPanelGeometry(panel, position, dimensions, viewport)', 'media info panel position updater')
+		expectExcerptNotToContain(panelPosition, 'const stripRect = strip.getBoundingClientRect()', 'media info panel position updater')
+		expectExcerptNotToContain(panelPosition, 'data-media-chrome-node-id', 'media info panel position updater')
 	})
 })
 
@@ -514,9 +663,21 @@ describe('Workspace canvas — video node interaction', () => {
 		// Without these the transparent drag overlay has no box, so pointer events
 		// fall through to the canvas and a node drag becomes a canvas pan.
 		const overlay = extractBlock(scss, '.video-drag-overlay')
+		const imageOverlay = extractBlock(scss, '.image-drag-overlay')
 		expectExcerptToContain(overlay, 'position: absolute', '.video-drag-overlay')
 		expectExcerptToContain(overlay, 'z-index: 15', '.video-drag-overlay')
-		expectExcerptToContain(overlay, 'cursor: move', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'top: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'left: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'right: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'bottom: 0', '.video-drag-overlay')
+		expectExcerptToContain(overlay, 'background: transparent', '.video-drag-overlay')
+		// Keep drag-hit parity with image drag overlays.
+		expectExcerptToContain(imageOverlay, 'position: absolute', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'z-index: 15', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'top: 0', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'left: 0', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'right: 0', '.image-drag-overlay')
+		expectExcerptToContain(imageOverlay, 'bottom: 0', '.image-drag-overlay')
 		const nodeBlock = extractBlock(scss, '.workspace-video-node')
 		expectExcerptToContain(nodeBlock, '&.is-dragging', '.workspace-video-node')
 	})
@@ -561,8 +722,8 @@ describe('Workspace canvas — media descriptors', () => {
 
 	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
 		expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
-		const buttonBlock = extractBlock(scss, '.image-info-button')
-		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.image-info-button')
+		const buttonBlock = extractBlock(scss, '.media-info-button')
+		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.media-info-button')
 		expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
 		const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
 		expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
@@ -647,7 +808,10 @@ describe('Workspace canvas — AI panel reload stability', () => {
 
 	it('tracks the mounted panel thread separately from the selected active thread', () => {
 		expectSourceToContain(ts, 'let activeAiChatPanelThreadId: string | null = null')
-		expectSourceToContain(ts, 'function destroyActiveAiChatPanel(clearActive = false, panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId): void')
+		expectSourceToContain(ts, 'function destroyActiveAiChatPanel(')
+		expectSourceToContain(ts, 'clearActive = false')
+		expectSourceToContain(ts, 'panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId')
+		expectSourceToContain(ts, 'preserveTabsSwitch = false')
 		expectSourceToContain(ts, 'threadEditors.get(panelThreadId)')
 		expectSourceToContain(ts, 'promptInputController.unregisterThreadEditor(panelThreadId)')
 		expectSourceToContain(ts, 'activeAiChatPanelThreadId = panelThreadId')
@@ -740,6 +904,132 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
 		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
 		expectSourceToContain(svelte, 'viewport: scheduledViewport')
+	})
+})
+
+// =============================================================================
+// Workspace AI chat panel — session history interactions
+// =============================================================================
+
+describe('Workspace AI chat panel — session history interactions', () => {
+	const ts = loadTs()
+	const scss = loadScss()
+	const svgIcons = loadSvgIcons()
+
+	it('uses the circle icon as the new-chat control and binds a start-new-draft action', () => {
+		expectSourceToContain(ts, 'xCircleIcon,')
+		expectSourceNotToContain(ts, 'xCircleIcon as plusIcon')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-new-chat')
+		expectSourceToContain(ts, 'aria-label="Start new chat"')
+		expectSourceToContain(ts, 'innerHTML=${xCircleIcon}')
+		expectSourceToContain(ts, 'const newChatEl = controlsEl.querySelector<HTMLButtonElement>(\'.workspace-ai-chat-panel-new-chat\')!')
+		expectSourceToContain(ts, 'newChatEl.addEventListener(\'click\', () => startNewAiChatDraft())')
+		expectSourceToContain(svgIcons, 'export const xCircleIcon')
+	})
+
+	it('styles the session control row and session entry details consistently', () => {
+		const historyToggleBlock = extractBlockContainingSelector(scss, '.workspace-ai-chat-panel-history-toggle,\n.workspace-ai-chat-panel-new-chat')
+		const newChatBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat')
+		const sessionBlock = extractBlock(scss, '.workspace-ai-chat-panel-session')
+		const titleBlock = extractBlock(scss, '.workspace-ai-chat-panel-session-title')
+		expectExcerptToContain(historyToggleBlock, 'display: grid', 'session controls block')
+		expectExcerptToContain(historyToggleBlock, 'place-items: center', 'session controls block')
+		expectExcerptToContain(newChatBlock, 'border-radius: 99px', 'new chat block')
+		expectExcerptToContain(newChatBlock, 'background: transparent', 'new chat block')
+		const sessionHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-session:focus-within')
+		const historyToggleHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-history-toggle:focus-visible')
+		const newChatHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-new-chat:focus-visible')
+		expectExcerptToContain(historyToggleHoverBlock, 'background: var(--workspace-ai-chat-panel-session-history-toggle-hover-background, rgba(105, 115, 136, 0.1))', 'session history toggle focus block')
+		expectExcerptToContain(historyToggleHoverBlock, 'outline: none', 'session history toggle focus block')
+		expectExcerptToContain(newChatHoverBlock, 'color: var(--workspace-ai-chat-panel-session-action-hover-background, #{$steelBlue})', 'new chat focus block')
+		expectExcerptToContain(newChatHoverBlock, 'outline: none', 'new chat focus block')
+		expectExcerptToContain(sessionHoverBlock, 'background-image:', 'session focus block')
+		expectExcerptToContain(sessionHoverBlock, '--workspace-ai-chat-panel-session-hover-background-image', 'session focus block')
+		expectExcerptToContain(sessionHoverBlock, 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)', 'session focus block')
+		expectSourceToContain(scss, 'max-height: 236px')
+		expectExcerptToContain(sessionBlock, 'display: flex', 'session block')
+		expectExcerptToContain(sessionBlock, 'min-height: 58px', 'session block')
+		expectExcerptToContain(titleBlock, 'font-size: 13px', 'session title block')
+		expectExcerptToContain(titleBlock, 'font-weight: 620', 'session title block')
+	})
+
+	it('starts a fresh standalone draft when last session tab is closed', () => {
+		const closeBody = extractFunctionBody(ts, 'closeAiChatSidebarTab')
+		const startNewBody = extractFunctionBody(ts, 'startNewAiChatDraft')
+		const emptyBranchIndex = closeBody.indexOf('if (aiChatSidebarTabs.length === 0) {')
+		const startFreshIndex = closeBody.indexOf('startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })')
+		const returnIndex = closeBody.indexOf('return', startFreshIndex)
+
+		expect(emptyBranchIndex).toBeGreaterThan(-1)
+		expect(startFreshIndex).toBeGreaterThan(emptyBranchIndex)
+		expect(returnIndex).toBeGreaterThan(startFreshIndex)
+		expectExcerptToContain(closeBody, 'startNewAiChatDraft({ preserveOpenTabs: false, syncFromState: false })', 'closeAiChatSidebarTab')
+		expectExcerptToContain(closeBody, 'return', 'closeAiChatSidebarTab')
+		expectExcerptToContain(startNewBody, 'const drafts = { ...(aiChatPanelState.drafts ?? {}) }', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'delete drafts[NEW_CHAT_DRAFT_KEY]', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'aiChatSidebarTabs = []', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'preserveOpenTabs = true', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'syncFromState = true', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'if (preserveOpenTabs && aiChatSidebarTabs.length > 0)', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'createAiChatDraftSidebarTab()', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatSidebarTabId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatSidebarThreadId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatThreadId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'activeAiChatRootNodeId = null', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'contextChips: [],', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'promptInputController.setTarget(null)', 'startNewAiChatDraft')
+		expectExcerptToContain(startNewBody, 'syncActiveAiChatPanelFromState()', 'startNewAiChatDraft')
+	})
+
+	it('turns a submitted draft tab into a thread tab and removes only that draft payload', () => {
+		const replaceBody = extractFunctionBody(ts, 'replaceAiChatDraftSidebarTab')
+		const submitBody = extractFunctionBody(ts, 'createStandaloneThreadAndSubmit')
+
+		expectExcerptToContain(replaceBody, 'if (tab.tabId !== draftTabId) return tab', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'replacedDraftTab = true', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'return threadTab', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'delete drafts[draftTabId]', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(replaceBody, 'aiChatPanelState = { ...aiChatPanelState, drafts }', 'replaceAiChatDraftSidebarTab')
+		expectExcerptToContain(submitBody, "const submittedDraftTabId = submittedTab?.type === 'draft' ? submittedTab.tabId : null", 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, 'replaceAiChatDraftSidebarTab(submittedDraftTabId, threadId)', 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, 'activeAiChatSidebarTabId = `thread:${threadId}`', 'createStandaloneThreadAndSubmit')
+		expectSourceToContain(ts, 'buildAiPromptDraftAttrsFromSubmitData,')
+		expectSourceToContain(ts, 'buildAiPromptDraftFromText,')
+		expectExcerptToContain(submitBody, 'const submittedThreadDraftKey = `thread:${threadId}`', 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, "const submittedThreadDraft = buildAiPromptDraftFromText('', buildAiPromptDraftAttrsFromSubmitData(data))", 'createStandaloneThreadAndSubmit')
+		expectExcerptToContain(submitBody, '[submittedThreadDraftKey]: { content: submittedThreadDraft }', 'createStandaloneThreadAndSubmit')
+	})
+
+	it('keeps thread sessions renderable with message count and status metadata', () => {
+		expectSourceToContain(ts, 'function countProseMirrorNodesByType(value: unknown, nodeTypes: Set<string>): number')
+		expectSourceToContain(ts, 'countAiChatSessionMessages(session.content)')
+		expectSourceToContain(ts, '${getAiChatSessionMeta(session)}')
+		expectSourceToContain(ts, 'pluralizeSessionCount(messageCount, \'message\')')
+	})
+
+	it('renders session history entries with thread/extraction markers and timestamps', () => {
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-marker-thread')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-marker-extraction')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-content')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-title')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-date')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-meta')
+		expectSourceToContain(ts, 'formatSessionUpdatedAt(session.updatedAt)')
+		expectSourceToContain(ts, 'formatSessionUpdatedAt(extractionState.updatedAt)')
+		expectSourceToContain(ts, 'sessionEl.querySelector(\'.workspace-ai-chat-panel-session-open\')?.addEventListener(\'click\', () => {')
+		expectSourceToContain(ts, 'activeAiChatSidebarTabId = `thread:${session.threadId}`')
+		expectSourceToContain(ts, 'openFeatureExtractionTab(extractionState.extractionRunId)')
+	})
+
+	it('defines stable session metadata formatters for deterministic labels', () => {
+		expectSourceToContain(ts, 'function formatSessionStatus(status: string): string')
+		expectSourceToContain(ts, ".split(/[-_]/)")
+		expectSourceToContain(ts, 'const minuteMs = 60_000')
+		expectSourceToContain(ts, 'return `${days} ${days === 1 ? \'day\' : \'days\'} ago`')
+		expectSourceToContain(ts, 'return `${weeks} ${weeks === 1 ? \'week\' : \'weeks\'} ago`')
+		expectSourceToContain(ts, 'formatSessionUpdatedAt')
+		expectSourceToContain(ts, 'formatSessionTimestamp(updatedAt)')
+		expectSourceToContain(ts, 'Date unavailable')
 	})
 })
 
@@ -1026,6 +1316,20 @@ describe('Resize handles - corner-hover visibility', () => {
 		expectSourceToContain(fnBody, "if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue")
 		expectSourceToContain(fnBody, 'nodeEl.appendChild(createResizeHandle(node.nodeId, corner))')
 	})
+
+	it('compares completed-video resize hitboxes in screen pixels', () => {
+		const fnBody = extractFunctionBody(ts, 'getVideoChromeResizeHandle')
+		sourceFileNames.set(fnBody, 'getVideoChromeResizeHandle')
+
+		expectSourceToContain(fnBody, 'const rect = chromeEl.getBoundingClientRect()')
+		expectSourceToContain(fnBody, 'const x = event.clientX - rect.left')
+		expectSourceToContain(fnBody, 'const y = event.clientY - rect.top')
+		expectSourceToContain(fnBody, 'const zoom = getCurrentViewportZoom()')
+		expectSourceToContain(fnBody, 'getResizeHandleScaledSizes(zoom, {')
+		expectSourceToContain(fnBody, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),')
+		expectSourceToContain(fnBody, 'const hitSize = Math.max(16, (size + Math.max(0, offset)) * zoom)')
+		expectSourceNotToContain(fnBody, 'const hitSize = Math.max(16, size + Math.max(0, offset))')
+	})
 })
 
 // =============================================================================
@@ -1194,7 +1498,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		const fnMatch = ts.match(/function\s+createThreadRail[\s\S]*?^    \}/m)
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, 'settings.aiChatThread.rail.boundaryCircleColors')
+		expectExcerptToContain(fnBody, 'settings.aiChatThread.rail.styles.boundaryCircleColors')
 		expectExcerptToContain(fnBody, "setAttribute('fill'")
 	})
 
@@ -1296,8 +1600,8 @@ describe('Vertical rail — TS infrastructure', () => {
 		expect(fnMatch).not.toBeNull()
 		const fnBody = fnMatch![0]
 
-		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)")
-		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--ai-prompt-model-menu-open-prompt-z-index', settings.aiPromptInput.modelMenu.openPromptZIndex)")
+		expectExcerptToContain(fnBody, "promptEl.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)")
+		expect(fnBody).not.toMatch(/open-prompt-z-index/)
 	})
 
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
@@ -1314,13 +1618,20 @@ describe('Vertical rail — TS infrastructure', () => {
 
 	it('renders a removable context chip tray and sends chip context for standalone chats', () => {
 		// The chip tray replaces the old Follow / Pinned / With Sources controls.
+		const scss = loadScss()
+
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chips')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-label')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
 		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
+		expectSourceToContain(ts, 'function destroyContextPreviewTooltips(): void')
+		expectSourceToContain(ts, 'activeContextPreviewTooltips.clear()')
 		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
 		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
+		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
+		expectSourceToContain(ts, 'function createAiChatPanelContextTrayElement(): HTMLDivElement')
 		expectSourceToContain(ts, 'removeContextChip(nodeId)')
+		expectSourceToContain(ts, 'activeContextPreviewTooltips.add(previewTooltip)')
 		// Submitting a standalone chat force-includes the explicit chips.
 		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips')
 		expectSourceToContain(ts, 'extractSelectedContext({ nodeIds: chipNodeIds, includeUpstream: false })')
@@ -1330,41 +1641,104 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
 		expectSourceToContain(ts, 'const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-sessions-hidden')
+		expectSourceToContain(scss, '--workspace-ai-chat-panel-content-inset')
+		expectSourceToContain(scss, '.workspace-ai-chat-panel-tabs-switch')
+		// Open tabs are now a D3 sliding switch, not DOM tag-style buttons.
+		expectSourceToContain(ts, "createSlidingTabsSwitch")
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-tabs-switch')
+		expectSourceToContain(ts, "id: 'workspace-ai-chat-panel-tabs'")
+		expectSourceToContain(ts, "onClose: (tabId) => closeAiChatSidebarTab(tabId)")
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.minTabWidth')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.height')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionDurationMs')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionMinDurationMs')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.styles.activeTabBoxShadow')
+		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.styles.activeTabInsetShadow')
+		expectSourceNotToContain(ts, 'createTagPill')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-title')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-close')
+		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-tab {')
 		// The removed context-mode controls must leave no dangling code.
 		expectSourceNotToContain(ts, "value: 'followSelection'")
 		expectSourceNotToContain(ts, "value: 'pinnedContext'")
 		expectSourceNotToContain(ts, '>With Sources</span>')
-		expectSourceNotToContain(ts, 'createSlidingSwitch')
 		expectSourceNotToContain(ts, 'createToggleSwitch')
 		expectSourceNotToContain(ts, 'includeUpstreamContext')
 		expectSourceNotToContain(ts, 'contextMode')
 		expectSourceNotToContain(ts, 'getStandaloneContextNodeIds')
 	})
 
-	it('renders removable automatic context chips and patches improved descriptors', () => {
+	it('preserves chat tab switch state and resets scroll position when changing tabs', () => {
+		expectSourceToContain(ts, 'const preservedTabsEl = options.preserveTabsSwitch')
+		expectSourceToContain(ts, 'const preservedTabsScrollLeft = preservedTabsEl?.scrollLeft ?? 0')
+		expectSourceToContain(ts, 'preservedTabsEl?.remove()')
+		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, undefined, { preserveTabsSwitch: true })')
+		expectSourceToContain(ts, 'tabsInitialScrollLeft = getAiChatPanelActiveTabScrollLeft(')
+		expectSourceToContain(ts, 'tabsEl.scrollLeft = tabsInitialScrollLeft')
+		expectSourceToContain(ts, 'resizeActiveAiChatPanelTabsSwitch()')
+		expectSourceToContain(ts, 'function resizeActiveAiChatPanelTabsSwitch(): void')
+		expectSourceToContain(ts, 'function getAiChatPanelActiveTabScrollLeft(')
+		expectSourceToContain(ts, 'function getAiChatPanelTabsViewportWidth(')
+	})
+
+	it('renders a single-tab divider instead of an empty tabs switch and hides it behind history', () => {
 		const scss = loadScss()
 
-		expectSourceToContain(ts, 'let autoContextSelections: WorkspaceContextSelection[] = []')
-		expectSourceToContain(ts, 'const removedAutoContextChipNodeIds: Set<string> = new Set()')
-		expectSourceToContain(ts, 'function removeAutoContextChip(nodeId: string): void')
-		expectSourceToContain(ts, 'function clearAutoContextChips(): void')
-		expectSourceToContain(ts, "kind: 'explicit' | 'auto'")
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-${kind}')
-		expectSourceToContain(ts, 'contextKind: kind')
-		expectSourceToContain(ts, "if (selection.role === 'forced-chip') continue")
-		expectSourceToContain(ts, 'if (kind === \'auto\')')
-		expectSourceToContain(ts, 'removeAutoContextChip(nodeId)')
+		expectSourceToContain(ts, 'const shouldRenderTabs = aiChatSidebarTabs.length > 1')
+		expectSourceToContain(ts, 'const singleTabDividerEl = shouldRenderTabs')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-single-tab-divider')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-single-tab-divider-hidden')
+		expectSourceToContain(ts, 'singleTabDividerEl?.classList.toggle(\'workspace-ai-chat-panel-single-tab-divider-hidden\', isSessionHistoryOpen)')
+		expectSourceToContain(scss, '.workspace-ai-chat-panel-single-tab-divider')
+		expectSourceToContain(scss, 'border-top: var(--workspace-ai-chat-panel-divider-border')
+	})
+
+	it('renders removable explicit context chips and patches improved descriptors', () => {
+		const scss = loadScss()
+
+		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
+		expectSourceToContain(ts, 'function renderContextChip({')
+		expectSourceToContain(ts, 'function destroyContextPreviewTooltips(): void')
+		expectSourceToContain(ts, 'contextKind: \'explicit\'')
 		expectSourceToContain(ts, 'function patchWorkspaceContextImprovedDescriptors(improvedDescriptors: Record<string, ContentDescriptor> | undefined): void')
-		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution): void')
+		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution, generationRun?: MediaGenerationRunMeta): void')
 		expectSourceToContain(ts, 'patchWorkspaceContextImprovedDescriptors(resolution.improvedDescriptors)')
-		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)')
+		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
 		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
-		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(threadId, referenceNodeIds)')
-		expectSourceToContain(ts, 'autoContextSelections = resolution.selections')
-		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ threadId, resolution }) =>')
+		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
+		expectSourceToContain(ts, 'onWorkspaceContextResolvedToCanvas: ({ threadId, resolution, generationRun }) =>')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-explicit')
-		expectSourceToContain(scss, '.workspace-ai-chat-panel-context-chip-auto')
-		expectSourceToContain(scss, 'border: 1px dashed rgba(212, 149, 106, 0.72)')
+		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-context-chip-auto')
+	})
+
+	it('applies context-preview styling helper variables to the panel shell', () => {
+		expectSourceToContain(ts, 'function applyAiChatPanelContextPreviewSettings(panelEl: HTMLElement): void')
+		expectSourceToContain(ts, 'settings.aiChatThread.contextPreview.styles')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-controls')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-preview-tooltip')
+		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-preview-trigger')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-context-chip-remove-box-shadow')
+	})
+
+	it('passes panel context-preview CSS variables through to detached tooltip content', () => {
+		expectSourceToContain(ts, 'const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-tooltip-background\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-tooltip-box-shadow\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-border-radius\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-video-glyph-background\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-document-icon-color\'')
+		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-popover-text-color\'')
+		expectSourceToContain(ts, 'contentCssVariableNames: AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES')
+	})
+
+	it('applies session-history styling helper variables to the panel shell', () => {
+		expectSourceToContain(ts, 'function applyAiChatPanelSessionHistorySettings(panelEl: HTMLElement): void')
+		expectSourceToContain(ts, 'settings.aiChatThread.sessionHistory.styles')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-control-color')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-control-hover-color')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-delete-color')
+		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-thread-marker-box-shadow')
 	})
 
 	it('prepares standalone panel media generations for canvas placeholders and branch origins', () => {
@@ -1372,24 +1746,27 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const referenceNodeIds = getStandaloneGeneratedMediaReferenceNodeIds()')
 		expectSourceToContain(ts, '...aiChatPanelState.contextChips,')
 		expectSourceToContain(ts, '...Array.from(selectedNodeIds),')
-		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0]')
+		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]')
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
-		expectSourceToContain(ts, 'referenceNodeIds,')
+		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
 		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
-		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId)')
-		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId)')
-		expectSourceToContain(ts, 'partialImageTracker.set(threadId, { nodeId, fileId: fileId || \'\', ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })')
-		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution)')
-		expectSourceToContain(ts, 'getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
-		expectSourceToContain(ts, 'if (!node || !isGeneratedMediaNode(node)) continue')
-		expectSourceToContain(ts, "resolution.mode === 'edit-active-branch'")
-		expectSourceToContain(ts, "resolution.operationKind === 'edit_existing'")
-		expectSourceToContain(ts, 'Boolean(resolution.branchId && node.generatedBy?.branchId === resolution.branchId)')
-		expectSourceToContain(ts, 'const parentImageNodeId = resolution\n            ? getGeneratedMediaLineageSourceNodeIdFromResolution(resolution)')
-		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string): Rect | undefined')
-		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number): { x: number; y: number } | undefined')
+		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId, generationRun)')
+		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode')
+		expectSourceToContain(ts, 'partialImageTracker.set(runKey, { nodeId, fileId: fileId || \'\', placementKey, ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })')
+		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
+		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
+		expectSourceToContain(ts, 'branchId: resolution.branchId ?? placement.branchId')
+		expectSourceToContain(ts, 'imageBranchResolution: resolution')
+		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
+		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds(resolution.referenceImageNodeIds)')
+		expectSourceToContain(ts, 'operationKind: resolution.operationKind')
+		expectSourceToContain(ts, 'referenceImageNodeIds: resolution.referenceImageNodeIds')
+		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds([')
+		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(getGeneratedMediaPlacementKey(threadId, generationRun), referenceNodeIds)')
+		expectSourceToContain(ts, 'function getReferenceGroupRectForGeneratedMedia(threadId: string, generationRun?: MediaGenerationRunMeta): Rect | undefined')
+		expectSourceToContain(ts, 'function getReferenceGroupGeneratedMediaPosition(threadId: string, mediaHeight: number, generationRun?: MediaGenerationRunMeta): { x: number; y: number } | undefined')
 		expectSourceToContain(ts, 'settings.imageBranchLineage.rootOutputGap')
-		expectSourceToContain(ts, 'const position = getGeneratedMediaInsertionPosition(threadId, imageHeight)')
+		expectSourceToContain(ts, 'const position = getGeneratedMediaInsertionPosition(threadId, imageHeight, generationRun)')
 		expectSourceNotToContain(ts, 'if (!sourceThread) return\n            const sourceNode = getGeneratedImageSourceNode(threadId, sourceThread)')
 	})
 
@@ -1403,14 +1780,19 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(aiInteractionService, 'workspaceContextResolution')
 		expectSourceToContain(aiInteractionService, 'content.status === STREAM_STATUS.CONTEXT_RELEVANCE_ERROR')
 		expectSourceToContain(aiInteractionService, "type: 'context_relevance_error'")
+		expectSourceToContain(aiInteractionService, 'content.status === STREAM_STATUS.IMAGE_ERROR')
+		expectSourceToContain(aiInteractionService, "type: 'image_error'")
 		expectSourceToContain(aiChatThreadPlugin, "type WorkspaceContextSegmentType = 'context_relevance_resolved' | 'context_relevance_error'")
+		expectSourceToContain(aiChatThreadPlugin, "if (type === 'image_error')")
+		expectSourceToContain(aiChatThreadPlugin, 'this.handleImageError(view, event)')
 		expectSourceToContain(aiChatThreadPlugin, "if (type === 'context_relevance_resolved')")
 		expectSourceToContain(aiChatThreadPlugin, 'callbacks.onWorkspaceContextResolvedToCanvas?.({')
 		expectSourceToContain(aiGeneratedImageNode, 'onWorkspaceContextResolvedToCanvas?: (data: {')
+		expectSourceToContain(aiGeneratedImageNode, 'onImageErrorToCanvas?: (data: {')
 		expectSourceToContain(aiGeneratedImageNode, 'resolution: WorkspaceContextResolution')
 	})
 
-	it('removes drafts only when a session is deleted, not when its tab is closed', () => {
+	it('keeps submitted-session drafts until deletion and removes unsent draft payloads when draft tabs close', () => {
 		const closeStart = ts.indexOf('function closeAiChatSidebarTab')
 		const removeDraftStart = ts.indexOf('function removeAiChatPanelDraft', closeStart)
 		const deleteChatStart = ts.indexOf('async function deleteAiChatSession', removeDraftStart)
@@ -1419,6 +1801,8 @@ describe('Vertical rail — TS infrastructure', () => {
 		const deleteChatBody = ts.slice(deleteChatStart, deleteExtractionStart)
 		const deleteExtractionBody = ts.slice(deleteExtractionStart, ts.indexOf('async function loadExtractionSessionHistory', deleteExtractionStart))
 
+		expectExcerptToContain(closeBody, "if (closedTab?.type === 'draft')", 'close-tab handler')
+		expectExcerptToContain(closeBody, 'delete drafts[closedTab.tabId]', 'close-tab handler')
 		expectExcerptNotToContain(closeBody, 'removeAiChatPanelDraft', 'close-tab handler')
 		expectExcerptToContain(deleteChatBody, 'removeAiChatPanelDraft(`thread:${threadId}`)', 'delete-chat handler')
 		expectExcerptToContain(deleteExtractionBody, 'removeAiChatPanelDraft(`extraction:${extractionRunId}`)', 'delete-extraction handler')
@@ -1443,8 +1827,9 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(scss, '--workspace-ai-chat-sidebar-edge-gap: 15px')
 		expectSourceToContain(scss, '.workspace-ai-chat-panel-backdrop')
 		expectSourceToContain(scss, 'z-index: 90')
-		expectSourceToContain(scss, 'width: calc(var(--workspace-ai-chat-sidebar-width) + 116px + var(--workspace-ai-chat-sidebar-edge-gap))')
-		expectSourceToContain(scss, 'backdrop-filter: blur(28px) saturate(145%)')
+		expectSourceToContain(scss, 'width: var(--workspace-ai-chat-sidebar-width)')
+		expectSourceToContain(scss, 'backdrop-filter: blur(24px) saturate(145%)')
+		expectSourceToContain(scss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(scss, 'mask-image: linear-gradient')
 		expectSourceToContain(scss, '@media (prefers-reduced-transparency: reduce)')
 		expectSourceToContain(svelte, 'class:workspace-canvas-chat-panel-open')
@@ -1461,12 +1846,12 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(scss, 'top: 15px')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px)')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap) + 3px)')
-		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-inline))')
+		expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
 		expectSourceToContain(scss, 'bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'border-radius: 10px', 'outer chat panel')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'background: transparent', 'outer chat panel')
-		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel-prompt'), 'width: 100% !important', 'chat composer')
+		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel-prompt'), 'width: calc(', 'chat composer')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel-prompt'), 'margin-top: 12px', 'chat composer')
 		expectSourceToContain(layout, 'workspace-sidebar-shell')
 		expectSourceToContain(layout, 'workspace-sidebar-body')
@@ -1512,9 +1897,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('plain click on node selects the node directly', () => {
 		// The click handler must call selectNode(node.nodeId) — the original
 		// node, with no pre-resolution through deprecated placement state.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		expectExcerptToContain(clickHandler, 'selectNode(node.nodeId)')
 		expectExcerptNotToContain(clickHandler, 'selectNode(selectionTargetNodeId)')
@@ -1534,9 +1918,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		// CRITICAL: clicks inside AI chat thread content must reach ProseMirror
 		// editors without triggering selectNode, which would cause the selection
 		// overlay and resize handles to appear, blocking text editing.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		// Must check all three selectors to cover:
 		// - contenteditable: any contenteditable element (ProseMirror root)
@@ -1555,9 +1938,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 	it('Mod-click triggers selection toggling from node chrome', () => {
 		// Mod-click on node chrome toggles selection from the click handler.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		expectExcerptToContain(clickHandler, 'if (isModSelectionEvent(e))', 'node click handler')
 		expectExcerptToContain(clickHandler, 'toggleNodeSelection(node.nodeId)', 'node click handler')
@@ -1583,7 +1965,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 		// setSelectedNodes accepts a fromMarquee parameter
 		expectSourceToContain(ts, 'function setSelectedNodes(nextSelectedNodeIds: Set<string>, fromMarquee = false): void')
-		expectSourceToContain(ts, 'selectionIsFromMarquee = fromMarquee && nextSelectedNodeIds.size > 0')
+		expectSourceToContain(ts, 'selectionIsFromMarquee = fromMarquee && selectedNodeIds.size > 0')
 	})
 
 	it('shouldShowSelectionGroupOverlay returns true for multi-select or marquee, false for plain click', () => {
@@ -1652,9 +2034,10 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 			expectSourceNotToContain(ts, ['getContext', 'Region', 'Cl', 'oudBounds'].join(''))
 			expectSourceToContain(ts, 'updateSelectionGroupOverlayElement()')
 			expectSourceToContain(scss, '.workspace-selection-group-overlay')
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*z-index:\s*10000/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*cursor:\s*move/s)
-		expect(scss).toMatch(/\.workspace-selection-group-overlay\s*\{[^}]*box-sizing:\s*border-box/s)
+			const selectionGroupOverlay = extractBlock(scss, '.workspace-selection-group-overlay')
+			expectExcerptToContain(selectionGroupOverlay, 'position: absolute', 'selection group overlay')
+			expectExcerptToContain(selectionGroupOverlay, 'z-index: 10000', 'selection group overlay')
+			expectExcerptToContain(selectionGroupOverlay, 'box-sizing: border-box', 'selection group overlay')
 	})
 
 	it('uses the selection overlay as a drag surface for the whole selected group', () => {
@@ -1682,20 +2065,29 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		})
 
 	it('wires selection colors from settings to CSS custom properties', () => {
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-border-color', settings.selection.marqueeBorderColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-background-color', settings.selection.marqueeBackgroundColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-border-color', settings.selection.overlayBorderColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-background-color', settings.selection.overlayBackgroundColor)")
-		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-outline-color', settings.selection.outlineColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-border-color', selectionStyles.marqueeBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-marquee-background-color', selectionStyles.marqueeBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-border-color', selectionStyles.overlayBorderColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-overlay-background-color', selectionStyles.overlayBackgroundColor)")
+		expectSourceToContain(ts, "paneEl.style.setProperty('--selection-outline-color', selectionStyles.outlineColor)")
 		expect(scss).toMatch(/var\(--selection-outline-color/)
 	})
 
-		it('wires image settings to CSS custom properties', () => {
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', settings.imageNode.defaultBoxShadow)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', settings.imageNode.selectedBoxShadow)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${settings.imageNode.borderRadius}px`)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', settings.imageNode.modelBadgeBoxShadow)")
+	it('wires image settings to CSS custom properties', () => {
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)")
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)")
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)")
+			expectSourceNotToContain(ts, "paneEl.style.setProperty('--workspace-media-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)")
 			expect(scss).toMatch(/border-radius:\s*var\(--workspace-image-border-radius\)/)
+	})
+
+	it('wires resize handles through configured bounded zoom scaling', () => {
+		expectSourceToContain(ts, 'const resizeHandleSettings = settings.mediaNode.resizeHandle')
+		expectSourceToContain(ts, 'baseSize: resizeHandleSettings.size,')
+		expectSourceToContain(ts, 'baseOffset: resizeHandleSettings.offset,')
+		expectSourceToContain(ts, 'minSize: resizeHandleSettings.minSize,')
+		expectSourceToContain(ts, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),')
+		expectSourceNotToContain(ts, ': { size: 24, offset: 6 }')
 	})
 
 	// -------------------------------------------------------------------------
@@ -1789,7 +2181,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	it('drag overlay passes original node.nodeId (not pre-resolved) to handleDragStart', () => {
 		// The drag overlay must pass the original nodeId so handleDragStart can
 		// preserve the original for the click path.
-		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceToContain(ts, 'handleDragStart(e, node.nodeId, {')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
@@ -1932,7 +2324,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	})
 
 	it('uses the image-node theme width for toolbar image insertion sizing', () => {
-		expectSourceToContain(svelte, 'const width = settings.imageNode.defaultInsertionWidth')
+		expectSourceToContain(svelte, 'const width = settings.mediaNode.image.defaultInsertionWidth')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(aspectRatio)')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(1)')
 		expectSourceNotToContain(svelte, 'const maxWidth = 400')
@@ -2007,9 +2399,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		//
 		// Invariant: clicks on contenteditable, .ProseMirror, or
 		// .ai-chat-thread-wrapper elements must bail out before selectNode
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		// All three checks must be present — they cover overlapping DOM trees
 		expectExcerptToContain(clickHandler, 'clickTarget.isContentEditable')
@@ -2026,9 +2417,8 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// Invariant: click handler must call selectNode(node.nodeId) with
 		// the original nodeId, never pre-resolving through deprecated
 		// generated-image placement state.
-		const clickMatch = ts.match(/nodeEl\.addEventListener\('click',[\s\S]*?\}\)/)
-		expect(clickMatch).not.toBeNull()
-		const clickHandler = clickMatch![0]
+		const clickHandler = extractNodeElClickHandler(ts)
+		expect(clickHandler).not.toBe('')
 
 		expectExcerptToContain(clickHandler, 'selectNode(node.nodeId)')
 		expectExcerptNotToContain(clickHandler, 'selectNode(selectionTargetNodeId)')
@@ -2043,7 +2433,7 @@ describe('Workspace canvas — selection interaction regression guards', () => {
 		// of the image.
 		//
 		// Invariant: dragOverlay must pass node.nodeId directly
-		expectSourceToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, node.nodeId)}')
+		expectSourceToContain(ts, 'handleDragStart(e, node.nodeId, {')
 		expectSourceNotToContain(ts, 'onmousedown=${(e: MouseEvent) => handleDragStart(e, getSelectionTargetNodeId(node.nodeId))}')
 	})
 
@@ -2140,45 +2530,45 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
 })
 
 // =============================================================================
-// Image error placeholder — uses brokenImageIcon from svgIcons
+// Image generation error cleanup
 // =============================================================================
 
-describe('Image error placeholder — SVG icon from svgIcons', () => {
+describe('Image generation error cleanup', () => {
 	const ts = loadTs()
 
-	it('imports brokenImageIcon from svgIcons', () => {
-		expectSourceToContain(ts, 'brokenImageIcon')
-		expect(ts).toMatch(/import\s*\{[^}]*brokenImageIcon[^}]*\}\s*from\s*['"]\$src\/svgIcons\/index\.ts['"]/)
+	function getImageErrorHandler(): string {
+		const start = ts.indexOf('onImageErrorToCanvas: ({ threadId, generationRun }) => {')
+		expect(start, 'WorkspaceCanvas.ts should contain onImageErrorToCanvas handler').toBeGreaterThan(-1)
+		const end = ts.indexOf('onImagePartialToCanvas:', start)
+		expect(end, 'onImageErrorToCanvas handler should end before onImagePartialToCanvas').toBeGreaterThan(start)
+		return ts.slice(start, end)
+	}
+
+	it('does not keep the old broken-image placeholder path', () => {
+		expectSourceNotToContain(ts, 'showImageErrorPlaceholder')
+		expectSourceNotToContain(ts, 'brokenImageIcon')
+		expectSourceNotToContain(ts, 'image-error-placeholder')
 	})
 
-	it('showImageErrorPlaceholder uses innerHTML to inject brokenImageIcon (not raw interpolation)', () => {
-		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
+	it('removes the failed partial image node from state and DOM immediately', () => {
+		const handler = getImageErrorHandler()
 
-		expectExcerptToContain(fnBody, 'innerHTML=${brokenImageIcon}')
-		// brokenImageIcon should only appear inside an innerHTML= binding
-		const allOccurrences = fnBody.match(/brokenImageIcon/g) || []
-		const inlineHtmlOccurrences = fnBody.match(/innerHTML=\$\{brokenImageIcon\}/g) || []
-		expect(allOccurrences.length).toBe(inlineHtmlOccurrences.length)
+		expectExcerptToContain(handler, 'partialImageTracker.delete(runKey)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'selectedNodeIds.delete(existing.nodeId)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const remainingNodes = currentCanvasState.nodes.filter', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const remainingEdges = currentCanvasState.edges.filter', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'resolveGeneratedMediaTreeState(remainingNodes, remainingEdges)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'commitCanvasStatePreservingEditors(nextState)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'nodeEl?.remove()', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'finishGeneratedMediaRun(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptNotToContain(handler, 'setTimeout', 'onImageErrorToCanvas')
 	})
 
-	it('showImageErrorPlaceholder deduplicates (checks for existing placeholder before appending)', () => {
-		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
+	it('keeps cleanup scoped to the matching generation run key', () => {
+		const handler = getImageErrorHandler()
 
-		expectExcerptToContain(fnBody, "nodeEl.querySelector('.image-error-placeholder')")
-		expectExcerptToContain(fnBody, 'return')
-	})
-
-	it('no inline SVG markup in showImageErrorPlaceholder', () => {
-		const fnMatch = ts.match(/function\s+showImageErrorPlaceholder[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-
-		expectExcerptNotToContain(fnBody, '<svg')
-		expectExcerptNotToContain(fnBody, 'viewBox')
+		expectExcerptToContain(handler, 'const runKey = getGeneratedMediaRunKey(threadId, generationRun)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'const existing = partialImageTracker.get(runKey)', 'onImageErrorToCanvas')
 	})
 })
 

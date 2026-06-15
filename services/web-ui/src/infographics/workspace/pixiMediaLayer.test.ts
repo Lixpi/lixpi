@@ -1,0 +1,439 @@
+'use strict'
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { createPixiMediaLayer } from '$src/infographics/workspace/pixiMediaLayer.ts'
+
+function makeImageNode(nodeId: string): Record<string, any> {
+    return {
+        nodeId,
+        type: 'image',
+        fileId: `${nodeId}-file`,
+        workspaceId: 'workspace-1',
+        src: `/${nodeId}.png`,
+        dimensions: { width: 100, height: 70 },
+        position: { x: 10, y: 20 },
+        referenceId: `${nodeId}-ref`,
+    }
+}
+
+function makeNonImageNode(nodeId: string, type: 'video' | 'document'): Record<string, any> {
+    return {
+        nodeId,
+        type,
+        fileId: `${nodeId}-file`,
+        workspaceId: 'workspace-1',
+        src: `/${nodeId}.bin`,
+        dimensions: { width: 50, height: 30 },
+        position: { x: 5, y: 6 },
+        referenceId: `${nodeId}-ref`,
+    }
+}
+
+const mediaNodeRegistryCalls: {
+    dispatchSync: ReturnType<typeof vi.fn>
+    dispatchRemove: ReturnType<typeof vi.fn>
+    dispatchLiveTransform: ReturnType<typeof vi.fn>
+    destroy: ReturnType<typeof vi.fn>
+    register: ReturnType<typeof vi.fn>
+} = {
+    dispatchSync: vi.fn(),
+    dispatchRemove: vi.fn(),
+    dispatchLiveTransform: vi.fn(),
+    destroy: vi.fn(),
+    register: vi.fn(),
+}
+
+const outlineRendererInstances: Array<{
+    sync: ReturnType<typeof vi.fn>
+    updateGeometry: ReturnType<typeof vi.fn>
+    setVisible: ReturnType<typeof vi.fn>
+    destroy: ReturnType<typeof vi.fn>
+}> = []
+
+vi.mock('pixi.js', () => {
+    const fakeFrameRequest = { x: 0, y: 0 }
+
+    class FakeContainer {
+        public children: any[] = []
+        public parent: any = null
+        public position = { set: vi.fn((x: number, y: number) => {
+            fakeFrameRequest.x = x
+            fakeFrameRequest.y = y
+        }) }
+        public label = ''
+        public eventMode = ''
+
+        constructor(public options: { label?: string } = {}) {
+            if (options?.label) {
+                this.label = options.label
+            }
+        }
+
+        public addChild(child: any): any {
+            this.children.push(child)
+            child.parent = this
+            return child
+        }
+
+        public removeChild(child: any): void {
+            this.children = this.children.filter((candidate) => candidate !== child)
+            if (child) child.parent = null
+        }
+
+        public scale = {
+            set: vi.fn(),
+        }
+    }
+
+    class FakeGraphics extends FakeContainer {
+        public fill = vi.fn()
+        public stroke = vi.fn()
+        public roundRect = vi.fn()
+        public clear = vi.fn()
+        public destroy = vi.fn()
+        public beginPath = vi.fn()
+        public moveTo = vi.fn()
+        public lineTo = vi.fn()
+    }
+
+    class FakeTexture {
+        public width = 100
+        public height = 100
+        public source = { autoGenerateMipmaps: false }
+
+        destroy = vi.fn()
+
+        static EMPTY = new FakeTexture(0, 0)
+
+        static from(bitmap: any): FakeTexture {
+            const texture = new FakeTexture(bitmap?.width ?? 100, bitmap?.height ?? 100)
+            return texture
+        }
+    }
+
+    class FakeSprite extends FakeContainer {
+        public texture: any
+        public visible = false
+        public renderable = true
+        public mask: any = null
+
+        public width = 0
+        public height = 0
+
+        constructor(texture: any = FakeTexture.EMPTY) {
+            super()
+            this.texture = texture
+        }
+
+        public destroy = vi.fn()
+    }
+
+    class FakeTicker {
+        stop = vi.fn()
+    }
+
+    class FakeApplication {
+        public stage = new FakeContainer()
+        public world = new FakeContainer()
+        public ticker = new FakeTicker()
+        public canvas = document.createElement('canvas') as HTMLCanvasElement
+        public init = vi.fn(async () => undefined)
+        public render = vi.fn()
+        public destroy = vi.fn()
+    }
+
+    return {
+        Application: FakeApplication,
+        Container: FakeContainer,
+        Graphics: FakeGraphics,
+        Sprite: FakeSprite,
+        Texture: FakeTexture,
+    }
+})
+
+vi.mock('$src/utils/domTemplates.ts', () => ({
+    html: (_template: unknown, ..._values: unknown[]) => document.createElement('div'),
+    applyStyle: vi.fn(),
+}))
+
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: vi.fn(async () => 'test-token'),
+    },
+}))
+
+vi.mock('$src/infographics/workspace/pixiImageDecoder.ts', () => ({
+    decodeImageInWorker: vi.fn(async () => ({ width: 10, height: 10 } as ImageBitmap)),
+    destroyPixiImageDecoder: vi.fn(),
+}))
+
+vi.mock('$src/infographics/workspace/pixiMediaLayerLogic.ts', () => ({
+    addPixiLodSizeParam: (url: string, tier: string) => `${url}&tier=${tier}`,
+    buildNodesById: (nodes: Array<{ nodeId: string }>) => new Map(nodes.map((node) => [node.nodeId, node] as const)),
+    buildPixiImageSrc: (resolvedSrc: string, _apiBaseUrl: string, token: string | false) => `${resolvedSrc}?token=${token ?? ''}`,
+    computeWorldPosition: (node: any) => node.position,
+    getPixiLodTier: (zoom: number) => (zoom >= 1 ? 'full' : 'thumb-256') as const,
+    getVisibleWorldRect: () => ({ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }),
+    makeIndexedImage: (node: { nodeId: string; dimensions: { width: number; height: number }; position: { x: number; y: number } }) => ({
+        nodeId: node.nodeId,
+        minX: node.position.x,
+        minY: node.position.y,
+        maxX: node.position.x + node.dimensions.width,
+        maxY: node.position.y + node.dimensions.height,
+    }),
+    resolveStoredImagePath: (node: { src?: string }) => node.src ?? '',
+    tierRank: (tier: string) => ({ color: 0, 'thumb-256': 1, full: 2 }[tier] ?? 0),
+}))
+
+vi.mock('$src/infographics/workspace/rendering/pixiEdgeRenderer.ts', () => ({
+    createPixiEdgeRenderer: vi.fn(() => ({ render: vi.fn(), destroy: vi.fn() })),
+}))
+
+vi.mock('$src/infographics/workspace/rendering/mediaNodeRegistry.ts', () => ({
+    createMediaNodeRegistry: () => mediaNodeRegistryCalls,
+}))
+
+vi.mock('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts', () => ({
+    PixiTravelingOutlineRenderer: class FakePixiTravelingOutlineRenderer {
+        public sync = vi.fn()
+        public updateGeometry = vi.fn()
+        public setVisible = vi.fn()
+        public destroy = vi.fn()
+
+        public constructor() {
+            outlineRendererInstances.push({
+                sync: this.sync,
+                updateGeometry: this.updateGeometry,
+                setVisible: this.setVisible,
+                destroy: this.destroy,
+            })
+        }
+    },
+}))
+
+vi.mock('$src/settings.ts', () => ({
+    settings: {
+        mediaNode: {
+            generationBorder: {
+                radius: 10,
+                trackWidth: 2,
+                snakeWidth: 4,
+                snakeLengthFraction: 0.8,
+                snakeSegmentCount: 9,
+                animationDurationMs: 2000,
+                styles: {
+                    trackColor: '#fff',
+                    trackAlpha: 0.75,
+                    snakeColors: ['#fff'],
+                    snakeTailAlpha: 0.3,
+                },
+            },
+            image: {
+                styles: {
+                    borderRadius: 8,
+                },
+            },
+        },
+        dropdown: {
+            styles: { popoverBoxShadow: '' },
+        },
+        connector: {
+            scaling: {
+                zoomScaling: { minZoom: 0.4 },
+            },
+        },
+        aiChatThread: {
+            panel: {
+                actions: {
+                    borderWidth: 1,
+                    borderColor: '#000',
+                    borderStyle: 'solid',
+                    borderRadius: '6px',
+                    activeColor: '#000',
+                    inactiveColor: '#000',
+                    activeBackground: '#000',
+                    disabledColor: '#000',
+                    disabledBackground: '#000',
+                    activeBackgroundColor: '#000',
+                    sessionHistoryBackground: '#000',
+                    threadListBackground: '#000',
+                    threadText: '#000',
+                    threadTextActive: '#000',
+                    contextChipTextColor: '#000',
+                    contextChipBackground: '#000',
+                    contextChipRemoveBackground: '#000',
+                    contextChipRemoveColor: '#000',
+                },
+            },
+            sessionHistory: {
+                styles: {
+                    controlColor: '#000',
+                    controlHoverColor: '#000',
+                    historyToggleHoverBackground: '#000',
+                    actionHoverBackground: '#000',
+                    actionHoverColor: '#000',
+                    deleteColor: '#000',
+                    hoverBackgroundImage: '',
+                    threadMarkerBackground: '#000',
+                    threadMarkerBoxShadow: '#000',
+                },
+            },
+            contextPreview: {
+                styles: {
+                    controlsColor: '#000',
+                    chipBackground: '#000',
+                    triggerBorderRadius: '4px',
+                    previewBorderRadius: '4px',
+                    tooltipBackground: '#000',
+                    tooltipBorder: '#000',
+                    tooltipBorderRadius: '4px',
+                    tooltipBoxShadow: '#000',
+                    tooltipColor: '#000',
+                    videoBackground: '#000',
+                    videoGlyphBackground: '#000',
+                    videoGlyphColor: '#000',
+                    documentColor: '#000',
+                    documentSkeletonLineBorderRadius: '4px',
+                    documentSkeletonLineBackground: '#000',
+                    documentIconColor: '#000',
+                    documentTextColor: '#000',
+                    popoverTitleColor: '#000',
+                    popoverTextColor: '#000',
+                    removeButtonBackground: '#000',
+                    removeButtonColor: '#000',
+                    removeButtonBoxShadow: '#000',
+                },
+            },
+        },
+    },
+}))
+
+function makeCanvasState(overrides: Partial<{ nodes: unknown[]; viewport: { x: number; y: number; zoom: number }; edges: unknown[] }> = {}) {
+    return {
+        nodes: overrides.nodes ?? [],
+        edges: overrides.edges ?? [],
+        viewport: overrides.viewport ?? { x: 0, y: 0, zoom: 1 },
+        sourceContext: {},
+    }
+}
+
+function createTestLayer(): ReturnType<typeof createPixiMediaLayer> {
+    const paneEl = document.createElement('div')
+    const viewportEl = document.createElement('div')
+    paneEl.appendChild(viewportEl)
+    const selectionColors = {
+        marqueeStroke: '#000',
+        marqueeFill: '#000',
+        groupOverlayStroke: '#000',
+        groupOverlayFill: '#000',
+    }
+
+    return createPixiMediaLayer({
+        paneEl,
+        viewportEl,
+        getWorkspaceId: () => 'workspace-1',
+        selectionColors,
+    })
+}
+
+function clearMocks(): void {
+    mediaNodeRegistryCalls.dispatchSync.mockReset()
+    mediaNodeRegistryCalls.dispatchRemove.mockReset()
+    mediaNodeRegistryCalls.dispatchLiveTransform.mockReset()
+    mediaNodeRegistryCalls.destroy.mockReset()
+    mediaNodeRegistryCalls.register.mockReset()
+    outlineRendererInstances.length = 0
+}
+
+describe('createPixiMediaLayer runtime behavior', () => {
+    beforeEach(() => {
+        clearMocks()
+        mediaNodeRegistryCalls.dispatchSync.mockReturnValue(true)
+        ;(globalThis as any).requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+            cb(0)
+            return 1
+        })
+        ;(globalThis as any).cancelAnimationFrame = vi.fn(() => undefined)
+    })
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    it('initializes asynchronously and transitions health to ready', async () => {
+        const layer = createTestLayer()
+
+        expect(layer.getHealth()).toBe('initializing')
+
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+    })
+
+    it('dispatches non-image nodes to the registry and removes stale node ids on sync', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const imageNode = makeImageNode('image-1')
+        const videoNode = makeNonImageNode('video-1', 'video')
+        const docNode = makeNonImageNode('doc-1', 'document')
+
+        layer.sync(makeCanvasState({ nodes: [imageNode, videoNode, docNode] }))
+
+        expect(mediaNodeRegistryCalls.dispatchSync).toHaveBeenCalledTimes(2)
+        expect(mediaNodeRegistryCalls.dispatchSync).toHaveBeenCalledWith(videoNode, { x: 5, y: 6 }, expect.objectContaining({ nodes: expect.arrayContaining([imageNode, videoNode, docNode]) }))
+        expect(mediaNodeRegistryCalls.dispatchSync).toHaveBeenCalledWith(docNode, { x: 5, y: 6 }, expect.objectContaining({ nodes: expect.arrayContaining([imageNode, videoNode, docNode]) }))
+
+        layer.sync(makeCanvasState({ nodes: [imageNode] }))
+
+        expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledTimes(2)
+        expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledWith('video-1')
+        expect(mediaNodeRegistryCalls.dispatchRemove).toHaveBeenCalledWith('doc-1')
+    })
+
+    it('forwards live transforms to registry for non-image nodes', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const videoNode = makeNonImageNode('video-live', 'video')
+        layer.sync(makeCanvasState({ nodes: [videoNode] }))
+
+        layer.setNodeLiveTransform('video-live', { x: 50, y: 60 }, { width: 70, height: 80 })
+
+        expect(mediaNodeRegistryCalls.dispatchLiveTransform).toHaveBeenCalledWith('video-live', { x: 50, y: 60 }, { width: 70, height: 80 })
+    })
+
+    it('syncs generating-image border geometry from currently flagged nodes', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const imageNode = makeImageNode('gen-1')
+        layer.sync(makeCanvasState({ nodes: [imageNode] }))
+
+        layer.setGeneratingImageNodes(new Set(['gen-1']))
+
+        const renderer = outlineRendererInstances.at(-1)
+        expect(renderer).toBeTruthy()
+
+        const syncCalls = renderer!.sync.mock.calls
+        const lastCall = syncCalls[syncCalls.length - 1] as [{ id: string; x: number; y: number; width: number; height: number; visible: boolean }[]]
+        expect(lastCall[0]).toEqual([
+            {
+                id: 'gen-1',
+                x: 10,
+                y: 20,
+                width: 100,
+                height: 70,
+                visible: true,
+            },
+        ])
+    })
+
+    it('invokes media-node registry destroy during teardown', async () => {
+        const layer = createTestLayer()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        layer.sync(makeCanvasState({ nodes: [makeNonImageNode('video-1', 'video')] }))
+        layer.destroy()
+
+        expect(mediaNodeRegistryCalls.destroy).toHaveBeenCalled()
+    })
+})

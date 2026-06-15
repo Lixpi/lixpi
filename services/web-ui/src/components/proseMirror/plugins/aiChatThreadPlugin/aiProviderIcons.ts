@@ -1,9 +1,28 @@
 import {
     claudeIcon,
     geminiIcon,
+    geminiColorIcon,
     gptAvatarIcon,
     stabilityIcon,
+    bytedanceIcon,
 } from '$src/svgIcons/index.ts'
+
+// Resolves a model's iconName/colorIconName (synced from ai-models-synchronization)
+// to its SVG markup. Keyed by the icon-name string, not by provider, so colored
+// variants such as geminiColorIcon resolve directly.
+const AI_MODEL_ICONS: Record<string, string> = {
+    gptAvatarIcon,
+    claudeIcon,
+    geminiIcon,
+    geminiColorIcon,
+    stabilityIcon,
+    bytedanceIcon,
+}
+
+export function getAiModelIcon(iconName: string | null | undefined): string | null {
+    if (!iconName) return null
+    return AI_MODEL_ICONS[iconName] ?? null
+}
 
 export function getAiProviderIcon(provider: string | null | undefined): string | null {
     switch (provider) {

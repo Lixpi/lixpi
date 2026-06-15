@@ -270,7 +270,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
     })
 
     // Apply theme shadow
-    infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.popoverBoxShadow)
+    infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
 
     // Append info bubble to dropdown or body
     if (mountToBody) {

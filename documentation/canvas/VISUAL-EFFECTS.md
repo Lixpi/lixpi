@@ -53,8 +53,8 @@ The system intentionally has separate palettes for different visual roles:
 
 | Setting | Purpose | Consumers |
 |---|---|---|
-| `settings.gradient.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
-| `settings.imageNode.generationBorder.snakeColors` | Bright traveling progress path palette | PIXI generated-image progress outline |
+| `settings.gradient.styles.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
+| `settings.mediaNode.generationBorder.styles.snakeColors` | Bright traveling progress path palette | PIXI generated-image progress outline |
 
 ## Gradient Consumers
 
@@ -66,11 +66,11 @@ The system intentionally has separate palettes for different visual roles:
 - `appendRepeatingLinearGradientStops()` creates looping stops for animated borders.
 - `startRotatingLinearGradient()` rotates gradient endpoints for document thread borders, defaulting to `Easing.hoverTransition()`.
 
-These SVG consumers use `settings.gradient.shiftingColors`; they reuse the palette but do not run the freeform pixel sampler.
+These SVG consumers use `settings.gradient.styles.shiftingColors`; they reuse the palette but do not run the freeform pixel sampler.
 
 ### PIXI Generated-Image Progress Outline
 
-`PixiTravelingOutlineRenderer` renders a subdued rounded track and a bright colored segment moving around its perimeter with PIXI `Graphics`. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds and style data into it. The workspace media layer uses it for generated-image progress with the blue-to-purple-to-orange palette configured in `settings.imageNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
+`PixiTravelingOutlineRenderer` renders a subdued rounded track and a bright colored segment moving around its perimeter with PIXI `Graphics`. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds and style data into it. The workspace media layer uses it for generated-image progress with the blue-to-purple-to-orange palette configured in `settings.mediaNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
 
 ### Static CSS Gradient Surfaces
 
@@ -78,7 +78,7 @@ Some UI surfaces use CSS gradients without participating in freeform bitmap rend
 
 | Surface | Definition | Relationship |
 |---|---|---|
-| AI chat thread vertical rail | `settings.aiChatThread.rail.gradient`, applied by `WorkspaceCanvas.ts` and rendered in `workspace-canvas.scss` | A static two-color accent related to the pastel shifting palette |
+| AI chat thread vertical rail | `settings.aiChatThread.rail.styles.gradient`, applied by `WorkspaceCanvas.ts` and rendered in `workspace-canvas.scss` | A static two-color accent related to the pastel shifting palette |
 | Model/dropdown highlights | `components/dropdown/_dropdown-mixins.scss` | Uses the same simple lavender/periwinkle two-color accent as the rail |
 | AI user message bubbles and canvas provenance prompt bubbles | `components/proseMirror/plugins/aiChatThreadPlugin/ai-chat-thread.scss`, `infographics/workspace/workspace-canvas.scss` | Local dark bubble treatment; not part of the animated palette system |
 | Generated-image action readability fade | `components/proseMirror/plugins/aiChatThreadPlugin/ai-chat-thread.scss` | Local media overlay fade; not a reusable gradient asset |
@@ -234,11 +234,13 @@ The gradient uses 4 colors that blend together. Choosing good colors is importan
 2. Have appropriate contrast (not too similar, not too jarring)
 3. Match the overall design aesthetic
 
-The current colors are ultra-light pastels inspired by a desert sunset sky palette. They are defined centrally in `settings.ts` as the `gradient.shiftingColors` property and shared across the shifting gradient background, image generation animated border (`WorkspaceCanvas.ts`), and document shape borders (`documentThreadShape.ts`, `documentContextSelection.ts`):
+The current colors are ultra-light pastels inspired by a desert sunset sky palette. They are defined centrally in `settings.ts` as the `gradient.styles.shiftingColors` property and shared across the shifting gradient background and SVG document shape/context selection borders:
 
 ```typescript
 // settings.ts
-shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
+styles: {
+    shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2'],
+}
 ```
 
 `FreeformGradientRenderer` converts these hex values to RGB at startup:
@@ -392,7 +394,7 @@ const GRADIENT_COLORS = {
 const CURRENT_PHASE = 0
 ```
 
-The printed TypeScript object is the tool's old configuration shape. The current app stores the palette as a hex array in `settings.ts` (`gradient.shiftingColors`), so convert the colors manually rather than pasting the snippet verbatim.
+The printed TypeScript object is the tool's old configuration shape. The current app stores the palette as a hex array in `settings.ts` (`gradient.styles.shiftingColors`), so convert the colors manually rather than pasting the snippet verbatim.
 
 #### Why LAB Color Space?
 
@@ -484,13 +486,13 @@ The design is intentionally simple. No WebGL, no shaders, just plain Canvas 2D. 
 
 #### Changing Colors
 
-Edit the `gradient.shiftingColors` array in `settings.ts`:
+Edit the `gradient.styles.shiftingColors` array in `settings.ts`:
 
 ```typescript
 shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; generated-image progress outlines use the separate palette in `settings.imageNode.generationBorder.snakeColors`.
+These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; generated-image progress outlines use the separate palette in `settings.mediaNode.generationBorder.styles.snakeColors`.
 
 #### Changing Animation Speed
 

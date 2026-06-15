@@ -30,7 +30,7 @@
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/nats-auth-callout-service": "workspace:*",
-        "@lixpi/markdown-stream-parser": "^0.0.3-34",
+        "@lixpi/markdown-stream-parser": "latest",
         "cookie-parser": "*",
         "cors": "*",
         "chalk": "*",
@@ -40,7 +40,6 @@
         "jsonwebtoken": "*",
         "multer": "*",
         "uuid": "*",
-        "socket.io": "*",
         "jwks-rsa": "*",
         "openai": "*",
         "@anthropic-ai/sdk": "*",
@@ -62,5 +61,5 @@
         "type": "git",
         "url": "git+https://github.com/Lixpi/lixpi-API.git"
     },
-    "packageManager": "pnpm@9.15.0"
+    "packageManager": "pnpm@11.6.0"
 }

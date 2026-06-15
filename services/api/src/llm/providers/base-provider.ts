@@ -5,13 +5,13 @@ import { StateGraph, END, START } from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn, err } from '@lixpi/debug-tools'
-import type { ProviderName } from '@lixpi/constants'
+import type { MediaGenerationRunMeta, ProviderName } from '@lixpi/constants'
 
 import type { BillingClient } from '../../billing/billing-client.ts'
 import type { Allowance } from '../../billing/contracts.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
-import { channels, type ProviderState } from '../graph/state.ts'
+import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import { ImagePublisher, type StoreWorkspaceImageFn } from '../graph/image-publisher.ts'
 import { VideoPublisher, type StoreWorkspaceVideoFn } from '../graph/video-publisher.ts'
@@ -26,6 +26,8 @@ import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveFeatures } from '../graph/feature-resolver.ts'
 import { resolveImageBranch } from '../graph/image-branch-resolver.ts'
 import { tokenUsageEvent, imageUsageEvent, videoUsageEvent } from '../usage/usage-event-mapper.ts'
+import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
+import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 
 export type BaseProviderDeps = {
     natsService: NatsService
@@ -40,6 +42,29 @@ export type BaseProviderDeps = {
     getOrgAllowance?: (userId: string) => Promise<Allowance | undefined>
 }
 
+type FanoutRouterResult = Pick<ProviderState,
+    'error' |
+    'errorCode' |
+    'errorType' |
+    'generatedImages' |
+    'generatedVideos'
+>
+
+const normalizeModelOption = (
+    requested: string | number | undefined,
+    options: Array<{ value?: string; label?: string }> | undefined,
+): string | undefined => {
+    const requestedValue = requested == null ? '' : String(requested)
+    if (!Array.isArray(options) || options.length === 0) return requestedValue || undefined
+
+    const values = options
+        .map(option => option.value)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    if (values.length === 0) return requestedValue || undefined
+    if (requestedValue && values.includes(requestedValue)) return requestedValue
+    return values[0]
+}
+
 // Shared LangGraph workflow for chat-style LLM calls (with optional image-gen branch).
 // Extraction runs have their own dedicated graph in src/llm/extraction/; this graph is
 // for chat threads and image generation only. The resolveFeatures pre-stage handles
@@ -50,7 +75,7 @@ export type BaseProviderDeps = {
 // chat stream owns it.
 //
 // Topology:
-//   START → resolveWorkspaceContext → resolveFeatures → resolveImageBranch → validateRequest → streamTokens → [conditional]
+//   START → resolveWorkspaceContext → resolveFeatures → resolveImageBranch → planMediaBranchLineage → validateRequest → streamTokens → [conditional]
 //     generate_image: validateImagePrompt → [conditional]
 //       generate_image: executeImageGeneration → calculateUsage → cleanup → END
 //       skip:                                    calculateUsage → cleanup → END
@@ -66,6 +91,8 @@ export abstract class BaseProvider {
     protected imagePublisher: ImagePublisher | undefined
     protected videoPublisher: VideoPublisher | undefined
     public readonly instanceKey: string
+    private readonly mediaBranchLineagePlanner = new MediaBranchLineagePlanner()
+    private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
 
     constructor(
         protected readonly _instanceKey: string,
@@ -77,17 +104,18 @@ export abstract class BaseProvider {
 
     private buildWorkflow() {
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
-            .addNode('resolveWorkspaceContext', async (s: ProviderState) => resolveWorkspaceContext(s, {
+            .addNode('resolveWorkspaceContext', async (s: ProviderState) => s.preflightResolved ? {} : resolveWorkspaceContext(s, {
                 natsService: this.nats,
                 publisher: this.publisher,
                 abortSignal: this.signal,
             }))
-            .addNode('resolveFeatures', async (s: ProviderState) => resolveFeatures(s))
-            .addNode('resolveImageBranch', async (s: ProviderState) => resolveImageBranch(s, {
+            .addNode('resolveFeatures', async (s: ProviderState) => s.preflightResolved ? {} : resolveFeatures(s))
+            .addNode('resolveImageBranch', async (s: ProviderState) => s.preflightResolved ? {} : resolveImageBranch(s, {
                 natsService: this.nats,
                 publisher: this.publisher,
                 abortSignal: this.signal,
             }))
+            .addNode('planMediaBranchLineage', async (s: ProviderState) => s.preflightResolved ? {} : this.planMediaBranchLineage(s))
             .addNode('validateRequest', async (s: ProviderState) => this.validateRequest(s))
             .addNode('streamTokens', async (s: ProviderState) => this.streamTokens(s))
             .addNode('validateImagePrompt', async (s: ProviderState) => this.validateImagePromptNode(s))
@@ -99,7 +127,8 @@ export abstract class BaseProvider {
         graph.addEdge(START, 'resolveWorkspaceContext' as any)
         graph.addEdge('resolveWorkspaceContext' as any, 'resolveFeatures' as any)
         graph.addEdge('resolveFeatures' as any, 'resolveImageBranch' as any)
-        graph.addEdge('resolveImageBranch' as any, 'validateRequest' as any)
+        graph.addEdge('resolveImageBranch' as any, 'planMediaBranchLineage' as any)
+        graph.addEdge('planMediaBranchLineage' as any, 'validateRequest' as any)
         graph.addEdge('validateRequest' as any, 'streamTokens' as any)
         graph.addConditionalEdges(
             'streamTokens' as any,
@@ -130,6 +159,7 @@ export abstract class BaseProvider {
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
+            requestData.generationRun,
         )
         this.imagePublisher = new ImagePublisher(
             this.deps.natsService,
@@ -137,6 +167,7 @@ export abstract class BaseProvider {
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
+            requestData.generationRun,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,
@@ -145,6 +176,7 @@ export abstract class BaseProvider {
             requestData.workspaceId,
             requestData.aiChatThreadId,
             this.providerName,
+            requestData.generationRun,
         )
 
         const initialState: ProviderState = {
@@ -167,8 +199,14 @@ export abstract class BaseProvider {
             imageProviderName: requestData.imageModelMetaInfo?.provider,
             imagePromptRetryCount: 0,
             workspaceContextSnapshot: requestData.workspaceContextSnapshot,
+            workspaceContextResolution: requestData.workspaceContextResolution,
             imageBranchCandidateSnapshot: requestData.imageBranchCandidateSnapshot,
+            imageBranchResolution: requestData.imageBranchResolution,
+            mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
             referencedFeatureIds: requestData.referencedFeatureIds,
+            featureReferenceImages: requestData.featureReferenceImages,
+            featureReferenceImageTraceUrls: requestData.featureReferenceImageTraceUrls,
+            featureUsagePrompt: requestData.featureUsagePrompt,
             enableVideoGeneration: requestData.enableVideoGeneration ?? false,
             videoModelMetaInfo: requestData.videoModelMetaInfo,
             videoModelVersion: requestData.videoModelMetaInfo?.modelVersion,
@@ -179,6 +217,9 @@ export abstract class BaseProvider {
             videoFirstFrameImage: requestData.videoFirstFrameImage,
             videoReferenceImages: requestData.videoReferenceImages,
             videoSourceForExtension: requestData.videoSourceForExtension,
+            generationRun: requestData.generationRun,
+            mediaFanoutPlan: requestData.mediaFanoutPlan,
+            preflightResolved: requestData.preflightResolved ?? false,
         }
 
         const timeoutHandle = setTimeout(() => {
@@ -220,6 +261,51 @@ export abstract class BaseProvider {
     }
 
     // -- Workflow nodes (shared) --
+
+    protected async planMediaBranchLineage(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (!state.imageModelVersion && !state.videoModelVersion) return {}
+        if (state.mediaBranchLineagePlan) return {}
+
+        const generationRun = this.mediaGenerationRunPlanner.buildSingleReasoningRun({
+            existingRun: state.generationRun,
+            eventMeta: state.eventMeta,
+            provider: state.provider,
+            modelName: state.aiModelMetaInfo.model,
+            modelVersion: state.modelVersion,
+        })
+        const lineagePlan = this.mediaBranchLineagePlanner.buildPlan({
+            generationRequestId: generationRun.generationRequestId,
+            reasoningModelIds: [generationRun.reasoningModelId],
+            imageBranchCandidateSnapshot: state.imageBranchCandidateSnapshot,
+            imageBranchResolution: state.imageBranchResolution,
+            workspaceContextSnapshot: state.workspaceContextSnapshot,
+            createdAt: Date.now(),
+        })
+        const lineageAssignment = lineagePlan.runAssignments.find(
+            assignment => assignment.reasoningRunId === generationRun.reasoningRunId
+        )
+        const nextGenerationRun: MediaGenerationRunMeta = {
+            ...generationRun,
+            ...(lineageAssignment ? { lineageAssignment } : {}),
+        }
+
+        this.streamPublisher?.mediaLineagePlanned(lineagePlan, nextGenerationRun)
+        info(`[BaseProvider] media branch lineage planned ${JSON.stringify({
+            workspaceId: state.workspaceId,
+            aiChatThreadId: state.aiChatThreadId,
+            generationRequestId: lineagePlan.generationRequestId,
+            branchId: lineagePlan.branchId,
+            branchOriginNodeId: lineagePlan.branchOrigin?.nodeId,
+            branchForkCount: lineagePlan.branchForks.length,
+            runAssignmentCount: lineagePlan.runAssignments.length,
+        }, null, 0)}`)
+
+        return {
+            mediaBranchLineagePlan: lineagePlan,
+            generationRun: nextGenerationRun,
+            eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, nextGenerationRun),
+        }
+    }
 
     protected async validateRequest(state: ProviderState): Promise<Partial<ProviderState>> {
         if (!state.modelVersion) throw new Error('modelVersion is required')
@@ -367,6 +453,10 @@ export abstract class BaseProvider {
     }
 
     protected async executeImageGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (state.mediaFanoutPlan && state.generationRun) {
+            return this.executeMediaFanout(state)
+        }
+
         const trace = buildImageGenerationTrace(state)
         if (trace) {
             try {
@@ -378,6 +468,7 @@ export abstract class BaseProvider {
 
         const imageResult = await this.deps.runImageRouter(state)
         if (imageResult.error) {
+            this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
             this.streamPublisher?.error(imageResult.error, imageResult.errorCode, imageResult.errorType)
         }
         return imageResult
@@ -390,6 +481,10 @@ export abstract class BaseProvider {
     // chat history can render the tool prompt + selected/excluded references
     // even if the VEO operation later fails.
     protected async executeVideoGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (state.mediaFanoutPlan && state.generationRun) {
+            return this.executeMediaFanout(state)
+        }
+
         const trace = buildVideoGenerationTrace(state)
         if (trace) {
             try {
@@ -404,6 +499,216 @@ export abstract class BaseProvider {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
         }
         return videoResult
+    }
+
+    protected async executeMediaFanout(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (!state.generationRun || !state.mediaFanoutPlan) return {}
+
+        if (state.generatedVideoPrompt) {
+            return this.executeVideoFanout(state)
+        }
+        if (state.generatedImagePrompt) {
+            return this.executeImageFanout(state)
+        }
+        return {}
+    }
+
+    private buildMediaRun(
+        state: ProviderState,
+        mediaModel: AiModelMetaInfo,
+        mediaType: 'image' | 'video',
+        mediaIndex: number,
+        mediaModelCount: number,
+    ): MediaGenerationRunMeta | undefined {
+        const mediaModelId = this.mediaGenerationRunPlanner.buildMediaModelId(
+            mediaModel.provider,
+            mediaModel.model,
+            mediaModel.modelVersion,
+        )
+        return this.mediaGenerationRunPlanner.buildProviderMediaRun({
+            generationRun: state.generationRun,
+            mediaModelId,
+            mediaType,
+            mediaIndex,
+            mediaModelCount,
+        })
+    }
+
+    private getErrorMessage(error: unknown): string {
+        return error instanceof Error ? error.message : String(error)
+    }
+
+    private getSettledFanoutResults(settledResults: Array<PromiseSettledResult<FanoutRouterResult>>): FanoutRouterResult[] {
+        return settledResults.map((result) => {
+            if (result.status === 'fulfilled') return result.value
+            return { error: this.getErrorMessage(result.reason) }
+        })
+    }
+
+    private async executeImageFanout(state: ProviderState): Promise<Partial<ProviderState>> {
+        const imageModels = state.mediaFanoutPlan?.imageModels ?? []
+        if (imageModels.length === 0) return {}
+
+        const settledResults = await Promise.allSettled(imageModels.map(async (imageModelMetaInfo, imageIndex): Promise<FanoutRouterResult> => {
+            const generationRun = this.buildMediaRun(state, imageModelMetaInfo, 'image', imageIndex, imageModels.length)
+            let fanoutState: ProviderState = {
+                ...state,
+                generationRun,
+                imageModelMetaInfo,
+                imageModelVersion: imageModelMetaInfo.modelVersion,
+                imageProviderName: imageModelMetaInfo.provider as ProviderName,
+                imageSize: state.mediaFanoutPlan?.imageSize ?? state.imageSize,
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
+            }
+            const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
+            fanoutState = { ...fanoutState, ...promptValidationPatch }
+            if (fanoutState.error || !fanoutState.generatedImagePrompt) {
+                const error = fanoutState.error ?? 'Image prompt validation failed for selected image model.'
+                this.streamPublisher?.imageGenerationError(error, generationRun)
+                return {
+                    error,
+                    errorCode: fanoutState.errorCode,
+                    errorType: fanoutState.errorType,
+                    generatedImages: [],
+                }
+            }
+
+            const trace = buildImageGenerationTrace(fanoutState)
+            if (trace) {
+                try {
+                    this.streamPublisher?.imageGenerationTrace(trace, generationRun)
+                } catch (error) {
+                    warn(`[BaseProvider] Skipping IMAGE_GENERATION_TRACE publish: ${this.getErrorMessage(error)}`)
+                }
+            }
+
+            const imageResult = await this.deps.runImageRouter(fanoutState)
+            if (imageResult.error) {
+                this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
+            }
+            return {
+                error: imageResult.error,
+                errorCode: imageResult.errorCode,
+                errorType: imageResult.errorType,
+                generatedImages: imageResult.generatedImages ?? [],
+            }
+        }))
+        const results = this.getSettledFanoutResults(settledResults)
+
+        const generatedImages = results.flatMap((result) => result.generatedImages ?? [])
+        if (generatedImages.length > 0) {
+            return { generatedImages }
+        }
+
+        const firstError = results.find((result): result is FanoutRouterResult & { error: string } =>
+            typeof result.error === 'string' && result.error.length > 0
+        )
+        if (!firstError) return {}
+        this.streamPublisher?.error(firstError.error, firstError.errorCode, firstError.errorType)
+        return {
+            error: firstError.error,
+            errorCode: firstError.errorCode,
+            errorType: firstError.errorType,
+        }
+    }
+
+    private async validateImageFanoutPrompt(state: ProviderState): Promise<Partial<ProviderState>> {
+        const prompt = state.generatedImagePrompt
+        if (!prompt) return {}
+        const maxChars = getImagePromptMaxChars(state.imageModelMetaInfo, state.imageProviderName)
+        if (!maxChars) return {}
+
+        const validationError = toolValidateImagePrompt(
+            prompt,
+            state.imageModelMetaInfo,
+            state.imageProviderName,
+        )
+        if (!validationError) return {}
+
+        try {
+            const rewritten = await this.rewriteImagePromptToFitLimit(state, prompt, maxChars)
+            if (rewritten) {
+                const trimmed = rewritten.trim()
+                const retryError = toolValidateImagePrompt(
+                    trimmed,
+                    state.imageModelMetaInfo,
+                    state.imageProviderName,
+                )
+                if (!retryError) return { generatedImagePrompt: trimmed }
+                return { error: retryError }
+            }
+        } catch (error) {
+            warn(`[BaseProvider] Image fanout prompt rewrite failed for ${this.instanceKey}: ${this.getErrorMessage(error)}`)
+        }
+
+        return { error: validationError }
+    }
+
+    private async executeVideoFanout(state: ProviderState): Promise<Partial<ProviderState>> {
+        const videoModels = state.mediaFanoutPlan?.videoModels ?? []
+        if (videoModels.length === 0) return {}
+
+        const settledResults = await Promise.allSettled(videoModels.map(async (videoModelMetaInfo, videoIndex): Promise<FanoutRouterResult> => {
+            const generationRun = this.buildMediaRun(state, videoModelMetaInfo, 'video', videoIndex, videoModels.length)
+            const normalizedVideoAspectRatio = normalizeModelOption(
+                state.mediaFanoutPlan?.videoAspectRatio ?? state.videoAspectRatio,
+                videoModelMetaInfo.videoAspectRatios as Array<{ value?: string; label?: string }> | undefined,
+            )
+            const normalizedVideoResolution = normalizeModelOption(
+                state.mediaFanoutPlan?.videoResolution ?? state.videoResolution,
+                videoModelMetaInfo.videoResolutions as Array<{ value?: string; label?: string }> | undefined,
+            )
+            const normalizedVideoDuration = normalizeModelOption(
+                state.mediaFanoutPlan?.videoDuration ?? state.mediaFanoutPlan?.videoDurationSeconds ?? state.videoDurationSeconds,
+                videoModelMetaInfo.videoDurations as Array<{ value?: string; label?: string }> | undefined,
+            )
+            const fanoutState: ProviderState = {
+                ...state,
+                generationRun,
+                videoModelMetaInfo,
+                videoModelVersion: videoModelMetaInfo.modelVersion,
+                videoProviderName: videoModelMetaInfo.provider as ProviderName,
+                videoAspectRatio: normalizedVideoAspectRatio,
+                videoResolution: normalizedVideoResolution,
+                videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+                videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
+            }
+
+            const trace = buildVideoGenerationTrace(fanoutState)
+            if (trace) {
+                try {
+                    this.streamPublisher?.videoGenerationTrace(trace, generationRun)
+                } catch (error) {
+                    warn(`[BaseProvider] Skipping VIDEO_GENERATION_TRACE publish: ${this.getErrorMessage(error)}`)
+                }
+            }
+
+            const videoResult = await this.deps.runVideoRouter(fanoutState)
+            return {
+                error: videoResult.error,
+                errorCode: videoResult.errorCode,
+                errorType: videoResult.errorType,
+                generatedVideos: videoResult.generatedVideos ?? [],
+            }
+        }))
+        const results = this.getSettledFanoutResults(settledResults)
+
+        const generatedVideos = results.flatMap((result) => result.generatedVideos ?? [])
+        if (generatedVideos.length > 0) {
+            return { generatedVideos }
+        }
+
+        const firstError = results.find((result): result is FanoutRouterResult & { error: string } =>
+            typeof result.error === 'string' && result.error.length > 0
+        )
+        if (!firstError) return {}
+        this.streamPublisher?.error(firstError.error, firstError.errorCode, firstError.errorType)
+        return {
+            error: firstError.error,
+            errorCode: firstError.errorCode,
+            errorType: firstError.errorType,
+        }
     }
 
     protected async calculateUsage(state: ProviderState): Promise<Partial<ProviderState>> {

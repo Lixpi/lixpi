@@ -138,19 +138,32 @@ export function makeIndexedImage(node: ImageCanvasNode, worldPosition: WorldPosi
 // =============================================================================
 
 export type PixiEdgeArrow = {
+    // World-space attachment point on the already-offset connector path.
     x: number
     y: number
     // Direction the arrowhead points (into the node it touches)
     // left anchor = Math.PI, right = 0, top = -Math.PI/2, bottom = Math.PI/2
     angle: number
-    size: number  // base screen pixels; renderer applies viewport thresholding
+    // Configured arrowhead width in final screen pixels before the viewport
+    // curve is applied by `pixiEdgeRenderer`. This must not be inverse-scaled
+    // in `WorkspaceConnectionManager`.
+    baseScreenSize: number
+    // Compatibility alias for older source-shape checks and consumers. New
+    // rendering code should read `baseScreenSize`.
+    size: number
 }
 
 export type PixiEdgeRenderDatum = {
     id: string
     svgPath: string     // SVG path string in world coordinates
     strokeColor: string
-    strokeWidth: number // base screen pixels; renderer applies viewport thresholding
+    // Configured stroke width in final screen pixels before the viewport curve
+    // is applied by `pixiEdgeRenderer`. The edge layer is screen-space, so the
+    // renderer, not the connection manager, owns the final stroke scaling.
+    baseScreenStrokeWidth: number
+    // Compatibility alias for older source-shape checks and consumers. New
+    // rendering code should read `baseScreenStrokeWidth`.
+    strokeWidth: number
     isDashed: boolean
     arrowEnd: PixiEdgeArrow | null
     arrowStart: PixiEdgeArrow | null

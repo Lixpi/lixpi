@@ -2,7 +2,7 @@
 
 Lixpi is a visual, node-based workflow engine engineered for building advanced AI image and video generation pipelines. Functionally, it sits at the intersection of an infinite spatial canvas (similar to Miro) and a visual logic execution pipeline (similar to n8n). Conceived and architected well before n8n's public release, Lixpi introduces a fundamental paradigm shift for generative AI tools: **spatial arrangement IS the workflow**.
 
-Instead of writing complex workflow DSLs or using linear chat prompts, users map out ideas topologically. The spatial relationships between documents, images, and AI chat threads on the canvas directly dictate the context extraction, dependency chains, and execution sequence of the underlying AI models.
+Instead of writing complex workflow DSLs or using linear chat prompts, users map out ideas topologically. The spatial relationships between documents and media nodes, plus explicit chat-panel context chips, dictate the context extraction, dependency chains, and execution sequence of the underlying AI models.
 
 ---
 
@@ -18,7 +18,7 @@ By treating all generated text, images, and video iterations as concrete "nodes"
 
 ## 2. Canvas Primitives
 
-The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The canvas supports four node types and directional edges between them.
+The workspace canvas is an infinite, zoomable surface rendered in vanilla TypeScript using `@xyflow/system` for pan/zoom coordinate math. Text-bearing document nodes embed ProseMirror editors; media nodes use specialized canvas chrome. The current renderer draws document, image, and video nodes. Older canvas state can still contain `aiChatThread` node data, but active chat sessions render in the right-side AI Chat panel instead of as visible canvas nodes.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -27,26 +27,31 @@ graph TB
         Doc[Document Node<br/>ProseMirror editor<br/>documentType: 'document']
         Img[Image Node<br/>Uploaded, imported, or AI-generated<br/>PIXI-rendered pixels]
         Vid[Video Node<br/>VEO-generated or library video<br/>DOM playback over PIXI poster]
-        Thread[AI Chat Thread Node<br/>ProseMirror editor<br/>documentType: 'aiChatThread']
+    end
+
+    subgraph "AI Chat Panel"
+        Panel[Right-side panel<br/>standalone + extraction tabs]
+        Chips[Explicit context chips<br/>plus workspace relevance]
+        Composer[Composer<br/>documentType: 'aiPromptInput']
     end
 
     subgraph "Connections"
-        Edge[Directional Edge<br/>Context flows source → target]
-        Prox[Proximity Connect<br/>Drag node near thread → auto-wire]
+        Edge[Directional Edge<br/>Canvas context relationship]
+        Prox[Proximity Connect<br/>Drag near a target → auto-wire]
     end
 
     subgraph "Interaction"
-        Float[Floating Prompt Input<br/>documentType: 'aiPromptInput'<br/>Per-thread, always visible]
         Bubble[Bubble Menu<br/>Context actions on selection]
     end
 
-    Doc -->|edge| Thread
-    Img -->|edge| Thread
-    Vid -->|edge| Thread
-    Thread -->|edge| Thread
+    Doc -->|chip or edge context| Chips
+    Img -->|chip or edge context| Chips
+    Vid -->|chip or edge context| Chips
+    Chips --> Panel
+    Composer --> Panel
     Edge -.->|defines| Doc
     Prox -.->|creates| Edge
-    Float -.->|targets| Thread
+    Bubble -.->|adds context or media actions| Chips
 ```
 
 | Node Type | Editor | Resize | Persistence |
@@ -54,15 +59,15 @@ graph TB
 | **Document** | ProseMirror (`documentType: 'document'`) | Free | DynamoDB Documents table |
 | **Image** | None (PIXI pixels + DOM chrome) | Aspect-ratio locked | NATS JetStream Object Store |
 | **Video** | None (PIXI poster + DOM `<video>` chrome) | Aspect-ratio locked | NATS JetStream Object Store |
-| **AI Chat Thread** | ProseMirror (`documentType: 'aiChatThread'`) | Free | DynamoDB AI-Chat-Threads table |
+| **AI Chat Thread** | Legacy canvas node data; active sessions render as panel tabs | Free when drawn by legacy code | DynamoDB AI-Chat-Threads table |
 
-**Edges** are directional connections stored in `canvasState.edges`. Each edge means "include your content as context for the target." Edges can be created by explicit handle drag or by **Proximity Connect** — dragging a node within range of an AI thread shows a dashed ghost line; dropping commits the connection.
+**Edges** are directional connections stored in `canvasState.edges`. Each edge records a context relationship between canvas nodes. Edges can be created by explicit handle drag or by **Proximity Connect**, which previews and commits a connection when a node is dragged within range of a target.
 
-**Floating Prompt Input** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) that appears below each AI thread node. It provides rich-text composition, an AI model selector dropdown, an image generation size picker, and Cmd/Ctrl+Enter to submit. The input is decoupled from threads — it only handles composition; an `AiPromptInputController` routes messages to the correct target.
+**AI Chat Panel Composer** is a separate ProseMirror editor (`documentType: 'aiPromptInput'`) inside the right-side panel. It provides rich-text composition, model controls, image/video generation settings, and Cmd/Ctrl+Enter to submit. The composer is decoupled from durable sessions; the panel creates a standalone chat only on first submit.
 
 **Media Library** is a canvas-owned right-side panel for reusable media. It exposes existing extracted Features without changing their extraction persistence path, and lets a user explicitly save completed canvas images or videos as independent JetStream Object Store copies. Inserting saved media creates fresh workspace objects and fresh canvas nodes, so library media survives deletion of its source node.
 
-**AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, compact `Follow` / `Pinned` and `With Sources` controls, and whether the history list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
+**AI Chat Panel and Sessions** are workspace-owned UI and conversation state, not a canvas-node requirement. The right-side AI Chat launcher opens an empty panel without creating a chat record. A standalone chat is created only after the user submits its first prompt. Panel visibility, open tabs, active tab, panel width, prompt drafts, explicit context chips, and whether the Sessions list is expanded are persisted in the workspace. Sessions is collapsed by default; when expanded it can reopen closed sessions until they are explicitly deleted.
 
 ---
 

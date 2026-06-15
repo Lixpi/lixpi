@@ -7,6 +7,7 @@ import { applyStyle } from '$src/utils/domTemplates.ts'
 import {
     doc,
     p,
+    reasoningSection,
     thread,
     response,
     schema,
@@ -312,6 +313,14 @@ describe('aiChatThreadNodeSpec — schema', () => {
                 }
                 return attrs[attr] ?? null
             },
+            hasAttribute: (attr: string) => [
+                'data-thread-id',
+                'data-status',
+                'data-ai-model',
+                'data-image-generation-enabled',
+                'data-image-generation-size',
+                'data-previous-response-id',
+            ].includes(attr),
         }
 
         const parsed = parseRule.getAttrs(mockDom)
@@ -534,13 +543,16 @@ describe('aiChatThreadPlugin — generated image completion', () => {
     function createView(
         onImageCompleteToCanvas = vi.fn(),
         onImagePartialToCanvas = vi.fn(),
-        additionalPlugins: any[] = []
+        additionalPlugins: any[] = [],
+        onImageErrorToCanvas = vi.fn(),
+        responseContent: any[] = [p('Generating image')],
+        responseAttrs: Record<string, unknown> = {}
     ) {
         const plugin = createAiChatThreadPlugin({
             sendAiRequestHandler: vi.fn(),
             stopAiRequestHandler: vi.fn(),
             placeholders: { titlePlaceholder: 'Title', paragraphPlaceholder: 'Type here…' },
-            imageCallbacks: { onImageCompleteToCanvas, onImagePartialToCanvas },
+            imageCallbacks: { onImageCompleteToCanvas, onImagePartialToCanvas, onImageErrorToCanvas },
         })
 
         const mount = document.createElement('div')
@@ -552,8 +564,8 @@ describe('aiChatThreadPlugin — generated image completion', () => {
                     thread(
                         { threadId: 'thread-1' },
                         response(
-                            { id: 'resp-1', isReceivingAnimation: true, isInitialRenderAnimation: true, aiProvider: 'OpenAI' },
-                            p('Generating image')
+                            { id: 'resp-1', isReceivingAnimation: true, isInitialRenderAnimation: true, aiProvider: 'OpenAI', ...responseAttrs },
+                            ...responseContent
                         )
                     )
                 ),
@@ -562,7 +574,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             }),
         })
 
-        return { view, mount, onImageCompleteToCanvas, onImagePartialToCanvas }
+        return { view, mount, onImageCompleteToCanvas, onImagePartialToCanvas, onImageErrorToCanvas }
     }
 
     function getGeneratedImageNodes(view: EditorView): any[] {
@@ -778,7 +790,90 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             partialIndex: 0,
             alignment: 'right',
         })
-        expect(view.state.doc.textContent).toContain('A revised prompt')
+
+        view.destroy()
+        mount.remove()
+    })
+
+    it('removes only the failed media-run placeholder on image_error', () => {
+        const onImageErrorToCanvas = vi.fn()
+        const requestId = 'request-1'
+        const reasoningRunId = 'reasoning-1'
+        const reasoningModelId = 'Anthropic:claude-sonnet-4-6'
+        const makeGenerationRun = (mediaRunId: string, mediaIndex: number) => ({
+            generationRequestId: requestId,
+            reasoningRunId,
+            mediaRunId,
+            reasoningModelId,
+            mediaModelId: `Google:gemini-image-${mediaIndex}`,
+            mediaType: 'image' as const,
+            reasoningIndex: 0,
+            mediaIndex,
+            variantIndex: mediaIndex,
+        })
+        const run0 = makeGenerationRun('reasoning-1:image:0', 0)
+        const run1 = makeGenerationRun('reasoning-1:image:1', 1)
+        const { view, mount } = createView(
+            vi.fn(),
+            vi.fn(),
+            [],
+            onImageErrorToCanvas,
+            [
+                reasoningSection(
+                    {
+                        generationRequestId: requestId,
+                        reasoningRunId,
+                        reasoningModelId,
+                        reasoningIndex: 0,
+                        isReceivingAnimation: true,
+                    },
+                    p('Generating image variants')
+                ),
+            ],
+            { generationRequestId: requestId }
+        )
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_partial',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '',
+            fileId: '',
+            workspaceId: 'workspace-1',
+            partialIndex: 0,
+            aiProvider: 'Anthropic',
+            generationRun: run0,
+        })
+        SegmentsReceiver.receiveSegment({
+            type: 'image_partial',
+            aiChatThreadId: 'thread-1',
+            imageUrl: '',
+            fileId: '',
+            workspaceId: 'workspace-1',
+            partialIndex: 0,
+            aiProvider: 'Anthropic',
+            generationRun: run1,
+        })
+
+        expect(getGeneratedImageNodes(view).map((node) => node.attrs.mediaRunId)).toEqual([
+            'reasoning-1:image:0',
+            'reasoning-1:image:1',
+        ])
+
+        SegmentsReceiver.receiveSegment({
+            type: 'image_error',
+            aiChatThreadId: 'thread-1',
+            error: 'Google image model returned no inline image data.',
+            generationRun: run0,
+        })
+
+        const remainingImages = getGeneratedImageNodes(view)
+        expect(remainingImages).toHaveLength(1)
+        expect(remainingImages[0].attrs.mediaRunId).toBe('reasoning-1:image:1')
+        expect(onImageErrorToCanvas).toHaveBeenCalledWith({
+            threadId: 'thread-1',
+            error: 'Google image model returned no inline image data.',
+            generationRun: run0,
+        })
 
         view.destroy()
         mount.remove()

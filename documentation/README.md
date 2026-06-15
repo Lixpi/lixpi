@@ -27,7 +27,8 @@ Do not rely on tiny routing files or stale folder names. To find the right guida
 1. Use this index for the main product and platform entry points.
 2. Use the generated docs-site sidebar for the complete current file list.
 3. Search by the concept you are changing, then read nearby pages before editing.
-4. For implementation work, read the relevant coding, testing, and source README guidance that matches the files being touched.
+4. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread. If cleanup or an edit would delete repository files, ask the user to confirm the exact file path(s) first; if the user does not confirm, keep the files and report them as cleanup candidates.
+5. For `services/web-ui` TypeScript UI work, [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) and [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) are mandatory before editing.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
 
@@ -43,6 +44,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
 | [Infrastructure Overview](platform/deployment/INFRASTRUCTURE-OVERVIEW.md) | Pulumi, AWS topology, network, ECS `api`, web-ui delivery, DynamoDB |
 | [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | NATS on Fargate, CloudMap discovery, the Route53 sidecar, Caddy-in-Lambda TLS, the auth-callout boundary |
+| [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — the hourly AI-models sync on NATS, the NEX account and credentials, local and AWS deployment |
 | [Scaling & Operations](platform/deployment/SCALING-AND-OPERATIONS.md) | Scaling profile, capacity ceilings, failure modes, environments, observability |
 
 ## Canvas
@@ -64,7 +66,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | Page | What it covers |
 |------|----------------|
 | [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | The workspace-owned AI chat panel, standalone chats, tabs, Sessions, extraction sessions, persistence |
-| [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md) | Descriptor-first workspace relevance, the resolver, explicit/auto chips, data contracts, context-region removal |
+| [Context Relevance](ai-chat/CONTEXT-RELEVANCE.md) | Descriptor-first workspace relevance, the resolver, explicit chips, automatic selections, data contracts, context-region removal |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 
 ## Media Generation
@@ -93,10 +95,14 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | Page | What it covers |
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation structure, migration workflow, Markdoc compatibility, link hygiene, and tone |
+| [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules |
+| [UI Components Coding Style](coding-style-guides/UI-COMPONENTS.md) | Svelte, D3/SVG, canvas chrome, component ownership, layout, and event rules |
 | [Markdown Rendering](conventions/MARKDOWN-RENDERING.md) | The one-parser rule and the two renderers |
+| [API-Owned Media Lineage Planning](knowledge/API-OWNED-MEDIA-LINEAGE-PLANNING.md) | API/browser ownership boundary for media branch topology, lineage plans, marker provenance, and canvas application |
 | [Rendering Architecture for a Media-Heavy Canvas](knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md) | Why the DOM/PIXI split; what the leading canvases use |
 | [Why Model Combinations Produce Different Styles](knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md) | Model chaining and visual signatures |
 | [Internal Service NATS Auth Pattern](knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md) | NKey-signed service auth recipe |
+| [NATS NEX Execution Engine — How It Works](knowledge/NATS-NEX-EXECUTION-ENGINE-EXPLAINED.md) | Nodes/nexlets/workloads, the Nexfile, every way to run NEX, and the real container/Docker story |
 
 ## Building these docs
 

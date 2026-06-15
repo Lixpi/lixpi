@@ -323,6 +323,37 @@ describe('resolveWorkspaceContext', () => {
         }))
     })
 
+    it('drops unrelated auto-selected media outside an active branch snapshot', async () => {
+        const { deps } = createDeps({
+            selections: [
+                { nodeId: 'landscape-image', rationale: 'The landscape looks visually interesting.', needsBetterDescriptor: false },
+            ],
+        })
+        const state = createState({
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'team-video'
+                    ? { ...node, isEdgeForced: false }
+                    : node
+                ),
+            },
+            imageBranchCandidateSnapshot: {
+                ...createState().imageBranchCandidateSnapshot!,
+                candidates: [baseCandidates[0]!],
+            },
+            imageModelVersion: 'gpt-image-1',
+            imageProviderName: 'OpenAI',
+        })
+
+        const update = await resolveWorkspaceContext(state, deps)
+
+        expect(update.workspaceContextResolution?.selections).toEqual([
+            { nodeId: 'cubist-doc', role: 'forced-chip' },
+        ])
+        expect(update.workspaceContextResolution?.narrowedMediaNodeIds).toEqual([])
+        expect(update.imageBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['goat-image'])
+    })
+
     it('resolves media object references immediately on text-only turns', async () => {
         const { deps, natsService } = createDeps({
             selections: [

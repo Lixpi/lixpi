@@ -2,6 +2,7 @@
 
 import * as process from 'process'
 import { randomUUID } from 'node:crypto'
+import sharp from 'sharp'
 
 import { info, warn, err } from '@lixpi/debug-tools'
 
@@ -19,8 +20,11 @@ const SD3_MODELS = new Set(['sd3.5-large'])
 const STYLE_CONTROL_ENDPOINT = '/v2beta/stable-image/control/style'
 const STYLE_TRANSFER_ENDPOINT = '/v2beta/stable-image/control/style-transfer'
 const STYLE_CONTROL_FIDELITY = 0.7
+const MAX_STABILITY_REFERENCE_PIXELS = 9_437_184
 
-const decodeDataUrlWithMime = (url: string): { bytes: Buffer; mime: string } | undefined => {
+type StabilityReferenceImage = { bytes: Buffer; mime: string }
+
+const decodeDataUrlWithMime = (url: string): StabilityReferenceImage | undefined => {
     if (!url || !url.startsWith('data:')) return undefined
     const commaIdx = url.indexOf(',')
     if (commaIdx === -1) return undefined
@@ -33,8 +37,8 @@ const decodeDataUrlWithMime = (url: string): { bytes: Buffer; mime: string } | u
     return { bytes: Buffer.from(data, 'base64'), mime }
 }
 
-const extractAllReferenceImages = (messages: ChatMessage[]): Array<{ bytes: Buffer; mime: string }> => {
-    const images: Array<{ bytes: Buffer; mime: string }> = []
+const extractAllReferenceImages = (messages: ChatMessage[]): StabilityReferenceImage[] => {
+    const images: StabilityReferenceImage[] = []
     for (const msg of messages) {
         if (msg.role !== 'user') continue
         const content = msg.content
@@ -66,6 +70,55 @@ const extractAllReferenceImages = (messages: ChatMessage[]): Array<{ bytes: Buff
         }
     }
     return images
+}
+
+const resizeReferenceForStability = async (
+    ref: StabilityReferenceImage,
+    logPrefix: string,
+    label: string,
+): Promise<StabilityReferenceImage> => {
+    let metadata: sharp.Metadata
+    try {
+        metadata = await sharp(ref.bytes).metadata()
+    } catch (e) {
+        warn(`${logPrefix} Failed to inspect ${label} reference dimensions: ${e}`)
+        return ref
+    }
+
+    const width = metadata.width ?? 0
+    const height = metadata.height ?? 0
+    const pixels = width * height
+    if (width <= 0 || height <= 0 || pixels <= MAX_STABILITY_REFERENCE_PIXELS) return ref
+
+    const scale = Math.sqrt(MAX_STABILITY_REFERENCE_PIXELS / pixels)
+    const resizedWidth = Math.max(1, Math.floor(width * scale))
+    const resizedHeight = Math.max(1, Math.floor(height * scale))
+
+    try {
+        const resizedBytes = await sharp(ref.bytes)
+            .resize({
+                width: resizedWidth,
+                height: resizedHeight,
+                fit: 'inside',
+                withoutEnlargement: true,
+                kernel: 'lanczos3',
+            })
+            .toBuffer()
+        const resizedMetadata = await sharp(resizedBytes).metadata()
+        const outWidth = resizedMetadata.width ?? resizedWidth
+        const outHeight = resizedMetadata.height ?? resizedHeight
+
+        info(
+            `${logPrefix} Resized ${label} reference image ` +
+            `${width}x${height} (${pixels} px) -> ${outWidth}x${outHeight} ` +
+            `(${outWidth * outHeight} px) for Stability limit ${MAX_STABILITY_REFERENCE_PIXELS}`,
+        )
+
+        return { bytes: resizedBytes, mime: ref.mime }
+    } catch (e) {
+        warn(`${logPrefix} Failed to resize ${label} reference image for Stability: ${e}`)
+        return ref
+    }
 }
 
 const extractPrompt = (messages: ChatMessage[]): string => {
@@ -124,8 +177,8 @@ export class StabilityProvider extends BaseProvider {
         const allRefs = extractAllReferenceImages(messages)
         info(`[Stability:${this.instanceKey}] Found ${allRefs.length} reference image(s) in messages`)
 
-        let primaryRef: { bytes: Buffer; mime: string } | undefined
-        let styleRef: { bytes: Buffer; mime: string } | undefined
+        let primaryRef: StabilityReferenceImage | undefined
+        let styleRef: StabilityReferenceImage | undefined
         if (allRefs.length >= 2) {
             allRefs.sort((a, b) => b.bytes.length - a.bytes.length)
             primaryRef = allRefs[0]
@@ -135,6 +188,14 @@ export class StabilityProvider extends BaseProvider {
             }
         } else if (allRefs.length === 1) {
             primaryRef = allRefs[0]
+        }
+
+        const logPrefix = `[Stability:${this.instanceKey}]`
+        if (primaryRef) {
+            primaryRef = await resizeReferenceForStability(primaryRef, logPrefix, 'primary')
+        }
+        if (styleRef) {
+            styleRef = await resizeReferenceForStability(styleRef, logPrefix, 'style')
         }
 
         await this.imagePub.partial('', 0)

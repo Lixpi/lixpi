@@ -73,7 +73,7 @@ export class ShiftingGradientRenderer {
         this.renderGradient()
     }
 
-    static getInstance(colors: ShiftingGradientColorSet = settings.gradient.shiftingColors): ShiftingGradientRenderer {
+    static getInstance(colors: ShiftingGradientColorSet = settings.gradient.styles.shiftingColors): ShiftingGradientRenderer {
         const instanceKey = ShiftingGradientRenderer.getColorSetKey(colors)
         let renderer = ShiftingGradientRenderer.instances.get(instanceKey)
 

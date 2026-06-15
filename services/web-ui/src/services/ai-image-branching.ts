@@ -36,6 +36,7 @@ type BuildImageBranchCandidateSnapshotParams = {
     nodes: CanvasNode[]
     edges: WorkspaceEdge[]
     prompt: string
+    contextMediaNodeIds?: string[]
     generatedImageTextByNodeId?: Record<string, string>
 }
 
@@ -151,8 +152,8 @@ function getLeafGeneratedMedia(media: MediaCanvasNode[], edges: WorkspaceEdge[])
     )
 
     for (const node of media) {
-        const parentImageNodeId = node.generatedBy?.parentImageNodeId
-        if (parentImageNodeId && mediaIds.has(parentImageNodeId)) sourceIdsWithGeneratedChildren.add(parentImageNodeId)
+        const parentMediaNodeId = node.generatedBy?.parentMediaNodeId ?? node.generatedBy?.parentImageNodeId
+        if (parentMediaNodeId && mediaIds.has(parentMediaNodeId)) sourceIdsWithGeneratedChildren.add(parentMediaNodeId)
     }
 
     const leaves = media.filter((node) => !sourceIdsWithGeneratedChildren.has(node.nodeId))
@@ -175,12 +176,15 @@ function collectImageBranchAncestors(
 
         const incomingEdge = edges.find((edge) => edge.targetNodeId === current?.nodeId)
         if (incomingEdge && incomingEdge.sourceNodeId !== regionNodeId) {
-            current = mediaById.get(incomingEdge.sourceNodeId)
-            if (current) continue
+            const sourceMedia = mediaById.get(incomingEdge.sourceNodeId)
+            if (sourceMedia) {
+                current = sourceMedia
+                continue
+            }
         }
 
-        const parentImageNodeId = current.generatedBy?.parentImageNodeId
-        current = parentImageNodeId ? mediaById.get(parentImageNodeId) : undefined
+        const parentMediaNodeId = current.generatedBy?.parentMediaNodeId ?? current.generatedBy?.parentImageNodeId
+        current = parentMediaNodeId ? mediaById.get(parentMediaNodeId) : undefined
     }
 
     return branchNodeIds
@@ -293,6 +297,7 @@ function getCandidateStillFileId(node: MediaCanvasNode): string | undefined {
 
 function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: string | undefined): ImageBranchCandidateImage {
     const generatedBy = media.generatedBy
+    const parentMediaNodeId = generatedBy?.parentMediaNodeId ?? generatedBy?.parentImageNodeId
     const roleHints: ImageBranchCandidateRoleHint[] = ['base-context']
     if (generatedBy) roleHints.push('generated-variant')
 
@@ -304,8 +309,9 @@ function createBaseContextCandidate(media: MediaCanvasNode, activeTargetNodeId: 
         mediaKind: media.type,
         roleHints: addActiveTargetHint(roleHints, media.nodeId, activeTargetNodeId),
         branchId: generatedBy?.branchId,
-        parentImageNodeId: generatedBy?.parentImageNodeId,
-        ancestorNodeIds: generatedBy?.parentImageNodeId ? [generatedBy.parentImageNodeId, media.nodeId] : [media.nodeId],
+        parentMediaNodeId,
+        parentImageNodeId: parentMediaNodeId,
+        ancestorNodeIds: parentMediaNodeId ? [parentMediaNodeId, media.nodeId] : [media.nodeId],
         sourceContextNodeIds: [media.nodeId],
         sourceMessageId: generatedBy?.responseMessageId,
         promptText: getMediaPromptText(media),
@@ -329,6 +335,7 @@ function createGeneratedCandidate(args: {
 }): ImageBranchCandidateImage {
     const ancestorNodeIds = collectImageBranchAncestors(args.media, args.mediaById, args.edges, args.regionNodeId)
     const generatedBy = args.media.generatedBy
+    const parentMediaNodeId = generatedBy?.parentMediaNodeId ?? generatedBy?.parentImageNodeId
     const roleHints: ImageBranchCandidateRoleHint[] = ['generated-variant']
     roleHints.push(args.leafNodeIds.has(args.media.nodeId) ? 'branch-leaf' : 'branch-ancestor')
 
@@ -340,7 +347,8 @@ function createGeneratedCandidate(args: {
         mediaKind: args.media.type,
         roleHints: addActiveTargetHint(roleHints, args.media.nodeId, args.activeTargetNodeId),
         branchId: getBranchIdForMedia(args.media, ancestorNodeIds, args.mediaById),
-        parentImageNodeId: generatedBy?.parentImageNodeId,
+        parentMediaNodeId,
+        parentImageNodeId: parentMediaNodeId,
         ancestorNodeIds,
         sourceContextNodeIds: uniqueValues([...(generatedBy?.sourceContextNodeIds ?? []), ...args.sourceContextNodeIds]),
         sourceMessageId: generatedBy?.responseMessageId,
@@ -379,9 +387,13 @@ export function buildImageBranchCandidateSnapshot({
     nodes,
     edges,
     prompt,
+    contextMediaNodeIds = [],
     generatedImageTextByNodeId = {},
 }: BuildImageBranchCandidateSnapshotParams): ImageBranchCandidateSnapshot {
-    const sourceContextNodeIds = getSourceContextNodeIds(nodes, edges, regionNodeId)
+    const sourceContextNodeIds = uniqueValues([
+        ...getSourceContextNodeIds(nodes, edges, regionNodeId),
+        ...contextMediaNodeIds,
+    ])
     const contextMedia = getContextMediaNodes(nodes, sourceContextNodeIds)
     const generatedMedia = getGeneratedMediaForThread(nodes, threadId)
     const generatedMediaById = new Map(generatedMedia.map((node) => [node.nodeId, node]))
@@ -436,6 +448,7 @@ type BuildWorkspaceContextSnapshotParams = {
 
 function toWorkspaceContextNode(
     node: WorkspaceContextCanvasNode,
+    threadId: string,
     chipNodeIds: Set<string>,
     edgeForcedNodeIds: Set<string>,
     titlesByNodeId: Record<string, string>
@@ -471,8 +484,13 @@ function toWorkspaceContextNode(
         if (fileId) contextNode.fileId = fileId
         const imageUrl = getMediaUrl(node)
         if (imageUrl) contextNode.imageUrl = imageUrl
-        const branchId = node.generatedBy?.branchId
+        const generatedBy = node.generatedBy
+        const branchId = generatedBy?.branchId
         if (branchId) contextNode.branchId = branchId
+        if (generatedBy?.aiChatThreadId) {
+            contextNode.sourceThreadId = generatedBy.aiChatThreadId
+            if (generatedBy.aiChatThreadId === threadId) contextNode.isCurrentThreadGenerated = true
+        }
     }
 
     return contextNode
@@ -504,7 +522,7 @@ export function buildWorkspaceContextSnapshot({
         promptText: prompt,
         nodes: nodes
             .filter(isWorkspaceContextCanvasNode)
-            .map((node) => toWorkspaceContextNode(node, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
+            .map((node) => toWorkspaceContextNode(node, threadId, chipNodeIds, edgeForcedNodeIds, titlesByNodeId)),
     }
 }
 

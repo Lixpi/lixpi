@@ -169,6 +169,16 @@ classDiagram
 - Uses cached flattened PIXI path data for edge hit testing and bubble-menu anchoring.
 - Manages edge selection state.
 
+### Zoom-Compensated Connector Sizes
+
+Connector scaling uses the shared bounded canvas-chrome helpers from [`zoomScaling.ts`](../../services/web-ui/src/infographics/utils/zoomScaling.ts). The important boundary is coordinate space:
+
+- Marker offsets and invisible hit widths are geometry values. `WorkspaceConnectionManager.ts` computes them in world units because path routing and hit testing use world coordinates.
+- Stroke width and arrowhead size are render values. `PixiEdgeRenderDatum` stores them as base screen pixels, and `pixiEdgeRenderer.ts` applies the adaptive bounded screen-size curve while painting.
+- The adaptive bounded curve keeps connector chrome at its configured size at 100% and higher zoom, shrinks it below 100% with the bounded canvas-chrome low-zoom power curve (`0.45` unless the setting overrides it), and keeps thinning below the configured lower breakpoint.
+
+This keeps connector interaction stable without making low-zoom connector pixels visually overpower smaller media nodes. It also avoids double scaling: a value is either world-space geometry or final screen-space chrome, never both.
+
 ## Handle DOM Elements
 
 Each workspace node has connection handles at the left (target) and right (source) edges:
@@ -217,7 +227,7 @@ Edge styling:
 
 ## Routing
 
-`WorkspaceConnectionManager` handles edge state and path planning, while `pixiEdgeRenderer.ts` draws committed edges as PIXI graphics. The routing style is configured in `settings.connector.connectionStyle`; the current default is `horizontal-bezier`.
+`WorkspaceConnectionManager` handles edge state and path planning, while `pixiEdgeRenderer.ts` draws committed edges as PIXI graphics. The routing style is configured in `settings.connector.lineCurve`; the current default is `horizontal-bezier`.
 
 | Behavior | Rule |
 |----------|------|

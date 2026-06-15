@@ -4,6 +4,7 @@ import { info, warn, err } from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
+import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
     buildImageModelPrompt,
     normalizeImageSize,
@@ -31,6 +32,8 @@ const fingerprintRef = (url: string): string => {
 // Spins up a transient provider keyed {ws}:{thread}:image with enableImageGeneration=true
 // so it skips its own START_STREAM/END_STREAM — the parent text stream owns the lifecycle.
 export class ImageRouter {
+    private readonly mediaGenerationRunPlanner = new MediaGenerationRunPlanner()
+
     constructor(private readonly registry: ProviderRegistry) {}
 
     async execute(state: ProviderState): Promise<Partial<ProviderState>> {
@@ -41,6 +44,16 @@ export class ImageRouter {
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
         const imageSize = normalizeImageSize(imageProvider, state.imageSize)
+        const mediaModelId = imageProvider && imageModel
+            ? this.mediaGenerationRunPlanner.buildMediaModelId(imageProvider, imageMeta.model, imageModel)
+            : undefined
+        const generationRun = mediaModelId
+            ? this.mediaGenerationRunPlanner.buildProviderMediaRun({
+                generationRun: state.generationRun,
+                mediaModelId,
+                mediaType: 'image',
+            })
+            : state.generationRun
 
         if (!imageProvider || !imageModel || !prompt) {
             err(
@@ -50,7 +63,9 @@ export class ImageRouter {
             return {}
         }
 
-        const instanceKey = `${workspaceId}:${aiChatThreadId}:image`
+        const instanceKey = generationRun?.mediaRunId
+            ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
+            : `${workspaceId}:${aiChatThreadId}:image`
         const referenceImages = state.referenceImages ?? []
         const featureReferenceImages = state.featureReferenceImages ?? []
         const hasFeatureReferences = featureReferenceImages.length > 0
@@ -110,7 +125,8 @@ export class ImageRouter {
                 aiChatThreadId,
                 enableImageGeneration: true,
                 imageSize,
-                eventMeta: state.eventMeta,
+                generationRun,
+                eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
 
             const finalState = await provider.process(requestData)
@@ -142,6 +158,8 @@ export class ImageRouter {
             const message = e?.message ?? String(e)
             err(`[ImageRouter] Image generation failed: ${message}`)
             return { error: message }
+        } finally {
+            this.registry.remove?.(instanceKey)
         }
     }
 }
