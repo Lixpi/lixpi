@@ -8,6 +8,20 @@ function loadSource(): string {
     return readFileSync(resolve(__dirname, 'pixiEdgeRenderer.ts'), 'utf-8')
 }
 
+function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
+    expect(
+        source.includes(snippet),
+        `${label} should contain:\n${snippet}`
+    ).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string, label = 'source excerpt'): void {
+    expect(
+        source.includes(snippet),
+        `${label} should not contain:\n${snippet}`
+    ).toBe(false)
+}
+
 function extractTopLevelFunction(source: string, functionName: string): string {
     const start = source.indexOf(`function ${functionName}`)
     expect(start, `${functionName} should exist`).toBeGreaterThanOrEqual(0)
@@ -50,13 +64,26 @@ describe('pixiEdgeRenderer — path isolation regression guards', () => {
         const drawArrowhead = extractTopLevelFunction(source, 'drawArrowhead')
         const edgeDatumKey = extractTopLevelFunction(source, 'edgeDatumKey')
 
-        expect(paintEdge).toContain('width: screenStrokeWidth')
-        expect(paintEdge).toContain('scaleCanvasChromeToScreenForZoom(')
-        expect(paintEdge).toContain('settings.connector.scaling.zoomScaling')
-        expect(drawArrowhead).toContain('scaleCanvasChromeToScreenForZoom(')
-        expect(drawArrowhead).toContain('settings.connector.scaling.zoomScaling')
-        expect(paintEdge).toContain('drawArrowhead(g, edge.arrowEnd, edge.strokeColor, viewport)')
-        expect(edgeDatumKey).toContain('${viewport.x},${viewport.y},${viewport.zoom}')
+        expectSourceToContain(paintEdge, 'width: screenStrokeWidth', 'paintEdge')
+        expectSourceToContain(paintEdge, 'scaleCanvasChromeToScreenForZoom(', 'paintEdge')
+        expectSourceToContain(paintEdge, 'edge.baseScreenStrokeWidth', 'paintEdge')
+        expectSourceToContain(paintEdge, 'getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling)', 'paintEdge')
+        expectSourceToContain(drawArrowhead, 'scaleCanvasChromeToScreenForZoom(', 'drawArrowhead')
+        expectSourceToContain(drawArrowhead, 'arrow.baseScreenSize', 'drawArrowhead')
+        expectSourceToContain(drawArrowhead, 'getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling)', 'drawArrowhead')
+        expectSourceToContain(paintEdge, 'drawArrowhead(g, edge.arrowEnd, edge.strokeColor, viewport)', 'paintEdge')
+        expectSourceToContain(edgeDatumKey, '${viewport.x},${viewport.y},${viewport.zoom}', 'edgeDatumKey')
+    })
+
+    it('does not draw from pre-scaled world-width aliases or debug probes', () => {
+        const paintEdge = extractTopLevelFunction(source, 'paintEdge')
+        const drawArrowhead = extractTopLevelFunction(source, 'drawArrowhead')
+
+        expectSourceNotToContain(paintEdge, 'edge.strokeWidth', 'paintEdge')
+        expectSourceNotToContain(drawArrowhead, 'arrow.size', 'drawArrowhead')
+        expectSourceNotToContain(source, 'LIXPI_ZOOM_SCALING_DEBUG', 'pixiEdgeRenderer.ts')
+        expectSourceNotToContain(source, 'logPixiEdgeDebug', 'pixiEdgeRenderer.ts')
+        expectSourceNotToContain(source, 'roundDebugNumber', 'pixiEdgeRenderer.ts')
     })
 
     it('draws arrowheads as closed independent paths', () => {

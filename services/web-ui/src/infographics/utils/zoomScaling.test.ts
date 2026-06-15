@@ -3,9 +3,12 @@
 import { describe, it, expect } from 'vitest'
 import {
 	getCanvasChromeScreenLayout,
+	getAdaptiveBoundedZoomScalingOptions,
 	getAdaptiveZoomMultiplier,
 	scaleCanvasChromeForZoom,
+	scaleCanvasChromeScreenSizeForZoom,
 	scaleCanvasChromeToScreenForZoom,
+	scaleCanvasChromeWorldSizeForZoom,
 	scaleForZoom,
 	getEdgeScaledSizes,
 	getResizeHandleScaledSizes,
@@ -13,8 +16,23 @@ import {
 import { worldSizeToScreenSize } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 const boundedZoomScaling = { minZoom: 0.4 }
+const adaptiveBoundedLowZoomPower = 0.45
+const adaptiveBoundedZoomScaling = getAdaptiveBoundedZoomScalingOptions(boundedZoomScaling)
 const edgeScalingConfig = { zoomScaling: boundedZoomScaling }
+const adaptiveEdgeScalingConfig = { zoomScaling: adaptiveBoundedZoomScaling }
 const resizeHandleScalingConfig = { zoomScaling: boundedZoomScaling }
+const adaptiveResizeHandleScalingConfig = { zoomScaling: adaptiveBoundedZoomScaling }
+
+function expectedAdaptiveBoundedScreenMultiplier(
+	zoom: number,
+	minZoom = boundedZoomScaling.minZoom,
+	lowZoomPower = adaptiveBoundedLowZoomPower
+): number {
+	const safeZoom = Number.isFinite(zoom) ? Math.max(zoom, 0.01) : 1
+	const safeMinZoom = Number.isFinite(minZoom) ? Math.max(minZoom, 0.01) : 1
+	if (safeZoom >= safeMinZoom) return Math.pow(Math.min(safeZoom, 1), lowZoomPower)
+	return Math.pow(Math.min(safeMinZoom, 1), lowZoomPower) * (safeZoom / safeMinZoom)
+}
 
 // =============================================================================
 // getAdaptiveZoomMultiplier
@@ -83,6 +101,74 @@ describe('scaleForZoom', () => {
 
 	it('defaults to constant mode', () => {
 		expect(scaleForZoom(10, 2.0)).toBe(5)
+	})
+})
+
+// =============================================================================
+// Adaptive bounded canvas chrome scaling
+// =============================================================================
+
+describe('adaptive bounded canvas chrome scaling', () => {
+	it('adds the canvas-chrome low-zoom power without mutating the plain bounded config', () => {
+		const adapted = getAdaptiveBoundedZoomScalingOptions(boundedZoomScaling)
+
+		expect(adapted).toEqual({ minZoom: 0.4, lowZoomPower: adaptiveBoundedLowZoomPower })
+		expect(boundedZoomScaling).toEqual({ minZoom: 0.4 })
+	})
+
+	it('preserves an explicit low-zoom power override', () => {
+		const adapted = getAdaptiveBoundedZoomScalingOptions({ minZoom: 0.5, lowZoomPower: 0.7 })
+
+		expect(adapted).toEqual({ minZoom: 0.5, lowZoomPower: 0.7 })
+	})
+
+	it('keeps screen chrome at base pixels at 100% and above', () => {
+		for (const zoom of [1, 1.01, 1.5, 2, 5]) {
+			expect(scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)).toBeCloseTo(34, 10)
+			expect(scaleCanvasChromeToScreenForZoom(34, zoom, adaptiveBoundedZoomScaling)).toBeCloseTo(34, 10)
+		}
+	})
+
+	it('shrinks screen chrome below 100% so low-zoom icons cannot look larger than high-zoom icons', () => {
+		const iconAt200Percent = scaleCanvasChromeScreenSizeForZoom(34, 2, adaptiveBoundedZoomScaling)
+		const iconAt44Percent = scaleCanvasChromeScreenSizeForZoom(34, 0.44, adaptiveBoundedZoomScaling)
+		const iconAt35Percent = scaleCanvasChromeScreenSizeForZoom(34, 0.35, adaptiveBoundedZoomScaling)
+
+		expect(iconAt200Percent).toBeCloseTo(34, 10)
+		expect(iconAt44Percent).toBeCloseTo(34 * expectedAdaptiveBoundedScreenMultiplier(0.44), 10)
+		expect(iconAt35Percent).toBeCloseTo(34 * expectedAdaptiveBoundedScreenMultiplier(0.35), 10)
+		expect(iconAt44Percent).toBeLessThan(iconAt200Percent)
+		expect(iconAt35Percent).toBeLessThan(iconAt44Percent)
+	})
+
+	it('decreases monotonically as the viewport zooms out from 100%', () => {
+		let previousScreenSize = scaleCanvasChromeScreenSizeForZoom(34, 1, adaptiveBoundedZoomScaling)
+
+		for (const zoom of [0.99, 0.75, 0.5, 0.44, 0.4, 0.25, 0.1]) {
+			const screenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+			expect(screenSize).toBeLessThan(previousScreenSize)
+			previousScreenSize = screenSize
+		}
+	})
+
+	it('is intentionally smaller than plain bounded scaling between the lower breakpoint and 100%', () => {
+		for (const zoom of [0.4, 0.44, 0.47, 0.5, 0.75, 0.99]) {
+			const plainScreenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, boundedZoomScaling)
+			const adaptiveScreenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+
+			expect(plainScreenSize).toBeCloseTo(34, 10)
+			expect(adaptiveScreenSize).toBeLessThan(plainScreenSize)
+		}
+	})
+
+	it('keeps world-space and screen-space helpers on the same final visual curve', () => {
+		for (const zoom of [0.1, 0.25, 0.35, 0.4, 0.44, 0.47, 0.75, 1, 1.57, 2]) {
+			const worldSize = scaleCanvasChromeWorldSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+			const screenSize = scaleCanvasChromeScreenSizeForZoom(34, zoom, adaptiveBoundedZoomScaling)
+
+			expect(worldSize * zoom).toBeCloseTo(screenSize, 10)
+			expect(screenSize).toBeCloseTo(34 * expectedAdaptiveBoundedScreenMultiplier(zoom), 10)
+		}
 	})
 })
 
@@ -166,6 +252,30 @@ describe('getCanvasChromeScreenLayout', () => {
 				scaleCanvasChromeToScreenForZoom(baseGap, zoom, boundedZoomScaling),
 				10
 			)
+		}
+	})
+
+	it('uses the adaptive bounded curve for generated-media chrome when the caller opts in', () => {
+		for (const zoom of [0.1, 0.35, 0.4, 0.44, 0.47, 0.75, 1, 1.57, 2]) {
+			const layout = getCanvasChromeScreenLayout({
+				viewport: { ...viewportBase, zoom },
+				worldPosition,
+				worldDimensions,
+				baseGap,
+				zoomScaling: adaptiveBoundedZoomScaling,
+			})
+			const expectedScale = expectedAdaptiveBoundedScreenMultiplier(zoom)
+			const projectedRight = viewportBase.x + (worldPosition.x + worldDimensions.width) * zoom
+
+			expect(layout.screenScale).toBeCloseTo(expectedScale, 10)
+			expect(layout.screenGap).toBeCloseTo(baseGap * expectedScale, 10)
+			expect(layout.left + layout.layoutWidth * layout.screenScale).toBeCloseTo(projectedRight, 10)
+
+			if (zoom < 1) {
+				expect(layout.screenScale).toBeLessThan(1)
+			} else {
+				expect(layout.screenScale).toBe(1)
+			}
 		}
 	})
 })
@@ -302,6 +412,46 @@ describe('getEdgeScaledSizes', () => {
 		}
 	})
 
+	it('applies adaptive low-zoom shrink to connector world geometry without changing high zoom', () => {
+		for (const zoom of [0.1, 0.35, 0.4, 0.44, 0.47, 0.75, 1, 1.57, 2]) {
+			const sizes = getEdgeScaledSizes(zoom, adaptiveEdgeScalingConfig)
+			const expectedScreenMultiplier = expectedAdaptiveBoundedScreenMultiplier(zoom)
+
+			expect(sizes.strokeWidth * zoom).toBeCloseTo(2 * expectedScreenMultiplier, 10)
+			expect(sizes.markerSize * zoom).toBeCloseTo(16 * expectedScreenMultiplier, 10)
+			expect(sizes.markerOffset.source * zoom).toBeCloseTo(6 * expectedScreenMultiplier, 10)
+			expect(sizes.markerOffset.target * zoom).toBeCloseTo(19 * expectedScreenMultiplier, 10)
+			expect(sizes.clickAreaWidth * zoom).toBeCloseTo(24 * expectedScreenMultiplier, 10)
+		}
+	})
+
+	it('makes low-zoom connector pixels smaller than the old plain bounded constant pixels', () => {
+		for (const zoom of [0.4, 0.44, 0.47, 0.75]) {
+			const plainSizes = getEdgeScaledSizes(zoom, edgeScalingConfig)
+			const adaptiveSizes = getEdgeScaledSizes(zoom, adaptiveEdgeScalingConfig)
+
+			expect(plainSizes.strokeWidth * zoom).toBeCloseTo(2, 10)
+			expect(plainSizes.markerSize * zoom).toBeCloseTo(16, 10)
+			expect(adaptiveSizes.strokeWidth * zoom).toBeLessThan(plainSizes.strokeWidth * zoom)
+			expect(adaptiveSizes.markerSize * zoom).toBeLessThan(plainSizes.markerSize * zoom)
+		}
+	})
+
+	it('keeps adaptive connector screen sizes monotonic as the viewport zooms out', () => {
+		let previousStroke = scaleCanvasChromeToScreenForZoom(2, 1, adaptiveBoundedZoomScaling)
+		let previousArrow = scaleCanvasChromeToScreenForZoom(16, 1, adaptiveBoundedZoomScaling)
+
+		for (const zoom of [0.99, 0.75, 0.5, 0.44, 0.4, 0.25, 0.1]) {
+			const stroke = scaleCanvasChromeToScreenForZoom(2, zoom, adaptiveBoundedZoomScaling)
+			const arrow = scaleCanvasChromeToScreenForZoom(16, zoom, adaptiveBoundedZoomScaling)
+
+			expect(stroke).toBeLessThan(previousStroke)
+			expect(arrow).toBeLessThan(previousArrow)
+			previousStroke = stroke
+			previousArrow = arrow
+		}
+	})
+
 	it('uses the same deterministic bounded curve for canvas title sizes', () => {
 		const baseTitleFontSize = 20
 
@@ -369,5 +519,25 @@ describe('getResizeHandleScaledSizes', () => {
 		expect(sizes.size).toBeCloseTo(24 / boundedZoomScaling.minZoom, 10)
 		expect(sizes.offset).toBeCloseTo(6 / boundedZoomScaling.minZoom, 10)
 		expect(sizes.size * 0.18).toBeLessThan(24)
+	})
+
+	it('applies adaptive low-zoom shrink to visible resize-handle pixels', () => {
+		for (const zoom of [0.1, 0.35, 0.4, 0.44, 0.47, 0.75, 1, 2]) {
+			const sizes = getResizeHandleScaledSizes(zoom, adaptiveResizeHandleScalingConfig)
+			const expectedScreenMultiplier = expectedAdaptiveBoundedScreenMultiplier(zoom)
+
+			expect(sizes.size * zoom).toBeCloseTo(24 * expectedScreenMultiplier, 10)
+			expect(sizes.offset * zoom).toBeCloseTo(6 * expectedScreenMultiplier, 10)
+		}
+	})
+
+	it('keeps adaptive resize-handle pixels smaller than plain bounded pixels below 100%', () => {
+		for (const zoom of [0.4, 0.44, 0.47, 0.75]) {
+			const plainSizes = getResizeHandleScaledSizes(zoom, resizeHandleScalingConfig)
+			const adaptiveSizes = getResizeHandleScaledSizes(zoom, adaptiveResizeHandleScalingConfig)
+
+			expect(plainSizes.size * zoom).toBeCloseTo(24, 10)
+			expect(adaptiveSizes.size * zoom).toBeLessThan(plainSizes.size * zoom)
+		}
 	})
 })

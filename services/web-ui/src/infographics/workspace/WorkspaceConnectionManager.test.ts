@@ -8,6 +8,7 @@ import {
 	getEdgeAnchorPositions,
 	type SpreadResult,
 } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
+import { getAdaptiveBoundedZoomScalingOptions, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { settings } from '$src/settings.ts'
 
 // =============================================================================
@@ -534,14 +535,58 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
 			zoom = nextZoom
 			manager.render()
 
-			const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ id: string; strokeWidth: number; arrowEnd: { size: number } | null; svgPath: string }>
+			const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{
+				id: string
+				baseScreenStrokeWidth: number
+				strokeWidth: number
+				arrowEnd: { baseScreenSize: number; size: number } | null
+				svgPath: string
+			}>
 			expect(pixiEdges).toHaveLength(1)
 			expect(pixiEdges[0].id).toBe(edge.edgeId)
 			expect(pixiEdges[0].svgPath).toMatch(/^M\s/)
+			expect(pixiEdges[0].baseScreenStrokeWidth).toBe(2)
 			expect(pixiEdges[0].strokeWidth).toBe(2)
+			expect(pixiEdges[0].arrowEnd?.baseScreenSize ?? 0).toBe(16)
 			expect(pixiEdges[0].arrowEnd?.size ?? 0).toBe(16)
 			expect(config.viewportEl.querySelector('svg.connector-svg')).toBeNull()
 		}
+	})
+
+	it('keeps PIXI stroke and arrow data as base screen pixels while adaptive marker offsets use world units', () => {
+		const zoom = 0.44
+		const onPixiEdgesReady = vi.fn()
+		const config = {
+			...createMockConfig(),
+			getTransform: () => [0, 0, zoom] as [number, number, number],
+			onPixiEdgesReady,
+		}
+		const manager = new WorkspaceConnectionManager(config)
+		const sourceNode = makeNode({ nodeId: 'source-adaptive', type: 'image', position: { x: 0, y: 0 }, dimensions: { width: 120, height: 120 } })
+		const targetNode = makeNode({ nodeId: 'target-adaptive', type: 'image', position: { x: 500, y: 0 }, dimensions: { width: 120, height: 120 } })
+		const edge = makeEdge({ edgeId: 'edge-adaptive', sourceNodeId: sourceNode.nodeId, targetNodeId: targetNode.nodeId })
+
+		manager.syncNodes([sourceNode, targetNode])
+		manager.syncEdges([edge])
+		manager.render()
+
+		const pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{
+			baseScreenStrokeWidth: number
+			strokeWidth: number
+			arrowEnd: { baseScreenSize: number; size: number } | null
+		}>
+		const start = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
+		const expectedSourceOffsetWorld = scaleCanvasChromeWorldSizeForZoom(
+			settings.connector.scaling.markerOffset.source,
+			zoom,
+			getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling),
+		)
+
+		expect(pixiEdges[0].baseScreenStrokeWidth).toBe(settings.connector.scaling.strokeWidth)
+		expect(pixiEdges[0].strokeWidth).toBe(settings.connector.scaling.strokeWidth)
+		expect(pixiEdges[0].arrowEnd?.baseScreenSize).toBe(settings.connector.scaling.markerSize)
+		expect(pixiEdges[0].arrowEnd?.size).toBe(settings.connector.scaling.markerSize)
+		expect(start.x).toBeCloseTo(sourceNode.dimensions.width + expectedSourceOffsetWorld, 10)
 	})
 
 	it('uses configured connector scaling in normal render and zoom-only recompute', () => {
@@ -571,16 +616,29 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
 
 			manager.syncNodes([sourceNode, targetNode])
 			manager.syncEdges([edge])
+			manager.render()
 
-			let pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ strokeWidth: number; arrowEnd: { size: number } | null }>
+			let pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{
+				baseScreenStrokeWidth: number
+				strokeWidth: number
+				arrowEnd: { baseScreenSize: number; size: number } | null
+			}>
+			expect(pixiEdges[0].baseScreenStrokeWidth).toBe(5)
 			expect(pixiEdges[0].strokeWidth).toBe(5)
+			expect(pixiEdges[0].arrowEnd?.baseScreenSize).toBe(22)
 			expect(pixiEdges[0].arrowEnd?.size).toBe(22)
 
 			zoom = 0.25
 			expect(manager.recomputePixiEdgesOnly(zoom)).toBe(true)
 
-			pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{ strokeWidth: number; arrowEnd: { size: number } | null }>
+			pixiEdges = onPixiEdgesReady.mock.calls.at(-1)?.[0] as Array<{
+				baseScreenStrokeWidth: number
+				strokeWidth: number
+				arrowEnd: { baseScreenSize: number; size: number } | null
+			}>
+			expect(pixiEdges[0].baseScreenStrokeWidth).toBe(5)
 			expect(pixiEdges[0].strokeWidth).toBe(5)
+			expect(pixiEdges[0].arrowEnd?.baseScreenSize).toBe(22)
 			expect(pixiEdges[0].arrowEnd?.size).toBe(22)
 		} finally {
 			settings.connector.scaling = originalScaling

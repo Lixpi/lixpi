@@ -54,7 +54,12 @@ export type HelpTooltipSettings = {
 }
 
 export type BoundedZoomScalingSettings = {
+    // Lower zoom breakpoint where inverse world-size compensation stops.
     minZoom: number
+    // Optional perceptual low-zoom curve power. Runtime call sites can add a
+    // default, currently 0.45 for canvas chrome, when they need adaptive shrink
+    // instead of plain bounded constant size.
+    lowZoomPower?: number
 }
 
 export type CanvasBubbleMenuSettings = {
@@ -336,7 +341,9 @@ export const settings: Settings = {
 
     // Canvas bubble menu zoom scaling settings.
     canvasBubbleMenu: {
-        // Lower zoom breakpoint for canvas bubble-menu chrome. Above this zoom, visual size stays constant; below it, world scaling freezes so the menu thins with the overview.
+        // Lower zoom breakpoint for canvas bubble-menu chrome. Runtime call sites
+        // opt this config into the shared adaptive low-zoom curve, which defaults
+        // to 0.45 unless this object provides `lowZoomPower`.
         zoomScaling: { minZoom: 0.4 },
     },
 
@@ -515,15 +522,17 @@ export const settings: Settings = {
         useZoomCompensatedScaling: true,
         // Connector screen-space base sizes and zoom breakpoint.
         scaling: {
-            // Screen-pixel connector stroke width while zoom is at or above the lower breakpoint.
+            // Base screen-pixel connector stroke width at 100% and higher zoom.
             strokeWidth: 2,
-            // Screen-pixel arrowhead size while zoom is at or above the lower breakpoint.
+            // Base screen-pixel arrowhead size at 100% and higher zoom.
             markerSize: 16,
-            // Screen-pixel source/target marker offsets while zoom is at or above the lower breakpoint.
+            // Base screen-pixel source/target marker offsets at 100% and higher zoom.
             markerOffset: { source: 6, target: 19 },
             // Screen-pixel width of the invisible selection hit area around connector lines.
             clickAreaWidth: 24,
-            // Lower zoom breakpoint for connector chrome. Above this zoom, visual size stays constant; below it, world scaling freezes so connectors thin with the overview.
+            // Lower zoom breakpoint for connector chrome. Runtime call sites opt
+            // this config into the shared adaptive low-zoom curve, which defaults
+            // to 0.45 unless this object provides `lowZoomPower`.
             zoomScaling: { minZoom: 0.4 },
         },
         // Renderer-coordinate distance at which dragging a node near a thread shows a proximity connection.
@@ -560,11 +569,13 @@ export const settings: Settings = {
 
         // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
         generatedMediaChrome: {
-            // Screen-pixel icon/button size in the generated-media chrome strip.
+            // Base screen-pixel icon/button size at 100% and higher zoom.
             iconSize: 34,
-            // Screen-pixel gap between the media node's bottom edge and the chrome strip.
+            // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip.
             topGap: 6,
-            // Lower zoom breakpoint for generated-media icon chrome. Above this zoom, visual size stays constant; below it, screen size thins with the overview.
+            // Lower zoom breakpoint for generated-media icon chrome. Runtime call
+            // sites opt this config into the shared adaptive low-zoom curve,
+            // which defaults to 0.45 unless this object provides `lowZoomPower`.
             zoomScaling: { minZoom: 0.4 },
         },
 
@@ -572,13 +583,15 @@ export const settings: Settings = {
         useZoomCompensatedResizeHandleScaling: true,
         // Resize-handle base sizes and zoom breakpoint, shared by image and video resize.
         resizeHandle: {
-            // Screen-pixel size of each resize handle while zoom is at or above the lower breakpoint.
+            // Base screen-pixel size of each resize handle at 100% and higher zoom.
             size: 24,
-            // Screen-pixel offset from the node corner while zoom is at or above the lower breakpoint.
+            // Base screen-pixel offset from the node corner at 100% and higher zoom.
             offset: 6,
             // Minimum handle size in canvas units after zoom compensation.
             minSize: 10,
-            // Lower zoom breakpoint for resize handles. Above this zoom, visual size stays constant; below it, world scaling freezes so handles thin with the overview.
+            // Lower zoom breakpoint for resize handles. Runtime call sites opt
+            // this config into the shared adaptive low-zoom curve, which defaults
+            // to 0.45 unless this object provides `lowZoomPower`.
             zoomScaling: { minZoom: 0.4 },
         },
 

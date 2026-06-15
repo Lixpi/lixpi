@@ -147,6 +147,21 @@ Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, an
 
 There is no separate provenance layer: a branch lineage's first generated image **is** the branch root, carries its own provenance (originating prompt + references on `generatedBy`), and renders through the normal media + chrome path. How a lineage is placed as a balanced tidy tree is documented in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) and [Collision Resolution](./COLLISION-RESOLUTION.md).
 
+### Canvas Chrome Zoom Scaling
+
+Canvas chrome uses one shared scaling vocabulary from [`zoomScaling.ts`](../../services/web-ui/src/infographics/utils/zoomScaling.ts):
+
+- **World-size helpers** return CSS or geometry values in canvas/world units. Use them for elements that live inside a viewport-transformed DOM layer, for connector marker offsets, and for connector hit areas. The viewport transform multiplies those values by `zoom` after layout.
+- **Screen-size helpers** return final screen-pixel values. Use them for screen-space overlays and PIXI graphics that project world points manually into screen coordinates.
+- **Plain bounded options** preserve constant screen size from the configured lower breakpoint upward, then thin below that breakpoint.
+- **Adaptive bounded options** are created with `getAdaptiveBoundedZoomScalingOptions(...)`. They keep chrome at the configured screen-pixel size at 100% and higher zoom, shrink it with the bounded canvas-chrome low-zoom power curve below 100% (`0.45` unless the setting overrides it), and keep thinning below the configured lower breakpoint.
+
+The split prevents double compensation. A world-space caller must not pass its already-expanded size into a screen-space renderer, and a screen-space renderer must not divide by zoom again. The generated-media strip, canvas bubble menu, resize handles, and connector chrome opt into adaptive bounded options so low zoom does not make fixed-size controls look larger than the zoomed-out content around them.
+
+PIXI connector edges are a special case in the layer stack. Their paths are stored in world coordinates, but the edge graphics are painted on the screen-space `edgeLayer`. `WorkspaceConnectionManager.ts` keeps marker offsets and hit widths in world units for geometry and interaction, while `PixiEdgeRenderDatum` carries stroke and arrowhead sizes as base screen pixels. `pixiEdgeRenderer.ts` projects path points to screen coordinates and applies the adaptive bounded screen-size curve once for stroke width and arrowhead size.
+
+Completed-video resize hit testing crosses the same boundary. The visible video chrome is inside the viewport-transformed overlay, but pointer coordinates from `clientX/clientY` are screen pixels. The resize-hit calculation computes handle size in world units, multiplies by the live zoom, and compares that screen-pixel radius to the pointer offset from `getBoundingClientRect()`.
+
 ### Viewport Bridge
 
 Pan/zoom flows through a single call site so DOM and the media PIXI world stay in exact agreement on every frame.

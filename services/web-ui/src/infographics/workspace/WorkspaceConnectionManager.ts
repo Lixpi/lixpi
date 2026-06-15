@@ -186,7 +186,10 @@ function computePixiEdgeDatum(
 	)
 
 	const strokeColor = isSelected ? focusColor : defaultColor
-	// Size matches SVG markerWidth so the PIXI polygon scales identically.
+	// PIXI edge data deliberately carries stroke and arrow sizes as base screen
+	// pixels, not pre-scaled world widths. The renderer is a screen-space PIXI
+	// layer, so it applies the bounded screen-size curve exactly once while
+	// projecting path points from world to screen coordinates.
 	const arrowSize = baseScreenMarkerSize
 
 	// Place arrows at the path endpoints (tgtCoords / srcCoords), not at the
@@ -1298,7 +1301,9 @@ export class WorkspaceConnectionManager {
 		const zoom = transform[2]
 		const connectorScaling = settings.connector.scaling
 
-		// Calculate scaled sizes for edges
+		// Marker offsets and hit areas are part of edge geometry/hit testing, so
+		// they stay in world units. Stroke width and arrowhead size are screen
+		// pixels for the PIXI renderer and must not be pre-scaled here.
 		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } =
 			settings.connector.useZoomCompensatedScaling
 				? getEdgeScaledSizes(zoom, {
@@ -1535,6 +1540,10 @@ export class WorkspaceConnectionManager {
 		if (!this.cachedPixiEdgeConfigs || !this.cachedPixiWorldNodeMap || !this.config.onPixiEdgesReady) return false
 
 		const connectorScaling = settings.connector.scaling
+		// Recompute world-space offsets/hit areas on zoom changes. The cached
+		// PIXI edge datum still carries base screen pixels for stroke/arrow sizes;
+		// `pixiEdgeRenderer` applies the matching adaptive bounded curve during
+		// paint so path geometry and rendered chrome stay in sync.
 		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } = settings.connector.useZoomCompensatedScaling
 			? getEdgeScaledSizes(zoom, {
 				baseStrokeWidth: connectorScaling.strokeWidth,

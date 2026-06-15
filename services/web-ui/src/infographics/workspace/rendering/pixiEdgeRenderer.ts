@@ -14,39 +14,15 @@ export type PixiEdgeRenderer = {
 }
 
 const MAX_PIXI_RESOLUTION = 2
-const ZOOM_SCALING_DEBUG_PREFIX = 'LIXPI_ZOOM_SCALING_DEBUG'
-const ZOOM_SCALING_DEBUG_MAX_KEYS = 600
-const pixiEdgeDebugKeys = new Set<string>()
 
 function getPixiScreenResolution(): number {
     if (typeof window === 'undefined') return 1
     return Math.min(window.devicePixelRatio || 1, MAX_PIXI_RESOLUTION)
 }
 
-function roundDebugNumber(value: number | null | undefined): number | null {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return null
-    return Math.round(value * 1000) / 1000
-}
-
-function shouldLogZoomScalingDebug(key: string): boolean {
-    if (pixiEdgeDebugKeys.has(key)) return false
-    if (pixiEdgeDebugKeys.size > ZOOM_SCALING_DEBUG_MAX_KEYS) pixiEdgeDebugKeys.clear()
-    pixiEdgeDebugKeys.add(key)
-    return true
-}
-
-function getPixiTransformDebug(container: Container): Record<string, number | null> {
-    const transform = container.worldTransform
-    return {
-        a: roundDebugNumber(transform.a),
-        b: roundDebugNumber(transform.b),
-        c: roundDebugNumber(transform.c),
-        d: roundDebugNumber(transform.d),
-        tx: roundDebugNumber(transform.tx),
-        ty: roundDebugNumber(transform.ty),
-    }
-}
-
+// PIXI edge graphics are drawn in screen coordinates on `edgeLayer`, not inside
+// the world-scaled media container. Snapping to the renderer resolution keeps
+// thin connector strokes from shimmering as the viewport pans by subpixels.
 function snapScreenCoordinate(value: number): number {
     const resolution = getPixiScreenResolution()
     return Math.round(value * resolution) / resolution
@@ -135,7 +111,9 @@ function drawArrowhead(g: Graphics, arrow: PixiEdgeArrow, color: string, viewpor
     const x = point.x
     const y = point.y
     const angle = arrow.angle
-    // scale factor: markerWidth=size maps to 256px viewBox
+    // `baseScreenSize` is the configured marker size in screen pixels. Apply the
+    // adaptive bounded screen curve here, then map that final marker width onto
+    // the 256px SVG icon coordinate system used by the polygon below.
     const s = scaleCanvasChromeToScreenForZoom(
         arrow.baseScreenSize,
         viewport.zoom,
@@ -188,61 +166,16 @@ export function createPixiEdgeRenderer(container: Container): PixiEdgeRenderer {
         entry.g.destroy()
     }
 
-    function logPixiEdgeDebug(edge: PixiEdgeRenderDatum, viewport: CanvasViewport, screenStrokeWidth: number): void {
-        const zoomPercent = Math.round(viewport.zoom * 100)
-        const key = `pixi-edge:${edge.id}:${zoomPercent}`
-        if (!shouldLogZoomScalingDebug(key)) return
-
-        const arrowEndScreenSize = edge.arrowEnd
-            ? scaleCanvasChromeToScreenForZoom(edge.arrowEnd.baseScreenSize, viewport.zoom, getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling))
-            : null
-        const arrowStartScreenSize = edge.arrowStart
-            ? scaleCanvasChromeToScreenForZoom(edge.arrowStart.baseScreenSize, viewport.zoom, getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling))
-            : null
-
-        const payload = {
-            kind: 'pixi-edge',
-            edgeId: edge.id,
-            viewport: {
-                x: roundDebugNumber(viewport.x),
-                y: roundDebugNumber(viewport.y),
-                zoom: roundDebugNumber(viewport.zoom),
-                zoomPercent,
-            },
-            settings: {
-                minZoom: settings.connector.scaling.zoomScaling.minZoom,
-                baseStrokeWidth: settings.connector.scaling.strokeWidth,
-                baseMarkerSize: settings.connector.scaling.markerSize,
-            },
-            datum: {
-                baseScreenStrokeWidth: edge.baseScreenStrokeWidth,
-                legacyStrokeWidth: edge.strokeWidth,
-                arrowEndBaseScreenSize: edge.arrowEnd?.baseScreenSize ?? null,
-                arrowEndLegacySize: edge.arrowEnd?.size ?? null,
-                arrowStartBaseScreenSize: edge.arrowStart?.baseScreenSize ?? null,
-                arrowStartLegacySize: edge.arrowStart?.size ?? null,
-            },
-            computedScreen: {
-                strokeWidth: roundDebugNumber(screenStrokeWidth),
-                arrowEndSize: roundDebugNumber(arrowEndScreenSize),
-                arrowStartSize: roundDebugNumber(arrowStartScreenSize),
-            },
-            pixi: {
-                resolution: getPixiScreenResolution(),
-                containerWorldTransform: getPixiTransformDebug(container),
-                parentWorldTransform: container.parent ? getPixiTransformDebug(container.parent) : null,
-            },
-        }
-        console.info(`${ZOOM_SCALING_DEBUG_PREFIX} ${JSON.stringify(payload)}`)
-    }
-
     function paintEdge(g: Graphics, edge: PixiEdgeRenderDatum, viewport: CanvasViewport): void {
+        // `edgeLayer` is already screen-space. The SVG path points are projected
+        // manually in `drawSvgPath`, so stroke width must be computed as a final
+        // screen-pixel value. Do not pass a world-scaled stroke width here or the
+        // connector will be compensated twice and drift against the arrowheads.
         const screenStrokeWidth = scaleCanvasChromeToScreenForZoom(
             edge.baseScreenStrokeWidth,
             viewport.zoom,
             getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling),
         )
-        logPixiEdgeDebug(edge, viewport, screenStrokeWidth)
         g.clear()
         g.beginPath()
         drawSvgPath(g, edge.svgPath, viewport)

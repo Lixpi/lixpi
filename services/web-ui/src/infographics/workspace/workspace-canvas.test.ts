@@ -278,22 +278,28 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl]')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
 		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
-		expectSourceToContain(ts, 'zoomScaling: settings.mediaNode.generatedMediaChrome.zoomScaling,')
+		expectSourceToContain(ts, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),')
 		expectSourceToContain(ts, 'left: `${chromeLayout.left}px`,')
 		expectSourceToContain(ts, 'top: `${chromeLayout.top}px`,')
 		expectSourceToContain(ts, 'width: `${chromeLayout.layoutWidth}px`,')
 		expectSourceToContain(ts, 'transform: `scale(${chromeLayout.screenScale})`,')
 		expectSourceToContain(ts, 'getVisualScale: () => scaleCanvasChromeToScreenForZoom(')
-		expectSourceToContain(ts, 'settings.canvasBubbleMenu.zoomScaling,')
+		expectSourceToContain(ts, 'getAdaptiveBoundedZoomScalingOptions(settings.canvasBubbleMenu.zoomScaling),')
+		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.topGap,')
+		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.iconSize,')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom')
 		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())')
 		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout()')
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
 		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
 		expectSourceToContain(ts, "return modelMeta?.title ?? ''")
+		expectSourceNotToContain(ts, 'LIXPI_ZOOM_SCALING_DEBUG')
+		expectSourceNotToContain(ts, 'logGeneratedMediaChromeDebug')
+		expectSourceNotToContain(ts, 'getDebugRect')
 		expectSourceNotToContain(ts, 'getCanvasChromeZoomMultiplier')
 		expectSourceNotToContain(ts, 'const localScale = scaleCanvasChromeForZoom(1, zoom)')
 		expectSourceNotToContain(ts, 'getTransformedCanvasChromeLayout')
@@ -622,21 +628,22 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
 	})
 
-	it('renders the info panel as constant-size screen-space content in its own decoupled layer', () => {
-		// The panel layer is intentionally NOT a viewport overlay, so the panel content
-		// keeps a constant on-screen size at any zoom and is decoupled from the
-		// bounded icon strip, which is projected separately from the same node bounds.
+	it('renders the info panel in a viewport-transformed decoupled layer', () => {
+		// The info panel is separate from the screen-space icon strip but still
+		// belongs to the viewport overlay, so its content scales naturally with
+		// the media node while the icon strip uses adaptive screen-space chrome.
 		const panelPositionStart = ts.indexOf('function updateGeneratedMediaInfoPanelPosition(')
 		const panelPositionEnd = ts.indexOf('// Video chrome', panelPositionStart)
 		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
 
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl],')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
 		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
-		expectSourceNotToContain(ts, 'generatedMediaInfoPanelLayerEl],')
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl.replaceChildren(')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom')
+		expectSourceToContain(ts, "transform: 'none',")
 		expect(panelPositionStart).toBeGreaterThan(-1)
 		expect(panelPositionEnd).toBeGreaterThan(panelPositionStart)
 		expectExcerptToContain(panelPosition, 'applyGeneratedMediaInfoPanelGeometry(panel, position, dimensions, viewport)', 'media info panel position updater')
@@ -1308,6 +1315,20 @@ describe('Resize handles - corner-hover visibility', () => {
 
 		expectSourceToContain(fnBody, "if (node.type === 'aiChatThread' && corner.startsWith('bottom')) continue")
 		expectSourceToContain(fnBody, 'nodeEl.appendChild(createResizeHandle(node.nodeId, corner))')
+	})
+
+	it('compares completed-video resize hitboxes in screen pixels', () => {
+		const fnBody = extractFunctionBody(ts, 'getVideoChromeResizeHandle')
+		sourceFileNames.set(fnBody, 'getVideoChromeResizeHandle')
+
+		expectSourceToContain(fnBody, 'const rect = chromeEl.getBoundingClientRect()')
+		expectSourceToContain(fnBody, 'const x = event.clientX - rect.left')
+		expectSourceToContain(fnBody, 'const y = event.clientY - rect.top')
+		expectSourceToContain(fnBody, 'const zoom = getCurrentViewportZoom()')
+		expectSourceToContain(fnBody, 'getResizeHandleScaledSizes(zoom, {')
+		expectSourceToContain(fnBody, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),')
+		expectSourceToContain(fnBody, 'const hitSize = Math.max(16, (size + Math.max(0, offset)) * zoom)')
+		expectSourceNotToContain(fnBody, 'const hitSize = Math.max(16, size + Math.max(0, offset))')
 	})
 })
 
@@ -2065,7 +2086,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 		expectSourceToContain(ts, 'baseSize: resizeHandleSettings.size,')
 		expectSourceToContain(ts, 'baseOffset: resizeHandleSettings.offset,')
 		expectSourceToContain(ts, 'minSize: resizeHandleSettings.minSize,')
-		expectSourceToContain(ts, 'zoomScaling: resizeHandleSettings.zoomScaling,')
+		expectSourceToContain(ts, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),')
 		expectSourceNotToContain(ts, ': { size: 24, offset: 6 }')
 	})
 
