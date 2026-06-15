@@ -217,7 +217,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
-    const generationBorder = settings.imageNode.generationBorder
+    const generationBorder = settings.mediaNode.generationBorder
     const generationBorderStyles = generationBorder.styles
     const generatingBorderRenderer = new PixiTravelingOutlineRenderer({
         container: generatingBorderLayer,
@@ -487,7 +487,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function getImageBorderRadius(width: number, height: number): number {
-        const borderRadius = settings.imageNode.styles.borderRadius
+        const borderRadius = settings.mediaNode.image.styles.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }

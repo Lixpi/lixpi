@@ -53,6 +53,19 @@ export type HelpTooltipSettings = {
     interactiveHideDelayMs: number
 }
 
+export type BoundedZoomScalingSettings = {
+    // Lower zoom breakpoint where inverse world-size compensation stops.
+    minZoom: number
+    // Optional perceptual low-zoom curve power. Runtime call sites can add a
+    // default, currently 0.45 for canvas chrome, when they need adaptive shrink
+    // instead of plain bounded constant size.
+    lowZoomPower?: number
+}
+
+export type CanvasBubbleMenuSettings = {
+    zoomScaling: BoundedZoomScalingSettings
+}
+
 export type AiChatThreadRailSettings = {
     offset: number
     edgeMargin: number
@@ -177,8 +190,14 @@ export type AiPromptInputSettings = {
 
 export type ConnectorSettings = {
     lineCurve: WorkspaceEdgePathType
-    lineClickAreaWidth: number
     useZoomCompensatedScaling: boolean
+    scaling: {
+        strokeWidth: number
+        markerSize: number
+        markerOffset: { source: number; target: number }
+        clickAreaWidth: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
     proximityConnectThreshold: number
     menuConnectionSnapRadius: number
     styles: {
@@ -197,8 +216,20 @@ export type SelectionSettings = {
     }
 }
 
-export type ImageNodeSettings = {
-    defaultInsertionWidth: number
+export type MediaNodeSettings = {
+    // Shared across all media types (image, video, …).
+    generatedMediaChrome: {
+        iconSize: number
+        topGap: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
+    useZoomCompensatedResizeHandleScaling: boolean
+    resizeHandle: {
+        size: number
+        offset: number
+        minSize: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
     generationBorder: {
         radius: number
         trackWidth: number
@@ -213,12 +244,14 @@ export type ImageNodeSettings = {
             snakeColors: [string, string, string, string, string]
         }
     }
-    useZoomCompensatedResizeHandleScaling: boolean
-    styles: {
-        defaultBoxShadow: string
-        selectedBoxShadow: string
-        borderRadius: number
-        modelBadgeBoxShadow: string
+    // Image-specific.
+    image: {
+        defaultInsertionWidth: number
+        styles: {
+            defaultBoxShadow: string
+            selectedBoxShadow: string
+            borderRadius: number
+        }
     }
 }
 
@@ -258,6 +291,8 @@ export type Settings = {
 
     helpTooltip: HelpTooltipSettings
 
+    canvasBubbleMenu: CanvasBubbleMenuSettings
+
     aiChatThread: AiChatThreadSettings
 
     aiPromptInput: AiPromptInputSettings
@@ -266,7 +301,7 @@ export type Settings = {
 
     selection: SelectionSettings
 
-    imageNode: ImageNodeSettings
+    mediaNode: MediaNodeSettings
 
     imageBranchLineage: ImageBranchLineageSettings
 
@@ -302,6 +337,14 @@ export const settings: Settings = {
     helpTooltip: {
         // Delay before an interactive tooltip closes after the pointer leaves its trigger/content.
         interactiveHideDelayMs: 80,
+    },
+
+    // Canvas bubble menu zoom scaling settings.
+    canvasBubbleMenu: {
+        // Lower zoom breakpoint for canvas bubble-menu chrome. Runtime call sites
+        // opt this config into the shared adaptive low-zoom curve, which defaults
+        // to 0.45 unless this object provides `lowZoomPower`.
+        zoomScaling: { minZoom: 0.4 },
     },
 
     // AI chat thread presentation and interaction settings.
@@ -475,10 +518,23 @@ export const settings: Settings = {
     connector: {
         // Default curve used for connector lines between nodes.
         lineCurve: 'horizontal-bezier',
-        // Screen-pixel width of the invisible selection hit area around connector lines.
-        lineClickAreaWidth: 24,
         // Keep connector stroke, marker, and hit-area sizes usable as the canvas zoom changes.
         useZoomCompensatedScaling: true,
+        // Connector screen-space base sizes and zoom breakpoint.
+        scaling: {
+            // Base screen-pixel connector stroke width at 100% and higher zoom.
+            strokeWidth: 2,
+            // Base screen-pixel arrowhead size at 100% and higher zoom.
+            markerSize: 16,
+            // Base screen-pixel source/target marker offsets at 100% and higher zoom.
+            markerOffset: { source: 6, target: 19 },
+            // Screen-pixel width of the invisible selection hit area around connector lines.
+            clickAreaWidth: 24,
+            // Lower zoom breakpoint for connector chrome. Runtime call sites opt
+            // this config into the shared adaptive low-zoom curve, which defaults
+            // to 0.45 unless this object provides `lowZoomPower`.
+            zoomScaling: { minZoom: 0.4 },
+        },
         // Renderer-coordinate distance at which dragging a node near a thread shows a proximity connection.
         proximityConnectThreshold: 700,
         // Renderer-coordinate distance at which menu-driven connection placement snaps to a target.
@@ -507,12 +563,39 @@ export const settings: Settings = {
         },
     },
 
-    // Canvas image node settings. These values style image-node chrome and selection states.
-    imageNode: {
-        // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
-        defaultInsertionWidth: 600,
+    // Canvas media node settings. Shared values style the chrome, resize handles, generation outline, and selection states common to every media node (image, video, …); per-type subcategories hold values specific to one media type.
+    mediaNode: {
+        // ── Shared across all media types (image, video, …) ──
 
-        // PIXI-rendered animated outline shown only while an AI-generated image is receiving partials.
+        // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
+        generatedMediaChrome: {
+            // Base screen-pixel icon/button size at 100% and higher zoom.
+            iconSize: 34,
+            // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip.
+            topGap: 6,
+            // Lower zoom breakpoint for generated-media icon chrome. Runtime call
+            // sites opt this config into the shared adaptive low-zoom curve,
+            // which defaults to 0.45 unless this object provides `lowZoomPower`.
+            zoomScaling: { minZoom: 0.4 },
+        },
+
+        // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
+        useZoomCompensatedResizeHandleScaling: true,
+        // Resize-handle base sizes and zoom breakpoint, shared by image and video resize.
+        resizeHandle: {
+            // Base screen-pixel size of each resize handle at 100% and higher zoom.
+            size: 24,
+            // Base screen-pixel offset from the node corner at 100% and higher zoom.
+            offset: 6,
+            // Minimum handle size in canvas units after zoom compensation.
+            minSize: 10,
+            // Lower zoom breakpoint for resize handles. Runtime call sites opt
+            // this config into the shared adaptive low-zoom curve, which defaults
+            // to 0.45 unless this object provides `lowZoomPower`.
+            zoomScaling: { minZoom: 0.4 },
+        },
+
+        // PIXI-rendered animated outline shown while AI-generated media (image or video) is receiving partials.
         generationBorder: {
             radius: 10,
             trackWidth: 3,
@@ -528,17 +611,18 @@ export const settings: Settings = {
             },
         },
 
-        // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
-        useZoomCompensatedResizeHandleScaling: true,
-        styles: {
-            // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
-            defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
-            // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
-            selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
-            // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
-            borderRadius: 8,
-            // Shadow behind the generated-image model badge. Increasing it improves badge separation on busy image pixels.
-            modelBadgeBoxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+        // ── Image-specific ──
+        image: {
+            // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
+            defaultInsertionWidth: 600,
+            styles: {
+                // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
+                defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
+                // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
+                selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+                // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
+                borderRadius: 8,
+            },
         },
     },
 

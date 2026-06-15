@@ -34,7 +34,7 @@ type RenderImageGenerationTraceDetailsParams = {
     toolPromptFallbackText?: string
 }
 
-type ImageGenerationTraceDetailsOptions = {
+export type ImageGenerationTraceDetailsOptions = {
     className?: string
     renderReferencesWhenClosed?: boolean
     getAdditionalReferenceImageSources?: (reference: ImageGenerationTraceReference) => string[]

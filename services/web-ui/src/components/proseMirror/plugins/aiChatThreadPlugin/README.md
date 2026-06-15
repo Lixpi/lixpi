@@ -17,6 +17,7 @@
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
 - Blocks paste inside thread logs. Users paste into the separate prompt input surface.
+- Supports read-only generated-media provenance projections through the shared AI chat NodeViews without subscribing the preview editor to live stream events.
 
 ## Runtime Wiring
 
@@ -31,6 +32,10 @@ createAiChatThreadPlugin({
         paragraphPlaceholder: 'I\'m your new document...',
     },
     onReceivingStateChange: this.onReceivingStateChange,
+    renderContext: {
+        readOnly: false,
+        traceDetailsOptions: undefined,
+    },
 })
 ```
 
@@ -143,7 +148,9 @@ Disclosure block for generation traces.
 - Attrs include `title`, `isOpen`, `isStreaming`, `imageGenerationTrace`, `imageGenerationTraceId`, `videoGenerationTrace`, and run metadata.
 - Used for image and video generation details.
 - The NodeView handles summary mouse/click events itself so thread focus handling does not steal the toggle.
-- Trace rendering is shared with canvas provenance panels through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated workspace/API URLs, retry the stored workspace file path when trace URLs fail, and render an unavailable state instead of browser broken-image chrome when a stored image cannot be loaded.
+- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated workspace/API URLs, retry the stored workspace file path when trace URLs fail, and render an unavailable state instead of browser broken-image chrome when a stored image cannot be loaded.
+- The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
+- In read-only render context, summary toggles update the local `<details>` element only and do not dispatch `setNodeMarkup`.
 
 ### `aiUserInput`
 
@@ -250,6 +257,12 @@ Decoration output:
 - `aiGeneratedVideoNodeView`
 
 Generated-image rendering is handled by `imageSelectionPlugin`.
+
+## Read-Only Provenance Projections
+
+`readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `aiChatThreadContentUtils.ts` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, `mediaRunId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
+
+Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread persistence callbacks, and reject document-changing transactions. NodeViews that own local controls guard direct dispatches with `view.editable`, so collapsible toggles, image resize, image/video selection, and focus writebacks do not mutate the projected document.
 
 ## Files
 

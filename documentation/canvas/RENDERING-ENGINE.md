@@ -61,7 +61,7 @@ The active canvas implementation lives in `services/web-ui/src/infographics/`. K
 | `workspace/workspaceViewportStatePlan.ts` | Pure stale viewport-only render guard; keeps delayed store viewport updates from overriding the live transform |
 | `workspace/WorkspaceConnectionManager.ts` | Edge creation, proximity connect, candidate detection, and the data feed for `pixiEdgeRenderer` |
 | `connectors/index.ts` | Connector exports for path helpers and connection utilities |
-| `utils/zoomScaling.ts` | Zoom-compensated handle scaling |
+| `utils/zoomScaling.ts` | Shared bounded zoom-scaling helpers for connector chrome, canvas bubble menus, generated-media icon strips, and resize handles |
 
 Use the incremental canvas architecture documented here as the implementation recipe: preserve the existing `infographics/workspace` entrypoint, harden the PIXI media layer, and move one renderer responsibility at a time only after parity checks pass.
 
@@ -71,7 +71,7 @@ All configurable web UI settings belong in [`settings.ts`](../../services/web-ui
 
 Do not add new configurable magic-number constants or UI behavior flags directly to [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), Svelte wrappers, PIXI rendering layers, or helper modules. Add them to `settings` first and read them from the consuming code. For example, the AI chat resize/drag rail hit target lives at `settings.aiChatThread.rail.dragGrabWidth`, and the Media Library uses `settings.mediaLibrary.panelWidthFraction`.
 
-`settings` must stay organized by logical groups. Each top-level group is its own subsection, such as `aiChatThread`, `connector`, `selection`, or `imageNode`; a group may contain nested subsections when a domain has a clear child domain, such as `aiChatThread.rail`. Every group and nested group must have a blank line before and after it in the object literal. Every key must have a short comment explaining what the value means and how changing it affects the application. Do not create a second global web UI settings module.
+`settings` must stay organized by logical groups. Each top-level group is its own subsection, such as `aiChatThread`, `connector`, `selection`, or `mediaNode`; a group may contain nested subsections when a domain has a clear child domain, such as `aiChatThread.rail` or `mediaNode.image`. Every group and nested group must have a blank line before and after it in the object literal. Every key must have a short comment explaining what the value means and how changing it affects the application. Do not create a second global web UI settings module.
 
 Use object getters in `settings` only when a setting must compute its value from sibling keys with `this`, such as a `styles` list referencing sibling `palettes`. Static values must remain plain properties; do not use getters just to organize or label settings.
 
@@ -117,9 +117,14 @@ flowchart TB
             GEN_BORDER[generatingBorderLayer: traveling generation progress paths]
             FG[fgLayer: selection outlines, marquee, group overlay]
         end
-        subgraph ImageChrome[".workspace-image-chrome-viewport (z-index 3, CSS-transformed)"]
-            IMG_CHROME[Generated-image provider badge<br/>info button + provenance panel]
+        subgraph MediaChromeViewport[".workspace-media-chrome-viewport (z-index 3, CSS-transformed)"]
             VIDEO_CHROME[Visible video surface<br/>shared SVG controls]
+        end
+        subgraph GeneratedChrome[".workspace-generated-media-chrome-layer (z-index 4, screen-space)"]
+            IMG_CHROME[Generated-media model label<br/>+ info button strip]
+        end
+        subgraph InfoPanelLayer[".workspace-generated-media-info-panel-layer (z-index 5, screen-space)"]
+            INFO_PANEL[Expanded info panel<br/>constant-size, decoupled]
         end
     end
 
@@ -128,10 +133,12 @@ flowchart TB
     WORLD --> IMG_SPR
     WORLD --> GEN_BORDER
     WORLD --> FG
-    PixiCanvas --> ImageChrome
+    PixiCanvas --> MediaChromeViewport
+    PixiCanvas --> GeneratedChrome
+    PixiCanvas --> InfoPanelLayer
 ```
 
-The PIXI media canvas sits **above** the DOM viewport. Generated-image provider badges, info buttons, full-width provenance panels, and completed video DOM surfaces sit in `.workspace-image-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Provenance panels use the exact image-node width and expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform but is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
+The PIXI media canvas sits **above** the DOM viewport. Completed video DOM surfaces sit in `.workspace-media-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Generated media model labels and info buttons sit in `.workspace-generated-media-chrome-layer`, a screen-space DOM overlay projected from media node bounds with bounded zoom compensation; the strip contains only the provider badge and info button, its width tracks the media node's projected width, and its top gap lives under `settings.mediaNode.generatedMediaChrome`. The expandable provenance panels are fully decoupled from that strip: they render in `.workspace-generated-media-info-panel-layer`, a separate screen-space DOM overlay positioned from the same media node bounds and matched to the media node's on-screen width, but their content is not nested in or transformed by the icon strip. The lower zoom breakpoint and related size knobs for the zoom-compensated canvas-chrome families live in `settings.ts`: `settings.connector.scaling`, `settings.canvasBubbleMenu.zoomScaling`, `settings.mediaNode.generatedMediaChrome`, and `settings.mediaNode.resizeHandle`. Provenance panels expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform as the media world and is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
 1. They host core interaction chrome — drag overlay and resize handles.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.
@@ -139,6 +146,21 @@ The PIXI media canvas sits **above** the DOM viewport. Generated-image provider 
 Canvas image nodes create no DOM `<img>` element. Stored, external, data-URL, and generated partial image sources all go through the PIXI media layer, so there is no duplicate hidden loader or fallback pixel surface. Completed video nodes are the deliberate exception: PIXI renders the poster/placeholder and stable geometry, while the actual MP4 frames come from the visible DOM `<video>` element in chrome. Generated-image partial pixels and the traveling in-progress outline are rendered by PIXI, not by a DOM/SVG overlay.
 
 There is no separate provenance layer: a branch lineage's first generated image **is** the branch root, carries its own provenance (originating prompt + references on `generatedBy`), and renders through the normal media + chrome path. How a lineage is placed as a balanced tidy tree is documented in [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) and [Collision Resolution](./COLLISION-RESOLUTION.md).
+
+### Canvas Chrome Zoom Scaling
+
+Canvas chrome uses one shared scaling vocabulary from [`zoomScaling.ts`](../../services/web-ui/src/infographics/utils/zoomScaling.ts):
+
+- **World-size helpers** return CSS or geometry values in canvas/world units. Use them for elements that live inside a viewport-transformed DOM layer, for connector marker offsets, and for connector hit areas. The viewport transform multiplies those values by `zoom` after layout.
+- **Screen-size helpers** return final screen-pixel values. Use them for screen-space overlays and PIXI graphics that project world points manually into screen coordinates.
+- **Plain bounded options** preserve constant screen size from the configured lower breakpoint upward, then thin below that breakpoint.
+- **Adaptive bounded options** are created with `getAdaptiveBoundedZoomScalingOptions(...)`. They keep chrome at the configured screen-pixel size at 100% and higher zoom, shrink it with the bounded canvas-chrome low-zoom power curve below 100% (`0.45` unless the setting overrides it), and keep thinning below the configured lower breakpoint.
+
+The split prevents double compensation. A world-space caller must not pass its already-expanded size into a screen-space renderer, and a screen-space renderer must not divide by zoom again. The generated-media strip, canvas bubble menu, resize handles, and connector chrome opt into adaptive bounded options so low zoom does not make fixed-size controls look larger than the zoomed-out content around them.
+
+PIXI connector edges are a special case in the layer stack. Their paths are stored in world coordinates, but the edge graphics are painted on the screen-space `edgeLayer`. `WorkspaceConnectionManager.ts` keeps marker offsets and hit widths in world units for geometry and interaction, while `PixiEdgeRenderDatum` carries stroke and arrowhead sizes as base screen pixels. `pixiEdgeRenderer.ts` projects path points to screen coordinates and applies the adaptive bounded screen-size curve once for stroke width and arrowhead size.
+
+Completed-video resize hit testing crosses the same boundary. The visible video chrome is inside the viewport-transformed overlay, but pointer coordinates from `clientX/clientY` are screen pixels. The resize-hit calculation computes handle size in world units, multiplies by the live zoom, and compares that screen-pixel radius to the pointer offset from `getBoundingClientRect()`.
 
 ### Viewport Bridge
 

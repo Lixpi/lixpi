@@ -127,6 +127,7 @@ export type AiGeneratedImageCallbacks = {
         revisedPrompt: string
         aiModel: string
         imageModelProvider: string
+        imageModelId?: string
         responseMessageId: string
         generationRun?: MediaGenerationRunMeta
     }) => void
@@ -194,6 +195,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     const handleClick = (event: MouseEvent) => {
         event.preventDefault()
         event.stopPropagation()
+        if (!view.editable) return
 
         const pos = getPos()
         if (pos === undefined) return

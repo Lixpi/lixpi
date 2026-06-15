@@ -95,6 +95,7 @@ function createCollapsibleNodeView(attrs: Record<string, unknown> = {}) {
                 nodeAt: vi.fn(() => node),
             },
         },
+        editable: true,
         dispatch: vi.fn(),
     }
 

@@ -2,6 +2,7 @@ import {
     createImageGenerationTraceDetails,
     getImageGenerationSummaryTitle,
     type ImageGenerationTraceDetailsAttrs,
+    type ImageGenerationTraceDetailsOptions,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 
 export { cacheImageGenerationTrace } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
@@ -80,8 +81,17 @@ const getSummaryTitle = (attrs: ImageGenerationTraceDetailsAttrs): string => {
     return getImageGenerationSummaryTitle(attrs)
 }
 
-export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => number | undefined) => {
-    const traceDetails = createImageGenerationTraceDetails()
+export type AiCollapsibleBlockNodeViewOptions = {
+    traceDetailsOptions?: ImageGenerationTraceDetailsOptions
+}
+
+export const aiCollapsibleBlockNodeView = (
+    node: any,
+    view: any,
+    getPos: () => number | undefined,
+    options: AiCollapsibleBlockNodeViewOptions = {},
+) => {
+    const traceDetails = createImageGenerationTraceDetails(options.traceDetailsOptions)
     const wrapper = traceDetails.dom
     const summary = traceDetails.summary
     const contentDom = traceDetails.contentDom
@@ -102,6 +112,8 @@ export const aiCollapsibleBlockNodeView = (node: any, view: any, getPos: () => n
         const newOpen = !wrapper.open
         wrapper.open = newOpen
         if (newOpen) renderTrace(node)
+
+        if (!view.editable) return
 
         const tr = view.state.tr.setNodeMarkup(pos, undefined, {
             ...view.state.doc.nodeAt(pos)?.attrs,

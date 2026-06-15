@@ -58,6 +58,7 @@ const createNodeView = (overrides: Record<string, unknown> = {}, getPos: () => n
         state,
         dispatch,
         focus,
+        editable: true,
     }
 
     const nodeView = aiGeneratedImageNodeView(node as any, view as any, getPos)
@@ -251,7 +252,7 @@ describe('aiGeneratedImageNodeView', () => {
         const focus = vi.fn()
         const state = EditorState.create({ doc, schema })
         const getPos = () => 0
-        const nodeView = aiGeneratedImageNodeView(node as any, { state, dispatch, focus } as any, getPos)
+        const nodeView = aiGeneratedImageNodeView(node as any, { state, dispatch, focus, editable: true } as any, getPos)
 
         nodeView.dom.dispatchEvent(new MouseEvent('click'))
 

@@ -268,6 +268,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
         event.preventDefault()
         event.stopPropagation()
+        if (!view.editable) return
 
         const pos = getPos()
         if (pos === undefined) return

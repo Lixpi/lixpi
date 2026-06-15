@@ -40,6 +40,7 @@ import type {
 
 import { setAiGeneratedImageCallbacks, getAiGeneratedImageCallbacks, aiGeneratedImageNodeType, type AiGeneratedImageCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 import { setAiGeneratedVideoCallbacks, getAiGeneratedVideoCallbacks, aiGeneratedVideoNodeType, aiGeneratedVideoNodeView, type AiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
+import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 
 // dispatchSendAiChatFromUserInput has been removed — messages are now injected by AiPromptInputController
 // findUserInputInThread is no longer needed — aiUserInput has been removed from the schema
@@ -70,6 +71,10 @@ type VideoOptions = {
 type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { aiModels?: string[]; imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
+export type AiChatThreadRenderContext = {
+    readOnly?: boolean
+    traceDetailsOptions?: ImageGenerationTraceDetailsOptions
+}
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
 type CollapsibleSegmentType = 'collapsible_start' | 'collapsible_end'
@@ -80,6 +85,7 @@ type SegmentEvent = {
     type?: ImageSegmentType | VideoSegmentType | CollapsibleSegmentType | WorkspaceContextSegmentType | MediaLineageSegmentType
     aiProvider?: string
     imageModelProvider?: string
+    imageModelId?: string
     videoModelProvider?: string
     threadId?: string
     aiChatThreadId?: string
@@ -1001,23 +1007,27 @@ class AiChatThreadPluginClass {
     private stopAiRequestHandler: StopAiRequestHandler
     private placeholderOptions: PlaceholderOptions
     private onReceivingStateChange: ((threadId: string, receiving: boolean) => void) | null
+    private renderContext: AiChatThreadRenderContext
     private unsubscribeFromSegments: (() => void) | null = null
 
     constructor({
         sendAiRequestHandler,
         stopAiRequestHandler,
         placeholders,
-        onReceivingStateChange
+        onReceivingStateChange,
+        renderContext
     }: {
         sendAiRequestHandler: SendAiRequestHandler
         stopAiRequestHandler: StopAiRequestHandler
         placeholders: PlaceholderOptions
         onReceivingStateChange?: (threadId: string, receiving: boolean) => void
+        renderContext?: AiChatThreadRenderContext
     }) {
         this.sendAiRequestHandler = sendAiRequestHandler
         this.stopAiRequestHandler = stopAiRequestHandler
         this.placeholderOptions = placeholders
         this.onReceivingStateChange = onReceivingStateChange ?? null
+        this.renderContext = renderContext ?? {}
     }
 
     // ========== STREAMING MANAGEMENT ==========
@@ -1640,7 +1650,7 @@ class AiChatThreadPluginClass {
     }
 
     private handleImageComplete(view: EditorView, event: SegmentEvent): void {
-        const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider, imageModelProvider } = event
+        const { imageUrl, fileId, workspaceId, responseId, revisedPrompt, aiChatThreadId, aiProvider, imageModelProvider, imageModelId } = event
         if (!imageUrl || !aiChatThreadId) return
 
         const { state } = view
@@ -1662,6 +1672,7 @@ class AiChatThreadPluginClass {
             revisedPrompt: revisedPrompt || '',
             aiModel: aiProvider || '',
             imageModelProvider: imageModelProvider || '',
+            imageModelId: imageModelId || '',
             responseMessageId,
             generationRun: event.generationRun,
         })
@@ -2589,6 +2600,7 @@ class AiChatThreadPluginClass {
             // Prevent transactions that would corrupt thread structure
             filterTransaction: (tr: Transaction, state: EditorState) => {
                 if (!tr.docChanged) return true
+                if (this.renderContext.readOnly) return false
 
                 let valid = true
                 tr.doc.descendants((node: ProseMirrorNode) => {
@@ -2814,7 +2826,9 @@ class AiChatThreadPluginClass {
             },
 
             view: (view: EditorView) => {
-                this.startStreaming(view)
+                if (!this.renderContext.readOnly) {
+                    this.startStreaming(view)
+                }
 
                 // Note: Dropdown state bridging removed - now handled by dropdown primitive plugin
 
@@ -2870,7 +2884,9 @@ class AiChatThreadPluginClass {
                     [aiUserMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiUserMessageNodeView(node, view, getPos),
                     [aiCollapsibleBlockNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
-                        aiCollapsibleBlockNodeView(node, view, getPos),
+                        aiCollapsibleBlockNodeView(node, view, getPos, {
+                            traceDetailsOptions: this.renderContext.traceDetailsOptions,
+                        }),
                     [aiReasoningSectionNodeType]: (node: ProseMirrorNode) =>
                         aiReasoningSectionNodeView(node),
                     [aiGeneratedVideoNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
@@ -2907,7 +2923,8 @@ export function createAiChatThreadPlugin({
     placeholders,
     imageCallbacks,
     videoCallbacks,
-    onReceivingStateChange
+    onReceivingStateChange,
+    renderContext
 }: {
     sendAiRequestHandler: SendAiRequestHandler
     stopAiRequestHandler: StopAiRequestHandler
@@ -2915,6 +2932,7 @@ export function createAiChatThreadPlugin({
     imageCallbacks?: AiGeneratedImageCallbacks
     videoCallbacks?: AiGeneratedVideoCallbacks
     onReceivingStateChange?: (threadId: string, receiving: boolean) => void
+    renderContext?: AiChatThreadRenderContext
 }): Plugin {
     // Set image generation callbacks if provided
     if (imageCallbacks) {
@@ -2926,6 +2944,12 @@ export function createAiChatThreadPlugin({
         setAiGeneratedVideoCallbacks(videoCallbacks)
     }
 
-    const pluginInstance = new AiChatThreadPluginClass({ sendAiRequestHandler, stopAiRequestHandler, placeholders, onReceivingStateChange })
+    const pluginInstance = new AiChatThreadPluginClass({
+        sendAiRequestHandler,
+        stopAiRequestHandler,
+        placeholders,
+        onReceivingStateChange,
+        renderContext,
+    })
     return pluginInstance.create()
 }

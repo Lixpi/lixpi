@@ -213,10 +213,7 @@ vi.mock('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts', () =>
 
 vi.mock('$src/settings.ts', () => ({
     settings: {
-        imageNode: {
-            styles: {
-                borderRadius: 8,
-            },
+        mediaNode: {
             generationBorder: {
                 radius: 10,
                 trackWidth: 2,
@@ -231,9 +228,19 @@ vi.mock('$src/settings.ts', () => ({
                     snakeTailAlpha: 0.3,
                 },
             },
+            image: {
+                styles: {
+                    borderRadius: 8,
+                },
+            },
         },
         dropdown: {
             styles: { popoverBoxShadow: '' },
+        },
+        connector: {
+            scaling: {
+                zoomScaling: { minZoom: 0.4 },
+            },
         },
         aiChatThread: {
             panel: {
