@@ -43,7 +43,7 @@ import {
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
-import { getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
+import { getAiModelIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 import {
     buildBranchOriginPromptProjection,
     buildGeneratedMediaTurnProjectionFromThreadContent,
@@ -336,6 +336,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const selectionStyles = settings.selection.styles
     const imageNodeStyles = settings.mediaNode.image.styles
     const branchOriginSettings = settings.imageBranchLineage.branchOrigin
+    const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
@@ -348,6 +349,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
     paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
     paneEl.style.setProperty('--workspace-generated-media-chrome-icon-size', `${settings.mediaNode.generatedMediaChrome.iconSize}px`)
+    paneEl.style.setProperty('--workspace-media-model-badge-icon-gap', generatedMediaChromeStyles.modelBadgeIconGap)
+    paneEl.style.setProperty('--workspace-media-model-badge-provider-color', generatedMediaChromeStyles.modelBadgeProviderColor)
+    paneEl.style.setProperty('--workspace-media-model-badge-model-color', generatedMediaChromeStyles.modelBadgeModelColor)
+    paneEl.style.setProperty('--workspace-media-model-badge-name-font-size', generatedMediaChromeStyles.modelBadgeNameFontSize)
+    paneEl.style.setProperty('--workspace-media-model-badge-name-font-weight', String(generatedMediaChromeStyles.modelBadgeNameFontWeight))
+    paneEl.style.setProperty('--workspace-media-model-badge-name-line-height', String(generatedMediaChromeStyles.modelBadgeNameLineHeight))
+    paneEl.style.setProperty('--workspace-media-info-button-color', generatedMediaChromeStyles.infoButtonColor)
+    paneEl.style.setProperty('--workspace-media-info-button-hover-color', generatedMediaChromeStyles.infoButtonHoverColor)
     paneEl.style.setProperty('--workspace-branch-origin-icon-size', `${branchOriginSettings.iconSize}px`)
     paneEl.style.setProperty('--workspace-branch-origin-background-color', branchOriginSettings.styles.backgroundColor)
     paneEl.style.setProperty('--workspace-branch-origin-border-color', branchOriginSettings.styles.borderColor)
@@ -1640,34 +1649,47 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return splitAiModelId(modelId).provider
     }
 
-    function getGeneratedMediaModelLabel(modelId: string, modelProvider: string): string {
+    // Resolves the synced model's badge parts: provider brand, model title, and the
+    // colored badge icon. colorIconName is populated per model by ai-models-synchronization
+    // (falling back to the grayscale iconName there when a provider has no colored variant),
+    // so the badge renders the colored brand mark with no fallback logic here. Provider and
+    // model are returned separately so the badge can de-emphasize the provider.
+    function getGeneratedMediaModelMeta(modelId: string, modelProvider: string): { providerTitle: string; modelTitle: string; icon: string | null } {
         const { provider, model } = splitAiModelId(modelId)
         const normalizedProvider = (provider || modelProvider).toLowerCase()
         const normalizedModel = model.toLowerCase()
-        const modelMeta = ((aiModelsStore.getData() ?? []) as Array<{ provider: string; model: string; title?: string; shortTitle?: string }>)
+        const modelMeta = ((aiModelsStore.getData() ?? []) as Array<{ provider: string; model: string; title?: string; providerTitle?: string; colorIconName?: string }>)
             .find((candidate) =>
                 String(candidate.provider).toLowerCase() === normalizedProvider
                 && String(candidate.model).toLowerCase() === normalizedModel
             )
-        return modelMeta?.title ?? ''
+        return {
+            providerTitle: modelMeta?.providerTitle ?? '',
+            modelTitle: modelMeta?.title ?? '',
+            icon: getAiModelIcon(modelMeta?.colorIconName),
+        }
     }
 
-    // Provider badge + info button only. This screen-space strip is projected from
-    // media node bounds and uses bounded zoom compensation. The expandable info
-    // panel renders separately in the viewport-transformed panel layer.
+    // Model badge (colored brand icon + title) + info button only. This screen-space
+    // strip is projected from media node bounds and uses bounded zoom compensation.
+    // The expandable info panel renders separately in the viewport-transformed panel layer.
     function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
         const modelId = getGeneratedMediaModelId(node)
         const modelProvider = getGeneratedMediaModelProvider(node, modelId)
-        const modelLabel = getGeneratedMediaModelLabel(modelId, modelProvider)
-        const providerIcon = getAiProviderIcon(modelProvider)
-        const shouldShowModelBadge = Boolean(providerIcon || modelLabel)
+        const { providerTitle, modelTitle, icon: modelIcon } = getGeneratedMediaModelMeta(modelId, modelProvider)
+        const modelLabel = [providerTitle, modelTitle].filter(Boolean).join(' ')
+        const shouldShowModelBadge = Boolean(modelIcon || modelLabel)
         const chromeEl = html`
             <div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
                 <div className="workspace-generated-media-actions">
                     ${shouldShowModelBadge ? html`
                         <div className="media-model-badge" title=${modelLabel}>
-                            ${providerIcon ? html`<span className="media-model-badge-icon" innerHTML=${providerIcon}></span>` : null}
-                            ${modelLabel ? html`<span className="media-model-badge-name">${modelLabel}</span>` : null}
+                            ${modelIcon ? html`<span className="media-model-badge-icon" innerHTML=${modelIcon}></span>` : null}
+                            ${modelLabel ? html`<span className="media-model-badge-name">${
+                                providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null
+                            }${providerTitle && modelTitle ? settings.mediaNode.generatedMediaChrome.modelBadgeSeparator : ''}${
+                                modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null
+                            }</span>` : null}
                         </div>
                     ` : null}
                     ${createMediaInfoButton(node)}

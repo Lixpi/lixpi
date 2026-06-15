@@ -4,6 +4,7 @@
     gptAvatarIcon,
     claudeIcon,
     geminiIcon,
+    bytedanceIcon,
     chevronDownIcon,
     imageIcon
 } from '$src/svgIcons/index.ts'
@@ -46,6 +47,7 @@ export function createAiModelSelectorDropdown(view: EditorView, getPos: () => nu
         gptAvatarIcon,
         claudeIcon,
         geminiIcon,
+        bytedanceIcon,
     }
 
     let aiModelsData: any[] = aiModelsStore.getData()

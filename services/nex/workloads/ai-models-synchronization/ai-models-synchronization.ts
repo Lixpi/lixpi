@@ -41,6 +41,18 @@ function generateModalitiesWithMetadata(modalities: string[]): Array<{ modality:
     })
 }
 
+// Brand display names per provider key. The provider field stays the internal key
+// (DynamoDB partition key / API routing); this maps it to the brand shown to users —
+// e.g. BytePlus models are branded ByteDance. Stored per model as providerTitle so
+// consumers can use the brand alone or concatenate it with the title themselves.
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+    OpenAI: 'OpenAI',
+    Anthropic: 'Anthropic',
+    Google: 'Google',
+    Stability: 'Stability',
+    BytePlus: 'ByteDance',
+}
+
 // VEO video-generation option lists. Reuse the ImageSizeOption { value, label }
 // shape so the frontend video dropdowns consume them like image sizes.
 const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
@@ -117,7 +129,7 @@ type ProviderBlacklist = {
 // Default model capability/settings per provider.
 type ModelDefaults = Pick<
     AiModel,
-    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'supportsSystemPrompt' | 'modalities' | 'pricing' | 'color' | 'iconName'
+    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'supportsSystemPrompt' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName'
 > & {
     imagePromptMaxChars?: number
     imageSizeMode?: ImageSizeMode
@@ -525,6 +537,7 @@ export class AiModelsSync {
                 },
                 color: '#4285F4',
                 iconName: 'geminiIcon',
+                colorIconName: 'geminiColorIcon',
                 imageSizeMode: 'aspectRatio',
                 imageSizes: [
                     { value: '1:1', label: '1:1' },
@@ -683,11 +696,9 @@ export class AiModelsSync {
                     resaleMargin: '1',
                     video: { measuringUnit: 'tokens', pricePer: '1000000', price: '4.30' }
                 },
-                // Brand color is a reasonable default; iconName 'seedanceIcon' is a
-                // forward-compatible key (AI_AVATAR_ICONS lookup degrades to no icon
-                // until an SVG is registered under it) — cosmetic, confirm asset.
+                // Seedance is a ByteDance model — brand color plus the ByteDance brand icon.
                 color: '#1664FF',
-                iconName: 'seedanceIcon',
+                iconName: 'bytedanceIcon',
                 starSortingPosition: 250,
                 transforms: {
                     title: (modelId: string) => {
@@ -742,6 +753,7 @@ export class AiModelsSync {
             pricing: this.mergePricingWithFallback(p.pricing as any, fallback.pricing),
             color: typeof (p as any).color === 'string' ? (p as any).color : fallback.color,
             iconName: typeof (p as any).iconName === 'string' ? (p as any).iconName : fallback.iconName,
+            colorIconName: typeof (p as any).colorIconName === 'string' ? (p as any).colorIconName : fallback.colorIconName,
             starSortingPosition: typeof (p as any).starSortingPosition === 'number' ? (p as any).starSortingPosition : fallback.starSortingPosition,
             transforms: (p as any).transforms || fallback.transforms,
         }
@@ -963,6 +975,7 @@ export class AiModelsSync {
 
         const model: AiModel = {
             provider: 'OpenAI',
+            providerTitle: PROVIDER_DISPLAY_NAMES.OpenAI,
             model: openAIModel.id,
             title: openAIModel.id,
             shortTitle: openAIModel.id,
@@ -974,6 +987,7 @@ export class AiModelsSync {
             supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
+            colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
@@ -1003,6 +1017,7 @@ export class AiModelsSync {
 
         const model: AiModel = {
             provider: 'Anthropic',
+            providerTitle: PROVIDER_DISPLAY_NAMES.Anthropic,
             model: anthropicModel.id,
             title: anthropicModel.display_name || anthropicModel.id,
             shortTitle: anthropicModel.display_name || anthropicModel.id,
@@ -1014,6 +1029,7 @@ export class AiModelsSync {
             supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
+            colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
@@ -1047,6 +1063,7 @@ export class AiModelsSync {
 
         const model: AiModel = {
             provider: 'Google',
+            providerTitle: PROVIDER_DISPLAY_NAMES.Google,
             model: googleModel.name,
             title: googleModel.displayName || googleModel.name,
             shortTitle: googleModel.displayName || googleModel.name,
@@ -1058,6 +1075,7 @@ export class AiModelsSync {
             supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
+            colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
@@ -1427,6 +1445,7 @@ export class AiModelsSync {
 
         const aiModel: AiModel = {
             provider: 'Stability',
+            providerTitle: PROVIDER_DISPLAY_NAMES.Stability,
             model: model.id,
             title: model.displayName,
             shortTitle: model.displayName,
@@ -1438,6 +1457,7 @@ export class AiModelsSync {
             supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
+            colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
@@ -1567,6 +1587,7 @@ export class AiModelsSync {
 
         const aiModel: AiModel = {
             provider: 'BytePlus',
+            providerTitle: PROVIDER_DISPLAY_NAMES.BytePlus,
             model: model.id,
             title: model.displayName,
             shortTitle: model.displayName,
@@ -1578,6 +1599,7 @@ export class AiModelsSync {
             supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
+            colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
             sortingPosition: modelDefaults.starSortingPosition + sortingPosition,
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,

@@ -221,7 +221,18 @@ export type MediaNodeSettings = {
     generatedMediaChrome: {
         iconSize: number
         topGap: number
+        modelBadgeSeparator: string
         zoomScaling: BoundedZoomScalingSettings
+        styles: {
+            modelBadgeIconGap: string
+            modelBadgeProviderColor: string
+            modelBadgeModelColor: string
+            modelBadgeNameFontSize: string
+            modelBadgeNameFontWeight: number
+            modelBadgeNameLineHeight: number
+            infoButtonColor: string
+            infoButtonHoverColor: string
+        }
     }
     useZoomCompensatedResizeHandleScaling: boolean
     resizeHandle: {
@@ -570,13 +581,30 @@ export const settings: Settings = {
         // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
         generatedMediaChrome: {
             // Base screen-pixel icon/button size at 100% and higher zoom.
-            iconSize: 34,
+            iconSize: 28,
             // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip.
-            topGap: 6,
+            topGap: 8,
+            // Separator between the provider brand and model title in the model badge, e.g. "OpenAI : GPT Image 2". Includes its own surrounding spacing so it can be tuned freely (" : ", " — ", " / ", …).
+            modelBadgeSeparator: ' : ',
             // Lower zoom breakpoint for generated-media icon chrome. Runtime call
             // sites opt this config into the shared adaptive low-zoom curve,
             // which defaults to 0.45 unless this object provides `lowZoomPower`.
             zoomScaling: { minZoom: 0.4 },
+            // Theme tokens for the model badge + info button, surfaced as CSS custom properties.
+            styles: {
+                // Gap between the provider icon and the provider/model name.
+                modelBadgeIconGap: '3px',
+                // Provider brand + separator color (the model title overrides with the darker value below so it reads as primary).
+                modelBadgeProviderColor: '#4d5963',
+                // Model title color — darker than the provider for emphasis.
+                modelBadgeModelColor: '#181e23',
+                modelBadgeNameFontSize: '15px',
+                modelBadgeNameFontWeight: 400,
+                modelBadgeNameLineHeight: 1.5,
+                // Info button: muted by default, full color on hover.
+                infoButtonColor: '#81878d',
+                infoButtonHoverColor: '#4d5963',
+            },
         },
 
         // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
