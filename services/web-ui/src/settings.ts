@@ -266,6 +266,97 @@ export type MediaNodeSettings = {
     }
 }
 
+export type VideoControlsSettings = {
+    height: number
+    canvas: {
+        horizontalInset: number
+        compactHorizontalInset: number
+        compactWidthThreshold: number
+        bottomInset: number
+    }
+    chat: {
+        horizontalInset: number
+        bottomInset: number
+        minWidth: number
+        fallbackWidth: number
+    }
+    layout: {
+        padding: number
+        gap: number
+        buttonSize: number
+        iconSize: number
+        barRadius: number
+        buttonRadius: number
+        railHeight: number
+        scrubberHandleRadius: number
+        volumeHandleRadius: number
+        backgroundHighlightInset: number
+        timeWidth: number
+        speedSliderWidth: number
+        compactSpeedSliderWidth: number
+        speedSliderMinWidth: number
+        speedIconSize: number
+        speedIconSliderGap: number
+        speedValueLabelEdgeInset: number
+        volumeSliderWidth: number
+        minSeekWidth: number
+        speedScaleTickHeight: number
+        speedValueLabelOffset: number
+    }
+    typography: {
+        timeFontSize: number
+        timeFontWeight: number
+        speedFontSize: number
+        speedFontWeight: number
+        hiddenButtonLabelFontSize: number
+        hiddenButtonLabelFontWeight: number
+    }
+    speed: {
+        minRate: number
+        maxRate: number
+        pointerStep: number
+        keyboardStep: number
+        displayPrecision: number
+        defaultRate: number
+        guideRate: number
+        guideRates: number[]
+    }
+    responsive: {
+        showSpeedSliderMinWidth: number
+        fullSpeedSliderMinWidth: number
+        showVolumeSliderMinWidth: number
+        showFullscreenMinWidth: number
+    }
+    styles: {
+        hostBorderRadius: string
+        hostDropShadow: string
+        hostBackdropFilter: string
+        hostReducedTransparencyBackground: string
+        background: string
+        backgroundStroke: string
+        backgroundStrokeWidth: number
+        glassHighlight: string
+        glassHighlightStrokeWidth: number
+        buttonHover: string
+        icon: string
+        iconMuted: string
+        text: string
+        textSubtle: string
+        rail: string
+        buffered: string
+        progress: string
+        speedScaleTick: string
+        speedScaleTickWidth: number
+        speedValueLabel: string
+        liquidGlassFilter: {
+            displacementScale: number
+            baseFrequency: string
+            numOctaves: number
+            seed: number
+        }
+    }
+}
+
 export type ImageBranchLineageSettings = {
     generatedImageSize: number
     rootOutputGap: number
@@ -313,6 +404,8 @@ export type Settings = {
     selection: SelectionSettings
 
     mediaNode: MediaNodeSettings
+
+    videoControls: VideoControlsSettings
 
     imageBranchLineage: ImageBranchLineageSettings
 
@@ -650,6 +743,112 @@ export const settings: Settings = {
                 selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
                 // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
                 borderRadius: 8,
+            },
+        },
+    },
+
+    // Shared SVG video player controls used by canvas video nodes and in-chat generated videos.
+    videoControls: {
+        // Screen-pixel height of the control bar and host.
+        height: 44,
+        // Canvas video-node mount geometry.
+        canvas: {
+            // Horizontal inset for normal-width video nodes.
+            horizontalInset: 18,
+            // Horizontal inset for compact video nodes.
+            compactHorizontalInset: 8,
+            // Node width below which the compact horizontal inset is used.
+            compactWidthThreshold: 260,
+            // Bottom inset from the video node edge.
+            bottomInset: 14,
+        },
+        // In-chat generated-video mount geometry.
+        chat: {
+            // Left and right inset inside generated-video cards.
+            horizontalInset: 18,
+            // Bottom inset inside generated-video cards.
+            bottomInset: 14,
+            // Minimum SVG viewBox width used when the host is narrow or not measured.
+            minWidth: 300,
+            // Fallback width before ResizeObserver measurement is available.
+            fallbackWidth: 520,
+        },
+        // Internal SVG geometry. These are supported sizing knobs, not CSS layout mechanics.
+        layout: {
+            padding: 10,
+            gap: 6,
+            buttonSize: 34,
+            iconSize: 20,
+            barRadius: 99,
+            buttonRadius: 99,
+            railHeight: 5,
+            scrubberHandleRadius: 5.5,
+            volumeHandleRadius: 4,
+            backgroundHighlightInset: 1,
+            timeWidth: 48,
+            speedSliderWidth: 96,
+            compactSpeedSliderWidth: 78,
+            speedSliderMinWidth: 64,
+            speedIconSize: 14,
+            speedIconSliderGap: 6,
+            speedValueLabelEdgeInset: 0,
+            volumeSliderWidth: 62,
+            minSeekWidth: 36,
+            speedScaleTickHeight: 11,
+            speedValueLabelOffset: 13,
+        },
+        typography: {
+            timeFontSize: 13,
+            timeFontWeight: 600,
+            speedFontSize: 7,
+            speedFontWeight: 400,
+            hiddenButtonLabelFontSize: 12,
+            hiddenButtonLabelFontWeight: 650,
+        },
+        // Continuous playback-speed slider settings. Guide rates render as scale marks only.
+        speed: {
+            minRate: 0.5,
+            maxRate: 2,
+            pointerStep: 0.01,
+            keyboardStep: 0.05,
+            displayPrecision: 2,
+            defaultRate: 1,
+            guideRate: 1,
+            guideRates: [0.75, 1, 1.5],
+        },
+        // Responsive visibility thresholds.
+        responsive: {
+            showSpeedSliderMinWidth: 430,
+            fullSpeedSliderMinWidth: 520,
+            showVolumeSliderMinWidth: 520,
+            showFullscreenMinWidth: 330,
+        },
+        styles: {
+            hostBorderRadius: '99px',
+            hostDropShadow: 'drop-shadow(0 12px 30px rgba(0, 0, 0, 0.30))',
+            hostBackdropFilter: 'blur(22px) saturate(155%) contrast(108%)',
+            hostReducedTransparencyBackground: 'rgba(24, 28, 34, 0.78)',
+            background: 'rgba(24, 28, 34, 0.30)',
+            backgroundStroke: 'rgba(255, 255, 255, 0.28)',
+            backgroundStrokeWidth: 1,
+            glassHighlight: 'rgba(255, 255, 255, 0.12)',
+            glassHighlightStrokeWidth: 1,
+            buttonHover: 'rgba(255, 255, 255, 0.14)',
+            icon: 'rgba(255, 255, 255, 0.95)',
+            iconMuted: 'rgba(255, 255, 255, 0.58)',
+            text: 'rgba(255, 255, 255, 0.92)',
+            textSubtle: 'rgba(255, 255, 255, 0.76)',
+            rail: 'rgba(255, 255, 255, 0.24)',
+            buffered: 'rgba(255, 255, 255, 0.34)',
+            progress: '#ffffff',
+            speedScaleTick: 'rgba(255, 255, 255, 0.42)',
+            speedScaleTickWidth: 1,
+            speedValueLabel: 'rgba(255, 255, 255, 0.92)',
+            liquidGlassFilter: {
+                displacementScale: 2.4,
+                baseFrequency: '0.012 0.08',
+                numOctaves: 2,
+                seed: 7,
             },
         },
     },

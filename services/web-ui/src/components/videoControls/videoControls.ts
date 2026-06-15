@@ -2,19 +2,16 @@
 // slidingSwitch and toggleSwitch. The component renders controls only; the host
 // owns video pixels and supplies the HTMLVideoElement as the single source of truth.
 
-// @ts-ignore - runtime import
-import { select } from 'd3-selection'
 import {
     videoFullscreenEnterGlyphIcon,
     videoFullscreenExitGlyphIcon,
     videoPauseGlyphIcon,
-    videoPictureInPictureGlyphIcon,
     videoPlayGlyphIcon,
-    videoSkipBack10GlyphIcon,
-    videoSkipForward10GlyphIcon,
+    videoSpeedGlyphIcon,
     videoVolumeHighGlyphIcon,
     videoVolumeMutedGlyphIcon,
 } from '$src/svgIcons/index.ts'
+import { settings } from '$src/settings.ts'
 
 export type VideoControlsConfig = {
     id: string
@@ -23,8 +20,6 @@ export type VideoControlsConfig = {
     width: number
     height?: number
     videoEl: HTMLVideoElement
-    skipSeconds?: number
-    playbackRates?: number[]
     className?: string
 }
 
@@ -34,38 +29,23 @@ export type VideoControlsInstance = {
     destroy: () => void
 }
 
+export function applyVideoControlsHostStyleProperties(host: HTMLElement): void {
+    const styles = settings.videoControls.styles
+    host.style.setProperty('--video-controls-host-border-radius', styles.hostBorderRadius)
+    host.style.setProperty('--video-controls-host-drop-shadow', styles.hostDropShadow)
+    host.style.setProperty('--video-controls-host-backdrop-filter', styles.hostBackdropFilter)
+    host.style.setProperty('--video-controls-host-reduced-transparency-background', styles.hostReducedTransparencyBackground)
+}
+
 type ButtonControl = {
     group: any
     hit: any
     icon: any
 }
 
-const DEFAULT_HEIGHT = 52
-const DEFAULT_SKIP_SECONDS = 10
-const DEFAULT_PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
-const PADDING = 10
-const GAP = 6
-const BUTTON_SIZE = 34
-const ICON_SIZE = 20
-const BAR_RADIUS = 18
-const SCRUBBER_HEIGHT = 5
-const SCRUBBER_HANDLE_RADIUS = 5.5
-const TIME_WIDTH = 48
-const SPEED_WIDTH = 48
-const VOLUME_SLIDER_WIDTH = 62
-
-const COLORS = {
-    background: 'rgba(24, 28, 34, 0.68)',
-    backgroundStroke: 'rgba(255, 255, 255, 0.18)',
-    buttonHover: 'rgba(255, 255, 255, 0.14)',
-    icon: 'rgba(255, 255, 255, 0.95)',
-    iconMuted: 'rgba(255, 255, 255, 0.58)',
-    text: 'rgba(255, 255, 255, 0.92)',
-    textSubtle: 'rgba(255, 255, 255, 0.76)',
-    rail: 'rgba(255, 255, 255, 0.24)',
-    buffered: 'rgba(255, 255, 255, 0.34)',
-    progress: '#ffffff',
-    popup: 'rgba(24, 28, 34, 0.94)',
+type SpeedGuideTickControl = {
+    rate: number
+    tick: any
 }
 
 const MEDIA_EVENTS = [
@@ -98,8 +78,19 @@ function formatTime(seconds: number): string {
     return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
-function formatRate(rate: number): string {
-    return `${Number.isInteger(rate) ? String(rate) : String(rate).replace(/0$/, '')}x`
+function formatRate(rate: number, precision = settings.videoControls.speed.displayPrecision): string {
+    const formatted = rate.toFixed(precision).replace(/\.?0+$/, '')
+    return `${formatted}x`
+}
+
+function roundToStep(value: number, step: number): number {
+    if (!Number.isFinite(step) || step <= 0) return value
+    const precision = Math.max(0, String(step).split('.')[1]?.length ?? 0)
+    return Number((Math.round(value / step) * step).toFixed(precision))
+}
+
+function sanitizeSvgId(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, '-') || 'video-controls'
 }
 
 function extractPathData(svgMarkup: string): string[] {
@@ -110,10 +101,39 @@ function extractPathData(svgMarkup: string): string[] {
         .filter(Boolean)
 }
 
-function setIconPaths(iconGroup: any, svgMarkup: string, fill: string = COLORS.icon): void {
+function getSvgViewBoxTransform(svgMarkup: string): string | null {
+    const parser = new DOMParser()
+    const svgDoc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+    const svgEl = svgDoc.querySelector('svg')
+    const viewBox = svgEl?.getAttribute('viewBox')
+    if (!viewBox) return null
+
+    const values = viewBox
+        .trim()
+        .split(/[\s,]+/)
+        .map(Number)
+    if (values.length !== 4) return null
+
+    const minX = values[0] ?? Number.NaN
+    const minY = values[1] ?? Number.NaN
+    const width = values[2] ?? Number.NaN
+    const height = values[3] ?? Number.NaN
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(width) || !Number.isFinite(height)) return null
+    if (width <= 0 || height <= 0) return null
+
+    const scale = Math.min(24 / width, 24 / height)
+    const x = (24 - width * scale) / 2 - minX * scale
+    const y = (24 - height * scale) / 2 - minY * scale
+    return `translate(${x} ${y}) scale(${scale})`
+}
+
+function setIconPaths(iconGroup: any, svgMarkup: string, fill: string = settings.videoControls.styles.icon): void {
     iconGroup.selectAll('*').remove()
+    const iconPathGroup = iconGroup.append('g')
+    const transform = getSvgViewBoxTransform(svgMarkup)
+    if (transform) iconPathGroup.attr('transform', transform)
     for (const pathData of extractPathData(svgMarkup)) {
-        iconGroup.append('path')
+        iconPathGroup.append('path')
             .attr('d', pathData)
             .attr('fill', fill)
     }
@@ -123,6 +143,10 @@ function setButtonPosition(button: ButtonControl, x: number, y: number, visible 
     button.group
         .attr('transform', `translate(${x}, ${y})`)
         .attr('display', visible ? null : 'none')
+}
+
+function roundedRectRadius(configuredRadius: number, height: number): number {
+    return Math.max(0, Math.min(configuredRadius, height / 2))
 }
 
 function bindButtonAction(button: ButtonControl, action: (event: Event) => void): void {
@@ -138,7 +162,7 @@ function bindButtonAction(button: ButtonControl, action: (event: Event) => void)
             if (event.key !== 'Enter' && event.key !== ' ') return
             run(event)
         })
-        .on('mouseenter', () => button.hit.attr('fill', COLORS.buttonHover))
+        .on('mouseenter', () => button.hit.attr('fill', settings.videoControls.styles.buttonHover))
         .on('mouseleave', () => button.hit.attr('fill', 'transparent'))
 }
 
@@ -150,23 +174,6 @@ function bufferedEnd(videoEl: HTMLVideoElement): number {
     } catch {
         return 0
     }
-}
-
-function supportsPictureInPicture(videoEl: HTMLVideoElement): boolean {
-    const doc = document as Document & {
-        pictureInPictureEnabled?: boolean
-    }
-    const videoWithPip = videoEl as HTMLVideoElement & {
-        requestPictureInPicture?: () => Promise<unknown>
-    }
-    return Boolean(doc.pictureInPictureEnabled && typeof videoWithPip.requestPictureInPicture === 'function')
-}
-
-function isPictureInPicture(videoEl: HTMLVideoElement): boolean {
-    const doc = document as Document & {
-        pictureInPictureElement?: Element | null
-    }
-    return doc.pictureInPictureElement === videoEl
 }
 
 function supportsFullscreen(videoEl: HTMLVideoElement): boolean {
@@ -181,18 +188,20 @@ class VideoControls implements VideoControlsInstance {
     private readonly id: string
     private readonly height: number
     private readonly videoEl: HTMLVideoElement
-    private readonly skipSeconds: number
-    private readonly playbackRates: number[]
     private readonly buttonY: number
     private readonly scrubberY: number
+    private readonly glassFilterId: string
+    private readonly glassClipId: string
 
     private x: number
     private y: number
     private width: number
-    private seekX = PADDING
+    private seekX = settings.videoControls.layout.padding
     private seekWidth: number
-    private volumeWidth = VOLUME_SLIDER_WIDTH
-    private speedMenuOpen = false
+    private volumeWidth = settings.videoControls.layout.volumeSliderWidth
+    private speedX = 0
+    private speedSliderX = 0
+    private speedSliderWidth = settings.videoControls.layout.speedSliderWidth
     private destroyed = false
     private activePointerCleanup: (() => void) | null = null
     private scrubPreviewTime: number | null = null
@@ -204,12 +213,12 @@ class VideoControls implements VideoControlsInstance {
     private scrubSeekCleanup: (() => void) | null = null
 
     private readonly group: any
+    private readonly defs: any
+    private readonly backgroundClip: any
     private readonly background: any
+    private readonly backgroundHighlight: any
     private readonly playButton: ButtonControl
-    private readonly skipBackButton: ButtonControl
-    private readonly skipForwardButton: ButtonControl
     private readonly volumeButton: ButtonControl
-    private readonly pipButton: ButtonControl
     private readonly fullscreenButton: ButtonControl
     private readonly currentTimeText: any
     private readonly durationText: any
@@ -219,10 +228,15 @@ class VideoControls implements VideoControlsInstance {
     private readonly seekProgress: any
     private readonly seekHandle: any
     private readonly seekHit: any
-    private readonly speedButton: any
-    private readonly speedButtonBg: any
+    private readonly speedGroup: any
+    private readonly speedIcon: any
     private readonly speedText: any
-    private readonly speedMenu: any
+    private readonly speedRail: any
+    private readonly speedProgress: any
+    private readonly speedHandle: any
+    private readonly speedHit: any
+    private readonly speedScale: any
+    private readonly speedGuideTicks: SpeedGuideTickControl[]
     private readonly volumeGroup: any
     private readonly volumeRail: any
     private readonly volumeProgress: any
@@ -233,22 +247,21 @@ class VideoControls implements VideoControlsInstance {
         const {
             id,
             videoEl,
-            skipSeconds = DEFAULT_SKIP_SECONDS,
-            playbackRates = DEFAULT_PLAYBACK_RATES,
             className = '',
         } = config
+        const { layout, styles, speed, typography } = settings.videoControls
 
         this.id = id
         this.videoEl = videoEl
-        this.skipSeconds = skipSeconds
-        this.playbackRates = playbackRates
         this.x = config.x
         this.y = config.y
         this.width = config.width
-        this.height = config.height ?? DEFAULT_HEIGHT
-        this.buttonY = (this.height - BUTTON_SIZE) / 2
-        this.scrubberY = this.height / 2 - SCRUBBER_HEIGHT / 2
-        this.seekWidth = Math.max(1, this.width - PADDING * 2)
+        this.height = config.height ?? settings.videoControls.height
+        this.buttonY = (this.height - layout.buttonSize) / 2
+        this.scrubberY = this.height / 2 - layout.railHeight / 2
+        this.seekWidth = Math.max(1, this.width - layout.padding * 2)
+        this.glassFilterId = `video-controls-liquid-glass-${sanitizeSvgId(this.id)}`
+        this.glassClipId = `video-controls-pill-clip-${sanitizeSvgId(this.id)}`
 
         this.group = parent.append('g')
             .attr('class', `video-controls-group ${className}`)
@@ -256,40 +269,67 @@ class VideoControls implements VideoControlsInstance {
             .attr('data-video-controls-id', this.id)
             .style('cursor', 'default')
 
+        this.defs = this.group.append('defs')
+        this.createLiquidGlassFilter()
+
+        this.backgroundClip = this.defs.append('clipPath')
+            .attr('id', this.glassClipId)
+            .append('rect')
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('width', this.width)
+            .attr('height', this.height)
+            .attr('rx', roundedRectRadius(layout.barRadius, this.height))
+            .attr('ry', roundedRectRadius(layout.barRadius, this.height))
+
         this.background = this.group.append('rect')
             .attr('class', 'video-controls-background')
             .attr('x', 0)
             .attr('y', 0)
             .attr('width', this.width)
             .attr('height', this.height)
-            .attr('rx', BAR_RADIUS)
-            .attr('ry', BAR_RADIUS)
-            .attr('fill', COLORS.background)
-            .attr('stroke', COLORS.backgroundStroke)
-            .attr('stroke-width', 1)
+            .attr('rx', roundedRectRadius(layout.barRadius, this.height))
+            .attr('ry', roundedRectRadius(layout.barRadius, this.height))
+            .attr('fill', styles.background)
+            .attr('stroke', styles.backgroundStroke)
+            .attr('stroke-width', styles.backgroundStrokeWidth)
+            .attr('clip-path', `url(#${this.glassClipId})`)
+            .attr('filter', styles.liquidGlassFilter.displacementScale > 0 ? `url(#${this.glassFilterId})` : null)
+
+        const highlightHeight = Math.max(0, this.height - layout.backgroundHighlightInset * 2)
+        this.backgroundHighlight = this.group.append('rect')
+            .attr('class', 'video-controls-background-highlight')
+            .attr('x', layout.backgroundHighlightInset)
+            .attr('y', layout.backgroundHighlightInset)
+            .attr('width', Math.max(0, this.width - layout.backgroundHighlightInset * 2))
+            .attr('height', highlightHeight)
+            .attr('rx', roundedRectRadius(Math.max(0, layout.barRadius - layout.backgroundHighlightInset), highlightHeight))
+            .attr('ry', roundedRectRadius(Math.max(0, layout.barRadius - layout.backgroundHighlightInset), highlightHeight))
+            .attr('fill', 'none')
+            .attr('stroke', styles.glassHighlight)
+            .attr('stroke-width', styles.glassHighlightStrokeWidth)
+            .attr('clip-path', `url(#${this.glassClipId})`)
+            .attr('pointer-events', 'none')
 
         this.playButton = this.createButton('video-controls-play', videoPlayGlyphIcon, 'Play video')
-        this.skipBackButton = this.createButton('video-controls-skip-back', videoSkipBack10GlyphIcon, `Skip back ${this.skipSeconds} seconds`)
-        this.skipForwardButton = this.createButton('video-controls-skip-forward', videoSkipForward10GlyphIcon, `Skip forward ${this.skipSeconds} seconds`)
         this.volumeButton = this.createButton('video-controls-volume-button', videoVolumeHighGlyphIcon, 'Mute video')
-        this.pipButton = this.createButton('video-controls-pip', videoPictureInPictureGlyphIcon, 'Picture in picture')
         this.fullscreenButton = this.createButton('video-controls-fullscreen', videoFullscreenEnterGlyphIcon, 'Enter fullscreen')
 
         this.currentTimeText = this.group.append('text')
             .attr('class', 'video-controls-current-time')
             .attr('y', this.height / 2)
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 13)
-            .attr('font-weight', 600)
-            .attr('fill', COLORS.textSubtle)
+            .attr('font-size', typography.timeFontSize)
+            .attr('font-weight', typography.timeFontWeight)
+            .attr('fill', styles.textSubtle)
 
         this.durationText = this.group.append('text')
             .attr('class', 'video-controls-duration')
             .attr('y', this.height / 2)
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 13)
-            .attr('font-weight', 600)
-            .attr('fill', COLORS.textSubtle)
+            .attr('font-size', typography.timeFontSize)
+            .attr('font-weight', typography.timeFontWeight)
+            .attr('fill', styles.textSubtle)
 
         this.seekGroup = this.group.append('g')
             .attr('class', 'video-controls-seek')
@@ -298,32 +338,32 @@ class VideoControls implements VideoControlsInstance {
         this.seekRail = this.seekGroup.append('rect')
             .attr('class', 'video-controls-seek-rail')
             .attr('y', this.scrubberY)
-            .attr('height', SCRUBBER_HEIGHT)
-            .attr('rx', SCRUBBER_HEIGHT / 2)
-            .attr('ry', SCRUBBER_HEIGHT / 2)
-            .attr('fill', COLORS.rail)
+            .attr('height', layout.railHeight)
+            .attr('rx', layout.railHeight / 2)
+            .attr('ry', layout.railHeight / 2)
+            .attr('fill', styles.rail)
 
         this.seekBuffered = this.seekGroup.append('rect')
             .attr('class', 'video-controls-seek-buffered')
             .attr('y', this.scrubberY)
-            .attr('height', SCRUBBER_HEIGHT)
-            .attr('rx', SCRUBBER_HEIGHT / 2)
-            .attr('ry', SCRUBBER_HEIGHT / 2)
-            .attr('fill', COLORS.buffered)
+            .attr('height', layout.railHeight)
+            .attr('rx', layout.railHeight / 2)
+            .attr('ry', layout.railHeight / 2)
+            .attr('fill', styles.buffered)
 
         this.seekProgress = this.seekGroup.append('rect')
             .attr('class', 'video-controls-seek-progress')
             .attr('y', this.scrubberY)
-            .attr('height', SCRUBBER_HEIGHT)
-            .attr('rx', SCRUBBER_HEIGHT / 2)
-            .attr('ry', SCRUBBER_HEIGHT / 2)
-            .attr('fill', COLORS.progress)
+            .attr('height', layout.railHeight)
+            .attr('rx', layout.railHeight / 2)
+            .attr('ry', layout.railHeight / 2)
+            .attr('fill', styles.progress)
 
         this.seekHandle = this.seekGroup.append('circle')
             .attr('class', 'video-controls-seek-handle')
-            .attr('cy', this.scrubberY + SCRUBBER_HEIGHT / 2)
-            .attr('r', SCRUBBER_HANDLE_RADIUS)
-            .attr('fill', COLORS.progress)
+            .attr('cy', this.scrubberY + layout.railHeight / 2)
+            .attr('r', layout.scrubberHandleRadius)
+            .attr('fill', styles.progress)
 
         this.seekHit = this.seekGroup.append('rect')
             .attr('class', 'video-controls-seek-hit')
@@ -331,36 +371,76 @@ class VideoControls implements VideoControlsInstance {
             .attr('height', this.height)
             .attr('fill', 'transparent')
 
-        this.speedButton = this.group.append('g')
+        this.speedGroup = this.group.append('g')
             .attr('class', 'video-controls-speed')
-            .attr('role', 'button')
+            .attr('role', 'slider')
             .attr('tabindex', 0)
             .attr('aria-label', 'Playback speed')
+            .attr('aria-valuemin', speed.minRate)
+            .attr('aria-valuemax', speed.maxRate)
             .style('cursor', 'pointer')
 
-        this.speedButtonBg = this.speedButton.append('rect')
-            .attr('class', 'video-controls-speed-bg')
-            .attr('x', 0)
-            .attr('y', this.buttonY)
-            .attr('width', SPEED_WIDTH)
-            .attr('height', BUTTON_SIZE)
-            .attr('rx', 7)
-            .attr('ry', 7)
-            .attr('fill', 'transparent')
+        const speedIconY = this.buttonY + (layout.buttonSize - layout.speedIconSize) / 2
+        const speedIconScale = layout.speedIconSize / 24
+        const speedIconTransform = `translate(0, ${speedIconY}) scale(${speedIconScale})`
+        this.speedIcon = this.speedGroup.append('g')
+            .attr('class', 'video-controls-speed-icon')
+            .attr('aria-hidden', 'true')
+            .attr('pointer-events', 'none')
+            .attr('transform', speedIconTransform)
+        setIconPaths(this.speedIcon, videoSpeedGlyphIcon)
 
-        this.speedText = this.speedButton.append('text')
+        this.speedText = this.speedGroup.append('text')
             .attr('class', 'video-controls-speed-text')
-            .attr('x', SPEED_WIDTH / 2)
-            .attr('y', this.height / 2)
+            .attr('x', 0)
+            .attr('y', this.scrubberY - layout.speedValueLabelOffset)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 13)
-            .attr('font-weight', 650)
-            .attr('fill', COLORS.text)
+            .attr('font-size', typography.speedFontSize)
+            .attr('font-weight', typography.speedFontWeight)
+            .attr('fill', styles.speedValueLabel)
+            .attr('pointer-events', 'none')
 
-        this.speedMenu = this.group.append('g')
-            .attr('class', 'video-controls-speed-menu')
-            .attr('display', 'none')
+        this.speedScale = this.speedGroup.append('g')
+            .attr('class', 'video-controls-speed-scale')
+            .attr('aria-hidden', 'true')
+
+        this.speedGuideTicks = speed.guideRates.map((rate) => ({
+            rate,
+            tick: this.speedScale.append('line')
+                .attr('class', 'video-controls-speed-scale-tick')
+                .attr('stroke', styles.speedScaleTick)
+                .attr('stroke-width', styles.speedScaleTickWidth)
+                .attr('stroke-linecap', 'round'),
+        }))
+
+        this.speedRail = this.speedGroup.append('rect')
+            .attr('class', 'video-controls-speed-rail')
+            .attr('y', this.scrubberY)
+            .attr('height', layout.railHeight)
+            .attr('rx', layout.railHeight / 2)
+            .attr('ry', layout.railHeight / 2)
+            .attr('fill', styles.rail)
+
+        this.speedProgress = this.speedGroup.append('rect')
+            .attr('class', 'video-controls-speed-progress')
+            .attr('y', this.scrubberY)
+            .attr('height', layout.railHeight)
+            .attr('rx', layout.railHeight / 2)
+            .attr('ry', layout.railHeight / 2)
+            .attr('fill', styles.progress)
+
+        this.speedHandle = this.speedGroup.append('circle')
+            .attr('class', 'video-controls-speed-handle')
+            .attr('cy', this.scrubberY + layout.railHeight / 2)
+            .attr('r', layout.scrubberHandleRadius)
+            .attr('fill', styles.progress)
+
+        this.speedHit = this.speedGroup.append('rect')
+            .attr('class', 'video-controls-speed-hit')
+            .attr('y', 0)
+            .attr('height', this.height)
+            .attr('fill', 'transparent')
 
         this.volumeGroup = this.group.append('g')
             .attr('class', 'video-controls-volume')
@@ -369,24 +449,24 @@ class VideoControls implements VideoControlsInstance {
         this.volumeRail = this.volumeGroup.append('rect')
             .attr('class', 'video-controls-volume-rail')
             .attr('y', this.scrubberY)
-            .attr('height', SCRUBBER_HEIGHT)
-            .attr('rx', SCRUBBER_HEIGHT / 2)
-            .attr('ry', SCRUBBER_HEIGHT / 2)
-            .attr('fill', COLORS.rail)
+            .attr('height', layout.railHeight)
+            .attr('rx', layout.railHeight / 2)
+            .attr('ry', layout.railHeight / 2)
+            .attr('fill', styles.rail)
 
         this.volumeProgress = this.volumeGroup.append('rect')
             .attr('class', 'video-controls-volume-progress')
             .attr('y', this.scrubberY)
-            .attr('height', SCRUBBER_HEIGHT)
-            .attr('rx', SCRUBBER_HEIGHT / 2)
-            .attr('ry', SCRUBBER_HEIGHT / 2)
-            .attr('fill', COLORS.progress)
+            .attr('height', layout.railHeight)
+            .attr('rx', layout.railHeight / 2)
+            .attr('ry', layout.railHeight / 2)
+            .attr('fill', styles.progress)
 
         this.volumeHandle = this.volumeGroup.append('circle')
             .attr('class', 'video-controls-volume-handle')
-            .attr('cy', this.scrubberY + SCRUBBER_HEIGHT / 2)
-            .attr('r', 4)
-            .attr('fill', COLORS.progress)
+            .attr('cy', this.scrubberY + layout.railHeight / 2)
+            .attr('r', layout.volumeHandleRadius)
+            .attr('fill', styles.progress)
 
         this.volumeHit = this.volumeGroup.append('rect')
             .attr('class', 'video-controls-volume-hit')
@@ -395,11 +475,11 @@ class VideoControls implements VideoControlsInstance {
             .attr('fill', 'transparent')
 
         this.bindButtonActions()
-        this.bindSpeedButton()
+        this.bindSpeedSlider()
         this.bindSeekDrag()
+        this.bindPointerDrag(this.speedHit, this.setSpeedFromEvent)
         this.bindPointerDrag(this.volumeHit, this.setVolumeFromEvent)
         this.addMediaListeners()
-        this.createSpeedMenu()
         this.render()
     }
 
@@ -412,6 +492,8 @@ class VideoControls implements VideoControlsInstance {
         const progressRatio = duration > 0 ? currentTime / duration : 0
         const bufferedRatio = duration > 0 ? bufferedEnd(this.videoEl) / duration : 0
         const volume = this.videoEl.muted ? 0 : clamp(this.videoEl.volume, 0, 1)
+        const speed = clamp(this.videoEl.playbackRate || 1, settings.videoControls.speed.minRate, settings.videoControls.speed.maxRate)
+        const speedRatio = this.speedRatio(speed)
 
         this.currentTimeText.text(formatTime(currentTime))
         this.durationText.text(formatTime(duration))
@@ -428,18 +510,22 @@ class VideoControls implements VideoControlsInstance {
 
         const isMuted = this.videoEl.muted || this.videoEl.volume === 0
         const volumeIcon = isMuted ? videoVolumeMutedGlyphIcon : videoVolumeHighGlyphIcon
-        setIconPaths(this.volumeButton.icon, volumeIcon, isMuted ? COLORS.iconMuted : COLORS.icon)
+        setIconPaths(this.volumeButton.icon, volumeIcon, isMuted ? settings.videoControls.styles.iconMuted : settings.videoControls.styles.icon)
         this.volumeButton.group.attr('aria-label', isMuted ? 'Unmute video' : 'Mute video')
         this.volumeProgress.attr('width', this.volumeWidth * volume)
         this.volumeHandle.attr('cx', this.volumeWidth * volume)
 
-        this.speedText.text(formatRate(this.videoEl.playbackRate || 1))
-        this.speedMenu.attr('display', this.speedMenuOpen ? null : 'none')
+        this.speedText.text(formatRate(speed))
+            .attr('x', this.speedSliderX + this.speedSliderWidth * speedRatio)
+        this.speedGroup
+            .attr('aria-valuenow', speed)
+            .attr('aria-valuetext', formatRate(speed))
+        this.speedProgress.attr('width', this.speedSliderWidth * speedRatio)
+        this.speedHandle.attr('cx', this.speedSliderX + this.speedSliderWidth * speedRatio)
 
         const fullscreenIcon = isFullscreen(this.videoEl) ? videoFullscreenExitGlyphIcon : videoFullscreenEnterGlyphIcon
         setIconPaths(this.fullscreenButton.icon, fullscreenIcon)
         this.fullscreenButton.group.attr('aria-label', isFullscreen(this.videoEl) ? 'Exit fullscreen' : 'Enter fullscreen')
-        this.pipButton.group.attr('aria-pressed', String(isPictureInPicture(this.videoEl)))
     }
 
     resize = (nextX: number, nextY: number, nextWidth: number): void => {
@@ -460,13 +546,38 @@ class VideoControls implements VideoControlsInstance {
             this.videoEl.removeEventListener(eventName, this.onMediaEvent)
         }
         document.removeEventListener('fullscreenchange', this.onMediaEvent)
-        this.videoEl.removeEventListener('enterpictureinpicture', this.onMediaEvent)
-        this.videoEl.removeEventListener('leavepictureinpicture', this.onMediaEvent)
-        window.removeEventListener('pointerdown', this.closeSpeedMenuOnOutsidePointer, true)
         this.group.remove()
     }
 
+    private createLiquidGlassFilter(): void {
+        const { liquidGlassFilter } = settings.videoControls.styles
+        if (liquidGlassFilter.displacementScale <= 0) return
+
+        const filter = this.defs.append('filter')
+            .attr('id', this.glassFilterId)
+            .attr('x', '-12%')
+            .attr('y', '-30%')
+            .attr('width', '124%')
+            .attr('height', '160%')
+            .attr('color-interpolation-filters', 'sRGB')
+
+        filter.append('feTurbulence')
+            .attr('type', 'fractalNoise')
+            .attr('baseFrequency', liquidGlassFilter.baseFrequency)
+            .attr('numOctaves', liquidGlassFilter.numOctaves)
+            .attr('seed', liquidGlassFilter.seed)
+            .attr('result', 'glass-noise')
+
+        filter.append('feDisplacementMap')
+            .attr('in', 'SourceGraphic')
+            .attr('in2', 'glass-noise')
+            .attr('scale', liquidGlassFilter.displacementScale)
+            .attr('xChannelSelector', 'R')
+            .attr('yChannelSelector', 'G')
+    }
+
     private createButton(className: string, iconMarkup: string, label: string): ButtonControl {
+        const { layout, styles, typography } = settings.videoControls
         const buttonGroup = this.group.append('g')
             .attr('class', className)
             .attr('role', 'button')
@@ -478,151 +589,118 @@ class VideoControls implements VideoControlsInstance {
             .attr('class', `${className}-hit`)
             .attr('x', 0)
             .attr('y', 0)
-            .attr('width', BUTTON_SIZE)
-            .attr('height', BUTTON_SIZE)
-            .attr('rx', 7)
-            .attr('ry', 7)
+            .attr('width', layout.buttonSize)
+            .attr('height', layout.buttonSize)
+            .attr('rx', roundedRectRadius(layout.buttonRadius, layout.buttonSize))
+            .attr('ry', roundedRectRadius(layout.buttonRadius, layout.buttonSize))
             .attr('fill', 'transparent')
 
         const icon = buttonGroup.append('g')
             .attr('class', `${className}-icon`)
-            .attr('transform', `translate(${(BUTTON_SIZE - ICON_SIZE) / 2}, ${(BUTTON_SIZE - ICON_SIZE) / 2}) scale(${ICON_SIZE / 24})`)
+            .attr('transform', `translate(${(layout.buttonSize - layout.iconSize) / 2}, ${(layout.buttonSize - layout.iconSize) / 2}) scale(${layout.iconSize / 24})`)
 
         buttonGroup.append('text')
             .attr('class', `${className}-label`)
-            .attr('x', BUTTON_SIZE / 2)
-            .attr('y', BUTTON_SIZE / 2)
+            .attr('x', layout.buttonSize / 2)
+            .attr('y', layout.buttonSize / 2)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
-            .attr('font-size', 12)
-            .attr('font-weight', 650)
-            .attr('fill', COLORS.text)
+            .attr('font-size', typography.hiddenButtonLabelFontSize)
+            .attr('font-weight', typography.hiddenButtonLabelFontWeight)
+            .attr('fill', styles.text)
             .attr('display', 'none')
 
         setIconPaths(icon, iconMarkup)
         return { group: buttonGroup, hit, icon }
     }
 
-    private createSpeedMenu(): void {
-        this.speedMenu.selectAll('*').remove()
-        const optionHeight = 26
-        const menuWidth = SPEED_WIDTH
-        const menuHeight = optionHeight * this.playbackRates.length + 6
-
-        this.speedMenu.append('rect')
-            .attr('class', 'video-controls-speed-menu-bg')
-            .attr('x', 0)
-            .attr('y', 0)
-            .attr('width', menuWidth)
-            .attr('height', menuHeight)
-            .attr('rx', 8)
-            .attr('ry', 8)
-            .attr('fill', COLORS.popup)
-            .attr('stroke', COLORS.backgroundStroke)
-            .attr('stroke-width', 1)
-
-        for (const [index, rate] of this.playbackRates.entries()) {
-            const optionY = 3 + index * optionHeight
-            const optionGroup = this.speedMenu.append('g')
-                .attr('class', 'video-controls-rate-option')
-                .attr('transform', `translate(0, ${optionY})`)
-                .style('cursor', 'pointer')
-
-            optionGroup.append('rect')
-                .attr('class', 'video-controls-rate-option-hit')
-                .attr('x', 3)
-                .attr('y', 1)
-                .attr('width', menuWidth - 6)
-                .attr('height', optionHeight - 2)
-                .attr('rx', 5)
-                .attr('ry', 5)
-                .attr('fill', 'transparent')
-                .attr('data-rate', String(rate))
-                .on('mouseenter', function () { select(this).attr('fill', COLORS.buttonHover) })
-                .on('mouseleave', function () { select(this).attr('fill', 'transparent') })
-                .on('click', (event: MouseEvent) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    this.videoEl.playbackRate = rate
-                    this.speedMenuOpen = false
-                    this.render()
-                })
-
-            optionGroup.append('text')
-                .attr('class', 'video-controls-rate-option-label')
-                .attr('x', menuWidth / 2)
-                .attr('y', optionHeight / 2)
-                .attr('text-anchor', 'middle')
-                .attr('dominant-baseline', 'central')
-                .attr('font-size', 12)
-                .attr('font-weight', 650)
-                .attr('fill', COLORS.text)
-                .text(formatRate(rate))
-        }
-    }
-
     private layout(): void {
-        const showSkip = this.width >= 340
-        const showVolumeSlider = this.width >= 440
-        const showPip = supportsPictureInPicture(this.videoEl) && this.width >= 380
-        const showFullscreen = supportsFullscreen(this.videoEl) && this.width >= 320
+        const { layout, responsive } = settings.videoControls
+        const showSpeedSlider = this.width >= responsive.showSpeedSliderMinWidth
+        const showVolumeSlider = this.width >= responsive.showVolumeSliderMinWidth
+        const showFullscreen = supportsFullscreen(this.videoEl) && this.width >= responsive.showFullscreenMinWidth
+        const speedSliderTargetWidth = this.width >= responsive.fullSpeedSliderMinWidth
+            ? layout.speedSliderWidth
+            : layout.compactSpeedSliderWidth
+        const speedSliderWidth = Math.max(layout.speedSliderMinWidth, speedSliderTargetWidth)
+        const speedSliderInset = layout.speedIconSize + layout.speedIconSliderGap + layout.speedValueLabelEdgeInset
+        const speedControlWidth = speedSliderInset + speedSliderWidth + layout.speedValueLabelEdgeInset
 
-        this.background.attr('width', this.width).attr('height', this.height)
-
-        let left = PADDING
+        this.background
+            .attr('width', this.width)
+            .attr('height', this.height)
+            .attr('rx', roundedRectRadius(layout.barRadius, this.height))
+            .attr('ry', roundedRectRadius(layout.barRadius, this.height))
+        const highlightHeight = Math.max(0, this.height - layout.backgroundHighlightInset * 2)
+        this.backgroundClip
+            .attr('width', this.width)
+            .attr('height', this.height)
+            .attr('rx', roundedRectRadius(layout.barRadius, this.height))
+            .attr('ry', roundedRectRadius(layout.barRadius, this.height))
+        this.backgroundHighlight
+            .attr('width', Math.max(0, this.width - layout.backgroundHighlightInset * 2))
+            .attr('height', highlightHeight)
+            .attr('rx', roundedRectRadius(Math.max(0, layout.barRadius - layout.backgroundHighlightInset), highlightHeight))
+            .attr('ry', roundedRectRadius(Math.max(0, layout.barRadius - layout.backgroundHighlightInset), highlightHeight))
+        let left = layout.padding
         setButtonPosition(this.playButton, left, this.buttonY)
-        left += BUTTON_SIZE + GAP
-
-        setButtonPosition(this.skipBackButton, left, this.buttonY, showSkip)
-        if (showSkip) left += BUTTON_SIZE + GAP
-        setButtonPosition(this.skipForwardButton, left, this.buttonY, showSkip)
-        if (showSkip) left += BUTTON_SIZE + GAP
+        left += layout.buttonSize + layout.gap
 
         this.currentTimeText.attr('x', left + 2)
-        left += TIME_WIDTH
+        left += layout.timeWidth
 
-        let right = this.width - PADDING
+        let right = this.width - layout.padding
 
         if (showFullscreen) {
-            right -= BUTTON_SIZE
+            right -= layout.buttonSize
             setButtonPosition(this.fullscreenButton, right, this.buttonY, true)
-            right -= GAP
+            right -= layout.gap
         } else {
             setButtonPosition(this.fullscreenButton, right, this.buttonY, false)
         }
 
-        if (showPip) {
-            right -= BUTTON_SIZE
-            setButtonPosition(this.pipButton, right, this.buttonY, true)
-            right -= GAP
-        } else {
-            setButtonPosition(this.pipButton, right, this.buttonY, false)
-        }
-
         if (showVolumeSlider) {
-            right -= VOLUME_SLIDER_WIDTH
-            this.volumeWidth = VOLUME_SLIDER_WIDTH
+            right -= layout.volumeSliderWidth
+            this.volumeWidth = layout.volumeSliderWidth
             this.volumeGroup.attr('transform', `translate(${right}, 0)`).attr('display', null)
-            right -= GAP
+            right -= layout.gap
         } else {
             this.volumeGroup.attr('display', 'none')
         }
 
-        right -= BUTTON_SIZE
+        right -= layout.buttonSize
         setButtonPosition(this.volumeButton, right, this.buttonY)
-        right -= GAP
+        right -= layout.gap
 
-        right -= SPEED_WIDTH
-        this.speedButton.attr('transform', `translate(${right}, 0)`)
-        this.speedMenu.attr('transform', `translate(${right}, ${this.buttonY - this.playbackRates.length * 26 - 12})`)
-        right -= GAP
+        if (showSpeedSlider) {
+            right -= speedControlWidth
+            this.speedX = right
+            this.speedSliderWidth = speedSliderWidth
+            this.speedSliderX = speedSliderInset
+            this.speedGroup.attr('transform', `translate(${this.speedX}, 0)`).attr('display', null)
+            this.speedRail.attr('x', this.speedSliderX).attr('width', this.speedSliderWidth)
+            this.speedProgress.attr('x', this.speedSliderX)
+            this.speedHit.attr('x', this.speedSliderX).attr('width', this.speedSliderWidth)
 
-        right -= TIME_WIDTH
+            for (const { rate, tick } of this.speedGuideTicks) {
+                const guideX = this.speedSliderX + this.speedSliderWidth * this.speedRatio(rate)
+                tick.attr('x1', guideX)
+                    .attr('x2', guideX)
+                    .attr('y1', this.scrubberY - layout.speedScaleTickHeight / 2)
+                    .attr('y2', this.scrubberY + layout.railHeight + layout.speedScaleTickHeight / 2)
+                    .attr('display', null)
+            }
+            right -= layout.gap
+        } else {
+            this.speedGroup.attr('display', 'none')
+        }
+
+        right -= layout.timeWidth
         this.durationText.attr('x', right + 4)
-        right -= GAP
+        right -= layout.gap
 
         this.seekX = left
-        this.seekWidth = Math.max(36, right - left)
+        this.seekWidth = Math.max(layout.minSeekWidth, right - left)
         this.seekRail.attr('x', this.seekX).attr('width', this.seekWidth)
         this.seekBuffered.attr('x', this.seekX)
         this.seekProgress.attr('x', this.seekX)
@@ -646,6 +724,41 @@ class VideoControls implements VideoControlsInstance {
         return clamp((event.clientX - rect.left) / rect.width, 0, 1)
     }
 
+    private speedRatio(rate: number): number {
+        const { minRate, maxRate } = settings.videoControls.speed
+        const guideRate = this.speedGuideRate()
+        const safeRate = clamp(rate, minRate, maxRate)
+        if (maxRate <= minRate) return 0
+        if (guideRate <= minRate || guideRate >= maxRate) return clamp((safeRate - minRate) / (maxRate - minRate), 0, 1)
+        if (safeRate <= guideRate) return clamp((safeRate - minRate) / (guideRate - minRate) * 0.5, 0, 0.5)
+        return clamp(0.5 + (safeRate - guideRate) / (maxRate - guideRate) * 0.5, 0.5, 1)
+    }
+
+    private speedFromRatio(ratio: number, step = settings.videoControls.speed.pointerStep): number {
+        const { minRate, maxRate } = settings.videoControls.speed
+        const guideRate = this.speedGuideRate()
+        const safeRatio = clamp(ratio, 0, 1)
+        let rawRate = minRate + safeRatio * (maxRate - minRate)
+        if (guideRate > minRate && guideRate < maxRate) {
+            rawRate = safeRatio <= 0.5
+                ? minRate + safeRatio / 0.5 * (guideRate - minRate)
+                : guideRate + (safeRatio - 0.5) / 0.5 * (maxRate - guideRate)
+        }
+        return clamp(roundToStep(rawRate, step), minRate, maxRate)
+    }
+
+    private speedGuideRate(): number {
+        const { guideRate, minRate, maxRate } = settings.videoControls.speed
+        return clamp(guideRate, minRate, maxRate)
+    }
+
+    private speedRatioFromEvent(event: PointerEvent | MouseEvent): number {
+        const node = this.speedHit.node() as SVGRectElement | null
+        const rect = node?.getBoundingClientRect()
+        if (!rect || rect.width <= 0) return this.speedRatio(this.videoEl.playbackRate || 1)
+        return clamp((event.clientX - rect.left) / rect.width, 0, 1)
+    }
+
     private readonly setVideoTimeFromEvent = (event: PointerEvent | MouseEvent): void => {
         if (!isFiniteDuration(this.videoEl)) return
         const targetTime = this.seekRatioFromEvent(event) * this.videoEl.duration
@@ -657,6 +770,18 @@ class VideoControls implements VideoControlsInstance {
     private readonly setVolumeFromEvent = (event: PointerEvent | MouseEvent): void => {
         this.videoEl.volume = this.volumeRatioFromEvent(event)
         this.videoEl.muted = this.videoEl.volume === 0
+        this.render()
+    }
+
+    private readonly setSpeedFromEvent = (event: PointerEvent | MouseEvent): void => {
+        this.videoEl.playbackRate = this.speedFromRatio(this.speedRatioFromEvent(event))
+        this.render()
+    }
+
+    private resetSpeedToDefault(): void {
+        const { defaultRate, guideRate, minRate, maxRate } = settings.videoControls.speed
+        const targetRate = Number.isFinite(defaultRate) ? defaultRate : guideRate
+        this.videoEl.playbackRate = clamp(targetRate, minRate, maxRate)
         this.render()
     }
 
@@ -804,41 +929,12 @@ class VideoControls implements VideoControlsInstance {
         this.render()
     }
 
-    private readonly closeSpeedMenuOnOutsidePointer = (event: PointerEvent): void => {
-        if (!this.speedMenuOpen) return
-        const target = event.target as Node | null
-        const speedNode = this.speedButton.node() as Node | null
-        const menuNode = this.speedMenu.node() as Node | null
-        if ((speedNode && target && speedNode.contains(target)) || (menuNode && target && menuNode.contains(target))) return
-        this.speedMenuOpen = false
-        this.render()
-    }
-
     private async togglePlay(): Promise<void> {
         try {
             if (this.videoEl.paused) await this.videoEl.play()
             else this.videoEl.pause()
         } catch (error) {
             console.warn('[videoControls] play toggle failed', error)
-        }
-        this.render()
-    }
-
-    private async togglePictureInPicture(): Promise<void> {
-        if (!supportsPictureInPicture(this.videoEl)) return
-        const doc = document as Document & {
-            exitPictureInPicture?: () => Promise<void>
-        }
-        try {
-            if (isPictureInPicture(this.videoEl)) await doc.exitPictureInPicture?.()
-            else {
-                const videoWithPip = this.videoEl as HTMLVideoElement & {
-                    requestPictureInPicture?: () => Promise<unknown>
-                }
-                await videoWithPip.requestPictureInPicture?.()
-            }
-        } catch (error) {
-            console.warn('[videoControls] picture-in-picture failed', error)
         }
         this.render()
     }
@@ -856,42 +952,36 @@ class VideoControls implements VideoControlsInstance {
 
     private bindButtonActions(): void {
         bindButtonAction(this.playButton, () => { void this.togglePlay() })
-        bindButtonAction(this.skipBackButton, () => {
-            if (!isFiniteDuration(this.videoEl)) return
-            this.videoEl.currentTime = clamp(this.videoEl.currentTime - this.skipSeconds, 0, this.videoEl.duration)
-            this.render()
-        })
-        bindButtonAction(this.skipForwardButton, () => {
-            if (!isFiniteDuration(this.videoEl)) return
-            this.videoEl.currentTime = clamp(this.videoEl.currentTime + this.skipSeconds, 0, this.videoEl.duration)
-            this.render()
-        })
         bindButtonAction(this.volumeButton, () => {
             this.videoEl.muted = !this.videoEl.muted
             if (!this.videoEl.muted && this.videoEl.volume === 0) this.videoEl.volume = 0.5
             this.render()
         })
-        bindButtonAction(this.pipButton, () => { void this.togglePictureInPicture() })
         bindButtonAction(this.fullscreenButton, () => { void this.toggleFullscreen() })
     }
 
-    private bindSpeedButton(): void {
-        this.speedButton
-            .on('click', (event: MouseEvent) => {
+    private bindSpeedSlider(): void {
+        this.speedGroup
+            .on('dblclick', (event: MouseEvent) => {
                 event.preventDefault()
                 event.stopPropagation()
-                this.speedMenuOpen = !this.speedMenuOpen
-                this.render()
+                this.resetSpeedToDefault()
             })
             .on('keydown', (event: KeyboardEvent) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return
+                const { keyboardStep, minRate, maxRate } = settings.videoControls.speed
+                const currentRate = clamp(this.videoEl.playbackRate || 1, minRate, maxRate)
+                let nextRate: number | null = null
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextRate = currentRate - keyboardStep
+                if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextRate = currentRate + keyboardStep
+                if (event.key === 'Home') nextRate = minRate
+                if (event.key === 'End') nextRate = maxRate
+                if (nextRate === null) return
+
                 event.preventDefault()
                 event.stopPropagation()
-                this.speedMenuOpen = !this.speedMenuOpen
+                this.videoEl.playbackRate = clamp(roundToStep(nextRate, keyboardStep), minRate, maxRate)
                 this.render()
             })
-            .on('mouseenter', () => this.speedButtonBg.attr('fill', COLORS.buttonHover))
-            .on('mouseleave', () => this.speedButtonBg.attr('fill', 'transparent'))
     }
 
     private addMediaListeners(): void {
@@ -899,9 +989,6 @@ class VideoControls implements VideoControlsInstance {
             this.videoEl.addEventListener(eventName, this.onMediaEvent)
         }
         document.addEventListener('fullscreenchange', this.onMediaEvent)
-        this.videoEl.addEventListener('enterpictureinpicture', this.onMediaEvent)
-        this.videoEl.addEventListener('leavepictureinpicture', this.onMediaEvent)
-        window.addEventListener('pointerdown', this.closeSpeedMenuOnOutsidePointer, true)
     }
 
     private readonly onMediaEvent = (): void => {

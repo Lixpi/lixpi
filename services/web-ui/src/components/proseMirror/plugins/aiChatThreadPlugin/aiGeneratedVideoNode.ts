@@ -1,11 +1,12 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
+import { settings } from '$src/settings.ts'
 import { NodeSelection } from 'prosemirror-state'
 import type { ImageBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 
 // Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
 // video. While VIDEO_PENDING is the active state, the node renders a placeholder
@@ -219,22 +220,23 @@ const buildAuthenticatedUrl = async (url: string): Promise<string> => {
 }
 
 export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => number | undefined) => {
-    const controlsHeight = 52
+    const controlsHeight = settings.videoControls.height
+    const controlsStyles = settings.videoControls.styles
     const containerStyle = {
         position: 'relative' as const,
         overflow: 'hidden' as const,
     }
     const controlsHostStyle = {
         position: 'absolute' as const,
-        left: '18px',
-        right: '18px',
-        bottom: '14px',
+        left: `${settings.videoControls.chat.horizontalInset}px`,
+        right: `${settings.videoControls.chat.horizontalInset}px`,
+        bottom: `${settings.videoControls.chat.bottomInset}px`,
         height: `${controlsHeight}px`,
         pointerEvents: 'auto' as const,
-        borderRadius: '18px',
-        filter: 'drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28))',
-        backdropFilter: 'blur(10px)',
-        webkitBackdropFilter: 'blur(10px)',
+        borderRadius: controlsStyles.hostBorderRadius,
+        filter: controlsStyles.hostDropShadow,
+        backdropFilter: controlsStyles.hostBackdropFilter,
+        webkitBackdropFilter: controlsStyles.hostBackdropFilter,
         display: 'none',
     }
     const wrapper = html`
@@ -256,6 +258,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
     const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
     const runMetaElement = wrapper.querySelector('.ai-generated-media-run-meta') as HTMLElement
+    applyVideoControlsHostStyleProperties(controlsHost)
     let videoControls: VideoControlsInstance | null = null
     let controlsSvg: any = null
     let resizeObserver: ResizeObserver | null = null
@@ -300,7 +303,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
     const getControlsWidth = (): number => {
         const measuredWidth = controlsHost.getBoundingClientRect().width || controlsHost.clientWidth
-        return Math.max(240, measuredWidth || 520)
+        return Math.max(settings.videoControls.chat.minWidth, measuredWidth || settings.videoControls.chat.fallbackWidth)
     }
 
     const syncControlsGeometry = (): void => {

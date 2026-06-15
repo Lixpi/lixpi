@@ -22,24 +22,22 @@ For video generation, storage, VEO polling, and branch lineage, see [Video Gener
 
 **Two Mount Points** — `WorkspaceCanvas.ts` mounts the bar in `.workspace-video-controls-host` for canvas videos. `aiGeneratedVideoNode.ts` mounts the same bar in `.ai-generated-video-controls-host` for chat-history videos.
 
-**Browser-Composited Canvas Playback** — The canvas does not sample a live video texture into PIXI. `videoNodeHandler.ts` creates the authenticated video element and loads the PIXI poster. `WorkspaceCanvas.ts` moves that same element into `.workspace-video-chrome`, above the poster, so browser playback, seeking, PiP, and fullscreen work normally.
+**Browser-Composited Canvas Playback** — The canvas does not sample a live video texture into PIXI. `videoNodeHandler.ts` creates the authenticated video element and loads the PIXI poster. `WorkspaceCanvas.ts` moves that same element into `.workspace-video-chrome`, above the poster, so browser playback, seeking, and fullscreen work normally.
 
-**Ephemeral Playback State** — Playback position, speed, volume, PiP, fullscreen, hover visibility, and scrubbing state are **not** persisted to `canvasState`.
+**Ephemeral Playback State** — Playback position, speed, volume, fullscreen, hover visibility, and scrubbing state are **not** persisted to `canvasState`.
 
 ## Control Set
 
 | Control | Behavior |
 |---------|----------|
 | Play / pause | Calls `videoEl.play()` or `videoEl.pause()` and reflects `play` / `pause` events |
-| Skip back / forward | Moves `currentTime` by `skipSeconds` (default `10`) within duration bounds |
 | Current time / duration | Renders `m:ss`; duration stays `0:00` until metadata is loaded |
 | Scrubber | Shows buffered and played ranges; dragging seeks the element |
-| Playback speed | Opens a rate menu, default `[0.5, 0.75, 1, 1.25, 1.5, 2]` |
+| Playback speed | Speed glyph plus continuous slider writes `playbackRate`; double-click resets to the configured default rate, and configured guide ticks are visual references only |
 | Volume / mute | Toggles `muted`; slider writes `volume` and reflects `volumechange` |
-| Picture-in-picture | Uses `requestPictureInPicture()` when supported; hidden otherwise |
 | Fullscreen | Uses `requestFullscreen()` / `exitFullscreen()` when supported; hidden otherwise |
 
-The layout is responsive. Skip buttons, PiP, fullscreen, and the volume slider hide when the available width is too small. Unsupported browser capabilities hide rather than error.
+The layout is responsive. The speed slider, fullscreen, and the volume slider hide when the available width is too small. Unsupported browser capabilities hide rather than error.
 
 ## Component API
 
@@ -51,8 +49,6 @@ export type VideoControlsConfig = {
     width: number
     height?: number
     videoEl: HTMLVideoElement
-    skipSeconds?: number
-    playbackRates?: number[]
     className?: string
 }
 
@@ -64,6 +60,8 @@ export type VideoControlsInstance = {
 ```
 
 `render()` re-syncs SVG state from the element. `resize()` updates bar geometry after canvas node resize or chat player resize. `destroy()` removes SVG nodes, media listeners, document listeners, pointer listeners, and in-flight scrub handlers.
+
+Player behavior, geometry, speed range, default rate, center guide rate, rendered guide rates, responsive thresholds, glass treatment, colors, line styles, shadows, and typography live in `settings.videoControls` in [`services/web-ui/src/settings.ts`](../../services/web-ui/src/settings.ts). The `speed.defaultRate` value is used by double-click reset. The `speed.guideRate` value is the midpoint of the slider curve, while `speed.guideRates` controls the rendered reference ticks. Pointer and keyboard changes remain continuous across the configured `minRate`-to-`maxRate` range.
 
 ## System Architecture
 
@@ -139,18 +137,17 @@ This avoids piling many seeks onto short VEO clips while still making paused scr
 
 ## Accessibility and Capability Handling
 
-Buttons are SVG groups with `role="button"`, `tabindex="0"`, and `aria-label`s. Enter and Space activate button controls. The speed picker also supports Enter/Space and closes on outside pointer down.
+Buttons are SVG groups with `role="button"`, `tabindex="0"`, and `aria-label`s. Enter and Space activate button controls. The speed control is an SVG slider with `role="slider"`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, and `aria-valuetext`; arrow keys adjust by the configured keyboard step, while Home and End jump to the configured range bounds.
 
-PiP and fullscreen controls are gated by browser support:
+Fullscreen controls are gated by browser support:
 
-- PiP requires `document.pictureInPictureEnabled` and `videoEl.requestPictureInPicture`
 - fullscreen requires `videoEl.requestFullscreen` and `document.exitFullscreen`
 
-If a capability is missing or the bar is too narrow, that control is hidden. Failures from `play()`, PiP, fullscreen, or resume-after-scrub are logged as warnings without breaking the rest of the bar.
+If a capability is missing or the bar is too narrow, that control is hidden. Failures from `play()`, fullscreen, or resume-after-scrub are logged as warnings without breaking the rest of the bar.
 
 ## Styling
 
-The component inlines SVG attributes rather than relying on global CSS, matching the existing D3 control primitives. It uses a translucent dark rounded bar, white glyphs, subtle hover fills, a buffered rail, a played rail, and a compact speed popup.
+The component inlines SVG attributes rather than relying on global CSS, matching the existing D3 control primitives. It uses a liquid-glass rounded bar, white glyphs, subtle hover fills, buffered and played rails, continuous speed and volume rails, speed and volume glyphs, configured speed guide marks, and settings-driven host backdrop filtering. The host elements apply the same glass pattern as the AI Chat panel: translucent fill, blur/saturation backdrop filtering, an inner highlight, and a reduced-transparency fallback.
 
 Canvas visibility and positioning are controlled by host elements:
 
