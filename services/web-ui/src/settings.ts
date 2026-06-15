@@ -295,19 +295,15 @@ export type VideoControlsSettings = {
         speedSliderWidth: number
         compactSpeedSliderWidth: number
         speedSliderMinWidth: number
-        speedIconSize: number
-        speedIconSliderGap: number
-        speedValueLabelEdgeInset: number
+        speedValueWidth: number
+        speedValueSliderGap: number
         volumeSliderWidth: number
         minSeekWidth: number
         speedScaleTickHeight: number
-        speedValueLabelOffset: number
     }
     typography: {
         timeFontSize: number
         timeFontWeight: number
-        speedFontSize: number
-        speedFontWeight: number
         hiddenButtonLabelFontSize: number
         hiddenButtonLabelFontWeight: number
     }
@@ -347,7 +343,6 @@ export type VideoControlsSettings = {
         progress: string
         speedScaleTick: string
         speedScaleTickWidth: number
-        speedValueLabel: string
         liquidGlassFilter: {
             displacementScale: number
             baseFrequency: string
@@ -750,17 +745,17 @@ export const settings: Settings = {
     // Shared SVG video player controls used by canvas video nodes and in-chat generated videos.
     videoControls: {
         // Screen-pixel height of the control bar and host.
-        height: 44,
+        height: 40,
         // Canvas video-node mount geometry.
         canvas: {
             // Horizontal inset for normal-width video nodes.
-            horizontalInset: 18,
+            horizontalInset: 0,
             // Horizontal inset for compact video nodes.
-            compactHorizontalInset: 8,
+            compactHorizontalInset: 0,
             // Node width below which the compact horizontal inset is used.
             compactWidthThreshold: 260,
-            // Bottom inset from the video node edge.
-            bottomInset: 14,
+            // Vertical gap between the video node edge and the external controls strip.
+            bottomInset: 0,
         },
         // In-chat generated-video mount geometry.
         chat: {
@@ -775,10 +770,10 @@ export const settings: Settings = {
         },
         // Internal SVG geometry. These are supported sizing knobs, not CSS layout mechanics.
         layout: {
-            padding: 10,
+            padding: 9,
             gap: 6,
-            buttonSize: 34,
-            iconSize: 20,
+            buttonSize: 30,
+            iconSize: 18,
             barRadius: 99,
             buttonRadius: 99,
             railHeight: 5,
@@ -789,19 +784,15 @@ export const settings: Settings = {
             speedSliderWidth: 96,
             compactSpeedSliderWidth: 78,
             speedSliderMinWidth: 64,
-            speedIconSize: 14,
-            speedIconSliderGap: 6,
-            speedValueLabelEdgeInset: 0,
+            speedValueWidth: 34,
+            speedValueSliderGap: 7,
             volumeSliderWidth: 62,
             minSeekWidth: 36,
-            speedScaleTickHeight: 11,
-            speedValueLabelOffset: 13,
+            speedScaleTickHeight: 10,
         },
         typography: {
             timeFontSize: 13,
             timeFontWeight: 600,
-            speedFontSize: 7,
-            speedFontWeight: 400,
             hiddenButtonLabelFontSize: 12,
             hiddenButtonLabelFontWeight: 650,
         },
@@ -827,11 +818,11 @@ export const settings: Settings = {
             hostBorderRadius: '99px',
             hostDropShadow: 'drop-shadow(0 12px 30px rgba(0, 0, 0, 0.30))',
             hostBackdropFilter: 'blur(22px) saturate(155%) contrast(108%)',
-            hostReducedTransparencyBackground: 'rgba(24, 28, 34, 0.78)',
-            background: 'rgba(24, 28, 34, 0.30)',
-            backgroundStroke: 'rgba(255, 255, 255, 0.28)',
+            hostReducedTransparencyBackground: 'rgba(24, 28, 34, 0.70)',
+            background: 'rgba(24, 28, 34, 0.24)',
+            backgroundStroke: 'rgba(255, 255, 255, 0.22)',
             backgroundStrokeWidth: 1,
-            glassHighlight: 'rgba(255, 255, 255, 0.12)',
+            glassHighlight: 'rgba(255, 255, 255, 0.10)',
             glassHighlightStrokeWidth: 1,
             buttonHover: 'rgba(255, 255, 255, 0.14)',
             icon: 'rgba(255, 255, 255, 0.95)',
@@ -843,7 +834,6 @@ export const settings: Settings = {
             progress: '#ffffff',
             speedScaleTick: 'rgba(255, 255, 255, 0.42)',
             speedScaleTickWidth: 1,
-            speedValueLabel: 'rgba(255, 255, 255, 0.92)',
             liquidGlassFilter: {
                 displacementScale: 2.4,
                 baseFrequency: '0.012 0.08',

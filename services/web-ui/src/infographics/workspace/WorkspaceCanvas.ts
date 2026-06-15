@@ -378,7 +378,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
-    const videoControlsHideTimers: Map<string, number> = new Map()
     const VIDEO_CONTROLS_HEIGHT = settings.videoControls.height
     const VIDEO_CONTROLS_HORIZONTAL_INSET = settings.videoControls.canvas.horizontalInset
     const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = settings.videoControls.canvas.compactHorizontalInset
@@ -1047,6 +1046,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
         viewport: Viewport,
+        extraTopOffsetScreen = 0,
     ): void {
         // Generated-media chrome is not a child of the viewport-transformed DOM
         // layer. It is projected into screen coordinates here, then scaled with
@@ -1062,7 +1062,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         applyStyle(chromeEl, {
             left: `${chromeLayout.left}px`,
-            top: `${chromeLayout.top}px`,
+            top: `${chromeLayout.top + extraTopOffsetScreen}px`,
             width: `${chromeLayout.layoutWidth}px`,
             transformOrigin: '0 0',
             transform: `scale(${chromeLayout.screenScale})`,
@@ -1074,6 +1074,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
         viewport: Viewport,
+        extraTopOffsetScreen = 0,
     ): void {
         const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
         const iconStripScreenGap = scaleCanvasChromeToScreenForZoom(
@@ -1090,7 +1091,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // so its top coordinate must be converted back to world units. The strip
         // gap and icon height are computed in final screen pixels, then divided
         // by zoom before being added to the media node's world-space bottom.
-        const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom
+        const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom
         const panelWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
             ? dimensions.width
             : settings.imageBranchLineage.generatedImageSize
@@ -1140,10 +1141,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
+    function getVideoControlsOutsideOffsetScreen(nodeId: string, viewport: Viewport): number {
+        if (!videoControlInstances.has(nodeId)) return 0
+        const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
+        return (VIDEO_CONTROLS_BOTTOM_INSET + VIDEO_CONTROLS_HEIGHT) * zoom
+    }
+
     function getVideoChromeResizeHandle(event: MouseEvent, chromeEl: HTMLElement): ResizeCorner | null {
-        const rect = chromeEl.getBoundingClientRect()
+        const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLElement | null
+        const rect = surface?.getBoundingClientRect() ?? chromeEl.getBoundingClientRect()
         const x = event.clientX - rect.left
         const y = event.clientY - rect.top
+        if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
         const resizeHandleSettings = settings.mediaNode.resizeHandle
         const zoom = getCurrentViewportZoom()
         const { size, offset } = settings.mediaNode.useZoomCompensatedResizeHandleScaling
@@ -1154,7 +1163,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),
             })
             : { size: resizeHandleSettings.size, offset: resizeHandleSettings.offset }
-        // `chromeEl.getBoundingClientRect()` and `event.clientX/Y` are screen
+        // The surface rect and event coordinates are screen
         // pixels, but resize handle sizing is computed in world units because
         // the completed-video chrome is inside the viewport-transformed overlay.
         // Convert the handle hit radius back to screen pixels before comparing.
@@ -1167,34 +1176,43 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return null
     }
 
-    // The video controls chrome spans the whole node so hover is reliable over
-    // the visible video surface. Controls capture their own events; the remaining
-    // chrome surface mirrors the node drag/click hit target.
+    // The video chrome keeps the visible video surface node-sized, then mounts
+    // the controls as a separate row below it. Only the surface mirrors node
+    // drag/click/resize; individual control hit areas stop their own events.
     function applyVideoControlsGeometry(
         chromeEl: HTMLElement,
         position: { x: number; y: number },
         dimensions: { width: number; height: number }
     ): void {
+        const controlsTop = dimensions.height + VIDEO_CONTROLS_BOTTOM_INSET
         applyStyle(chromeEl, {
             left: `${position.x}px`,
             top: `${position.y}px`,
             width: `${dimensions.width}px`,
-            height: `${dimensions.height}px`,
+            height: `${controlsTop + VIDEO_CONTROLS_HEIGHT}px`,
         })
+
+        const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLElement | null
+        if (surface) {
+            applyStyle(surface, {
+                width: `${dimensions.width}px`,
+                height: `${dimensions.height}px`,
+            })
+        }
 
         const { insetX, width } = getVideoControlsChromeLayout(dimensions.width)
         const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLElement | null
         if (host) {
             applyStyle(host, {
                 left: `${insetX}px`,
-                bottom: `${VIDEO_CONTROLS_BOTTOM_INSET}px`,
+                top: `${controlsTop}px`,
                 width: `${width}px`,
                 height: `${VIDEO_CONTROLS_HEIGHT}px`,
             })
         }
 
-        // The controls host is bottom-pinned inside the node-sized chrome. Keep
-        // the SVG viewBox synced to the pill width at any zoom/resize.
+        // The controls host is a separate below-node row. Keep the SVG viewBox
+        // synced to the pill width at any zoom/resize.
         const svg = chromeEl.querySelector('.workspace-video-controls-svg') as SVGSVGElement | null
         svg?.setAttribute('viewBox', `0 0 ${width} ${VIDEO_CONTROLS_HEIGHT}`)
         svg?.setAttribute('height', String(VIDEO_CONTROLS_HEIGHT))
@@ -1209,7 +1227,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewport: Viewport,
     ): void {
         const chromeEl = generatedMediaChromeLayerEl?.querySelector(`[data-media-chrome-node-id="${nodeId}"]`) as HTMLElement | null
-        if (chromeEl) applyGeneratedMediaChromeGeometry(chromeEl, position, dimensions, viewport)
+        const videoControlsOffsetScreen = getVideoControlsOutsideOffsetScreen(nodeId, viewport)
+        if (chromeEl) applyGeneratedMediaChromeGeometry(chromeEl, position, dimensions, viewport, videoControlsOffsetScreen)
         updateGeneratedMediaInfoPanelPosition(nodeId, position, dimensions, viewport)
         const videoChromeEl = mediaChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions)
@@ -1402,7 +1421,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!paneEl.contains(target)) return false
         if (target.closest('.canvas-generated-media-info-panel')) return false
         if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node')) return false
-        if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu')) return false
+        if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu, .workspace-video-controls-host')) return false
         return true
     }
 
@@ -1691,7 +1710,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             </div>
         ` as HTMLElement
 
-        applyGeneratedMediaChromeGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions, getLiveViewport())
+        const viewport = getLiveViewport()
+        applyGeneratedMediaChromeGeometry(
+            chromeEl,
+            getNodeWorldPosition(node),
+            node.dimensions,
+            viewport,
+            getVideoControlsOutsideOffsetScreen(node.nodeId, viewport),
+        )
         return chromeEl
     }
 
@@ -1713,17 +1739,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): void {
         const panel = generatedMediaInfoPanelLayerEl?.querySelector(`[data-media-info-panel-node-id="${nodeId}"]`) as HTMLElement | null
         if (!panel) return
-        applyGeneratedMediaInfoPanelGeometry(panel, position, dimensions, viewport)
+        applyGeneratedMediaInfoPanelGeometry(
+            panel,
+            position,
+            dimensions,
+            viewport,
+            getVideoControlsOutsideOffsetScreen(nodeId, viewport),
+        )
     }
 
-    // Video chrome for completed video nodes: the actual <video> shown on the node
-    // PLUS the SVG control bar, both in the transform-synced chrome layer (above
-    // the PIXI poster). The element MUST be visibly composited — the browser
+    // Video chrome for completed video nodes: the actual <video> shown on the
+    // node plus an external SVG control bar below it, both in the transform-
+    // synced chrome layer. The element MUST be visibly composited — the browser
     // throttles frame production for a <video> it isn't rendering, so sampling a
-    // hidden element into a PIXI texture renders blank on play (it only decodes
-    // when made visible, e.g. fullscreen). Showing the real element is what makes
-    // playback and fullscreen work; the opaque surface covers the redundant
-    // PIXI sprite behind it.
+    // hidden element into a PIXI texture renders blank on play. Showing the real
+    // element is what makes playback and fullscreen work; the opaque surface
+    // covers the redundant PIXI sprite behind it.
     function createVideoControlsChrome(node: VideoCanvasNode): HTMLElement | null {
         const videoEl = videoNodeHandler?.getVideoElement(node.nodeId)
         if (!videoEl) return null
@@ -1731,10 +1762,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const { insetX, width: controlsWidth } = getVideoControlsChromeLayout(node.dimensions.width)
         const controlsStyles = settings.videoControls.styles
+        const controlsTop = node.dimensions.height + VIDEO_CONTROLS_BOTTOM_INSET
         const controlsHostStyle = {
             position: 'absolute' as const,
             left: `${insetX}px`,
-            bottom: `${VIDEO_CONTROLS_BOTTOM_INSET}px`,
+            top: `${controlsTop}px`,
             width: `${controlsWidth}px`,
             height: `${VIDEO_CONTROLS_HEIGHT}px`,
             borderRadius: controlsStyles.hostBorderRadius,
@@ -1743,9 +1775,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             webkitBackdropFilter: controlsStyles.hostBackdropFilter,
         }
         const chromeEl = html`
-            <div className="workspace-video-chrome nopan" data=${{ videoChromeNodeId: node.nodeId }}>
+            <div className="workspace-video-chrome" data=${{ videoChromeNodeId: node.nodeId }}>
                 <div className="workspace-video-surface"></div>
-                <div className="workspace-video-controls-host nopan" style=${controlsHostStyle}></div>
+                <div className="workspace-video-controls-host" style=${controlsHostStyle}></div>
             </div>
         ` as HTMLElement
 
@@ -1754,12 +1786,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLDivElement
         surface.appendChild(videoEl)
 
-        const isControlsEvent = (event: Event): boolean => {
-            const target = event.target as HTMLElement | null
-            return Boolean(target?.closest('.workspace-video-controls-host'))
-        }
         const togglePlayback = (event: Event) => {
-            if (isControlsEvent(event)) return
             event.preventDefault()
             event.stopPropagation()
             if (videoNodeHandler?.hasEntry(node.nodeId)) {
@@ -1767,19 +1794,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        chromeEl.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
-        chromeEl.addEventListener('mousemove', (event: MouseEvent) => {
-            showVideoControls(node.nodeId)
-            if (isControlsEvent(event)) return
+        surface.addEventListener('mousemove', (event: MouseEvent) => {
             const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
-            chromeEl.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : ''
+            surface.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : ''
         })
-        chromeEl.addEventListener('mouseleave', () => {
-            chromeEl.style.cursor = ''
-            hideVideoControls(node.nodeId)
+        surface.addEventListener('mouseleave', () => {
+            surface.style.cursor = ''
         })
-        chromeEl.addEventListener('mousedown', (event: MouseEvent) => {
-            if (isControlsEvent(event)) return
+        surface.addEventListener('mousedown', (event: MouseEvent) => {
             const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
             if (resizeHandle) {
                 handleResizeStart(event, node.nodeId, resizeHandle)
@@ -1787,13 +1809,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             handleDragStart(event, node.nodeId)
         })
-        chromeEl.addEventListener('dblclick', togglePlayback)
+        surface.addEventListener('dblclick', togglePlayback)
 
-        // Controls auto-hide: revealed on hover of the node chrome or bar.
         const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLDivElement
         applyVideoControlsHostStyleProperties(host)
-        host.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
-        host.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
 
         const svg = select(host)
             .append('svg')
@@ -1819,8 +1838,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function destroyVideoControlInstances(): void {
-        for (const timer of videoControlsHideTimers.values()) clearTimeout(timer)
-        videoControlsHideTimers.clear()
         for (const controls of videoControlInstances.values()) {
             controls.destroy()
         }
@@ -1851,37 +1868,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    // Show/hide the auto-hiding control bar for a video node. The hide is debounced
-    // so moving between the visible video surface and the bar doesn't flicker the
-    // controls off.
-    function showVideoControls(nodeId: string): void {
-        const pending = videoControlsHideTimers.get(nodeId)
-        if (pending !== undefined) {
-            clearTimeout(pending)
-            videoControlsHideTimers.delete(nodeId)
-        }
-        mediaChromeViewportEl
-            ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
-            ?.classList.add('is-visible')
-    }
-
-    function hideVideoControls(nodeId: string): void {
-        const pending = videoControlsHideTimers.get(nodeId)
-        if (pending !== undefined) clearTimeout(pending)
-        const timer = window.setTimeout(() => {
-            videoControlsHideTimers.delete(nodeId)
-            mediaChromeViewportEl
-                ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
-                ?.classList.remove('is-visible')
-        }, 140)
-        videoControlsHideTimers.set(nodeId, timer)
-    }
-
     function syncGeneratedMediaChrome(canvasState: CanvasState | null = currentCanvasState): void {
         if (!mediaChromeViewportEl || !generatedMediaChromeLayerEl) return
         // Generated/uploaded media (image OR video) carrying generation metadata
         // or a descriptor gets the below-node provenance chrome (info button +
-        // panel + analyzing pulse) — placed identically for both media types.
+        // panel + analyzing pulse). Video info chrome reserves space for the
+        // external playback-control row.
         const mediaInfoNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
@@ -1894,8 +1886,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         destroyGeneratedMediaInfoRenderers()
         destroyVideoControlInstances()
 
-        // Completed video nodes (those with a stored MP4 src) get the shared SVG
-        // control bar in the same chrome layer.
+        // Completed video nodes (those with a stored MP4 src) get the visible
+        // video surface plus the external shared SVG control bar in the chrome layer.
         const playableVideoNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is VideoCanvasNode => node.type === 'video' && Boolean((node as VideoCanvasNode).src))
         const videoChromeEls = playableVideoNodes
@@ -2612,6 +2604,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             '.node-drag-overlay',
             '.bubble-menu',
             '.workspace-generated-media-chrome',
+            '.workspace-video-controls-host',
             '.workspace-branch-origin-info-chrome',
             '.workspace-branch-fork-info-chrome',
             '.canvas-generated-media-info-panel',
@@ -7377,11 +7370,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             { fileId: node.fileId }
         )
         dragOverlay.className = 'video-drag-overlay nopan'
-
-        // Fallback reveal while the pointer is over the node shell. Completed
-        // videos normally use the chrome-layer hit target above the visible video.
-        dragOverlay.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
-        dragOverlay.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
 
         const togglePlayback = (event: Event) => {
             event.stopPropagation()

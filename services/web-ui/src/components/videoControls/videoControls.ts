@@ -7,7 +7,6 @@ import {
     videoFullscreenExitGlyphIcon,
     videoPauseGlyphIcon,
     videoPlayGlyphIcon,
-    videoSpeedGlyphIcon,
     videoVolumeHighGlyphIcon,
     videoVolumeMutedGlyphIcon,
 } from '$src/svgIcons/index.ts'
@@ -149,6 +148,15 @@ function roundedRectRadius(configuredRadius: number, height: number): number {
     return Math.max(0, Math.min(configuredRadius, height / 2))
 }
 
+function stopControlPointerStart(event: Event): void {
+    event.preventDefault()
+    event.stopPropagation()
+}
+
+function stopControlPointerPropagation(event: Event): void {
+    event.stopPropagation()
+}
+
 function bindButtonAction(button: ButtonControl, action: (event: Event) => void): void {
     const run = (event: Event) => {
         event.preventDefault()
@@ -156,14 +164,19 @@ function bindButtonAction(button: ButtonControl, action: (event: Event) => void)
         action(event)
     }
 
-    button.group
+    button.hit
+        .on('pointerdown', stopControlPointerPropagation)
+        .on('mousedown', stopControlPointerPropagation)
         .on('click', run)
+        .on('dblclick', stopControlPointerPropagation)
+        .on('mouseenter', () => button.hit.attr('fill', settings.videoControls.styles.buttonHover))
+        .on('mouseleave', () => button.hit.attr('fill', 'transparent'))
+
+    button.group
         .on('keydown', (event: KeyboardEvent) => {
             if (event.key !== 'Enter' && event.key !== ' ') return
             run(event)
         })
-        .on('mouseenter', () => button.hit.attr('fill', settings.videoControls.styles.buttonHover))
-        .on('mouseleave', () => button.hit.attr('fill', 'transparent'))
 }
 
 function bufferedEnd(videoEl: HTMLVideoElement): number {
@@ -229,7 +242,6 @@ class VideoControls implements VideoControlsInstance {
     private readonly seekHandle: any
     private readonly seekHit: any
     private readonly speedGroup: any
-    private readonly speedIcon: any
     private readonly speedText: any
     private readonly speedRail: any
     private readonly speedProgress: any
@@ -267,6 +279,7 @@ class VideoControls implements VideoControlsInstance {
             .attr('class', `video-controls-group ${className}`)
             .attr('transform', `translate(${this.x}, ${this.y})`)
             .attr('data-video-controls-id', this.id)
+            .attr('pointer-events', 'none')
             .style('cursor', 'default')
 
         this.defs = this.group.append('defs')
@@ -295,6 +308,7 @@ class VideoControls implements VideoControlsInstance {
             .attr('stroke-width', styles.backgroundStrokeWidth)
             .attr('clip-path', `url(#${this.glassClipId})`)
             .attr('filter', styles.liquidGlassFilter.displacementScale > 0 ? `url(#${this.glassFilterId})` : null)
+            .attr('pointer-events', 'none')
 
         const highlightHeight = Math.max(0, this.height - layout.backgroundHighlightInset * 2)
         this.backgroundHighlight = this.group.append('rect')
@@ -366,10 +380,11 @@ class VideoControls implements VideoControlsInstance {
             .attr('fill', styles.progress)
 
         this.seekHit = this.seekGroup.append('rect')
-            .attr('class', 'video-controls-seek-hit')
+            .attr('class', 'video-controls-seek-hit nopan')
             .attr('y', 0)
             .attr('height', this.height)
             .attr('fill', 'transparent')
+            .attr('pointer-events', 'auto')
 
         this.speedGroup = this.group.append('g')
             .attr('class', 'video-controls-speed')
@@ -380,25 +395,15 @@ class VideoControls implements VideoControlsInstance {
             .attr('aria-valuemax', speed.maxRate)
             .style('cursor', 'pointer')
 
-        const speedIconY = this.buttonY + (layout.buttonSize - layout.speedIconSize) / 2
-        const speedIconScale = layout.speedIconSize / 24
-        const speedIconTransform = `translate(0, ${speedIconY}) scale(${speedIconScale})`
-        this.speedIcon = this.speedGroup.append('g')
-            .attr('class', 'video-controls-speed-icon')
-            .attr('aria-hidden', 'true')
-            .attr('pointer-events', 'none')
-            .attr('transform', speedIconTransform)
-        setIconPaths(this.speedIcon, videoSpeedGlyphIcon)
-
         this.speedText = this.speedGroup.append('text')
             .attr('class', 'video-controls-speed-text')
-            .attr('x', 0)
-            .attr('y', this.scrubberY - layout.speedValueLabelOffset)
+            .attr('x', layout.speedValueWidth / 2)
+            .attr('y', this.height / 2)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
-            .attr('font-size', typography.speedFontSize)
-            .attr('font-weight', typography.speedFontWeight)
-            .attr('fill', styles.speedValueLabel)
+            .attr('font-size', typography.timeFontSize)
+            .attr('font-weight', typography.timeFontWeight)
+            .attr('fill', styles.textSubtle)
             .attr('pointer-events', 'none')
 
         this.speedScale = this.speedGroup.append('g')
@@ -437,10 +442,11 @@ class VideoControls implements VideoControlsInstance {
             .attr('fill', styles.progress)
 
         this.speedHit = this.speedGroup.append('rect')
-            .attr('class', 'video-controls-speed-hit')
+            .attr('class', 'video-controls-speed-hit nopan')
             .attr('y', 0)
             .attr('height', this.height)
             .attr('fill', 'transparent')
+            .attr('pointer-events', 'auto')
 
         this.volumeGroup = this.group.append('g')
             .attr('class', 'video-controls-volume')
@@ -469,16 +475,18 @@ class VideoControls implements VideoControlsInstance {
             .attr('fill', styles.progress)
 
         this.volumeHit = this.volumeGroup.append('rect')
-            .attr('class', 'video-controls-volume-hit')
+            .attr('class', 'video-controls-volume-hit nopan')
             .attr('y', 0)
             .attr('height', this.height)
             .attr('fill', 'transparent')
+            .attr('pointer-events', 'auto')
 
         this.bindButtonActions()
         this.bindSpeedSlider()
         this.bindSeekDrag()
         this.bindPointerDrag(this.speedHit, this.setSpeedFromEvent)
         this.bindPointerDrag(this.volumeHit, this.setVolumeFromEvent)
+        this.volumeHit.on('dblclick', stopControlPointerStart)
         this.addMediaListeners()
         this.render()
     }
@@ -516,7 +524,6 @@ class VideoControls implements VideoControlsInstance {
         this.volumeHandle.attr('cx', this.volumeWidth * volume)
 
         this.speedText.text(formatRate(speed))
-            .attr('x', this.speedSliderX + this.speedSliderWidth * speedRatio)
         this.speedGroup
             .attr('aria-valuenow', speed)
             .attr('aria-valuetext', formatRate(speed))
@@ -586,7 +593,7 @@ class VideoControls implements VideoControlsInstance {
             .style('cursor', 'pointer')
 
         const hit = buttonGroup.append('rect')
-            .attr('class', `${className}-hit`)
+            .attr('class', `${className}-hit nopan`)
             .attr('x', 0)
             .attr('y', 0)
             .attr('width', layout.buttonSize)
@@ -594,6 +601,7 @@ class VideoControls implements VideoControlsInstance {
             .attr('rx', roundedRectRadius(layout.buttonRadius, layout.buttonSize))
             .attr('ry', roundedRectRadius(layout.buttonRadius, layout.buttonSize))
             .attr('fill', 'transparent')
+            .attr('pointer-events', 'auto')
 
         const icon = buttonGroup.append('g')
             .attr('class', `${className}-icon`)
@@ -623,8 +631,8 @@ class VideoControls implements VideoControlsInstance {
             ? layout.speedSliderWidth
             : layout.compactSpeedSliderWidth
         const speedSliderWidth = Math.max(layout.speedSliderMinWidth, speedSliderTargetWidth)
-        const speedSliderInset = layout.speedIconSize + layout.speedIconSliderGap + layout.speedValueLabelEdgeInset
-        const speedControlWidth = speedSliderInset + speedSliderWidth + layout.speedValueLabelEdgeInset
+        const speedSliderInset = layout.speedValueWidth + layout.speedValueSliderGap
+        const speedControlWidth = speedSliderInset + speedSliderWidth
 
         this.background
             .attr('width', this.width)
@@ -786,64 +794,67 @@ class VideoControls implements VideoControlsInstance {
     }
 
     private bindPointerDrag(hit: any, applyValue: (event: PointerEvent) => void): void {
-        hit.on('pointerdown', (event: PointerEvent) => {
-            event.preventDefault()
-            event.stopPropagation()
-            this.activePointerCleanup?.()
-            applyValue(event)
+        hit
+            .on('pointerdown', (event: PointerEvent) => {
+                stopControlPointerStart(event)
+                this.activePointerCleanup?.()
+                applyValue(event)
 
-            const move = (moveEvent: PointerEvent) => applyValue(moveEvent)
-            const up = () => {
-                window.removeEventListener('pointermove', move)
-                window.removeEventListener('pointerup', up)
-                this.activePointerCleanup = null
-            }
+                const move = (moveEvent: PointerEvent) => applyValue(moveEvent)
+                const up = () => {
+                    window.removeEventListener('pointermove', move)
+                    window.removeEventListener('pointerup', up)
+                    this.activePointerCleanup = null
+                }
 
-            window.addEventListener('pointermove', move)
-            window.addEventListener('pointerup', up)
-            this.activePointerCleanup = up
-        })
+                window.addEventListener('pointermove', move)
+                window.addEventListener('pointerup', up)
+                this.activePointerCleanup = up
+            })
+            .on('mousedown', stopControlPointerStart)
     }
 
     private bindSeekDrag(): void {
-        this.seekHit.on('pointerdown', (event: PointerEvent) => {
-            event.preventDefault()
-            event.stopPropagation()
-            if (!isFiniteDuration(this.videoEl)) return
+        this.seekHit
+            .on('pointerdown', (event: PointerEvent) => {
+                stopControlPointerStart(event)
+                if (!isFiniteDuration(this.videoEl)) return
 
-            this.activePointerCleanup?.()
-            this.scrubDragActive = true
-            this.scrubResumeOnRelease = !this.videoEl.paused
-            if (this.scrubResumeOnRelease) this.videoEl.pause()
-            this.setVideoTimeFromEvent(event)
+                this.activePointerCleanup?.()
+                this.scrubDragActive = true
+                this.scrubResumeOnRelease = !this.videoEl.paused
+                if (this.scrubResumeOnRelease) this.videoEl.pause()
+                this.setVideoTimeFromEvent(event)
 
-            const move = (moveEvent: PointerEvent) => {
-                moveEvent.preventDefault()
-                moveEvent.stopPropagation()
-                this.setVideoTimeFromEvent(moveEvent)
-            }
-            const removeListeners = () => {
-                window.removeEventListener('pointermove', move)
-                window.removeEventListener('pointerup', up)
-                window.removeEventListener('pointercancel', cancel)
-                this.activePointerCleanup = null
-            }
-            const finish = () => {
-                removeListeners()
-                this.scrubDragActive = false
-                this.cancelScrubSeek()
-                this.applyScrubSeekTarget()
-                this.cancelScrubSeek()
-                this.finishScrubAfterSeek()
-            }
-            const up = () => finish()
-            const cancel = () => finish()
+                const move = (moveEvent: PointerEvent) => {
+                    moveEvent.preventDefault()
+                    moveEvent.stopPropagation()
+                    this.setVideoTimeFromEvent(moveEvent)
+                }
+                const removeListeners = () => {
+                    window.removeEventListener('pointermove', move)
+                    window.removeEventListener('pointerup', up)
+                    window.removeEventListener('pointercancel', cancel)
+                    this.activePointerCleanup = null
+                }
+                const finish = () => {
+                    removeListeners()
+                    this.scrubDragActive = false
+                    this.cancelScrubSeek()
+                    this.applyScrubSeekTarget()
+                    this.cancelScrubSeek()
+                    this.finishScrubAfterSeek()
+                }
+                const up = () => finish()
+                const cancel = () => finish()
 
-            window.addEventListener('pointermove', move)
-            window.addEventListener('pointerup', up)
-            window.addEventListener('pointercancel', cancel)
-            this.activePointerCleanup = finish
-        })
+                window.addEventListener('pointermove', move)
+                window.addEventListener('pointerup', up)
+                window.addEventListener('pointercancel', cancel)
+                this.activePointerCleanup = finish
+            })
+            .on('mousedown', stopControlPointerStart)
+            .on('dblclick', stopControlPointerStart)
     }
 
     private queueScrubSeek(targetTime: number): void {

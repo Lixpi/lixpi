@@ -394,16 +394,17 @@
 
 .workspace-video-chrome {
     position: absolute;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 .workspace-video-surface {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
     overflow: hidden;
     border-radius: var(--workspace-image-border-radius);
     background: #1c1c1c;
-    pointer-events: none;
+    pointer-events: auto;
 
     video {
         width: 100%;
@@ -414,22 +415,18 @@
 }
 
 .workspace-video-controls-host {
-    opacity: 0;
-    pointer-events: auto;
+    opacity: 1;
+    pointer-events: none;
     border-radius: var(--video-controls-host-border-radius, 18px);
     filter: var(--video-controls-host-drop-shadow, drop-shadow(0 12px 30px rgba(0, 0, 0, 0.30)));
     backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
     -webkit-backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
-    transition: opacity 0.15s ease;
-
-    &.is-visible {
-        opacity: 1;
-    }
 }
 
 .workspace-video-controls-svg {
     display: block;
     overflow: visible;
+    pointer-events: none;
 }
 
 .workspace-generated-media-actions {
