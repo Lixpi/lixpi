@@ -53,7 +53,7 @@ import {
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon, branchForkfIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, branchMidIcon, branchForkfIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
@@ -126,12 +126,17 @@ import {
     buildAiPromptDraftAttrsFromSubmitData,
     buildAiPromptDraftFromText,
 } from '$src/infographics/workspace/aiPromptDraft.ts'
-import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 import {
     createSlidingTabsSwitch,
     type SlidingTabsSwitchInstance,
 } from '$src/components/slidingTabsSwitch/index.ts'
-import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
+import {
+    createContextPreviewTile,
+    getContextPreviewAccessibleLabel,
+    type ContextPreviewEnvironment,
+    type ContextPreviewTileInstance,
+} from '$src/components/contextPreview/index.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
@@ -158,23 +163,6 @@ type GeneratedMediaInfoPanelOptions = {
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
-const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
-    '--workspace-ai-chat-panel-context-preview-tooltip-background',
-    '--workspace-ai-chat-panel-context-preview-tooltip-border',
-    '--workspace-ai-chat-panel-context-preview-tooltip-border-radius',
-    '--workspace-ai-chat-panel-context-preview-tooltip-box-shadow',
-    '--workspace-ai-chat-panel-context-preview-tooltip-color',
-    '--workspace-ai-chat-panel-context-preview-border-radius',
-    '--workspace-ai-chat-panel-context-preview-video-background',
-    '--workspace-ai-chat-panel-context-preview-video-glyph-background',
-    '--workspace-ai-chat-panel-context-preview-video-glyph-color',
-    '--workspace-ai-chat-panel-context-preview-document-color',
-    '--workspace-ai-chat-panel-context-preview-document-icon-color',
-    '--workspace-ai-chat-panel-context-preview-document-text-color',
-    '--workspace-ai-chat-panel-context-preview-popover-title-color',
-    '--workspace-ai-chat-panel-context-preview-popover-text-color',
-]
-
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
     return { width: size, height: size }
@@ -388,12 +376,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
     const expandedBranchForkInfoNodeIds: Set<string> = new Set()
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
+    const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
     const videoControlsHideTimers: Map<string, number> = new Map()
-    const VIDEO_CONTROLS_HEIGHT = 52
-    const VIDEO_CONTROLS_HORIZONTAL_INSET = 18
-    const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = 8
-    const VIDEO_CONTROLS_BOTTOM_INSET = 14
+    const VIDEO_CONTROLS_HEIGHT = settings.videoControls.height
+    const VIDEO_CONTROLS_HORIZONTAL_INSET = settings.videoControls.canvas.horizontalInset
+    const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = settings.videoControls.canvas.compactHorizontalInset
+    const VIDEO_CONTROLS_COMPACT_WIDTH_THRESHOLD = settings.videoControls.canvas.compactWidthThreshold
+    const VIDEO_CONTROLS_BOTTOM_INSET = settings.videoControls.canvas.bottomInset
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     let selectionRectEl: HTMLDivElement | null = null
@@ -423,7 +413,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPromptResizeObserver: ResizeObserver | null = null
     let activeAiChatPanelRailHeightFrame: number | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
-    const activeContextPreviewTooltips: Set<HelpTooltipInstance> = new Set()
+    const activeContextPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     const mediaLibraryService = new MediaLibraryService()
@@ -1143,7 +1133,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function getVideoControlsChromeLayout(nodeWidth: number): { insetX: number; width: number } {
-        const insetX = nodeWidth >= 260 ? VIDEO_CONTROLS_HORIZONTAL_INSET : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
+        const insetX = nodeWidth >= VIDEO_CONTROLS_COMPACT_WIDTH_THRESHOLD ? VIDEO_CONTROLS_HORIZONTAL_INSET : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
         return {
             insetX,
             width: Math.max(1, nodeWidth - insetX * 2),
@@ -1343,6 +1333,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 fallback: {
                     threadId: generatedBy.aiChatThreadId,
                     promptText: generatedBy.promptText,
+                    referenceNodeIds: generatedBy.referenceImageNodeIds,
                     responseText: generatedBy.revisedPrompt,
                     responseProvider: modelName,
                     generatedAt: generatedBy.createdAt,
@@ -1362,6 +1353,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     content: projection.content,
                     threadId: projection.threadId,
                     className: 'canvas-generated-media-projection-editor',
+                    contextPreview: getAiUserMessageContextPreviewRenderer(),
                     traceDetailsOptions: {
                         className: 'canvas-generated-media-trace-details',
                         renderReferencesWhenClosed: true,
@@ -1458,16 +1450,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedMediaChrome(currentCanvasState)
     }
 
-    function createBranchOriginReferenceLabel(nodeId: string): string {
-        const node = findCanvasNodeById(nodeId)
-        if (!node) return nodeId
-        if (node.type === 'image') return node.descriptor?.summary || `Image ${nodeId}`
-        if (node.type === 'video') return node.descriptor?.summary || `Video ${nodeId}`
-        if (node.type === 'document') return `Document ${nodeId}`
-        if (node.type === 'aiChatThread') return `Thread ${node.referenceId}`
-        return nodeId
-    }
-
     function createBranchOriginReferencesSection(referenceNodeIds: string[]): HTMLElement {
         const section = html`
             <div className="canvas-branch-origin-provenance-section">
@@ -1480,14 +1462,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return section
         }
 
-        const list = html`<ul className="canvas-branch-origin-reference-list"></ul>` as HTMLUListElement
+        const list = html`<div className="canvas-branch-origin-reference-preview-list"></div>` as HTMLElement
+        const environment = getContextPreviewEnvironment()
         for (const nodeId of uniqueReferenceNodeIds) {
-            list.appendChild(html`
-                <li className="canvas-branch-origin-reference-item">
-                    <span className="canvas-branch-origin-reference-id">${nodeId}</span>
-                    <span className="canvas-branch-origin-reference-label">${createBranchOriginReferenceLabel(nodeId)}</span>
-                </li>
-            ` as HTMLLIElement)
+            const node = findCanvasNodeById(nodeId)
+            if (!node) continue
+            const tile = createContextPreviewTile({
+                node,
+                environment,
+                preferredPlacement: 'bottom',
+            })
+            generatedMediaInfoPreviewTiles.add(tile)
+            list.appendChild(tile.dom)
+        }
+        if (!list.childElementCount) {
+            section.appendChild(html`<p className="canvas-generated-media-info-empty">Provided references are no longer on this canvas.</p>` as HTMLElement)
+            return section
         }
         section.appendChild(list)
         return section
@@ -1518,12 +1508,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
         const generatedMediaNodes = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)
         const promptText = branchOriginNode.provenance?.promptText ?? ''
-        const referenceNodeIds = branchOriginNode.provenance?.referenceNodeIds ?? []
+        const referenceNodeIds = branchOriginNode.provenance?.providedReferenceNodeIds
+            ?? branchOriginNode.provenance?.referenceNodeIds
+            ?? []
         if (!promptText && referenceNodeIds.length === 0 && generatedMediaNodes.length === 0) return null
 
         const panel = html`<div className="canvas-generated-media-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
         const promptProjection = buildBranchOriginPromptProjection(promptText, {
             threadId: `branch-origin:${branchOriginNode.nodeId}`,
+            referenceNodeIds,
         })
         if (promptProjection) {
             const rendererKey = `branch-origin:${branchOriginNode.nodeId}`
@@ -1535,6 +1528,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 content: promptProjection.content,
                 threadId: promptProjection.threadId,
                 className: 'canvas-generated-media-projection-editor',
+                contextPreview: getAiUserMessageContextPreviewRenderer(),
             }))
         }
         panel.appendChild(createBranchOriginReferencesSection(referenceNodeIds))
@@ -1728,7 +1722,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // throttles frame production for a <video> it isn't rendering, so sampling a
     // hidden element into a PIXI texture renders blank on play (it only decodes
     // when made visible, e.g. fullscreen). Showing the real element is what makes
-    // playback, PiP and fullscreen work; the opaque surface covers the redundant
+    // playback and fullscreen work; the opaque surface covers the redundant
     // PIXI sprite behind it.
     function createVideoControlsChrome(node: VideoCanvasNode): HTMLElement | null {
         const videoEl = videoNodeHandler?.getVideoElement(node.nodeId)
@@ -1736,12 +1730,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!videoEl.currentSrc && !videoEl.src) return null
 
         const { insetX, width: controlsWidth } = getVideoControlsChromeLayout(node.dimensions.width)
+        const controlsStyles = settings.videoControls.styles
         const controlsHostStyle = {
             position: 'absolute' as const,
             left: `${insetX}px`,
             bottom: `${VIDEO_CONTROLS_BOTTOM_INSET}px`,
             width: `${controlsWidth}px`,
             height: `${VIDEO_CONTROLS_HEIGHT}px`,
+            borderRadius: controlsStyles.hostBorderRadius,
+            filter: controlsStyles.hostDropShadow,
+            backdropFilter: controlsStyles.hostBackdropFilter,
+            webkitBackdropFilter: controlsStyles.hostBackdropFilter,
         }
         const chromeEl = html`
             <div className="workspace-video-chrome nopan" data=${{ videoChromeNodeId: node.nodeId }}>
@@ -1792,6 +1791,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         // Controls auto-hide: revealed on hover of the node chrome or bar.
         const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLDivElement
+        applyVideoControlsHostStyleProperties(host)
         host.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
         host.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
 
@@ -1837,6 +1837,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             renderer.destroy()
         }
         generatedMediaInfoRenderers.clear()
+        for (const tile of generatedMediaInfoPreviewTiles) {
+            tile.destroy()
+        }
+        generatedMediaInfoPreviewTiles.clear()
     }
 
     function scheduleGeneratedMediaChromeSync(): void {
@@ -3048,7 +3052,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeAiChatPanelRailHeightFrame = null
         }
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
-        destroyContextPreviewTooltips()
+        destroyContextPreviewTiles()
         activeAiChatPanelEl?.remove()
         activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
@@ -3132,249 +3136,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasMetadataState(persistedState)
     }
 
-    // A short visible label for context metadata. Media previews are already
-    // visual, so unresolved image/video descriptors stay label-free.
-    function getContextChipLabel(node: CanvasNode): string {
-        const descriptor = isDescriptorCanvasNode(node) ? node.descriptor : undefined
-        const summary = descriptor && descriptor.status === 'ready' ? descriptor.summary : ''
-        const trimmed = summary.trim()
-        if (trimmed) return trimmed
-        switch (node.type) {
-            case 'document': return 'Document'
-            case 'aiChatThread': return 'Chat'
-            case 'image':
-            case 'video': return ''
-            default: return node.type
+    function getContextPreviewEnvironment(): ContextPreviewEnvironment {
+        return {
+            getDocuments: () => currentDocuments,
+            getThreads: () => currentAiChatThreads,
+            getApiBaseUrl: () => import.meta.env.VITE_API_URL || '',
+            getAuthToken: () => AuthService.getTokenSilently(),
         }
     }
 
-    function getContextPreviewTitle(node: CanvasNode): string {
-        if (node.type === 'document') {
-            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
-            const title = document?.title?.trim()
-            if (title) return title
-        }
-        if (node.type === 'aiChatThread') {
-            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
-            const title = thread?.title?.trim()
-            if (title) return title
-        }
-        if (node.type === 'image' || node.type === 'video') return ''
-        return getContextChipLabel(node)
-    }
-
-    function getContextPreviewText(node: CanvasNode): string {
-        const descriptor = isDescriptorCanvasNode(node) && node.descriptor?.status === 'ready'
-            ? node.descriptor.summary.trim()
-            : ''
-        if (descriptor) return descriptor
-
-        if (node.type === 'document') {
-            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
-            const { text } = extractContentFromProseMirror((document?.content ?? '') as string | object)
-            return text.trim()
-        }
-
-        if (node.type === 'aiChatThread') {
-            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
-            const { text } = extractContentFromProseMirror((thread?.content ?? '') as string | object)
-            return text.trim()
-        }
-
-        return ''
-    }
-
-    function getContextPreviewTypeLabel(node: CanvasNode): string {
-        switch (node.type) {
-            case 'document': return 'Document'
-            case 'image': return 'Image'
-            case 'video': return 'Video'
-            case 'aiChatThread': return 'Chat'
-            default: return node.type
+    function getAiUserMessageContextPreviewRenderer() {
+        return {
+            getNodeById: (nodeId: string) => findCanvasNodeById(nodeId),
+            environment: getContextPreviewEnvironment(),
         }
     }
 
-    function buildContextPreviewInitialMediaSrc(mediaUrl: string): string {
-        if (!mediaUrl) return ''
-        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
-        if (mediaUrl.startsWith('/api/') || mediaUrl.startsWith('http')) return mediaUrl
-        return `data:image/png;base64,${mediaUrl}`
-    }
-
-    function setContextPreviewMediaTokenParam(mediaUrl: string, token: string): string {
-        if (!token) return mediaUrl
-        const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(mediaUrl)
-        try {
-            const url = isAbsoluteUrl ? new URL(mediaUrl) : new URL(mediaUrl, window.location.origin)
-            url.searchParams.set('token', token)
-            if (isAbsoluteUrl) return url.toString()
-            return `${url.pathname}${url.search}${url.hash}`
-        } catch {
-            const separator = mediaUrl.includes('?') ? '&' : '?'
-            return `${mediaUrl}${separator}token=${encodeURIComponent(token)}`
+    function destroyContextPreviewTiles(): void {
+        for (const tile of activeContextPreviewTiles) {
+            tile.destroy()
         }
-    }
-
-    async function buildContextPreviewAuthenticatedMediaSrc(mediaUrl: string): Promise<string> {
-        if (!mediaUrl) return ''
-        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
-        if (mediaUrl.startsWith('/api/')) {
-            const token = await AuthService.getTokenSilently()
-            const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
-            const sourceUrl = apiBaseUrl ? `${apiBaseUrl}${mediaUrl}` : mediaUrl
-            return setContextPreviewMediaTokenParam(sourceUrl, token)
-        }
-        if (mediaUrl.startsWith('http')) {
-            if (mediaUrl.includes('/api/videos/') || mediaUrl.includes('/api/images/')) {
-                const token = await AuthService.getTokenSilently()
-                return setContextPreviewMediaTokenParam(mediaUrl, token)
-            }
-            return mediaUrl
-        }
-        return `data:image/png;base64,${mediaUrl}`
-    }
-
-    function hydrateContextPreviewMedia(el: HTMLImageElement | HTMLVideoElement, mediaUrl: string, attr: 'src' | 'poster' = 'src'): void {
-        if (!mediaUrl) return
-        void (async () => {
-            try {
-                const src = await buildContextPreviewAuthenticatedMediaSrc(mediaUrl)
-                if (!src || !el.isConnected) return
-                if (attr === 'poster' && el instanceof HTMLVideoElement) {
-                    el.poster = src
-                    return
-                }
-                el.src = src
-            } catch (error) {
-                console.warn('Failed to resolve context preview media URL:', error)
-            }
-        })()
-    }
-
-    function setContextPreviewVideoSources(videoEl: HTMLVideoElement, node: VideoCanvasNode): void {
-        const initialSrc = buildContextPreviewInitialMediaSrc(node.src)
-        const initialPoster = buildContextPreviewInitialMediaSrc(node.posterSrc)
-        if (initialSrc) videoEl.src = initialSrc
-        if (initialPoster) videoEl.poster = initialPoster
-        hydrateContextPreviewMedia(videoEl, node.src)
-        hydrateContextPreviewMedia(videoEl, node.posterSrc, 'poster')
-    }
-
-    function renderContextImagePreview(node: ImageCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
-        const imageEl = html`<img
-            className=${`workspace-ai-chat-panel-context-preview-image workspace-ai-chat-panel-context-preview-image-${size}`}
-            src=${buildImageSrc(node.src, '', false)}
-            alt=""
-            loading="lazy"
-        />` as HTMLImageElement
-        imageEl.setAttribute('aria-label', label)
-        hydrateContextPreviewMedia(imageEl, node.src)
-        return imageEl
-    }
-
-    function renderContextVideoPreview(node: VideoCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
-        if (size === 'large') {
-            const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-large">
-                <video
-                    muted="true"
-                    playsinline="true"
-                    preload="metadata"
-                    controls="true"
-                    aria-label=${label}
-                ></video>
-                <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
-            </div>` as HTMLElement
-            const videoEl = previewEl.querySelector('video')
-            if (videoEl) setContextPreviewVideoSources(videoEl, node)
-            return previewEl
-        }
-
-        const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-mini">
-            <video
-                muted="true"
-                playsinline="true"
-                preload="metadata"
-                aria-label=${label}
-            ></video>
-            <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
-        </div>` as HTMLElement
-        const videoEl = previewEl.querySelector('video')
-        if (videoEl) setContextPreviewVideoSources(videoEl, node)
-        return previewEl
-    }
-
-    function renderContextDocumentPreview(node: DocumentCanvasNode | AiChatThreadCanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
-        if (size === 'mini') {
-            return html`<div className="workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-mini">
-                <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
-                <span className="workspace-ai-chat-panel-context-preview-document-skeleton" aria-label=${title}>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </span>
-            </div>` as HTMLElement
-        }
-
-        return html`<div className=${`workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-${size}`}>
-            <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
-            <span className="workspace-ai-chat-panel-context-preview-document-lines">
-                <span className="workspace-ai-chat-panel-context-preview-document-title">${title}</span>
-                <span className="workspace-ai-chat-panel-context-preview-document-text">${text || getContextPreviewTypeLabel(node)}</span>
-            </span>
-        </div>` as HTMLElement
-    }
-
-    function renderContextPreviewVisual(node: CanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
-        if (node.type === 'image') return renderContextImagePreview(node, title, size)
-        if (node.type === 'video') return renderContextVideoPreview(node, title, size)
-        if (node.type === 'document' || node.type === 'aiChatThread') {
-            return renderContextDocumentPreview(node, title, text, size)
-        }
-        return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
-    }
-
-    type ContextPreviewPopoverOrientation = 'landscape' | 'portrait'
-
-    function getContextPreviewPopoverOrientation(node: ImageCanvasNode | VideoCanvasNode): ContextPreviewPopoverOrientation {
-        if (Number.isFinite(node.aspectRatio) && node.aspectRatio > 0) {
-            return node.aspectRatio < 1 ? 'portrait' : 'landscape'
-        }
-        return node.dimensions.height > node.dimensions.width ? 'portrait' : 'landscape'
-    }
-
-    function renderContextPreviewPopoverMeta(title: string, text: string): HTMLElement {
-        return html`<div className="workspace-ai-chat-panel-context-preview-popover-meta">
-            ${title ? html`<span className="workspace-ai-chat-panel-context-preview-popover-title">${title}</span>` : ''}
-            ${text ? html`<span className="workspace-ai-chat-panel-context-preview-popover-text">${text}</span>` : ''}
-        </div>` as HTMLElement
-    }
-
-    function renderContextPreviewPopoverContent(node: CanvasNode, title: string, text: string, accessibleLabel: string): HTMLElement {
-        if (node.type !== 'image' && node.type !== 'video') {
-            return renderContextPreviewVisual(node, accessibleLabel, text, 'large')
-        }
-
-        const hasPopoverMeta = Boolean(title || text)
-        const orientation = hasPopoverMeta ? getContextPreviewPopoverOrientation(node) : 'landscape'
-        return html`<div className=${`workspace-ai-chat-panel-context-preview-popover-body workspace-ai-chat-panel-context-preview-popover-body-${orientation}`}>
-            <div className="workspace-ai-chat-panel-context-preview-popover-media">
-                ${renderContextPreviewVisual(node, accessibleLabel, text, 'large')}
-            </div>
-            ${hasPopoverMeta ? renderContextPreviewPopoverMeta(title, text) : ''}
-        </div>` as HTMLElement
-    }
-
-    function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boolean): string {
-        const baseClassName = 'workspace-ai-chat-panel-context-preview-popover'
-        if ((node.type !== 'image' && node.type !== 'video') || !hasPopoverMeta) return baseClassName
-        return `${baseClassName} ${baseClassName}-${getContextPreviewPopoverOrientation(node)}`
-    }
-
-    function destroyContextPreviewTooltips(): void {
-        for (const tooltip of activeContextPreviewTooltips) {
-            tooltip.destroy()
-        }
-        activeContextPreviewTooltips.clear()
+        activeContextPreviewTiles.clear()
     }
 
     function createAiChatPanelContextTrayElement(): HTMLDivElement {
@@ -3456,30 +3238,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         nodeId: string
         node: CanvasNode
     }): HTMLDivElement {
-        const title = getContextPreviewTitle(node)
-        const text = getContextPreviewText(node)
-        const accessibleLabel = title || getContextPreviewTypeLabel(node)
-        const previewTooltip = createHelpTooltip({
-            label: accessibleLabel,
-            triggerContent: renderContextPreviewVisual(node, accessibleLabel, text, 'mini'),
-            content: renderContextPreviewPopoverContent(node, title, text, accessibleLabel),
-            preferredPlacement: 'top',
-            className: 'workspace-ai-chat-panel-context-preview-tooltip',
-            triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
-            contentClassName: getContextPreviewPopoverClassName(node, Boolean(title || text)),
-            contentCssVariableNames: AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
-            interactive: true,
-        })
+        const environment = getContextPreviewEnvironment()
+        const previewTile = createContextPreviewTile({ node, environment })
+        const accessibleLabel = getContextPreviewAccessibleLabel(node, environment)
         const removeLabel = `Remove ${accessibleLabel} from context`
-        activeContextPreviewTooltips.add(previewTooltip)
+        activeContextPreviewTiles.add(previewTile)
         const chipEl = html`<div
             className="workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-explicit"
             data=${{ nodeId, contextKind: 'explicit', contextRole: 'forced-chip' }}
             role="listitem"
         >
-            <div className="workspace-ai-chat-panel-context-preview-main">
-                ${previewTooltip.dom}
-            </div>
+            ${previewTile.dom}
             <button
                 type="button"
                 className="workspace-ai-chat-panel-context-chip-remove"
@@ -3502,7 +3271,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         const previousScrollTop = historyScrollerEl?.scrollTop ?? null
         const refreshVersion = ++contextPreviewRefreshVersion
-        destroyContextPreviewTooltips()
+        destroyContextPreviewTiles()
         trayEl.replaceChildren()
         const explicitChipNodeIds = aiChatPanelState.contextChips
         const nodesById = new Map(currentCanvasState?.nodes.map((node): [string, CanvasNode] => [node.nodeId, node]) ?? [])
@@ -3905,6 +3674,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             useMultipleVideoModels: data.useMultipleVideoModels,
             imageOptions: data.imageOptions,
             videoOptions: data.videoOptions,
+            referenceNodeIds: aiChatPanelState.contextChips.slice(),
         })
     }
 
@@ -4152,6 +3922,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 isDisabled: false,
                 documentType: 'aiChatThread',
                 threadId: panelThreadId,
+                aiChatThreadRenderContext: {
+                    contextPreview: getAiUserMessageContextPreviewRenderer(),
+                },
                 onEditorChange: (value: any) => {
                     onAiChatThreadContentChange?.({ workspaceId, threadId: panelThreadId, content: value })
                     // The descriptor lives on the canvas thread node (if this thread
@@ -4352,6 +4125,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     useMultipleVideoModels: data.useMultipleVideoModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
+                    referenceNodeIds: aiChatPanelState.contextChips.slice(),
                 })
             },
             onPromptStop: () => {

@@ -45,6 +45,7 @@ export class MediaBranchLineagePlanner {
         const promptText = snapshot?.promptText ?? input.workspaceContextSnapshot?.promptText ?? ''
         const promptFingerprint = snapshot?.promptFingerprint
         const referenceNodeIds = this.getReferenceNodeIds(resolution, snapshot)
+        const providedReferenceNodeIds = this.getProvidedReferenceNodeIds(input.workspaceContextSnapshot)
         const sourceContextNodeIds = resolution?.sourceContextNodeIds ?? []
         const createdAt = input.createdAt ?? Date.now()
         const sourceDecision = this.getSourceDecision(resolution, snapshot, referenceNodeIds)
@@ -54,6 +55,7 @@ export class MediaBranchLineagePlanner {
             promptText,
             promptFingerprint,
             referenceNodeIds,
+            providedReferenceNodeIds,
             sourceContextNodeIds,
             sourceDecision,
         })
@@ -63,6 +65,7 @@ export class MediaBranchLineagePlanner {
             promptText,
             promptFingerprint,
             referenceNodeIds,
+            providedReferenceNodeIds,
             sourceContextNodeIds,
             sourceDecision,
             branchOrigin,
@@ -102,6 +105,14 @@ export class MediaBranchLineagePlanner {
         snapshot: ImageBranchCandidateSnapshot | undefined,
     ): string[] {
         const nodeIds = resolution?.referenceImageNodeIds ?? snapshot?.candidates.map(candidate => candidate.nodeId) ?? []
+        return Array.from(new Set(nodeIds.filter(Boolean)))
+    }
+
+    private getProvidedReferenceNodeIds(snapshot: WorkspaceContextSnapshot | undefined): string[] {
+        const nodeIds = snapshot?.nodes
+            .filter(node => node.isExplicitChip)
+            .map(node => node.nodeId)
+            ?? []
         return Array.from(new Set(nodeIds.filter(Boolean)))
     }
 
@@ -169,6 +180,7 @@ export class MediaBranchLineagePlanner {
         promptText: string
         promptFingerprint?: string
         referenceNodeIds: string[]
+        providedReferenceNodeIds: string[]
         sourceContextNodeIds: string[]
         sourceDecision: SourceDecision
     }): BranchOriginLineagePlan | undefined {
@@ -182,6 +194,7 @@ export class MediaBranchLineagePlanner {
             provenance: {
                 kind: 'branch-root-fork-decision',
                 promptText: args.promptText,
+                providedReferenceNodeIds: args.providedReferenceNodeIds,
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
                 forked: args.input.reasoningModelIds.length > 1,
@@ -196,6 +209,7 @@ export class MediaBranchLineagePlanner {
         promptText: string
         promptFingerprint?: string
         referenceNodeIds: string[]
+        providedReferenceNodeIds: string[]
         sourceContextNodeIds: string[]
         sourceDecision: SourceDecision
         branchOrigin?: BranchOriginLineagePlan
@@ -218,6 +232,7 @@ export class MediaBranchLineagePlanner {
                 provenance: {
                     kind: 'reasoning-run',
                     promptText: args.promptText,
+                    providedReferenceNodeIds: args.providedReferenceNodeIds,
                     referenceNodeIds: args.referenceNodeIds,
                     sourceContextNodeIds: args.sourceContextNodeIds,
                     reasoningRunId,

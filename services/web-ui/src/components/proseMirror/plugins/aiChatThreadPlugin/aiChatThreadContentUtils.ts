@@ -33,6 +33,7 @@ export type GeneratedMediaTurnLocator = {
 export type GeneratedMediaTurnFallback = {
     threadId: string
     promptText?: string
+    referenceNodeIds?: string[]
     responseText?: string
     responseProvider?: string
     generatedAt?: string | number
@@ -62,6 +63,7 @@ type BuildGeneratedMediaTurnProjectionOptions = {
 type BuildBranchOriginPromptProjectionOptions = {
     threadId?: string
     generatedAt?: string | number
+    referenceNodeIds?: string[]
 }
 
 type GeneratedMediaTurnMatch = {
@@ -266,12 +268,13 @@ function parseTimestamp(value?: string | number): number {
     return Number.isFinite(parsed) ? parsed : 0
 }
 
-function createUserMessageNode(text: string, createdAt = 0): ProseMirrorJsonNode {
+function createUserMessageNode(text: string, createdAt = 0, referenceNodeIds: string[] = []): ProseMirrorJsonNode {
     return {
         type: 'aiUserMessage',
         attrs: {
             id: 'generated-media-provenance-user',
             createdAt,
+            referenceNodeIds,
         },
         content: createParagraphNodesFromText(text),
     }
@@ -324,7 +327,7 @@ function buildFallbackProjection(
     const createdAt = parseTimestamp(fallback.generatedAt)
 
     if (fallback.promptText?.trim()) {
-        messages.push(createUserMessageNode(fallback.promptText.trim(), createdAt))
+        messages.push(createUserMessageNode(fallback.promptText.trim(), createdAt, fallback.referenceNodeIds ?? []))
     }
 
     if (fallback.responseText?.trim() || fallback.responseProvider) {
@@ -459,6 +462,7 @@ export function buildBranchOriginPromptProjection(
     const fallback: GeneratedMediaTurnFallback = {
         threadId,
         promptText: text,
+        referenceNodeIds: options.referenceNodeIds ?? [],
         generatedAt: options.generatedAt,
         missingReason: 'Branch origin provenance is stored outside durable chat history.',
     }

@@ -3,6 +3,7 @@
 @import '$src/sass/components/animations';
 @import '$src/components/dropdown/dropdown.scss';
 @import '$src/components/infoBubble/infoBubble.scss';
+@import '$src/components/contextPreview/context-preview.scss';
 
 $aiChatThreadMinHeight: 50px;
 
@@ -10,6 +11,40 @@ $aiChatThreadMinHeight: 50px;
 $userMessageBubbleColor: linear-gradient(135deg, #636d75 0%, #6c747c 100%);
 $userMessageBubbleSolidColor: #6a7279; // Solid fallback for the tail
 $userMessageTextColor: #fff;
+
+.ai-user-message-reference-previews {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    max-width: 100%;
+    margin-bottom: 8px;
+}
+
+.ai-user-message-reference-previews[hidden] {
+    display: none;
+}
+
+.ai-user-message-reference-previews .workspace-ai-chat-panel-context-preview-main {
+    flex: 0 0 58px;
+    width: 58px;
+    height: 42px;
+}
+
+.ai-generated-video-controls-host {
+    border-radius: var(--video-controls-host-border-radius, 18px);
+    filter: var(--video-controls-host-drop-shadow, drop-shadow(0 12px 30px rgba(0, 0, 0, 0.30)));
+    backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
+    -webkit-backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .ai-generated-video-controls-host {
+        background: var(--video-controls-host-reduced-transparency-background, rgba(24, 28, 34, 0.88));
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+}
 
 // ========== AI CHAT THREAD WRAPPER ==========
 .ai-chat-thread-wrapper {

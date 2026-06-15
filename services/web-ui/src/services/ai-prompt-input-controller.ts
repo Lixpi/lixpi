@@ -42,6 +42,7 @@ type AiSubmitPayload = {
         imageGenerationSize: ImageGenerationSize
     }
     videoOptions?: VideoOptions
+    referenceNodeIds?: string[]
 }
 
 type TargetNode = {
@@ -64,6 +65,7 @@ type PendingMessage = {
         imageGenerationSize: ImageGenerationSize
     }
     videoOptions?: VideoOptions
+    referenceNodeIds?: string[]
 }
 
 type AiPromptInputControllerOptions = {
@@ -169,6 +171,7 @@ export class AiPromptInputController {
             imageGenerationSize: ImageGenerationSize
         }
         videoOptions?: VideoOptions
+        referenceNodeIds?: string[]
     }): Promise<void> {
         const {
             contentJSON,
@@ -180,6 +183,7 @@ export class AiPromptInputController {
             useMultipleVideoModels,
             imageOptions,
             videoOptions,
+            referenceNodeIds,
         } = params
 
         if (!this.target) {
@@ -205,6 +209,7 @@ export class AiPromptInputController {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
+                referenceNodeIds,
             })
         } else {
             // Target is a document or image — auto-create a new AI chat thread
@@ -218,6 +223,7 @@ export class AiPromptInputController {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
+                referenceNodeIds,
             })
         }
     }
@@ -275,7 +281,7 @@ export class AiPromptInputController {
         }
 
         const messageNode = userMessageType.create(
-            { id: createId(), createdAt: Date.now() },
+            { id: createId(), createdAt: Date.now(), referenceNodeIds: pending.referenceNodeIds ?? [] },
             messageContent
         )
 
@@ -366,6 +372,7 @@ export class AiPromptInputController {
         useMultipleVideoModels?: boolean
         imageOptions?: PendingMessage['imageOptions']
         videoOptions?: PendingMessage['videoOptions']
+        referenceNodeIds?: string[]
     }): Promise<void> {
         const {
             contentJSON,
@@ -377,6 +384,7 @@ export class AiPromptInputController {
             useMultipleVideoModels,
             imageOptions,
             videoOptions,
+            referenceNodeIds,
         } = params
         if (!this.target) return
 
@@ -420,7 +428,7 @@ export class AiPromptInputController {
                     content: [
                         {
                             type: 'aiUserMessage',
-                            attrs: { id: createId(), createdAt: Date.now() },
+                            attrs: { id: createId(), createdAt: Date.now(), referenceNodeIds: referenceNodeIds ?? [] },
                             content: contentJSON.length > 0 ? contentJSON : [{ type: 'paragraph' }]
                         }
                     ]
@@ -491,6 +499,7 @@ export class AiPromptInputController {
                 useMultipleVideoModels: threadUseMultipleVideoModels,
                 imageOptions,
                 videoOptions,
+                referenceNodeIds,
             })
 
             this.persistCanvasState(newCanvasState)

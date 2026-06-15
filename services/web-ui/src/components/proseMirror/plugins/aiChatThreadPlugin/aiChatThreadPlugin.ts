@@ -17,7 +17,7 @@ import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/compo
 // aiUserInput has been removed — the composer is now a separate floating canvas element
 // The aiUserInputNodeType is still imported for legacy content migration
 import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
-import { aiUserMessageNodeType, aiUserMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
+import { aiUserMessageNodeType, aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
@@ -74,6 +74,7 @@ type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: stri
 export type AiChatThreadRenderContext = {
     readOnly?: boolean
     traceDetailsOptions?: ImageGenerationTraceDetailsOptions
+    contextPreview?: AiUserMessageContextPreviewRenderer
 }
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
@@ -2882,7 +2883,9 @@ class AiChatThreadPluginClass {
                     [aiResponseMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiResponseMessageNodeView(node, view, getPos),
                     [aiUserMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
-                        aiUserMessageNodeView(node, view, getPos),
+                        aiUserMessageNodeView(node, view, getPos, {
+                            contextPreview: this.renderContext.contextPreview,
+                        }),
                     [aiCollapsibleBlockNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiCollapsibleBlockNodeView(node, view, getPos, {
                             traceDetailsOptions: this.renderContext.traceDetailsOptions,

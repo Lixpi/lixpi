@@ -35,11 +35,13 @@ createAiChatThreadPlugin({
     renderContext: {
         readOnly: false,
         traceDetailsOptions: undefined,
+        contextPreview: undefined,
     },
 })
 ```
 
 The factory also accepts optional `imageCallbacks` and `videoCallbacks`, which are stored through `setAiGeneratedImageCallbacks()` and `setAiGeneratedVideoCallbacks()`.
+`renderContext.contextPreview` lets user-message NodeViews resolve stored explicit reference ids into shared context preview tiles; read-only provenance projections pass the same renderer so sent-message references match the live panel input previews.
 
 ```mermaid
 sequenceDiagram
@@ -99,9 +101,10 @@ Attrs declared in `aiChatThreadNode.ts`:
 Sent user message bubble inserted by `AiPromptInputController`.
 
 - Content: `(paragraph | block)+`
-- Attrs: `id`, `createdAt`
+- Attrs: `id`, `createdAt`, `referenceNodeIds`
 - DOM parse target: `div.ai-user-message`
 - NodeView shell comes from `createAiUserMessageShell()`.
+- Explicit composer references are stored in `referenceNodeIds` at submit time and render above the message text through `components/contextPreview` when `renderContext.contextPreview` is available.
 
 ### `aiResponseMessage`
 

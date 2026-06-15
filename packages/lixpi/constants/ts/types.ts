@@ -260,6 +260,7 @@ export type ImageBranchVlmResolution = {
 export type BranchOriginProvenance = {
     kind: 'branch-root-fork-decision'
     promptText: string
+    providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
     forked: boolean
@@ -269,6 +270,7 @@ export type BranchOriginProvenance = {
 export type BranchForkProvenance = {
     kind: 'reasoning-run'
     promptText: string
+    providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
     reasoningRunId: string
