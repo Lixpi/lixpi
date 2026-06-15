@@ -143,14 +143,16 @@ export type PixiEdgeArrow = {
     // Direction the arrowhead points (into the node it touches)
     // left anchor = Math.PI, right = 0, top = -Math.PI/2, bottom = Math.PI/2
     angle: number
-    size: number  // base screen pixels; renderer applies viewport thresholding
+    baseScreenSize: number
+    size: number
 }
 
 export type PixiEdgeRenderDatum = {
     id: string
     svgPath: string     // SVG path string in world coordinates
     strokeColor: string
-    strokeWidth: number // base screen pixels; renderer applies viewport thresholding
+    baseScreenStrokeWidth: number
+    strokeWidth: number
     isDashed: boolean
     arrowEnd: PixiEdgeArrow | null
     arrowStart: PixiEdgeArrow | null

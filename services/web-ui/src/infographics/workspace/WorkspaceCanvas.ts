@@ -60,7 +60,7 @@ import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/c
 import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
@@ -157,6 +157,8 @@ type GeneratedMediaInfoPanelOptions = {
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
+const ZOOM_SCALING_DEBUG_PREFIX = 'LIXPI_ZOOM_SCALING_DEBUG'
+const ZOOM_SCALING_DEBUG_MAX_KEYS = 600
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
 const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-tooltip-background',
@@ -174,6 +176,52 @@ const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-popover-title-color',
     '--workspace-ai-chat-panel-context-preview-popover-text-color',
 ]
+
+function roundDebugNumber(value: number | null | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null
+    return Math.round(value * 1000) / 1000
+}
+
+function getDebugRect(element: Element | null): { left: number; top: number; width: number; height: number } | null {
+    if (!element) return null
+    const rect = element.getBoundingClientRect()
+    return {
+        left: roundDebugNumber(rect.left) ?? 0,
+        top: roundDebugNumber(rect.top) ?? 0,
+        width: roundDebugNumber(rect.width) ?? 0,
+        height: roundDebugNumber(rect.height) ?? 0,
+    }
+}
+
+function getDebugComputedStyle(element: Element | null): Record<string, string> | null {
+    if (!element) return null
+    const style = getComputedStyle(element)
+    return {
+        width: style.width,
+        height: style.height,
+        minWidth: style.minWidth,
+        flexBasis: style.flexBasis,
+        transform: style.transform,
+        transformOrigin: style.transformOrigin,
+        zoom: style.getPropertyValue('zoom'),
+        fontSize: style.fontSize,
+    }
+}
+
+function getDebugTransformScale(element: Element | null): { scaleX: number; scaleY: number } | null {
+    if (!element) return null
+    const transform = getComputedStyle(element).transform
+    if (!transform || transform === 'none') return { scaleX: 1, scaleY: 1 }
+    try {
+        const matrix = new DOMMatrixReadOnly(transform)
+        return {
+            scaleX: roundDebugNumber(Math.hypot(matrix.a, matrix.b)) ?? 1,
+            scaleY: roundDebugNumber(Math.hypot(matrix.c, matrix.d)) ?? 1,
+        }
+    } catch {
+        return null
+    }
+}
 
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
@@ -373,6 +421,111 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let transformSideEffectsRaf: number | null = null
     let pendingHandleZoom: number | null = null
     let autoGrowRaf: number | null = null
+    const generatedMediaChromeDebugKeys = new Set<string>()
+
+    function shouldLogZoomScalingDebug(keys: Set<string>, key: string): boolean {
+        if (keys.has(key)) return false
+        if (keys.size > ZOOM_SCALING_DEBUG_MAX_KEYS) keys.clear()
+        keys.add(key)
+        return true
+    }
+
+    function getDebugAncestorTransforms(element: HTMLElement | null): Array<Record<string, unknown>> {
+        const ancestors: Array<Record<string, unknown>> = []
+        let current = element?.parentElement ?? null
+        while (current && ancestors.length < 5) {
+            ancestors.push({
+                className: current.className,
+                rect: getDebugRect(current),
+                transformScale: getDebugTransformScale(current),
+                computed: getDebugComputedStyle(current),
+            })
+            current = current.parentElement
+        }
+        return ancestors
+    }
+
+    function logGeneratedMediaChromeDebug(
+        chromeEl: HTMLElement,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number },
+        viewport: Viewport,
+        chromeLayout: ReturnType<typeof getCanvasChromeScreenLayout>,
+    ): void {
+        const nodeId = chromeEl.dataset.mediaChromeNodeId ?? 'unknown'
+        const zoomPercent = Math.round(viewport.zoom * 100)
+        const key = `generated-media:${nodeId}:${zoomPercent}`
+        if (!shouldLogZoomScalingDebug(generatedMediaChromeDebugKeys, key)) return
+
+        requestAnimationFrame(() => {
+            const actionsEl = chromeEl.querySelector('.workspace-generated-media-actions')
+            const buttonEl = chromeEl.querySelector('.media-info-button')
+            const iconSpanEl = chromeEl.querySelector('.media-info-button span')
+            const svgEl = chromeEl.querySelector('.media-info-button svg')
+            const expectedIconScreenPx = settings.mediaNode.generatedMediaChrome.iconSize * chromeLayout.screenScale
+            const buttonRect = getDebugRect(buttonEl)
+            const svgRect = getDebugRect(svgEl)
+            const payload = {
+                kind: 'generated-media-chrome',
+                nodeId,
+                viewport: {
+                    x: roundDebugNumber(viewport.x),
+                    y: roundDebugNumber(viewport.y),
+                    zoom: roundDebugNumber(viewport.zoom),
+                    zoomPercent,
+                },
+                settings: {
+                    iconSize: settings.mediaNode.generatedMediaChrome.iconSize,
+                    topGap: settings.mediaNode.generatedMediaChrome.topGap,
+                    minZoom: settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom,
+                },
+                world: {
+                    position,
+                    dimensions,
+                },
+                computedLayout: {
+                    ...chromeLayout,
+                    left: roundDebugNumber(chromeLayout.left),
+                    top: roundDebugNumber(chromeLayout.top),
+                    layoutWidth: roundDebugNumber(chromeLayout.layoutWidth),
+                    screenScale: roundDebugNumber(chromeLayout.screenScale),
+                    screenGap: roundDebugNumber(chromeLayout.screenGap),
+                    screenWidth: roundDebugNumber(chromeLayout.screenWidth),
+                    expectedIconScreenPx: roundDebugNumber(expectedIconScreenPx),
+                },
+                actualRects: {
+                    layer: getDebugRect(generatedMediaChromeLayerEl),
+                    chrome: getDebugRect(chromeEl),
+                    actions: getDebugRect(actionsEl),
+                    button: buttonRect,
+                    iconSpan: getDebugRect(iconSpanEl),
+                    svg: svgRect,
+                },
+                actualVsExpected: {
+                    buttonWidthRatio: buttonRect && expectedIconScreenPx > 0 ? roundDebugNumber(buttonRect.width / expectedIconScreenPx) : null,
+                    buttonHeightRatio: buttonRect && expectedIconScreenPx > 0 ? roundDebugNumber(buttonRect.height / expectedIconScreenPx) : null,
+                    svgWidthRatio: svgRect && expectedIconScreenPx > 0 ? roundDebugNumber(svgRect.width / expectedIconScreenPx) : null,
+                    svgHeightRatio: svgRect && expectedIconScreenPx > 0 ? roundDebugNumber(svgRect.height / expectedIconScreenPx) : null,
+                },
+                computedStyles: {
+                    layer: getDebugComputedStyle(generatedMediaChromeLayerEl),
+                    chrome: getDebugComputedStyle(chromeEl),
+                    actions: getDebugComputedStyle(actionsEl),
+                    button: getDebugComputedStyle(buttonEl),
+                    iconSpan: getDebugComputedStyle(iconSpanEl),
+                    svg: getDebugComputedStyle(svgEl),
+                },
+                transformScales: {
+                    layer: getDebugTransformScale(generatedMediaChromeLayerEl),
+                    chrome: getDebugTransformScale(chromeEl),
+                    button: getDebugTransformScale(buttonEl),
+                    svg: getDebugTransformScale(svgEl),
+                },
+                ancestorTransforms: getDebugAncestorTransforms(chromeEl),
+            }
+            console.info(`${ZOOM_SCALING_DEBUG_PREFIX} ${JSON.stringify(payload)}`)
+        })
+    }
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
     const expandedGeneratedMediaInfoNodeIds: Set<string> = new Set()
@@ -883,7 +1036,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             getVisualScale: () => scaleCanvasChromeToScreenForZoom(
                 1,
                 getCurrentViewportZoom(),
-                settings.canvasBubbleMenu.zoomScaling,
+                getAdaptiveBoundedZoomScalingOptions(settings.canvasBubbleMenu.zoomScaling),
             ),
         })
     }
@@ -1054,14 +1207,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             worldPosition: position,
             worldDimensions: dimensions,
             baseGap: settings.mediaNode.generatedMediaChrome.topGap,
-            zoomScaling: settings.mediaNode.generatedMediaChrome.zoomScaling,
+            zoomScaling: getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),
         })
         applyStyle(chromeEl, {
             left: `${chromeLayout.left}px`,
             top: `${chromeLayout.top}px`,
             width: `${chromeLayout.layoutWidth}px`,
+            transformOrigin: '0 0',
             transform: `scale(${chromeLayout.screenScale})`,
         })
+        logGeneratedMediaChromeDebug(chromeEl, position, dimensions, viewport, chromeLayout)
     }
 
     function applyGeneratedMediaInfoPanelGeometry(
@@ -1074,12 +1229,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const iconStripScreenGap = scaleCanvasChromeToScreenForZoom(
             settings.mediaNode.generatedMediaChrome.topGap,
             zoom,
-            settings.mediaNode.generatedMediaChrome.zoomScaling,
+            getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),
         )
         const iconScreenSize = scaleCanvasChromeToScreenForZoom(
             settings.mediaNode.generatedMediaChrome.iconSize,
             zoom,
-            settings.mediaNode.generatedMediaChrome.zoomScaling,
+            getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),
         )
         const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom
         const panelWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
@@ -1136,15 +1291,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const x = event.clientX - rect.left
         const y = event.clientY - rect.top
         const resizeHandleSettings = settings.mediaNode.resizeHandle
+        const zoom = getCurrentViewportZoom()
         const { size, offset } = settings.mediaNode.useZoomCompensatedResizeHandleScaling
-            ? getResizeHandleScaledSizes(getCurrentViewportZoom(), {
+            ? getResizeHandleScaledSizes(zoom, {
                 baseSize: resizeHandleSettings.size,
                 baseOffset: resizeHandleSettings.offset,
                 minSize: resizeHandleSettings.minSize,
-                zoomScaling: resizeHandleSettings.zoomScaling,
+                zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),
             })
             : { size: resizeHandleSettings.size, offset: resizeHandleSettings.offset }
-        const hitSize = Math.max(16, size + Math.max(0, offset))
+        const hitSize = Math.max(16, (size + Math.max(0, offset)) * zoom)
 
         if (x <= hitSize && y <= hitSize) return 'top-left'
         if (x >= rect.width - hitSize && y <= hitSize) return 'top-right'
@@ -6911,7 +7067,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 baseSize: resizeHandleSettings.size,
                 baseOffset: resizeHandleSettings.offset,
                 minSize: resizeHandleSettings.minSize,
-                zoomScaling: resizeHandleSettings.zoomScaling,
+                zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),
             })
             : { size: resizeHandleSettings.size, offset: resizeHandleSettings.offset }
 

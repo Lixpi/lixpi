@@ -27,7 +27,7 @@ import {
 } from '$src/infographics/connectors/index.ts'
 import type { PixiEdgeRenderDatum, PixiEdgeArrow } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
-import { getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
+import { getAdaptiveBoundedZoomScalingOptions, getEdgeScaledSizes } from '$src/infographics/utils/zoomScaling.ts'
 import { applyStyle } from '$src/utils/domTemplates.ts'
 
 import type {
@@ -128,8 +128,8 @@ function computePixiEdgeDatum(
 	isSelected: boolean,
 	defaultColor: string,
 	focusColor: string,
-	visibleStrokeWidth: number,
-	visibleMarkerSize: number,
+	baseScreenStrokeWidth: number,
+	baseScreenMarkerSize: number,
 	markerOffset: { source: number; target: number }
 ): PixiEdgeRenderDatum | null {
 	const {
@@ -187,24 +187,25 @@ function computePixiEdgeDatum(
 
 	const strokeColor = isSelected ? focusColor : defaultColor
 	// Size matches SVG markerWidth so the PIXI polygon scales identically.
-	const arrowSize = visibleMarkerSize
+	const arrowSize = baseScreenMarkerSize
 
 	// Place arrows at the path endpoints (tgtCoords / srcCoords), not at the
 	// raw node-edge anchors. The marker-offset gap is already built into those
 	// coordinates, matching the SVG marker's refX/refY positioning.
 	const arrowEnd: PixiEdgeArrow | null = marker !== 'none'
-		? { x: tgtCoords.x, y: tgtCoords.y, angle: anchorArrowAngle(target.position), size: arrowSize }
+		? { x: tgtCoords.x, y: tgtCoords.y, angle: anchorArrowAngle(target.position), baseScreenSize: arrowSize, size: arrowSize }
 		: null
 
 	const arrowStart: PixiEdgeArrow | null = markerStart && markerStart !== 'none'
-		? { x: srcCoords.x, y: srcCoords.y, angle: anchorArrowAngle(source.position), size: arrowSize }
+		? { x: srcCoords.x, y: srcCoords.y, angle: anchorArrowAngle(source.position), baseScreenSize: arrowSize, size: arrowSize }
 		: null
 
 	return {
 		id,
 		svgPath,
 		strokeColor,
-		strokeWidth: visibleStrokeWidth,
+		baseScreenStrokeWidth,
+		strokeWidth: baseScreenStrokeWidth,
 		isDashed: edgeConfig.lineStyle === 'dashed',
 		arrowEnd,
 		arrowStart,
@@ -1305,7 +1306,7 @@ export class WorkspaceConnectionManager {
 					baseMarkerSize: connectorScaling.markerSize,
 					baseMarkerOffset: connectorScaling.markerOffset,
 					baseClickAreaWidth: connectorScaling.clickAreaWidth,
-					zoomScaling: connectorScaling.zoomScaling,
+					zoomScaling: getAdaptiveBoundedZoomScalingOptions(connectorScaling.zoomScaling),
 				})
 				: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth }
 		const pixiStrokeWidth = connectorScaling.strokeWidth
@@ -1540,7 +1541,7 @@ export class WorkspaceConnectionManager {
 				baseMarkerSize: connectorScaling.markerSize,
 				baseMarkerOffset: connectorScaling.markerOffset,
 				baseClickAreaWidth: connectorScaling.clickAreaWidth,
-				zoomScaling: connectorScaling.zoomScaling,
+				zoomScaling: getAdaptiveBoundedZoomScalingOptions(connectorScaling.zoomScaling),
 			})
 			: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth }
 		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
