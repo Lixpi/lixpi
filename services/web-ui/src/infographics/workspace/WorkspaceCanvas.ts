@@ -43,7 +43,6 @@ import {
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
-import { getAiModelIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 import {
     buildBranchOriginPromptProjection,
     buildGeneratedMediaTurnProjectionFromThreadContent,
@@ -60,7 +59,7 @@ import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/c
 import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
@@ -137,6 +136,7 @@ import {
     type ContextPreviewEnvironment,
     type ContextPreviewTileInstance,
 } from '$src/components/contextPreview/index.ts'
+import { applyMediaModelBadgeStyleProperties, createMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
@@ -324,7 +324,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const selectionStyles = settings.selection.styles
     const imageNodeStyles = settings.mediaNode.image.styles
     const branchOriginSettings = settings.imageBranchLineage.branchOrigin
-    const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
@@ -336,15 +335,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)
     paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
     paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
-    paneEl.style.setProperty('--workspace-generated-media-chrome-icon-size', `${settings.mediaNode.generatedMediaChrome.iconSize}px`)
-    paneEl.style.setProperty('--workspace-media-model-badge-icon-gap', generatedMediaChromeStyles.modelBadgeIconGap)
-    paneEl.style.setProperty('--workspace-media-model-badge-provider-color', generatedMediaChromeStyles.modelBadgeProviderColor)
-    paneEl.style.setProperty('--workspace-media-model-badge-model-color', generatedMediaChromeStyles.modelBadgeModelColor)
-    paneEl.style.setProperty('--workspace-media-model-badge-name-font-size', generatedMediaChromeStyles.modelBadgeNameFontSize)
-    paneEl.style.setProperty('--workspace-media-model-badge-name-font-weight', String(generatedMediaChromeStyles.modelBadgeNameFontWeight))
-    paneEl.style.setProperty('--workspace-media-model-badge-name-line-height', String(generatedMediaChromeStyles.modelBadgeNameLineHeight))
-    paneEl.style.setProperty('--workspace-media-info-button-color', generatedMediaChromeStyles.infoButtonColor)
-    paneEl.style.setProperty('--workspace-media-info-button-hover-color', generatedMediaChromeStyles.infoButtonHoverColor)
+    applyMediaModelBadgeStyleProperties(paneEl)
     paneEl.style.setProperty('--workspace-branch-origin-icon-size', `${branchOriginSettings.iconSize}px`)
     paneEl.style.setProperty('--workspace-branch-origin-background-color', branchOriginSettings.styles.backgroundColor)
     paneEl.style.setProperty('--workspace-branch-origin-border-color', branchOriginSettings.styles.borderColor)
@@ -1133,18 +1124,51 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getVideoControlsChromeLayout(nodeWidth: number): { insetX: number; width: number } {
-        const insetX = nodeWidth >= VIDEO_CONTROLS_COMPACT_WIDTH_THRESHOLD ? VIDEO_CONTROLS_HORIZONTAL_INSET : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
+    function getVideoControlsZoomScalingOptions() {
+        return getAdaptiveBoundedZoomScalingOptions(settings.videoControls.canvas.zoomScaling)
+    }
+
+    function getSafeViewportZoom(viewport: Viewport): number {
+        return Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
+    }
+
+    function getVideoControlsScreenScale(viewport: Viewport): number {
+        return scaleCanvasChromeToScreenForZoom(1, getSafeViewportZoom(viewport), getVideoControlsZoomScalingOptions())
+    }
+
+    function getVideoControlsChromeLayout(
+        dimensions: { width: number; height: number },
+        viewport: Viewport
+    ): { insetX: number; top: number; width: number; height: number; logicalWidth: number; responsiveWidth: number } {
+        const zoom = getSafeViewportZoom(viewport)
+        const screenScale = getVideoControlsScreenScale(viewport)
+        const projectedNodeWidth = dimensions.width * zoom
+        const baseInset = projectedNodeWidth >= VIDEO_CONTROLS_COMPACT_WIDTH_THRESHOLD
+            ? VIDEO_CONTROLS_HORIZONTAL_INSET
+            : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
+        const insetX = scaleCanvasChromeWorldSizeForZoom(baseInset, zoom, getVideoControlsZoomScalingOptions())
+        const top = dimensions.height + scaleCanvasChromeWorldSizeForZoom(VIDEO_CONTROLS_BOTTOM_INSET, zoom, getVideoControlsZoomScalingOptions())
+        const width = Math.max(1, dimensions.width - insetX * 2)
+        const height = Math.max(1, (VIDEO_CONTROLS_HEIGHT * screenScale) / zoom)
+        const responsiveWidth = Math.max(1, width * zoom)
+        const logicalWidth = Math.max(1, (width * zoom) / screenScale)
+
         return {
             insetX,
-            width: Math.max(1, nodeWidth - insetX * 2),
+            top,
+            width,
+            height,
+            logicalWidth,
+            responsiveWidth,
         }
     }
 
     function getVideoControlsOutsideOffsetScreen(nodeId: string, viewport: Viewport): number {
         if (!videoControlInstances.has(nodeId)) return 0
-        const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
-        return (VIDEO_CONTROLS_BOTTOM_INSET + VIDEO_CONTROLS_HEIGHT) * zoom
+        const zoom = getSafeViewportZoom(viewport)
+        const zoomScaling = getVideoControlsZoomScalingOptions()
+        return scaleCanvasChromeToScreenForZoom(VIDEO_CONTROLS_BOTTOM_INSET, zoom, zoomScaling)
+            + scaleCanvasChromeToScreenForZoom(VIDEO_CONTROLS_HEIGHT, zoom, zoomScaling)
     }
 
     function getVideoChromeResizeHandle(event: MouseEvent, chromeEl: HTMLElement): ResizeCorner | null {
@@ -1182,14 +1206,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function applyVideoControlsGeometry(
         chromeEl: HTMLElement,
         position: { x: number; y: number },
-        dimensions: { width: number; height: number }
+        dimensions: { width: number; height: number },
+        viewport: Viewport = getLiveViewport()
     ): void {
-        const controlsTop = dimensions.height + VIDEO_CONTROLS_BOTTOM_INSET
+        const controlsLayout = getVideoControlsChromeLayout(dimensions, viewport)
         applyStyle(chromeEl, {
             left: `${position.x}px`,
             top: `${position.y}px`,
             width: `${dimensions.width}px`,
-            height: `${controlsTop + VIDEO_CONTROLS_HEIGHT}px`,
+            height: `${controlsLayout.top + controlsLayout.height}px`,
         })
 
         const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLElement | null
@@ -1200,24 +1225,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         }
 
-        const { insetX, width } = getVideoControlsChromeLayout(dimensions.width)
         const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLElement | null
         if (host) {
             applyStyle(host, {
-                left: `${insetX}px`,
-                top: `${controlsTop}px`,
-                width: `${width}px`,
-                height: `${VIDEO_CONTROLS_HEIGHT}px`,
+                left: `${controlsLayout.insetX}px`,
+                top: `${controlsLayout.top}px`,
+                width: `${controlsLayout.width}px`,
+                height: `${controlsLayout.height}px`,
             })
         }
 
-        // The controls host is a separate below-node row. Keep the SVG viewBox
-        // synced to the pill width at any zoom/resize.
+        // The controls host lives inside the viewport-transformed layer. The
+        // SVG viewBox is expanded by the inverse bounded scale so the row keeps
+        // full node width while glyphs/text use the same low-zoom curve as other
+        // canvas chrome.
         const svg = chromeEl.querySelector('.workspace-video-controls-svg') as SVGSVGElement | null
-        svg?.setAttribute('viewBox', `0 0 ${width} ${VIDEO_CONTROLS_HEIGHT}`)
-        svg?.setAttribute('height', String(VIDEO_CONTROLS_HEIGHT))
+        svg?.setAttribute('viewBox', `0 0 ${controlsLayout.logicalWidth} ${VIDEO_CONTROLS_HEIGHT}`)
+        svg?.setAttribute('height', '100%')
         const controls = videoControlInstances.get(chromeEl.dataset.videoChromeNodeId || '')
-        controls?.resize(0, 0, width)
+        controls?.resize(0, 0, controlsLayout.logicalWidth, controlsLayout.responsiveWidth)
     }
 
     function updateGeneratedMediaChromeLiveTransform(
@@ -1231,7 +1257,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (chromeEl) applyGeneratedMediaChromeGeometry(chromeEl, position, dimensions, viewport, videoControlsOffsetScreen)
         updateGeneratedMediaInfoPanelPosition(nodeId, position, dimensions, viewport)
         const videoChromeEl = mediaChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
-        if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions)
+        if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions, viewport)
         const branchOriginChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-origin-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (branchOriginChromeEl) applyBranchOriginInfoChromeGeometry(
             branchOriginChromeEl,
@@ -1662,49 +1688,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return splitAiModelId(modelId).provider
     }
 
-    // Resolves the synced model's badge parts: provider brand, model title, and the
-    // colored badge icon. colorIconName is populated per model by ai-models-synchronization
-    // (falling back to the grayscale iconName there when a provider has no colored variant),
-    // so the badge renders the colored brand mark with no fallback logic here. Provider and
-    // model are returned separately so the badge can de-emphasize the provider.
-    function getGeneratedMediaModelMeta(modelId: string, modelProvider: string): { providerTitle: string; modelTitle: string; icon: string | null } {
-        const { provider, model } = splitAiModelId(modelId)
-        const normalizedProvider = (provider || modelProvider).toLowerCase()
-        const normalizedModel = model.toLowerCase()
-        const modelMeta = ((aiModelsStore.getData() ?? []) as Array<{ provider: string; model: string; title?: string; providerTitle?: string; colorIconName?: string }>)
-            .find((candidate) =>
-                String(candidate.provider).toLowerCase() === normalizedProvider
-                && String(candidate.model).toLowerCase() === normalizedModel
-            )
-        return {
-            providerTitle: modelMeta?.providerTitle ?? '',
-            modelTitle: modelMeta?.title ?? '',
-            icon: getAiModelIcon(modelMeta?.colorIconName),
-        }
-    }
-
     // Model badge (colored brand icon + title) + info button only. This screen-space
     // strip is projected from media node bounds and uses bounded zoom compensation.
     // The expandable info panel renders separately in the viewport-transformed panel layer.
     function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
         const modelId = getGeneratedMediaModelId(node)
         const modelProvider = getGeneratedMediaModelProvider(node, modelId)
-        const { providerTitle, modelTitle, icon: modelIcon } = getGeneratedMediaModelMeta(modelId, modelProvider)
-        const modelLabel = [providerTitle, modelTitle].filter(Boolean).join(' ')
-        const shouldShowModelBadge = Boolean(modelIcon || modelLabel)
+        const modelBadge = createMediaModelBadge({ modelId, modelProvider })
         const chromeEl = html`
             <div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
                 <div className="workspace-generated-media-actions">
-                    ${shouldShowModelBadge ? html`
-                        <div className="media-model-badge" title=${modelLabel}>
-                            ${modelIcon ? html`<span className="media-model-badge-icon" innerHTML=${modelIcon}></span>` : null}
-                            ${modelLabel ? html`<span className="media-model-badge-name">${
-                                providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null
-                            }${providerTitle && modelTitle ? settings.mediaNode.generatedMediaChrome.modelBadgeSeparator : ''}${
-                                modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null
-                            }</span>` : null}
-                        </div>
-                    ` : null}
+                    ${modelBadge}
                     ${createMediaInfoButton(node)}
                 </div>
             </div>
@@ -1760,15 +1754,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!videoEl) return null
         if (!videoEl.currentSrc && !videoEl.src) return null
 
-        const { insetX, width: controlsWidth } = getVideoControlsChromeLayout(node.dimensions.width)
+        const viewport = getLiveViewport()
+        const controlsLayout = getVideoControlsChromeLayout(node.dimensions, viewport)
         const controlsStyles = settings.videoControls.styles
-        const controlsTop = node.dimensions.height + VIDEO_CONTROLS_BOTTOM_INSET
         const controlsHostStyle = {
             position: 'absolute' as const,
-            left: `${insetX}px`,
-            top: `${controlsTop}px`,
-            width: `${controlsWidth}px`,
-            height: `${VIDEO_CONTROLS_HEIGHT}px`,
+            left: `${controlsLayout.insetX}px`,
+            top: `${controlsLayout.top}px`,
+            width: `${controlsLayout.width}px`,
+            height: `${controlsLayout.height}px`,
             borderRadius: controlsStyles.hostBorderRadius,
             filter: controlsStyles.hostDropShadow,
             backdropFilter: controlsStyles.hostBackdropFilter,
@@ -1818,8 +1812,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .append('svg')
             .attr('class', 'workspace-video-controls-svg')
             .attr('width', '100%')
-            .attr('height', String(VIDEO_CONTROLS_HEIGHT))
-            .attr('viewBox', `0 0 ${controlsWidth} ${VIDEO_CONTROLS_HEIGHT}`)
+            .attr('height', '100%')
+            .attr('viewBox', `0 0 ${controlsLayout.logicalWidth} ${VIDEO_CONTROLS_HEIGHT}`)
             .style('display', 'block')
             .style('overflow', 'visible')
 
@@ -1827,13 +1821,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             id: node.nodeId,
             x: 0,
             y: 0,
-            width: controlsWidth,
+            width: controlsLayout.logicalWidth,
             height: VIDEO_CONTROLS_HEIGHT,
+            responsiveWidth: controlsLayout.responsiveWidth,
             videoEl,
             className: 'workspace-video-controls',
         })
         videoControlInstances.set(node.nodeId, controls)
-        applyVideoControlsGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions)
+        applyVideoControlsGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions, viewport)
         return chromeEl
     }
 

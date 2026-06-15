@@ -18,13 +18,14 @@ export type VideoControlsConfig = {
     y: number
     width: number
     height?: number
+    responsiveWidth?: number
     videoEl: HTMLVideoElement
     className?: string
 }
 
 export type VideoControlsInstance = {
     render: () => void
-    resize: (x: number, y: number, width: number) => void
+    resize: (x: number, y: number, width: number, responsiveWidth?: number) => void
     destroy: () => void
 }
 
@@ -92,6 +93,19 @@ function sanitizeSvgId(value: string): string {
     return value.replace(/[^a-zA-Z0-9_-]/g, '-') || 'video-controls'
 }
 
+function interpolateControlWidth(
+    responsiveWidth: number,
+    minResponsiveWidth: number,
+    maxResponsiveWidth: number,
+    minControlWidth: number,
+    maxControlWidth: number
+): number {
+    if (maxControlWidth <= minControlWidth) return maxControlWidth
+    if (maxResponsiveWidth <= minResponsiveWidth) return maxControlWidth
+    const ratio = clamp((responsiveWidth - minResponsiveWidth) / (maxResponsiveWidth - minResponsiveWidth), 0, 1)
+    return minControlWidth + (maxControlWidth - minControlWidth) * ratio
+}
+
 function extractPathData(svgMarkup: string): string[] {
     const parser = new DOMParser()
     const svgDoc = parser.parseFromString(svgMarkup, 'image/svg+xml')
@@ -138,10 +152,9 @@ function setIconPaths(iconGroup: any, svgMarkup: string, fill: string = settings
     }
 }
 
-function setButtonPosition(button: ButtonControl, x: number, y: number, visible = true): void {
+function setButtonPosition(button: ButtonControl, x: number, y: number): void {
     button.group
         .attr('transform', `translate(${x}, ${y})`)
-        .attr('display', visible ? null : 'none')
 }
 
 function roundedRectRadius(configuredRadius: number, height: number): number {
@@ -209,6 +222,7 @@ class VideoControls implements VideoControlsInstance {
     private x: number
     private y: number
     private width: number
+    private responsiveWidth: number
     private seekX = settings.videoControls.layout.padding
     private seekWidth: number
     private volumeWidth = settings.videoControls.layout.volumeSliderWidth
@@ -268,6 +282,7 @@ class VideoControls implements VideoControlsInstance {
         this.x = config.x
         this.y = config.y
         this.width = config.width
+        this.responsiveWidth = config.responsiveWidth ?? config.width
         this.height = config.height ?? settings.videoControls.height
         this.buttonY = (this.height - layout.buttonSize) / 2
         this.scrubberY = this.height / 2 - layout.railHeight / 2
@@ -535,10 +550,11 @@ class VideoControls implements VideoControlsInstance {
         this.fullscreenButton.group.attr('aria-label', isFullscreen(this.videoEl) ? 'Exit fullscreen' : 'Enter fullscreen')
     }
 
-    resize = (nextX: number, nextY: number, nextWidth: number): void => {
+    resize = (nextX: number, nextY: number, nextWidth: number, nextResponsiveWidth = nextWidth): void => {
         this.x = nextX
         this.y = nextY
         this.width = Math.max(1, nextWidth)
+        this.responsiveWidth = Math.max(1, nextResponsiveWidth)
         this.group.attr('transform', `translate(${this.x}, ${this.y})`)
         this.render()
     }
@@ -584,7 +600,7 @@ class VideoControls implements VideoControlsInstance {
     }
 
     private createButton(className: string, iconMarkup: string, label: string): ButtonControl {
-        const { layout, styles, typography } = settings.videoControls
+        const { layout } = settings.videoControls
         const buttonGroup = this.group.append('g')
             .attr('class', className)
             .attr('role', 'button')
@@ -607,30 +623,28 @@ class VideoControls implements VideoControlsInstance {
             .attr('class', `${className}-icon`)
             .attr('transform', `translate(${(layout.buttonSize - layout.iconSize) / 2}, ${(layout.buttonSize - layout.iconSize) / 2}) scale(${layout.iconSize / 24})`)
 
-        buttonGroup.append('text')
-            .attr('class', `${className}-label`)
-            .attr('x', layout.buttonSize / 2)
-            .attr('y', layout.buttonSize / 2)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'central')
-            .attr('font-size', typography.hiddenButtonLabelFontSize)
-            .attr('font-weight', typography.hiddenButtonLabelFontWeight)
-            .attr('fill', styles.text)
-            .attr('display', 'none')
-
         setIconPaths(icon, iconMarkup)
         return { group: buttonGroup, hit, icon }
     }
 
     private layout(): void {
         const { layout, responsive } = settings.videoControls
-        const showSpeedSlider = this.width >= responsive.showSpeedSliderMinWidth
-        const showVolumeSlider = this.width >= responsive.showVolumeSliderMinWidth
-        const showFullscreen = supportsFullscreen(this.videoEl) && this.width >= responsive.showFullscreenMinWidth
-        const speedSliderTargetWidth = this.width >= responsive.fullSpeedSliderMinWidth
+        const speedSliderWidth = this.responsiveWidth >= responsive.speedSliderFullResponsiveWidth
             ? layout.speedSliderWidth
-            : layout.compactSpeedSliderWidth
-        const speedSliderWidth = Math.max(layout.speedSliderMinWidth, speedSliderTargetWidth)
+            : interpolateControlWidth(
+                this.responsiveWidth,
+                responsive.speedSliderMinResponsiveWidth,
+                responsive.speedSliderFullResponsiveWidth,
+                layout.speedSliderMinWidth,
+                layout.compactSpeedSliderWidth,
+            )
+        const volumeSliderWidth = interpolateControlWidth(
+            this.responsiveWidth,
+            responsive.volumeSliderMinResponsiveWidth,
+            responsive.volumeSliderFullResponsiveWidth,
+            layout.volumeSliderMinWidth,
+            layout.volumeSliderWidth,
+        )
         const speedSliderInset = layout.speedValueWidth + layout.speedValueSliderGap
         const speedControlWidth = speedSliderInset + speedSliderWidth
 
@@ -659,49 +673,36 @@ class VideoControls implements VideoControlsInstance {
 
         let right = this.width - layout.padding
 
-        if (showFullscreen) {
-            right -= layout.buttonSize
-            setButtonPosition(this.fullscreenButton, right, this.buttonY, true)
-            right -= layout.gap
-        } else {
-            setButtonPosition(this.fullscreenButton, right, this.buttonY, false)
-        }
+        right -= layout.buttonSize
+        setButtonPosition(this.fullscreenButton, right, this.buttonY)
+        right -= layout.gap
 
-        if (showVolumeSlider) {
-            right -= layout.volumeSliderWidth
-            this.volumeWidth = layout.volumeSliderWidth
-            this.volumeGroup.attr('transform', `translate(${right}, 0)`).attr('display', null)
-            right -= layout.gap
-        } else {
-            this.volumeGroup.attr('display', 'none')
-        }
+        right -= volumeSliderWidth
+        this.volumeWidth = volumeSliderWidth
+        this.volumeGroup.attr('transform', `translate(${right}, 0)`)
+        right -= layout.gap
 
         right -= layout.buttonSize
         setButtonPosition(this.volumeButton, right, this.buttonY)
         right -= layout.gap
 
-        if (showSpeedSlider) {
-            right -= speedControlWidth
-            this.speedX = right
-            this.speedSliderWidth = speedSliderWidth
-            this.speedSliderX = speedSliderInset
-            this.speedGroup.attr('transform', `translate(${this.speedX}, 0)`).attr('display', null)
-            this.speedRail.attr('x', this.speedSliderX).attr('width', this.speedSliderWidth)
-            this.speedProgress.attr('x', this.speedSliderX)
-            this.speedHit.attr('x', this.speedSliderX).attr('width', this.speedSliderWidth)
+        right -= speedControlWidth
+        this.speedX = right
+        this.speedSliderWidth = speedSliderWidth
+        this.speedSliderX = speedSliderInset
+        this.speedGroup.attr('transform', `translate(${this.speedX}, 0)`)
+        this.speedRail.attr('x', this.speedSliderX).attr('width', this.speedSliderWidth)
+        this.speedProgress.attr('x', this.speedSliderX)
+        this.speedHit.attr('x', this.speedSliderX).attr('width', this.speedSliderWidth)
 
-            for (const { rate, tick } of this.speedGuideTicks) {
-                const guideX = this.speedSliderX + this.speedSliderWidth * this.speedRatio(rate)
-                tick.attr('x1', guideX)
-                    .attr('x2', guideX)
-                    .attr('y1', this.scrubberY - layout.speedScaleTickHeight / 2)
-                    .attr('y2', this.scrubberY + layout.railHeight + layout.speedScaleTickHeight / 2)
-                    .attr('display', null)
-            }
-            right -= layout.gap
-        } else {
-            this.speedGroup.attr('display', 'none')
+        for (const { rate, tick } of this.speedGuideTicks) {
+            const guideX = this.speedSliderX + this.speedSliderWidth * this.speedRatio(rate)
+            tick.attr('x1', guideX)
+                .attr('x2', guideX)
+                .attr('y1', this.scrubberY - layout.speedScaleTickHeight / 2)
+                .attr('y2', this.scrubberY + layout.railHeight + layout.speedScaleTickHeight / 2)
         }
+        right -= layout.gap
 
         right -= layout.timeWidth
         this.durationText.attr('x', right + 4)

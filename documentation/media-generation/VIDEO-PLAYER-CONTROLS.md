@@ -7,8 +7,8 @@ description: The one shared SVG video control bar used for generated and saved v
 
 Lixpi uses **one shared SVG video control bar** for generated and saved videos. The control bar is a framework-agnostic D3 primitive in [`services/web-ui/src/components/videoControls/`](../../services/web-ui/src/components/videoControls/videoControls.ts), mounted in two places:
 
-- over canvas `VideoCanvasNode`s in the transformed workspace chrome layer
-- inside in-chat generated video nodes in the ProseMirror AI chat history
+- below canvas `VideoCanvasNode`s in the transformed workspace chrome layer
+- below in-chat generated video nodes in the ProseMirror AI chat history
 
 The bar controls an `HTMLVideoElement`; **it does not render video frames**. The host surface owns pixels. On the canvas, PIXI owns the poster/placeholder behind the node and the browser-composited `<video>` element owns completed playback. In chat, the same component controls the visible DOM `<video>`.
 
@@ -35,9 +35,9 @@ For video generation, storage, VEO polling, and branch lineage, see [Video Gener
 | Scrubber | Shows buffered and played ranges; dragging seeks the element |
 | Playback speed | Speed value plus continuous slider writes `playbackRate`; double-click resets to the configured default rate, and configured guide ticks are visual references only |
 | Volume / mute | Toggles `muted`; slider writes `volume` and reflects `volumechange` |
-| Fullscreen | Uses `requestFullscreen()` / `exitFullscreen()` when supported; hidden otherwise |
+| Fullscreen | Uses `requestFullscreen()` / `exitFullscreen()` when supported |
 
-The layout is responsive. The speed slider, fullscreen, and the volume slider hide when the available width is too small. Unsupported browser capabilities hide rather than error.
+The layout is responsive. Controls stay present while the seek, speed, and volume rails absorb tight widths by shrinking.
 
 ## Component API
 
@@ -48,20 +48,21 @@ export type VideoControlsConfig = {
     y: number
     width: number
     height?: number
+    responsiveWidth?: number
     videoEl: HTMLVideoElement
     className?: string
 }
 
 export type VideoControlsInstance = {
     render: () => void
-    resize: (x: number, y: number, width: number) => void
+    resize: (x: number, y: number, width: number, responsiveWidth?: number) => void
     destroy: () => void
 }
 ```
 
-`render()` re-syncs SVG state from the element. `resize()` updates bar geometry after canvas node resize or chat player resize. `destroy()` removes SVG nodes, media listeners, document listeners, pointer listeners, and in-flight scrub handlers.
+`render()` re-syncs SVG state from the element. `resize()` updates bar geometry after canvas node resize or chat player resize. `responsiveWidth` lets hosts scale the SVG viewBox for canvas zoom or chat sizing while keeping responsive sizing decisions tied to the visible row width. `destroy()` removes SVG nodes, media listeners, document listeners, pointer listeners, and in-flight scrub handlers.
 
-Player behavior, geometry, speed range, default rate, center guide rate, rendered guide rates, responsive thresholds, glass treatment, colors, line styles, shadows, and typography live in `settings.videoControls` in [`services/web-ui/src/settings.ts`](../../services/web-ui/src/settings.ts). The `speed.defaultRate` value is used by double-click reset. The `speed.guideRate` value is the midpoint of the slider curve, while `speed.guideRates` controls the rendered reference ticks. Pointer and keyboard changes remain continuous across the configured `minRate`-to-`maxRate` range.
+Player behavior, geometry, speed range, default rate, center guide rate, rendered guide rates, responsive thresholds, canvas zoom scaling, chat scale, glass treatment, colors, line styles, shadows, and typography live in `settings.videoControls` in [`services/web-ui/src/settings.ts`](../../services/web-ui/src/settings.ts). The `speed.defaultRate` value is used by double-click reset. The `speed.guideRate` value is the midpoint of the slider curve, while `speed.guideRates` controls the rendered reference ticks. Pointer and keyboard changes remain continuous across the configured `minRate`-to-`maxRate` range.
 
 ## System Architecture
 
@@ -102,7 +103,7 @@ flowchart TB
 
 `videoNodeHandler.ts` creates one `<video preload="metadata" playsinline crossorigin="anonymous">` per `VideoCanvasNode`, loads authenticated `/api/videos` URLs, applies the poster URL, and keeps intrinsic video dimensions available to the canvas. The element begins in `.workspace-hidden-video-host`.
 
-When the video node is playable, `WorkspaceCanvas.ts` creates `.workspace-video-chrome`, moves that same element into `.workspace-video-surface`, and mounts `createVideoControls(...)` in a sibling `.workspace-video-controls-host` row below the surface. The canvas control row is always visible and uses the canvas geometry from `settings.videoControls`.
+When the video node is playable, `WorkspaceCanvas.ts` creates `.workspace-video-chrome`, moves that same element into `.workspace-video-surface`, and mounts `createVideoControls(...)` in a sibling `.workspace-video-controls-host` row below the surface. The canvas control row is always visible and uses bounded zoom scaling from `settings.videoControls`.
 
 The chrome mirrors normal node interactions:
 
@@ -117,7 +118,7 @@ This is why the video element must be **visibly composited**. Browser playback a
 
 ## Chat Playback Flow
 
-`aiGeneratedVideoNode.ts` keeps its pending, keepalive, complete, and error states (see [Video Generation](./VIDEO-GENERATION.md) for the lifecycle that drives them). On completion it renders a native-controls-disabled `<video>` and overlays the same `createVideoControls(...)` bar at the bottom. A `ResizeObserver` keeps the SVG `viewBox` and control geometry in sync with the chat card width.
+`aiGeneratedVideoNode.ts` keeps its pending, keepalive, complete, and error states (see [Video Generation](./VIDEO-GENERATION.md) for the lifecycle that drives them). On completion it renders a native-controls-disabled `<video>`, mounts the same `createVideoControls(...)` bar as a sibling row below the video surface, and renders the shared generated-media provider badge below the controls. The canvas info button is not mounted in chat. A `ResizeObserver` keeps the SVG `viewBox` and control geometry in sync with the chat card width.
 
 The chat video has **no PIXI involvement**. The same component still works because all state lives on the supplied `HTMLVideoElement`.
 
@@ -156,6 +157,7 @@ Canvas visibility and positioning are controlled by host elements:
 | `.workspace-video-surface` | Holds the visible canvas `<video>` element |
 | `.workspace-video-controls-host` | Mounts the canvas SVG bar below the video surface; individual control hit areas isolate their own events while empty strip space stays available to canvas gestures |
 | `.ai-generated-video-controls-host` | Mounts the in-chat SVG bar |
+| `.ai-generated-video-model-chrome` | Holds the in-chat generated-media provider badge below the controls |
 
 ## Data, Storage, and Transport
 

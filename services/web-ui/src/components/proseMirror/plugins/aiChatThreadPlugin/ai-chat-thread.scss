@@ -38,6 +38,67 @@ $userMessageTextColor: #fff;
     -webkit-backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
 }
 
+.ai-generated-video-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+}
+
+.ai-generated-video-container {
+    position: relative;
+    width: 100%;
+    background: transparent;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.ai-generated-video-content {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: transparent;
+    transform: scale(1.01);
+}
+
+.ai-generated-video-placeholder,
+.video-error-placeholder {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.75rem;
+    background: rgba(24, 28, 34, 0.05);
+    color: rgba(42, 45, 47, 0.62);
+    font-size: 0.78rem;
+    line-height: 1.3;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.ai-generated-video-placeholder.is-active,
+.video-error-placeholder {
+    display: flex;
+}
+
+.video-error-placeholder svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    fill: currentColor;
+}
+
+.ai-generated-video-controls-svg {
+    display: block;
+    overflow: visible;
+    pointer-events: none;
+}
+
 @media (prefers-reduced-transparency: reduce) {
     .ai-generated-video-controls-host {
         background: var(--video-controls-host-reduced-transparency-background, rgba(24, 28, 34, 0.88));
@@ -628,6 +689,55 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     &[hidden] {
         display: none;
     }
+}
+
+.ai-generated-video-model-chrome.ai-generated-media-run-meta {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
+    margin-top: var(--workspace-generated-media-chrome-top-gap, 8px);
+    min-height: var(--workspace-generated-media-chrome-icon-size, 34px);
+}
+
+.ai-generated-video-model-chrome .media-model-badge {
+    min-width: 0;
+    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--workspace-media-model-badge-icon-gap, 3px);
+    color: var(--workspace-media-model-badge-provider-color, #4d5963);
+    line-height: 1;
+    pointer-events: none;
+}
+
+.ai-generated-video-model-chrome .media-model-badge-icon,
+.ai-generated-video-model-chrome .media-model-badge svg {
+    width: var(--workspace-generated-media-chrome-icon-size, 34px);
+    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
+    fill: currentColor;
+}
+
+.ai-generated-video-model-chrome .media-model-badge-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ai-generated-video-model-chrome .media-model-badge-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--workspace-media-model-badge-provider-color, #4d5963);
+    font-size: var(--workspace-media-model-badge-name-font-size, 15px);
+    font-weight: var(--workspace-media-model-badge-name-font-weight, 400);
+    line-height: var(--workspace-media-model-badge-name-line-height, 1.5);
+}
+
+.ai-generated-video-model-chrome .media-model-badge-model {
+    color: var(--workspace-media-model-badge-model-color, #181e23);
 }
 
 @keyframes spin {

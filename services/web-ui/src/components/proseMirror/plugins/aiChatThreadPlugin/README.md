@@ -139,7 +139,8 @@ Atom node for compact generated-image references in the thread log.
 Atom node for generated-video status and previews in the thread log.
 
 - Pending/generating/error/complete events update the in-thread video node.
-- Complete nodes render an authenticated video URL plus the shared SVG `videoControls` bar.
+- Complete nodes render an authenticated video URL, the shared SVG `videoControls` bar as a scaled external row below the video, and the shared generated-media provider badge below the controls.
+- The canvas media info button is not rendered in chat history nodes.
 - Poster file ids can be reused as still-image context when the thread log is converted into a later request.
 - Carries the same run metadata shape as generated images.
 

@@ -273,10 +273,13 @@ export type VideoControlsSettings = {
         compactHorizontalInset: number
         compactWidthThreshold: number
         bottomInset: number
+        zoomScaling: BoundedZoomScalingSettings
     }
     chat: {
         horizontalInset: number
         bottomInset: number
+        controlsScale: number
+        modelBadgeScale: number
         minWidth: number
         fallbackWidth: number
     }
@@ -298,14 +301,13 @@ export type VideoControlsSettings = {
         speedValueWidth: number
         speedValueSliderGap: number
         volumeSliderWidth: number
+        volumeSliderMinWidth: number
         minSeekWidth: number
         speedScaleTickHeight: number
     }
     typography: {
         timeFontSize: number
         timeFontWeight: number
-        hiddenButtonLabelFontSize: number
-        hiddenButtonLabelFontWeight: number
     }
     speed: {
         minRate: number
@@ -318,10 +320,10 @@ export type VideoControlsSettings = {
         guideRates: number[]
     }
     responsive: {
-        showSpeedSliderMinWidth: number
-        fullSpeedSliderMinWidth: number
-        showVolumeSliderMinWidth: number
-        showFullscreenMinWidth: number
+        speedSliderMinResponsiveWidth: number
+        speedSliderFullResponsiveWidth: number
+        volumeSliderMinResponsiveWidth: number
+        volumeSliderFullResponsiveWidth: number
     }
     styles: {
         hostBorderRadius: string
@@ -756,13 +758,19 @@ export const settings: Settings = {
             compactWidthThreshold: 260,
             // Vertical gap between the video node edge and the external controls strip.
             bottomInset: 0,
+            // Bounded zoom scaling for the canvas control strip.
+            zoomScaling: { minZoom: 0.4 },
         },
         // In-chat generated-video mount geometry.
         chat: {
-            // Left and right inset inside generated-video cards.
-            horizontalInset: 18,
-            // Bottom inset inside generated-video cards.
-            bottomInset: 14,
+            // Left and right inset for the external chat controls row.
+            horizontalInset: 0,
+            // Vertical gap between the chat video surface and the external controls row.
+            bottomInset: 0,
+            // Visual scale applied to the shared controls inside chat history cards.
+            controlsScale: 0.72,
+            // Visual scale applied to the generated-media provider badge in chat history cards.
+            modelBadgeScale: 0.72,
             // Minimum SVG viewBox width used when the host is narrow or not measured.
             minWidth: 300,
             // Fallback width before ResizeObserver measurement is available.
@@ -787,14 +795,13 @@ export const settings: Settings = {
             speedValueWidth: 34,
             speedValueSliderGap: 7,
             volumeSliderWidth: 62,
+            volumeSliderMinWidth: 28,
             minSeekWidth: 36,
             speedScaleTickHeight: 10,
         },
         typography: {
             timeFontSize: 13,
             timeFontWeight: 600,
-            hiddenButtonLabelFontSize: 12,
-            hiddenButtonLabelFontWeight: 650,
         },
         // Continuous playback-speed slider settings. Guide rates render as scale marks only.
         speed: {
@@ -807,12 +814,12 @@ export const settings: Settings = {
             guideRate: 1,
             guideRates: [0.75, 1, 1.5],
         },
-        // Responsive visibility thresholds.
+        // Responsive rail sizing thresholds.
         responsive: {
-            showSpeedSliderMinWidth: 430,
-            fullSpeedSliderMinWidth: 520,
-            showVolumeSliderMinWidth: 520,
-            showFullscreenMinWidth: 330,
+            speedSliderMinResponsiveWidth: 430,
+            speedSliderFullResponsiveWidth: 520,
+            volumeSliderMinResponsiveWidth: 330,
+            volumeSliderFullResponsiveWidth: 520,
         },
         styles: {
             hostBorderRadius: '99px',

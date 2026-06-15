@@ -7,12 +7,14 @@ import type { ImageBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/co
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
 import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyMediaModelBadgeStyleProperties, createMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
 // Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
 // video. While VIDEO_PENDING is the active state, the node renders a placeholder
 // (matching the canvas placeholder style — no DOM spinner per PR #202). On
-// VIDEO_COMPLETE the node swaps to a poster + controls-less <video> element plus
-// the shared SVG videoControls bar used by the workspace canvas.
+// VIDEO_COMPLETE the node swaps to a poster + controls-less <video> element,
+// then mounts the shared SVG videoControls bar as an external row below it.
 
 export const aiGeneratedVideoNodeType = 'aiGeneratedVideo'
 
@@ -20,17 +22,6 @@ function parseVariantIndex(value: string | null): number | null {
     if (!value) return null
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : null
-}
-
-function formatModelLabel(modelId: string): string {
-    if (!modelId) return ''
-    const parts = String(modelId).split(':')
-    return parts[1] || parts[0] || ''
-}
-
-function formatVariantLabel(variantIndex: number | null): string {
-    if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
-    return `Variant ${Number(variantIndex) + 1}`
 }
 
 export const aiGeneratedVideoNodeSpec = {
@@ -220,23 +211,25 @@ const buildAuthenticatedUrl = async (url: string): Promise<string> => {
 }
 
 export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => number | undefined) => {
-    const controlsHeight = settings.videoControls.height
+    const normalizeScale = (value: number): number => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 1
+    const controlsScale = normalizeScale(settings.videoControls.chat.controlsScale)
+    const controlsSvgHeight = settings.videoControls.height
+    const controlsHeight = controlsSvgHeight * controlsScale
     const controlsStyles = settings.videoControls.styles
     const containerStyle = {
         position: 'relative' as const,
         overflow: 'hidden' as const,
+        aspectRatio: String(Number(node.attrs.aspectRatio) || 1.777),
     }
     const controlsHostStyle = {
-        position: 'absolute' as const,
-        left: `${settings.videoControls.chat.horizontalInset}px`,
-        right: `${settings.videoControls.chat.horizontalInset}px`,
-        bottom: `${settings.videoControls.chat.bottomInset}px`,
         height: `${controlsHeight}px`,
+        margin: `${settings.videoControls.chat.bottomInset}px ${settings.videoControls.chat.horizontalInset}px 0`,
         pointerEvents: 'auto' as const,
         borderRadius: controlsStyles.hostBorderRadius,
         filter: controlsStyles.hostDropShadow,
         backdropFilter: controlsStyles.hostBackdropFilter,
         webkitBackdropFilter: controlsStyles.hostBackdropFilter,
+        overflow: 'hidden' as const,
         display: 'none',
     }
     const wrapper = html`
@@ -246,9 +239,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
                     <span className="placeholder-text">Generating video…</span>
                 </div>
                 <video className="ai-generated-video-content" preload="metadata" playsinline crossorigin="anonymous"></video>
-                <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
             </div>
-            <div className="ai-generated-media-run-meta"></div>
+            <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
+            <div className="ai-generated-video-model-chrome ai-generated-media-run-meta"></div>
         </div>
     `
 
@@ -257,13 +250,21 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
     const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
-    const runMetaElement = wrapper.querySelector('.ai-generated-media-run-meta') as HTMLElement
+    const modelChromeElement = wrapper.querySelector('.ai-generated-video-model-chrome') as HTMLElement
     applyVideoControlsHostStyleProperties(controlsHost)
+    applyMediaModelBadgeStyleProperties(wrapper, { scale: settings.videoControls.chat.modelBadgeScale })
     let videoControls: VideoControlsInstance | null = null
     let controlsSvg: any = null
     let resizeObserver: ResizeObserver | null = null
+    let unsubscribeAiModelsStore: (() => void) | null = null
 
     applyStyle(videoElement, { display: 'none' })
+
+    const syncContainerGeometry = (): void => {
+        applyStyle(container, {
+            aspectRatio: String(Number(node.attrs.aspectRatio) || 1.777),
+        })
+    }
 
     const handleClick = (event: MouseEvent) => {
         const target = event.target as HTMLElement
@@ -283,25 +284,27 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
     wrapper.addEventListener('click', handleClick)
 
-    const updateRunMeta = (): void => {
-        const mediaLabel = formatModelLabel(node.attrs.mediaModelId || node.attrs.videoModel)
-        const variantLabel = formatVariantLabel(node.attrs.variantIndex)
-        runMetaElement.replaceChildren()
+    const updateModelChrome = (): void => {
+        const modelBadge = createMediaModelBadge({
+            modelId: node.attrs.mediaModelId || node.attrs.videoModel,
+        })
 
-        if (mediaLabel) {
-            const modelPill = html`<span className="ai-generated-media-run-pill" title=${node.attrs.mediaModelId || node.attrs.videoModel}>${mediaLabel}</span>` as HTMLElement
-            runMetaElement.appendChild(modelPill)
+        modelChromeElement.replaceChildren()
+        if (modelBadge) {
+            modelChromeElement.appendChild(modelBadge)
         }
+        modelChromeElement.hidden = !modelBadge
+    }
 
-        if (variantLabel) {
-            const variantPill = html`<span className="ai-generated-media-run-pill is-variant">${variantLabel}</span>` as HTMLElement
-            runMetaElement.appendChild(variantPill)
-        }
-
-        runMetaElement.hidden = runMetaElement.childElementCount === 0
+    const clearErrorPlaceholder = (): void => {
+        container.querySelector('.video-error-placeholder')?.remove()
     }
 
     const getControlsWidth = (): number => {
+        return Math.max(settings.videoControls.chat.minWidth / controlsScale, getControlsVisualWidth() / controlsScale)
+    }
+
+    const getControlsVisualWidth = (): number => {
         const measuredWidth = controlsHost.getBoundingClientRect().width || controlsHost.clientWidth
         return Math.max(settings.videoControls.chat.minWidth, measuredWidth || settings.videoControls.chat.fallbackWidth)
     }
@@ -310,10 +313,10 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         if (!videoControls || !controlsSvg) return
         const width = getControlsWidth()
         controlsSvg
-            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
-            .attr('width', '100%')
-            .attr('height', String(controlsHeight))
-        videoControls.resize(0, 0, width)
+            .attr('viewBox', `0 0 ${width} ${controlsSvgHeight}`)
+            .attr('width', `${100 / controlsScale}%`)
+            .attr('height', String(controlsSvgHeight))
+        videoControls.resize(0, 0, width, getControlsVisualWidth())
     }
 
     const destroyVideoControls = (): void => {
@@ -333,18 +336,22 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         controlsSvg = select(controlsHost)
             .append('svg')
             .attr('class', 'ai-generated-video-controls-svg')
-            .attr('width', '100%')
-            .attr('height', String(controlsHeight))
-            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
+            .attr('width', `${100 / controlsScale}%`)
+            .attr('height', String(controlsSvgHeight))
+            .attr('viewBox', `0 0 ${width} ${controlsSvgHeight}`)
             .style('display', 'block')
             .style('overflow', 'visible')
+            .style('pointer-events', 'none')
+            .style('transform-origin', '0 0')
+            .style('transform', `scale(${controlsScale})`)
 
         videoControls = createVideoControls(controlsSvg, {
             id: String(node.attrs.responseId || node.attrs.fileId || 'chat-video'),
             x: 0,
             y: 0,
             width,
-            height: controlsHeight,
+            height: controlsSvgHeight,
+            responsiveWidth: getControlsVisualWidth(),
             videoEl: videoElement,
             className: 'ai-generated-video-controls',
         })
@@ -359,19 +366,19 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         const { videoUrl, posterUrl, isPending, errorMessage } = node.attrs
 
         if (errorMessage) {
+            clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
             destroyVideoControls()
             placeholderElement.classList.remove('is-active')
-            if (!container.querySelector('.video-error-placeholder')) {
-                container.appendChild(html`
-                    <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>${errorMessage}</span></div>
-                `)
-            }
+            container.appendChild(html`
+                <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>${errorMessage}</span></div>
+            `)
             return
         }
 
         if (isPending || !videoUrl) {
+            clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
             destroyVideoControls()
@@ -380,6 +387,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             return
         }
 
+        clearErrorPlaceholder()
         placeholderElement.classList.remove('is-active')
         applyStyle(videoElement, { display: 'block' })
         applyStyle(controlsHost, { display: 'block' })
@@ -397,18 +405,18 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
 
     videoElement.onerror = () => {
+        clearErrorPlaceholder()
         applyStyle(videoElement, { display: 'none' })
         applyStyle(controlsHost, { display: 'none' })
         destroyVideoControls()
-        if (!container.querySelector('.video-error-placeholder')) {
-            container.appendChild(html`
-                <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Video unavailable</span></div>
-            `)
-        }
+        container.appendChild(html`
+            <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Video unavailable</span></div>
+        `)
     }
 
     updateDisplay().catch(() => {})
-    updateRunMeta()
+    unsubscribeAiModelsStore = aiModelsStore.subscribe(() => updateModelChrome())
+    syncContainerGeometry()
 
     return {
         dom: wrapper,
@@ -418,12 +426,15 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             }
 
             node = updatedNode
+            syncContainerGeometry()
             updateDisplay().catch(() => {})
-            updateRunMeta()
+            updateModelChrome()
             return true
         },
         destroy: () => {
             wrapper.removeEventListener('click', handleClick)
+            unsubscribeAiModelsStore?.()
+            unsubscribeAiModelsStore = null
             resizeObserver?.disconnect()
             resizeObserver = null
             destroyVideoControls()
