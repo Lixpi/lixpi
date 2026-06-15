@@ -104,19 +104,20 @@ export function scaleCanvasChromeToScreenForZoom(
 
 // Geometry for floating DOM chrome mounted outside the transformed viewport.
 // World coordinates are projected once into screen coordinates. The returned
-// layout width is expanded when low-zoom chrome thins so its transformed right
-// edge still matches the projected media right edge.
+// layout width expands when low-zoom chrome thins so the transformed right edge
+// still matches the projected media right edge.
 export function getCanvasChromeScreenLayout(
 	config: CanvasChromeScreenLayoutConfig
 ): CanvasChromeScreenLayout {
 	const { viewport, worldPosition, worldDimensions, baseGap, zoomScaling } = config
-	const screenScale = scaleCanvasChromeToScreenForZoom(1, viewport.zoom, zoomScaling)
-	const screenGap = scaleCanvasChromeToScreenForZoom(baseGap, viewport.zoom, zoomScaling)
-	const screenWidth = worldDimensions.width * safeZoom(viewport.zoom)
+	const zoom = safeZoom(viewport.zoom)
+	const screenScale = scaleCanvasChromeToScreenForZoom(1, zoom, zoomScaling)
+	const screenGap = scaleCanvasChromeToScreenForZoom(baseGap, zoom, zoomScaling)
+	const screenWidth = worldDimensions.width * zoom
 
 	return {
-		left: viewport.x + worldPosition.x * safeZoom(viewport.zoom),
-		top: viewport.y + (worldPosition.y + worldDimensions.height) * safeZoom(viewport.zoom) + screenGap,
+		left: viewport.x + worldPosition.x * zoom,
+		top: viewport.y + (worldPosition.y + worldDimensions.height) * zoom + screenGap,
 		layoutWidth: screenWidth / screenScale,
 		screenScale,
 		screenGap,

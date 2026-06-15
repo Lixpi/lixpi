@@ -2,10 +2,10 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+	getCanvasChromeScreenLayout,
 	getAdaptiveZoomMultiplier,
 	scaleCanvasChromeForZoom,
 	scaleCanvasChromeToScreenForZoom,
-	getCanvasChromeScreenLayout,
 	scaleForZoom,
 	getEdgeScaledSizes,
 	getResizeHandleScaledSizes,
@@ -91,16 +91,14 @@ describe('scaleForZoom', () => {
 // =============================================================================
 
 describe('getCanvasChromeScreenLayout', () => {
-	const viewport = { x: 120, y: -45, zoom: 1 }
-	const worldPosition = { x: 200, y: 320 }
-	const worldDimensions = { width: 640, height: 360 }
+	const worldPosition = { x: 240, y: 360 }
+	const worldDimensions = { width: 512, height: 288 }
 	const baseGap = 6
-	const baseIconSize = 34
-	const minZoom = 0.4
+	const viewportBase = { x: 120, y: -45 }
 
 	function getLayout(zoom: number) {
 		return getCanvasChromeScreenLayout({
-			viewport: { ...viewport, zoom },
+			viewport: { ...viewportBase, zoom },
 			worldPosition,
 			worldDimensions,
 			baseGap,
@@ -108,61 +106,66 @@ describe('getCanvasChromeScreenLayout', () => {
 		})
 	}
 
-	it('keeps screen-space DOM chrome visually identical throughout the scaling band', () => {
+	it('keeps generated-media icon chrome screen scale constant throughout the bounded band', () => {
 		for (let zoomStep = 40; zoomStep <= 500; zoomStep += 1) {
 			const zoom = zoomStep / 100
 			const layout = getLayout(zoom)
 
 			expect(layout.screenScale).toBeCloseTo(1, 10)
-			expect(baseIconSize * layout.screenScale).toBeCloseTo(baseIconSize, 10)
 			expect(layout.screenGap).toBeCloseTo(baseGap, 10)
+			expect(layout.screenWidth).toBeCloseTo(worldDimensions.width * zoom, 10)
+			expect(layout.layoutWidth * layout.screenScale).toBeCloseTo(worldDimensions.width * zoom, 10)
 		}
 	})
 
-	it('freezes the scaling curve below the lower breakpoint so overview zooms thin chrome deterministically', () => {
-		let previousScreenIconSize = 0
-
+	it('thins generated-media icon chrome only below the lower zoom breakpoint', () => {
+		let previousScale = 0
 		for (let zoomStep = 1; zoomStep < 40; zoomStep += 1) {
 			const zoom = zoomStep / 100
 			const layout = getLayout(zoom)
-			const screenIconSize = baseIconSize * layout.screenScale
+			const expectedScale = zoom / boundedZoomScaling.minZoom
 
-			expect(layout.screenScale).toBeCloseTo(zoom / minZoom, 10)
-			expect(screenIconSize).toBeCloseTo(baseIconSize * zoom / minZoom, 10)
-			expect(screenIconSize).toBeLessThan(baseIconSize)
-			expect(screenIconSize).toBeGreaterThan(previousScreenIconSize)
-			expect(layout.screenGap).toBeCloseTo(baseGap * zoom / minZoom, 10)
+			expect(layout.screenScale).toBeCloseTo(expectedScale, 10)
+			expect(layout.screenScale).toBeLessThan(1)
+			expect(layout.screenScale).toBeGreaterThan(previousScale)
+			expect(layout.screenGap).toBeCloseTo(baseGap * expectedScale, 10)
+			expect(layout.layoutWidth * layout.screenScale).toBeCloseTo(worldDimensions.width * zoom, 10)
 
-			previousScreenIconSize = screenIconSize
+			previousScale = layout.screenScale
 		}
 	})
 
-	it('keeps the chrome right edge aligned with the projected media right edge', () => {
+	it('keeps the transformed strip right edge aligned with the projected media right edge', () => {
+		for (const zoom of [0.1, 0.39, 0.4, 0.75, 1, 1.61, 2, 5]) {
+			const layout = getLayout(zoom)
+			const projectedRight = viewportBase.x + (worldPosition.x + worldDimensions.width) * zoom
+
+			expect(layout.left + layout.layoutWidth * layout.screenScale).toBeCloseTo(projectedRight, 10)
+		}
+	})
+
+	it('positions the strip top from projected media bottom plus the bounded screen gap', () => {
+		for (const zoom of [0.18, 0.4, 1, 2]) {
+			const layout = getLayout(zoom)
+			const projectedBottom = viewportBase.y + (worldPosition.y + worldDimensions.height) * zoom
+
+			expect(layout.top).toBeCloseTo(projectedBottom + layout.screenGap, 10)
+		}
+	})
+
+	it('uses the same bounded scaling helper as connector chrome and bubble menus', () => {
 		for (let zoomStep = 1; zoomStep <= 500; zoomStep += 1) {
 			const zoom = zoomStep / 100
 			const layout = getLayout(zoom)
 
-			expect(layout.layoutWidth * layout.screenScale).toBeCloseTo(worldDimensions.width * zoom, 10)
-			expect(layout.left + layout.layoutWidth * layout.screenScale)
-				.toBeCloseTo(viewport.x + (worldPosition.x + worldDimensions.width) * zoom, 10)
-		}
-	})
-
-	it('projects the chrome top from the media bottom plus bounded screen gap', () => {
-		for (const zoom of [0.18, 0.4, 0.42, 1.05, 2]) {
-			const layout = getLayout(zoom)
-			const expectedMediaBottom = viewport.y + (worldPosition.y + worldDimensions.height) * zoom
-
-			expect(layout.top).toBeCloseTo(expectedMediaBottom + layout.screenGap, 10)
-		}
-	})
-
-	it('matches connector chrome screen scaling at representative zooms', () => {
-		for (const zoom of [0.15, 0.18, 0.39, 0.4, 0.45, 0.56, 1, 1.61, 3]) {
-			const layout = getLayout(zoom)
-
-			expect(layout.screenScale).toBeCloseTo(scaleCanvasChromeToScreenForZoom(1, zoom, boundedZoomScaling), 10)
-			expect(layout.screenGap).toBeCloseTo(scaleCanvasChromeToScreenForZoom(baseGap, zoom, boundedZoomScaling), 10)
+			expect(layout.screenScale).toBeCloseTo(
+				scaleCanvasChromeToScreenForZoom(1, zoom, boundedZoomScaling),
+				10
+			)
+			expect(layout.screenGap).toBeCloseTo(
+				scaleCanvasChromeToScreenForZoom(baseGap, zoom, boundedZoomScaling),
+				10
+			)
 		}
 	})
 })

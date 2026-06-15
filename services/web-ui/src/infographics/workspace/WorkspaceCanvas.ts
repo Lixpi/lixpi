@@ -334,7 +334,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let workspaceId = options.workspaceId
     const connectorStyles = settings.connector.styles
     const selectionStyles = settings.selection.styles
-    const imageNodeStyles = settings.imageNode.styles
+    const imageNodeStyles = settings.mediaNode.image.styles
     const branchOriginSettings = settings.imageBranchLineage.branchOrigin
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
@@ -347,6 +347,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)
     paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
     paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
+    paneEl.style.setProperty('--workspace-generated-media-chrome-icon-size', `${settings.mediaNode.generatedMediaChrome.iconSize}px`)
     paneEl.style.setProperty('--workspace-branch-origin-icon-size', `${branchOriginSettings.iconSize}px`)
     paneEl.style.setProperty('--workspace-branch-origin-background-color', branchOriginSettings.styles.backgroundColor)
     paneEl.style.setProperty('--workspace-branch-origin-border-color', branchOriginSettings.styles.borderColor)
@@ -362,8 +363,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let connectionManager: WorkspaceConnectionManager | null = null
     let pixiMediaLayer: PixiMediaLayer | null = null
     let viewportBridge: ViewportBridge | null = null
-    let imageChromeViewportEl: HTMLDivElement | null = null
+    let mediaChromeViewportEl: HTMLDivElement | null = null
     let generatedMediaChromeLayerEl: HTMLDivElement | null = null
+    let generatedMediaInfoPanelLayerEl: HTMLDivElement | null = null
     let generatedMediaChromeSyncRaf: number | null = null
 
     const liveNodeOverrides: Map<string, { position?: { x: number; y: number }; dimensions?: { width: number; height: number } }> = new Map()
@@ -373,7 +375,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let autoGrowRaf: number | null = null
     let selectedNodeIds: Set<string> = new Set()
     let selectedEdgeId: string | null = null
-    const expandedGeneratedImageInfoNodeIds: Set<string> = new Set()
+    const expandedGeneratedMediaInfoNodeIds: Set<string> = new Set()
     const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
     const expandedBranchForkInfoNodeIds: Set<string> = new Set()
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
@@ -480,11 +482,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaRegistry.register(videoNodeHandler)
         }
     }
-    imageChromeViewportEl = createImageChromeViewport()
+    mediaChromeViewportEl = createMediaChromeViewport()
     generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()
+    generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()
     viewportBridge = createViewportBridge({
         viewportEl,
-        viewportOverlayEls: [imageChromeViewportEl],
+        viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],
         getPixiLayers: () => [pixiMediaLayer],
     })
     if (currentCanvasState?.viewport) {
@@ -987,7 +990,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     height: `${node.dimensions.height}px`,
                 })
             }
-            updateGeneratedImageChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())
+            updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())
         }
 
         repositionAllThreadFloatingInputs()
@@ -995,7 +998,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         repositionCanvasBubbleMenu()
     }
 
-    function createImageChromeViewport(): HTMLDivElement {
+    function createMediaChromeViewport(): HTMLDivElement {
         const chromeViewportStyle = {
             position: 'absolute' as const,
             top: '0',
@@ -1005,7 +1008,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             pointerEvents: 'none' as const,
             zIndex: '3',
         }
-        const chromeViewport = html`<div className="workspace-image-chrome-viewport" style=${chromeViewportStyle}></div>` as HTMLDivElement
+        const chromeViewport = html`<div className="workspace-media-chrome-viewport" style=${chromeViewportStyle}></div>` as HTMLDivElement
         paneEl.appendChild(chromeViewport)
         return chromeViewport
     }
@@ -1022,24 +1025,72 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return chromeLayer
     }
 
-    function applyGeneratedImageChromeGeometry(
+    // Viewport-transformed overlay for expandable media info panels. This keeps
+    // the panel on the same natural canvas scale as the media node while the
+    // separate generated-media icon strip keeps its bounded screen-space scaling.
+    function createGeneratedMediaInfoPanelLayer(): HTMLDivElement {
+        const panelLayerStyle = {
+            position: 'absolute' as const,
+            top: '0',
+            left: '0',
+            transformOrigin: '0 0',
+            willChange: 'transform',
+            pointerEvents: 'none' as const,
+            zIndex: '5',
+        }
+        const panelLayer = html`<div className="workspace-generated-media-info-panel-layer" style=${panelLayerStyle}></div>` as HTMLDivElement
+        paneEl.appendChild(panelLayer)
+        return panelLayer
+    }
+
+    function applyGeneratedMediaChromeGeometry(
         chromeEl: HTMLElement,
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
-        viewport: Viewport
+        viewport: Viewport,
     ): void {
         const chromeLayout = getCanvasChromeScreenLayout({
             viewport,
             worldPosition: position,
             worldDimensions: dimensions,
-            baseGap: settings.imageNode.generatedMediaChrome.topGap,
-            zoomScaling: settings.imageNode.generatedMediaChrome.zoomScaling,
+            baseGap: settings.mediaNode.generatedMediaChrome.topGap,
+            zoomScaling: settings.mediaNode.generatedMediaChrome.zoomScaling,
         })
         applyStyle(chromeEl, {
             left: `${chromeLayout.left}px`,
             top: `${chromeLayout.top}px`,
             width: `${chromeLayout.layoutWidth}px`,
             transform: `scale(${chromeLayout.screenScale})`,
+        })
+    }
+
+    function applyGeneratedMediaInfoPanelGeometry(
+        panel: HTMLElement,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number },
+        viewport: Viewport,
+    ): void {
+        const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
+        const iconStripScreenGap = scaleCanvasChromeToScreenForZoom(
+            settings.mediaNode.generatedMediaChrome.topGap,
+            zoom,
+            settings.mediaNode.generatedMediaChrome.zoomScaling,
+        )
+        const iconScreenSize = scaleCanvasChromeToScreenForZoom(
+            settings.mediaNode.generatedMediaChrome.iconSize,
+            zoom,
+            settings.mediaNode.generatedMediaChrome.zoomScaling,
+        )
+        const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom
+        const panelWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
+            ? dimensions.width
+            : settings.imageBranchLineage.generatedImageSize
+
+        applyStyle(panel, {
+            left: `${position.x}px`,
+            top: `${panelTop}px`,
+            width: `${panelWidth}px`,
+            transform: 'none',
         })
     }
 
@@ -1084,8 +1135,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const rect = chromeEl.getBoundingClientRect()
         const x = event.clientX - rect.left
         const y = event.clientY - rect.top
-        const resizeHandleSettings = settings.imageNode.resizeHandle
-        const { size, offset } = settings.imageNode.useZoomCompensatedResizeHandleScaling
+        const resizeHandleSettings = settings.mediaNode.resizeHandle
+        const { size, offset } = settings.mediaNode.useZoomCompensatedResizeHandleScaling
             ? getResizeHandleScaledSizes(getCurrentViewportZoom(), {
                 baseSize: resizeHandleSettings.size,
                 baseOffset: resizeHandleSettings.offset,
@@ -1137,24 +1188,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         controls?.resize(0, 0, width)
     }
 
-    function updateGeneratedImageChromeLiveTransform(
+    function updateGeneratedMediaChromeLiveTransform(
         nodeId: string,
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
-        viewport: Viewport
+        viewport: Viewport,
     ): void {
-        const chromeEl = generatedMediaChromeLayerEl?.querySelector(`[data-image-chrome-node-id="${nodeId}"]`) as HTMLElement | null
-        if (chromeEl) applyGeneratedImageChromeGeometry(chromeEl, position, dimensions, viewport)
-        const videoChromeEl = imageChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        const chromeEl = generatedMediaChromeLayerEl?.querySelector(`[data-media-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        if (chromeEl) applyGeneratedMediaChromeGeometry(chromeEl, position, dimensions, viewport)
+        updateGeneratedMediaInfoPanelPosition(nodeId, position, dimensions, viewport)
+        const videoChromeEl = mediaChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions)
-        const branchOriginChromeEl = imageChromeViewportEl?.querySelector(`[data-branch-origin-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        const branchOriginChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-origin-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (branchOriginChromeEl) applyBranchOriginInfoChromeGeometry(
             branchOriginChromeEl,
             position,
             dimensions,
             getBranchOriginInfoPanelWidth(nodeId),
         )
-        const branchForkChromeEl = imageChromeViewportEl?.querySelector(`[data-branch-fork-chrome-node-id="${nodeId}"]`) as HTMLElement | null
+        const branchForkChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-fork-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (branchForkChromeEl) applyBranchOriginInfoChromeGeometry(
             branchForkChromeEl,
             position,
@@ -1163,14 +1215,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
     }
 
-    function updateGeneratedMediaChromeLayout(viewport: Viewport): void {
+    function updateGeneratedMediaChromeLayout(viewport: Viewport = getLiveViewport()): void {
         if (!currentCanvasState || !generatedMediaChromeLayerEl) return
         const nodesById = getCanvasNodesById(currentCanvasState.nodes)
         for (const node of currentCanvasState.nodes) {
             if (node.type !== 'image' && node.type !== 'video') continue
             const position = getNodeWorldPosition(node, nodesById)
             const dimensions = liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
-            updateGeneratedImageChromeLiveTransform(node.nodeId, position, dimensions, viewport)
+            updateGeneratedMediaChromeLiveTransform(node.nodeId, position, dimensions, viewport)
         }
     }
 
@@ -1242,7 +1294,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         options: GeneratedMediaInfoPanelOptions = {}
     ): HTMLElement {
         const generatedBy = node.generatedBy
-        const panelClassName = ['canvas-generated-image-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
+        const panelClassName = ['canvas-generated-media-info-panel', options.className, 'nopan'].filter(Boolean).join(' ')
         const panel = html`<div className=${panelClassName}></div>` as HTMLElement
 
         if (generatedBy) {
@@ -1287,7 +1339,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     threadId: projection.threadId,
                     className: 'canvas-generated-media-projection-editor',
                     traceDetailsOptions: {
-                        className: 'canvas-generated-image-trace-details',
+                        className: 'canvas-generated-media-trace-details',
                         renderReferencesWhenClosed: true,
                         getAdditionalReferenceImageSources: getCanvasTraceReferenceImageSources,
                     },
@@ -1303,36 +1355,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return panel
     }
 
-    function toggleGeneratedImageInfo(nodeId: string): void {
-        if (expandedGeneratedImageInfoNodeIds.has(nodeId)) {
-            expandedGeneratedImageInfoNodeIds.delete(nodeId)
+    function toggleGeneratedMediaInfo(nodeId: string): void {
+        if (expandedGeneratedMediaInfoNodeIds.has(nodeId)) {
+            expandedGeneratedMediaInfoNodeIds.delete(nodeId)
         } else {
-            expandedGeneratedImageInfoNodeIds.add(nodeId)
+            expandedGeneratedMediaInfoNodeIds.add(nodeId)
         }
-        syncGeneratedImageChrome(currentCanvasState)
+        syncGeneratedMediaChrome(currentCanvasState)
     }
 
     function hasOpenGeneratedMediaInfoPanels(): boolean {
-        return expandedGeneratedImageInfoNodeIds.size > 0
+        return expandedGeneratedMediaInfoNodeIds.size > 0
             || expandedBranchOriginInfoNodeIds.size > 0
             || expandedBranchForkInfoNodeIds.size > 0
     }
 
     function clearGeneratedMediaInfoPanels(options: { preserveBranchInfo?: boolean } = {}): void {
         if (!hasOpenGeneratedMediaInfoPanels()) return
-        expandedGeneratedImageInfoNodeIds.clear()
+        expandedGeneratedMediaInfoNodeIds.clear()
         if (!options.preserveBranchInfo) {
             expandedBranchOriginInfoNodeIds.clear()
             expandedBranchForkInfoNodeIds.clear()
         }
-        syncGeneratedImageChrome(currentCanvasState)
+        syncGeneratedMediaChrome(currentCanvasState)
     }
 
     function shouldClearGeneratedMediaInfoForCanvasClick(target: EventTarget | null): boolean {
         if (!hasOpenGeneratedMediaInfoPanels()) return false
         if (!(target instanceof Element)) return false
         if (!paneEl.contains(target)) return false
-        if (target.closest('.canvas-generated-image-info-panel')) return false
+        if (target.closest('.canvas-generated-media-info-panel')) return false
         if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node')) return false
         if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu')) return false
         return true
@@ -1370,7 +1422,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } else {
             expandedBranchOriginInfoNodeIds.add(branchOriginNodeId)
         }
-        syncGeneratedImageChrome(currentCanvasState)
+        syncGeneratedMediaChrome(currentCanvasState)
     }
 
     function toggleBranchForkGeneratedMediaInfo(branchForkNodeId: string): void {
@@ -1379,7 +1431,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         } else {
             expandedBranchForkInfoNodeIds.add(branchForkNodeId)
         }
-        syncGeneratedImageChrome(currentCanvasState)
+        syncGeneratedMediaChrome(currentCanvasState)
     }
 
     function createBranchOriginReferenceLabel(nodeId: string): string {
@@ -1400,7 +1452,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         ` as HTMLElement
         const uniqueReferenceNodeIds = uniqueStringValues(referenceNodeIds)
         if (uniqueReferenceNodeIds.length === 0) {
-            section.appendChild(html`<p className="canvas-generated-image-info-empty">No provided references.</p>` as HTMLElement)
+            section.appendChild(html`<p className="canvas-generated-media-info-empty">No provided references.</p>` as HTMLElement)
             return section
         }
 
@@ -1433,7 +1485,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const section = html`
             <div className="canvas-branch-origin-provenance-section">
                 <span className="canvas-branch-origin-provenance-label">Branch decision</span>
-                <p className="canvas-generated-image-info-text">${decisionText}</p>
+                <p className="canvas-generated-media-info-text">${decisionText}</p>
             </div>
         ` as HTMLElement
         return section
@@ -1445,7 +1497,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const referenceNodeIds = branchOriginNode.provenance?.referenceNodeIds ?? []
         if (!promptText && referenceNodeIds.length === 0 && generatedMediaNodes.length === 0) return null
 
-        const panel = html`<div className="canvas-generated-image-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
+        const panel = html`<div className="canvas-generated-media-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
         const promptProjection = buildBranchOriginPromptProjection(promptText, {
             threadId: `branch-origin:${branchOriginNode.nodeId}`,
         })
@@ -1521,11 +1573,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // the media descriptor is still being analyzed and explains itself on hover.
     function createMediaInfoButton(node: ImageCanvasNode | VideoCanvasNode): HTMLButtonElement {
         const analyzing = node.descriptor?.status === 'analyzing'
-        const isExpanded = expandedGeneratedImageInfoNodeIds.has(node.nodeId)
+        const isExpanded = expandedGeneratedMediaInfoNodeIds.has(node.nodeId)
         const title = analyzing ? 'Analyzing media — generating a description…' : 'Media details'
         const button = html`
             <button
-                className=${`image-info-button nopan${isExpanded ? ' is-active' : ''}${analyzing ? ' is-analyzing' : ''}`}
+                className=${`media-info-button nopan${isExpanded ? ' is-active' : ''}${analyzing ? ' is-analyzing' : ''}`}
                 type="button"
                 aria-label=${title}
                 aria-expanded=${String(isExpanded)}
@@ -1537,7 +1589,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         button.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault()
             event.stopPropagation()
-            toggleGeneratedImageInfo(node.nodeId)
+            toggleGeneratedMediaInfo(node.nodeId)
         })
         return button
     }
@@ -1585,34 +1637,52 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return modelMeta?.title ?? ''
     }
 
-    // Provenance/descriptor chrome (provider badge + info button + expandable
-    // panel) rendered as a strip BELOW the node — identical placement for image
-    // and video so the info affordance is consistent across media. The video
-    // control bar is a SEPARATE overlay (createVideoControlsChrome).
-    function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode, viewport: Viewport): HTMLElement {
+    // Provider badge + info button only. This screen-space strip is projected from
+    // media node bounds and uses bounded zoom compensation. The expandable info
+    // panel renders separately in the viewport-transformed panel layer.
+    function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
         const modelId = getGeneratedMediaModelId(node)
         const modelProvider = getGeneratedMediaModelProvider(node, modelId)
         const modelLabel = getGeneratedMediaModelLabel(modelId, modelProvider)
         const providerIcon = getAiProviderIcon(modelProvider)
         const shouldShowModelBadge = Boolean(providerIcon || modelLabel)
-        const isExpanded = expandedGeneratedImageInfoNodeIds.has(node.nodeId)
         const chromeEl = html`
-            <div className="workspace-generated-image-chrome" data=${{ imageChromeNodeId: node.nodeId }}>
-                <div className="workspace-generated-image-actions">
+            <div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
+                <div className="workspace-generated-media-actions">
                     ${shouldShowModelBadge ? html`
-                        <div className="image-model-badge" title=${modelLabel}>
-                            ${providerIcon ? html`<span className="image-model-badge-icon" innerHTML=${providerIcon}></span>` : null}
-                            ${modelLabel ? html`<span className="image-model-badge-name">${modelLabel}</span>` : null}
+                        <div className="media-model-badge" title=${modelLabel}>
+                            ${providerIcon ? html`<span className="media-model-badge-icon" innerHTML=${providerIcon}></span>` : null}
+                            ${modelLabel ? html`<span className="media-model-badge-name">${modelLabel}</span>` : null}
                         </div>
                     ` : null}
                     ${createMediaInfoButton(node)}
                 </div>
-                ${isExpanded ? createGeneratedMediaInfoPanel(node) : null}
             </div>
         ` as HTMLElement
 
-        applyGeneratedImageChromeGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions, viewport)
+        applyGeneratedMediaChromeGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions, getLiveViewport())
         return chromeEl
+    }
+
+    // The expandable info panel is decoupled from the scaling chrome strip. It
+    // uses normal viewport-transformed canvas coordinates, so zooming the canvas
+    // changes the panel and text naturally instead of applying bounded icon scaling.
+    function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
+        const panel = createGeneratedMediaInfoPanel(node)
+        panel.setAttribute('data-media-info-panel-node-id', node.nodeId)
+        applyStyle(panel, { position: 'absolute', top: '0', left: '0' })
+        return panel
+    }
+
+    function updateGeneratedMediaInfoPanelPosition(
+        nodeId: string,
+        position: { x: number; y: number },
+        dimensions: { width: number; height: number },
+        viewport: Viewport,
+    ): void {
+        const panel = generatedMediaInfoPanelLayerEl?.querySelector(`[data-media-info-panel-node-id="${nodeId}"]`) as HTMLElement | null
+        if (!panel) return
+        applyGeneratedMediaInfoPanelGeometry(panel, position, dimensions, viewport)
     }
 
     // Video chrome for completed video nodes: the actual <video> shown on the node
@@ -1736,7 +1806,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (generatedMediaChromeSyncRaf !== null) return
         generatedMediaChromeSyncRaf = requestAnimationFrame(() => {
             generatedMediaChromeSyncRaf = null
-            syncGeneratedImageChrome(currentCanvasState)
+            syncGeneratedMediaChrome(currentCanvasState)
         })
     }
 
@@ -1749,7 +1819,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             clearTimeout(pending)
             videoControlsHideTimers.delete(nodeId)
         }
-        imageChromeViewportEl
+        mediaChromeViewportEl
             ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
             ?.classList.add('is-visible')
     }
@@ -1759,16 +1829,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (pending !== undefined) clearTimeout(pending)
         const timer = window.setTimeout(() => {
             videoControlsHideTimers.delete(nodeId)
-            imageChromeViewportEl
+            mediaChromeViewportEl
                 ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
                 ?.classList.remove('is-visible')
         }, 140)
         videoControlsHideTimers.set(nodeId, timer)
     }
 
-    function syncGeneratedImageChrome(canvasState: CanvasState | null = currentCanvasState): void {
-        if (!imageChromeViewportEl || !generatedMediaChromeLayerEl) return
-        const viewport = getLiveViewport()
+    function syncGeneratedMediaChrome(canvasState: CanvasState | null = currentCanvasState): void {
+        if (!mediaChromeViewportEl || !generatedMediaChromeLayerEl) return
         // Generated/uploaded media (image OR video) carrying generation metadata
         // or a descriptor gets the below-node provenance chrome (info button +
         // panel + analyzing pulse) — placed identically for both media types.
@@ -1795,8 +1864,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // Drop expanded state for nodes that no longer show info chrome, so a
         // deleted node doesn't leak an orphaned open panel.
         const infoNodeIds = new Set<string>(mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => node.nodeId))
-        for (const expandedNodeId of Array.from(expandedGeneratedImageInfoNodeIds)) {
-            if (!infoNodeIds.has(expandedNodeId)) expandedGeneratedImageInfoNodeIds.delete(expandedNodeId)
+        for (const expandedNodeId of Array.from(expandedGeneratedMediaInfoNodeIds)) {
+            if (!infoNodeIds.has(expandedNodeId)) expandedGeneratedMediaInfoNodeIds.delete(expandedNodeId)
         }
         const branchOriginNodeIds = new Set<string>(branchOriginNodes.map((node: BranchOriginCanvasNode) => node.nodeId))
         for (const expandedNodeId of Array.from(expandedBranchOriginInfoNodeIds)) {
@@ -1814,13 +1883,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .filter((el): el is HTMLElement => Boolean(el))
 
         generatedMediaChromeLayerEl.replaceChildren(
-            ...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaChrome(node, viewport)),
+            ...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaChrome(node)),
         )
-        imageChromeViewportEl.replaceChildren(
+        mediaChromeViewportEl.replaceChildren(
             ...branchOriginInfoChromeEls,
             ...branchForkInfoChromeEls,
             ...videoChromeEls,
         )
+        // Expanded info panels render in their own viewport-transformed layer,
+        // decoupled from the bounded scaling strip above, then get anchored under it.
+        if (generatedMediaInfoPanelLayerEl) {
+            const expandedMediaInfoNodes = mediaInfoNodes.filter((node: ImageCanvasNode | VideoCanvasNode) =>
+                expandedGeneratedMediaInfoNodeIds.has(node.nodeId))
+            generatedMediaInfoPanelLayerEl.replaceChildren(
+                ...expandedMediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaInfoPanelChrome(node)),
+            )
+            const nodesById = getCanvasNodesById(canvasState?.nodes ?? [])
+            const viewport = getLiveViewport()
+            for (const node of expandedMediaInfoNodes) {
+                updateGeneratedMediaInfoPanelPosition(
+                    node.nodeId,
+                    getNodeWorldPosition(node, nodesById),
+                    liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions,
+                    viewport,
+                )
+            }
+        }
     }
 
     function syncPixiGeneratingImageNodes(): void {
@@ -1841,7 +1929,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function syncPixiMediaLayer(canvasState: CanvasState | null = currentCanvasState): void {
         syncPixiGeneratingImageNodes()
         pixiMediaLayer?.sync(canvasState)
-        syncGeneratedImageChrome(canvasState)
+        syncGeneratedMediaChrome(canvasState)
     }
 
     function fitImageDimensionsToAspectRatio(
@@ -2482,10 +2570,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             '.document-resize-handle',
             '.node-drag-overlay',
             '.bubble-menu',
-            '.workspace-generated-image-chrome',
+            '.workspace-generated-media-chrome',
             '.workspace-branch-origin-info-chrome',
             '.workspace-branch-fork-info-chrome',
-            '.canvas-generated-image-info-panel',
+            '.canvas-generated-media-info-panel',
         ].join(', '))
     }
 
@@ -6506,9 +6594,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             syncViewportInteractionState(vp)
             updateCurrentCanvasViewport(vp)
             viewportBridge?.applyViewport(vp)
-            updateGeneratedMediaChromeLayout(vp)
+            updateGeneratedMediaChromeLayout()
             if (zoomChanged) {
-                if (settings.imageNode.useZoomCompensatedResizeHandleScaling) {
+                if (settings.mediaNode.useZoomCompensatedResizeHandleScaling) {
                     pendingHandleZoom = vp.zoom
                 }
                 if (settings.connector.useZoomCompensatedScaling) {
@@ -6817,8 +6905,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Handle sizing/positioning of resize handles so they appear constant in screen pixels
     function applyHandleSizing(handle: HTMLElement, corner: ResizeCorner, zoom: number) {
-        const resizeHandleSettings = settings.imageNode.resizeHandle
-        const { size: sizePx, offset: offsetPx } = settings.imageNode.useZoomCompensatedResizeHandleScaling
+        const resizeHandleSettings = settings.mediaNode.resizeHandle
+        const { size: sizePx, offset: offsetPx } = settings.mediaNode.useZoomCompensatedResizeHandleScaling
             ? getResizeHandleScaledSizes(zoom, {
                 baseSize: resizeHandleSettings.size,
                 baseOffset: resizeHandleSettings.offset,
@@ -6986,7 +7074,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 })
 
                 pixiMediaLayer?.setNodeLiveTransform(draggedNodeId, currentPos, currentDims)
-                updateGeneratedImageChromeLiveTransform(draggedNodeId, currentPos, currentDims, getLiveViewport())
+                updateGeneratedMediaChromeLiveTransform(draggedNodeId, currentPos, currentDims, getLiveViewport())
 
                 if (floatingInputEl && floatingInputEl.style.display !== 'none' && draggedNodeId === singleSelectedNodeId) {
                     applyStyle(floatingInputEl, {
@@ -7136,7 +7224,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                                 applyStyle(movedNodeEl, { left: `${resolvedPosition.x}px`, top: `${resolvedPosition.y}px` })
                             }
                             pixiMediaLayer?.setNodeLiveTransform(n.nodeId, resolvedPosition, n.dimensions)
-                            updateGeneratedImageChromeLiveTransform(n.nodeId, resolvedPosition, n.dimensions, getLiveViewport())
+                            updateGeneratedMediaChromeLiveTransform(n.nodeId, resolvedPosition, n.dimensions, getLiveViewport())
                             const nextPosition = n.parentId
                                 ? toParentRelativePosition(resolvedPosition, n.parentId, getCanvasNodesById(updatedNodes))
                                 : resolvedPosition
@@ -7279,7 +7367,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
 
             pixiMediaLayer?.setNodeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions)
-            updateGeneratedImageChromeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions, getLiveViewport())
+            updateGeneratedMediaChromeLiveTransform(nodeId, liveResizePosition, liveResizeDimensions, getLiveViewport())
             pixiMediaLayer?.setSelectedImageNodes(selectedNodeIds)
             pixiMediaLayer?.setSelectionOverlayBounds(getSelectionOverlayBounds(), { fill: shouldFillSelectionOverlayBounds() })
 
@@ -7860,7 +7948,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             itemId: item.itemId,
                         })
                         if (!materialized.fileId || !materialized.url) return false
-                        const width = settings.imageNode.defaultInsertionWidth
+                        const width = settings.mediaNode.image.defaultInsertionWidth
                         const imageNodeId = `node-${materialized.fileId}`
                         const imageNode: Omit<ImageCanvasNode, 'position'> = {
                             nodeId: imageNodeId,
@@ -7891,7 +7979,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         if (!materialized.video?.fileId || !materialized.video?.url) return false
                         // Reuse the image default insertion width — the video node
                         // resizes to its intrinsic aspect on first frame.
-                        const width = settings.imageNode.defaultInsertionWidth
+                        const width = settings.mediaNode.image.defaultInsertionWidth
                         const aspectRatio = item.aspectRatio || 1
                         const videoNodeId = `node-${materialized.video.fileId}`
                         const posterFileId = materialized.poster?.fileId ?? ''
@@ -8078,7 +8166,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             // Video controls need videoNodeHandler entries. Those entries are
             // created by syncPixiMediaLayer, so media chrome must sync after the
             // PIXI/media-registry pass.
-            syncGeneratedImageChrome(currentCanvasState)
+            syncGeneratedMediaChrome(currentCanvasState)
 
             // 3. Apply viewport after PIXI sync. `setViewport` may trigger
             //    `upsertAllImages(lastState)` on a tier change, but `lastState`
@@ -8102,7 +8190,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     || oldViewport?.y !== currentCanvasState?.viewport?.y
                     || oldViewport?.zoom !== currentCanvasState?.viewport?.zoom
                 ) {
-                    updateGeneratedMediaChromeLayout(getLiveViewport())
+                    updateGeneratedMediaChromeLayout()
                 }
             }
         },
@@ -8149,9 +8237,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             viewportBridge = null
             destroyGeneratedMediaInfoRenderers()
             destroyVideoControlInstances()
-            imageChromeViewportEl?.remove()
-            imageChromeViewportEl = null
-            expandedGeneratedImageInfoNodeIds.clear()
+            mediaChromeViewportEl?.remove()
+            mediaChromeViewportEl = null
+            generatedMediaChromeLayerEl?.remove()
+            generatedMediaChromeLayerEl = null
+            generatedMediaInfoPanelLayerEl?.remove()
+            generatedMediaInfoPanelLayerEl = null
+            expandedGeneratedMediaInfoNodeIds.clear()
             expandedBranchOriginInfoNodeIds.clear()
             expandedBranchForkInfoNodeIds.clear()
             pixiMediaLayer?.destroy()

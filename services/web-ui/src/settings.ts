@@ -211,10 +211,18 @@ export type SelectionSettings = {
     }
 }
 
-export type ImageNodeSettings = {
-    defaultInsertionWidth: number
+export type MediaNodeSettings = {
+    // Shared across all media types (image, video, …).
     generatedMediaChrome: {
+        iconSize: number
         topGap: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
+    useZoomCompensatedResizeHandleScaling: boolean
+    resizeHandle: {
+        size: number
+        offset: number
+        minSize: number
         zoomScaling: BoundedZoomScalingSettings
     }
     generationBorder: {
@@ -231,17 +239,14 @@ export type ImageNodeSettings = {
             snakeColors: [string, string, string, string, string]
         }
     }
-    useZoomCompensatedResizeHandleScaling: boolean
-    resizeHandle: {
-        size: number
-        offset: number
-        minSize: number
-        zoomScaling: BoundedZoomScalingSettings
-    }
-    styles: {
-        defaultBoxShadow: string
-        selectedBoxShadow: string
-        borderRadius: number
+    // Image-specific.
+    image: {
+        defaultInsertionWidth: number
+        styles: {
+            defaultBoxShadow: string
+            selectedBoxShadow: string
+            borderRadius: number
+        }
     }
 }
 
@@ -291,7 +296,7 @@ export type Settings = {
 
     selection: SelectionSettings
 
-    imageNode: ImageNodeSettings
+    mediaNode: MediaNodeSettings
 
     imageBranchLineage: ImageBranchLineageSettings
 
@@ -549,20 +554,35 @@ export const settings: Settings = {
         },
     },
 
-    // Canvas image node settings. These values style image-node chrome and selection states.
-    imageNode: {
-        // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
-        defaultInsertionWidth: 600,
+    // Canvas media node settings. Shared values style the chrome, resize handles, generation outline, and selection states common to every media node (image, video, …); per-type subcategories hold values specific to one media type.
+    mediaNode: {
+        // ── Shared across all media types (image, video, …) ──
 
-        // Generated-media model label and info-button chrome below image/video nodes.
+        // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
         generatedMediaChrome: {
-            // Screen-pixel gap between the media bottom edge and generated-media chrome.
+            // Screen-pixel icon/button size in the generated-media chrome strip.
+            iconSize: 34,
+            // Screen-pixel gap between the media node's bottom edge and the chrome strip.
             topGap: 6,
-            // Lower zoom breakpoint for generated-media chrome. Above this zoom, visual size stays constant; below it, world scaling freezes so chrome thins with the overview.
+            // Lower zoom breakpoint for generated-media icon chrome. Above this zoom, visual size stays constant; below it, screen size thins with the overview.
             zoomScaling: { minZoom: 0.4 },
         },
 
-        // PIXI-rendered animated outline shown only while an AI-generated image is receiving partials.
+        // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
+        useZoomCompensatedResizeHandleScaling: true,
+        // Resize-handle base sizes and zoom breakpoint, shared by image and video resize.
+        resizeHandle: {
+            // Screen-pixel size of each resize handle while zoom is at or above the lower breakpoint.
+            size: 24,
+            // Screen-pixel offset from the node corner while zoom is at or above the lower breakpoint.
+            offset: 6,
+            // Minimum handle size in canvas units after zoom compensation.
+            minSize: 10,
+            // Lower zoom breakpoint for resize handles. Above this zoom, visual size stays constant; below it, world scaling freezes so handles thin with the overview.
+            zoomScaling: { minZoom: 0.4 },
+        },
+
+        // PIXI-rendered animated outline shown while AI-generated media (image or video) is receiving partials.
         generationBorder: {
             radius: 10,
             trackWidth: 3,
@@ -578,26 +598,18 @@ export const settings: Settings = {
             },
         },
 
-        // Keep resize corner handles at a stable apparent size as the canvas zoom changes.
-        useZoomCompensatedResizeHandleScaling: true,
-        // Resize-handle base sizes and zoom breakpoint.
-        resizeHandle: {
-            // Screen-pixel size of each resize handle while zoom is at or above the lower breakpoint.
-            size: 24,
-            // Screen-pixel offset from the node corner while zoom is at or above the lower breakpoint.
-            offset: 6,
-            // Minimum handle size in canvas units after zoom compensation.
-            minSize: 10,
-            // Lower zoom breakpoint for resize handles. Above this zoom, visual size stays constant; below it, world scaling freezes so handles thin with the overview.
-            zoomScaling: { minZoom: 0.4 },
-        },
-        styles: {
-            // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
-            defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
-            // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
-            selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
-            // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
-            borderRadius: 8,
+        // ── Image-specific ──
+        image: {
+            // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
+            defaultInsertionWidth: 600,
+            styles: {
+                // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
+                defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
+                // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
+                selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+                // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
+                borderRadius: 8,
+            },
         },
     },
 

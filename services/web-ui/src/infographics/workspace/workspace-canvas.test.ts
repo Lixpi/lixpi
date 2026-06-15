@@ -249,8 +249,8 @@ describe('workspace node CSS — box-shadow consistency', () => {
 	})
 
 	it('keeps generated media model chrome free of badge and button shadows', () => {
-		const badgeBlock = extractBlock(scss, '.image-model-badge')
-		const infoButtonBlock = extractBlock(scss, '.image-info-button')
+		const badgeBlock = extractBlock(scss, '.media-model-badge')
+		const infoButtonBlock = extractBlock(scss, '.media-info-button')
 
 		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(0)
 		expect(extractBoxShadowValues(infoButtonBlock)).toHaveLength(0)
@@ -262,36 +262,37 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
 	})
 
-	it('uses helper-driven bounded zoom layout for generated media chrome', () => {
+	it('renders generated media icon chrome with bounded screen-space zoom scaling', () => {
 		const ts = loadTs()
 		const chromeLayerBlock = extractBlock(scss, '.workspace-generated-media-chrome-layer')
-		const actionsBlock = extractBlock(scss, '.workspace-generated-image-actions')
-		const badgeBlock = extractBlock(scss, '.image-model-badge')
-		const badgeIconBlock = extractBlockContainingSelector(scss, '.image-model-badge-icon,\n.image-model-badge svg')
-		const infoButtonBlock = extractBlock(scss, '.image-info-button')
+		const actionsBlock = extractBlock(scss, '.workspace-generated-media-actions')
+		const badgeBlock = extractBlock(scss, '.media-model-badge')
+		const badgeIconBlock = extractBlockContainingSelector(scss, '.media-model-badge-icon,\n.media-model-badge svg')
+		const infoButtonBlock = extractBlock(scss, '.media-info-button')
 		const infoIconBlock = extractBlock(infoButtonBlock, 'svg')
-		const panelBlock = extractBlock(scss, '.canvas-generated-image-info-panel')
-		const traceDetailsBlock = extractBlock(scss, '.canvas-generated-media-projection-editor .canvas-generated-image-trace-details')
+		const panelBlock = extractBlock(scss, '.canvas-generated-media-info-panel')
+		const traceDetailsBlock = extractBlock(scss, '.canvas-generated-media-projection-editor .canvas-generated-media-trace-details')
 		const promptAndFinalFallbackBlock = scss.match(
 			/\.canvas-generated-media-projection-editor \.ai-image-generation-tool-prompt-fallback,[\s\S]*?\.canvas-generated-media-projection-editor \.ai-image-generation-final-prompt \{[\s\S]*?\}/
 		)?.[0] ?? ''
 		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
 
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl]')
+		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
-		expectSourceToContain(ts, 'viewport,\n            worldPosition: position,\n            worldDimensions: dimensions,')
-		expectSourceToContain(ts, 'baseGap: settings.imageNode.generatedMediaChrome.topGap,')
-		expectSourceToContain(ts, 'zoomScaling: settings.imageNode.generatedMediaChrome.zoomScaling,')
+		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
+		expectSourceToContain(ts, 'zoomScaling: settings.mediaNode.generatedMediaChrome.zoomScaling,')
 		expectSourceToContain(ts, 'left: `${chromeLayout.left}px`,')
 		expectSourceToContain(ts, 'top: `${chromeLayout.top}px`,')
 		expectSourceToContain(ts, 'width: `${chromeLayout.layoutWidth}px`,')
 		expectSourceToContain(ts, 'transform: `scale(${chromeLayout.screenScale})`,')
 		expectSourceToContain(ts, 'getVisualScale: () => scaleCanvasChromeToScreenForZoom(')
 		expectSourceToContain(ts, 'settings.canvasBubbleMenu.zoomScaling,')
-		expectSourceToContain(ts, 'updateGeneratedImageChromeLiveTransform(node.nodeId, position, dimensions, viewport)')
-		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout(vp)')
+		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())')
+		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout()')
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
-		expectSourceToContain(ts, 'imageChromeViewportEl.replaceChildren(')
+		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
 		expectSourceToContain(ts, "return modelMeta?.title ?? ''")
 		expectSourceNotToContain(ts, 'getCanvasChromeZoomMultiplier')
 		expectSourceNotToContain(ts, 'const localScale = scaleCanvasChromeForZoom(1, zoom)')
@@ -300,22 +301,22 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectSourceNotToContain(ts, 'zoom: number = getCurrentViewportZoom()')
 		expectSourceNotToContain(ts, 'pendingGeneratedMediaChromeZoom')
 		expectSourceNotToContain(ts, 'updateGeneratedMediaChromeZoomScaling')
-		expectSourceNotToContain(ts, 'function getGeneratedImageInfoWidth')
+		expectSourceNotToContain(ts, 'function getGeneratedMediaInfoWidth')
 		expectExcerptToContain(chromeLayerBlock, 'position: absolute', 'generated media chrome layer block')
 		expectExcerptToContain(chromeLayerBlock, 'inset: 0', 'generated media chrome layer block')
 		expectExcerptToContain(chromeLayerBlock, 'pointer-events: none', 'generated media chrome layer block')
 		expectExcerptToContain(actionsBlock, 'width: 100%', 'generated image actions block')
 		expectExcerptToContain(actionsBlock, 'gap: 0', 'generated image actions block')
-		expectExcerptToContain(badgeBlock, 'height: 34px', 'image model badge block')
-		expectExcerptToContain(badgeIconBlock, 'width: 34px', 'image model badge icon block')
-		expectExcerptToContain(badgeIconBlock, 'height: 34px', 'image model badge icon block')
+		expectExcerptToContain(badgeBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge block')
+		expectExcerptToContain(badgeIconBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge icon block')
+		expectExcerptToContain(badgeIconBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge icon block')
 		expectExcerptNotToContain(badgeBlock, 'border:', 'image model badge block')
 		expectExcerptNotToContain(badgeBlock, 'box-shadow:', 'image model badge block')
-		expectExcerptToContain(infoButtonBlock, 'width: 34px', 'image info button block')
-		expectExcerptToContain(infoButtonBlock, 'height: 34px', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info button block')
+		expectExcerptToContain(infoButtonBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info button block')
 		expectExcerptToContain(infoButtonBlock, 'border: none', 'image info button block')
-		expectExcerptToContain(infoIconBlock, 'width: 34px', 'image info icon block')
-		expectExcerptToContain(infoIconBlock, 'height: 34px', 'image info icon block')
+		expectExcerptToContain(infoIconBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info icon block')
+		expectExcerptToContain(infoIconBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info icon block')
 		expectExcerptNotToContain(infoIconBlock, 'transform:', 'image info icon block')
 		expectExcerptToContain(activeBlock, 'color: #4d5963', 'active image info button block')
 		expectExcerptToContain(activeBlock, 'background: transparent', 'active image info button block')
@@ -363,7 +364,7 @@ describe('PIXI media layer — first sync geometry', () => {
 
 	it('clips PIXI image sprites with the configured image border radius', () => {
 		expectSourceToContain(ts, "import { settings } from '$src/settings.ts'")
-		expectSourceToContain(ts, 'settings.imageNode.styles.borderRadius')
+		expectSourceToContain(ts, 'settings.mediaNode.image.styles.borderRadius')
 		expectSourceToContain(ts, 'sprite.mask = spriteMask')
 		expectSourceToContain(ts, 'function syncSpriteMask(entry: PixiImageEntry')
 		expectSourceToContain(ts, 'entry.spriteMask.roundRect(0, 0, width, height, radius)')
@@ -379,7 +380,7 @@ describe('PIXI media layer — first sync geometry', () => {
 	})
 
 	it('reads generation-border colors from style tokens while keeping geometry tokens separate', () => {
-		expectSourceToContain(ts, 'const generationBorder = settings.imageNode.generationBorder')
+		expectSourceToContain(ts, 'const generationBorder = settings.mediaNode.generationBorder')
 		expectSourceToContain(ts, 'const generationBorderStyles = generationBorder.styles')
 		expectSourceToContain(ts, 'radius: generationBorder.radius')
 		expectSourceToContain(ts, 'trackWidth: generationBorder.trackWidth')
@@ -555,7 +556,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 	it('syncs video chrome after video handler entries exist', () => {
 		const renderStart = ts.indexOf('render(newCanvasState: CanvasState | null')
 		const pixiSync = ts.indexOf('syncPixiMediaLayer(currentCanvasState)', renderStart)
-		const chromeSync = ts.indexOf('syncGeneratedImageChrome(currentCanvasState)', renderStart)
+		const chromeSync = ts.indexOf('syncGeneratedMediaChrome(currentCanvasState)', renderStart)
 
 		expect(renderStart).toBeGreaterThan(-1)
 		expect(pixiSync).toBeGreaterThan(-1)
@@ -587,16 +588,19 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(completeHandler, 'frameFileId: frameFileId || videoNode.frameFileId,', 'video complete handler')
 	})
 
-	it('renders the info button + panel in the below-node media chrome (image+video parity)', () => {
-		// The shared media chrome (a strip below the node) carries the info button
-		// and descriptor panel for BOTH images and videos.
-		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode, viewport: Viewport)')
-		const chromeEnd = ts.indexOf('function createVideoControlsChrome', chromeStart)
+	it('keeps the bounded icon strip to badge + info button only, with the panel decoupled', () => {
+		// The screen-space chrome strip carries ONLY the provider badge + info
+		// button for BOTH images and videos. The expandable info panel is built
+		// separately as constant-size screen-space content, so the two affordances
+		// are fully decoupled.
+		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		const chromeEnd = ts.indexOf('function createGeneratedMediaInfoPanelChrome', chromeStart)
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
 		expect(chromeStart).toBeGreaterThan(-1)
-		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome')
-		expectExcerptToContain(mediaChrome, 'createGeneratedMediaInfoPanel(node)', 'media chrome')
-		expectExcerptToContain(mediaChrome, 'applyGeneratedImageChromeGeometry(', 'media chrome')
+		expect(chromeEnd).toBeGreaterThan(chromeStart)
+		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome strip')
+		expectExcerptToContain(mediaChrome, 'applyGeneratedMediaChromeGeometry(', 'media chrome strip')
+		expectExcerptNotToContain(mediaChrome, 'createGeneratedMediaInfoPanel', 'media chrome strip')
 	})
 
 	it('keeps the video controls overlay free of the info button', () => {
@@ -609,13 +613,35 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const controlsChrome = ts.slice(chromeStart, chromeEnd)
 		expectExcerptToContain(controlsChrome, 'workspace-video-controls-host nopan', 'video controls chrome')
 		expectExcerptNotToContain(controlsChrome, 'createMediaInfoButton(node)', 'video controls chrome')
-		expectExcerptNotToContain(controlsChrome, 'workspace-generated-image-actions', 'video controls chrome')
+		expectExcerptNotToContain(controlsChrome, 'workspace-generated-media-actions', 'video controls chrome')
 	})
 
 	it('renders media info chrome for both image and video nodes', () => {
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
-		expectSourceToContain(ts, '...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaChrome(node, viewport)),')
+		expectSourceToContain(ts, '...mediaInfoNodes.map((node: ImageCanvasNode | VideoCanvasNode) => createGeneratedMediaChrome(node)),')
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
+	})
+
+	it('renders the info panel as constant-size screen-space content in its own decoupled layer', () => {
+		// The panel layer is intentionally NOT a viewport overlay, so the panel content
+		// keeps a constant on-screen size at any zoom and is decoupled from the
+		// bounded icon strip, which is projected separately from the same node bounds.
+		const panelPositionStart = ts.indexOf('function updateGeneratedMediaInfoPanelPosition(')
+		const panelPositionEnd = ts.indexOf('// Video chrome', panelPositionStart)
+		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
+
+		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
+		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl],')
+		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
+		expectSourceNotToContain(ts, 'generatedMediaInfoPanelLayerEl],')
+		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
+		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl.replaceChildren(')
+		expect(panelPositionStart).toBeGreaterThan(-1)
+		expect(panelPositionEnd).toBeGreaterThan(panelPositionStart)
+		expectExcerptToContain(panelPosition, 'applyGeneratedMediaInfoPanelGeometry(panel, position, dimensions, viewport)', 'media info panel position updater')
+		expectExcerptNotToContain(panelPosition, 'const stripRect = strip.getBoundingClientRect()', 'media info panel position updater')
+		expectExcerptNotToContain(panelPosition, 'data-media-chrome-node-id', 'media info panel position updater')
 	})
 })
 
@@ -689,8 +715,8 @@ describe('Workspace canvas — media descriptors', () => {
 
 	it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
 		expectSourceToContain(ts, "node.descriptor?.status === 'analyzing'")
-		const buttonBlock = extractBlock(scss, '.image-info-button')
-		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.image-info-button')
+		const buttonBlock = extractBlock(scss, '.media-info-button')
+		expectExcerptToContain(buttonBlock, '&.is-analyzing', '.media-info-button')
 		expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
 		const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
 		expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
@@ -2030,12 +2056,12 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)")
 			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)")
 			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)")
-			expectSourceNotToContain(ts, "paneEl.style.setProperty('--workspace-image-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)")
+			expectSourceNotToContain(ts, "paneEl.style.setProperty('--workspace-media-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)")
 			expect(scss).toMatch(/border-radius:\s*var\(--workspace-image-border-radius\)/)
 	})
 
 	it('wires resize handles through configured bounded zoom scaling', () => {
-		expectSourceToContain(ts, 'const resizeHandleSettings = settings.imageNode.resizeHandle')
+		expectSourceToContain(ts, 'const resizeHandleSettings = settings.mediaNode.resizeHandle')
 		expectSourceToContain(ts, 'baseSize: resizeHandleSettings.size,')
 		expectSourceToContain(ts, 'baseOffset: resizeHandleSettings.offset,')
 		expectSourceToContain(ts, 'minSize: resizeHandleSettings.minSize,')
@@ -2277,7 +2303,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	})
 
 	it('uses the image-node theme width for toolbar image insertion sizing', () => {
-		expectSourceToContain(svelte, 'const width = settings.imageNode.defaultInsertionWidth')
+		expectSourceToContain(svelte, 'const width = settings.mediaNode.image.defaultInsertionWidth')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(aspectRatio)')
 		expectSourceToContain(svelte, 'const dimensions = getImageInsertionDimensions(1)')
 		expectSourceNotToContain(svelte, 'const maxWidth = 400')
