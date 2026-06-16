@@ -10,13 +10,18 @@ import { warn, info, err } from '@lixpi/debug-tools'
 
 import type { ProviderName } from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
-import { convertAttachmentsForProvider, resolveImageUrls } from '../utils/attachments.ts'
+import { convertAttachmentsForProvider, resolveImageUrls, type AttachmentFormat } from '../utils/attachments.ts'
 import { detectCapabilities, type ModelCapabilities } from './capabilities.ts'
 
 export type VlmJsonSchema = {
     name: string
     description: string
     schema: Record<string, any>
+    // OpenAI strict structured output requires `additionalProperties: false` on every
+    // nested object. Schemas that intentionally use open-ended objects (dynamic keys)
+    // must opt out with `strict: false`. Defaults to true. OpenAI-only; ignored by
+    // the Anthropic and Google paths.
+    strict?: boolean
 }
 
 export type VlmCallArgs = {
@@ -83,7 +88,7 @@ const getGoogle = (): GoogleGenAI => {
 const resolveAndConvert = async (
     messages: ChatMessage[],
     natsService: NatsService,
-    format: 'ANTHROPIC' | 'OPENAI' | 'GOOGLE',
+    format: AttachmentFormat,
 ): Promise<Array<{ role: string; content: any }>> => {
     const out: Array<{ role: string; content: any }> = []
     for (const msg of messages) {
@@ -219,7 +224,7 @@ const callAnthropic = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> =>
 const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
     const client = getOpenAi()
-    const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI')
+    const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI_CHAT')
     const messages: Array<Record<string, any>> = [
         { role: 'system', content: args.systemPrompt },
         ...formatted,
@@ -236,7 +241,7 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
                 name: args.schema.name,
                 description: args.schema.description,
                 parameters: args.schema.schema,
-                strict: true,
+                strict: args.schema.strict ?? true,
             },
         }],
         tool_choice: { type: 'function', function: { name: args.schema.name } },
