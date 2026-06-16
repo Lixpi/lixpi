@@ -150,9 +150,9 @@ Avoid:
 - Inline HTML that Markdoc may parse differently from GitHub.
 - Unclosed `{% callout %}` tags.
 - Mermaid diagrams that depend on unsupported runtime plugins.
-- Anchor links guessed by hand without running the docs build.
+- Anchor links guessed by hand. Prefer linking to the page when you cannot verify a heading fragment.
 
-The docs build generates heading IDs and validates anchor fragments. If you link to a heading, run the build instead of assuming the slug.
+The docs build can validate heading IDs and anchor fragments when a human explicitly asks for that check. Do not run it as a default agent step.
 
 ## Moving or Renaming Pages
 
@@ -163,10 +163,10 @@ When reorganizing documentation:
 1. Map old pages to their new homes before deleting anything.
 2. Search for old paths and old page titles across the repo.
 3. Update links in docs, source comments, package READMEs, and tests.
-4. Run the docs build.
+4. Use static link review unless the user explicitly asks for the docs build.
 5. If a source-shape test asserts a documentation path, update the test with the new path.
 
-Do not leave references to deleted pages. A green docs build should mean the rendered site is safe to click, including heading anchors and source-code links.
+Do not leave references to deleted pages. Keep links defensible from static review unless a requested docs build validates the rendered site.
 
 ## Updating the Docs Index
 
@@ -183,13 +183,9 @@ When a domain changes shape, update the index at the same time as the pages. Do 
 
 ## Verification
 
-Always run the docs build after documentation changes:
+Do not run the docs build after documentation changes unless the user explicitly asks for it. Use static review by default.
 
-```bash
-pnpm docs:build
-```
-
-The build is the link and Markdoc compatibility gate. It should fail on Markdoc parse/validation errors, dangling documentation links, missing source-code link targets, and broken heading fragments.
+When a docs build is explicitly requested, run it through the documented Docker-only workflow. Never run `pnpm docs:build` on the host.
 
 If documentation changes a tested source assertion, run the relevant test
 through the allowed project test command only when the user explicitly asks for

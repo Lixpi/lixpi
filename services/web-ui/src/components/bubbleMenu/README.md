@@ -97,7 +97,7 @@ menu.destroy()
 | `show(context, position)` | Show menu with given context and target position |
 | `hide()` | Hide the menu |
 | `forceHide()` | Hide immediately, clearing `preventHide` state |
-| `reposition(position?)` | Reposition using new or last-known position |
+| `reposition(position?)` | Reposition using new or last-known position; already-visible menus stay visible during measurement so hovered controls keep cursor/hover state |
 | `updateContext(context, position)` | Switch context and reposition |
 | `refreshState()` | Call each item's `update()` callback |
 | `destroy()` | Remove all listeners and DOM |

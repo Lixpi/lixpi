@@ -443,6 +443,10 @@
     min-width: 0;
 }
 
+.ai-prompt-model-menu-control[data-visible="false"] {
+    display: none;
+}
+
 .ai-prompt-model-menu-control-label {
     color: var(--ai-prompt-model-menu-control-label-color, #7a828a);
     padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);

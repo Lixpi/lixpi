@@ -116,7 +116,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 `GoogleProvider.runVeoGeneration` ([`google-provider.ts`](../../services/api/src/llm/providers/google-provider.ts)) runs **only** when `enableVideoGeneration && modelNameImpliesVideoOutput` — a non-VEO Google model never enters this path, and the existing Gemini image branch is untouched.
 
-**Config.** `numberOfVideos: 1`, `personGeneration: 'allow_adult'`, plus `aspectRatio` / `resolution` / `durationSeconds` from the synced model metadata and the request's `abortSignal`. `generateAudio` is sent only for Vertex clients; the Gemini Developer API rejects that knob but still generates VEO 3 audio by default. Google currently requires `durationSeconds: 8` for `referenceImages`, extension, and `1080p` / `4K` requests, so model synchronization exposes only the safe `8s` duration for VEO dropdowns.
+**Config.** `numberOfVideos: 1`, `aspectRatio` / `resolution` / `durationSeconds` from the synced model metadata, the request's `abortSignal`, and a VEO `personGeneration` value selected by input mode: `allow_all` for text-to-video and extension, `allow_adult` for first-frame image or reference-image conditioning. `generateAudio` is sent only for Vertex clients; the Gemini Developer API rejects that knob but still generates VEO 3 audio by default. Google currently requires `durationSeconds: 8` for `referenceImages`, extension, and `1080p` / `4K` requests, so model synchronization exposes only the safe `8s` duration for VEO dropdowns.
 
 **Input precedence.** Exactly one conditioning input is sent, in this fixed order. The first applicable input wins; the rest are ignored:
 

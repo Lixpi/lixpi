@@ -109,6 +109,8 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     private options: AiModelDropdownOption[] = []
     private selectedModelIds: string[] = []
     private renderedOptionIds: string[] = []
+    private renderedSelectionSignature = ''
+    private renderedOptionSelectionSignature = ''
 
     constructor(private readonly config: ModelMultiSelectConfig) {
         this.options = this.buildOptions()
@@ -282,18 +284,24 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             .filter((option): option is AiModelDropdownOption => Boolean(option))
 
         const showEmptySelectionError = this.options.length > 0 && selectedOptions.length === 0
+        const nextTitle = showEmptySelectionError
+            ? this.config.emptySelectionErrorTitle || settings.dropdown.errorState.fallbackTitle
+            : selectedOptions.length === 0
+                ? this.config.placeholderTitle
+                : `${selectedOptions.length} ${selectedOptions.length === 1 ? 'model' : 'models'}`
+        const nextColor = showEmptySelectionError ? settings.dropdown.errorState.textColor : ''
+        const nextSelectionSignature = [
+            showEmptySelectionError,
+            nextTitle,
+            nextColor,
+        ].join('\u0000')
+
+        if (this.renderedSelectionSignature === nextSelectionSignature) return
+        this.renderedSelectionSignature = nextSelectionSignature
+
         this.dom.classList.toggle('dropdown-error-state', showEmptySelectionError)
-
-        if (showEmptySelectionError) {
-            this.titleEl.textContent = this.config.emptySelectionErrorTitle || settings.dropdown.errorState.fallbackTitle
-            this.titleEl.style.color = settings.dropdown.errorState.textColor
-            return
-        }
-
-        this.titleEl.style.color = ''
-        this.titleEl.textContent = selectedOptions.length === 0
-            ? this.config.placeholderTitle
-            : `${selectedOptions.length} ${selectedOptions.length === 1 ? 'model' : 'models'}`
+        this.titleEl.textContent = nextTitle
+        this.titleEl.style.color = nextColor
     }
 
     private renderOptions(): void {
@@ -330,22 +338,37 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
 
         this.optionsList.replaceChildren(...optionItems)
         this.renderedOptionIds = optionIds
+        this.renderedOptionSelectionSignature = this.getOptionSelectionSignature(selectedModelIds)
     }
 
     private updateRenderedOptionSelection(selectedModelIds: Set<string>): void {
+        const nextSelectionSignature = this.getOptionSelectionSignature(selectedModelIds)
+        if (this.renderedOptionSelectionSignature === nextSelectionSignature) return
+        this.renderedOptionSelectionSignature = nextSelectionSignature
+
         const optionItems = Array.from(this.optionsList.children) as HTMLLIElement[]
         for (const [index, option] of this.options.entries()) {
             const optionItem = optionItems[index]
             if (!optionItem) continue
 
             const isSelected = selectedModelIds.has(option.aiModel)
-            optionItem.dataset.selected = isSelected ? 'true' : 'false'
+            const nextSelected = isSelected ? 'true' : 'false'
+            if (optionItem.dataset.selected !== nextSelected) {
+                optionItem.dataset.selected = nextSelected
+            }
 
             const checkEl = optionItem.querySelector('.ai-model-multi-select-check') as HTMLElement | null
-            if (checkEl) {
-                checkEl.innerHTML = isSelected ? checkMarkIcon : ''
+            const nextCheckIcon = isSelected ? checkMarkIcon : ''
+            if (checkEl && checkEl.innerHTML !== nextCheckIcon) {
+                checkEl.innerHTML = nextCheckIcon
             }
         }
+    }
+
+    private getOptionSelectionSignature(selectedModelIds: Set<string>): string {
+        return this.options
+            .map((option) => selectedModelIds.has(option.aiModel) ? '1' : '0')
+            .join('')
     }
 
     update(): void {

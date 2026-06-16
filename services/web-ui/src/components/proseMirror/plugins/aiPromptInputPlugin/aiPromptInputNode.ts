@@ -286,6 +286,7 @@ type DropdownView = {
 type ModelControlItem = {
     label: string | HTMLElement
     control: HTMLElement
+    getVisible?: () => boolean
 }
 
 type ModelControlSection = {
@@ -298,11 +299,13 @@ type ModelControlSection = {
 
 type ModelMenuSectionView = {
     dom: HTMLElement
+    update: () => void
     destroy: () => void
 }
 
 type ModelMenuContentView = {
     dom: HTMLElement
+    update: () => void
     destroy: () => void
 }
 
@@ -402,22 +405,32 @@ function getNodeViewPos(getPos: () => number | undefined): number | undefined {
     }
 }
 
-function createModelMenuControl(item: ModelControlItem): HTMLElement {
+function createModelMenuControl(item: ModelControlItem): { dom: HTMLElement; update: () => void } {
     const label = item.label === ''
         ? null
         : typeof item.label === 'string'
         ? html`<span className="ai-prompt-model-menu-control-label">${item.label}</span>` as HTMLElement
         : item.label
 
-    return html`
+    const dom = html`
         <div className="ai-prompt-model-menu-control">
             ${label}
             <span className="ai-prompt-model-menu-control-field">${item.control}</span>
         </div>
     ` as HTMLElement
+
+    const update = (): void => {
+        const nextVisible = String(item.getVisible?.() ?? true)
+        if (dom.dataset.visible === nextVisible) return
+        dom.dataset.visible = nextVisible
+    }
+    update()
+
+    return { dom, update }
 }
 
 function createModelMenuSection(section: ModelControlSection): ModelMenuSectionView {
+    const controlViews = section.controls.map(createModelMenuControl)
     const helpTooltip = createHelpTooltip({
         label: `${section.title} help`,
         text: section.helpText,
@@ -434,7 +447,7 @@ function createModelMenuSection(section: ModelControlSection): ModelMenuSectionV
                 <div className="ai-prompt-model-menu-section-heading-action">${section.headingControl ?? null}</div>
             </div>
             <div className="ai-prompt-model-menu-section-controls">
-                ${section.controls.map(createModelMenuControl)}
+                ${controlViews.map(controlView => controlView.dom)}
             </div>
             ${section.selectedModelTags ?? null}
         </section>
@@ -442,6 +455,11 @@ function createModelMenuSection(section: ModelControlSection): ModelMenuSectionV
 
     return {
         dom,
+        update: () => {
+            for (const controlView of controlViews) {
+                controlView.update()
+            }
+        },
         destroy: () => helpTooltip.destroy(),
     }
 }
@@ -456,6 +474,11 @@ function createModelMenuContent(sections: ModelControlSection[]): ModelMenuConte
 
     return {
         dom,
+        update: () => {
+            for (const sectionView of sectionViews) {
+                sectionView.update()
+            }
+        },
         destroy: () => {
             for (const sectionView of sectionViews) {
                 sectionView.destroy()
@@ -903,6 +926,27 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             }),
         }
 
+        const imageControls: ImageSizeControls = {
+            getImageGenerationSize: () => getNodeAttr(view, getPos, 'imageGenerationSize') || 'auto',
+            setImageGenerationSize: (size: string) => setNodeAttrs(view, getPos, { imageGenerationSize: size }),
+            getCurrentImageModel: imageModelControls.getCurrentImageModel,
+        }
+        const videoAspectControls: VideoOptionControls = {
+            getValue: () => getNodeAttr(view, getPos, 'videoAspectRatio') || '',
+            setValue: (value: string) => setNodeAttrs(view, getPos, { videoAspectRatio: value }),
+            getCurrentVideoModel: videoModelControls.getCurrentVideoModel,
+        }
+        const videoResolutionControls: VideoOptionControls = {
+            getValue: () => getNodeAttr(view, getPos, 'videoResolution') || '',
+            setValue: (value: string) => setNodeAttrs(view, getPos, { videoResolution: value }),
+            getCurrentVideoModel: videoModelControls.getCurrentVideoModel,
+        }
+        const videoDurationControls: VideoOptionControls = {
+            getValue: () => getNodeAttr(view, getPos, 'videoDuration') || '',
+            setValue: (value: string) => setNodeAttrs(view, getPos, { videoDuration: value }),
+            getCurrentVideoModel: videoModelControls.getCurrentVideoModel,
+        }
+
         const submitControls: SubmitControls = {
             onSubmit: options.onSubmit,
             onStop: options.onStop,
@@ -936,6 +980,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             () => options.createImageModelMultiSelect?.(imageModelControls, 'ai-image-model')
                 ?? options.createImageModelDropdown(imageModelControls, 'ai-image-model')
         )
+        const imageSizeDropdown = options.createImageSizeDropdown(imageControls, 'ai-image-size')
         const imageConfigMatrix = createMediaGenerationConfigMatrixView({
             mediaType: 'image',
             getUseMultipleModels: imageMultipleModelsControls.getUseMultipleModels,
@@ -950,6 +995,9 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             () => options.createVideoModelMultiSelect?.(videoModelControls, 'ai-video-model')
                 ?? options.createVideoModelDropdown(videoModelControls, 'ai-video-model')
         )
+        const videoAspectDropdown = options.createVideoAspectDropdown(videoAspectControls, 'ai-video-aspect')
+        const videoResolutionDropdown = options.createVideoResolutionDropdown(videoResolutionControls, 'ai-video-resolution')
+        const videoDurationDropdown = options.createVideoDurationDropdown(videoDurationControls, 'ai-video-duration')
         const videoConfigMatrix = createMediaGenerationConfigMatrixView({
             mediaType: 'video',
             getUseMultipleModels: videoMultipleModelsControls.getUseMultipleModels,
@@ -972,16 +1020,20 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             reasoningSelectedModelTags,
             modelDropdown,
             imageModelDropdown,
-            imageConfigMatrix,
             videoModelDropdown,
-            videoConfigMatrix,
         ]
+        const singleImageOptionDropdowns = [imageSizeDropdown]
+        const singleVideoOptionDropdowns = [videoAspectDropdown, videoResolutionDropdown, videoDurationDropdown]
+        const multiImageOptionDropdowns = [imageConfigMatrix]
+        const multiVideoOptionDropdowns = [videoConfigMatrix]
 
         const modelLabelUpdaters: Array<() => void> = []
         const createModeAwareModelControlLabel = (controls: MultipleModelModeControls): HTMLElement => {
             const label = html`<span className="ai-prompt-model-menu-control-label"></span>` as HTMLElement
             const updateLabel = (): void => {
-                label.textContent = controls.getUseMultipleModels() ? 'Models' : 'Model'
+                const nextLabel = controls.getUseMultipleModels() ? 'Models' : 'Model'
+                if (label.textContent === nextLabel) return
+                label.textContent = nextLabel
             }
             updateLabel()
             modelLabelUpdaters.push(updateLabel)
@@ -991,9 +1043,17 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const reasoningModelLabel = createModeAwareModelControlLabel(reasoningMultipleModelsControls)
         const imageModelLabel = createModeAwareModelControlLabel(imageMultipleModelsControls)
         const videoModelLabel = createModeAwareModelControlLabel(videoMultipleModelsControls)
+        const imageSizeControlLabel = html`<span className="ai-prompt-model-menu-control-label"></span>` as HTMLElement
+        const updateImageSizeControlLabel = (): void => {
+            const nextLabel = imageSizeDropdown.getControlLabel?.() ?? 'Image option'
+            if (imageSizeControlLabel.textContent === nextLabel) return
+            imageSizeControlLabel.textContent = nextLabel
+        }
 
         let modelMenu: BubbleMenu | null = null
         let modelMenuTrigger: HTMLButtonElement | null = null
+        let modelMenuContent: ModelMenuContentView
+        let modelMenuLayoutSignature = ''
         const getModelMenuPosition = () => {
             if (!modelMenuTrigger) return null
             return {
@@ -1018,17 +1078,46 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             reposition()
         }
 
+        const getModelMenuLayoutSignature = (): string => JSON.stringify({
+            useMultipleReasoningModels: reasoningMultipleModelsControls.getUseMultipleModels(),
+            useMultipleImageModels: imageMultipleModelsControls.getUseMultipleModels(),
+            useMultipleVideoModels: videoMultipleModelsControls.getUseMultipleModels(),
+            reasoningModelIds: getSelectedModelIdsForMode('aiModels', 'aiModel'),
+            imageModelIds: getSelectedModelIdsForMode('aiImageModels', 'aiImageModel'),
+            videoModelIds: getSelectedModelIdsForMode('aiVideoModels', 'aiVideoModel'),
+        })
+
+        const updateModelMenuRows = (): void => {
+            for (const updateLabel of modelLabelUpdaters) {
+                updateLabel()
+            }
+            updateImageSizeControlLabel()
+            modelMenuContent.update()
+        }
+
         const updateModelDropdowns = (): void => {
             for (const dropdown of modelDropdowns) {
                 dropdown.update()
             }
-            for (const updateLabel of modelLabelUpdaters) {
-                updateLabel()
+            const singleImageMode = !imageMultipleModelsControls.getUseMultipleModels()
+            const singleVideoMode = !videoMultipleModelsControls.getUseMultipleModels()
+            for (const dropdown of singleImageMode ? singleImageOptionDropdowns : multiImageOptionDropdowns) {
+                dropdown.update()
             }
-            scheduleModelMenuReposition()
-        }
+            for (const dropdown of singleVideoMode ? singleVideoOptionDropdowns : multiVideoOptionDropdowns) {
+                dropdown.update()
+            }
+            updateModelMenuRows()
 
-        const modelMenuContent = createModelMenuContent([
+            const nextLayoutSignature = getModelMenuLayoutSignature()
+            if (nextLayoutSignature !== modelMenuLayoutSignature) {
+                modelMenuLayoutSignature = nextLayoutSignature
+                scheduleModelMenuReposition()
+            }
+        }
+        updateImageSizeControlLabel()
+
+        modelMenuContent = createModelMenuContent([
             {
                 title: 'Reasoning model',
                 helpText: 'Reasoning model works on your prompt, resolves the most relevant items on canvas, crafts a detailed prompt for media model and passed it to the media model with the reference items included.',
@@ -1044,7 +1133,16 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 headingControl: imageMultipleModelsToggle.dom,
                 controls: [
                     { label: imageModelLabel, control: imageModelDropdown.dom },
-                    { label: '', control: imageConfigMatrix.dom },
+                    {
+                        label: imageSizeControlLabel,
+                        control: imageSizeDropdown.dom,
+                        getVisible: () => !imageMultipleModelsControls.getUseMultipleModels(),
+                    },
+                    {
+                        label: '',
+                        control: imageConfigMatrix.dom,
+                        getVisible: imageMultipleModelsControls.getUseMultipleModels,
+                    },
                 ],
             },
             {
@@ -1053,7 +1151,26 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 headingControl: videoMultipleModelsToggle.dom,
                 controls: [
                     { label: videoModelLabel, control: videoModelDropdown.dom },
-                    { label: '', control: videoConfigMatrix.dom },
+                    {
+                        label: 'Aspect ratio',
+                        control: videoAspectDropdown.dom,
+                        getVisible: () => !videoMultipleModelsControls.getUseMultipleModels(),
+                    },
+                    {
+                        label: 'Resolution',
+                        control: videoResolutionDropdown.dom,
+                        getVisible: () => !videoMultipleModelsControls.getUseMultipleModels(),
+                    },
+                    {
+                        label: 'Duration',
+                        control: videoDurationDropdown.dom,
+                        getVisible: () => !videoMultipleModelsControls.getUseMultipleModels(),
+                    },
+                    {
+                        label: '',
+                        control: videoConfigMatrix.dom,
+                        getVisible: videoMultipleModelsControls.getUseMultipleModels,
+                    },
                 ],
             },
         ])
@@ -1088,7 +1205,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             {
                 element: modelMenuContent.dom,
                 context: ['modelSettings'],
-                update: updateModelDropdowns,
+                update: updateModelMenuRows,
             },
         ]
 
@@ -1160,8 +1277,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 reasoningSelectedModelTags.destroy?.()
                 modelDropdown.destroy?.()
                 imageModelDropdown.destroy?.()
+                imageSizeDropdown.destroy?.()
                 imageConfigMatrix.destroy?.()
                 videoModelDropdown.destroy?.()
+                videoAspectDropdown.destroy?.()
+                videoResolutionDropdown.destroy?.()
+                videoDurationDropdown.destroy?.()
                 videoConfigMatrix.destroy?.()
             },
             stopEvent: (e: Event) => {

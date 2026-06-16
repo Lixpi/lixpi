@@ -66,7 +66,7 @@ src/llm/
         provider-registry.ts     # Map<instanceKey, provider> + active-task dedupe via Map<string, AbortController>
         openai-provider.ts       # OpenAI Responses API + Image API (gpt-image-*)
         anthropic-provider.ts    # Anthropic messages.stream() + tool_use blocks
-        google-provider.ts       # Google generateContentStream + native image generation + VEO submit/poll/download
+        google-provider.ts       # Google generateContentStream + native image generation + VEO submit/poll/download and input-mode config
         byteplus-provider.ts     # BytePlus ModelArk Seedance 2.0 (video-only: create/poll/download)
         byteplus-video-types.ts  # Typed ModelArk REST client + buildSeedanceContent + pollVideoGenerationTask
         stability-provider.ts    # Stability v2beta REST (multipart, no streaming, reference pixel-cap resizing)

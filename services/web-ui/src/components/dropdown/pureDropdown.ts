@@ -72,6 +72,7 @@ export function createPureDropdown(config: PureDropdownConfig) {
     let activeFilterTags: Set<string> = new Set()
     let allOptions = [...options]
     let infoBubble: any = null // Will be initialized after button is created
+    let selectedDisplaySignature = ''
 
     const modalityFilterEnabled = Boolean(
         enableTagFilter
@@ -296,26 +297,39 @@ export function createPureDropdown(config: PureDropdownConfig) {
         const activeErrorState = currentErrorState && currentErrorState.enabled !== false
             ? currentErrorState
             : null
+        const nextTitle = activeErrorState
+            ? activeErrorState.title || settings.dropdown.errorState.fallbackTitle
+            : renderTitleForSelectedValue ? (currentSelectedValue?.title || '') : ''
+        const nextTitleColor = activeErrorState
+            ? activeErrorState.textColor || settings.dropdown.errorState.textColor
+            : ''
+        const nextIcon = renderIconForSelectedValue && currentSelectedValue?.icon
+            ? ignoreColorValuesForSelectedValue
+                ? currentSelectedValue.icon
+                : injectFillColor(currentSelectedValue.icon, currentSelectedValue.color)
+            : ''
+        const nextDisplaySignature = [
+            Boolean(activeErrorState),
+            nextTitle,
+            nextTitleColor,
+            nextIcon,
+        ].join('\u0000')
+
+        if (selectedDisplaySignature === nextDisplaySignature) return
+        selectedDisplaySignature = nextDisplaySignature
 
         dom.classList.toggle('dropdown-error-state', Boolean(activeErrorState))
 
         if (titleEl) {
-            if (activeErrorState) {
-                titleEl.textContent = activeErrorState.title || settings.dropdown.errorState.fallbackTitle
-                titleEl.style.color = activeErrorState.textColor || settings.dropdown.errorState.textColor
-            } else {
-                titleEl.textContent = renderTitleForSelectedValue ? (currentSelectedValue?.title || '') : ''
-                titleEl.style.color = ''
-            }
+            titleEl.textContent = nextTitle
+            titleEl.style.color = nextTitleColor
         }
 
         if (iconWrap) {
-            if (renderIconForSelectedValue && currentSelectedValue?.icon) {
+            if (nextIcon) {
                 iconWrap.innerHTML = ''
                 const span = document.createElement('span')
-                span.innerHTML = ignoreColorValuesForSelectedValue
-                    ? currentSelectedValue.icon
-                    : injectFillColor(currentSelectedValue.icon, currentSelectedValue.color)
+                span.innerHTML = nextIcon
                 iconWrap.appendChild(span)
             } else {
                 iconWrap.innerHTML = ''
