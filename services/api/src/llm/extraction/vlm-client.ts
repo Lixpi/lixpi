@@ -242,7 +242,11 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         tool_choice: { type: 'function', function: { name: args.schema.name } },
     }
     if (args.temperature !== undefined && caps.supportsTemperature) requestArgs.temperature = args.temperature
-    if (args.maxTokens) requestArgs.max_tokens = args.maxTokens
+    // GPT-5 / o-series reject the legacy `max_tokens` and require `max_completion_tokens`.
+    if (args.maxTokens) {
+        if (caps.usesMaxCompletionTokens) requestArgs.max_completion_tokens = args.maxTokens
+        else requestArgs.max_tokens = args.maxTokens
+    }
 
     const stream = await client.chat.completions.create(requestArgs as any, { signal: args.abortSignal })
 
