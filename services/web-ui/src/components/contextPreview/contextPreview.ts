@@ -36,6 +36,7 @@ export type ContextPreviewTileInstance = {
 
 export type CreateContextPreviewTileOptions = {
     node: CanvasNode
+    getNode?: () => CanvasNode | undefined
     environment: ContextPreviewEnvironment
     preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
 }
@@ -321,26 +322,56 @@ function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boo
 
 export function createContextPreviewTile({
     node,
+    getNode,
     environment,
     preferredPlacement = 'top',
 }: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
-    const title = getContextPreviewTitle(node, environment)
-    const text = getContextPreviewText(node, environment)
-    const accessibleLabel = getContextPreviewAccessibleLabel(node, environment)
+    const resolveNode = (): CanvasNode => getNode?.() ?? node
+    const currentNode = resolveNode()
+    const title = getContextPreviewTitle(currentNode, environment)
+    const text = getContextPreviewText(currentNode, environment)
+    const accessibleLabel = getContextPreviewAccessibleLabel(currentNode, environment)
+    const popoverContent = renderContextPreviewPopoverContent(currentNode, title, text, accessibleLabel, environment)
     const previewTooltip: HelpTooltipInstance = createHelpTooltip({
         label: accessibleLabel,
-        triggerContent: renderContextPreviewVisual(node, accessibleLabel, text, environment, 'mini'),
-        content: renderContextPreviewPopoverContent(node, title, text, accessibleLabel, environment),
+        triggerContent: renderContextPreviewVisual(currentNode, accessibleLabel, text, environment, 'mini'),
+        content: popoverContent,
         preferredPlacement,
         className: 'workspace-ai-chat-panel-context-preview-tooltip',
         triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
-        contentClassName: getContextPreviewPopoverClassName(node, Boolean(title || text)),
+        contentClassName: getContextPreviewPopoverClassName(currentNode, Boolean(title || text)),
         contentCssVariableNames: CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
         interactive: true,
     })
+    const tooltipContent = previewTooltip.dom.querySelector<HTMLElement>('.help-tooltip-content')
+    const trigger = previewTooltip.dom.querySelector<HTMLElement>('.help-tooltip-trigger')
+    const syncLatestContent = (): void => {
+        const latestNode = resolveNode()
+        const latestTitle = getContextPreviewTitle(latestNode, environment)
+        const latestText = getContextPreviewText(latestNode, environment)
+        const latestAccessibleLabel = getContextPreviewAccessibleLabel(latestNode, environment)
+        const latestContent = renderContextPreviewPopoverContent(latestNode, latestTitle, latestText, latestAccessibleLabel, environment)
+        tooltipContent?.replaceChildren(latestContent)
+        if (tooltipContent) {
+            const isVisible = tooltipContent.classList.contains('is-visible')
+            tooltipContent.className = [
+                'help-tooltip-content',
+                getContextPreviewPopoverClassName(latestNode, Boolean(latestTitle || latestText)),
+                'help-tooltip-content-interactive',
+                isVisible ? 'is-visible' : '',
+            ].filter(Boolean).join(' ')
+        }
+        trigger?.setAttribute('aria-label', latestAccessibleLabel)
+    }
+    trigger?.addEventListener('pointerenter', syncLatestContent, true)
+    trigger?.addEventListener('focusin', syncLatestContent, true)
     const dom = html`<div className="workspace-ai-chat-panel-context-preview-main">${previewTooltip.dom}</div>` as HTMLElement
     return {
         dom,
-        destroy: () => previewTooltip.destroy(),
+        destroy: () => {
+            trigger?.removeEventListener('pointerenter', syncLatestContent, true)
+            trigger?.removeEventListener('focusin', syncLatestContent, true)
+            previewTooltip.destroy()
+        },
     }
 }

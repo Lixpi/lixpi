@@ -1514,6 +1514,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             if (!node) continue
             const tile = createContextPreviewTile({
                 node,
+                getNode: () => findCanvasNodeById(nodeId) ?? node,
                 environment,
                 preferredPlacement: 'bottom',
             })
@@ -3227,7 +3228,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         node: CanvasNode
     }): HTMLDivElement {
         const environment = getContextPreviewEnvironment()
-        const previewTile = createContextPreviewTile({ node, environment })
+        const previewTile = createContextPreviewTile({
+            node,
+            getNode: () => findCanvasNodeById(nodeId) ?? node,
+            environment,
+        })
         const accessibleLabel = getContextPreviewAccessibleLabel(node, environment)
         const removeLabel = `Remove ${accessibleLabel} from context`
         activeContextPreviewTiles.add(previewTile)
@@ -5405,8 +5410,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return { ...node, descriptor } as CanvasNode
         })
         if (!patched) return
-        currentCanvasState = { ...currentCanvasState, nodes }
-        syncPixiMediaLayer(currentCanvasState)
+        const nextState = { ...currentCanvasState, nodes }
+        commitCanvasMetadataState(nextState)
+        syncPixiMediaLayer(nextState)
         refreshContextChipTray()
     }
 

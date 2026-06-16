@@ -104,7 +104,7 @@ Sent user message bubble inserted by `AiPromptInputController`.
 - Attrs: `id`, `createdAt`, `referenceNodeIds`
 - DOM parse target: `div.ai-user-message`
 - NodeView shell comes from `createAiUserMessageShell()`.
-- Explicit composer references are stored in `referenceNodeIds` at submit time and render above the message text through `components/contextPreview` when `renderContext.contextPreview` is available.
+- Explicit composer references are stored in `referenceNodeIds` at submit time and render above the message text through `components/contextPreview` when `renderContext.contextPreview` is available; those tiles re-resolve the current canvas node on hover so late descriptor self-heal metadata appears without rebuilding the message.
 
 ### `aiResponseMessage`
 

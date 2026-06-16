@@ -120,6 +120,7 @@ export const aiUserMessageNodeView = (
             if (!canvasNode) continue
             const tile = createContextPreviewTile({
                 node: canvasNode,
+                getNode: () => contextPreview.getNodeById(nodeId) ?? canvasNode,
                 environment: contextPreview.environment,
                 preferredPlacement: 'bottom',
             })
