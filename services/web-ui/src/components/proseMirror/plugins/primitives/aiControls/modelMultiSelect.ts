@@ -39,6 +39,7 @@ type ModelMultiSelectConfig = {
     id: string
     controls: AiModelMultiSelectControls
     placeholderTitle: string
+    emptySelectionErrorTitle: string
     requireSelection: boolean
     autoSelectFirst: boolean
     filterModels: (models: any[]) => any[]
@@ -107,6 +108,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     private readonly handleDocumentMouseDown: (event: MouseEvent) => void
     private options: AiModelDropdownOption[] = []
     private selectedModelIds: string[] = []
+    private renderedOptionIds: string[] = []
 
     constructor(private readonly config: ModelMultiSelectConfig) {
         this.options = this.buildOptions()
@@ -212,8 +214,8 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     }
 
     private getControlSelection(): string[] {
-        const multiSelection = this.config.controls.getCurrentAiModels?.() ?? []
-        if (multiSelection.length > 0) return uniqueModelIds(multiSelection)
+        const multiSelection = this.config.controls.getCurrentAiModels?.()
+        if (multiSelection) return uniqueModelIds(multiSelection)
 
         const scalarSelection = this.config.controls.getCurrentAiModel()
         return scalarSelection ? [scalarSelection] : []
@@ -243,9 +245,10 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         }
 
         const controlSelection = this.getNormalizedControlSelection()
+        const shouldAutoSelectFirst = commitChanges && this.config.requireSelection && this.options[0]
         const nextSelection = controlSelection.length > 0
             ? controlSelection
-            : this.config.requireSelection && this.options[0]
+            : shouldAutoSelectFirst
                 ? [this.options[0].aiModel]
                 : []
 
@@ -262,7 +265,6 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
 
     private toggleModel(option: AiModelDropdownOption): void {
         const isSelected = this.selectedModelIds.includes(option.aiModel)
-        if (isSelected && this.config.requireSelection && this.selectedModelIds.length === 1) return
 
         const nextSelection = isSelected
             ? this.selectedModelIds.filter((modelId) => modelId !== option.aiModel)
@@ -279,15 +281,31 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             .map((modelId) => this.options.find((option) => option.aiModel === modelId))
             .filter((option): option is AiModelDropdownOption => Boolean(option))
 
+        const showEmptySelectionError = this.options.length > 0 && selectedOptions.length === 0
+        this.dom.classList.toggle('dropdown-error-state', showEmptySelectionError)
+
+        if (showEmptySelectionError) {
+            this.titleEl.textContent = this.config.emptySelectionErrorTitle || settings.dropdown.errorState.fallbackTitle
+            this.titleEl.style.color = settings.dropdown.errorState.textColor
+            return
+        }
+
+        this.titleEl.style.color = ''
         this.titleEl.textContent = selectedOptions.length === 0
             ? this.config.placeholderTitle
-            : selectedOptions.length === 1
-                ? selectedOptions[0].title
-                : `${selectedOptions.length} models`
+            : `${selectedOptions.length} ${selectedOptions.length === 1 ? 'model' : 'models'}`
     }
 
     private renderOptions(): void {
         const selectedModelIds = new Set(this.selectedModelIds)
+        const optionIds = this.options.map((option) => option.aiModel)
+        const optionItemsMatch = sameModelIds(this.renderedOptionIds, optionIds)
+
+        if (optionItemsMatch) {
+            this.updateRenderedOptionSelection(selectedModelIds)
+            return
+        }
+
         const optionItems = this.options.map((option) => {
             const isSelected = selectedModelIds.has(option.aiModel)
             const handleClick = (event: MouseEvent): void => {
@@ -300,6 +318,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
                 <li
                     className="ai-model-multi-select-option flex justify-start items-center"
                     data-selected=${isSelected ? 'true' : 'false'}
+                    data-model-id=${option.aiModel}
                     onclick=${handleClick}
                 >
                     ${option.icon ? html`<span className="ai-model-multi-select-icon" innerHTML=${option.icon}></span>` : null}
@@ -310,6 +329,23 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         })
 
         this.optionsList.replaceChildren(...optionItems)
+        this.renderedOptionIds = optionIds
+    }
+
+    private updateRenderedOptionSelection(selectedModelIds: Set<string>): void {
+        const optionItems = Array.from(this.optionsList.children) as HTMLLIElement[]
+        for (const [index, option] of this.options.entries()) {
+            const optionItem = optionItems[index]
+            if (!optionItem) continue
+
+            const isSelected = selectedModelIds.has(option.aiModel)
+            optionItem.dataset.selected = isSelected ? 'true' : 'false'
+
+            const checkEl = optionItem.querySelector('.ai-model-multi-select-check') as HTMLElement | null
+            if (checkEl) {
+                checkEl.innerHTML = isSelected ? checkMarkIcon : ''
+            }
+        }
     }
 
     update(): void {
@@ -331,6 +367,7 @@ export function createGenericAiModelMultiSelect(
         id: dropdownId,
         controls,
         placeholderTitle: 'Select models',
+        emptySelectionErrorTitle: 'Select at least 1 model',
         requireSelection: true,
         autoSelectFirst: true,
         filterModels: filterReasoningModels,
@@ -345,6 +382,7 @@ export function createGenericImageModelMultiSelect(
         id: dropdownId,
         controls: adaptImageModelControls(controls),
         placeholderTitle: 'Image models',
+        emptySelectionErrorTitle: 'Select at least 1 model',
         requireSelection: true,
         autoSelectFirst: true,
         filterModels: filterImageModels,
@@ -359,6 +397,7 @@ export function createGenericVideoModelMultiSelect(
         id: dropdownId,
         controls: adaptVideoModelControls(controls),
         placeholderTitle: 'Video models',
+        emptySelectionErrorTitle: 'Select at least 1 model',
         requireSelection: false,
         autoSelectFirst: false,
         filterModels: filterVideoModels,

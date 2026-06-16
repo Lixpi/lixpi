@@ -38,6 +38,10 @@ export type ModelSelectorDropdownSettings = {
 }
 
 export type DropdownSettings = {
+    errorState: {
+        fallbackTitle: string
+        textColor: string
+    }
     styles: {
         popoverBoxShadow: string
     }
@@ -420,6 +424,10 @@ export const settings: Settings = {
 
     // Shared dropdown surface settings.
     dropdown: {
+        errorState: {
+            fallbackTitle: 'Error state',
+            textColor: colorPalette.red,
+        },
         styles: {
             // Shadow for dropdown popover menus. Increasing it raises menus visually from their backdrop.
             popoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',

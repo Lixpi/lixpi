@@ -3925,7 +3925,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)
                 },
                 onProjectTitleChange: () => {},
-                onAiChatSubmit: async ({ messages, aiModel, aiModels, imageOptions, videoOptions, referencedFeatureIds }: any) => {
+                onAiChatSubmit: async ({
+                    messages,
+                    aiModel,
+                    aiModels,
+                    useMultipleModels,
+                    useMultipleReasoningModels,
+                    useMultipleImageModels,
+                    useMultipleVideoModels,
+                    imageOptions,
+                    videoOptions,
+                    referencedFeatureIds
+                }: any) => {
                     gradient?.triggerAnimation()
                     activeAiChatPromptGradient?.triggerAnimation()
 
@@ -4008,14 +4019,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             messages: messagesWithContext,
                             aiModel,
                             aiModels,
+                            useMultipleModels,
+                            useMultipleReasoningModels,
+                            useMultipleImageModels,
+                            useMultipleVideoModels,
                             aiImageModel: imageOptions?.aiImageModel,
                             aiImageModels: imageOptions?.aiImageModels,
                             imageSize: imageOptions?.imageGenerationSize,
+                            imageConfigGroups: imageOptions?.configGroups,
                             aiVideoModel: videoOptions?.aiVideoModel,
                             aiVideoModels: videoOptions?.aiVideoModels,
                             videoAspectRatio: videoOptions?.videoAspectRatio,
                             videoResolution: videoOptions?.videoResolution,
                             videoDuration: videoOptions?.videoDuration,
+                            videoConfigGroups: videoOptions?.configGroups,
                             videoSourceForExtension,
                             referencedFeatureIds,
                             imageBranchCandidateSnapshot,
@@ -4286,7 +4303,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
 
-    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; useMultipleModels?: boolean | string; useMultipleReasoningModels?: boolean | string; useMultipleImageModels?: boolean | string; useMultipleVideoModels?: boolean | string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string }): void {
+    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; useMultipleModels?: boolean | string; useMultipleReasoningModels?: boolean | string; useMultipleImageModels?: boolean | string; useMultipleVideoModels?: boolean | string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; imageGenerationConfigGroups?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string; videoGenerationConfigGroups?: string }): void {
         if (threadFloatingInputs.has(node.nodeId)) return
 
         const threadInputStyle = { position: 'absolute' as const, display: 'block', zIndex: '9999' }

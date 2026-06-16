@@ -11,9 +11,11 @@ import { atomIcon } from '$src/svgIcons/index.ts'
 import { settings, type AiPromptInputModelMenuSettings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
+    createMediaGenerationConfigMatrixView,
     transformModelsToOptions,
     type AiModelDropdownOption,
 } from '$src/components/proseMirror/plugins/primitives/aiControls/aiControls.ts'
+import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 
 export const aiPromptInputNodeType = 'aiPromptInput'
 
@@ -43,8 +45,62 @@ export function serializeAiModelSelectionAttr(models: readonly string[]): string
     return uniqueModels.length > 0 ? JSON.stringify(uniqueModels) : ''
 }
 
+export function parseMediaGenerationConfigSelectionAttr(value: unknown): MediaGenerationConfigSelectionGroup[] {
+    if (typeof value !== 'string') return []
+    const trimmed = value.trim()
+    if (!trimmed) return []
+
+    try {
+        const parsed = JSON.parse(trimmed) as unknown
+        if (!Array.isArray(parsed)) return []
+        return parsed.flatMap((entry): MediaGenerationConfigSelectionGroup[] => {
+            if (!entry || typeof entry !== 'object') return []
+            const candidate = entry as Record<string, unknown>
+            if (typeof candidate.groupId !== 'string' || !candidate.groupId) return []
+            if (!Array.isArray(candidate.modelIds)) return []
+
+            const modelIds = candidate.modelIds
+                .filter((modelId): modelId is string => typeof modelId === 'string' && modelId.trim().length > 0)
+            const rawValues = candidate.values && typeof candidate.values === 'object'
+                ? candidate.values as Record<string, unknown>
+                : {}
+            const values = Object.fromEntries(
+                Object.entries(rawValues)
+                    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+            )
+
+            return [{
+                groupId: candidate.groupId,
+                modelIds: modelIds as MediaGenerationConfigSelectionGroup['modelIds'],
+                values,
+            }]
+        })
+    } catch {
+        return []
+    }
+}
+
+export function serializeMediaGenerationConfigSelectionAttr(groups: readonly MediaGenerationConfigSelectionGroup[]): string {
+    const normalizedGroups = groups
+        .map(group => ({
+            groupId: group.groupId,
+            modelIds: Array.from(new Set(group.modelIds.filter(modelId => modelId.trim().length > 0))),
+            values: Object.fromEntries(
+                Object.entries(group.values)
+                    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+            ),
+        }))
+        .filter(group => group.groupId && group.modelIds.length > 0)
+
+    return normalizedGroups.length > 0 ? JSON.stringify(normalizedGroups) : ''
+}
+
 function normalizeAiModelSelectionAttr(value: unknown): string {
     return serializeAiModelSelectionAttr(parseAiModelSelectionAttr(value))
+}
+
+export function normalizeMediaGenerationConfigSelectionAttr(value: unknown): string {
+    return serializeMediaGenerationConfigSelectionAttr(parseMediaGenerationConfigSelectionAttr(value))
 }
 
 function parseBooleanAttr(value: unknown): boolean {
@@ -67,11 +123,13 @@ export const aiPromptInputNodeSpec = {
         aiImageModel: { default: '' },
         aiImageModels: { default: '' },
         imageGenerationSize: { default: 'auto' },
+        imageGenerationConfigGroups: { default: '' },
         aiVideoModel: { default: '' },
         aiVideoModels: { default: '' },
         videoAspectRatio: { default: '' },
         videoResolution: { default: '' },
         videoDuration: { default: '' },
+        videoGenerationConfigGroups: { default: '' },
     },
     parseDOM: [
         {
@@ -82,21 +140,39 @@ export const aiPromptInputNodeSpec = {
                     || dom.hasAttribute('data-use-multiple-image-models')
                     || dom.hasAttribute('data-use-multiple-video-models')
                 const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModeAttrs
+                const useMultipleReasoningModels = dom.getAttribute('data-use-multiple-reasoning-models') === 'true' || useLegacyModeFallback
+                const useMultipleImageModels = dom.getAttribute('data-use-multiple-image-models') === 'true' || useLegacyModeFallback
+                const useMultipleVideoModels = dom.getAttribute('data-use-multiple-video-models') === 'true' || useLegacyModeFallback
+                const aiModel = dom.getAttribute('data-ai-model') || ''
+                const aiImageModel = dom.getAttribute('data-ai-image-model') || ''
+                const aiVideoModel = dom.getAttribute('data-ai-video-model') || ''
                 return {
-                    aiModel: dom.getAttribute('data-ai-model') || '',
-                    aiModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-models')),
+                    aiModel,
+                    aiModels: useMultipleReasoningModels
+                        ? normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-models'))
+                        : serializeAiModelSelectionAttr(aiModel ? [aiModel] : []),
                     useMultipleModels: legacyUseMultipleModels,
-                    useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true' || useLegacyModeFallback,
-                    useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true' || useLegacyModeFallback,
-                    useMultipleVideoModels: dom.getAttribute('data-use-multiple-video-models') === 'true' || useLegacyModeFallback,
-                    aiImageModel: dom.getAttribute('data-ai-image-model') || '',
-                    aiImageModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-image-models')),
+                    useMultipleReasoningModels,
+                    useMultipleImageModels,
+                    useMultipleVideoModels,
+                    aiImageModel,
+                    aiImageModels: useMultipleImageModels
+                        ? normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-image-models'))
+                        : serializeAiModelSelectionAttr(aiImageModel ? [aiImageModel] : []),
                     imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
-                    aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
-                    aiVideoModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-video-models')),
+                    imageGenerationConfigGroups: useMultipleImageModels
+                        ? normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-image-generation-config-groups'))
+                        : '',
+                    aiVideoModel,
+                    aiVideoModels: useMultipleVideoModels
+                        ? normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-video-models'))
+                        : serializeAiModelSelectionAttr(aiVideoModel ? [aiVideoModel] : []),
                     videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                     videoResolution: dom.getAttribute('data-video-resolution') || '',
                     videoDuration: dom.getAttribute('data-video-duration') || '',
+                    videoGenerationConfigGroups: useMultipleVideoModels
+                        ? normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups'))
+                        : '',
                 }
             }
         },
@@ -110,24 +186,39 @@ export const aiPromptInputNodeSpec = {
         const useMultipleReasoningModels = parseBooleanAttr(node.attrs.useMultipleReasoningModels) || useLegacyModeFallback
         const useMultipleImageModels = parseBooleanAttr(node.attrs.useMultipleImageModels) || useLegacyModeFallback
         const useMultipleVideoModels = parseBooleanAttr(node.attrs.useMultipleVideoModels) || useLegacyModeFallback
+        const aiModel = node.attrs.aiModel || ''
+        const aiImageModel = node.attrs.aiImageModel || ''
+        const aiVideoModel = node.attrs.aiVideoModel || ''
         return [
             'div',
             {
                 class: 'ai-prompt-input-wrapper',
-                'data-ai-model': node.attrs.aiModel,
-                'data-ai-models': normalizeAiModelSelectionAttr(node.attrs.aiModels),
+                'data-ai-model': aiModel,
+                'data-ai-models': useMultipleReasoningModels
+                    ? normalizeAiModelSelectionAttr(node.attrs.aiModels)
+                    : serializeAiModelSelectionAttr(aiModel ? [aiModel] : []),
                 'data-use-multiple-models': String(useMultipleReasoningModels || useMultipleImageModels || useMultipleVideoModels),
                 'data-use-multiple-reasoning-models': String(useMultipleReasoningModels),
                 'data-use-multiple-image-models': String(useMultipleImageModels),
                 'data-use-multiple-video-models': String(useMultipleVideoModels),
-                'data-ai-image-model': node.attrs.aiImageModel,
-                'data-ai-image-models': normalizeAiModelSelectionAttr(node.attrs.aiImageModels),
+                'data-ai-image-model': aiImageModel,
+                'data-ai-image-models': useMultipleImageModels
+                    ? normalizeAiModelSelectionAttr(node.attrs.aiImageModels)
+                    : serializeAiModelSelectionAttr(aiImageModel ? [aiImageModel] : []),
                 'data-image-generation-size': node.attrs.imageGenerationSize,
-                'data-ai-video-model': node.attrs.aiVideoModel,
-                'data-ai-video-models': normalizeAiModelSelectionAttr(node.attrs.aiVideoModels),
+                'data-image-generation-config-groups': useMultipleImageModels
+                    ? normalizeMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups)
+                    : '',
+                'data-ai-video-model': aiVideoModel,
+                'data-ai-video-models': useMultipleVideoModels
+                    ? normalizeAiModelSelectionAttr(node.attrs.aiVideoModels)
+                    : serializeAiModelSelectionAttr(aiVideoModel ? [aiVideoModel] : []),
                 'data-video-aspect-ratio': node.attrs.videoAspectRatio,
                 'data-video-resolution': node.attrs.videoResolution,
                 'data-video-duration': node.attrs.videoDuration,
+                'data-video-generation-config-groups': useMultipleVideoModels
+                    ? normalizeMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups)
+                    : '',
             },
             0,
         ]
@@ -282,30 +373,33 @@ function uniqueNonEmptyValues(values: string[]): string[] {
     return Array.from(new Set(values.filter((value) => value.trim().length > 0)))
 }
 
-function setNodeAttr(view: EditorView, getPos: () => number | undefined, attrName: string, value: any) {
-    const pos = getPos()
-    if (pos === undefined) return
-    const tr = view.state.tr.setNodeMarkup(pos, undefined, {
-        ...view.state.doc.nodeAt(pos)?.attrs,
-        [attrName]: value,
-    })
-    view.dispatch(tr)
-}
-
 function setNodeAttrs(view: EditorView, getPos: () => number | undefined, attrs: Record<string, unknown>): void {
-    const pos = getPos()
+    const pos = getNodeViewPos(getPos)
     if (pos === undefined) return
+    const node = view.state.doc.nodeAt(pos)
+    if (!node || node.type.name !== aiPromptInputNodeType) return
+
     const tr = view.state.tr.setNodeMarkup(pos, undefined, {
-        ...view.state.doc.nodeAt(pos)?.attrs,
+        ...node.attrs,
         ...attrs,
     })
     view.dispatch(tr)
 }
 
 function getNodeAttr(view: EditorView, getPos: () => number | undefined, attrName: string): any {
-    const pos = getPos()
+    const pos = getNodeViewPos(getPos)
     if (pos === undefined) return undefined
-    return view.state.doc.nodeAt(pos)?.attrs?.[attrName]
+    const node = view.state.doc.nodeAt(pos)
+    if (!node || node.type.name !== aiPromptInputNodeType) return undefined
+    return node.attrs?.[attrName]
+}
+
+function getNodeViewPos(getPos: () => number | undefined): number | undefined {
+    try {
+        return getPos()
+    } catch {
+        return undefined
+    }
 }
 
 function createModelMenuControl(item: ModelControlItem): HTMLElement {
@@ -646,6 +740,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             return serializeAiModelSelectionAttr(getSelectedModelIdsForMode(selectionAttrName, scalarAttrName))
         }
 
+        const getConfigSelectionGroups = (attrName: 'imageGenerationConfigGroups' | 'videoGenerationConfigGroups'): MediaGenerationConfigSelectionGroup[] => {
+            return parseMediaGenerationConfigSelectionAttr(getNodeAttr(view, getPos, attrName))
+        }
+
         const setSelectedModelIdsForMode = (
             selectionAttrName: 'aiModels' | 'aiImageModels' | 'aiVideoModels',
             scalarAttrName: 'aiModel' | 'aiImageModel' | 'aiVideoModel',
@@ -654,6 +752,26 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setNodeAttrs(view, getPos, {
                 [scalarAttrName]: modelIds[0] ?? '',
                 [selectionAttrName]: serializeAiModelSelectionAttr(uniqueNonEmptyValues(modelIds)),
+            })
+        }
+
+        const setImageConfigSelectionGroups = (groups: MediaGenerationConfigSelectionGroup[]): void => {
+            const firstImageModel = getSelectedModelIdsForMode('aiImageModels', 'aiImageModel')[0]
+            const firstImageGroup = groups.find(group => firstImageModel && group.modelIds.includes(firstImageModel))
+            setNodeAttrs(view, getPos, {
+                imageGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(groups),
+                ...(firstImageGroup?.values.imageSize ? { imageGenerationSize: firstImageGroup.values.imageSize } : {}),
+            })
+        }
+
+        const setVideoConfigSelectionGroups = (groups: MediaGenerationConfigSelectionGroup[]): void => {
+            const firstVideoModel = getSelectedModelIdsForMode('aiVideoModels', 'aiVideoModel')[0]
+            const firstVideoGroup = groups.find(group => firstVideoModel && group.modelIds.includes(firstVideoModel))
+            setNodeAttrs(view, getPos, {
+                videoGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(groups),
+                ...(firstVideoGroup?.values.aspectRatio ? { videoAspectRatio: firstVideoGroup.values.aspectRatio } : {}),
+                ...(firstVideoGroup?.values.resolution ? { videoResolution: firstVideoGroup.values.resolution } : {}),
+                ...(firstVideoGroup?.values.duration ? { videoDuration: firstVideoGroup.values.duration } : {}),
             })
         }
 
@@ -666,7 +784,8 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const createMultipleModelModeControls = (
             modeAttrName: 'useMultipleReasoningModels' | 'useMultipleImageModels' | 'useMultipleVideoModels',
             selectionAttrName: 'aiModels' | 'aiImageModels' | 'aiVideoModels',
-            scalarAttrName: 'aiModel' | 'aiImageModel' | 'aiVideoModel'
+            scalarAttrName: 'aiModel' | 'aiImageModel' | 'aiVideoModel',
+            clearAttrsWhenDisabled: Record<string, unknown> = {},
         ): MultipleModelModeControls => {
             const getModeAttrs = (useMultipleModels: boolean) => {
                 const useMultipleReasoningModels = modeAttrName === 'useMultipleReasoningModels'
@@ -691,7 +810,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                     || (parseBooleanAttr(getNodeAttr(view, getPos, 'useMultipleModels')) && !hasEnabledSectionModelMode()),
                 setUseMultipleModels: (useMultipleModels: boolean) => setNodeAttrs(view, getPos, {
                     ...getModeAttrs(useMultipleModels),
-                    [selectionAttrName]: getSerializedSelectionForMode(selectionAttrName, scalarAttrName),
+                    [selectionAttrName]: useMultipleModels
+                        ? getSerializedSelectionForMode(selectionAttrName, scalarAttrName)
+                        : serializeAiModelSelectionAttr(uniqueNonEmptyValues([getNodeAttr(view, getPos, scalarAttrName) || ''])),
+                    ...(!useMultipleModels ? clearAttrsWhenDisabled : {}),
                 }),
             }
         }
@@ -704,12 +826,14 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const imageMultipleModelsControls = createMultipleModelModeControls(
             'useMultipleImageModels',
             'aiImageModels',
-            'aiImageModel'
+            'aiImageModel',
+            { imageGenerationConfigGroups: '' },
         )
         const videoMultipleModelsControls = createMultipleModelModeControls(
             'useMultipleVideoModels',
             'aiVideoModels',
-            'aiVideoModel'
+            'aiVideoModel',
+            { videoGenerationConfigGroups: '' },
         )
 
         const getUseMultipleReasoningModels = (): boolean => reasoningMultipleModelsControls.getUseMultipleModels()
@@ -725,6 +849,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             getCurrentAiModels: () => {
                 const selectedModels = parseAiModelSelectionAttr(getNodeAttr(view, getPos, 'aiModels'))
                 if (selectedModels.length > 0) return selectedModels
+                if (getUseMultipleReasoningModels()) return []
                 const aiModel = getNodeAttr(view, getPos, 'aiModel') || ''
                 return aiModel ? [aiModel] : []
             },
@@ -745,6 +870,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             getCurrentImageModels: () => {
                 const selectedModels = parseAiModelSelectionAttr(getNodeAttr(view, getPos, 'aiImageModels'))
                 if (selectedModels.length > 0) return selectedModels
+                if (getUseMultipleImageModels()) return []
                 const aiModel = getNodeAttr(view, getPos, 'aiImageModel') || ''
                 return aiModel ? [aiModel] : []
             },
@@ -756,13 +882,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             }),
         }
 
-        const imageControls: ImageSizeControls = {
-            getImageGenerationSize: () => getNodeAttr(view, getPos, 'imageGenerationSize') || 'auto',
-            setImageGenerationSize: (size: string) => setNodeAttr(view, getPos, 'imageGenerationSize', size),
-            getProvider: () => (getNodeAttr(view, getPos, 'aiImageModel') || getNodeAttr(view, getPos, 'aiModel') || '').split(':')[0] || '',
-            getCurrentImageModel: () => getNodeAttr(view, getPos, 'aiImageModel') || '',
-        }
-
         const videoModelControls: VideoModelControls = {
             getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
             setVideoModel: (aiModel: string) => setNodeAttrs(view, getPos, {
@@ -772,6 +891,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             getCurrentVideoModels: () => {
                 const selectedModels = parseAiModelSelectionAttr(getNodeAttr(view, getPos, 'aiVideoModels'))
                 if (selectedModels.length > 0) return selectedModels
+                if (getUseMultipleVideoModels()) return []
                 const aiModel = getNodeAttr(view, getPos, 'aiVideoModel') || ''
                 return aiModel ? [aiModel] : []
             },
@@ -781,24 +901,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 useMultipleModels: true,
                 useMultipleVideoModels: true,
             }),
-        }
-
-        const videoAspectControls: VideoOptionControls = {
-            getValue: () => getNodeAttr(view, getPos, 'videoAspectRatio') || '',
-            setValue: (value: string) => setNodeAttr(view, getPos, 'videoAspectRatio', value),
-            getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
-        }
-
-        const videoResolutionControls: VideoOptionControls = {
-            getValue: () => getNodeAttr(view, getPos, 'videoResolution') || '',
-            setValue: (value: string) => setNodeAttr(view, getPos, 'videoResolution', value),
-            getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
-        }
-
-        const videoDurationControls: VideoOptionControls = {
-            getValue: () => getNodeAttr(view, getPos, 'videoDuration') || '',
-            setValue: (value: string) => setNodeAttr(view, getPos, 'videoDuration', value),
-            getCurrentVideoModel: () => getNodeAttr(view, getPos, 'aiVideoModel') || '',
         }
 
         const submitControls: SubmitControls = {
@@ -834,31 +936,33 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             () => options.createImageModelMultiSelect?.(imageModelControls, 'ai-image-model')
                 ?? options.createImageModelDropdown(imageModelControls, 'ai-image-model')
         )
-        const imageSizeDropdown = options.createImageSizeDropdown(imageControls, 'ai-image-size')
+        const imageConfigMatrix = createMediaGenerationConfigMatrixView({
+            mediaType: 'image',
+            getUseMultipleModels: imageMultipleModelsControls.getUseMultipleModels,
+            getSelectedModelIds: () => getSelectedModelIdsForMode('aiImageModels', 'aiImageModel'),
+            setSelectedModelIds: (modelIds) => setSelectedModelIdsForMode('aiImageModels', 'aiImageModel', modelIds),
+            getConfigGroups: () => getConfigSelectionGroups('imageGenerationConfigGroups'),
+            setConfigGroups: setImageConfigSelectionGroups,
+        })
         const videoModelDropdown = createModeAwareModelSelector(
             videoMultipleModelsControls,
             () => options.createVideoModelDropdown(videoModelControls, 'ai-video-model'),
             () => options.createVideoModelMultiSelect?.(videoModelControls, 'ai-video-model')
                 ?? options.createVideoModelDropdown(videoModelControls, 'ai-video-model')
         )
-        const videoAspectDropdown = options.createVideoAspectDropdown(videoAspectControls, 'ai-video-aspect')
-        const videoResolutionDropdown = options.createVideoResolutionDropdown(videoResolutionControls, 'ai-video-resolution')
-        const videoDurationDropdown = options.createVideoDurationDropdown(videoDurationControls, 'ai-video-duration')
+        const videoConfigMatrix = createMediaGenerationConfigMatrixView({
+            mediaType: 'video',
+            getUseMultipleModels: videoMultipleModelsControls.getUseMultipleModels,
+            getSelectedModelIds: () => getSelectedModelIdsForMode('aiVideoModels', 'aiVideoModel'),
+            setSelectedModelIds: (modelIds) => setSelectedModelIdsForMode('aiVideoModels', 'aiVideoModel', modelIds),
+            getConfigGroups: () => getConfigSelectionGroups('videoGenerationConfigGroups'),
+            setConfigGroups: setVideoConfigSelectionGroups,
+        })
         const submitButton = options.createSubmitButton(submitControls)
         const reasoningSelectedModelTags = new SelectedModelTagsRow({
             getUseMultipleModels: reasoningMultipleModelsControls.getUseMultipleModels,
             getSelectedModelIds: () => getSelectedModelIdsForMode('aiModels', 'aiModel'),
             setSelectedModelIds: (modelIds) => setSelectedModelIdsForMode('aiModels', 'aiModel', modelIds),
-        })
-        const imageSelectedModelTags = new SelectedModelTagsRow({
-            getUseMultipleModels: imageMultipleModelsControls.getUseMultipleModels,
-            getSelectedModelIds: () => getSelectedModelIdsForMode('aiImageModels', 'aiImageModel'),
-            setSelectedModelIds: (modelIds) => setSelectedModelIdsForMode('aiImageModels', 'aiImageModel', modelIds),
-        })
-        const videoSelectedModelTags = new SelectedModelTagsRow({
-            getUseMultipleModels: videoMultipleModelsControls.getUseMultipleModels,
-            getSelectedModelIds: () => getSelectedModelIdsForMode('aiVideoModels', 'aiVideoModel'),
-            setSelectedModelIds: (modelIds) => setSelectedModelIdsForMode('aiVideoModels', 'aiVideoModel', modelIds),
         })
 
         const modelDropdowns = [
@@ -866,30 +970,63 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             imageMultipleModelsToggle,
             videoMultipleModelsToggle,
             reasoningSelectedModelTags,
-            imageSelectedModelTags,
-            videoSelectedModelTags,
             modelDropdown,
             imageModelDropdown,
-            imageSizeDropdown,
+            imageConfigMatrix,
             videoModelDropdown,
-            videoAspectDropdown,
-            videoResolutionDropdown,
-            videoDurationDropdown,
+            videoConfigMatrix,
         ]
 
-        const imageSizeControlLabel = html`<span className="ai-prompt-model-menu-control-label"></span>` as HTMLElement
-        const updateImageSizeControlLabel = (): void => {
-            imageSizeControlLabel.textContent = imageSizeDropdown.getControlLabel?.() ?? 'Image option'
+        const modelLabelUpdaters: Array<() => void> = []
+        const createModeAwareModelControlLabel = (controls: MultipleModelModeControls): HTMLElement => {
+            const label = html`<span className="ai-prompt-model-menu-control-label"></span>` as HTMLElement
+            const updateLabel = (): void => {
+                label.textContent = controls.getUseMultipleModels() ? 'Models' : 'Model'
+            }
+            updateLabel()
+            modelLabelUpdaters.push(updateLabel)
+            return label
+        }
+
+        const reasoningModelLabel = createModeAwareModelControlLabel(reasoningMultipleModelsControls)
+        const imageModelLabel = createModeAwareModelControlLabel(imageMultipleModelsControls)
+        const videoModelLabel = createModeAwareModelControlLabel(videoMultipleModelsControls)
+
+        let modelMenu: BubbleMenu | null = null
+        let modelMenuTrigger: HTMLButtonElement | null = null
+        const getModelMenuPosition = () => {
+            if (!modelMenuTrigger) return null
+            return {
+                targetRect: modelMenuTrigger.getBoundingClientRect(),
+                placement: 'above' as const,
+                horizontalAlignment: 'end' as const,
+                clampToParent: false,
+            }
+        }
+        const scheduleModelMenuReposition = (): void => {
+            if (!modelMenu?.isVisible) return
+            const reposition = (): void => {
+                if (!modelMenu?.isVisible) return
+                const position = getModelMenuPosition()
+                if (!position) return
+                modelMenu.reposition(position)
+            }
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(reposition)
+                return
+            }
+            reposition()
         }
 
         const updateModelDropdowns = (): void => {
             for (const dropdown of modelDropdowns) {
                 dropdown.update()
             }
-            updateImageSizeControlLabel()
+            for (const updateLabel of modelLabelUpdaters) {
+                updateLabel()
+            }
+            scheduleModelMenuReposition()
         }
-
-        updateImageSizeControlLabel()
 
         const modelMenuContent = createModelMenuContent([
             {
@@ -898,34 +1035,28 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 headingControl: reasoningMultipleModelsToggle.dom,
                 selectedModelTags: reasoningSelectedModelTags.dom,
                 controls: [
-                    { label: 'Model', control: modelDropdown.dom },
+                    { label: reasoningModelLabel, control: modelDropdown.dom },
                 ],
             },
             {
                 title: 'Image model',
                 helpText: 'In this section you can configure image generation options. The model choice decides which image generator will draw it. The second option controls the shape or exact size of the image, depending on what that model supports.',
                 headingControl: imageMultipleModelsToggle.dom,
-                selectedModelTags: imageSelectedModelTags.dom,
                 controls: [
-                    { label: 'Model', control: imageModelDropdown.dom },
-                    { label: imageSizeControlLabel, control: imageSizeDropdown.dom },
+                    { label: imageModelLabel, control: imageModelDropdown.dom },
+                    { label: '', control: imageConfigMatrix.dom },
                 ],
             },
             {
                 title: 'Video model',
                 helpText: 'In this section you can configure video generation options. These options choose the video generator, the frame shape, the output quality, and how long the clip should be.',
                 headingControl: videoMultipleModelsToggle.dom,
-                selectedModelTags: videoSelectedModelTags.dom,
                 controls: [
-                    { label: 'Model', control: videoModelDropdown.dom },
-                    { label: 'Aspect ratio', control: videoAspectDropdown.dom },
-                    { label: 'Resolution', control: videoResolutionDropdown.dom },
-                    { label: 'Duration', control: videoDurationDropdown.dom },
+                    { label: videoModelLabel, control: videoModelDropdown.dom },
+                    { label: '', control: videoConfigMatrix.dom },
                 ],
             },
         ])
-
-        let modelMenu: BubbleMenu | null = null
 
         const toggleModelMenu = (event: MouseEvent): void => {
             event.preventDefault()
@@ -939,15 +1070,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             }
 
             updateModelDropdowns()
-            modelMenu.show('modelSettings', {
-                targetRect: modelMenuTrigger.getBoundingClientRect(),
-                placement: 'above',
-                horizontalAlignment: 'end',
-                clampToParent: false,
-            })
+            const position = getModelMenuPosition()
+            if (!position) return
+            modelMenu.show('modelSettings', position)
         }
 
-        const modelMenuTrigger = createModelMenuTrigger(toggleModelMenu)
+        modelMenuTrigger = createModelMenuTrigger(toggleModelMenu)
 
         controlsEl.appendChild(modelMenuTrigger)
         controlsEl.appendChild(submitButton)
@@ -1030,15 +1158,11 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 imageMultipleModelsToggle.destroy?.()
                 videoMultipleModelsToggle.destroy?.()
                 reasoningSelectedModelTags.destroy?.()
-                imageSelectedModelTags.destroy?.()
-                videoSelectedModelTags.destroy?.()
                 modelDropdown.destroy?.()
                 imageModelDropdown.destroy?.()
-                imageSizeDropdown.destroy?.()
+                imageConfigMatrix.destroy?.()
                 videoModelDropdown.destroy?.()
-                videoAspectDropdown.destroy?.()
-                videoResolutionDropdown.destroy?.()
-                videoDurationDropdown.destroy?.()
+                videoConfigMatrix.destroy?.()
             },
             stopEvent: (e: Event) => {
                 // Prevent ProseMirror from stealing focus/clicks from controls

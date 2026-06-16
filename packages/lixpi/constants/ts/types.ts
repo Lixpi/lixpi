@@ -127,6 +127,45 @@ export type ImageSizeOption = {
 
 export type ImageSizeMode = 'resolution' | 'aspectRatio'
 
+export type MediaGenerationConfigControlKey =
+    | 'imageSize'
+    | 'aspectRatio'
+    | 'resolution'
+    | 'duration'
+
+export type MediaGenerationConfigControl = {
+    key: MediaGenerationConfigControlKey
+    label: string
+    options: ImageSizeOption[]
+    defaultValue?: string
+}
+
+export type MediaGenerationConfigGroup = {
+    groupId: string
+    mediaType: 'image' | 'video'
+    provider: string
+    providerTitle?: string
+    title: string
+    modelIds: AiModelId[]
+    controls: MediaGenerationConfigControl[]
+}
+
+export type MediaGenerationConfigMatrix = {
+    version: 'media-generation-config-matrix-v1'
+    groups: MediaGenerationConfigGroup[]
+}
+
+export type MediaGenerationConfigSelectionGroup = {
+    groupId: string
+    modelIds: AiModelId[]
+    values: Partial<Record<MediaGenerationConfigControlKey, string>>
+}
+
+export type AiModelsCatalogResponse = {
+    models: Omit<AiModel, 'pricing'>[]
+    mediaGenerationConfigMatrix: MediaGenerationConfigMatrix
+}
+
 export type ImageGenerationOperationKind = 'new_image' | 'edit_existing' | 'style_transfer' | 'compare_branches' | 'fresh_branch'
 
 export type ImageBranchSelectionMode = 'context-only' | 'edit-active-branch' | 'all-branches' | 'fresh-branch' | 'ambiguous'
@@ -1241,11 +1280,15 @@ export type AiInteractionChatSendMessagePayload = {
 export type AiInteractionMediaGenerationRequest = {
     requestVersion: 'media-generation-matrix-v1'
     generationRequestId: string
+    useMultipleReasoningModels?: boolean
+    useMultipleImageModels?: boolean
+    useMultipleVideoModels?: boolean
     reasoningModelIds: AiModelId[]
     imageModelIds: AiModelId[]
     videoModelIds: AiModelId[]
     imageOptions?: {
         imageSize: ImageGenerationSize
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     videoOptions?: {
         aspectRatio?: string
@@ -1253,6 +1296,7 @@ export type AiInteractionMediaGenerationRequest = {
         duration?: string
         sourceVideoNodeId?: string
         sourceForExtension?: string
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 }
 

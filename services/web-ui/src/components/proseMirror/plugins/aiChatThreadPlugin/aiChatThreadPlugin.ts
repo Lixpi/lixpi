@@ -23,7 +23,10 @@ import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/com
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { parseAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import {
+    parseAiModelSelectionAttr,
+    parseMediaGenerationConfigSelectionAttr,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
@@ -33,6 +36,7 @@ import type {
     ImageGenerationSize,
     MarkdownParsedSegment,
     MediaBranchLineagePlan,
+    MediaGenerationConfigSelectionGroup,
     MediaGenerationRunMeta,
     StreamStatus,
     WorkspaceContextResolution,
@@ -53,6 +57,7 @@ type ImageOptions = {
     aiImageModel: string
     aiImageModels?: string[]
     imageGenerationSize: ImageGenerationSize
+    configGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
 type VideoOptions = {
@@ -61,6 +66,7 @@ type VideoOptions = {
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
+    configGroups?: MediaGenerationConfigSelectionGroup[]
     // Set when the user invoked "Extend in new thread" from a generated video
     // node. WorkspaceCanvas resolves the nodeId to a workspace Object Store URI
     // (`nats-obj://workspace-{ws}-files/{fileId}`) before forwarding to the
@@ -68,7 +74,15 @@ type VideoOptions = {
     sourceVideoNodeId?: string
 }
 
-type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { aiModels?: string[]; imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => void
+type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & {
+    aiModels?: string[]
+    useMultipleModels?: boolean
+    useMultipleReasoningModels?: boolean
+    useMultipleImageModels?: boolean
+    useMultipleVideoModels?: boolean
+    imageOptions?: ImageOptions
+    videoOptions?: VideoOptions
+}) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 export type AiChatThreadRenderContext = {
@@ -2492,11 +2506,13 @@ class AiChatThreadPluginClass {
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
             imageGenerationSize = 'auto',
+            imageGenerationConfigGroups = '',
             aiVideoModel = '',
             aiVideoModels = '',
             videoAspectRatio = '',
             videoResolution = '',
             videoDuration = '',
+            videoGenerationConfigGroups = '',
             sourceVideoNodeId = ''
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
@@ -2516,22 +2532,43 @@ class AiChatThreadPluginClass {
         const rawReasoningModelIds = parseAiModelSelectionAttr(aiModels)
         const rawImageModelIds = parseAiModelSelectionAttr(aiImageModels)
         const rawVideoModelIds = parseAiModelSelectionAttr(aiVideoModels)
-        const effectiveAiModel = aiModel || rawReasoningModelIds[0] || ''
-        const effectiveImageModel = aiImageModel || rawImageModelIds[0] || ''
-        const effectiveVideoModel = aiVideoModel || rawVideoModelIds[0] || ''
+        const imageConfigGroups = parseMediaGenerationConfigSelectionAttr(imageGenerationConfigGroups)
+        const videoConfigGroups = parseMediaGenerationConfigSelectionAttr(videoGenerationConfigGroups)
         const reasoningModelIds = reasoningModelsEnabled
-            ? (rawReasoningModelIds.length > 0 ? rawReasoningModelIds : effectiveAiModel ? [effectiveAiModel] : [])
+            ? rawReasoningModelIds
             : []
         const imageModelIds = imageModelsEnabled
-            ? (rawImageModelIds.length > 0 ? rawImageModelIds : effectiveImageModel ? [effectiveImageModel] : [])
+            ? rawImageModelIds
             : []
         const videoModelIds = videoModelsEnabled
-            ? (rawVideoModelIds.length > 0 ? rawVideoModelIds : effectiveVideoModel ? [effectiveVideoModel] : [])
+            ? rawVideoModelIds
             : []
+        const effectiveAiModel = reasoningModelsEnabled
+            ? reasoningModelIds[0] || ''
+            : aiModel || rawReasoningModelIds[0] || ''
+        const effectiveImageModel = imageModelsEnabled
+            ? imageModelIds[0] || ''
+            : aiImageModel || rawImageModelIds[0] || ''
+        const effectiveVideoModel = videoModelsEnabled
+            ? videoModelIds[0] || ''
+            : aiVideoModel || rawVideoModelIds[0] || ''
+
+        if (reasoningModelsEnabled && reasoningModelIds.length === 0) {
+            alert('Please select at least 1 reasoning model.')
+            return null
+        }
 
         // Validate AI model selected
         if (!effectiveAiModel) {
             alert('Please select an AI model from the dropdown before submitting.')
+            return null
+        }
+        if (imageModelsEnabled && imageModelIds.length === 0) {
+            alert('Please select at least 1 image model.')
+            return null
+        }
+        if (videoModelsEnabled && videoModelIds.length === 0) {
+            alert('Please select at least 1 video model.')
             return null
         }
 
@@ -2545,7 +2582,8 @@ class AiChatThreadPluginClass {
         const imageOptions = effectiveImageModel ? {
             aiImageModel: effectiveImageModel,
             aiImageModels: imageModelIds,
-            imageGenerationSize
+            imageGenerationSize,
+            ...(imageModelsEnabled && imageConfigGroups.length > 0 ? { configGroups: imageConfigGroups } : {}),
         } : undefined
 
         // Build video generation options if a video model is selected. The
@@ -2557,6 +2595,7 @@ class AiChatThreadPluginClass {
             videoAspectRatio,
             videoResolution,
             videoDuration,
+            ...(videoModelsEnabled && videoConfigGroups.length > 0 ? { configGroups: videoConfigGroups } : {}),
             ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
         } : undefined
 
@@ -2571,6 +2610,10 @@ class AiChatThreadPluginClass {
             messages,
             aiModel: effectiveAiModel,
             aiModels: reasoningModelIds,
+            useMultipleModels: reasoningModelsEnabled || imageModelsEnabled || videoModelsEnabled,
+            useMultipleReasoningModels: reasoningModelsEnabled,
+            useMultipleImageModels: imageModelsEnabled,
+            useMultipleVideoModels: videoModelsEnabled,
             threadId,
             imageOptions,
             videoOptions,

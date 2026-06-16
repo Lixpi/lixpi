@@ -4,6 +4,7 @@ import type {
     ImageBranchCandidateSnapshot,
     ImageBranchVlmResolution,
     MediaBranchLineagePlan,
+    MediaGenerationConfigSelectionGroup,
     MediaGenerationRunMeta,
     ProviderName,
     WorkspaceContextResolution,
@@ -64,11 +65,15 @@ export type MediaFanoutPlan = {
     imageModels: AiModelMetaInfo[]
     videoModels: AiModelMetaInfo[]
     imageSize?: string
+    imageModelOptions?: Record<string, { imageSize?: string }>
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string | number
     videoDurationSeconds?: number
+    videoModelOptions?: Record<string, { aspectRatio?: string; resolution?: string; duration?: string | number }>
     videoSourceForExtension?: string
+    imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
+    videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
 // Reference-image cap for the selected video model. VEO accepts 3, Seedance 9.

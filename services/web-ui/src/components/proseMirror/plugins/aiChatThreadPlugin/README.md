@@ -88,12 +88,14 @@ Attrs declared in `aiChatThreadNode.ts`:
 - `aiImageModels`
 - `imageGenerationEnabled`
 - `imageGenerationSize`
+- `imageGenerationConfigGroups`
 - `previousResponseId`
 - `aiVideoModel`
 - `aiVideoModels`
 - `videoAspectRatio`
 - `videoResolution`
 - `videoDuration`
+- `videoGenerationConfigGroups`
 - `sourceVideoNodeId`
 
 ### `aiUserMessage`
@@ -183,6 +185,8 @@ The request payload includes:
 - `referencedFeatureIds`
 
 Model-list attrs are JSON-like strings parsed with `parseAiModelSelectionAttr()`. `useMultipleModels` is accepted as an aggregate multi-model flag when section-specific flags are absent.
+
+Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded to `mediaGenerationRequest.imageOptions.configGroups` / `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
 
 `ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and `aiResponseMessage` blocks. It preserves code blocks with triple backticks, converts hard breaks to newlines, collects inline generated-image references, reuses generated-video posters as image context, and collects `feature_reference` ids.
 

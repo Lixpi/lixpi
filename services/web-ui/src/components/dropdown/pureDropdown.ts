@@ -20,6 +20,12 @@ type DropdownOption = {
     [key: string]: any
 }
 
+type DropdownErrorState = {
+    enabled?: boolean
+    title?: string
+    textColor?: string
+}
+
 type PureDropdownConfig = {
     id: string
     selectedValue: DropdownOption
@@ -36,6 +42,7 @@ type PureDropdownConfig = {
     mountToBody?: boolean
     disableAutoPositioning?: boolean
     disableTriggerHover?: boolean
+    errorState?: DropdownErrorState
     onSelect: (option: DropdownOption) => void
 }
 
@@ -55,11 +62,13 @@ export function createPureDropdown(config: PureDropdownConfig) {
         mountToBody = false,
         disableAutoPositioning = false,
         disableTriggerHover = false,
+        errorState,
         onSelect
     } = config
 
     let availableTags = config.availableTags || []
     let currentSelectedValue = selectedValue
+    let currentErrorState: DropdownErrorState | undefined = errorState
     let activeFilterTags: Set<string> = new Set()
     let allOptions = [...options]
     let infoBubble: any = null // Will be initialized after button is created
@@ -284,9 +293,20 @@ export function createPureDropdown(config: PureDropdownConfig) {
     const updateSelectedDisplay = () => {
         const titleEl = dom.querySelector('.title')
         const iconWrap = dom.querySelector('.selected-option-icon')
+        const activeErrorState = currentErrorState && currentErrorState.enabled !== false
+            ? currentErrorState
+            : null
+
+        dom.classList.toggle('dropdown-error-state', Boolean(activeErrorState))
 
         if (titleEl) {
-            titleEl.textContent = renderTitleForSelectedValue ? (currentSelectedValue?.title || '') : ''
+            if (activeErrorState) {
+                titleEl.textContent = activeErrorState.title || settings.dropdown.errorState.fallbackTitle
+                titleEl.style.color = activeErrorState.textColor || settings.dropdown.errorState.textColor
+            } else {
+                titleEl.textContent = renderTitleForSelectedValue ? (currentSelectedValue?.title || '') : ''
+                titleEl.style.color = ''
+            }
         }
 
         if (iconWrap) {
@@ -335,6 +355,10 @@ export function createPureDropdown(config: PureDropdownConfig) {
         destroy: () => {
             document.removeEventListener('mousedown', handleDocumentMouseDown, true)
             infoBubble?.destroy()
+        },
+        setErrorState: (newErrorState?: DropdownErrorState) => {
+            currentErrorState = newErrorState
+            updateSelectedDisplay()
         }
     }
 }

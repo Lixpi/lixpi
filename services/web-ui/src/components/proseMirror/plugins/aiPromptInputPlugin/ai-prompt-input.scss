@@ -427,12 +427,13 @@
 }
 
 .ai-prompt-model-menu-section-controls {
-    display: grid;
-    grid-template-columns: var(--ai-prompt-model-menu-controls-grid-template-columns, repeat(4, max-content));
-    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
     gap: var(--ai-prompt-model-menu-controls-gap, 8px);
+    width: 100%;
     min-width: 0;
-    max-width: var(--ai-prompt-model-menu-controls-max-width, min(612px, calc(100vw - 48px)));
+    max-width: 100%;
 }
 
 .ai-prompt-model-menu-control {
@@ -461,8 +462,10 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--ai-prompt-selected-model-tags-gap, 6px);
+    width: 100%;
     min-width: 0;
-    max-width: var(--ai-prompt-model-menu-controls-max-width, min(612px, calc(100vw - 48px)));
+    max-width: 100%;
+    box-sizing: border-box;
     padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
 }
 
@@ -486,6 +489,131 @@
 
 .ai-prompt-selected-model-tag-svg {
     overflow: visible;
+}
+
+.ai-prompt-model-menu-control:has(.ai-media-config-matrix) {
+    flex: 1 0 100%;
+    width: 100%;
+    max-width: 100%;
+}
+
+.ai-prompt-model-menu-control:has(.ai-media-config-matrix) .ai-prompt-model-menu-control-field {
+    width: 100%;
+}
+
+.ai-media-config-matrix {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.ai-media-config-matrix[data-visible="false"] {
+    display: none;
+}
+
+.ai-media-config-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+}
+
+.ai-media-config-group-title {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.ai-media-config-provider-title {
+    color: var(--ai-prompt-model-menu-section-title-color, #59626b);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ai-media-config-group-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: start;
+    column-gap: 16px;
+    width: 100%;
+    min-width: 0;
+}
+
+.ai-media-config-group-models {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ai-prompt-model-menu-control-gap, 3px);
+    min-width: 0;
+}
+
+.ai-media-config-models-label {
+    padding-left: 0;
+}
+
+.ai-media-config-model-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ai-prompt-selected-model-tags-gap, 6px);
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-media-config-model-tag,
+.ai-media-config-model-tag-svg {
+    flex: 0 0 auto;
+}
+
+.ai-media-config-model-tag {
+    display: inline-flex;
+    line-height: 0;
+}
+
+.ai-media-config-model-tag-svg {
+    display: block;
+    overflow: visible;
+}
+
+.ai-media-config-group-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-media-config-control {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ai-prompt-model-menu-control-gap, 3px);
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-media-config-control .dropdown-menu-tag-pill-wrapper,
+.ai-media-config-control .dots-dropdown-menu,
+.ai-media-config-control .dots-dropdown-menu button {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .ai-prompt-model-selector-host {
@@ -543,6 +671,10 @@
 
 .ai-prompt-model-menu-section-controls .dots-dropdown-menu button {
     max-width: var(--ai-prompt-model-menu-dropdown-button-max-width, 190px);
+}
+
+.ai-prompt-model-menu-section-controls .ai-media-config-control .dots-dropdown-menu button {
+    max-width: 100%;
 }
 
 .ai-prompt-model-menu-section-controls .dots-dropdown-menu button .title {
@@ -610,8 +742,25 @@
     }
 
     .ai-prompt-model-menu-section-controls {
-        grid-template-columns: var(--ai-prompt-model-menu-controls-mobile-grid-template-columns, repeat(2, max-content));
-        max-width: var(--ai-prompt-model-menu-controls-mobile-max-width, calc(100vw - 36px));
+        max-width: 100%;
+    }
+
+    .ai-media-config-matrix {
+        min-width: 0;
+    }
+
+    .ai-media-config-group {
+        gap: 6px;
+    }
+
+    .ai-media-config-group-row {
+        grid-template-columns: 1fr;
+        row-gap: 6px;
+    }
+
+    .ai-media-config-group-controls {
+        flex-wrap: wrap;
+        justify-content: flex-start;
     }
 
     .ai-prompt-model-menu-section-controls .dots-dropdown-menu button {
