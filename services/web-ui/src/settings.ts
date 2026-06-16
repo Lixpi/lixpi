@@ -221,6 +221,7 @@ export type MediaNodeSettings = {
     generatedMediaChrome: {
         iconSize: number
         topGap: number
+        chatScale: number
         modelBadgeSeparator: string
         zoomScaling: BoundedZoomScalingSettings
         styles: {
@@ -279,7 +280,6 @@ export type VideoControlsSettings = {
         horizontalInset: number
         bottomInset: number
         controlsScale: number
-        modelBadgeScale: number
         minWidth: number
         fallbackWidth: number
     }
@@ -674,6 +674,8 @@ export const settings: Settings = {
             iconSize: 28,
             // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip.
             topGap: 8,
+            // Scale applied to generated-media badges rendered inside AI chat history cards.
+            chatScale: 0.72,
             // Separator between the provider brand and model title in the model badge, e.g. "OpenAI : GPT Image 2". Includes its own surrounding spacing so it can be tuned freely (" : ", " — ", " / ", …).
             modelBadgeSeparator: ' : ',
             // Lower zoom breakpoint for generated-media icon chrome. Runtime call
@@ -757,7 +759,7 @@ export const settings: Settings = {
             // Node width below which the compact horizontal inset is used.
             compactWidthThreshold: 260,
             // Vertical gap between the video node edge and the external controls strip.
-            bottomInset: 0,
+            bottomInset: 8,
             // Bounded zoom scaling for the canvas control strip.
             zoomScaling: { minZoom: 0.4 },
         },
@@ -769,8 +771,6 @@ export const settings: Settings = {
             bottomInset: 0,
             // Visual scale applied to the shared controls inside chat history cards.
             controlsScale: 0.72,
-            // Visual scale applied to the generated-media provider badge in chat history cards.
-            modelBadgeScale: 0.72,
             // Minimum SVG viewBox width used when the host is narrow or not measured.
             minWidth: 300,
             // Fallback width before ResizeObserver measurement is available.

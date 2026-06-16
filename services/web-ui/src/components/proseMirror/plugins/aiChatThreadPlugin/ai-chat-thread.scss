@@ -6,6 +6,7 @@
 @import '$src/components/contextPreview/context-preview.scss';
 
 $aiChatThreadMinHeight: 50px;
+$aiChatThreadMediaMaxWidth: 500px;
 
 // User message bubble colors
 $userMessageBubbleColor: linear-gradient(135deg, #636d75 0%, #6c747c 100%);
@@ -122,6 +123,19 @@ $userMessageTextColor: #fff;
 
         // Reserve space so sticky composer doesn't cover last message
         padding-bottom: 3.25rem;
+    }
+
+    .ai-chat-thread-content .ai-generated-media-node {
+        width: 100% !important;
+        max-width: $aiChatThreadMediaMaxWidth;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .ai-chat-thread-content .ai-generated-media-node .pm-image-media-frame,
+    .ai-chat-thread-content .ai-generated-media-node img,
+    .ai-chat-thread-content .ai-generated-video-container {
+        width: 100%;
     }
 
     // ===== USER MESSAGE (SENT) =====
@@ -691,7 +705,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     }
 }
 
-.ai-generated-video-model-chrome.ai-generated-media-run-meta {
+.ai-generated-media-model-chrome.ai-generated-media-run-meta {
     justify-content: flex-start;
     min-width: 0;
     width: 100%;
@@ -699,7 +713,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     min-height: var(--workspace-generated-media-chrome-icon-size, 34px);
 }
 
-.ai-generated-video-model-chrome .media-model-badge {
+.ai-generated-media-model-chrome .media-model-badge {
     min-width: 0;
     height: var(--workspace-generated-media-chrome-icon-size, 34px);
     flex: 1 1 auto;
@@ -711,21 +725,21 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     pointer-events: none;
 }
 
-.ai-generated-video-model-chrome .media-model-badge-icon,
-.ai-generated-video-model-chrome .media-model-badge svg {
+.ai-generated-media-model-chrome .media-model-badge-icon,
+.ai-generated-media-model-chrome .media-model-badge svg {
     width: var(--workspace-generated-media-chrome-icon-size, 34px);
     height: var(--workspace-generated-media-chrome-icon-size, 34px);
     flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
     fill: currentColor;
 }
 
-.ai-generated-video-model-chrome .media-model-badge-icon {
+.ai-generated-media-model-chrome .media-model-badge-icon {
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.ai-generated-video-model-chrome .media-model-badge-name {
+.ai-generated-media-model-chrome .media-model-badge-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -736,7 +750,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     line-height: var(--workspace-media-model-badge-name-line-height, 1.5);
 }
 
-.ai-generated-video-model-chrome .media-model-badge-model {
+.ai-generated-media-model-chrome .media-model-badge-model {
     color: var(--workspace-media-model-badge-model-color, #181e23);
 }
 

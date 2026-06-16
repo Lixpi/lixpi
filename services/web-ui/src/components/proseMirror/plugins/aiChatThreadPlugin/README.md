@@ -11,7 +11,7 @@
 
 ## What It Does
 
-- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiCollapsibleBlock`, and `aiGeneratedVideo`.
+- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
 - Parses `aiUserInput` through the schema compatibility path, then removes those children in `appendTransaction()`.
 - Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
@@ -131,7 +131,9 @@ Atom node for compact generated-image references in the thread log.
 
 - Spec and exported NodeView live in `aiGeneratedImageNode.ts`.
 - Generated-image rendering is owned by `imageSelectionPlugin`.
-- `imageSelectionPlugin` owns the active image NodeView path so regular image selection, bubble-menu alignment, and wrap controls work consistently.
+- `imageSelectionPlugin` owns the active `ImageNodeView` path so regular image selection, bubble-menu alignment, wrap controls, and the shared generated-media provider badge stay on the same visible surface.
+- Complete nodes render an authenticated image URL and the provider badge below the image.
+- Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
 - Partial and complete stream events are matched primarily with `mediaRunId` when available, then by file, response, or partial identifiers.
 
 ### `aiGeneratedVideo`
@@ -140,6 +142,7 @@ Atom node for generated-video status and previews in the thread log.
 
 - Pending/generating/error/complete events update the in-thread video node.
 - Complete nodes render an authenticated video URL, the shared SVG `videoControls` bar as a scaled external row below the video, and the shared generated-media provider badge below the controls.
+- Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
 - The canvas media info button is not rendered in chat history nodes.
 - Poster file ids can be reused as still-image context when the thread log is converted into a later request.
 - Carries the same run metadata shape as generated images.
@@ -275,8 +278,9 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 - `aiUserMessageNode.ts`: sent-user-message schema and shell NodeView.
 - `aiResponseMessageNode.ts`: assistant response schema, shell NodeView, and response-level metadata.
 - `aiReasoningSectionNode.ts`: per-reasoning-run section schema and NodeView for one shared media response message.
-- `aiGeneratedImageNode.ts`: generated-image schema, callback surface, and exported NodeView.
-- `aiGeneratedVideoNode.ts`: generated-video schema, callback surface, in-chat video NodeView.
+- `aiGeneratedImageNode.ts`: generated-image schema and callback surface.
+- `imageSelectionPlugin/imageNodeView.ts`: visible regular/generated image NodeView, authenticated image loading, resizing, and generated-media provider badge.
+- `aiGeneratedVideoNode.ts`: generated-video schema, callback surface, in-chat video NodeView, controls mount, and generated-media provider badge.
 - `aiCollapsibleBlockNode.ts`: trace disclosure schema and NodeView.
 - `imageGenerationTraceDetails.ts`: shared trace detail renderer.
 - `aiChatMessageShells.ts`: shared user/assistant message shells.

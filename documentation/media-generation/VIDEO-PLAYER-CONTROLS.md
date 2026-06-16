@@ -143,7 +143,7 @@ Fullscreen controls are gated by browser support:
 
 - fullscreen requires `videoEl.requestFullscreen` and `document.exitFullscreen`
 
-If a capability is missing or the bar is too narrow, that control is hidden. Failures from `play()`, fullscreen, or resume-after-scrub are logged as warnings without breaking the rest of the bar.
+If fullscreen support is missing, the fullscreen action returns without changing layout. Failures from `play()`, fullscreen, or resume-after-scrub are logged as warnings without breaking the rest of the bar.
 
 ## Styling
 
@@ -157,7 +157,7 @@ Canvas visibility and positioning are controlled by host elements:
 | `.workspace-video-surface` | Holds the visible canvas `<video>` element |
 | `.workspace-video-controls-host` | Mounts the canvas SVG bar below the video surface; individual control hit areas isolate their own events while empty strip space stays available to canvas gestures |
 | `.ai-generated-video-controls-host` | Mounts the in-chat SVG bar |
-| `.ai-generated-video-model-chrome` | Holds the in-chat generated-media provider badge below the controls |
+| `.ai-generated-media-model-chrome` | Holds the in-chat generated-media provider badge below the controls or image |
 
 ## Data, Storage, and Transport
 

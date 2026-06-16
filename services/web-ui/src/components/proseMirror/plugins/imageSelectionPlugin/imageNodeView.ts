@@ -4,6 +4,9 @@ import { NodeSelection } from 'prosemirror-state'
 import { imageResizeCornerIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import { settings } from '$src/settings.ts'
+import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
 type ImageAlignment = 'left' | 'center' | 'right'
 type TextWrap = 'none' | 'left' | 'right'
@@ -60,14 +63,18 @@ export class ImageNodeView implements NodeView {
     private node: ProseMirrorNode
 
     private figure: HTMLElement
+    private mediaFrame: HTMLElement
     private img: HTMLImageElement
     private partialPlaceholder: HTMLElement | null = null
+    private modelChromeElement: HTMLElement | null = null
     private resizeHandles: Map<ResizeCorner, HTMLElement> = new Map()
 
     private originalAspectRatio = 1
     private isResizing = false
     private currentSrcAttr = '' // Track the original src attr to avoid redundant updates
     private readonly resizeEnabled: boolean
+    private readonly isGeneratedImage: boolean
+    private unsubscribeAiModelsStore: (() => void) | null = null
 
     constructor({ node, view, getPos }: ImageNodeViewOptions) {
         this.node = node
@@ -75,8 +82,10 @@ export class ImageNodeView implements NodeView {
         this.getPos = getPos
         this.currentSrcAttr = getImageSrcAttr(node)
         this.resizeEnabled = view.editable
+        this.isGeneratedImage = node.type.name === 'aiGeneratedImage'
 
         this.figure = html`<figure className=${this.buildClassName()} draggable=${this.resizeEnabled}></figure>` as HTMLElement
+        this.mediaFrame = html`<div className="pm-image-media-frame"></div>` as HTMLElement
         this.img = html`<img />` as HTMLImageElement
         // Set src asynchronously to handle auth token
         this.updateImageSrc(getImageSrcAttr(node))
@@ -90,7 +99,7 @@ export class ImageNodeView implements NodeView {
             for (const corner of corners) {
                 const handle = this.createResizeHandle(corner)
                 this.resizeHandles.set(corner, handle)
-                this.figure.appendChild(handle)
+                this.mediaFrame.appendChild(handle)
             }
         }
 
@@ -105,16 +114,18 @@ export class ImageNodeView implements NodeView {
         this.figure.dataset.textWrap = node.attrs.textWrap || 'none'
 
         // Assemble DOM
-        this.figure.appendChild(this.img)
+        this.mediaFrame.appendChild(this.img)
+        this.figure.appendChild(this.mediaFrame)
         this.syncPartialPlaceholder()
+        this.syncGeneratedImageModelChrome()
 
         // Store aspect ratio when image loads
         this.img.addEventListener('load', this.handleImageLoad)
 
         this.img.addEventListener('error', () => {
             applyStyle(this.img, { display: 'none' })
-            if (!this.figure.querySelector('.image-error-placeholder')) {
-                this.figure.appendChild(html`
+            if (!this.mediaFrame.querySelector('.image-error-placeholder')) {
+                this.mediaFrame.appendChild(html`
                     <div className="image-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Image unavailable</span></div>
                 `)
             }
@@ -141,7 +152,7 @@ export class ImageNodeView implements NodeView {
         try {
             const resolvedSrc = await buildImageSrc(src)
             if (this.img.src !== resolvedSrc) {
-                this.figure.querySelector('.image-error-placeholder')?.remove()
+                this.mediaFrame.querySelector('.image-error-placeholder')?.remove()
                 applyStyle(this.img, { display: '' })
                 this.img.src = resolvedSrc
             }
@@ -153,7 +164,8 @@ export class ImageNodeView implements NodeView {
     private buildClassName(): string {
         const alignment = this.node.attrs.alignment || 'left'
         const textWrap = this.node.attrs.textWrap || 'none'
-        return `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`
+        const generatedMediaClassName = this.isGeneratedImage ? ' ai-generated-media-node' : ''
+        return `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}${generatedMediaClassName}`
     }
 
     private applyFigureClasses(): void {
@@ -170,6 +182,7 @@ export class ImageNodeView implements NodeView {
             `pm-image-align-${this.node.attrs.alignment || 'left'}`,
             `pm-image-wrap-${this.node.attrs.textWrap || 'none'}`,
         )
+        this.figure.classList.toggle('ai-generated-media-node', this.isGeneratedImage)
     }
 
     private syncPartialPlaceholder(): void {
@@ -196,8 +209,30 @@ export class ImageNodeView implements NodeView {
             `
         }
         if (!this.partialPlaceholder.parentElement) {
-            this.figure.appendChild(this.partialPlaceholder)
+            this.mediaFrame.appendChild(this.partialPlaceholder)
         }
+    }
+
+    private syncGeneratedImageModelChrome(): void {
+        if (!this.isGeneratedImage) return
+
+        if (!this.modelChromeElement) {
+            this.modelChromeElement = html`
+                <div className="ai-generated-media-model-chrome ai-generated-media-run-meta"></div>
+            ` as HTMLElement
+            applyMediaModelBadgeStyleProperties(this.figure, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
+            this.figure.appendChild(this.modelChromeElement)
+            this.unsubscribeAiModelsStore = aiModelsStore.subscribe(() => this.renderGeneratedImageModelBadge())
+        }
+
+        this.renderGeneratedImageModelBadge()
+    }
+
+    private renderGeneratedImageModelBadge(): void {
+        if (!this.modelChromeElement) return
+        renderMediaModelBadge(this.modelChromeElement, {
+            modelId: this.node.attrs.mediaModelId,
+        })
     }
 
     private createResizeHandle(corner: ResizeCorner): HTMLElement {
@@ -329,6 +364,7 @@ export class ImageNodeView implements NodeView {
         // Update image src asynchronously to handle auth token
         this.updateImageSrc(getImageSrcAttr(node))
         this.syncPartialPlaceholder()
+        this.syncGeneratedImageModelChrome()
 
         if (node.attrs.alt !== this.img.alt) {
             this.img.alt = node.attrs.alt || ''
@@ -382,5 +418,7 @@ export class ImageNodeView implements NodeView {
         this.resizeHandles.clear()
         this.img.removeEventListener('load', this.handleImageLoad)
         this.figure.removeEventListener('click', this.handleClick)
+        this.unsubscribeAiModelsStore?.()
+        this.unsubscribeAiModelsStore = null
     }
 }

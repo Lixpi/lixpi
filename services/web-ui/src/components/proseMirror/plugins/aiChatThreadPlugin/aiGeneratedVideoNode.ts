@@ -7,7 +7,7 @@ import type { ImageBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/co
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
 import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
-import { applyMediaModelBadgeStyleProperties, createMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
 // Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
@@ -233,7 +233,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         display: 'none',
     }
     const wrapper = html`
-        <div className="ai-generated-video-wrapper">
+        <div className="ai-generated-video-wrapper ai-generated-media-node">
             <div className="ai-generated-video-container" style=${containerStyle}>
                 <div className="ai-generated-video-placeholder">
                     <span className="placeholder-text">Generating video…</span>
@@ -241,7 +241,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
                 <video className="ai-generated-video-content" preload="metadata" playsinline crossorigin="anonymous"></video>
             </div>
             <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
-            <div className="ai-generated-video-model-chrome ai-generated-media-run-meta"></div>
+            <div className="ai-generated-media-model-chrome ai-generated-media-run-meta"></div>
         </div>
     `
 
@@ -250,9 +250,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
     const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
-    const modelChromeElement = wrapper.querySelector('.ai-generated-video-model-chrome') as HTMLElement
+    const modelChromeElement = wrapper.querySelector('.ai-generated-media-model-chrome') as HTMLElement
     applyVideoControlsHostStyleProperties(controlsHost)
-    applyMediaModelBadgeStyleProperties(wrapper, { scale: settings.videoControls.chat.modelBadgeScale })
+    applyMediaModelBadgeStyleProperties(wrapper, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
     let videoControls: VideoControlsInstance | null = null
     let controlsSvg: any = null
     let resizeObserver: ResizeObserver | null = null
@@ -285,15 +285,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     wrapper.addEventListener('click', handleClick)
 
     const updateModelChrome = (): void => {
-        const modelBadge = createMediaModelBadge({
+        renderMediaModelBadge(modelChromeElement, {
             modelId: node.attrs.mediaModelId || node.attrs.videoModel,
         })
-
-        modelChromeElement.replaceChildren()
-        if (modelBadge) {
-            modelChromeElement.appendChild(modelBadge)
-        }
-        modelChromeElement.hidden = !modelBadge
     }
 
     const clearErrorPlaceholder = (): void => {

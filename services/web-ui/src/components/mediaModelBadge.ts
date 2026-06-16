@@ -113,6 +113,15 @@ export function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElemen
     ` as HTMLElement
 }
 
+export function renderMediaModelBadge(host: HTMLElement, config: MediaModelBadgeConfig): void {
+    const modelBadge = createMediaModelBadge(config)
+    host.replaceChildren()
+    if (modelBadge) {
+        host.appendChild(modelBadge)
+    }
+    host.hidden = !modelBadge
+}
+
 export function applyMediaModelBadgeStyleProperties(host: HTMLElement, options: MediaModelBadgeStyleOptions = {}): void {
     const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
     const scale = normalizeScale(options.scale)

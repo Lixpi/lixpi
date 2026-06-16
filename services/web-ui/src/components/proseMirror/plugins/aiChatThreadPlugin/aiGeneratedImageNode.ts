@@ -1,6 +1,9 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
+import { settings } from '$src/settings.ts'
+import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { NodeSelection } from 'prosemirror-state'
 import type { ImageBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
 
@@ -10,17 +13,6 @@ function parseVariantIndex(value: string | null): number | null {
     if (!value) return null
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : null
-}
-
-function formatModelLabel(modelId: string): string {
-    if (!modelId) return ''
-    const parts = String(modelId).split(':')
-    return parts[1] || parts[0] || ''
-}
-
-function formatVariantLabel(variantIndex: number | null): string {
-    if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
-    return `Variant ${Number(variantIndex) + 1}`
 }
 
 export const aiGeneratedImageNodeSpec = {
@@ -174,7 +166,7 @@ export function getAiGeneratedImageCallbacks(): AiGeneratedImageCallbacks {
 
 export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => number | undefined) => {
     const wrapper = html`
-        <div className="ai-generated-image-wrapper">
+        <div className="ai-generated-image-wrapper ai-generated-media-node">
             <div className="ai-generated-image-container">
                 <div className="ai-generated-image-spinner">
                     <div className="spinner-ring"></div>
@@ -182,14 +174,16 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
                 </div>
                 <img className="ai-generated-image-content" alt="" />
             </div>
-            <div className="ai-generated-media-run-meta"></div>
+            <div className="ai-generated-media-model-chrome ai-generated-media-run-meta"></div>
         </div>
     `
 
     const container = wrapper.querySelector('.ai-generated-image-container') as HTMLElement
     const spinnerElement = wrapper.querySelector('.ai-generated-image-spinner') as HTMLElement
     const imageElement = wrapper.querySelector('.ai-generated-image-content') as HTMLImageElement
-    const runMetaElement = wrapper.querySelector('.ai-generated-media-run-meta') as HTMLElement
+    const modelChromeElement = wrapper.querySelector('.ai-generated-media-model-chrome') as HTMLElement
+    applyMediaModelBadgeStyleProperties(wrapper, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
+    let unsubscribeAiModelsStore: (() => void) | null = null
 
     // Click handler to select the node (needed for bubble menu)
     const handleClick = (event: MouseEvent) => {
@@ -207,26 +201,14 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
 
     wrapper.addEventListener('click', handleClick)
 
-    const updateRunMeta = () => {
-        const mediaLabel = formatModelLabel(node.attrs.mediaModelId)
-        const variantLabel = formatVariantLabel(node.attrs.variantIndex)
-        runMetaElement.replaceChildren()
-
-        if (mediaLabel) {
-            const modelPill = html`<span className="ai-generated-media-run-pill" title=${node.attrs.mediaModelId}>${mediaLabel}</span>` as HTMLElement
-            runMetaElement.appendChild(modelPill)
-        }
-
-        if (variantLabel) {
-            const variantPill = html`<span className="ai-generated-media-run-pill is-variant">${variantLabel}</span>` as HTMLElement
-            runMetaElement.appendChild(variantPill)
-        }
-
-        runMetaElement.hidden = runMetaElement.childElementCount === 0
+    const updateModelChrome = (): void => {
+        renderMediaModelBadge(modelChromeElement, {
+            modelId: node.attrs.mediaModelId,
+        })
     }
 
     const updateDisplay = async () => {
-        const { imageData, revisedPrompt, responseId, aiModel, isPartial } = node.attrs
+        const { imageData, isPartial } = node.attrs
 
         if (!imageData) {
             spinnerElement.classList.add('is-active')
@@ -281,7 +263,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     }
 
     updateDisplay().catch(() => {})
-    updateRunMeta()
+    unsubscribeAiModelsStore = aiModelsStore.subscribe(() => updateModelChrome())
 
     return {
         dom: wrapper,
@@ -292,11 +274,13 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
 
             node = updatedNode
             updateDisplay()
-            updateRunMeta()
+            updateModelChrome()
             return true
         },
         destroy: () => {
             wrapper.removeEventListener('click', handleClick)
+            unsubscribeAiModelsStore?.()
+            unsubscribeAiModelsStore = null
         },
         stopEvent: (event: Event) => {
             return false

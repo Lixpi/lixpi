@@ -182,6 +182,11 @@ function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previous
     }
 }
 
+function buildMediaModelId(provider?: string, model?: string): string {
+    if (!model) return ''
+    return model.includes(':') || !provider ? model : `${provider}:${model}`
+}
+
 function usesReasoningSection(
     generationRun?: MediaGenerationRunMeta
 ): generationRun is MediaGenerationRunMeta & { requestKind: 'media-generation-matrix' } {
@@ -296,9 +301,9 @@ type AiChatThreadPluginState = {
 
 const PLUGIN_KEY = AI_CHAT_THREAD_PLUGIN_KEY as PluginKey<AiChatThreadPluginState>
 const INSERT_THREAD_META = `insert:${aiChatThreadNodeType}`
-const AI_GENERATED_IMAGE_THUMBNAIL_WIDTH = '112px'
-const AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT: AiGeneratedImageAlignment = 'right'
-const AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP: AiGeneratedImageTextWrap = 'none'
+const AI_GENERATED_MEDIA_WIDTH = '100%'
+const AI_GENERATED_MEDIA_ALIGNMENT: AiGeneratedImageAlignment = 'right'
+const AI_GENERATED_MEDIA_TEXT_WRAP: AiGeneratedImageTextWrap = 'none'
 
 // ========== UTILITY MODULES ==========
 
@@ -1124,11 +1129,13 @@ class AiChatThreadPluginClass {
         const previousAlignment = previousAttrs.alignment
         const alignment = previousAlignment === 'left' || previousAlignment === 'center' || previousAlignment === 'right'
             ? previousAlignment
-            : AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT
+            : AI_GENERATED_MEDIA_ALIGNMENT
         const previousTextWrap = previousAttrs.textWrap
         const textWrap = previousTextWrap === 'left' || previousTextWrap === 'right' || previousTextWrap === 'none'
             ? previousTextWrap
-            : AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP
+            : AI_GENERATED_MEDIA_TEXT_WRAP
+        const runAttrs = buildGeneratedRunAttrs(event.generationRun, previousAttrs)
+        const mediaModelId = runAttrs.mediaModelId || buildMediaModelId(event.imageModelProvider, event.imageModelId)
 
         return {
             imageData: event.imageUrl || previousAttrs.imageData || '',
@@ -1139,10 +1146,11 @@ class AiChatThreadPluginClass {
             aiModel: event.aiProvider || previousAttrs.aiModel || '',
             isPartial,
             partialIndex,
-            width: previousAttrs.width || AI_GENERATED_IMAGE_THUMBNAIL_WIDTH,
+            width: previousAttrs.width || AI_GENERATED_MEDIA_WIDTH,
             alignment,
             textWrap,
-            ...buildGeneratedRunAttrs(event.generationRun, previousAttrs),
+            ...runAttrs,
+            mediaModelId,
         }
     }
 
@@ -1307,11 +1315,11 @@ class AiChatThreadPluginClass {
         const previousAlignment = previousAttrs.alignment
         const alignment = previousAlignment === 'left' || previousAlignment === 'center' || previousAlignment === 'right'
             ? previousAlignment
-            : AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT
+            : AI_GENERATED_MEDIA_ALIGNMENT
         const previousTextWrap = previousAttrs.textWrap
         const textWrap = previousTextWrap === 'left' || previousTextWrap === 'right' || previousTextWrap === 'none'
             ? previousTextWrap
-            : AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP
+            : AI_GENERATED_MEDIA_TEXT_WRAP
 
         return {
             videoUrl: event.videoUrl || previousAttrs.videoUrl || '',
@@ -1327,7 +1335,7 @@ class AiChatThreadPluginClass {
             videoModel: event.videoModel || event.generationRun?.mediaModelId || previousAttrs.videoModel || '',
             isPending,
             errorMessage,
-            width: previousAttrs.width || AI_GENERATED_IMAGE_THUMBNAIL_WIDTH,
+            width: previousAttrs.width || AI_GENERATED_MEDIA_WIDTH,
             alignment,
             textWrap,
             ...buildGeneratedRunAttrs(event.generationRun, previousAttrs),
