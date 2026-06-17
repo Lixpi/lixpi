@@ -30,12 +30,18 @@ describe('ai model selection parsing and serialization', () => {
 })
 
 describe('aiPromptInputNodeSpec', () => {
-    it('normalizes aiModels and model list attrs through toDOM', () => {
+    it('normalizes multi-model lists for toDOM serialization when multi-model mode is enabled', () => {
         const promptNode = testSchema.nodes.aiPromptInput.create({
             aiModels: '["gpt-4o", "gpt-4o", "", "claude-3"]',
             aiImageModels: '["image-model", "image-model", ""]',
             aiVideoModels: '["video-model", "video-model", ""]',
             imageGenerationSize: 'auto',
+            useMultipleReasoningModels: true,
+            useMultipleImageModels: true,
+            useMultipleVideoModels: true,
+            aiModel: 'fallback-text-model',
+            aiImageModel: 'fallback-image-model',
+            aiVideoModel: 'fallback-video-model',
         }, [testSchema.nodes.paragraph.create(null, [testSchema.text('hello')])])
 
         const domSpec = aiPromptInputNodeSpec.toDOM(promptNode as any) as any[]
@@ -43,6 +49,27 @@ describe('aiPromptInputNodeSpec', () => {
 
         expect(attrs['data-ai-models']).toBe('["gpt-4o","claude-3"]')
         expect(attrs['data-ai-image-models']).toBe('["image-model"]')
+        expect(attrs['data-ai-video-models']).toBe('["video-model"]')
+    })
+
+    it('uses single-model attrs in toDOM when multi-model mode is disabled', () => {
+        const promptNode = testSchema.nodes.aiPromptInput.create({
+            aiModel: 'gpt-4o',
+            aiImageModel: 'image-model',
+            aiVideoModel: 'video-model',
+            aiModels: '["gpt-4o", "claude-3"]',
+            aiImageModels: '["image-model", "image-model"]',
+            aiVideoModels: '["video-model", "video-model"]',
+        }, [testSchema.nodes.paragraph.create(null, [testSchema.text('hello')])])
+
+        const domSpec = aiPromptInputNodeSpec.toDOM(promptNode as any) as any[]
+        const attrs = domSpec[1]
+
+        expect(attrs['data-ai-model']).toBe('gpt-4o')
+        expect(attrs['data-ai-models']).toBe('["gpt-4o"]')
+        expect(attrs['data-ai-image-model']).toBe('image-model')
+        expect(attrs['data-ai-image-models']).toBe('["image-model"]')
+        expect(attrs['data-ai-video-model']).toBe('video-model')
         expect(attrs['data-ai-video-models']).toBe('["video-model"]')
     })
 

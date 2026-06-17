@@ -4,6 +4,14 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 
+function expectSourceToContain(source: string, snippet: string): void {
+    expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string): void {
+    expect(source.includes(snippet), `source should not contain: ${snippet}`).toBe(false)
+}
+
 const panelSource = readFileSync(resolve(__dirname, 'mediaLibraryPanel.ts'), 'utf-8')
 const panelStyles = readFileSync(resolve(__dirname, 'media-library-panel.scss'), 'utf-8')
 const canvasSource = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf-8')
@@ -11,66 +19,74 @@ const workspaceSvelteSource = readFileSync(resolve(__dirname, '../../components/
 
 describe('Media Library panel contract', () => {
     it('presents clear content modes with a compact scope selector', () => {
-        expect(panelSource).toContain('Media Library')
-        expect(panelSource).toContain("{ key: MEDIA_LIBRARY_CATEGORY.FEATURES, label: 'Features' }")
-        expect(panelSource).toContain("{ key: MEDIA_LIBRARY_CATEGORY.IMAGES, label: 'Images' }")
-        expect(panelSource).toContain("{ key: MEDIA_LIBRARY_BROWSE_ALL, label: 'All available' }")
-        expect(panelSource).toContain('media-library-scope-select')
-        expect(panelSource).toContain('role="tablist"')
-        expect(panelSource).not.toContain('media-library-filter-tabs')
+        expectSourceToContain(panelSource, 'Media Library')
+        expectSourceToContain(panelSource, "{ key: MEDIA_LIBRARY_CATEGORY.FEATURES, label: 'Features' }")
+        expectSourceToContain(panelSource, "{ key: MEDIA_LIBRARY_CATEGORY.IMAGES, label: 'Images' }")
+        expectSourceToContain(panelSource, "{ key: MEDIA_LIBRARY_BROWSE_ALL, label: 'All available' }")
+        expectSourceToContain(panelSource, 'media-library-scope-select')
+        expectSourceToContain(panelSource, 'role="tablist"')
+        expectSourceNotToContain(panelSource, 'media-library-filter-tabs')
     })
 
     it('keeps browsing cards concise while retaining complete inspector details', () => {
-        expect(panelSource).toContain('feature-library-inspector-card')
-        expect(panelSource).toContain('media-library-browser-intro')
-        expect(panelSource).toContain('renderMarkdownStatic(feature.instructions')
-        expect(panelSource).toContain('for (const tag of tags)')
-        expect(panelSource).not.toContain('feature.instructions.slice')
-        expect(panelStyles).toContain('-webkit-line-clamp: 2')
+        expectSourceToContain(panelSource, 'feature-library-inspector-card')
+        expectSourceToContain(panelSource, 'media-library-browser-intro')
+        expectSourceToContain(panelSource, 'renderMarkdownStatic(feature.instructions')
+        expectSourceToContain(panelSource, 'for (const tag of tags)')
+        expectSourceNotToContain(panelSource, 'feature.instructions.slice')
+        expectSourceToContain(panelStyles, '-webkit-line-clamp: 2')
     })
 
     it('retains source sample previews and falls back to the durable authorized sample route', () => {
-        expect(panelSource).toContain('function getStoredSampleUrl')
-        expect(panelSource).toContain('/api/features/${feature.featureId}/samples/${sampleIndex}')
+        expectSourceToContain(panelSource, 'function getStoredSampleUrl')
+        expectSourceToContain(panelSource, '/api/features/${feature.featureId}/samples/${sampleIndex}')
         expect(panelSource.indexOf('if (featureSample?.imageUrl)')).toBeLessThan(panelSource.indexOf('return getStoredSampleUrl(feature, sampleIndex)'))
-        expect(panelSource).toContain('imageEl.src = getStoredSampleUrl(feature, sampleIndex)')
+        expectSourceToContain(panelSource, 'imageEl.src = getStoredSampleUrl(feature, sampleIndex)')
     })
 
     it('uses the shared close icon and non-shifting card feedback', () => {
-        expect(panelSource).toContain("import { xIcon } from '$src/svgIcons/index.ts'")
-        expect(panelSource).toContain('media-library-header-close-icon')
-        expect(panelStyles).toContain('.feature-library-row:hover')
-        expect(panelStyles).toContain('transform: none;')
-        expect(panelStyles).toContain('box-shadow: inset 0 0 0 1px')
+        expectSourceToContain(panelSource, "import { xIcon } from '$src/svgIcons/index.ts'")
+        expectSourceToContain(panelSource, 'media-library-header-close-icon')
+        expectSourceToContain(panelStyles, '.feature-library-row:hover')
+        expectSourceToContain(panelStyles, 'transform: none;')
+        expectSourceToContain(panelStyles, 'box-shadow: inset 0 0 0 1px')
     })
 
     it('uses a full-height panel, accounts for AI chat, and focuses details when narrow', () => {
-        expect(panelStyles).toContain('top: 0;')
-        expect(panelStyles).toContain('bottom: 0;')
-        expect(panelStyles).toContain('right: 0;')
-        expect(panelStyles).toContain('var(--media-library-panel-fraction, 0.666667)')
-        expect(panelStyles).toContain('.workspace-canvas-chat-panel-open .media-library-panel')
-        expect(panelStyles).toContain('var(--workspace-ai-chat-sidebar-width)')
-        expect(panelStyles).toContain('@container media-library (max-width: 680px)')
-        expect(panelStyles).toContain('.media-library-panel-feature-selected .media-library-inspector')
+        expectSourceToContain(panelStyles, 'top: 0;')
+        expectSourceToContain(panelStyles, 'bottom: 0;')
+        expectSourceToContain(panelStyles, 'right: 0;')
+        expectSourceToContain(panelStyles, 'var(--media-library-panel-fraction, 0.666667)')
+        expectSourceToContain(panelStyles, '.workspace-canvas-chat-panel-open .media-library-panel')
+        expectSourceToContain(panelStyles, 'var(--workspace-ai-chat-sidebar-width)')
+        expectSourceToContain(panelStyles, '@container media-library (max-width: 680px)')
+        expectSourceToContain(panelStyles, '.media-library-panel-feature-selected .media-library-inspector')
     })
 
     it('places an independent Media Library trigger above the standalone zoom indicator', () => {
-        expect(workspaceSvelteSource).toContain('workspace-media-library-launcher')
-        expect(workspaceSvelteSource).toContain('workspace-zoom-indicator')
-        expect(workspaceSvelteSource).not.toContain('workspace-canvas-utility-capsule')
+        expectSourceToContain(workspaceSvelteSource, 'workspace-media-library-launcher')
+        expectSourceToContain(workspaceSvelteSource, 'workspace-zoom-indicator')
+        expectSourceNotToContain(workspaceSvelteSource, 'workspace-canvas-utility-capsule')
         const leftToolbar = workspaceSvelteSource.slice(
             workspaceSvelteSource.indexOf('<div class="workspace-floating-toolbar">'),
             workspaceSvelteSource.indexOf('<button class="workspace-media-library-launcher"'),
         )
-        expect(leftToolbar).not.toContain('handleToggleMediaLibrary')
+        expectSourceNotToContain(leftToolbar, 'handleToggleMediaLibrary')
     })
 
     it('restores saved images through materialization and the existing centered insertion path', () => {
-        expect(canvasSource).toContain('mediaLibraryService.materializeImage')
-        expect(canvasSource).toContain('insertNodeAtViewportCenterInternal(imageNode)')
-        expect(canvasSource).toContain("type: 'image'")
-        expect(workspaceSvelteSource).toContain('/api/images/${workspaceId}/import-url')
-        expect(workspaceSvelteSource).toContain('addImageToCanvas({ fileId: data.fileId, src: imageUrl })')
+        expectSourceToContain(canvasSource, 'mediaLibraryService.materializeImage')
+        expectSourceToContain(canvasSource, 'insertNodeAtViewportCenterInternal(imageNode)')
+        expectSourceToContain(canvasSource, "type: 'image'")
+        expectSourceToContain(workspaceSvelteSource, '/api/images/${targetWorkspaceId}/import-url')
+        expectSourceToContain(workspaceSvelteSource, 'addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })')
+    })
+
+    it('imports remote images with the current workspace target and encoded auth token', () => {
+        expectSourceToContain(workspaceSvelteSource, 'const targetWorkspaceId = workspaceId')
+        expectSourceToContain(workspaceSvelteSource, 'fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}/import-url`, {')
+        expectSourceToContain(workspaceSvelteSource, "'Authorization': `Bearer ${token}`")
+        expectSourceToContain(workspaceSvelteSource, 'const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`')
+        expectSourceToContain(workspaceSvelteSource, 'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return')
     })
 })

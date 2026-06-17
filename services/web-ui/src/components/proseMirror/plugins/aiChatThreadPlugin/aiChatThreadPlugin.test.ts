@@ -1,6 +1,7 @@
 'use strict'
 
 import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, beforeAll } from 'vitest'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
 import { STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
@@ -18,6 +19,14 @@ function createPlugin(sendAiRequestHandler = vi.fn(), stopAiRequestHandler = vi.
         placeholders: { titlePlaceholder: 'Title', paragraphPlaceholder: 'Type here' },
     })
 }
+
+const alertMock = vi.fn()
+beforeAll(() => {
+    ;(globalThis as any).alert = alertMock
+})
+beforeEach(() => {
+    alertMock.mockReset()
+})
 
 function collectNodes(state: EditorState, nodeType: string): ProseMirrorNode[] {
     const nodes: ProseMirrorNode[] = []
@@ -300,7 +309,13 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         ]),
                         useMultipleModels: true,
                         aiImageModel: 'Google:gemini-2.5-flash-image',
+                        aiImageModels: JSON.stringify([
+                            'Google:gemini-2.5-flash-image',
+                        ]),
                         aiVideoModel: 'OpenAI:o4-mini',
+                        aiVideoModels: JSON.stringify([
+                            'OpenAI:o4-mini',
+                        ]),
                         imageGenerationSize: '1024x1024',
                         videoAspectRatio: '16:9',
                         videoResolution: '1080p',

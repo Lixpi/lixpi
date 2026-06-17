@@ -217,6 +217,24 @@ describe('BaseProvider request validation', () => {
     })
 })
 
+describe('BaseProvider routing', () => {
+    it('prioritizes generate_video over generate_image when both prompts exist', async () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        })
+
+        expect((provider as any).routeAfterStream({ generatedImagePrompt: 'paint', generatedVideoPrompt: 'animate' } as any))
+            .toBe('generate_video')
+        expect((provider as any).routeAfterStream({ generatedImagePrompt: 'paint' } as any)).toBe('generate_image')
+        expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+    })
+})
+
 describe('BaseProvider fanout', () => {
     it('returns successful image fanout results while emitting an image error event for failures', async () => {
         const nats = makeFakeNats()
@@ -285,6 +303,47 @@ describe('BaseProvider fanout', () => {
         expect(runVideoRouter).toHaveBeenCalledTimes(2)
         const videoErrorEvents = nats.published.filter((item) => item.payload.content.status === STREAM_STATUS.ERROR)
         expect(videoErrorEvents).toHaveLength(0)
+    })
+
+    it('returns an aggregated error when every media fanout attempt fails', async () => {
+        const nats = makeFakeNats()
+        const runImageRouter = vi.fn(async (): Promise<Partial<ProviderState>> => ({
+            error: 'Image model unavailable',
+        }))
+
+        const deps = {
+            natsService: nats.fake,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter,
+            runVideoRouter: vi.fn(),
+        } as unknown as BaseProviderDeps
+        const provider = new TestProvider('ws1:thread1', deps)
+
+        const result = await provider.runImageGeneration(createFanoutState({
+            generatedVideoPrompt: undefined,
+            generatedImagePrompt: 'Render with all models failing',
+        }))
+
+        expect(result).toMatchObject({ error: 'Image model unavailable' })
+        expect(runImageRouter).toHaveBeenCalledTimes(2)
+
+        const topLevelErrors = nats.published.filter((item) =>
+            item.payload?.content?.status === STREAM_STATUS.ERROR,
+        )
+        expect(topLevelErrors).toHaveLength(1)
+        expect(topLevelErrors[0]?.payload.content).toMatchObject({
+            status: STREAM_STATUS.ERROR,
+            aiProvider: 'Anthropic',
+            text: 'Image model unavailable',
+            generationRun: expect.objectContaining({
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                reasoningIndex: 0,
+            }),
+        })
     })
 
     it('does not fan out when generationRun is missing, even if fanout plans exist', async () => {

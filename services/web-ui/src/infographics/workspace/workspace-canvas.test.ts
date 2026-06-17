@@ -75,6 +75,10 @@ function loadWorkspaceCanvasSvelte(): string {
 	return readSourceFile('../../components/WorkspaceCanvas.svelte', 'components/WorkspaceCanvas.svelte')
 }
 
+function loadContextPreview(): string {
+	return readSourceFile('../../components/contextPreview/contextPreview.ts', 'components/contextPreview/contextPreview.ts')
+}
+
 function loadAiInteractionService(): string {
 	return readSourceFile('../../services/ai-interaction-service.ts', 'services/ai-interaction-service.ts')
 }
@@ -284,19 +288,21 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.topGap,')
 		expectSourceToContain(ts, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),')
 		expectSourceToContain(ts, 'left: `${chromeLayout.left}px`,')
-		expectSourceToContain(ts, 'top: `${chromeLayout.top}px`,')
+		expectSourceToContain(ts, 'top: `${chromeLayout.top + extraTopOffsetScreen}px`,')
 		expectSourceToContain(ts, 'width: `${chromeLayout.layoutWidth}px`,')
 		expectSourceToContain(ts, 'transform: `scale(${chromeLayout.screenScale})`,')
 		expectSourceToContain(ts, 'getVisualScale: () => scaleCanvasChromeToScreenForZoom(')
 		expectSourceToContain(ts, 'getAdaptiveBoundedZoomScalingOptions(settings.canvasBubbleMenu.zoomScaling),')
 		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.topGap,')
 		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.iconSize,')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom')
 		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, node.dimensions, getLiveViewport())')
 		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout()')
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
 		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
-		expectSourceToContain(ts, "return modelMeta?.title ?? ''")
+		expectSourceToContain(ts, 'const modelId = getGeneratedMediaModelId(node)')
+		expectSourceToContain(ts, 'const modelProvider = getGeneratedMediaModelProvider(node, modelId)')
+		expectSourceToContain(ts, 'const modelBadge = createMediaModelBadge({ modelId, modelProvider })')
 		expectSourceNotToContain(ts, 'LIXPI_ZOOM_SCALING_DEBUG')
 		expectSourceNotToContain(ts, 'logGeneratedMediaChromeDebug')
 		expectSourceNotToContain(ts, 'getDebugRect')
@@ -324,7 +330,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectExcerptToContain(infoIconBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info icon block')
 		expectExcerptToContain(infoIconBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info icon block')
 		expectExcerptNotToContain(infoIconBlock, 'transform:', 'image info icon block')
-		expectExcerptToContain(activeBlock, 'color: #4d5963', 'active image info button block')
+		expectExcerptToContain(activeBlock, 'color: var(--workspace-media-info-button-hover-color, #4d5963)', 'active image info button block')
 		expectExcerptToContain(activeBlock, 'background: transparent', 'active image info button block')
 		expectExcerptNotToContain(activeBlock, '$steelBlue', 'active image info button block')
 		expectExcerptNotToContain(activeBlock, 'border-color:', 'active image info button block')
@@ -545,18 +551,18 @@ describe('Workspace canvas — generated video canvas state', () => {
 		// The controls must live in the z-index-3 chrome layer because PIXI paints
 		// the video pixels above the DOM node shell.
 		expectSourceToContain(ts, 'function createVideoControlsChrome(node: VideoCanvasNode)')
-		expectSourceToContain(ts, 'className="workspace-video-chrome nopan"')
+		expectSourceToContain(ts, 'className="workspace-video-chrome"')
 		expectSourceToContain(ts, 'createVideoControls(svg, {')
 		expectSourceToContain(ts, 'videoNodeHandler?.getVideoElement(node.nodeId)')
 		expectSourceToContain(ts, 'if (!videoEl.currentSrc && !videoEl.src) return null')
-		expectSourceToContain(ts, "chromeEl.addEventListener('mouseenter', () => showVideoControls(node.nodeId))")
-		expectSourceToContain(ts, "chromeEl.addEventListener('mousemove', (event: MouseEvent) => {")
+		expectSourceToContain(ts, "surface.addEventListener('mousemove', (event: MouseEvent) => {")
+		expectSourceToContain(ts, "surface.addEventListener('mousedown', (event: MouseEvent) => {")
 		expectSourceToContain(ts, 'handleDragStart(event, node.nodeId)')
 		expectSourceToContain(ts, 'handleResizeStart(event, node.nodeId, resizeHandle)')
 		// Only completed videos (with a stored MP4 src) get the controls.
 		expectSourceToContain(ts, "node.type === 'video' && Boolean((node as VideoCanvasNode).src)")
 		// The chrome geometry tracks the node during live drag/resize.
-		expectSourceToContain(ts, 'applyVideoControlsGeometry(videoChromeEl, position, dimensions)')
+		expectSourceToContain(ts, 'applyVideoControlsGeometry(videoChromeEl, position, dimensions, viewport)')
 	})
 
 	it('syncs video chrome after video handler entries exist', () => {
@@ -617,7 +623,8 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const chromeStart = ts.indexOf('function createVideoControlsChrome(node: VideoCanvasNode)')
 		const chromeEnd = ts.indexOf('function destroyVideoControlInstances', chromeStart)
 		const controlsChrome = ts.slice(chromeStart, chromeEnd)
-		expectExcerptToContain(controlsChrome, 'workspace-video-controls-host nopan', 'video controls chrome')
+		expectExcerptToContain(controlsChrome, 'workspace-video-controls-host', 'video controls chrome')
+		expectExcerptToContain(controlsChrome, 'workspace-video-surface', 'video controls chrome')
 		expectExcerptNotToContain(controlsChrome, 'createMediaInfoButton(node)', 'video controls chrome')
 		expectExcerptNotToContain(controlsChrome, 'workspace-generated-media-actions', 'video controls chrome')
 	})
@@ -642,11 +649,11 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
 		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl.replaceChildren(')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom')
+		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom')
 		expectSourceToContain(ts, "transform: 'none',")
 		expect(panelPositionStart).toBeGreaterThan(-1)
 		expect(panelPositionEnd).toBeGreaterThan(panelPositionStart)
-		expectExcerptToContain(panelPosition, 'applyGeneratedMediaInfoPanelGeometry(panel, position, dimensions, viewport)', 'media info panel position updater')
+		expectExcerptToContain(panelPosition, 'getVideoControlsOutsideOffsetScreen(nodeId, viewport),', 'media info panel position updater')
 		expectExcerptNotToContain(panelPosition, 'const stripRect = strip.getBoundingClientRect()', 'media info panel position updater')
 		expectExcerptNotToContain(panelPosition, 'data-media-chrome-node-id', 'media info panel position updater')
 	})
@@ -684,11 +691,13 @@ describe('Workspace canvas — video node interaction', () => {
 
 	it('lets the visible video chrome and controls own hover while preserving pointer interaction', () => {
 		const chrome = extractBlock(scss, '.workspace-video-chrome')
+		const surface = extractBlock(scss, '.workspace-video-surface')
 		const controlsHost = extractBlock(scss, '.workspace-video-controls-host')
 
-		expectExcerptToContain(chrome, 'pointer-events: auto', '.workspace-video-chrome')
-		expectExcerptToContain(controlsHost, 'pointer-events: auto', '.workspace-video-controls-host')
-		expectExcerptToContain(controlsHost, '&.is-visible', '.workspace-video-controls-host')
+		expectExcerptToContain(chrome, 'pointer-events: none', '.workspace-video-chrome')
+		expectExcerptToContain(surface, 'pointer-events: auto', '.workspace-video-surface')
+		expectExcerptToContain(controlsHost, 'pointer-events: none', '.workspace-video-controls-host')
+		expectExcerptNotToContain(controlsHost, '&.is-visible', '.workspace-video-controls-host')
 	})
 
 	it('shows resize handles on video node hover/selection', () => {
@@ -1321,7 +1330,7 @@ describe('Resize handles - corner-hover visibility', () => {
 		const fnBody = extractFunctionBody(ts, 'getVideoChromeResizeHandle')
 		sourceFileNames.set(fnBody, 'getVideoChromeResizeHandle')
 
-		expectSourceToContain(fnBody, 'const rect = chromeEl.getBoundingClientRect()')
+		expectSourceToContain(fnBody, 'const rect = surface?.getBoundingClientRect() ?? chromeEl.getBoundingClientRect()')
 		expectSourceToContain(fnBody, 'const x = event.clientX - rect.left')
 		expectSourceToContain(fnBody, 'const y = event.clientY - rect.top')
 		expectSourceToContain(fnBody, 'const zoom = getCurrentViewportZoom()')
@@ -1624,14 +1633,15 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
 		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
-		expectSourceToContain(ts, 'function destroyContextPreviewTooltips(): void')
-		expectSourceToContain(ts, 'activeContextPreviewTooltips.clear()')
+		expectSourceToContain(ts, 'function destroyContextPreviewTiles(): void')
+		expectSourceToContain(ts, 'activeContextPreviewTiles.clear()')
 		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
 		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
 		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
 		expectSourceToContain(ts, 'function createAiChatPanelContextTrayElement(): HTMLDivElement')
 		expectSourceToContain(ts, 'removeContextChip(nodeId)')
-		expectSourceToContain(ts, 'activeContextPreviewTooltips.add(previewTooltip)')
+		expectSourceToContain(ts, 'activeContextPreviewTiles.add(previewTile)')
+		expectSourceToContain(ts, 'const previewTile = createContextPreviewTile({')
 		// Submitting a standalone chat force-includes the explicit chips.
 		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips')
 		expectSourceToContain(ts, 'extractSelectedContext({ nodeIds: chipNodeIds, includeUpstream: false })')
@@ -1699,7 +1709,7 @@ describe('Vertical rail — TS infrastructure', () => {
 
 		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
 		expectSourceToContain(ts, 'function renderContextChip({')
-		expectSourceToContain(ts, 'function destroyContextPreviewTooltips(): void')
+		expectSourceToContain(ts, 'function destroyContextPreviewTiles(): void')
 		expectSourceToContain(ts, 'contextKind: \'explicit\'')
 		expectSourceToContain(ts, 'function patchWorkspaceContextImprovedDescriptors(improvedDescriptors: Record<string, ContentDescriptor> | undefined): void')
 		expectSourceToContain(ts, 'function handleWorkspaceContextResolution(threadId: string | undefined, resolution: WorkspaceContextResolution, generationRun?: MediaGenerationRunMeta): void')
@@ -1722,14 +1732,11 @@ describe('Vertical rail — TS infrastructure', () => {
 	})
 
 	it('passes panel context-preview CSS variables through to detached tooltip content', () => {
-		expectSourceToContain(ts, 'const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [')
-		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-tooltip-background\'')
-		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-tooltip-box-shadow\'')
-		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-border-radius\'')
-		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-video-glyph-background\'')
-		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-document-icon-color\'')
-		expectSourceToContain(ts, '\'--workspace-ai-chat-panel-context-preview-popover-text-color\'')
-		expectSourceToContain(ts, 'contentCssVariableNames: AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES')
+		const contextPreview = loadContextPreview()
+		expectSourceToContain(contextPreview, 'export const CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [')
+		expectSourceToContain(contextPreview, "contentCssVariableNames: CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,")
+		expectSourceToContain(contextPreview, "'--workspace-ai-chat-panel-context-preview-popover-text-color'")
+		expectSourceToContain(ts, 'const previewTile = createContextPreviewTile({')
 	})
 
 	it('applies session-history styling helper variables to the panel shell', () => {
@@ -1835,7 +1842,7 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(svelte, 'class:workspace-canvas-chat-panel-open')
 		expectSourceToContain(svelte, 'workspace-media-library-launcher')
 		expectSourceToContain(svelte, 'workspace-ai-chat-launcher')
-		expectSourceToContain(svelte, 'aiChatIcon')
+		expectSourceToContain(svelte, 'mediaFoloderIcon')
 		expectSourceToContain(svelte, 'aiChatPanelCollapseIcon')
 		expectSourceToContain(svelte, "aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}")
 		expectSourceNotToContain(svelte, 'workspace-ai-chat-launcher-tooltip')
@@ -1845,7 +1852,6 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(scss, '.workspace-canvas-chat-panel-open .workspace-ai-chat-launcher')
 		expectSourceToContain(scss, 'top: 15px')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px)')
-		expectSourceToContain(scss, 'right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap) + 3px)')
 		expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
 		expectSourceToContain(scss, 'bottom: calc(var(--workspace-ai-chat-sidebar-edge-gap) - var(--workspace-canvas-padding-bottom))')
 		expectExcerptToContain(extractBlock(scss, '.workspace-ai-chat-floating-panel'), 'top: 0px', 'outer chat panel')
@@ -2712,7 +2718,7 @@ describe('video generation — canvas + plugin source shape', () => {
 		// dispatched through the mediaNodeRegistry (videoNodeHandler).
 		expectSourceToContain(ts, 'videoGenerationTracker')
 		expectSourceToContain(ts, 'createVideoNodeHandler')
-		expectSourceToContain(ts, 'createCanvasVideoLifecycleTracker')
+		expectSourceToContain(ts, 'createCanvasMediaNodeLifecycleTracker()')
 		expectSourceToContain(ts, "type: 'video'")
 		expectSourceToContain(ts, 'setAiGeneratedVideoCallbacks({')
 		expectSourceToContain(ts, 'onVideoPendingToCanvas:')

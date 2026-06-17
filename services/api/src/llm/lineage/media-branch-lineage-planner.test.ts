@@ -217,4 +217,76 @@ describe('MediaBranchLineagePlanner', () => {
         const forkNodeIds = plan.branchForks.map((fork) => fork.nodeId)
         expect(forkNodeIds.every((forkNodeId) => plan.runAssignments.some((assignment) => assignment.branchForkNodeId === forkNodeId))).toBe(true)
     })
+
+    it('deduplicates candidate/reference nodes and records explicit reference provenance', () => {
+        const snapshot: ImageBranchCandidateSnapshot = {
+            resolverVersion: 'image-branch-vlm-v1',
+            threadId: 'thread-2',
+            regionNodeId: 'standalone:region-2',
+            promptText: 'compose a poster',
+            transcriptContext: 'context',
+            candidates: [
+                candidate({ nodeId: 'candidate-1', roleHints: ['base-context'], fileId: 'candidate-1' }),
+                candidate({ nodeId: 'candidate-2', roleHints: ['base-context'], fileId: 'candidate-2' }),
+                candidate({ nodeId: 'candidate-1', roleHints: ['base-context'], fileId: 'candidate-1' }),
+            ],
+        }
+
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-4',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6', 'Anthropic:claude-opus-4-1'],
+            imageBranchCandidateSnapshot: snapshot,
+            imageBranchResolution: {
+                ...(resolutionForCandidate(snapshot) as any),
+            },
+            workspaceContextSnapshot: {
+                threadId: 'thread-2',
+                workspaceId: 'workspace-1',
+                nodes: [
+                    { nodeId: 'chip-1', isExplicitChip: true },
+                    { nodeId: 'chip-1', isExplicitChip: true },
+                    { nodeId: 'chip-2', isExplicitChip: false },
+                    { nodeId: 'chip-3', isExplicitChip: true },
+                ],
+            } as any,
+            createdAt: 1700000003000,
+        })
+
+        expect(plan.referenceNodeIds).toEqual(['candidate-1', 'candidate-2'])
+        expect(plan.branchOrigin?.provenance.providedReferenceNodeIds).toEqual(['chip-1', 'chip-3'])
+        expect(plan.branchOrigin?.provenance.referenceNodeIds).toEqual(['candidate-1', 'candidate-2'])
+        expect(plan.branchForks).toHaveLength(2)
+        expect(plan.runAssignments[1]).toMatchObject({
+            lineageParentNodeId: plan.branchForks[1]?.nodeId,
+            createdAt: 1700000003001,
+            referenceNodeIds: ['candidate-1', 'candidate-2'],
+            sourceContextNodeIds: ['chip-1', 'chip-3'],
+        })
+    })
 })
+
+const resolutionForCandidate = (snapshot: ImageBranchCandidateSnapshot) => {
+    const firstCandidate = snapshot.candidates?.[0]
+    return {
+        resolverKind: 'structured-vlm',
+        resolverVersion: 'image-branch-vlm-v1',
+        resolverModelProvider: 'OpenAI',
+        resolverModelId: 'gpt-4.1',
+        mode: 'context-only',
+        operationKind: 'new_image',
+        targetImageNodeId: firstCandidate?.nodeId,
+        branchId: firstCandidate?.branchId ?? null,
+        includeGeneratedNodeIds: [],
+        referenceImageNodeIds: ['candidate-1', 'candidate-1', 'candidate-2'],
+        sourceContextNodeIds: ['chip-1', 'chip-3'],
+        styleReferenceNodeIds: [],
+        excludedNodeIds: [],
+        visualEntitySummary: 'poster',
+        entityTags: ['poster'],
+        styleTags: ['graphic'],
+        confidence: 0.9,
+        rationale: 'context references',
+        decisions: [],
+        visualStyleSummary: 'bold typography',
+    }
+}

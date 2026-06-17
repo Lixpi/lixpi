@@ -525,9 +525,27 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             const { nv } = createNodeView()
             const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
             const expectedSections = [
-                { title: 'Reasoning model', controlCount: 1, toggleLabel: 'Use multiple reasoning models' },
-                { title: 'Image model', controlCount: 2, toggleLabel: 'Use multiple image models' },
-                { title: 'Video model', controlCount: 4, toggleLabel: 'Use multiple video models' },
+                {
+                    title: 'Reasoning model',
+                    controlCount: 1,
+                    controlVisibility: ['true'],
+                    toggleLabel: 'Use multiple reasoning models',
+                    hasSelectedTagsRow: true,
+                },
+                {
+                    title: 'Image model',
+                    controlCount: 3,
+                    controlVisibility: ['true', 'true', 'false'],
+                    toggleLabel: 'Use multiple image models',
+                    hasSelectedTagsRow: false,
+                },
+                {
+                    title: 'Video model',
+                    controlCount: 5,
+                    controlVisibility: ['true', 'true', 'true', 'true', 'false'],
+                    toggleLabel: 'Use multiple video models',
+                    hasSelectedTagsRow: false,
+                },
             ]
 
             expect(sections).toHaveLength(expectedSections.length)
@@ -537,16 +555,30 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 const headingMain = section.querySelector('.ai-prompt-model-menu-section-heading-main')!
                 const headingAction = section.querySelector('.ai-prompt-model-menu-section-heading-action')!
                 const controlsRow = section.querySelector('.ai-prompt-model-menu-section-controls')!
-                const selectedTagsRow = section.querySelector('.ai-prompt-selected-model-tags-row')!
+                const selectedTagsRow = section.querySelector('.ai-prompt-selected-model-tags-row')
+                const selectedTagsRows = section.querySelectorAll('.ai-prompt-selected-model-tags-row')
+                const sectionControlRows = Array.from(section.querySelectorAll('.ai-prompt-model-menu-control'))
 
                 expect(heading.contains(headingMain)).toBe(true)
                 expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(expectedSection.title)
                 expect(headingMain.querySelector('.help-tooltip-trigger')).not.toBeNull()
                 expect(headingAction.querySelector('.ai-prompt-model-menu-toggle')?.getAttribute('aria-label')).toBe(expectedSection.toggleLabel)
                 expect(headingAction.querySelector('.ai-prompt-model-menu-toggle-text')?.textContent).toBe('Use multiple models')
-                expect(controlsRow.querySelectorAll('.ai-prompt-model-menu-control')).toHaveLength(expectedSection.controlCount)
-                expect(section.children[2]).toBe(selectedTagsRow)
-                expect(selectedTagsRow.getAttribute('data-visible')).toBe('false')
+                expect(sectionControlRows).toHaveLength(expectedSection.controlCount)
+                expect(Array.from(controlsRow.querySelectorAll('.ai-prompt-model-menu-control')).map((control) => {
+                    return control.getAttribute('data-visible')
+                })).toEqual(expectedSection.controlVisibility)
+
+                if (expectedSection.hasSelectedTagsRow) {
+                    expect(selectedTagsRow).not.toBeNull()
+                    expect(section.children[2]).toBe(selectedTagsRow)
+                    expect(selectedTagsRow?.getAttribute('data-visible')).toBe('false')
+                    expect(selectedTagsRows).toHaveLength(1)
+                } else {
+                    expect(selectedTagsRow).toBeNull()
+                    expect(selectedTagsRows).toHaveLength(0)
+                    expect(section.children).toHaveLength(2)
+                }
             }
 
             nv.destroy!()
@@ -606,12 +638,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             })
             const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
             const reasoningTagsRow = sections[0]!.querySelector('.ai-prompt-selected-model-tags-row')!
-            const imageTagsRow = sections[1]!.querySelector('.ai-prompt-selected-model-tags-row')!
+            const imageTagsRow = sections[1]!.querySelector('.ai-prompt-selected-model-tags-row')
             const reasoningLabels = () => Array.from(reasoningTagsRow.querySelectorAll('.tag-pill-label'))
                 .map((element) => element.textContent)
 
             expect(reasoningTagsRow.getAttribute('data-visible')).toBe('true')
-            expect(imageTagsRow.getAttribute('data-visible')).toBe('false')
+            expect(imageTagsRow).toBeNull()
             expect(reasoningLabels()).toEqual(['Sonnet 4.6', 'Opus 4.8'])
             expect(reasoningTagsRow.querySelector('.tag-pill-label')!.getAttribute('text-anchor')).toBe('middle')
             expect(reasoningTagsRow.querySelector('.tag-pill-close')!.getAttribute('transform')).toBe('translate(11, 12)')

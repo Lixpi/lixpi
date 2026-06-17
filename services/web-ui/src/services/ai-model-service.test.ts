@@ -1,0 +1,110 @@
+'use strict'
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
+import AiModelService from '$src/services/ai-model-service.ts'
+
+const { AI_MODELS_SUBJECTS } = NATS_SUBJECTS
+
+const getDataMock = vi.hoisted(() => vi.fn())
+const requestMock = vi.hoisted(() => vi.fn())
+const getTokenSilentlyMock = vi.hoisted(() => vi.fn())
+const setAiModelsMock = vi.hoisted(() => vi.fn())
+const setAiModelsCatalogMock = vi.hoisted(() => vi.fn())
+const setMetaValuesMock = vi.hoisted(() => vi.fn())
+
+vi.mock('$src/services/auth-service.ts', () => ({
+    default: {
+        getTokenSilently: getTokenSilentlyMock,
+    },
+}))
+
+vi.mock('$src/stores/servicesStore.ts', () => ({
+    servicesStore: {
+        getData: getDataMock,
+    },
+}))
+
+vi.mock('$src/stores/aiModelsStore.ts', () => ({
+    aiModelsStore: {
+        setAiModels: setAiModelsMock,
+        setAiModelsCatalog: setAiModelsCatalogMock,
+        setMetaValues: setMetaValuesMock,
+    },
+}))
+
+describe('AiModelService', () => {
+    let service: AiModelService
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        getDataMock.mockReturnValue({
+            request: requestMock,
+        })
+        getTokenSilentlyMock.mockResolvedValue('auth-token')
+
+        service = new AiModelService()
+    })
+
+    it('sets loading and stores direct model arrays from NATS', async () => {
+        const response = [
+            { provider: 'openai', model: 'gpt-4o', version: '1' },
+            { provider: 'google', model: 'gemini', version: '1' },
+        ] as const
+
+        requestMock.mockResolvedValue(response)
+
+        await service.getAvailableAiModels()
+
+        expect(getDataMock).toHaveBeenCalledWith('nats')
+        expect(requestMock).toHaveBeenCalledWith(AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS, {
+            token: 'auth-token',
+        })
+        expect(setMetaValuesMock).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.loading })
+        expect(setAiModelsMock).toHaveBeenCalledWith(response as any)
+        expect(setMetaValuesMock).toHaveBeenNthCalledWith(2, { loadingStatus: LoadingStatus.success })
+        expect(setAiModelsCatalogMock).not.toHaveBeenCalled()
+    })
+
+    it('stores model catalog responses with matrix when returned', async () => {
+        const catalog = {
+            models: [
+                { provider: 'openai', model: 'gpt-4o' },
+                { provider: 'google', model: 'gemini-flash' },
+            ],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [{ provider: 'openai', models: [] }],
+            },
+        } as const
+
+        requestMock.mockResolvedValue(catalog)
+
+        await service.getAvailableAiModels()
+
+        expect(setAiModelsCatalogMock).toHaveBeenCalledWith(catalog as any)
+        expect(setAiModelsMock).not.toHaveBeenCalled()
+        expect(setMetaValuesMock).toHaveBeenNthCalledWith(2, { loadingStatus: LoadingStatus.success })
+    })
+
+    it('falls back to empty model list when response shape is unknown', async () => {
+        requestMock.mockResolvedValue({ kind: 'unknown', notModels: [] })
+
+        await service.getAvailableAiModels()
+
+        expect(setAiModelsMock).toHaveBeenCalledWith([])
+        expect(setAiModelsCatalogMock).not.toHaveBeenCalled()
+        expect(setMetaValuesMock).toHaveBeenNthCalledWith(2, { loadingStatus: LoadingStatus.success })
+    })
+
+    it('flags loading error on NATS failures', async () => {
+        requestMock.mockRejectedValue(new Error('chat service unavailable'))
+
+        await service.getAvailableAiModels()
+
+        expect(setMetaValuesMock).toHaveBeenNthCalledWith(1, { loadingStatus: LoadingStatus.loading })
+        expect(setMetaValuesMock).toHaveBeenCalledWith({ loadingStatus: LoadingStatus.error })
+        expect(setAiModelsMock).not.toHaveBeenCalled()
+        expect(setAiModelsCatalogMock).not.toHaveBeenCalled()
+    })
+})

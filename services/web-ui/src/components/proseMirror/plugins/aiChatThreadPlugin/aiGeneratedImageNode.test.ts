@@ -214,7 +214,7 @@ describe('aiGeneratedImageNodeView', () => {
 
         expect(meta.hidden).toBe(false)
         expect(meta.textContent).toContain('gemini-flash-image')
-        expect(meta.textContent).toContain('Variant 1')
+        expect(meta.textContent).toContain('Google')
 
         const updatedNode = createImageNode({
             mediaModelId: 'OpenAI:gpt-4.1',
@@ -227,7 +227,7 @@ describe('aiGeneratedImageNodeView', () => {
 
         expect(updated).toBe(true)
         expect(meta.textContent).toContain('gpt-4.1')
-        expect(meta.textContent).toContain('Variant 3')
+        expect(meta.textContent).toContain('OpenAI')
     })
 
     it('adds an inline error placeholder only once when image fails to load', async () => {

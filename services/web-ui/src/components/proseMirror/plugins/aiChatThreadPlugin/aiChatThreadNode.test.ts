@@ -611,7 +611,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             aiModel: 'OpenAI',
             isPartial: true,
             partialIndex: 0,
-            width: '112px',
+            width: '100%',
             alignment: 'right',
             textWrap: 'none',
         })
@@ -744,7 +744,7 @@ describe('aiChatThreadPlugin — generated image completion', () => {
             responseId: 'response-1',
             revisedPrompt: 'A revised prompt',
             isPartial: false,
-            width: '112px',
+            width: '100%',
             alignment: 'right',
             textWrap: 'none',
         })

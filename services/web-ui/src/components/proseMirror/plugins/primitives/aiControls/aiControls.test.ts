@@ -56,24 +56,37 @@ function createControls(overrides: {
 
 describe('createGenericImageSizeDropdown', () => {
     beforeEach(() => {
-        aiModelsStore.setAiModels([])
         resetMockDropdown()
+        aiModelsStore.setAiModels([])
     })
 
-    it('uses Resolution label and size list when model emits WxH values', () => {
-        aiModelsStore.setAiModels([
-            {
+    it('uses matrix-driven label and options for image-size controls', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
                 provider: 'provider-a',
                 model: 'size-literal',
                 iconName: 'gpt',
-                modalities: [],
-                imageSizes: [
-                    { value: '1024x1024', label: '1024x1024' },
-                    { value: '1536x1024', label: '1536x1024' },
-                ],
+                modalities: [{ modality: 'image_generation' }],
+            } as any],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [{
+                    groupId: 'image:provider-a',
+                    mediaType: 'image',
+                    provider: 'provider-a',
+                    title: 'Provider A',
+                    modelIds: ['provider-a:size-literal'],
+                    controls: [{
+                        key: 'imageSize',
+                        label: 'Resolution',
+                        options: [
+                            { value: '1024x1024', label: '1024x1024' },
+                            { value: '1536x1024', label: '1536x1024' },
+                        ],
+                    }],
+                }],
             },
-        ] as any)
-
+        })
         const controls = createControls({
             currentImageModel: 'provider-a:size-literal',
             currentImageGenerationSize: '1536x1024',
@@ -91,21 +104,35 @@ describe('createGenericImageSizeDropdown', () => {
         dropdown.destroy()
     })
 
-    it('uses Aspect ratio label for aspect-style image size values', () => {
-        aiModelsStore.setAiModels([
-            {
+    it('uses matrix-driven Aspect ratio label when matrix defines it', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
                 provider: 'provider-b',
                 model: 'ratio-model',
                 iconName: 'gpt',
-                modalities: [],
-                imageSizes: [
-                    { value: '16:9', label: '16:9' },
-                    { value: '4:3', label: '4:3' },
-                ],
+                modalities: [{ modality: 'image_generation' }],
+            } as any],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [{
+                    groupId: 'image:provider-b',
+                    mediaType: 'image',
+                    provider: 'provider-b',
+                    title: 'Provider B',
+                    modelIds: ['provider-b:ratio-model'],
+                    controls: [{
+                        key: 'imageSize',
+                        label: 'Aspect ratio',
+                        options: [
+                            { value: '16:9', label: '16:9' },
+                            { value: '4:3', label: '4:3' },
+                        ],
+                    }],
+                }],
             },
-        ] as any)
-
+        })
         const controls = createControls({
+            currentImageModel: 'provider-b:ratio-model',
             provider: 'provider-b',
             currentImageGenerationSize: '16:9',
         })
@@ -121,21 +148,35 @@ describe('createGenericImageSizeDropdown', () => {
         dropdown.destroy()
     })
 
-    it('uses Image option label when model exposes non-resolution values', () => {
-        aiModelsStore.setAiModels([
-            {
+    it('uses matrix-driven generic label when matrix marks control as an image option', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
                 provider: 'provider-c',
                 model: 'label-mode',
                 iconName: 'gpt',
-                modalities: [],
-                imageSizes: [
-                    { value: 'small', label: 'Small' },
-                    { value: 'large', label: 'Large' },
-                ],
+                modalities: [{ modality: 'image_generation' }],
+            } as any],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [{
+                    groupId: 'image:provider-c',
+                    mediaType: 'image',
+                    provider: 'provider-c',
+                    title: 'Provider C',
+                    modelIds: ['provider-c:label-mode'],
+                    controls: [{
+                        key: 'imageSize',
+                        label: 'Image option',
+                        options: [
+                            { value: 'small', label: 'Small' },
+                            { value: 'large', label: 'Large' },
+                        ],
+                    }],
+                }],
             },
-        ] as any)
-
+        })
         const controls = createControls({
+            currentImageModel: 'provider-c:label-mode',
             provider: 'provider-c',
             currentImageGenerationSize: 'small',
         })
@@ -153,18 +194,31 @@ describe('createGenericImageSizeDropdown', () => {
 
     it('revalidates current size on dropdown update and normalizes to first option', () => {
         const currentImageModel = 'provider-d:normalize-size'
-        aiModelsStore.setAiModels([
-            {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
                 provider: 'provider-d',
                 model: 'normalize-size',
                 iconName: 'gpt',
-                modalities: [],
-                imageSizes: [
-                    { value: 'small', label: 'Small' },
-                    { value: 'large', label: 'Large' },
-                ],
+                modalities: [{ modality: 'image_generation' }],
+            } as any],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [{
+                    groupId: 'image:provider-d',
+                    mediaType: 'image',
+                    provider: 'provider-d',
+                    title: 'Provider D',
+                    modelIds: ['provider-d:normalize-size'],
+                    controls: [{
+                        key: 'imageSize',
+                        label: 'Image option',
+                        options: [
+                            { value: 'auto', label: 'Auto' },
+                        ],
+                    }],
+                }],
             },
-        ] as any)
+        })
 
         const controls = {
             getImageGenerationSize: vi.fn(() => 'invalid-size'),
@@ -175,18 +229,32 @@ describe('createGenericImageSizeDropdown', () => {
 
         const dropdown = createGenericImageSizeDropdown(controls, 'image-size')
 
-        aiModelsStore.setAiModels([
-            {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
                 provider: 'provider-d',
                 model: 'normalize-size',
                 iconName: 'gpt',
-                modalities: [],
-                imageSizes: [
-                    { value: 'tiny', label: 'Tiny' },
-                    { value: 'small', label: 'Small' },
-                ],
+                modalities: [{ modality: 'image_generation' }],
+            } as any],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [{
+                    groupId: 'image:provider-d',
+                    mediaType: 'image',
+                    provider: 'provider-d',
+                    title: 'Provider D',
+                    modelIds: ['provider-d:normalize-size'],
+                    controls: [{
+                        key: 'imageSize',
+                        label: 'Image option',
+                        options: [
+                            { value: 'tiny', label: 'Tiny' },
+                            { value: 'small', label: 'Small' },
+                        ],
+                    }],
+                }],
             },
-        ] as any)
+        })
 
         dropdown.update()
 

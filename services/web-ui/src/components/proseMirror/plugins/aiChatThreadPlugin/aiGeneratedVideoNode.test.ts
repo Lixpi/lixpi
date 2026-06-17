@@ -16,6 +16,7 @@ vi.mock('$src/components/videoControls/index.ts', () => ({
         resize: vi.fn(),
         destroy: vi.fn(),
     })),
+    applyVideoControlsHostStyleProperties: vi.fn(),
 }))
 
 import { createVideoControls } from '$src/components/videoControls/index.ts'
@@ -175,11 +176,11 @@ describe('aiGeneratedVideoNodeView', () => {
         const video = view.dom.querySelector('.ai-generated-video-content') as HTMLVideoElement
         const meta = view.dom.querySelector('.ai-generated-media-run-meta') as HTMLElement
 
-        expect(view.dom.className).toBe('ai-generated-video-wrapper')
+        expect(view.dom.className).toContain('ai-generated-video-wrapper')
         expect(placeholder.classList.contains('is-active')).toBe(false)
         expect(video.style.display).toBe('block')
         expect(meta.textContent).toContain('veo-3.0-generate-001')
-        expect(meta.textContent).toContain('Variant 2')
+        expect(meta.textContent).toContain('Google')
     })
 
     it('renders inline error UI on hard failure states', async () => {
