@@ -27,6 +27,8 @@ class WorkspaceService {
                 workspaceId
             })
 
+            if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+
             if (workspace.error) {
                 workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.error })
                 workspaceStore.setDataValues({ error: workspace.error })
@@ -45,6 +47,8 @@ class WorkspaceService {
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
         } catch (error) {
+            if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+
             console.error('Failed to load workspace:', error)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.error })
             workspaceStore.setDataValues({ error: error })

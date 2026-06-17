@@ -147,11 +147,11 @@ const os = await natsService.createObjectStore('my-bucket', {
 // Or open an existing bucket
 const os = await natsService.getObjectStore('my-bucket')
 
-// Store an object (bytes)
+// Store an object (bytes) in an existing bucket
 const data = new TextEncoder().encode('Hello World')
 await natsService.putObject('my-bucket', 'hello.txt', data)
 
-// Store from a ReadableStream
+// Store from a ReadableStream in an existing bucket
 await natsService.putObjectFromReadable('my-bucket', 'large-file.bin', readableStream)
 
 // Retrieve an object as bytes

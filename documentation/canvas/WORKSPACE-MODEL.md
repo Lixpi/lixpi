@@ -275,6 +275,8 @@ The currently open workspace with full canvas state.
 }
 ```
 
+The `files` array is metadata for objects in the workspace's NATS Object Store bucket. Backend file registration uses atomic DynamoDB append, and file removal uses a conditional indexed remove instead of rewriting the whole list, so a delete cannot overwrite concurrent media registrations.
+
 ### documentsStore
 
 Documents belonging to the current workspace.
@@ -364,16 +366,15 @@ Canvas-state changes are debounced (1 second) before persisting, which prevents 
 
 AI chat panel state is stored inside `canvasState.aiChatPanel`. Opening or closing the panel, expanding or collapsing Sessions, opening or closing tabs, resizing it, changing context controls, and editing prompt drafts persist workspace UI state but do **not** create a conversation entity. Submitting from an empty panel creates a standalone chat session. Sessions is collapsed by default and toggled from the history icon in the panel control row; when expanded it lists standalone chats and extraction sessions. Closing a tab only changes panel presentation and the session remains reopenable; explicit standalone or extraction deletion removes that session and its saved prompt draft, while a saved Feature remains independent when its extraction session is deleted. The full panel and Sessions behavior is documented in [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md).
 
-## Image Lifecycle Management
+## Media Node Lifecycle Management
 
-Images on the canvas are tracked by [`canvasImageLifecycle.ts`](../../services/web-ui/src/infographics/workspace/canvasImageLifecycle.ts). When an image node is removed from the canvas state:
+Media nodes on the canvas are tracked by [`canvasMediaNodeLifecycle.ts`](../../services/web-ui/src/infographics/workspace/canvasMediaNodeLifecycle.ts). Each supported node type provides a small tracking/deletion config, so images, videos, and future media types share one state-diff implementation. When a tracked media node is removed from the canvas state:
 
 1. The tracker compares the previous and current canvas states.
-2. It detects which `fileId`s are missing from the current canvas state.
-3. It calls `deleteImage()` from [`imageUtils.ts`](../../services/web-ui/src/utils/imageUtils.ts) to delete the object from storage.
-4. The same `deleteImage()` utility is shared with ProseMirror's `imageLifecyclePlugin`, so inline-document images and canvas images use one deletion path.
+2. It detects which tracked media keys are missing from the current canvas state.
+3. It calls the configured deletion utility for that node type.
 
-This ensures orphaned workspace-node images do not accumulate in storage. Video nodes use the parallel `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` path. Neither path deletes Media Library items — those are intentionally independent saved copies with their own scope and deletion lifecycle (see [Media Library](../library/MEDIA-LIBRARY.md)).
+This ensures orphaned workspace-node media does not accumulate in storage. Image nodes use `deleteImage()` from [`imageUtils.ts`](../../services/web-ui/src/utils/imageUtils.ts). Video nodes use `deleteVideo()` from [`videoUtils.ts`](../../services/web-ui/src/utils/videoUtils.ts), which deletes the MP4 and best-effort poster image. Neither path deletes Media Library items — those are intentionally independent saved copies with their own scope and deletion lifecycle (see [Media Library](../library/MEDIA-LIBRARY.md)).
 
 ## Workspace Load and Visibility Tracking
 

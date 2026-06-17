@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Workspace from './workspace.ts'
-import type { ContentDescriptor } from '@lixpi/constants'
+import type { ContentDescriptor, DocumentFile } from '@lixpi/constants'
 
 const dynamo = {
     getItem: vi.fn(),
@@ -71,6 +71,116 @@ describe('Workspace.patchCanvasNodeDescriptor', () => {
                 updatedAt: 1,
             },
         })).resolves.toBe(false)
+
+        expect(dynamo.updateItem).not.toHaveBeenCalled()
+    })
+})
+
+// =============================================================================
+// WORKSPACE FILE LIST STORAGE
+// =============================================================================
+
+describe('Workspace file list storage', () => {
+    const file: DocumentFile = {
+        id: 'file-1',
+        name: 'image.png',
+        mimeType: 'image/png',
+        size: 100,
+    }
+
+    it('adds files with DynamoDB list_append instead of a read-modify-write overwrite', async () => {
+        await Workspace.addFile({
+            workspaceId: 'workspace-1',
+            file,
+        })
+
+        expect(dynamo.getItem).not.toHaveBeenCalled()
+        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'workspace-1' },
+            updateExpression: 'SET #files = list_append(if_not_exists(#files, :empty), :newFiles), #updatedAt = :now',
+            expressionAttributeNames: {
+                '#files': 'files',
+                '#updatedAt': 'updatedAt',
+            },
+            expressionAttributeValues: {
+                ':empty': [],
+                ':newFiles': [file],
+                ':now': expect.any(Number),
+            },
+        }))
+    })
+
+    it('removes a file by guarded list index instead of rewriting the whole files array', async () => {
+        dynamo.getItem.mockResolvedValue({
+            files: [
+                { id: 'keep-1' },
+                { id: 'file-1' },
+                { id: 'keep-2' },
+            ],
+        })
+        dynamo.updateItem.mockResolvedValue(undefined)
+
+        await Workspace.removeFile({
+            workspaceId: 'workspace-1',
+            fileId: 'file-1',
+        })
+
+        expect(dynamo.updateItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { workspaceId: 'workspace-1' },
+            updateExpression: 'SET #updatedAt = :now REMOVE #files[1]',
+            conditionExpression: '#files[1].#id = :fileId',
+            expressionAttributeNames: {
+                '#files': 'files',
+                '#id': 'id',
+                '#updatedAt': 'updatedAt',
+            },
+            expressionAttributeValues: {
+                ':fileId': 'file-1',
+                ':now': expect.any(Number),
+            },
+        }))
+        expect(dynamo.updateItem.mock.calls[0][0].updates).toBeUndefined()
+    })
+
+    it('re-reads and retries when another writer shifts the file index', async () => {
+        const conditionalFailure = Object.assign(new Error('index changed'), {
+            name: 'ConditionalCheckFailedException',
+        })
+        dynamo.getItem
+            .mockResolvedValueOnce({
+                files: [
+                    { id: 'keep-1' },
+                    { id: 'file-1' },
+                ],
+            })
+            .mockResolvedValueOnce({
+                files: [
+                    { id: 'file-1' },
+                ],
+            })
+        dynamo.updateItem
+            .mockRejectedValueOnce(conditionalFailure)
+            .mockResolvedValueOnce(undefined)
+
+        await Workspace.removeFile({
+            workspaceId: 'workspace-1',
+            fileId: 'file-1',
+        })
+
+        expect(dynamo.getItem).toHaveBeenCalledTimes(2)
+        expect(dynamo.updateItem.mock.calls[0][0].updateExpression).toBe('SET #updatedAt = :now REMOVE #files[1]')
+        expect(dynamo.updateItem.mock.calls[1][0].updateExpression).toBe('SET #updatedAt = :now REMOVE #files[0]')
+    })
+
+    it('does not write when the file is already absent', async () => {
+        dynamo.getItem.mockResolvedValue({
+            files: [{ id: 'keep-1' }],
+        })
+
+        await Workspace.removeFile({
+            workspaceId: 'workspace-1',
+            fileId: 'file-1',
+        })
 
         expect(dynamo.updateItem).not.toHaveBeenCalled()
     })

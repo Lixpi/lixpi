@@ -139,7 +139,7 @@ flowchart TB
         TN[AI Chat Thread Nodes]
         PM[ProseMirror Editors]
         AIS[AiInteractionService]
-        IL[Canvas Image Lifecycle]
+        IL[Canvas Media Node Lifecycle]
     end
 
     subgraph Services["Services Layer"]
@@ -268,9 +268,13 @@ When an AI-generated image is being created, the canvas provides visual feedback
 5. **Prompt handoff** — `IMAGE_GENERATION_TRACE` / `VIDEO_GENERATION_TRACE` marks the handoff from reasoning model to media model and clears the reference outlines. Later image partials replace only the generated node.
 6. **Completion** — `onImageCompleteToCanvas` clears the tracker only after the final image arrives, which removes the generated-node PIXI progress outline. `IMAGE_ERROR` removes the matching partial node immediately, keyed by `mediaRunId` when present.
 
-### Image Lifecycle
+### Media Node Lifecycle
 
-When an image node is removed from the canvas, the `canvasImageLifecycle` tracker detects the change and triggers deletion from NATS Object Store via the `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE` NATS subject.
+When a tracked media node is removed from the canvas, the `canvasMediaNodeLifecycle` tracker detects the change and triggers the configured deletion path. Image nodes route through `WORKSPACE_SUBJECTS.IMAGE_SUBJECTS.DELETE_IMAGE`; video nodes route through `WORKSPACE_SUBJECTS.VIDEO_SUBJECTS.DELETE_VIDEO` and best-effort poster cleanup.
+
+Workspace navigation and first non-empty workspace load reinitialize the media lifecycle tracker from the opened workspace's canvas state before local commits can run. The tracker must never compare media from one workspace against another workspace's node set, because a cross-workspace diff would turn a navigation render into destructive storage deletion.
+
+Generated media stream callbacks also verify that the event's thread still belongs to the currently rendered workspace before they mutate canvas state. Late image/video events from a previously opened workspace must be ignored instead of inserted into the new workspace.
 
 ### Drag and Resize
 
@@ -461,7 +465,7 @@ Menu items are defined in `canvasBubbleMenuItems.ts`. The core `BubbleMenu` clas
 | `rendering/mediaNodeRegistry.ts` | Dispatches non-image media nodes to specialized handlers. Image nodes are handled directly by `pixiMediaLayer`; video nodes route to `videoNodeHandler.ts` |
 | `rendering/videoNodeHandler.ts` | Video renderer that owns PIXI poster/placeholder sprites and the authenticated `HTMLVideoElement` moved into DOM video chrome |
 | `workspace-canvas.scss` | All styles for canvas, DOM interaction nodes, handles, edges, editors, and media chrome |
-| `canvasImageLifecycle.ts` | Tracks image nodes and deletes orphaned images from storage |
+| `canvasMediaNodeLifecycle.ts` | Tracks configured media-node types and deletes orphaned workspace media from storage |
 | `canvasBubbleMenuItems.ts` | Bubble menu item definitions for canvas elements (image and edge actions) |
 | `imagePositioning.ts` | Computes viewport-normalized insertion dimensions and generated image placement positions next to source threads |
 | `nodeLayering.ts` | Z-index management for bringing nodes to front |

@@ -6,6 +6,7 @@ const { WORKSPACE_SUBJECTS } = NATS_SUBJECTS
 const { DOCUMENT_SUBJECTS } = WORKSPACE_SUBJECTS
 
 import AuthService from '$src/services/auth-service.ts'
+import RouterService from '$src/services/router-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { documentsStore } from '$src/stores/documentsStore.ts'
@@ -49,9 +50,14 @@ class DocumentService {
 				token: await AuthService.getTokenSilently(),
 				workspaceId
 			})
+
+			if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+
 			documentsStore.setDocuments(Array.isArray(documents) ? documents : [])
 			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 		} catch (error) {
+			if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+
 			console.error('Failed to load workspace documents:', error)
 			documentsStore.setMetaValues({ loadingStatus: LoadingStatus.error })
 		}
