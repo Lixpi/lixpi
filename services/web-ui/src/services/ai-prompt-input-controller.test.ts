@@ -166,6 +166,30 @@ function createThreadEditorEntry(params: {
     }
 }
 
+function createThreadlessEditorEntry() {
+    const schema = createPromptSchema()
+    const doc = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, schema.text('outside thread content'))])
+    const { transaction, inserts, nodeMarkupCalls, metaCalls } = createTransactionTracker()
+
+    const editorView = {
+        state: {
+            schema,
+            doc,
+            tr: transaction,
+        },
+        dispatch: vi.fn(),
+    } as unknown as EditorView
+
+    return {
+        editorView,
+        dispatch: editorView.dispatch as unknown as ReturnType<typeof vi.fn>,
+        transaction,
+        inserts,
+        nodeMarkupCalls,
+        metaCalls,
+    }
+}
+
 function createController(options?: {
     getCanvasState?: () => CanvasState | null
     persistCanvasState?: (state: CanvasState) => void
@@ -222,6 +246,56 @@ describe('AiPromptInputController', () => {
         })
 
         expect(warnSpy).toHaveBeenCalledWith('[AiPromptInputController] No target set, cannot submit')
+    })
+
+    it('warns when the target thread node is not found in the editor document', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        const { controller } = createController()
+        const editorEntry = createThreadlessEditorEntry()
+
+        controller.setTarget({ nodeId: 'thread-node-missing', type: 'aiChatThread', referenceId: 'thread-missing' })
+        controller.registerThreadEditor('thread-missing', {
+            editorView: editorEntry.editorView,
+            triggerGradientAnimation: vi.fn(),
+        })
+
+        await controller.submitMessage({
+            contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'Draft prompt' }] }],
+            aiModel: 'text-model',
+        })
+
+        expect(warnSpy).toHaveBeenCalledWith('[AiPromptInputController] Could not find aiChatThread node in editor')
+        expect(editorEntry.dispatch).not.toHaveBeenCalled()
+        warnSpy.mockRestore()
+    })
+
+    it('warns and drops messages when content JSON cannot be converted to a PM fragment', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        const { controller } = createController()
+        const editorEntry = createThreadEditorEntry({
+            threadId: 'thread-parse-error',
+            threadAttrs: {
+                aiModel: 'existing-model',
+            },
+        })
+
+        controller.setTarget({ nodeId: 'thread-node-parse-error', type: 'aiChatThread', referenceId: 'thread-parse-error' })
+        controller.registerThreadEditor('thread-parse-error', {
+            editorView: editorEntry.editorView,
+            triggerGradientAnimation: vi.fn(),
+        })
+
+        await controller.submitMessage({
+            contentJSON: [{ type: 'invalid-node-type' }],
+            aiModel: 'text-model',
+        })
+
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[AiPromptInputController] Failed to convert content JSON to fragment:',
+            expect.any(Error),
+        )
+        expect(editorEntry.dispatch).not.toHaveBeenCalled()
+        warnSpy.mockRestore()
     })
 
     it('alerts when AI model is missing for any target', async () => {
@@ -451,5 +525,64 @@ describe('AiPromptInputController', () => {
 
         controller.setReceiving('thread-1', false)
         expect(controller.isReceiving()).toBe(false)
+    })
+
+    it('ignores streaming stop requests when no active target thread exists', () => {
+        const onAiStop = vi.fn()
+        const { controller } = createController({ onAiStop })
+
+        controller.stopStreaming()
+        expect(onAiStop).not.toHaveBeenCalled()
+    })
+
+    it('does not create a canvas node when canvas state does not contain target node', async () => {
+        const persistCanvasState = vi.fn()
+        const createAiChatThread = vi.fn().mockResolvedValue({
+            threadId: 'thread-id',
+        })
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+        const { controller } = createController({
+            getCanvasState: () => ({
+                nodes: [],
+                edges: [],
+                nodeIdsByType: { all: [], document: [] },
+                workspaceId: 'workspace-1',
+            }),
+            persistCanvasState,
+            createAiChatThread,
+        })
+
+        controller.setTarget({ nodeId: 'target-doc', type: 'document', referenceId: 'doc-1' })
+        await controller.submitMessage({
+            contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'Start a new thread' }] }],
+            aiModel: 'text-model',
+        })
+
+        expect(createAiChatThread).toHaveBeenCalled()
+        expect(persistCanvasState).not.toHaveBeenCalled()
+        expect(consoleErrorSpy).not.toHaveBeenCalled()
+        consoleErrorSpy.mockRestore()
+    })
+
+    it('drops pending messages after destroy', async () => {
+        const { controller } = createController()
+        const editorEntry = createThreadEditorEntry({ threadId: 'thread-destroy' })
+
+        controller.setTarget({ nodeId: 'thread-node-destroy', type: 'aiChatThread', referenceId: 'thread-destroy' })
+        await controller.submitMessage({
+            contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'Draft prompt' }] }],
+            aiModel: 'text-model',
+        })
+        controller.destroy()
+
+        controller.registerThreadEditor('thread-destroy', {
+            editorView: editorEntry.editorView,
+            triggerGradientAnimation: vi.fn(),
+        })
+
+        expect(editorEntry.dispatch).not.toHaveBeenCalled()
+        expect(controller.getTarget()).toBeNull()
+        expect(controller.isReceiving('thread-destroy')).toBe(false)
     })
 })

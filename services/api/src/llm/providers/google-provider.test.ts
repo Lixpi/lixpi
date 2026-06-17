@@ -127,3 +127,81 @@ describe('GoogleProvider rewrite flow', () => {
         expect(generateContent).toHaveBeenCalledTimes(1)
     })
 })
+
+describe('GoogleProvider internals', () => {
+    const createDeps = (): BaseProviderDeps => ({
+        natsService: { publish: vi.fn() } as any,
+        storeWorkspaceImage: vi.fn(),
+        storeWorkspaceVideo: vi.fn(),
+        usageReporter: {} as any,
+        runImageRouter: vi.fn(),
+        runVideoRouter: vi.fn(),
+    }) as unknown as BaseProviderDeps
+
+    beforeEach(() => {
+        process.env.GOOGLE_API_KEY = 'test-key'
+        generateContent.mockReset()
+    })
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+        delete process.env.GOOGLE_API_KEY
+    })
+
+    it('maps legacy and modern function-call payload fields in summaries', () => {
+        const summary = getGoogleImageResponseSummary({
+            candidates: [
+                {
+                    finish_reason: 'STOP',
+                    safety_ratings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'LOW' }],
+                    content: {
+                        parts: [
+                            { function_call: { name: 'generate_image' } },
+                            { inline_data: { data: 'payload-bytes' } },
+                        ],
+                    },
+                },
+            ],
+        })
+
+        expect(summary).toEqual({
+            promptFeedback: undefined,
+            candidates: [{
+                index: 0,
+                finishReason: 'STOP',
+                safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'LOW' }],
+                partTypes: [
+                    {
+                        hasText: false,
+                        textPreview: '',
+                        hasInlineData: false,
+                        hasFunctionCall: true,
+                    },
+                    {
+                        hasText: false,
+                        textPreview: '',
+                        hasInlineData: true,
+                        hasFunctionCall: false,
+                    },
+                ],
+            }],
+        })
+    })
+
+    it('builds Google request parts from text and mixed attachment payload shapes', async () => {
+        const provider = new GoogleProvider('ws-1:thread-1', createDeps())
+
+        const parts = (provider as any).buildParts([
+            { text: 'prompt' },
+            { inline_data: { data: 'abc', mime_type: 'image/png' } },
+            { inlineData: { data: 'def', mimeType: 'image/jpeg' } },
+            { unknown: 'x' },
+        ])
+
+        expect(parts).toEqual([
+            { text: 'prompt' },
+            { inlineData: { data: 'abc', mimeType: 'image/png' } },
+            { inlineData: { data: 'def', mimeType: 'image/jpeg' } },
+        ])
+    })
+})

@@ -102,4 +102,75 @@ describe('resolveFeatures', () => {
         const result = await resolveFeatures(createState({ referencedFeatureIds: ['feat-denied'] }))
         expect(result).toEqual({})
     })
+
+    it('uses cached feature resolution for repeated ids inside TTL', async () => {
+        const getFeature = vi.spyOn(FeatureModule.default, 'getFeature').mockResolvedValue(buildFeature('feat-cache') as any)
+        const readSample = vi.spyOn(featureSampleStorage, 'readFeatureSampleObject').mockResolvedValue(Buffer.from('sample-bytes') as any)
+
+        const state = createState({ referencedFeatureIds: ['feat-cache'] })
+
+        const first = await resolveFeatures(state)
+        const second = await resolveFeatures(state)
+
+        expect(first).toEqual(second)
+        expect(getFeature).toHaveBeenCalledTimes(1)
+        expect(readSample).toHaveBeenCalledTimes(2)
+    })
+
+    it('adds organizationId to trace URLs only for organization-scoped features', async () => {
+        const orgFeature = {
+            ...buildFeature('feat-org'),
+            scope: 'organization',
+        }
+        vi.spyOn(FeatureModule.default, 'getFeature').mockResolvedValue(orgFeature as any)
+        vi.spyOn(featureSampleStorage, 'readFeatureSampleObject').mockResolvedValue(Buffer.from('sample-bytes') as any)
+
+        const result = await resolveFeatures(createState({ referencedFeatureIds: ['feat-org'] }))
+
+        expect(result.featureReferenceImageTraceUrls?.[0]).toBe(
+            '/api/features/feat-org/samples/0?workspaceId=ws-1&organizationId=org-1',
+        )
+    })
+
+    it('continues resolving a feature when individual sample reads fail', async () => {
+        vi.spyOn(FeatureModule.default, 'getFeature').mockResolvedValue({
+            ...buildFeature('feat-partial'),
+            sampleImages: [
+                { idx: 0, subject: 'bad', ext: 'png' },
+                { idx: 1, subject: 'good', ext: 'jpg' },
+            ],
+        } as any)
+
+        let firstRead = true
+        vi.spyOn(featureSampleStorage, 'readFeatureSampleObject').mockImplementation(async () => {
+            if (firstRead) {
+                firstRead = false
+                throw new Error('sample fetch failed')
+            }
+            return Buffer.from('sample-bytes') as any
+        })
+
+        const result = await resolveFeatures(createState({ referencedFeatureIds: ['feat-partial'] }))
+
+        expect(result.featureReferenceImages).toHaveLength(1)
+        expect(result.featureReferenceImages?.[0]).toMatch(/^data:image\/jpeg;base64,/)
+        expect(result.referenceImages).toEqual(['data:image/jpeg;base64,c2FtcGxlLWJ5dGVz'])
+        expect(result.messages?.length).toBeGreaterThan(1)
+    })
+
+    it('resolves feature definitions without sample-derived references when no samples are present', async () => {
+        vi.spyOn(FeatureModule.default, 'getFeature').mockResolvedValue({
+            ...buildFeature('feat-no-samples'),
+            sampleImages: [],
+        } as any)
+        vi.spyOn(featureSampleStorage, 'readFeatureSampleObject')
+
+        const result = await resolveFeatures(createState({ referencedFeatureIds: ['feat-no-samples'] }))
+
+        expect(result.featureReferenceImages).toEqual([])
+        expect(result.featureReferenceImageTraceUrls).toEqual([])
+        expect(result.featureUsagePrompt).toContain('Watercolor')
+        expect(result.messages?.[0]?.content).toContain('Feature definition for @Watercolor')
+        expect(result.messages?.length).toBe(2)
+    })
 })

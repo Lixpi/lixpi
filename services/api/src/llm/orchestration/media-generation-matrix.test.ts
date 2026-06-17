@@ -385,6 +385,205 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         }
     })
 
+    it('normalizes malformed model identifiers and deduplicates model ids before lookup', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            if (model === 'gemini-image-a') {
+                return {
+                    provider: 'Google',
+                    model: 'gemini-image-a',
+                    modelVersion: 'gemini-image-a',
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizes: [{ value: '1024x1024' }, { value: '768x768' }],
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model: 'gemini-image-b',
+                modelVersion: 'gemini-image-b',
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [{ value: '640x480' }, { value: '800x600' }],
+            } as any
+        })
+
+        vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
+        vi.spyOn(featureResolver, 'resolveFeatures').mockResolvedValue({})
+        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({})
+
+        await orchestrator.process(createRequest({
+            aiModel: undefined,
+            aiImageModel: undefined,
+            aiVideoModel: undefined,
+            mediaGenerationRequest: {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: 'request-normalize',
+                reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+                imageModelIds: [' Google:gemini-image-a ', 'Google:gemini-image-a', 'Google:gemini-image-b '],
+                videoModelIds: [],
+                imageOptions: {
+                    imageSize: '1024x1024',
+                    configGroups: [],
+                },
+                videoOptions: {},
+                useMultipleImageModels: true,
+            },
+        }))
+
+        const lookedUpModels = getAiModel.mock.calls.map((call) => call?.[0]?.model)
+        expect(getAiModel).toHaveBeenCalledTimes(3)
+        expect(lookedUpModels).toEqual([
+            'claude-sonnet-4-6',
+            'gemini-image-a',
+            'gemini-image-b',
+        ])
+    })
+
+    it('applies model-specific config groups and normalizes invalid option values', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            if (model === 'gemini-image-a') {
+                return {
+                    provider: 'Google',
+                    model: 'gemini-image-a',
+                    modelVersion: 'gemini-image-a',
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizes: [{ value: '256x256' }, { value: '512x512' }],
+                } as any
+            }
+            if (model === 'gemini-image-b') {
+                return {
+                    provider: 'Google',
+                    model: 'gemini-image-b',
+                    modelVersion: 'gemini-image-b',
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizes: [{ value: '1024x1024' }, { value: '2048x2048' }],
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model: 'veo-3.1-generate-preview',
+                modelVersion: 'veo-3.1-generate-preview',
+                modalities: [{ modality: 'video_generation' }],
+                videoAspectRatios: [{ value: '16:9' }, { value: '4:3' }],
+                videoResolutions: [{ value: '720p' }, { value: '1080p' }],
+                videoDurations: [{ value: '8' }, { value: '12' }],
+            } as any
+        })
+
+        vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
+        vi.spyOn(featureResolver, 'resolveFeatures').mockResolvedValue({})
+        vi.spyOn(imageBranchResolver, 'resolveImageBranch').mockResolvedValue({})
+
+        await orchestrator.process(createRequest({
+            aiModel: undefined,
+            aiImageModel: undefined,
+            aiVideoModel: undefined,
+            mediaGenerationRequest: {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: 'request-options',
+                reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+                imageModelIds: ['Google:gemini-image-a', 'Google:gemini-image-b'],
+                videoModelIds: ['Google:veo-3.1-generate-preview'],
+                useMultipleImageModels: true,
+                useMultipleVideoModels: true,
+                imageOptions: {
+                    imageSize: '1024x1024',
+                    configGroups: [
+                        {
+                            groupId: 'img-a',
+                            modelIds: ['Google:gemini-image-a'],
+                            values: { imageSize: 'invalid-size' },
+                        },
+                        {
+                            groupId: 'img-b',
+                            modelIds: ['Google:gemini-image-b'],
+                            values: { imageSize: '1024x1024' },
+                        },
+                        {
+                            groupId: 'ignore-me',
+                            modelIds: ['Google:does-not-exist'],
+                            values: { imageSize: '128x128' },
+                        },
+                    ],
+                },
+                videoOptions: {
+                    aspectRatio: '16:9',
+                    configGroups: [
+                        {
+                            groupId: 'vid-only',
+                            modelIds: ['Google:veo-3.1-generate-preview'],
+                            values: { aspectRatio: '4:3', duration: '12', resolution: '1080p' },
+                        },
+                    ],
+                },
+            },
+        }))
+
+        const state = registry.process.mock.calls[0]?.[2] as any
+        expect(state.mediaFanoutPlan.imageConfigGroups).toHaveLength(2)
+        expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-a')).toBe(true)
+        expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-b')).toBe(true)
+        expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-a']).toMatchObject({
+            imageSize: '256x256',
+        })
+        expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-b']).toMatchObject({
+            imageSize: '1024x1024',
+        })
+        expect(state.mediaFanoutPlan.videoModelOptions?.['Google:veo-3.1-generate-preview']).toMatchObject({
+            aspectRatio: '4:3',
+            resolution: '1080p',
+            duration: '12',
+        })
+        expect(state.videoDurationSeconds).toBe(12)
+    })
+
+    it('throws on malformed model ids before any model metadata fetch', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        await expect(
+            orchestrator.process({
+                workspaceId: 'ws-1',
+                aiChatThreadId: 'thread-1',
+                mediaGenerationRequest: {
+                    requestVersion: 'media-generation-matrix-v1',
+                    generationRequestId: 'request-invalid-id',
+                    reasoningModelIds: ['BadReasoningId'],
+                    imageModelIds: ['Google:gemini-2.5-flash-image'],
+                    videoModelIds: ['Google:veo-3.1-generate-preview'],
+                    imageOptions: { imageSize: '1024x1024' },
+                    videoOptions: {},
+                },
+            } as any),
+        ).rejects.toThrow('Invalid AI model id: BadReasoningId')
+
+        expect(getAiModel).toHaveBeenCalled()
+        expect(registry.process).not.toHaveBeenCalled()
+    })
+
     it('forwards stop calls to the provider registry', async () => {
         const registry = createRegistry()
         const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
