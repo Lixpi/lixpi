@@ -13,7 +13,7 @@ import {
     downloadIcon,
     triggerNodesConnectionIcon,
     changeNodesConnectorLineCurve,
-    mediaLibraryIcon
+    mediaFoloderIcon
 } from '$src/svgIcons/index.ts'
 import type { BubbleMenuItem } from '$src/components/bubbleMenu/index.ts'
 
@@ -117,7 +117,7 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     if (replaceSvg) applyStyle(replaceSvg, { transform: 'rotate(180deg)' })
 
     const addToLibraryButton = createCanvasButton({
-        icon: mediaLibraryIcon,
+        icon: mediaFoloderIcon,
         title: 'Add to Media Library',
         iconSize: 16,
         onClick: () => {

@@ -11,7 +11,7 @@ import {
     type SubstepView,
 } from '$src/infographics/workspace/extractionTimelineModel.ts'
 import { MarkdownStreamRenderer, renderMarkdownStatic } from '$src/utils/markdownStreamRenderer.ts'
-import { aiRobotFaceIcon, claudeIcon, geminiIcon, gptAvatarIcon, stabilityIcon } from '$src/svgIcons/index.ts'
+import { claudeIcon, geminiIcon, gptAvatarIcon, stabilityIcon } from '$src/svgIcons/index.ts'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
@@ -181,13 +181,13 @@ function getAiProviderFromModel(aiModel: string | undefined): string {
     return aiModel?.split(':')[0] || ''
 }
 
-function getAssistantIcon(provider: string): string {
+function getAssistantIcon(provider: string): string | null {
     switch (provider) {
         case 'Anthropic': return claudeIcon
         case 'Google': return geminiIcon
         case 'OpenAI': return gptAvatarIcon
         case 'Stability': return stabilityIcon
-        default: return aiRobotFaceIcon
+        default: return null
     }
 }
 
@@ -212,12 +212,16 @@ function createExtractionConversationLayout(bodyEl: HTMLElement, userText: strin
                         <div className="ai-response-message-content"></div>
                     </div>
                 </div>
-                <div className="ai-response-message-meta">
-                    <div className=${`user-avatar${normalizedProviderClass}`} innerHTML=${assistantIcon}></div>
-                </div>
             </div>
         </div>
     </div>` as HTMLElement
+
+    if (assistantIcon) {
+        const assistantMessageEl = threadEl.querySelector('.extraction-assistant-message') as HTMLElement
+        assistantMessageEl.appendChild(html`<div className="ai-response-message-meta">
+            <div className=${`user-avatar${normalizedProviderClass}`} innerHTML=${assistantIcon}></div>
+        </div>` as HTMLElement)
+    }
 
     const userContentEl = threadEl.querySelector('.ai-user-message-content') as HTMLElement
     renderUserText(userContentEl, userText)

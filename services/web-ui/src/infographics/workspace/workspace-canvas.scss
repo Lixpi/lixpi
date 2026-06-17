@@ -219,7 +219,7 @@
     background: transparent;
     color: $steelBlue;
     cursor: pointer;
-    transition: right 70ms ease, color 70ms ease;
+    transition: right 50ms ease-in, color 50ms ease-in;
 
     svg {
         width: 20px;
@@ -249,25 +249,26 @@
     top: 15px;
     right: 15px;
     display: block;
-    width: 22px;
-    height: 22px;
-    color: $aiGreen;
+    width: 15px;
+    height: 15px;
+    color: $steelBlue;
 
     svg {
         display: block;
         width: 100%;
         height: 100%;
-        transform: none;
+        transform: rotate(180deg);
+        transform-origin: center;
     }
 
     &:hover,
     &:focus-visible {
-        color: darken($aiGreen, 8%);
+        color: $nightBlue;
     }
 }
 
 .workspace-canvas-chat-panel-open .workspace-media-library-launcher {
-    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap) + 3px);
+    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px);
 }
 
 .workspace-canvas-chat-panel-open .workspace-ai-chat-launcher {
@@ -280,6 +281,7 @@
     svg {
         width: 100%;
         height: 100%;
+        transform: none;
     }
 
     &:hover,
@@ -314,17 +316,17 @@
     right: 16px;
     z-index: 100;
     background: rgba(255, 255, 255, 0.9);
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 6px 7px;
+    border-radius: 999px;
     font-size: 12px;
     font-weight: 500;
     color: #555;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.15);
     pointer-events: none;
 }
 
 .workspace-canvas-chat-panel-open .workspace-zoom-indicator {
-    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap));
+    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px);
 }
 
 .workspace-pane {
