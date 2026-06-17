@@ -24,6 +24,9 @@ const getMediaLibraryBucketName = (scope: MediaLibraryScope, scopeOwnerId: strin
         ? 'media-library-public-files'
         : `media-library-${scope}-${scopeOwnerId}-files`
 
+export const getMediaLibraryWorkspaceBucketName = (workspaceId: string): string =>
+    getMediaLibraryBucketName(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId)
+
 const getStorageService = (): NATS_Service => {
     const natsService = NATS_Service.getInstance()
     if (!natsService) {
@@ -152,7 +155,7 @@ export const deleteLibraryImageObject = async (item: MediaLibraryImageItem): Pro
 }
 
 export const deleteMediaLibraryWorkspaceBucket = async (workspaceId: string): Promise<void> => {
-    await getStorageService().deleteObjectStore(getMediaLibraryBucketName(MEDIA_LIBRARY_SCOPE.WORKSPACE, workspaceId))
+    await getStorageService().deleteObjectStore(getMediaLibraryWorkspaceBucketName(workspaceId))
 }
 
 // =============================================================================

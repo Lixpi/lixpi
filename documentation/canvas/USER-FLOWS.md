@@ -185,7 +185,7 @@ When an image node is removed from the canvas — by user action or programmatic
 sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas.ts
-    participant Tracker as canvasImageLifecycle
+    participant Tracker as canvasMediaNodeLifecycle
     participant NATS as NATS Client
     participant API as API Service
     participant ObjStore as NATS Object Store
@@ -228,7 +228,7 @@ sequenceDiagram
     end
 ```
 
-Video nodes follow the same shape over the `DELETE_VIDEO` subject. Neither deletion path touches Media Library items, which are independent saved copies; the full lifecycle is described in [Image Lifecycle Management](./WORKSPACE-MODEL.md#image-lifecycle-management).
+Video nodes follow the same shape over the `DELETE_VIDEO` subject. Neither deletion path touches Media Library items, which are independent saved copies; the full lifecycle is described in [Media Node Lifecycle Management](./WORKSPACE-MODEL.md#media-node-lifecycle-management).
 
 ## Editing Content
 

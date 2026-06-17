@@ -13,6 +13,7 @@ import {
     deleteLibraryImageObject,
     deleteLibraryVideoObject,
     deleteMediaLibraryWorkspaceBucket,
+    getMediaLibraryWorkspaceBucketName,
 } from '../../services/media-library-storage.ts'
 import { ensureFeatureSamplesForScope } from '../../services/feature-sample-storage.ts'
 
@@ -62,6 +63,7 @@ export const workspaceSubjects = [
             if (workspace && 'workspaceId' in workspace) {
                 const natsService = NATS_Service.getInstance()
                 const bucketName = Workspace.getBucketName(workspace.workspaceId)
+                const mediaLibraryBucketName = getMediaLibraryWorkspaceBucketName(workspace.workspaceId)
 
                 if (!natsService) {
                     err(`Failed to create Object Store bucket ${bucketName}: NATS service unavailable`)
@@ -75,8 +77,14 @@ export const workspaceSubjects = [
                         description: `Files for workspace ${workspace.workspaceId}`
                     })
                     info(`Created Object Store bucket: ${bucketName}`)
+                    await natsService.createObjectStore(mediaLibraryBucketName, {
+                        description: `Media Library files for workspace ${workspace.workspaceId}`
+                    })
+                    info(`Created Object Store bucket: ${mediaLibraryBucketName}`)
                 } catch (bucketError: any) {
                     err(`Failed to create Object Store bucket for workspace ${workspace.workspaceId}:`, bucketError)
+                    await natsService.deleteObjectStore(bucketName).catch(() => {})
+                    await natsService.deleteObjectStore(mediaLibraryBucketName).catch(() => {})
                     await Workspace.delete({ userId, workspaceId: workspace.workspaceId })
                     return { error: 'FAILED_TO_CREATE_BUCKET' }
                 }

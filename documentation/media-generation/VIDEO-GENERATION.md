@@ -195,7 +195,7 @@ Video reuses the workspace bucket and the **same content-hash dedup as images**.
 
 Authentication mirrors the image route (Bearer or `?token=`). The poster reuses `GET /api/images/...`.
 
-**Deletion.** `workspace.video.delete` (`video-subjects.ts`) removes the MP4 from the Object Store and its `workspace.files` entry. On the canvas, `canvasVideoLifecycle.ts` tracks `VideoCanvasNode`s across state commits and, when one disappears, fires `deleteVideo(fileId, workspaceId, posterFileId)` — the MP4 via the video subject and the poster via the image-delete subject (the poster is a normal image). Workspace deletion cleans up video Media Library items by branching on `item.kind`.
+**Deletion.** `workspace.video.delete` (`video-subjects.ts`) removes the MP4 from the Object Store and its `workspace.files` entry. On the canvas, `canvasMediaNodeLifecycle.ts` tracks configured media node types across state commits. For `VideoCanvasNode`, when the node disappears it fires `deleteVideo(fileId, workspaceId, posterFileId)` — the MP4 via the video subject and the poster via the image-delete subject (the poster is a normal image). Workspace deletion cleans up video Media Library items by branching on `item.kind`.
 
 ## The `VideoCanvasNode`
 
@@ -339,7 +339,7 @@ services/web-ui/src/
 ├── infographics/workspace/
 │   ├── WorkspaceCanvas.ts            # VideoCanvasNode placement, lifecycle callbacks, extend-in-new-thread
 │   ├── rendering/videoNodeHandler.ts # PIXI poster + authenticated DOM video element
-│   ├── canvasVideoLifecycle.ts       # delete MP4 + poster when a node disappears
+│   ├── canvasMediaNodeLifecycle.ts   # generic media-node storage cleanup configs
 │   ├── pixiMediaLayer.ts             # dispatch non-image nodes to the registry
 │   └── canvasBubbleMenuItems.ts      # CANVAS_VIDEO_CONTEXT (extend / connect / delete)
 ├── components/videoControls/         # shared SVG playback controls

@@ -677,15 +677,6 @@ class NatsService:
         js = self._get_jetstream()
         return await js.object_store(bucket_name)
 
-    async def ensure_object_store(self, bucket_name: str) -> ObjectStore:
-        """Open a bucket, auto-creating it if it was wiped or never existed."""
-        js = self._get_jetstream()
-        try:
-            return await js.object_store(bucket_name)
-        except Exception:
-            warn(f"Object Store bucket missing, recreating: {bucket_name}")
-            return await js.create_object_store(bucket_name, config=ObjectStoreConfig(replicas=1))
-
     async def delete_object_store(self, bucket_name: str) -> bool:
         """Delete an Object Store bucket."""
         js = self._get_jetstream()
@@ -701,7 +692,7 @@ class NatsService:
         meta: Optional[ObjectMeta] = None
     ) -> ObjectInfo:
         """Store data as an object."""
-        os = await self.ensure_object_store(bucket_name)
+        os = await self.get_object_store(bucket_name)
         result = await os.put(name, data, meta=meta)
         info(f"Object stored: {bucket_name}/{name} ({len(data)} bytes)")
         return result
@@ -714,14 +705,14 @@ class NatsService:
         meta: Optional[ObjectMeta] = None
     ) -> ObjectInfo:
         """Store data from a readable stream."""
-        os = await self.ensure_object_store(bucket_name)
+        os = await self.get_object_store(bucket_name)
         result = await os.put(name, readable, meta=meta)
         info(f"Object stored from stream: {bucket_name}/{name}")
         return result
 
     async def get_object(self, bucket_name: str, name: str) -> Optional[bytes]:
         """Retrieve an object as bytes."""
-        os = await self.ensure_object_store(bucket_name)
+        os = await self.get_object_store(bucket_name)
         try:
             result = await os.get(name)
         except Exception as e:
@@ -739,7 +730,7 @@ class NatsService:
         writeinto: io.BufferedIOBase
     ) -> Optional[ObjectInfo]:
         """Retrieve an object by streaming directly into a writable buffer."""
-        os = await self.ensure_object_store(bucket_name)
+        os = await self.get_object_store(bucket_name)
         try:
             result = await os.get(name, writeinto=writeinto)
         except Exception as e:
@@ -752,7 +743,7 @@ class NatsService:
 
     async def get_object_info(self, bucket_name: str, name: str) -> Optional[ObjectInfo]:
         """Get object metadata."""
-        os = await self.ensure_object_store(bucket_name)
+        os = await self.get_object_store(bucket_name)
         try:
             return await os.info(name)
         except Exception as e:
@@ -762,11 +753,11 @@ class NatsService:
 
     async def delete_object(self, bucket_name: str, name: str) -> None:
         """Delete an object from a bucket."""
-        os = await self.ensure_object_store(bucket_name)
+        os = await self.get_object_store(bucket_name)
         await os.delete(name)
         info(f"Object deleted: {bucket_name}/{name}")
 
     async def list_objects(self, bucket_name: str) -> List[ObjectInfo]:
         """List all objects in a bucket."""
-        os = await self.ensure_object_store(bucket_name)
+        os = await self.get_object_store(bucket_name)
         return await os.list()

@@ -13,6 +13,7 @@ import type {
 const { AI_CHAT_THREAD_SUBJECTS } = NATS_SUBJECTS.WORKSPACE_SUBJECTS
 
 import AuthService from '$src/services/auth-service.ts'
+import RouterService from '$src/services/router-service.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { aiChatThreadStore } from '$src/stores/aiChatThreadStore.ts'
@@ -230,9 +231,13 @@ class AiChatThreadService {
                 workspaceId
             })
 
+            if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+
             aiChatThreadsStore.setThreads(Array.isArray(threads) ? threads : [])
             aiChatThreadsStore.setMetaValues({ loadingStatus: LoadingStatus.success })
         } catch (error) {
+            if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+
             console.error('Failed to load workspace AI chat threads:', error)
             aiChatThreadsStore.setMetaValues({ loadingStatus: LoadingStatus.error })
         }

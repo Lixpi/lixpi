@@ -232,7 +232,7 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(246, 199, 179)
         Note over User, ObjStore: PHASE 4 - RESTORE — Recreate content from archive
-        API->>ObjStore: ensureObjectStore(bucketName)
+        API->>ObjStore: createObjectStore(bucketName)
         activate ObjStore
         loop For each image in ZIP
             API->>ObjStore: putObject(bucketName, fileId, data)
@@ -271,7 +271,7 @@ sequenceDiagram
 - **In-memory extraction**: The ZIP is buffered by `multer` and extracted with `adm-zip` — no temporary files on disk.
 - **Auth**: Uses `Authorization: Bearer` header (standard `fetch` POST, not `window.open`).
 - **Validation-first**: The archive is fully parsed and validated before any existing data is deleted. Invalid archives produce a 400 error with zero data loss.
-- **Bucket wipe**: The NATS Object Store bucket is deleted entirely via `deleteObjectStore()`, then recreated via `ensureObjectStore()`. This is faster than deleting individual objects and guarantees no orphans.
+- **Bucket wipe**: The NATS Object Store bucket is deleted entirely via `deleteObjectStore()`, then created explicitly with `createObjectStore()` as part of the import restore transaction. Normal media writes do not auto-create missing buckets.
 - **File size**: Accepts uploads up to 1GB via multer memory storage.
 - **Post-import reload**: The frontend automatically reloads workspace data, documents, and AI chat threads if the imported workspace is currently open.
 

@@ -58,8 +58,8 @@ import {
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, branchMidIcon, branchForkfIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
-import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
-import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
+import { createCanvasMediaNodeLifecycleTracker } from '$src/infographics/workspace/canvasMediaNodeLifecycle.ts'
+import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForState } from '$src/infographics/workspace/generatedMediaEventWorkspaceGuard.ts'
 import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
@@ -427,15 +427,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const loadedNodeIds: Set<string> = new Set()
     let paneRect: DOMRect | null = null
 
-    // Image lifecycle tracker - handles deletion of orphaned images
-    const canvasImageLifecycle = createCanvasImageLifecycleTracker()
-    canvasImageLifecycle.initializeFromCanvasState(currentCanvasState)
-
-    // Video lifecycle tracker (sibling of canvasImageLifecycle) — deletes the
-    // MP4 + poster from the workspace Object Store when a VideoCanvasNode is
-    // removed from canvas state.
-    const canvasVideoLifecycle = createCanvasVideoLifecycleTracker()
-    canvasVideoLifecycle.initializeFromCanvasState(currentCanvasState)
+    const canvasMediaNodeLifecycle = createCanvasMediaNodeLifecycleTracker()
+    canvasMediaNodeLifecycle.initializeFromCanvasState(currentCanvasState)
 
     // Pending video-generation tracker: mirrors partialImageTracker. VEO has no
     // partial frames, so the sequence is VIDEO_PENDING (create placeholder +
@@ -5636,6 +5629,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         onCanvasStateChange?.(nextState)
     }
 
+    function shouldAcceptGeneratedMediaEvent(threadId: string, eventWorkspaceId?: string): boolean {
+        return shouldAcceptGeneratedMediaEventForState({
+            threadId,
+            eventWorkspaceId,
+            workspaceId,
+            currentCanvasState,
+            currentAiChatThreads,
+        })
+    }
+
     setAiGeneratedImageCallbacks({
         onAddToCanvas: async (data) => {
             const { imageUrl, fileId, responseId, revisedPrompt, aiModel } = data
@@ -5701,6 +5704,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
 
         onImageBranchResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             const placement = getPendingGeneratedMediaPlacement(threadId, generationRun)
             if (!placement) return
 
@@ -5728,25 +5733,35 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
 
         onMediaLineagePlannedToCanvas: ({ threadId, lineagePlan, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             applyMediaBranchLineagePlan(threadId, lineagePlan, generationRun)
         },
 
         onWorkspaceContextResolvedToCanvas: ({ threadId, resolution, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             handleWorkspaceContextResolution(threadId, resolution, generationRun)
         },
 
         onImageBranchResolutionErrorToCanvas: ({ threadId, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
             pendingGeneratedImagePlacements.delete(placementKey)
             clearGeneratingReferenceNodeIds(placementKey)
         },
 
         onImageGenerationTraceToCanvas: ({ threadId, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             registerGeneratedMediaRun(threadId, generationRun)
             clearGeneratingReferencesAfterPromptHandoff(threadId, generationRun)
         },
 
         onImageErrorToCanvas: ({ threadId, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             const existing = partialImageTracker.get(runKey)
             if (!existing || !currentCanvasState) {
@@ -5778,6 +5793,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         onImagePartialToCanvas: (data) => {
             const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, generationRun } = data
+            if (!shouldAcceptGeneratedMediaEvent(threadId, imgWorkspaceId)) return
+
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
@@ -5879,6 +5896,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         onImageCompleteToCanvas: (data) => {
             const { threadId, imageUrl, fileId, workspaceId: imgWorkspaceId, responseId, revisedPrompt, aiModel, imageModelProvider, imageModelId, responseMessageId, generationRun } = data
+            if (!shouldAcceptGeneratedMediaEvent(threadId, imgWorkspaceId)) return
+
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
             const completionMediaModelId = generationRun?.mediaModelId ?? buildAiModelId(imageModelProvider, imageModelId ?? '')
@@ -6148,6 +6167,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     setAiGeneratedVideoCallbacks({
         onVideoPendingToCanvas: (data) => {
             const { threadId, generationRun } = data
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             const placementKey = getGeneratedMediaPlacementKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
@@ -6227,7 +6248,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             appendVideoNodeToDOM(placedVideoNode)
         },
 
-        onVideoGeneratingToCanvas: (_data) => {
+        onVideoGeneratingToCanvas: ({ threadId }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             // VEO keepalive heartbeat. The PIXI traveling outline is already
             // running on the placeholder via pixiMediaLayer's generating-image
             // tracker, so no canvas state mutation is required here. Phase 6
@@ -6235,6 +6258,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         },
 
         onVideoGenerationTraceToCanvas: ({ threadId, generationRun }) => {
+            if (!shouldAcceptGeneratedMediaEvent(threadId)) return
+
             registerGeneratedMediaRun(threadId, generationRun)
             clearGeneratingReferencesAfterPromptHandoff(threadId, generationRun)
         },
@@ -6258,6 +6283,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 responseMessageId,
                 generationRun,
             } = data
+            if (!shouldAcceptGeneratedMediaEvent(threadId, videoWorkspaceId)) return
+
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             registerGeneratedMediaRun(threadId, generationRun)
 
@@ -6582,12 +6609,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function commitCanvasState(nextState: CanvasState) {
-        // Track image changes and delete orphaned images from storage
-        canvasImageLifecycle.trackCanvasState(nextState)
-        // Same lifecycle treatment for VideoCanvasNode entries: when a node
-        // leaves canvasState, the tracker fires the workspace.video.delete
-        // NATS subject to remove both the MP4 and its companion poster image.
-        canvasVideoLifecycle.trackCanvasState(nextState)
+        canvasMediaNodeLifecycle.trackCanvasState(nextState)
         currentCanvasState = nextState
         pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)
         onCanvasStateChange?.(nextState)
@@ -7960,11 +7982,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 workspaceChanged,
             })
 
+            const shouldResetMediaLifecycle = workspaceChanged || (!currentCanvasState && Boolean(effectiveCanvasState))
+
             currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState
                 ? { ...effectiveCanvasState, viewport: liveViewport }
                 : effectiveCanvasState
             currentDocuments = newDocuments
             currentAiChatThreads = newAiChatThreads
+            if (shouldResetMediaLifecycle) {
+                canvasMediaNodeLifecycle.initializeFromCanvasState(currentCanvasState)
+            }
             syncActiveAiChatPanelFromState()
 
             // 1. Rebuild DOM first so image nodes exist when PIXI syncs DOM ownership.
@@ -8093,8 +8120,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 promptInputController.unregisterThreadEditor(threadId)
             }
             threadEditors.clear()
-            canvasImageLifecycle.destroy()
-            canvasVideoLifecycle.destroy()
+            canvasMediaNodeLifecycle.destroy()
             videoNodeHandler?.destroy()
             videoNodeHandler = null
             videoGenerationTracker.clear()

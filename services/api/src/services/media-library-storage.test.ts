@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { MediaLibraryImageItem } from '@lixpi/constants'
+import type { MediaLibraryImageItem, MediaLibraryVideoItem } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
     getWorkspaceInternal: vi.fn(),
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     deleteObject: vi.fn(),
     deleteObjectStore: vi.fn(),
     storeWorkspaceImage: vi.fn(),
+    storeWorkspaceVideo: vi.fn(),
 }))
 
 vi.mock('@lixpi/nats-service', () => ({
@@ -37,11 +38,17 @@ vi.mock('./image-storage.ts', () => ({
     storeWorkspaceImage: mocks.storeWorkspaceImage,
 }))
 
+vi.mock('./video-storage.ts', () => ({
+    storeWorkspaceVideo: mocks.storeWorkspaceVideo,
+}))
+
 import {
+    copyWorkspaceVideoToLibrary,
     copyLibraryImageToScope,
     copyWorkspaceImageToLibrary,
     deleteMediaLibraryWorkspaceBucket,
     materializeLibraryImageToWorkspace,
+    materializeLibraryVideoToWorkspace,
 } from './media-library-storage.ts'
 
 const pngBytes = Buffer.from(
@@ -73,6 +80,38 @@ const makeItem = (): MediaLibraryImageItem => ({
     updatedAt: 1,
 })
 
+const makeVideoItem = (): MediaLibraryVideoItem => ({
+    itemId: 'library-video-1',
+    version: 1,
+    kind: 'video',
+    displayName: 'saved.mp4',
+    ownerUserId: 'user-1',
+    originWorkspaceId: 'workspace-1',
+    sourceFileId: 'source-video-1',
+    sourcePosterFileId: 'source-poster-1',
+    scope: 'workspace',
+    scopeOwnerId: 'workspace-1',
+    scopeAndOwner: 'workspace#workspace-1',
+    status: 'active',
+    asset: {
+        bucketName: 'media-library-workspace-workspace-1-files',
+        objectKey: 'library-video-1',
+        mimeType: 'video/mp4',
+        byteSize: pngBytes.length,
+        originalName: 'saved.mp4',
+    },
+    poster: {
+        bucketName: 'media-library-workspace-workspace-1-files',
+        objectKey: 'library-video-1-poster',
+        mimeType: 'image/png',
+        byteSize: pngBytes.length,
+        originalName: 'saved-poster.png',
+    },
+    video: { durationSeconds: 4, aspectRatio: 1, hasAudio: false },
+    createdAt: 1,
+    updatedAt: 1,
+})
+
 describe('Media Library storage ownership', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -80,6 +119,16 @@ describe('Media Library storage ownership', () => {
             files: [{
                 id: 'source-file-1',
                 name: 'saved.png',
+                mimeType: 'image/png',
+                size: pngBytes.length,
+            }, {
+                id: 'source-video-1',
+                name: 'saved.mp4',
+                mimeType: 'video/mp4',
+                size: pngBytes.length,
+            }, {
+                id: 'source-poster-1',
+                name: 'saved-poster.png',
                 mimeType: 'image/png',
                 size: pngBytes.length,
             }],
@@ -93,6 +142,13 @@ describe('Media Library storage ownership', () => {
             isDuplicate: false,
             size: pngBytes.length,
             mimeType: 'image/png',
+        })
+        mocks.storeWorkspaceVideo.mockResolvedValue({
+            fileId: 'restored-video-1',
+            url: '/api/videos/workspace-2/restored-video-1',
+            isDuplicate: false,
+            size: pngBytes.length,
+            mimeType: 'video/mp4',
         })
     })
 
@@ -146,5 +202,57 @@ describe('Media Library storage ownership', () => {
 
         await deleteMediaLibraryWorkspaceBucket('workspace-1')
         expect(mocks.deleteObjectStore).toHaveBeenCalledWith('media-library-workspace-workspace-1-files')
+    })
+
+    it('saves a canvas video and its poster into independent workspace-scoped library objects', async () => {
+        const copied = await copyWorkspaceVideoToLibrary({
+            workspaceId: 'workspace-1',
+            fileId: 'source-video-1',
+            posterFileId: 'source-poster-1',
+            durationSeconds: 4,
+            aspectRatio: 1,
+            hasAudio: false,
+            scope: 'workspace',
+            scopeOwnerId: 'workspace-1',
+        })
+
+        expect(copied.itemId).not.toBe('source-video-1')
+        expect(copied.asset.bucketName).toBe('media-library-workspace-workspace-1-files')
+        expect(copied.asset.objectKey).toBe(copied.itemId)
+        expect(copied.poster).toEqual(expect.objectContaining({
+            bucketName: 'media-library-workspace-workspace-1-files',
+            objectKey: `${copied.itemId}-poster`,
+            originalName: 'saved-poster.png',
+        }))
+        expect(mocks.putObjectFromReadable).toHaveBeenCalledWith(
+            'media-library-workspace-workspace-1-files',
+            copied.itemId,
+            { readable: true },
+            { name: copied.itemId, description: 'saved.mp4' }
+        )
+        expect(mocks.putObjectFromReadable).toHaveBeenCalledWith(
+            'media-library-workspace-workspace-1-files',
+            `${copied.itemId}-poster`,
+            { readable: true },
+            { name: `${copied.itemId}-poster`, description: 'saved-poster.png' }
+        )
+    })
+
+    it('restores a saved video through the existing workspace video and poster storage paths', async () => {
+        const item = makeVideoItem()
+        await materializeLibraryVideoToWorkspace({ item, workspaceId: 'workspace-2' })
+
+        expect(mocks.storeWorkspaceVideo).toHaveBeenCalledWith({
+            workspaceId: 'workspace-2',
+            buffer: pngBytes,
+            originalName: 'saved.mp4',
+            mimeType: 'video/mp4',
+        })
+        expect(mocks.storeWorkspaceImage).toHaveBeenCalledWith({
+            workspaceId: 'workspace-2',
+            buffer: pngBytes,
+            originalName: 'saved-poster.png',
+            mimeType: 'image/png',
+        })
     })
 })
