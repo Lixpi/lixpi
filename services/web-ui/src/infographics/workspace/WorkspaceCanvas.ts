@@ -48,6 +48,10 @@ import {
     buildGeneratedMediaTurnProjectionFromThreadContent,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 import {
+    getAiLineageEventsForProjection,
+    type AiLineageProjectionScope,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+import {
     mountReadOnlyAiChatThreadProjection,
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
@@ -158,6 +162,7 @@ type GeneratedMediaInfoPanelOptions = {
     includeDescriptor?: boolean
     rendererKey?: string
     limitProjectionToSelectedMedia?: boolean
+    lineageProjectionScope?: AiLineageProjectionScope
 }
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -1370,11 +1375,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const modelName = node.type === 'video'
                 ? String((generatedBy as VideoCanvasNode['generatedBy'])?.videoModel || '')
                 : String((generatedBy as ImageCanvasNode['generatedBy'])?.aiModel || '')
+            const lineageProjectionScope = options.lineageProjectionScope ?? 'media-run'
 
             const projection = buildGeneratedMediaTurnProjectionFromThreadContent(thread?.content, locator, {
                 threadId: generatedBy.aiChatThreadId,
                 forceGenerationDetailsOpen: true,
                 limitToLocatorMedia: options.limitProjectionToSelectedMedia ?? true,
+                lineageProjectionScope,
                 fallback: {
                     threadId: generatedBy.aiChatThreadId,
                     promptText: generatedBy.promptText,
@@ -1382,6 +1389,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     responseText: generatedBy.revisedPrompt,
                     responseProvider: modelName,
                     generatedAt: generatedBy.createdAt,
+                    lineageEvents: getAiLineageEventsForProjection(generatedBy, lineageProjectionScope),
                     missingReason: thread
                         ? 'Producing response was not found in the stored AI chat thread.'
                         : 'Producing AI chat thread content was unavailable.',
@@ -1562,6 +1570,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const panel = html`<div className="canvas-generated-media-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
         const promptProjection = buildBranchOriginPromptProjection(promptText, {
             threadId: `branch-origin:${branchOriginNode.nodeId}`,
+            branchOriginNodeId: branchOriginNode.nodeId,
             referenceNodeIds,
         })
         if (promptProjection) {
@@ -1610,6 +1619,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             includeDescriptor: false,
             rendererKey: `branch-fork:${branchForkNode.nodeId}`,
             limitProjectionToSelectedMedia: false,
+            lineageProjectionScope: 'branch-fork',
         })
     }
 

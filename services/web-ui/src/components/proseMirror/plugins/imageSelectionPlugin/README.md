@@ -7,6 +7,7 @@ This plugin provides rich image editing functionality in the ProseMirror editor 
 - **Percentage Width** - Image widths are stored as percentages for responsive behavior
 - **Bubble Menu Integration** - When an image is selected, the bubble menu shows image-specific options
 - **Partial Image Placeholder** - `aiGeneratedImage` nodes with `isPartial: true` and no `imageData` render a compact generating placeholder using the same wrapper, alignment, and selection behavior as completed images
+- **Generated Model Chrome** - `aiGeneratedImage` nodes render the provider/model badge below completed generated images; branch lineage stays in node attrs and AI chat projection markers, not in this badge row
 
 ## Supported Node Types
 
@@ -86,6 +87,11 @@ aiGeneratedImage: {
     responseId: {default: null},
     aiModel: {default: null},
     isPartial: {default: true},
+    branchId: {default: ''},          // API lineage id for branch-tree reconstruction
+    branchOriginNodeId: {default: ''},
+    branchForkNodeId: {default: ''},
+    parentMediaNodeId: {default: ''},
+    lineageParentNodeId: {default: ''},
     width: {default: null},           // Percentage string
     alignment: {default: 'left'},     // 'left' | 'center' | 'right'
     textWrap: {default: 'none'}       // 'none' | 'left' | 'right'

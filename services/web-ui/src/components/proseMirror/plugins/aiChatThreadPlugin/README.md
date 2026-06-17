@@ -11,11 +11,12 @@
 
 ## What It Does
 
-- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
+- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
 - Parses `aiUserInput` through the schema compatibility path, then removes those children in `appendTransaction()`.
 - Streams parsed text, image, video, context-resolution, branch-resolution, and trace events from `SegmentsReceiver`.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
+- Preserves API media-lineage assignments on durable response/media nodes, then projects those ids into reusable lineage-event markers for the live thread, branch-root panels, branch-fork panels, and generated-media provenance.
 - Blocks paste inside thread logs. Users paste into the separate prompt input surface.
 - Supports read-only generated-media provenance projections through the shared AI chat NodeViews without subscribing the preview editor to live stream events.
 
@@ -123,9 +124,20 @@ Assistant response node created as the request is submitted, then filled by stre
 Per-model section inside one `aiResponseMessage` for media-generation matrix requests.
 
 - Content: `(paragraph | block)*`
-- Attrs: `generationRequestId`, `reasoningRunId`, `reasoningModelId`, `reasoningIndex`, `isReceivingAnimation`
+- Attrs: `generationRequestId`, `reasoningRunId`, `reasoningModelId`, `reasoningIndex`, `branchOriginNodeId`, `branchForkNodeId`, `lineageProjectionScope`, `isReceivingAnimation`
+- `branchOriginNodeId` and `branchForkNodeId` are persisted from the API lineage assignment. The NodeView asks the shared lineage-event projector which markers belong in the current scope. The live conversation scope can show `Branch started` on the first origin section and `Branch fork created` on forked sections; read-only branch-fork and media-run projections show only fork-local lineage events.
 - Created as local placeholders on submit when the request includes image/video generation, then adopted by streamed `generationRun` metadata.
 - Owns only that reasoning run's prose, generation-details collapsible, and generated media thumbnail, so canvas provenance/details can resolve by `reasoningRunId` or `mediaRunId`.
+
+### `aiLineageEvent`
+
+Atom block for a materialized workflow event in a projected chat transcript.
+
+- Spec and NodeView live in `aiLineageEventNode.ts`; event labels and icon rendering live in `aiLineageEvents.ts`.
+- Marker CSS mirrors the canvas branch-marker glyph ratio and per-shape SVG offsets so the same icon family stays optically centered at chat size.
+- Attrs: `kind`, `branchOriginNodeId`, `branchForkNodeId`
+- `kind: 'branch-origin'` renders `Branch started`; `kind: 'branch-fork'` renders `Branch fork created`.
+- Used when the projection itself is a workflow node, such as a branch root panel. Durable streamed responses keep lineage ids on `aiReasoningSection` and generated media attrs; projections decide whether to render standalone events or section-local markers.
 
 ### `aiGeneratedImage`
 
@@ -135,6 +147,7 @@ Atom node for compact generated-image references in the thread log.
 - Generated-image rendering is owned by `imageSelectionPlugin`.
 - `imageSelectionPlugin` owns the active `ImageNodeView` path so regular image selection, bubble-menu alignment, wrap controls, and the shared generated-media provider badge stay on the same visible surface.
 - Complete nodes render an authenticated image URL and the provider badge below the image.
+- Nodes keep `branchId`, `branchOriginNodeId`, `branchForkNodeId`, `parentMediaNodeId`, and `lineageParentNodeId` from `generationRun.lineageAssignment`; the provider badge row remains model/provider-only.
 - Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
 - Partial and complete stream events are matched primarily with `mediaRunId` when available, then by file, response, or partial identifiers.
 
@@ -144,6 +157,7 @@ Atom node for generated-video status and previews in the thread log.
 
 - Pending/generating/error/complete events update the in-thread video node.
 - Complete nodes render an authenticated video URL, the shared SVG `videoControls` bar as a scaled external row below the video, and the shared generated-media provider badge below the controls.
+- Nodes keep the same lineage attrs as generated images; the provider badge row remains model/provider-only.
 - Generated media nodes share the same in-thread media width contract: full available width up to the chat media cap.
 - The canvas media info button is not rendered in chat history nodes.
 - Poster file ids can be reused as still-image context when the thread log is converted into a later request.
@@ -209,6 +223,7 @@ The plugin subscribes through `SegmentsReceiver` and handles these event familie
 - `image_error`
 - `image_branch_resolved`
 - `image_branch_resolution_error`
+- `media_lineage_planned`
 - `image_generation_trace`
 - `context_relevance_resolved`
 - `context_relevance_error`
@@ -263,6 +278,7 @@ Decoration output:
 - `aiChatThreadNodeView`
 - `aiResponseMessageNodeView`
 - `aiReasoningSectionNodeView`
+- `aiLineageEventNodeView`
 - `aiUserMessageNodeView`
 - `aiCollapsibleBlockNodeView`
 - `aiGeneratedVideoNodeView`
@@ -273,6 +289,8 @@ Generated-image rendering is handled by `imageSelectionPlugin`.
 
 `readOnlyAiChatThreadRenderer.ts` mounts a `ProseMirrorEditor` with `documentType: 'aiChatThread'`, `readOnly: true`, and an optional trace-details render context. `aiChatThreadContentUtils.ts` builds a scoped `doc` JSON projection for generated image/video provenance by cloning the producing `aiUserMessage` and `aiResponseMessage` from `AiChatThread.content`. Matrix media responses keep only the matching `aiReasoningSection`, selected by `responseMessageId`, `reasoningRunId`, `mediaRunId`, or `reasoningModelId`. Per-image/per-video provenance can additionally prune generated-media atom nodes to the exact `mediaRunId`, `fileId`, and `variantIndex`; branch-fork provenance leaves sibling media visible.
 
+Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view, `branch-origin` materializes a standalone `aiLineageEvent` for the branch root, `branch-fork` keeps only fork-local markers on the selected reasoning section, and `media-run` keeps run-local fork markers for generated-media panels. This keeps branch-root and branch-fork workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
+
 Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread persistence callbacks, and reject document-changing transactions. NodeViews that own local controls guard direct dispatches with `view.editable`, so collapsible toggles, image resize, image/video selection, and focus writebacks do not mutate the projected document.
 
 ## Files
@@ -282,6 +300,8 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 - `aiUserMessageNode.ts`: sent-user-message schema and shell NodeView.
 - `aiResponseMessageNode.ts`: assistant response schema, shell NodeView, and response-level metadata.
 - `aiReasoningSectionNode.ts`: per-reasoning-run section schema and NodeView for one shared media response message.
+- `aiLineageEvents.ts`: shared lineage-event projection, labels, and icon marker rendering.
+- `aiLineageEventNode.ts`: standalone projected workflow event node.
 - `aiGeneratedImageNode.ts`: generated-image schema and callback surface.
 - `imageSelectionPlugin/imageNodeView.ts`: visible regular/generated image NodeView, authenticated image loading, resizing, and generated-media provider badge.
 - `aiGeneratedVideoNode.ts`: generated-video schema, callback surface, in-chat video NodeView, controls mount, and generated-media provider badge.

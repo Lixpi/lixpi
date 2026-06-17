@@ -20,6 +20,7 @@ import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatT
 import { aiUserMessageNodeType, aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
+import { aiLineageEventNodeType, aiLineageEventNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
@@ -142,6 +143,14 @@ type GeneratedRunAttrs = {
     mediaType: string
     variantIndex: number | null
 }
+
+type GeneratedMediaRunAttrs = GeneratedRunAttrs & {
+    branchId: string
+    parentMediaNodeId: string
+    branchOriginNodeId: string
+    branchForkNodeId: string
+    lineageParentNodeId: string
+}
 type ImageReference = { fileId: string; workspaceId: string }
 type ThreadContent = {
     nodeType: string
@@ -163,7 +172,7 @@ type AiGeneratedImageAttrs = {
     width: string
     alignment: AiGeneratedImageAlignment
     textWrap: AiGeneratedImageTextWrap
-} & GeneratedRunAttrs
+} & GeneratedMediaRunAttrs
 
 type AiGeneratedVideoAttrs = {
     videoUrl: string
@@ -182,7 +191,7 @@ type AiGeneratedVideoAttrs = {
     width: string
     alignment: AiGeneratedImageAlignment
     textWrap: AiGeneratedImageTextWrap
-} & GeneratedRunAttrs
+} & GeneratedMediaRunAttrs
 
 function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previousAttrs: Partial<GeneratedRunAttrs> = {}): GeneratedRunAttrs {
     return {
@@ -193,6 +202,21 @@ function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previous
         mediaModelId: generationRun?.mediaModelId || previousAttrs.mediaModelId || '',
         mediaType: generationRun?.mediaType || previousAttrs.mediaType || '',
         variantIndex: generationRun?.variantIndex ?? previousAttrs.variantIndex ?? null,
+    }
+}
+
+function buildGeneratedMediaRunAttrs(
+    generationRun?: MediaGenerationRunMeta,
+    previousAttrs: Partial<GeneratedMediaRunAttrs> = {}
+): GeneratedMediaRunAttrs {
+    const lineageAssignment = generationRun?.lineageAssignment
+    return {
+        ...buildGeneratedRunAttrs(generationRun, previousAttrs),
+        branchId: lineageAssignment?.branchId || previousAttrs.branchId || '',
+        parentMediaNodeId: lineageAssignment?.parentMediaNodeId || previousAttrs.parentMediaNodeId || '',
+        branchOriginNodeId: lineageAssignment?.branchOriginNodeId || previousAttrs.branchOriginNodeId || '',
+        branchForkNodeId: lineageAssignment?.branchForkNodeId || previousAttrs.branchForkNodeId || '',
+        lineageParentNodeId: lineageAssignment?.lineageParentNodeId || previousAttrs.lineageParentNodeId || '',
     }
 }
 
@@ -220,6 +244,7 @@ function getReasoningOnlyGenerationRun(generationRun?: MediaGenerationRunMeta): 
         reasoningRunId: generationRun.reasoningRunId,
         reasoningModelId: generationRun.reasoningModelId,
         reasoningIndex: generationRun.reasoningIndex,
+        lineageAssignment: generationRun.lineageAssignment,
     }
 }
 
@@ -257,6 +282,8 @@ function buildReasoningSectionAttrs(
         reasoningRunId: generationRun.reasoningRunId || previousAttrs.reasoningRunId || '',
         reasoningModelId: generationRun.reasoningModelId || previousAttrs.reasoningModelId || '',
         reasoningIndex: generationRun.reasoningIndex ?? previousAttrs.reasoningIndex ?? null,
+        branchOriginNodeId: generationRun.lineageAssignment?.branchOriginNodeId || previousAttrs.branchOriginNodeId || '',
+        branchForkNodeId: generationRun.lineageAssignment?.branchForkNodeId || previousAttrs.branchForkNodeId || '',
         isReceivingAnimation,
     }
 }
@@ -1081,6 +1108,32 @@ class AiChatThreadPluginClass {
         }
     }
 
+    private applyGenerationRunLineageToResponseSection(
+        tr: Transaction,
+        responseContext: ResponseContext,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
+        if (!generationRun?.lineageAssignment) return
+        if (responseContext.responseNode.type.name !== aiReasoningSectionNodeType) return
+
+        const currentAttrs = responseContext.responseNode.attrs
+        const nextAttrs = buildReasoningSectionAttrs(
+            generationRun,
+            currentAttrs,
+            currentAttrs.isReceivingAnimation,
+        )
+        const hasLineageAttrChange = currentAttrs.branchOriginNodeId !== nextAttrs.branchOriginNodeId
+            || currentAttrs.branchForkNodeId !== nextAttrs.branchForkNodeId
+            || currentAttrs.generationRequestId !== nextAttrs.generationRequestId
+            || currentAttrs.reasoningRunId !== nextAttrs.reasoningRunId
+            || currentAttrs.reasoningModelId !== nextAttrs.reasoningModelId
+            || currentAttrs.reasoningIndex !== nextAttrs.reasoningIndex
+
+        if (!hasLineageAttrChange) return
+
+        tr.setNodeMarkup(responseContext.responseStartPos, undefined, nextAttrs)
+    }
+
     private findGeneratedImageInResponse(
         responseContext: ResponseContext,
         options: {
@@ -1148,7 +1201,7 @@ class AiChatThreadPluginClass {
         const textWrap = previousTextWrap === 'left' || previousTextWrap === 'right' || previousTextWrap === 'none'
             ? previousTextWrap
             : AI_GENERATED_MEDIA_TEXT_WRAP
-        const runAttrs = buildGeneratedRunAttrs(event.generationRun, previousAttrs)
+        const runAttrs = buildGeneratedMediaRunAttrs(event.generationRun, previousAttrs)
         const mediaModelId = runAttrs.mediaModelId || buildMediaModelId(event.imageModelProvider, event.imageModelId)
 
         return {
@@ -1188,6 +1241,7 @@ class AiChatThreadPluginClass {
         })
         const imageAttrs = this.buildGeneratedImageAttrs(event, true, partialIndex, existingImage?.node.attrs)
         const tr = state.tr
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (existingImage) {
             tr.setNodeMarkup(existingImage.nodePos, undefined, imageAttrs)
@@ -1266,6 +1320,7 @@ class AiChatThreadPluginClass {
 
         const imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
         const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (imageNodeType) {
             const imageAttrs = this.buildGeneratedImageAttrs(event, false, partialIndex, existingImage?.node.attrs)
@@ -1352,7 +1407,7 @@ class AiChatThreadPluginClass {
             width: previousAttrs.width || AI_GENERATED_MEDIA_WIDTH,
             alignment,
             textWrap,
-            ...buildGeneratedRunAttrs(event.generationRun, previousAttrs),
+            ...buildGeneratedMediaRunAttrs(event.generationRun, previousAttrs),
         }
     }
 
@@ -1372,6 +1427,7 @@ class AiChatThreadPluginClass {
         })
         const videoAttrs = this.buildGeneratedVideoAttrs(event, true, '', existingVideo?.node.attrs)
         const tr = state.tr
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (existingVideo) {
             tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
@@ -1406,6 +1462,7 @@ class AiChatThreadPluginClass {
         const tr = state.tr
         const videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
         const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         const videoAttrs = this.buildGeneratedVideoAttrs(event, false, '', existingVideo?.node.attrs)
         if (videoNodePos !== undefined) {
@@ -1442,6 +1499,7 @@ class AiChatThreadPluginClass {
             existingVideo?.node.attrs
         )
         const tr = state.tr
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (existingVideo) {
             tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
@@ -1536,6 +1594,9 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'media_lineage_planned') {
+                if (event.generationRun) {
+                    this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
+                }
                 const callbacks = getAiGeneratedImageCallbacks()
                 if (effectiveThreadId && event.mediaBranchLineagePlan) {
                     callbacks.onMediaLineagePlannedToCanvas?.({
@@ -2943,6 +3004,8 @@ class AiChatThreadPluginClass {
                         }),
                     [aiReasoningSectionNodeType]: (node: ProseMirrorNode) =>
                         aiReasoningSectionNodeView(node),
+                    [aiLineageEventNodeType]: (node: ProseMirrorNode) =>
+                        aiLineageEventNodeView(node),
                     [aiGeneratedVideoNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiGeneratedVideoNodeView(node, view, getPos),
                     // Note: aiGeneratedImage is handled by imageSelectionPlugin for bubble menu integration

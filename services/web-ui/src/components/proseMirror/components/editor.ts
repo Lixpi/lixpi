@@ -36,7 +36,9 @@ import {
     aiCollapsibleBlockNodeView,
     aiReasoningSectionNodeType,
     aiReasoningSectionNodeSpec,
-    aiReasoningSectionNodeView
+    aiReasoningSectionNodeView,
+    aiLineageEventNodeType,
+    aiLineageEventNodeSpec
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
 // aiUserInput is kept in the schema for legacy content migration but no longer imported here
 import { aiUserInputNodeType, aiUserInputNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
@@ -228,7 +230,8 @@ export class ProseMirrorEditor {
                 [aiGeneratedImageNodeType]: aiGeneratedImageNodeSpec,
                 [aiGeneratedVideoNodeType]: aiGeneratedVideoNodeSpec,
                 [aiCollapsibleBlockNodeType]: aiCollapsibleBlockNodeSpec,
-                [aiReasoningSectionNodeType]: aiReasoningSectionNodeSpec
+                [aiReasoningSectionNodeType]: aiReasoningSectionNodeSpec,
+                [aiLineageEventNodeType]: aiLineageEventNodeSpec
             }
         } else if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
             allNodes = {

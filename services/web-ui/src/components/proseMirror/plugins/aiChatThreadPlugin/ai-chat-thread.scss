@@ -527,6 +527,69 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 }
             }
 
+            .ai-lineage-event {
+                display: flex;
+                align-items: center;
+                gap: 0.38rem;
+                max-width: 100%;
+                margin: 0 0 0.35rem;
+                color: #4d5963;
+                font-size: 0.78rem;
+                font-weight: 600;
+                line-height: 1.2;
+
+                &[hidden] {
+                    display: none;
+                }
+            }
+
+            .ai-lineage-event-icon {
+                --ai-lineage-event-icon-size: 1.25rem;
+                --ai-lineage-event-glyph-size: calc(var(--ai-lineage-event-icon-size) * 0.4875);
+
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: var(--ai-lineage-event-icon-size);
+                height: var(--ai-lineage-event-icon-size);
+                flex: 0 0 var(--ai-lineage-event-icon-size);
+                border: 1px solid var(--workspace-branch-origin-border-color, #53616c);
+                border-radius: 999px;
+                background: var(--workspace-branch-origin-background-color, #53616c);
+                color: var(--workspace-branch-origin-icon-color, #fff);
+                box-shadow: var(--workspace-branch-origin-box-shadow, 0 6px 18px rgba(42, 48, 57, 0.18));
+
+                svg {
+                    display: block;
+                    width: var(--ai-lineage-event-glyph-size);
+                    height: var(--ai-lineage-event-glyph-size);
+                    fill: currentColor;
+                    transform-origin: center;
+                }
+            }
+
+            // Match the canvas branch marker compensation: the branch SVG paths
+            // are not optically centered in their 24px viewBox, so each shape
+            // needs its own small right/down offset after scaling.
+            .ai-lineage-event-branch-origin .ai-lineage-event-icon svg {
+                transform: translate(
+                    calc(var(--ai-lineage-event-icon-size) * 0.0208),
+                    calc(var(--ai-lineage-event-icon-size) * 0.0208)
+                );
+            }
+
+            .ai-lineage-event-branch-fork .ai-lineage-event-icon svg {
+                transform: translate(
+                    calc(var(--ai-lineage-event-icon-size) * 0.03125),
+                    calc(var(--ai-lineage-event-icon-size) * 0.0208)
+                );
+            }
+
+            .ai-lineage-event-label {
+                min-width: 0;
+                overflow-wrap: anywhere;
+            }
+
             // Per-reasoning-model slice of a multi-model response. Consecutive
             // sections are separated by a hairline so each model's reply + its
             // generation collapsible + its image read as one grouped block.
@@ -537,6 +600,22 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                     margin-top: 0.75rem;
                     padding-top: 0.75rem;
                     border-top: 1px solid rgba(42, 45, 47, 0.08);
+                }
+
+                .ai-reasoning-section-lineage-markers {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 0.35rem;
+                    margin: 0 0 0.55rem;
+                }
+
+                .ai-reasoning-section-lineage-markers[hidden] {
+                    display: none;
+                }
+
+                .ai-lineage-event {
+                    margin: 0;
                 }
 
                 .ai-reasoning-section-spinner {
