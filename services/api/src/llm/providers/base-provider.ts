@@ -97,6 +97,17 @@ export abstract class BaseProvider {
     }
 
     private buildWorkflow() {
+        // `preflightResolved` gates every shared-resolution node below. For
+        // multi-model matrix requests the orchestrator runs these resolvers ONCE
+        // in a shared preflight and dispatches each child with
+        // `preflightResolved: true`, so the child SKIPS them (returns `{}`) and
+        // relies entirely on the resolution the matrix forwarded in the request.
+        // INVARIANT: any field these resolvers emit must be propagated by
+        // `MediaGenerationMatrixOrchestrator` (it forwards the whole resolved
+        // patch). A field resolved here but not forwarded is lost for matrix
+        // children — that is what once dropped the video reference images and
+        // forced text-to-video. Single (non-matrix) requests leave the flag
+        // `false`, so these nodes run in-graph and feed the same state directly.
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
             .addNode('resolveWorkspaceContext', async (s: ProviderState) => s.preflightResolved ? {} : resolveWorkspaceContext(s, {
                 natsService: this.nats,

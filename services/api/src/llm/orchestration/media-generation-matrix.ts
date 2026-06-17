@@ -239,6 +239,35 @@ export class MediaGenerationMatrixOrchestrator {
             })
             return this.registry.process(instanceKey, reasoningModel.provider, {
                 ...requestData,
+
+                // ── Shared-preflight → fanout propagation (CRITICAL INVARIANT) ──
+                // `runSharedPreflight()` resolves workspace context, `/use`
+                // features, the image branch (which ALSO selects the video
+                // first-frame / reference images), and media lineage EXACTLY ONCE,
+                // then every reasoning child is dispatched with
+                // `preflightResolved: true`. That flag makes each child's provider
+                // graph SKIP all resolver nodes (see `BaseProvider.buildWorkflow`),
+                // so a child can only ever observe resolution outputs that are
+                // forwarded right here — anything omitted is silently lost before
+                // the image/video routers run.
+                //
+                // Regression this prevents: the resolver correctly chose reference
+                // images into `videoReferenceImages` / `videoFirstFrameImage`, but
+                // an earlier hand-maintained field list here forwarded only a
+                // subset and never forwarded those two, so every Seedance/VEO call
+                // ran as pure text-to-video (zero references) and quality collapsed.
+                //
+                // Fix / future-proofing: spread the ENTIRE resolved patch returned
+                // by `runSharedPreflight()` rather than cherry-picking named fields.
+                // `sharedPreflightState` is precisely what the resolvers emitted
+                // (single source of truth), so reference inputs for images, video,
+                // and any media modality added later propagate automatically.
+                ...sharedPreflightState,
+
+                // Per-child identity + primary-model media options. These are
+                // model-specific and MUST win over anything above, so they are set
+                // last (the spreads above never contain these keys today, but
+                // ordering keeps that guarantee robust).
                 aiModelMetaInfo: reasoningModel.meta,
                 imageModelMetaInfo: primaryImageModel?.meta,
                 videoModelMetaInfo: primaryVideoModel?.meta,
@@ -247,15 +276,6 @@ export class MediaGenerationMatrixOrchestrator {
                 videoResolution: primaryVideoOptions?.resolution,
                 videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
                 videoSourceForExtension: normalized.videoSourceForExtension,
-                workspaceContextResolution: sharedPreflightState.workspaceContextResolution,
-                imageBranchCandidateSnapshot: sharedPreflightState.imageBranchCandidateSnapshot,
-                imageBranchResolution: sharedPreflightState.imageBranchResolution,
-                mediaBranchLineagePlan: sharedPreflightState.mediaBranchLineagePlan,
-                messages: sharedPreflightState.messages,
-                featureReferenceImages: sharedPreflightState.featureReferenceImages,
-                featureReferenceImageTraceUrls: sharedPreflightState.featureReferenceImageTraceUrls,
-                featureUsagePrompt: sharedPreflightState.featureUsagePrompt,
-                referencedFeatureIds: sharedPreflightState.referencedFeatureIds,
                 preflightResolved: true,
                 mediaFanoutPlan: {
                     generationRequestId: normalized.generationRequestId,
@@ -508,13 +528,40 @@ export class MediaGenerationMatrixOrchestrator {
             generationRun,
         }
 
-        state = this.applyStatePatch(state, await resolveWorkspaceContext(state, {
+        // Each resolver runs against the accumulating `state` because later
+        // resolvers depend on earlier outputs (e.g. the image-branch resolver
+        // reads the `messages` rewritten by `/use` feature resolution). Separately
+        // we capture the RAW resolver patches into `resolved`: this is the exact,
+        // complete set of fields the shared preflight produced and is the single
+        // source of truth forwarded to every reasoning child in `process()`.
+        //
+        // Deriving the forwarded set from the patches — instead of a hand-listed
+        // field allow-list — is what makes it structurally impossible to drop a
+        // resolver output on the way to the per-model children. Children run with
+        // `preflightResolved: true`, which makes their provider graph SKIP every
+        // resolver node (see `BaseProvider.buildWorkflow`), so a field the
+        // preflight resolved but did not forward is lost forever. That is exactly
+        // how `videoReferenceImages` / `videoFirstFrameImage` got dropped and made
+        // every video generate as text-to-video. Capturing patches guarantees the
+        // reference images for images, video, and ANY media modality added later
+        // ride along automatically. `undefined` values are skipped to mirror
+        // `applyStatePatch` and avoid clobbering already-forwarded request data.
+        const resolved: Partial<ProviderState> = {}
+        const resolvedRecord = resolved as Record<string, unknown>
+        const applyResolved = (patch: Partial<ProviderState>): void => {
+            state = this.applyStatePatch(state, patch)
+            for (const [key, value] of Object.entries(patch)) {
+                if (value !== undefined) resolvedRecord[key] = value
+            }
+        }
+
+        applyResolved(await resolveWorkspaceContext(state, {
             natsService: this.natsService,
             publisher,
             abortSignal: abortController.signal,
         }))
-        state = this.applyStatePatch(state, await resolveFeatures(state))
-        state = this.applyStatePatch(state, await resolveImageBranch(state, {
+        applyResolved(await resolveFeatures(state))
+        applyResolved(await resolveImageBranch(state, {
             natsService: this.natsService,
             publisher,
             abortSignal: abortController.signal,
@@ -539,9 +586,9 @@ export class MediaGenerationMatrixOrchestrator {
             branchForkCount: mediaBranchLineagePlan.branchForks.length,
             runAssignmentCount: mediaBranchLineagePlan.runAssignments.length,
         })
-        state = this.applyStatePatch(state, { mediaBranchLineagePlan })
+        applyResolved({ mediaBranchLineagePlan })
 
-        return state
+        return resolved
     }
 
     private getRunLineageAssignment(

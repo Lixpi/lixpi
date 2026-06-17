@@ -769,7 +769,7 @@ export const settings: Settings = {
             // Vertical gap between the video node edge and the external controls strip.
             bottomInset: 8,
             // Bounded zoom scaling for the canvas control strip.
-            zoomScaling: { minZoom: 0.4 },
+            zoomScaling: { minZoom: 1.2 },
         },
         // In-chat generated-video mount geometry.
         chat: {
