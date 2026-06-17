@@ -1,4 +1,8 @@
 import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
+import type {
+    AiLineageEventDescriptor,
+    AiLineageProjectionScope,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 
 export type ProseMirrorJsonNode = {
     type?: string
@@ -33,9 +37,11 @@ export type GeneratedMediaTurnLocator = {
 export type GeneratedMediaTurnFallback = {
     threadId: string
     promptText?: string
+    referenceNodeIds?: string[]
     responseText?: string
     responseProvider?: string
     generatedAt?: string | number
+    lineageEvents?: AiLineageEventDescriptor[]
     missingReason: string
 }
 
@@ -56,12 +62,15 @@ type BuildGeneratedMediaTurnProjectionOptions = {
     threadId?: string
     forceGenerationDetailsOpen?: boolean
     limitToLocatorMedia?: boolean
+    lineageProjectionScope?: AiLineageProjectionScope
     fallback?: GeneratedMediaTurnFallback
 }
 
 type BuildBranchOriginPromptProjectionOptions = {
     threadId?: string
+    branchOriginNodeId?: string
     generatedAt?: string | number
+    referenceNodeIds?: string[]
 }
 
 type GeneratedMediaTurnMatch = {
@@ -266,18 +275,31 @@ function parseTimestamp(value?: string | number): number {
     return Number.isFinite(parsed) ? parsed : 0
 }
 
-function createUserMessageNode(text: string, createdAt = 0): ProseMirrorJsonNode {
+function createUserMessageNode(text: string, createdAt = 0, referenceNodeIds: string[] = []): ProseMirrorJsonNode {
     return {
         type: 'aiUserMessage',
         attrs: {
             id: 'generated-media-provenance-user',
             createdAt,
+            referenceNodeIds,
         },
         content: createParagraphNodesFromText(text),
     }
 }
 
-function createResponseMessageNode(text: string, provider = ''): ProseMirrorJsonNode {
+function createResponseMessageNode(
+    text: string,
+    provider = '',
+    lineageEvents: AiLineageEventDescriptor[] = [],
+): ProseMirrorJsonNode {
+    const textContent = text.trim()
+        ? createParagraphNodesFromText(text)
+        : []
+    const content = [
+        ...lineageEvents.map(createLineageEventNode),
+        ...textContent,
+    ]
+
     return {
         type: 'aiResponseMessage',
         attrs: {
@@ -294,7 +316,18 @@ function createResponseMessageNode(text: string, provider = ''): ProseMirrorJson
             mediaType: '',
             variantIndex: null,
         },
-        content: createParagraphNodesFromText(text),
+        content: content.length > 0 ? content : createParagraphNodesFromText(text),
+    }
+}
+
+function createLineageEventNode(event: AiLineageEventDescriptor): ProseMirrorJsonNode {
+    return {
+        type: 'aiLineageEvent',
+        attrs: {
+            kind: event.kind,
+            branchOriginNodeId: event.branchOriginNodeId ?? '',
+            branchForkNodeId: event.branchForkNodeId ?? '',
+        },
     }
 }
 
@@ -324,11 +357,16 @@ function buildFallbackProjection(
     const createdAt = parseTimestamp(fallback.generatedAt)
 
     if (fallback.promptText?.trim()) {
-        messages.push(createUserMessageNode(fallback.promptText.trim(), createdAt))
+        messages.push(createUserMessageNode(fallback.promptText.trim(), createdAt, fallback.referenceNodeIds ?? []))
     }
 
-    if (fallback.responseText?.trim() || fallback.responseProvider) {
-        messages.push(createResponseMessageNode(fallback.responseText?.trim() ?? '', fallback.responseProvider ?? ''))
+    const lineageEvents = fallback.lineageEvents ?? []
+    if (fallback.responseText?.trim() || fallback.responseProvider || lineageEvents.length > 0) {
+        messages.push(createResponseMessageNode(
+            fallback.responseText?.trim() ?? '',
+            fallback.responseProvider ?? '',
+            lineageEvents,
+        ))
     }
 
     return {
@@ -345,6 +383,7 @@ function cloneResponseForProjection(
     locator: GeneratedMediaTurnLocator,
     forceGenerationDetailsOpen: boolean,
     limitToLocatorMedia: boolean,
+    lineageProjectionScope: AiLineageProjectionScope,
 ): ProseMirrorJsonNode {
     const shouldKeepNode = limitToLocatorMedia
         ? createSingleGeneratedMediaFilter(locator)
@@ -355,10 +394,15 @@ function cloneResponseForProjection(
     }
 
     const selectedSection = getReasoningContainer(responseNode, locator)
+    const clonedSection = cloneProjectionNode(selectedSection, forceGenerationDetailsOpen, shouldKeepNode)
+    clonedSection.attrs = {
+        ...(clonedSection.attrs ?? {}),
+        lineageProjectionScope,
+    }
     return {
         ...cloneProseMirrorJsonNode(responseNode),
         content: selectedSection.type === 'aiReasoningSection'
-            ? [cloneProjectionNode(selectedSection, forceGenerationDetailsOpen, shouldKeepNode)]
+            ? [clonedSection]
             : [],
     }
 }
@@ -437,6 +481,7 @@ export function buildGeneratedMediaTurnProjectionFromThreadContent(
             locator,
             options.forceGenerationDetailsOpen ?? false,
             options.limitToLocatorMedia ?? false,
+            options.lineageProjectionScope ?? 'media-run',
         ),
     ].filter((message): message is ProseMirrorJsonNode => Boolean(message))
 
@@ -453,13 +498,20 @@ export function buildBranchOriginPromptProjection(
     options: BuildBranchOriginPromptProjectionOptions = {},
 ): GeneratedMediaTurnProjection | null {
     const text = promptText.trim()
-    if (!text) return null
+    if (!text && !options.branchOriginNodeId) return null
 
     const threadId = options.threadId ?? 'branch-origin-provenance'
     const fallback: GeneratedMediaTurnFallback = {
         threadId,
         promptText: text,
+        referenceNodeIds: options.referenceNodeIds ?? [],
         generatedAt: options.generatedAt,
+        lineageEvents: options.branchOriginNodeId
+            ? [{
+                kind: 'branch-origin',
+                branchOriginNodeId: options.branchOriginNodeId,
+            }]
+            : [],
         missingReason: 'Branch origin provenance is stored outside durable chat history.',
     }
     return buildFallbackProjection({}, fallback, 'branch-origin-fallback')

@@ -8,6 +8,7 @@ import type {
     ImageGenerationTrace,
     ImageGenerationSize,
     MediaBranchLineagePlan,
+    MediaGenerationConfigSelectionGroup,
     MediaGenerationRunMeta,
     VideoGenerationTrace,
     WorkspaceContextResolution
@@ -25,14 +26,20 @@ import { organizationStore } from '$src/stores/organizationStore.ts'
 
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'threadId'> & {
     aiModels?: string[]
+    useMultipleModels?: boolean
+    useMultipleReasoningModels?: boolean
+    useMultipleImageModels?: boolean
+    useMultipleVideoModels?: boolean
     aiImageModel?: string
     aiImageModels?: string[]
     imageSize?: ImageGenerationSize
+    imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
     aiVideoModel?: string
     aiVideoModels?: string[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
+    videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
     // Workspace Object Store URI of an existing generated video that VEO should
     // extend (continuation generation). Built by WorkspaceCanvas from the
     // source VideoCanvasNode's fileId + workspaceId when the thread is rooted
@@ -428,14 +435,20 @@ export default class AiInteractionService {
         messages,
         aiModel,
         aiModels,
+        useMultipleModels,
+        useMultipleReasoningModels,
+        useMultipleImageModels,
+        useMultipleVideoModels,
         aiImageModel,
         aiImageModels,
         imageSize,
+        imageConfigGroups,
         aiVideoModel,
         aiVideoModels,
         videoAspectRatio,
         videoResolution,
         videoDuration,
+        videoConfigGroups,
         videoSourceForExtension,
         referencedFeatureIds,
         imageBranchCandidateSnapshot,
@@ -484,26 +497,43 @@ export default class AiInteractionService {
             if (videoSourceForExtension) payload.videoSourceForExtension = videoSourceForExtension
         }
 
-        const reasoningModelIds = aiModels?.length ? aiModels : aiModel ? [aiModel] : []
-        const imageModelIds = aiImageModels?.length ? aiImageModels : aiImageModel ? [aiImageModel] : []
-        const videoModelIds = aiVideoModels?.length ? aiVideoModels : aiVideoModel ? [aiVideoModel] : []
+        const legacyUseMultipleModels = Boolean(useMultipleModels)
+        const inferModeFromModels = (modelIds: string[] | undefined): boolean =>
+            useMultipleModels === undefined ? (modelIds?.length ?? 0) > 1 : legacyUseMultipleModels
+        const reasoningModelsEnabled = useMultipleReasoningModels ?? inferModeFromModels(aiModels)
+        const imageModelsEnabled = useMultipleImageModels ?? inferModeFromModels(aiImageModels)
+        const videoModelsEnabled = useMultipleVideoModels ?? inferModeFromModels(aiVideoModels)
+        const reasoningModelIds = reasoningModelsEnabled
+            ? aiModels ?? []
+            : aiModel ? [aiModel] : []
+        const imageModelIds = imageModelsEnabled
+            ? aiImageModels ?? []
+            : aiImageModel ? [aiImageModel] : []
+        const videoModelIds = videoModelsEnabled
+            ? aiVideoModels ?? []
+            : aiVideoModel ? [aiVideoModel] : []
         const selectedModelCount = reasoningModelIds.length + imageModelIds.length + videoModelIds.length
         const scalarModelCount = (aiModel ? 1 : 0) + (aiImageModel ? 1 : 0) + (aiVideoModel ? 1 : 0)
         if (selectedModelCount > scalarModelCount) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: uuidv4(),
+                useMultipleReasoningModels: reasoningModelsEnabled,
+                useMultipleImageModels: imageModelsEnabled,
+                useMultipleVideoModels: videoModelsEnabled,
                 reasoningModelIds,
                 imageModelIds,
                 videoModelIds,
                 imageOptions: {
                     imageSize: imageSize || 'auto',
+                    ...(imageModelsEnabled && imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
                 },
                 videoOptions: {
                     ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
                     ...(videoResolution ? { resolution: videoResolution } : {}),
                     ...(videoDuration ? { duration: videoDuration } : {}),
                     ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
+                    ...(videoModelsEnabled && videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
                 },
             }
         }

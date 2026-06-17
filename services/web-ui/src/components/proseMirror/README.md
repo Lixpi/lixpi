@@ -55,6 +55,7 @@ Custom nodes are intentionally split by responsibility:
   - `aiUserInputNode` (`aiUserInput`): **DEPRECATED** — kept in schema for legacy content migration only. Silently stripped from loaded documents.
   - `aiResponseMessageNode` (`aiResponseMessage`): assistant message. Content: `(paragraph | block)*` so it can start empty and be filled by streaming.
   - `aiReasoningSectionNode` (`aiReasoningSection`): per-reasoning-run section inside one media response message. Content: `(paragraph | block)*`.
+  - `aiLineageEventNode` (`aiLineageEvent`): atom block for projected workflow events such as `Branch started` and `Branch fork created`. Live streamed content stores lineage ids on reasoning/media nodes; read-only canvas projections materialize only the lineage events that belong to the projected workflow node.
 
 - AI prompt input (separate `documentType: 'aiPromptInput'` via `plugins/aiPromptInputPlugin/`):
   - `aiPromptInputNode` (`aiPromptInput`): floating composer used to send messages to any selected canvas node. Content: `(paragraph | block)+`. Renders as a floating element below the active node.
@@ -68,6 +69,7 @@ flowchart TD
   T --> R[aiResponseMessage]
   UM --> UMC["(paragraph | block)+"]
   R --> RP["(paragraph | block)*"]
+  R --> LE[aiLineageEvent]
 
   subgraph "Separate floating editor"
     FI[aiPromptInput] --> FIC["(paragraph | block)+"]

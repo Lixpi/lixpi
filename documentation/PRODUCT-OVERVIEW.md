@@ -147,7 +147,7 @@ Video generation is powered by Google VEO through the same dual-model architectu
 
 VEO generation is asynchronous: the API submits a `generateVideos` operation, polls until completion, publishes keepalive events while no partial frames exist, downloads and validates the MP4, extracts a frame-0 poster and representative mid-frame with `ffmpeg`, and stores the result in NATS Object Store. The completed clip becomes a `VideoCanvasNode`.
 
-On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, PiP, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](media-generation/VIDEO-GENERATION.md) for the full architecture.
+On the canvas, PIXI renders the poster/placeholder for stable geometry, while a visible browser-composited `<video>` element owns actual playback, seeking, scrubbing, and fullscreen. Hovering the video reveals the shared SVG control bar. Prior video nodes can be piped into later AI threads as representative stills, or extended directly through VEO's video input using **Extend video in new thread**. See [Video Generation](media-generation/VIDEO-GENERATION.md) for the full architecture.
 
 ---
 

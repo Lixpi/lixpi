@@ -43,24 +43,27 @@ import {
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { setAiGeneratedImageCallbacks, setAiGeneratedVideoCallbacks } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/index.ts'
-import { getAiModelIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 import {
     buildBranchOriginPromptProjection,
     buildGeneratedMediaTurnProjectionFromThreadContent,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 import {
+    getAiLineageEventsForProjection,
+    type AiLineageProjectionScope,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+import {
     mountReadOnlyAiChatThreadProjection,
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, documentIcon, videoPlayGlyphIcon, branchMidIcon, branchForkfIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, branchMidIcon, branchForkfIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasImageLifecycleTracker } from '$src/infographics/workspace/canvasImageLifecycle.ts'
 import { createCanvasVideoLifecycleTracker } from '$src/infographics/workspace/canvasVideoLifecycle.ts'
 import { createVideoNodeHandler, type VideoNodeHandlerControl } from '$src/infographics/workspace/rendering/videoNodeHandler.ts'
 import { createLoadingPlaceholder, createErrorPlaceholder } from '$src/components/proseMirror/plugins/primitives/loadingPlaceholder/index.ts'
 import { WorkspaceConnectionManager } from '$src/infographics/workspace/WorkspaceConnectionManager.ts'
-import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom } from '$src/infographics/utils/zoomScaling.ts'
+import { getAdaptiveBoundedZoomScalingOptions, getCanvasChromeScreenLayout, getResizeHandleScaledSizes, scaleCanvasChromeToScreenForZoom, scaleCanvasChromeWorldSizeForZoom } from '$src/infographics/utils/zoomScaling.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
@@ -126,12 +129,18 @@ import {
     buildAiPromptDraftAttrsFromSubmitData,
     buildAiPromptDraftFromText,
 } from '$src/infographics/workspace/aiPromptDraft.ts'
-import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
 import {
     createSlidingTabsSwitch,
     type SlidingTabsSwitchInstance,
 } from '$src/components/slidingTabsSwitch/index.ts'
-import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
+import {
+    createContextPreviewTile,
+    getContextPreviewAccessibleLabel,
+    type ContextPreviewEnvironment,
+    type ContextPreviewTileInstance,
+} from '$src/components/contextPreview/index.ts'
+import { applyMediaModelBadgeStyleProperties, createMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
@@ -153,28 +162,12 @@ type GeneratedMediaInfoPanelOptions = {
     includeDescriptor?: boolean
     rendererKey?: string
     limitProjectionToSelectedMedia?: boolean
+    lineageProjectionScope?: AiLineageProjectionScope
 }
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
-const AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
-    '--workspace-ai-chat-panel-context-preview-tooltip-background',
-    '--workspace-ai-chat-panel-context-preview-tooltip-border',
-    '--workspace-ai-chat-panel-context-preview-tooltip-border-radius',
-    '--workspace-ai-chat-panel-context-preview-tooltip-box-shadow',
-    '--workspace-ai-chat-panel-context-preview-tooltip-color',
-    '--workspace-ai-chat-panel-context-preview-border-radius',
-    '--workspace-ai-chat-panel-context-preview-video-background',
-    '--workspace-ai-chat-panel-context-preview-video-glyph-background',
-    '--workspace-ai-chat-panel-context-preview-video-glyph-color',
-    '--workspace-ai-chat-panel-context-preview-document-color',
-    '--workspace-ai-chat-panel-context-preview-document-icon-color',
-    '--workspace-ai-chat-panel-context-preview-document-text-color',
-    '--workspace-ai-chat-panel-context-preview-popover-title-color',
-    '--workspace-ai-chat-panel-context-preview-popover-text-color',
-]
-
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
     return { width: size, height: size }
@@ -336,7 +329,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const selectionStyles = settings.selection.styles
     const imageNodeStyles = settings.mediaNode.image.styles
     const branchOriginSettings = settings.imageBranchLineage.branchOrigin
-    const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
     paneEl.style.setProperty('--connector-line-focus-color', connectorStyles.lineFocusColor)
@@ -348,15 +340,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)
     paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
     paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
-    paneEl.style.setProperty('--workspace-generated-media-chrome-icon-size', `${settings.mediaNode.generatedMediaChrome.iconSize}px`)
-    paneEl.style.setProperty('--workspace-media-model-badge-icon-gap', generatedMediaChromeStyles.modelBadgeIconGap)
-    paneEl.style.setProperty('--workspace-media-model-badge-provider-color', generatedMediaChromeStyles.modelBadgeProviderColor)
-    paneEl.style.setProperty('--workspace-media-model-badge-model-color', generatedMediaChromeStyles.modelBadgeModelColor)
-    paneEl.style.setProperty('--workspace-media-model-badge-name-font-size', generatedMediaChromeStyles.modelBadgeNameFontSize)
-    paneEl.style.setProperty('--workspace-media-model-badge-name-font-weight', String(generatedMediaChromeStyles.modelBadgeNameFontWeight))
-    paneEl.style.setProperty('--workspace-media-model-badge-name-line-height', String(generatedMediaChromeStyles.modelBadgeNameLineHeight))
-    paneEl.style.setProperty('--workspace-media-info-button-color', generatedMediaChromeStyles.infoButtonColor)
-    paneEl.style.setProperty('--workspace-media-info-button-hover-color', generatedMediaChromeStyles.infoButtonHoverColor)
+    applyMediaModelBadgeStyleProperties(paneEl)
     paneEl.style.setProperty('--workspace-branch-origin-icon-size', `${branchOriginSettings.iconSize}px`)
     paneEl.style.setProperty('--workspace-branch-origin-background-color', branchOriginSettings.styles.backgroundColor)
     paneEl.style.setProperty('--workspace-branch-origin-border-color', branchOriginSettings.styles.borderColor)
@@ -388,12 +372,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const expandedBranchOriginInfoNodeIds: Set<string> = new Set()
     const expandedBranchForkInfoNodeIds: Set<string> = new Set()
     const generatedMediaInfoRenderers: Map<string, ReadOnlyAiChatThreadRendererInstance> = new Map()
+    const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const videoControlInstances: Map<string, VideoControlsInstance> = new Map()
-    const videoControlsHideTimers: Map<string, number> = new Map()
-    const VIDEO_CONTROLS_HEIGHT = 52
-    const VIDEO_CONTROLS_HORIZONTAL_INSET = 18
-    const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = 8
-    const VIDEO_CONTROLS_BOTTOM_INSET = 14
+    const VIDEO_CONTROLS_HEIGHT = settings.videoControls.height
+    const VIDEO_CONTROLS_HORIZONTAL_INSET = settings.videoControls.canvas.horizontalInset
+    const VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET = settings.videoControls.canvas.compactHorizontalInset
+    const VIDEO_CONTROLS_COMPACT_WIDTH_THRESHOLD = settings.videoControls.canvas.compactWidthThreshold
+    const VIDEO_CONTROLS_BOTTOM_INSET = settings.videoControls.canvas.bottomInset
     let resizingNodeId: string | null = null
     let draggingNodeId: string | null = null
     let selectionRectEl: HTMLDivElement | null = null
@@ -423,7 +408,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let activeAiChatPromptResizeObserver: ResizeObserver | null = null
     let activeAiChatPanelRailHeightFrame: number | null = null
     let activeContextChipTrayEl: HTMLDivElement | null = null
-    const activeContextPreviewTooltips: Set<HelpTooltipInstance> = new Set()
+    const activeContextPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     const mediaLibraryService = new MediaLibraryService()
@@ -1057,6 +1042,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
         viewport: Viewport,
+        extraTopOffsetScreen = 0,
     ): void {
         // Generated-media chrome is not a child of the viewport-transformed DOM
         // layer. It is projected into screen coordinates here, then scaled with
@@ -1072,7 +1058,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         applyStyle(chromeEl, {
             left: `${chromeLayout.left}px`,
-            top: `${chromeLayout.top}px`,
+            top: `${chromeLayout.top + extraTopOffsetScreen}px`,
             width: `${chromeLayout.layoutWidth}px`,
             transformOrigin: '0 0',
             transform: `scale(${chromeLayout.screenScale})`,
@@ -1084,6 +1070,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         position: { x: number; y: number },
         dimensions: { width: number; height: number },
         viewport: Viewport,
+        extraTopOffsetScreen = 0,
     ): void {
         const zoom = Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
         const iconStripScreenGap = scaleCanvasChromeToScreenForZoom(
@@ -1100,7 +1087,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         // so its top coordinate must be converted back to world units. The strip
         // gap and icon height are computed in final screen pixels, then divided
         // by zoom before being added to the media node's world-space bottom.
-        const panelTop = position.y + dimensions.height + (iconStripScreenGap + iconScreenSize) / zoom
+        const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize) / zoom
         const panelWidth = Number.isFinite(dimensions.width) && dimensions.width > 0
             ? dimensions.width
             : settings.imageBranchLineage.generatedImageSize
@@ -1142,18 +1129,59 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function getVideoControlsChromeLayout(nodeWidth: number): { insetX: number; width: number } {
-        const insetX = nodeWidth >= 260 ? VIDEO_CONTROLS_HORIZONTAL_INSET : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
+    function getVideoControlsZoomScalingOptions() {
+        return getAdaptiveBoundedZoomScalingOptions(settings.videoControls.canvas.zoomScaling)
+    }
+
+    function getSafeViewportZoom(viewport: Viewport): number {
+        return Number.isFinite(viewport.zoom) ? Math.max(viewport.zoom, 0.01) : 1
+    }
+
+    function getVideoControlsScreenScale(viewport: Viewport): number {
+        return scaleCanvasChromeToScreenForZoom(1, getSafeViewportZoom(viewport), getVideoControlsZoomScalingOptions())
+    }
+
+    function getVideoControlsChromeLayout(
+        dimensions: { width: number; height: number },
+        viewport: Viewport
+    ): { insetX: number; top: number; width: number; height: number; logicalWidth: number; responsiveWidth: number } {
+        const zoom = getSafeViewportZoom(viewport)
+        const screenScale = getVideoControlsScreenScale(viewport)
+        const projectedNodeWidth = dimensions.width * zoom
+        const baseInset = projectedNodeWidth >= VIDEO_CONTROLS_COMPACT_WIDTH_THRESHOLD
+            ? VIDEO_CONTROLS_HORIZONTAL_INSET
+            : VIDEO_CONTROLS_COMPACT_HORIZONTAL_INSET
+        const insetX = scaleCanvasChromeWorldSizeForZoom(baseInset, zoom, getVideoControlsZoomScalingOptions())
+        const top = dimensions.height + scaleCanvasChromeWorldSizeForZoom(VIDEO_CONTROLS_BOTTOM_INSET, zoom, getVideoControlsZoomScalingOptions())
+        const width = Math.max(1, dimensions.width - insetX * 2)
+        const height = Math.max(1, (VIDEO_CONTROLS_HEIGHT * screenScale) / zoom)
+        const responsiveWidth = Math.max(1, width * zoom)
+        const logicalWidth = Math.max(1, (width * zoom) / screenScale)
+
         return {
             insetX,
-            width: Math.max(1, nodeWidth - insetX * 2),
+            top,
+            width,
+            height,
+            logicalWidth,
+            responsiveWidth,
         }
     }
 
+    function getVideoControlsOutsideOffsetScreen(nodeId: string, viewport: Viewport): number {
+        if (!videoControlInstances.has(nodeId)) return 0
+        const zoom = getSafeViewportZoom(viewport)
+        const zoomScaling = getVideoControlsZoomScalingOptions()
+        return scaleCanvasChromeToScreenForZoom(VIDEO_CONTROLS_BOTTOM_INSET, zoom, zoomScaling)
+            + scaleCanvasChromeToScreenForZoom(VIDEO_CONTROLS_HEIGHT, zoom, zoomScaling)
+    }
+
     function getVideoChromeResizeHandle(event: MouseEvent, chromeEl: HTMLElement): ResizeCorner | null {
-        const rect = chromeEl.getBoundingClientRect()
+        const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLElement | null
+        const rect = surface?.getBoundingClientRect() ?? chromeEl.getBoundingClientRect()
         const x = event.clientX - rect.left
         const y = event.clientY - rect.top
+        if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
         const resizeHandleSettings = settings.mediaNode.resizeHandle
         const zoom = getCurrentViewportZoom()
         const { size, offset } = settings.mediaNode.useZoomCompensatedResizeHandleScaling
@@ -1164,7 +1192,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 zoomScaling: getAdaptiveBoundedZoomScalingOptions(resizeHandleSettings.zoomScaling),
             })
             : { size: resizeHandleSettings.size, offset: resizeHandleSettings.offset }
-        // `chromeEl.getBoundingClientRect()` and `event.clientX/Y` are screen
+        // The surface rect and event coordinates are screen
         // pixels, but resize handle sizing is computed in world units because
         // the completed-video chrome is inside the viewport-transformed overlay.
         // Convert the handle hit radius back to screen pixels before comparing.
@@ -1177,39 +1205,50 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return null
     }
 
-    // The video controls chrome spans the whole node so hover is reliable over
-    // the visible video surface. Controls capture their own events; the remaining
-    // chrome surface mirrors the node drag/click hit target.
+    // The video chrome keeps the visible video surface node-sized, then mounts
+    // the controls as a separate row below it. Only the surface mirrors node
+    // drag/click/resize; individual control hit areas stop their own events.
     function applyVideoControlsGeometry(
         chromeEl: HTMLElement,
         position: { x: number; y: number },
-        dimensions: { width: number; height: number }
+        dimensions: { width: number; height: number },
+        viewport: Viewport = getLiveViewport()
     ): void {
+        const controlsLayout = getVideoControlsChromeLayout(dimensions, viewport)
         applyStyle(chromeEl, {
             left: `${position.x}px`,
             top: `${position.y}px`,
             width: `${dimensions.width}px`,
-            height: `${dimensions.height}px`,
+            height: `${controlsLayout.top + controlsLayout.height}px`,
         })
 
-        const { insetX, width } = getVideoControlsChromeLayout(dimensions.width)
-        const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLElement | null
-        if (host) {
-            applyStyle(host, {
-                left: `${insetX}px`,
-                bottom: `${VIDEO_CONTROLS_BOTTOM_INSET}px`,
-                width: `${width}px`,
-                height: `${VIDEO_CONTROLS_HEIGHT}px`,
+        const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLElement | null
+        if (surface) {
+            applyStyle(surface, {
+                width: `${dimensions.width}px`,
+                height: `${dimensions.height}px`,
             })
         }
 
-        // The controls host is bottom-pinned inside the node-sized chrome. Keep
-        // the SVG viewBox synced to the pill width at any zoom/resize.
+        const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLElement | null
+        if (host) {
+            applyStyle(host, {
+                left: `${controlsLayout.insetX}px`,
+                top: `${controlsLayout.top}px`,
+                width: `${controlsLayout.width}px`,
+                height: `${controlsLayout.height}px`,
+            })
+        }
+
+        // The controls host lives inside the viewport-transformed layer. The
+        // SVG viewBox is expanded by the inverse bounded scale so the row keeps
+        // full node width while glyphs/text use the same low-zoom curve as other
+        // canvas chrome.
         const svg = chromeEl.querySelector('.workspace-video-controls-svg') as SVGSVGElement | null
-        svg?.setAttribute('viewBox', `0 0 ${width} ${VIDEO_CONTROLS_HEIGHT}`)
-        svg?.setAttribute('height', String(VIDEO_CONTROLS_HEIGHT))
+        svg?.setAttribute('viewBox', `0 0 ${controlsLayout.logicalWidth} ${VIDEO_CONTROLS_HEIGHT}`)
+        svg?.setAttribute('height', '100%')
         const controls = videoControlInstances.get(chromeEl.dataset.videoChromeNodeId || '')
-        controls?.resize(0, 0, width)
+        controls?.resize(0, 0, controlsLayout.logicalWidth, controlsLayout.responsiveWidth)
     }
 
     function updateGeneratedMediaChromeLiveTransform(
@@ -1219,10 +1258,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         viewport: Viewport,
     ): void {
         const chromeEl = generatedMediaChromeLayerEl?.querySelector(`[data-media-chrome-node-id="${nodeId}"]`) as HTMLElement | null
-        if (chromeEl) applyGeneratedMediaChromeGeometry(chromeEl, position, dimensions, viewport)
+        const videoControlsOffsetScreen = getVideoControlsOutsideOffsetScreen(nodeId, viewport)
+        if (chromeEl) applyGeneratedMediaChromeGeometry(chromeEl, position, dimensions, viewport, videoControlsOffsetScreen)
         updateGeneratedMediaInfoPanelPosition(nodeId, position, dimensions, viewport)
         const videoChromeEl = mediaChromeViewportEl?.querySelector(`[data-video-chrome-node-id="${nodeId}"]`) as HTMLElement | null
-        if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions)
+        if (videoChromeEl) applyVideoControlsGeometry(videoChromeEl, position, dimensions, viewport)
         const branchOriginChromeEl = mediaChromeViewportEl?.querySelector(`[data-branch-origin-chrome-node-id="${nodeId}"]`) as HTMLElement | null
         if (branchOriginChromeEl) applyBranchOriginInfoChromeGeometry(
             branchOriginChromeEl,
@@ -1335,17 +1375,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             const modelName = node.type === 'video'
                 ? String((generatedBy as VideoCanvasNode['generatedBy'])?.videoModel || '')
                 : String((generatedBy as ImageCanvasNode['generatedBy'])?.aiModel || '')
+            const lineageProjectionScope = options.lineageProjectionScope ?? 'media-run'
 
             const projection = buildGeneratedMediaTurnProjectionFromThreadContent(thread?.content, locator, {
                 threadId: generatedBy.aiChatThreadId,
                 forceGenerationDetailsOpen: true,
                 limitToLocatorMedia: options.limitProjectionToSelectedMedia ?? true,
+                lineageProjectionScope,
                 fallback: {
                     threadId: generatedBy.aiChatThreadId,
                     promptText: generatedBy.promptText,
+                    referenceNodeIds: generatedBy.referenceImageNodeIds,
                     responseText: generatedBy.revisedPrompt,
                     responseProvider: modelName,
                     generatedAt: generatedBy.createdAt,
+                    lineageEvents: getAiLineageEventsForProjection(generatedBy, lineageProjectionScope),
                     missingReason: thread
                         ? 'Producing response was not found in the stored AI chat thread.'
                         : 'Producing AI chat thread content was unavailable.',
@@ -1362,6 +1406,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     content: projection.content,
                     threadId: projection.threadId,
                     className: 'canvas-generated-media-projection-editor',
+                    contextPreview: getAiUserMessageContextPreviewRenderer(),
                     traceDetailsOptions: {
                         className: 'canvas-generated-media-trace-details',
                         renderReferencesWhenClosed: true,
@@ -1410,7 +1455,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!paneEl.contains(target)) return false
         if (target.closest('.canvas-generated-media-info-panel')) return false
         if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node')) return false
-        if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu')) return false
+        if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu, .workspace-video-controls-host')) return false
         return true
     }
 
@@ -1458,16 +1503,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncGeneratedMediaChrome(currentCanvasState)
     }
 
-    function createBranchOriginReferenceLabel(nodeId: string): string {
-        const node = findCanvasNodeById(nodeId)
-        if (!node) return nodeId
-        if (node.type === 'image') return node.descriptor?.summary || `Image ${nodeId}`
-        if (node.type === 'video') return node.descriptor?.summary || `Video ${nodeId}`
-        if (node.type === 'document') return `Document ${nodeId}`
-        if (node.type === 'aiChatThread') return `Thread ${node.referenceId}`
-        return nodeId
-    }
-
     function createBranchOriginReferencesSection(referenceNodeIds: string[]): HTMLElement {
         const section = html`
             <div className="canvas-branch-origin-provenance-section">
@@ -1480,14 +1515,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return section
         }
 
-        const list = html`<ul className="canvas-branch-origin-reference-list"></ul>` as HTMLUListElement
+        const list = html`<div className="canvas-branch-origin-reference-preview-list"></div>` as HTMLElement
+        const environment = getContextPreviewEnvironment()
         for (const nodeId of uniqueReferenceNodeIds) {
-            list.appendChild(html`
-                <li className="canvas-branch-origin-reference-item">
-                    <span className="canvas-branch-origin-reference-id">${nodeId}</span>
-                    <span className="canvas-branch-origin-reference-label">${createBranchOriginReferenceLabel(nodeId)}</span>
-                </li>
-            ` as HTMLLIElement)
+            const node = findCanvasNodeById(nodeId)
+            if (!node) continue
+            const tile = createContextPreviewTile({
+                node,
+                getNode: () => findCanvasNodeById(nodeId) ?? node,
+                environment,
+                preferredPlacement: 'bottom',
+            })
+            generatedMediaInfoPreviewTiles.add(tile)
+            list.appendChild(tile.dom)
+        }
+        if (!list.childElementCount) {
+            section.appendChild(html`<p className="canvas-generated-media-info-empty">Provided references are no longer on this canvas.</p>` as HTMLElement)
+            return section
         }
         section.appendChild(list)
         return section
@@ -1518,12 +1562,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createBranchOriginInfoPanel(branchOriginNode: BranchOriginCanvasNode): HTMLElement | null {
         const generatedMediaNodes = getBranchOriginGeneratedMediaNodes(branchOriginNode.nodeId)
         const promptText = branchOriginNode.provenance?.promptText ?? ''
-        const referenceNodeIds = branchOriginNode.provenance?.referenceNodeIds ?? []
+        const referenceNodeIds = branchOriginNode.provenance?.providedReferenceNodeIds
+            ?? branchOriginNode.provenance?.referenceNodeIds
+            ?? []
         if (!promptText && referenceNodeIds.length === 0 && generatedMediaNodes.length === 0) return null
 
         const panel = html`<div className="canvas-generated-media-info-panel canvas-branch-origin-info-panel nopan"></div>` as HTMLElement
         const promptProjection = buildBranchOriginPromptProjection(promptText, {
             threadId: `branch-origin:${branchOriginNode.nodeId}`,
+            branchOriginNodeId: branchOriginNode.nodeId,
+            referenceNodeIds,
         })
         if (promptProjection) {
             const rendererKey = `branch-origin:${branchOriginNode.nodeId}`
@@ -1535,6 +1583,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 content: promptProjection.content,
                 threadId: promptProjection.threadId,
                 className: 'canvas-generated-media-projection-editor',
+                contextPreview: getAiUserMessageContextPreviewRenderer(),
             }))
         }
         panel.appendChild(createBranchOriginReferencesSection(referenceNodeIds))
@@ -1570,6 +1619,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             includeDescriptor: false,
             rendererKey: `branch-fork:${branchForkNode.nodeId}`,
             limitProjectionToSelectedMedia: false,
+            lineageProjectionScope: 'branch-fork',
         })
     }
 
@@ -1649,55 +1699,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return splitAiModelId(modelId).provider
     }
 
-    // Resolves the synced model's badge parts: provider brand, model title, and the
-    // colored badge icon. colorIconName is populated per model by ai-models-synchronization
-    // (falling back to the grayscale iconName there when a provider has no colored variant),
-    // so the badge renders the colored brand mark with no fallback logic here. Provider and
-    // model are returned separately so the badge can de-emphasize the provider.
-    function getGeneratedMediaModelMeta(modelId: string, modelProvider: string): { providerTitle: string; modelTitle: string; icon: string | null } {
-        const { provider, model } = splitAiModelId(modelId)
-        const normalizedProvider = (provider || modelProvider).toLowerCase()
-        const normalizedModel = model.toLowerCase()
-        const modelMeta = ((aiModelsStore.getData() ?? []) as Array<{ provider: string; model: string; title?: string; providerTitle?: string; colorIconName?: string }>)
-            .find((candidate) =>
-                String(candidate.provider).toLowerCase() === normalizedProvider
-                && String(candidate.model).toLowerCase() === normalizedModel
-            )
-        return {
-            providerTitle: modelMeta?.providerTitle ?? '',
-            modelTitle: modelMeta?.title ?? '',
-            icon: getAiModelIcon(modelMeta?.colorIconName),
-        }
-    }
-
     // Model badge (colored brand icon + title) + info button only. This screen-space
     // strip is projected from media node bounds and uses bounded zoom compensation.
     // The expandable info panel renders separately in the viewport-transformed panel layer.
     function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode): HTMLElement {
         const modelId = getGeneratedMediaModelId(node)
         const modelProvider = getGeneratedMediaModelProvider(node, modelId)
-        const { providerTitle, modelTitle, icon: modelIcon } = getGeneratedMediaModelMeta(modelId, modelProvider)
-        const modelLabel = [providerTitle, modelTitle].filter(Boolean).join(' ')
-        const shouldShowModelBadge = Boolean(modelIcon || modelLabel)
+        const modelBadge = createMediaModelBadge({ modelId, modelProvider })
         const chromeEl = html`
             <div className="workspace-generated-media-chrome" data=${{ mediaChromeNodeId: node.nodeId }}>
                 <div className="workspace-generated-media-actions">
-                    ${shouldShowModelBadge ? html`
-                        <div className="media-model-badge" title=${modelLabel}>
-                            ${modelIcon ? html`<span className="media-model-badge-icon" innerHTML=${modelIcon}></span>` : null}
-                            ${modelLabel ? html`<span className="media-model-badge-name">${
-                                providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null
-                            }${providerTitle && modelTitle ? settings.mediaNode.generatedMediaChrome.modelBadgeSeparator : ''}${
-                                modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null
-                            }</span>` : null}
-                        </div>
-                    ` : null}
+                    ${modelBadge}
                     ${createMediaInfoButton(node)}
                 </div>
             </div>
         ` as HTMLElement
 
-        applyGeneratedMediaChromeGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions, getLiveViewport())
+        const viewport = getLiveViewport()
+        applyGeneratedMediaChromeGeometry(
+            chromeEl,
+            getNodeWorldPosition(node),
+            node.dimensions,
+            viewport,
+            getVideoControlsOutsideOffsetScreen(node.nodeId, viewport),
+        )
         return chromeEl
     }
 
@@ -1719,34 +1744,45 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): void {
         const panel = generatedMediaInfoPanelLayerEl?.querySelector(`[data-media-info-panel-node-id="${nodeId}"]`) as HTMLElement | null
         if (!panel) return
-        applyGeneratedMediaInfoPanelGeometry(panel, position, dimensions, viewport)
+        applyGeneratedMediaInfoPanelGeometry(
+            panel,
+            position,
+            dimensions,
+            viewport,
+            getVideoControlsOutsideOffsetScreen(nodeId, viewport),
+        )
     }
 
-    // Video chrome for completed video nodes: the actual <video> shown on the node
-    // PLUS the SVG control bar, both in the transform-synced chrome layer (above
-    // the PIXI poster). The element MUST be visibly composited — the browser
+    // Video chrome for completed video nodes: the actual <video> shown on the
+    // node plus an external SVG control bar below it, both in the transform-
+    // synced chrome layer. The element MUST be visibly composited — the browser
     // throttles frame production for a <video> it isn't rendering, so sampling a
-    // hidden element into a PIXI texture renders blank on play (it only decodes
-    // when made visible, e.g. fullscreen). Showing the real element is what makes
-    // playback, PiP and fullscreen work; the opaque surface covers the redundant
-    // PIXI sprite behind it.
+    // hidden element into a PIXI texture renders blank on play. Showing the real
+    // element is what makes playback and fullscreen work; the opaque surface
+    // covers the redundant PIXI sprite behind it.
     function createVideoControlsChrome(node: VideoCanvasNode): HTMLElement | null {
         const videoEl = videoNodeHandler?.getVideoElement(node.nodeId)
         if (!videoEl) return null
         if (!videoEl.currentSrc && !videoEl.src) return null
 
-        const { insetX, width: controlsWidth } = getVideoControlsChromeLayout(node.dimensions.width)
+        const viewport = getLiveViewport()
+        const controlsLayout = getVideoControlsChromeLayout(node.dimensions, viewport)
+        const controlsStyles = settings.videoControls.styles
         const controlsHostStyle = {
             position: 'absolute' as const,
-            left: `${insetX}px`,
-            bottom: `${VIDEO_CONTROLS_BOTTOM_INSET}px`,
-            width: `${controlsWidth}px`,
-            height: `${VIDEO_CONTROLS_HEIGHT}px`,
+            left: `${controlsLayout.insetX}px`,
+            top: `${controlsLayout.top}px`,
+            width: `${controlsLayout.width}px`,
+            height: `${controlsLayout.height}px`,
+            borderRadius: controlsStyles.hostBorderRadius,
+            filter: controlsStyles.hostDropShadow,
+            backdropFilter: controlsStyles.hostBackdropFilter,
+            webkitBackdropFilter: controlsStyles.hostBackdropFilter,
         }
         const chromeEl = html`
-            <div className="workspace-video-chrome nopan" data=${{ videoChromeNodeId: node.nodeId }}>
+            <div className="workspace-video-chrome" data=${{ videoChromeNodeId: node.nodeId }}>
                 <div className="workspace-video-surface"></div>
-                <div className="workspace-video-controls-host nopan" style=${controlsHostStyle}></div>
+                <div className="workspace-video-controls-host" style=${controlsHostStyle}></div>
             </div>
         ` as HTMLElement
 
@@ -1755,12 +1791,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const surface = chromeEl.querySelector('.workspace-video-surface') as HTMLDivElement
         surface.appendChild(videoEl)
 
-        const isControlsEvent = (event: Event): boolean => {
-            const target = event.target as HTMLElement | null
-            return Boolean(target?.closest('.workspace-video-controls-host'))
-        }
         const togglePlayback = (event: Event) => {
-            if (isControlsEvent(event)) return
             event.preventDefault()
             event.stopPropagation()
             if (videoNodeHandler?.hasEntry(node.nodeId)) {
@@ -1768,19 +1799,14 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
         }
 
-        chromeEl.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
-        chromeEl.addEventListener('mousemove', (event: MouseEvent) => {
-            showVideoControls(node.nodeId)
-            if (isControlsEvent(event)) return
+        surface.addEventListener('mousemove', (event: MouseEvent) => {
             const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
-            chromeEl.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : ''
+            surface.style.cursor = resizeHandle ? getResizeCursorForHandle(resizeHandle) : ''
         })
-        chromeEl.addEventListener('mouseleave', () => {
-            chromeEl.style.cursor = ''
-            hideVideoControls(node.nodeId)
+        surface.addEventListener('mouseleave', () => {
+            surface.style.cursor = ''
         })
-        chromeEl.addEventListener('mousedown', (event: MouseEvent) => {
-            if (isControlsEvent(event)) return
+        surface.addEventListener('mousedown', (event: MouseEvent) => {
             const resizeHandle = getVideoChromeResizeHandle(event, chromeEl)
             if (resizeHandle) {
                 handleResizeStart(event, node.nodeId, resizeHandle)
@@ -1788,19 +1814,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             }
             handleDragStart(event, node.nodeId)
         })
-        chromeEl.addEventListener('dblclick', togglePlayback)
+        surface.addEventListener('dblclick', togglePlayback)
 
-        // Controls auto-hide: revealed on hover of the node chrome or bar.
         const host = chromeEl.querySelector('.workspace-video-controls-host') as HTMLDivElement
-        host.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
-        host.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
+        applyVideoControlsHostStyleProperties(host)
 
         const svg = select(host)
             .append('svg')
             .attr('class', 'workspace-video-controls-svg')
             .attr('width', '100%')
-            .attr('height', String(VIDEO_CONTROLS_HEIGHT))
-            .attr('viewBox', `0 0 ${controlsWidth} ${VIDEO_CONTROLS_HEIGHT}`)
+            .attr('height', '100%')
+            .attr('viewBox', `0 0 ${controlsLayout.logicalWidth} ${VIDEO_CONTROLS_HEIGHT}`)
             .style('display', 'block')
             .style('overflow', 'visible')
 
@@ -1808,19 +1832,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             id: node.nodeId,
             x: 0,
             y: 0,
-            width: controlsWidth,
+            width: controlsLayout.logicalWidth,
             height: VIDEO_CONTROLS_HEIGHT,
+            responsiveWidth: controlsLayout.responsiveWidth,
             videoEl,
             className: 'workspace-video-controls',
         })
         videoControlInstances.set(node.nodeId, controls)
-        applyVideoControlsGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions)
+        applyVideoControlsGeometry(chromeEl, getNodeWorldPosition(node), node.dimensions, viewport)
         return chromeEl
     }
 
     function destroyVideoControlInstances(): void {
-        for (const timer of videoControlsHideTimers.values()) clearTimeout(timer)
-        videoControlsHideTimers.clear()
         for (const controls of videoControlInstances.values()) {
             controls.destroy()
         }
@@ -1837,6 +1860,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             renderer.destroy()
         }
         generatedMediaInfoRenderers.clear()
+        for (const tile of generatedMediaInfoPreviewTiles) {
+            tile.destroy()
+        }
+        generatedMediaInfoPreviewTiles.clear()
     }
 
     function scheduleGeneratedMediaChromeSync(): void {
@@ -1847,37 +1874,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    // Show/hide the auto-hiding control bar for a video node. The hide is debounced
-    // so moving between the visible video surface and the bar doesn't flicker the
-    // controls off.
-    function showVideoControls(nodeId: string): void {
-        const pending = videoControlsHideTimers.get(nodeId)
-        if (pending !== undefined) {
-            clearTimeout(pending)
-            videoControlsHideTimers.delete(nodeId)
-        }
-        mediaChromeViewportEl
-            ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
-            ?.classList.add('is-visible')
-    }
-
-    function hideVideoControls(nodeId: string): void {
-        const pending = videoControlsHideTimers.get(nodeId)
-        if (pending !== undefined) clearTimeout(pending)
-        const timer = window.setTimeout(() => {
-            videoControlsHideTimers.delete(nodeId)
-            mediaChromeViewportEl
-                ?.querySelector(`[data-video-chrome-node-id="${nodeId}"] .workspace-video-controls-host`)
-                ?.classList.remove('is-visible')
-        }, 140)
-        videoControlsHideTimers.set(nodeId, timer)
-    }
-
     function syncGeneratedMediaChrome(canvasState: CanvasState | null = currentCanvasState): void {
         if (!mediaChromeViewportEl || !generatedMediaChromeLayerEl) return
         // Generated/uploaded media (image OR video) carrying generation metadata
         // or a descriptor gets the below-node provenance chrome (info button +
-        // panel + analyzing pulse) — placed identically for both media types.
+        // panel + analyzing pulse). Video info chrome reserves space for the
+        // external playback-control row.
         const mediaInfoNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
@@ -1890,8 +1892,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         destroyGeneratedMediaInfoRenderers()
         destroyVideoControlInstances()
 
-        // Completed video nodes (those with a stored MP4 src) get the shared SVG
-        // control bar in the same chrome layer.
+        // Completed video nodes (those with a stored MP4 src) get the visible
+        // video surface plus the external shared SVG control bar in the chrome layer.
         const playableVideoNodes = (canvasState?.nodes ?? [])
             .filter((node: CanvasNode): node is VideoCanvasNode => node.type === 'video' && Boolean((node as VideoCanvasNode).src))
         const videoChromeEls = playableVideoNodes
@@ -2608,6 +2610,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             '.node-drag-overlay',
             '.bubble-menu',
             '.workspace-generated-media-chrome',
+            '.workspace-video-controls-host',
             '.workspace-branch-origin-info-chrome',
             '.workspace-branch-fork-info-chrome',
             '.canvas-generated-media-info-panel',
@@ -3048,7 +3051,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             activeAiChatPanelRailHeightFrame = null
         }
         if (!preserveTabsSwitch) activeAiChatPanelTabsSwitch?.destroy()
-        destroyContextPreviewTooltips()
+        destroyContextPreviewTiles()
         activeAiChatPanelEl?.remove()
         activeAiChatBackdropEl?.remove()
         activeAiChatPanelThreadId = null
@@ -3132,249 +3135,27 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         commitCanvasMetadataState(persistedState)
     }
 
-    // A short visible label for context metadata. Media previews are already
-    // visual, so unresolved image/video descriptors stay label-free.
-    function getContextChipLabel(node: CanvasNode): string {
-        const descriptor = isDescriptorCanvasNode(node) ? node.descriptor : undefined
-        const summary = descriptor && descriptor.status === 'ready' ? descriptor.summary : ''
-        const trimmed = summary.trim()
-        if (trimmed) return trimmed
-        switch (node.type) {
-            case 'document': return 'Document'
-            case 'aiChatThread': return 'Chat'
-            case 'image':
-            case 'video': return ''
-            default: return node.type
+    function getContextPreviewEnvironment(): ContextPreviewEnvironment {
+        return {
+            getDocuments: () => currentDocuments,
+            getThreads: () => currentAiChatThreads,
+            getApiBaseUrl: () => import.meta.env.VITE_API_URL || '',
+            getAuthToken: () => AuthService.getTokenSilently(),
         }
     }
 
-    function getContextPreviewTitle(node: CanvasNode): string {
-        if (node.type === 'document') {
-            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
-            const title = document?.title?.trim()
-            if (title) return title
-        }
-        if (node.type === 'aiChatThread') {
-            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
-            const title = thread?.title?.trim()
-            if (title) return title
-        }
-        if (node.type === 'image' || node.type === 'video') return ''
-        return getContextChipLabel(node)
-    }
-
-    function getContextPreviewText(node: CanvasNode): string {
-        const descriptor = isDescriptorCanvasNode(node) && node.descriptor?.status === 'ready'
-            ? node.descriptor.summary.trim()
-            : ''
-        if (descriptor) return descriptor
-
-        if (node.type === 'document') {
-            const document = currentDocuments.find((doc) => doc.documentId === node.referenceId)
-            const { text } = extractContentFromProseMirror((document?.content ?? '') as string | object)
-            return text.trim()
-        }
-
-        if (node.type === 'aiChatThread') {
-            const thread = currentAiChatThreads.find((item) => item.threadId === node.referenceId)
-            const { text } = extractContentFromProseMirror((thread?.content ?? '') as string | object)
-            return text.trim()
-        }
-
-        return ''
-    }
-
-    function getContextPreviewTypeLabel(node: CanvasNode): string {
-        switch (node.type) {
-            case 'document': return 'Document'
-            case 'image': return 'Image'
-            case 'video': return 'Video'
-            case 'aiChatThread': return 'Chat'
-            default: return node.type
+    function getAiUserMessageContextPreviewRenderer() {
+        return {
+            getNodeById: (nodeId: string) => findCanvasNodeById(nodeId),
+            environment: getContextPreviewEnvironment(),
         }
     }
 
-    function buildContextPreviewInitialMediaSrc(mediaUrl: string): string {
-        if (!mediaUrl) return ''
-        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
-        if (mediaUrl.startsWith('/api/') || mediaUrl.startsWith('http')) return mediaUrl
-        return `data:image/png;base64,${mediaUrl}`
-    }
-
-    function setContextPreviewMediaTokenParam(mediaUrl: string, token: string): string {
-        if (!token) return mediaUrl
-        const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(mediaUrl)
-        try {
-            const url = isAbsoluteUrl ? new URL(mediaUrl) : new URL(mediaUrl, window.location.origin)
-            url.searchParams.set('token', token)
-            if (isAbsoluteUrl) return url.toString()
-            return `${url.pathname}${url.search}${url.hash}`
-        } catch {
-            const separator = mediaUrl.includes('?') ? '&' : '?'
-            return `${mediaUrl}${separator}token=${encodeURIComponent(token)}`
+    function destroyContextPreviewTiles(): void {
+        for (const tile of activeContextPreviewTiles) {
+            tile.destroy()
         }
-    }
-
-    async function buildContextPreviewAuthenticatedMediaSrc(mediaUrl: string): Promise<string> {
-        if (!mediaUrl) return ''
-        if (mediaUrl.startsWith('data:') || mediaUrl.startsWith('blob:')) return mediaUrl
-        if (mediaUrl.startsWith('/api/')) {
-            const token = await AuthService.getTokenSilently()
-            const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
-            const sourceUrl = apiBaseUrl ? `${apiBaseUrl}${mediaUrl}` : mediaUrl
-            return setContextPreviewMediaTokenParam(sourceUrl, token)
-        }
-        if (mediaUrl.startsWith('http')) {
-            if (mediaUrl.includes('/api/videos/') || mediaUrl.includes('/api/images/')) {
-                const token = await AuthService.getTokenSilently()
-                return setContextPreviewMediaTokenParam(mediaUrl, token)
-            }
-            return mediaUrl
-        }
-        return `data:image/png;base64,${mediaUrl}`
-    }
-
-    function hydrateContextPreviewMedia(el: HTMLImageElement | HTMLVideoElement, mediaUrl: string, attr: 'src' | 'poster' = 'src'): void {
-        if (!mediaUrl) return
-        void (async () => {
-            try {
-                const src = await buildContextPreviewAuthenticatedMediaSrc(mediaUrl)
-                if (!src || !el.isConnected) return
-                if (attr === 'poster' && el instanceof HTMLVideoElement) {
-                    el.poster = src
-                    return
-                }
-                el.src = src
-            } catch (error) {
-                console.warn('Failed to resolve context preview media URL:', error)
-            }
-        })()
-    }
-
-    function setContextPreviewVideoSources(videoEl: HTMLVideoElement, node: VideoCanvasNode): void {
-        const initialSrc = buildContextPreviewInitialMediaSrc(node.src)
-        const initialPoster = buildContextPreviewInitialMediaSrc(node.posterSrc)
-        if (initialSrc) videoEl.src = initialSrc
-        if (initialPoster) videoEl.poster = initialPoster
-        hydrateContextPreviewMedia(videoEl, node.src)
-        hydrateContextPreviewMedia(videoEl, node.posterSrc, 'poster')
-    }
-
-    function renderContextImagePreview(node: ImageCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
-        const imageEl = html`<img
-            className=${`workspace-ai-chat-panel-context-preview-image workspace-ai-chat-panel-context-preview-image-${size}`}
-            src=${buildImageSrc(node.src, '', false)}
-            alt=""
-            loading="lazy"
-        />` as HTMLImageElement
-        imageEl.setAttribute('aria-label', label)
-        hydrateContextPreviewMedia(imageEl, node.src)
-        return imageEl
-    }
-
-    function renderContextVideoPreview(node: VideoCanvasNode, label: string, size: 'mini' | 'large'): HTMLElement {
-        if (size === 'large') {
-            const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-large">
-                <video
-                    muted="true"
-                    playsinline="true"
-                    preload="metadata"
-                    controls="true"
-                    aria-label=${label}
-                ></video>
-                <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
-            </div>` as HTMLElement
-            const videoEl = previewEl.querySelector('video')
-            if (videoEl) setContextPreviewVideoSources(videoEl, node)
-            return previewEl
-        }
-
-        const previewEl = html`<div className="workspace-ai-chat-panel-context-preview-video workspace-ai-chat-panel-context-preview-video-mini">
-            <video
-                muted="true"
-                playsinline="true"
-                preload="metadata"
-                aria-label=${label}
-            ></video>
-            <span className="workspace-ai-chat-panel-context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
-        </div>` as HTMLElement
-        const videoEl = previewEl.querySelector('video')
-        if (videoEl) setContextPreviewVideoSources(videoEl, node)
-        return previewEl
-    }
-
-    function renderContextDocumentPreview(node: DocumentCanvasNode | AiChatThreadCanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
-        if (size === 'mini') {
-            return html`<div className="workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-mini">
-                <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
-                <span className="workspace-ai-chat-panel-context-preview-document-skeleton" aria-label=${title}>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </span>
-            </div>` as HTMLElement
-        }
-
-        return html`<div className=${`workspace-ai-chat-panel-context-preview-document workspace-ai-chat-panel-context-preview-document-${size}`}>
-            <span className="workspace-ai-chat-panel-context-preview-document-icon" innerHTML=${documentIcon}></span>
-            <span className="workspace-ai-chat-panel-context-preview-document-lines">
-                <span className="workspace-ai-chat-panel-context-preview-document-title">${title}</span>
-                <span className="workspace-ai-chat-panel-context-preview-document-text">${text || getContextPreviewTypeLabel(node)}</span>
-            </span>
-        </div>` as HTMLElement
-    }
-
-    function renderContextPreviewVisual(node: CanvasNode, title: string, text: string, size: 'mini' | 'large'): HTMLElement {
-        if (node.type === 'image') return renderContextImagePreview(node, title, size)
-        if (node.type === 'video') return renderContextVideoPreview(node, title, size)
-        if (node.type === 'document' || node.type === 'aiChatThread') {
-            return renderContextDocumentPreview(node, title, text, size)
-        }
-        return html`<div className="workspace-ai-chat-panel-context-preview-document">${title}</div>` as HTMLElement
-    }
-
-    type ContextPreviewPopoverOrientation = 'landscape' | 'portrait'
-
-    function getContextPreviewPopoverOrientation(node: ImageCanvasNode | VideoCanvasNode): ContextPreviewPopoverOrientation {
-        if (Number.isFinite(node.aspectRatio) && node.aspectRatio > 0) {
-            return node.aspectRatio < 1 ? 'portrait' : 'landscape'
-        }
-        return node.dimensions.height > node.dimensions.width ? 'portrait' : 'landscape'
-    }
-
-    function renderContextPreviewPopoverMeta(title: string, text: string): HTMLElement {
-        return html`<div className="workspace-ai-chat-panel-context-preview-popover-meta">
-            ${title ? html`<span className="workspace-ai-chat-panel-context-preview-popover-title">${title}</span>` : ''}
-            ${text ? html`<span className="workspace-ai-chat-panel-context-preview-popover-text">${text}</span>` : ''}
-        </div>` as HTMLElement
-    }
-
-    function renderContextPreviewPopoverContent(node: CanvasNode, title: string, text: string, accessibleLabel: string): HTMLElement {
-        if (node.type !== 'image' && node.type !== 'video') {
-            return renderContextPreviewVisual(node, accessibleLabel, text, 'large')
-        }
-
-        const hasPopoverMeta = Boolean(title || text)
-        const orientation = hasPopoverMeta ? getContextPreviewPopoverOrientation(node) : 'landscape'
-        return html`<div className=${`workspace-ai-chat-panel-context-preview-popover-body workspace-ai-chat-panel-context-preview-popover-body-${orientation}`}>
-            <div className="workspace-ai-chat-panel-context-preview-popover-media">
-                ${renderContextPreviewVisual(node, accessibleLabel, text, 'large')}
-            </div>
-            ${hasPopoverMeta ? renderContextPreviewPopoverMeta(title, text) : ''}
-        </div>` as HTMLElement
-    }
-
-    function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boolean): string {
-        const baseClassName = 'workspace-ai-chat-panel-context-preview-popover'
-        if ((node.type !== 'image' && node.type !== 'video') || !hasPopoverMeta) return baseClassName
-        return `${baseClassName} ${baseClassName}-${getContextPreviewPopoverOrientation(node)}`
-    }
-
-    function destroyContextPreviewTooltips(): void {
-        for (const tooltip of activeContextPreviewTooltips) {
-            tooltip.destroy()
-        }
-        activeContextPreviewTooltips.clear()
+        activeContextPreviewTiles.clear()
     }
 
     function createAiChatPanelContextTrayElement(): HTMLDivElement {
@@ -3456,30 +3237,21 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         nodeId: string
         node: CanvasNode
     }): HTMLDivElement {
-        const title = getContextPreviewTitle(node)
-        const text = getContextPreviewText(node)
-        const accessibleLabel = title || getContextPreviewTypeLabel(node)
-        const previewTooltip = createHelpTooltip({
-            label: accessibleLabel,
-            triggerContent: renderContextPreviewVisual(node, accessibleLabel, text, 'mini'),
-            content: renderContextPreviewPopoverContent(node, title, text, accessibleLabel),
-            preferredPlacement: 'top',
-            className: 'workspace-ai-chat-panel-context-preview-tooltip',
-            triggerClassName: 'workspace-ai-chat-panel-context-preview-trigger',
-            contentClassName: getContextPreviewPopoverClassName(node, Boolean(title || text)),
-            contentCssVariableNames: AI_CHAT_PANEL_CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
-            interactive: true,
+        const environment = getContextPreviewEnvironment()
+        const previewTile = createContextPreviewTile({
+            node,
+            getNode: () => findCanvasNodeById(nodeId) ?? node,
+            environment,
         })
+        const accessibleLabel = getContextPreviewAccessibleLabel(node, environment)
         const removeLabel = `Remove ${accessibleLabel} from context`
-        activeContextPreviewTooltips.add(previewTooltip)
+        activeContextPreviewTiles.add(previewTile)
         const chipEl = html`<div
             className="workspace-ai-chat-panel-context-chip workspace-ai-chat-panel-context-chip-explicit"
             data=${{ nodeId, contextKind: 'explicit', contextRole: 'forced-chip' }}
             role="listitem"
         >
-            <div className="workspace-ai-chat-panel-context-preview-main">
-                ${previewTooltip.dom}
-            </div>
+            ${previewTile.dom}
             <button
                 type="button"
                 className="workspace-ai-chat-panel-context-chip-remove"
@@ -3502,7 +3274,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         const previousScrollTop = historyScrollerEl?.scrollTop ?? null
         const refreshVersion = ++contextPreviewRefreshVersion
-        destroyContextPreviewTooltips()
+        destroyContextPreviewTiles()
         trayEl.replaceChildren()
         const explicitChipNodeIds = aiChatPanelState.contextChips
         const nodesById = new Map(currentCanvasState?.nodes.map((node): [string, CanvasNode] => [node.nodeId, node]) ?? [])
@@ -3905,6 +3677,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             useMultipleVideoModels: data.useMultipleVideoModels,
             imageOptions: data.imageOptions,
             videoOptions: data.videoOptions,
+            referenceNodeIds: aiChatPanelState.contextChips.slice(),
         })
     }
 
@@ -4152,6 +3925,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 isDisabled: false,
                 documentType: 'aiChatThread',
                 threadId: panelThreadId,
+                aiChatThreadRenderContext: {
+                    contextPreview: getAiUserMessageContextPreviewRenderer(),
+                },
                 onEditorChange: (value: any) => {
                     onAiChatThreadContentChange?.({ workspaceId, threadId: panelThreadId, content: value })
                     // The descriptor lives on the canvas thread node (if this thread
@@ -4159,7 +3935,18 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     if (rootNode) scheduleTextNodeDescriptor(rootNode.nodeId, value)
                 },
                 onProjectTitleChange: () => {},
-                onAiChatSubmit: async ({ messages, aiModel, aiModels, imageOptions, videoOptions, referencedFeatureIds }: any) => {
+                onAiChatSubmit: async ({
+                    messages,
+                    aiModel,
+                    aiModels,
+                    useMultipleModels,
+                    useMultipleReasoningModels,
+                    useMultipleImageModels,
+                    useMultipleVideoModels,
+                    imageOptions,
+                    videoOptions,
+                    referencedFeatureIds
+                }: any) => {
                     gradient?.triggerAnimation()
                     activeAiChatPromptGradient?.triggerAnimation()
 
@@ -4242,14 +4029,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             messages: messagesWithContext,
                             aiModel,
                             aiModels,
+                            useMultipleModels,
+                            useMultipleReasoningModels,
+                            useMultipleImageModels,
+                            useMultipleVideoModels,
                             aiImageModel: imageOptions?.aiImageModel,
                             aiImageModels: imageOptions?.aiImageModels,
                             imageSize: imageOptions?.imageGenerationSize,
+                            imageConfigGroups: imageOptions?.configGroups,
                             aiVideoModel: videoOptions?.aiVideoModel,
                             aiVideoModels: videoOptions?.aiVideoModels,
                             videoAspectRatio: videoOptions?.videoAspectRatio,
                             videoResolution: videoOptions?.videoResolution,
                             videoDuration: videoOptions?.videoDuration,
+                            videoConfigGroups: videoOptions?.configGroups,
                             videoSourceForExtension,
                             referencedFeatureIds,
                             imageBranchCandidateSnapshot,
@@ -4352,6 +4145,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     useMultipleVideoModels: data.useMultipleVideoModels,
                     imageOptions: data.imageOptions,
                     videoOptions: data.videoOptions,
+                    referenceNodeIds: aiChatPanelState.contextChips.slice(),
                 })
             },
             onPromptStop: () => {
@@ -4519,7 +4313,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // ---- Per-thread floating inputs (always visible for aiChatThread nodes) ----
 
-    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; useMultipleModels?: boolean | string; useMultipleReasoningModels?: boolean | string; useMultipleImageModels?: boolean | string; useMultipleVideoModels?: boolean | string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string }): void {
+    function createThreadFloatingInput(node: AiChatThreadCanvasNode, savedAttrs?: { aiModel?: string; aiModels?: string; useMultipleModels?: boolean | string; useMultipleReasoningModels?: boolean | string; useMultipleImageModels?: boolean | string; useMultipleVideoModels?: boolean | string; aiImageModel?: string; aiImageModels?: string; imageGenerationSize?: string; imageGenerationConfigGroups?: string; aiVideoModel?: string; aiVideoModels?: string; videoAspectRatio?: string; videoResolution?: string; videoDuration?: string; videoGenerationConfigGroups?: string }): void {
         if (threadFloatingInputs.has(node.nodeId)) return
 
         const threadInputStyle = { position: 'absolute' as const, display: 'block', zIndex: '9999' }
@@ -5643,8 +5437,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return { ...node, descriptor } as CanvasNode
         })
         if (!patched) return
-        currentCanvasState = { ...currentCanvasState, nodes }
-        syncPixiMediaLayer(currentCanvasState)
+        const nextState = { ...currentCanvasState, nodes }
+        commitCanvasMetadataState(nextState)
+        syncPixiMediaLayer(nextState)
         refreshContextChipTray()
     }
 
@@ -7603,11 +7398,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             { fileId: node.fileId }
         )
         dragOverlay.className = 'video-drag-overlay nopan'
-
-        // Fallback reveal while the pointer is over the node shell. Completed
-        // videos normally use the chrome-layer hit target above the visible video.
-        dragOverlay.addEventListener('mouseenter', () => showVideoControls(node.nodeId))
-        dragOverlay.addEventListener('mouseleave', () => hideVideoControls(node.nodeId))
 
         const togglePlayback = (event: Event) => {
             event.stopPropagation()

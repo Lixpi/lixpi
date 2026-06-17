@@ -19,7 +19,8 @@
         LoadingStatus,
         type AiChatSendMessagePayload,
         type AiChatStopMessagePayload,
-        type ImageGenerationSize
+        type ImageGenerationSize,
+        type MediaGenerationConfigSelectionGroup
     } from '@lixpi/constants'
 
     import Spinner from `$src/components/spinner.svelte`
@@ -42,6 +43,7 @@
     type ImageOptions = {
         aiImageModel: string
         imageGenerationSize: ImageGenerationSize
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 
     type VideoOptions = {
@@ -49,6 +51,7 @@
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 
     const onAiChatSubmit = ({ messages, aiModel, threadId, imageOptions, videoOptions, referencedFeatureIds }: AiChatSendMessagePayload & { imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => {
@@ -66,10 +69,12 @@
             aiModel,
             aiImageModel: imageOptions?.aiImageModel,
             imageSize: imageOptions?.imageGenerationSize,
+            imageConfigGroups: imageOptions?.configGroups,
             aiVideoModel: videoOptions?.aiVideoModel,
             videoAspectRatio: videoOptions?.videoAspectRatio,
             videoResolution: videoOptions?.videoResolution,
             videoDuration: videoOptions?.videoDuration,
+            videoConfigGroups: videoOptions?.configGroups,
             referencedFeatureIds,
         })
     }

@@ -9,6 +9,7 @@ import type {
     AiModelId,
     ImageGenerationSize,
     MediaBranchLineagePlan,
+    MediaGenerationConfigSelectionGroup,
     MediaRunLineageAssignment,
     ProviderName,
 } from '@lixpi/constants'
@@ -50,20 +51,27 @@ type ResolvedAiModel = ParsedAiModelId & {
 type NormalizedMatrixRequest = {
     generationRequestId: string
     requestGroupKey: string
+    useMultipleReasoningModels: boolean
+    useMultipleImageModels: boolean
+    useMultipleVideoModels: boolean
     reasoningModelIds: AiModelId[]
     imageModelIds: AiModelId[]
     videoModelIds: AiModelId[]
     imageSize: ImageGenerationSize
+    imageConfigGroups: MediaGenerationConfigSelectionGroup[]
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string | number
     videoSourceForExtension?: string
+    videoConfigGroups: MediaGenerationConfigSelectionGroup[]
 }
 
 type ResolvedMatrixRequest = NormalizedMatrixRequest & {
     reasoningModels: ResolvedAiModel[]
     imageModels: ResolvedAiModel[]
     videoModels: ResolvedAiModel[]
+    imageModelOptions: Record<AiModelId, { imageSize?: string }>
+    videoModelOptions: Record<AiModelId, { aspectRatio?: string; resolution?: string; duration?: string | number }>
 }
 
 type StopMatrixRequestParams = {
@@ -78,6 +86,40 @@ const uniqueModelIds = (modelIds: Array<string | undefined>): AiModelId[] =>
             .filter((modelId): modelId is string => typeof modelId === 'string' && modelId.trim().length > 0)
             .map((modelId) => modelId.trim() as AiModelId)
     ))
+
+const normalizeModelIdsForMode = (
+    useMultipleModels: boolean,
+    requestedModelIds: AiModelId[] | undefined,
+    scalarModelId: AiModelId | undefined,
+): AiModelId[] => {
+    if (useMultipleModels) return uniqueModelIds(requestedModelIds ?? [])
+    return uniqueModelIds([scalarModelId ?? requestedModelIds?.[0]])
+}
+
+const normalizeConfigGroupsForModels = (
+    configGroups: MediaGenerationConfigSelectionGroup[] | undefined,
+    modelIds: AiModelId[],
+): MediaGenerationConfigSelectionGroup[] => {
+    if (!configGroups?.length || modelIds.length === 0) return []
+
+    const modelIdSet = new Set(modelIds)
+    return configGroups.flatMap((group): MediaGenerationConfigSelectionGroup[] => {
+        const selectedModelIds = uniqueModelIds(group.modelIds)
+            .filter(modelId => modelIdSet.has(modelId))
+        if (!group.groupId || selectedModelIds.length === 0) return []
+
+        const values = Object.fromEntries(
+            Object.entries(group.values ?? {})
+                .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+        ) as MediaGenerationConfigSelectionGroup['values']
+
+        return [{
+            groupId: group.groupId,
+            modelIds: selectedModelIds,
+            values,
+        }]
+    })
+}
 
 const parseAiModelId = (modelId: AiModelId): ParsedAiModelId => {
     const [provider, ...modelParts] = modelId.split(':')
@@ -128,6 +170,16 @@ const normalizeModelOption = (
     return values[0]
 }
 
+const findConfigGroupValue = (
+    configGroups: MediaGenerationConfigSelectionGroup[],
+    modelId: AiModelId,
+    key: 'imageSize' | 'aspectRatio' | 'resolution' | 'duration',
+): string | undefined => {
+    const group = configGroups.find(configGroup => configGroup.modelIds.includes(modelId))
+    const value = group?.values?.[key]
+    return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
 export const buildMediaGenerationRequestGroupKey = (
     workspaceId: string,
     aiChatThreadId: string,
@@ -155,17 +207,15 @@ export class MediaGenerationMatrixOrchestrator {
         const normalized = await this.resolveRequest(this.normalizeRequest(requestData))
         const primaryImageModel = normalized.imageModels[0]
         const primaryVideoModel = normalized.videoModels[0]
-        const normalizedVideoAspectRatio = normalizeModelOption(requestData.videoAspectRatio ?? normalized.videoAspectRatio, primaryVideoModel?.meta.videoAspectRatios)
-        const normalizedVideoResolution = normalizeModelOption(requestData.videoResolution ?? normalized.videoResolution, primaryVideoModel?.meta.videoResolutions)
-        const normalizedVideoDuration = normalizeModelOption(requestData.videoDuration ?? normalized.videoDuration, primaryVideoModel?.meta.videoDurations)
+        const primaryImageOptions = primaryImageModel ? normalized.imageModelOptions[primaryImageModel.modelId] : undefined
+        const primaryVideoOptions = primaryVideoModel ? normalized.videoModelOptions[primaryVideoModel.modelId] : undefined
         const sharedPreflightState = await this.runSharedPreflight({
             requestData,
             normalized,
             primaryImageModel,
             primaryVideoModel,
-            normalizedVideoAspectRatio,
-            normalizedVideoResolution,
-            normalizedVideoDuration,
+            primaryImageOptions,
+            primaryVideoOptions,
         })
 
         info('[MEDIA_MATRIX] Starting media generation matrix request', {
@@ -189,46 +239,77 @@ export class MediaGenerationMatrixOrchestrator {
             })
             return this.registry.process(instanceKey, reasoningModel.provider, {
                 ...requestData,
+
+                // ── Shared-preflight → fanout propagation (CRITICAL INVARIANT) ──
+                // `runSharedPreflight()` resolves workspace context, `/use`
+                // features, the image branch (which ALSO selects the video
+                // first-frame / reference images), and media lineage EXACTLY ONCE,
+                // then every reasoning child is dispatched with
+                // `preflightResolved: true`. That flag makes each child's provider
+                // graph SKIP all resolver nodes (see `BaseProvider.buildWorkflow`),
+                // so a child can only ever observe resolution outputs that are
+                // forwarded right here — anything omitted is silently lost before
+                // the image/video routers run.
+                //
+                // Regression this prevents: the resolver correctly chose reference
+                // images into `videoReferenceImages` / `videoFirstFrameImage`, but
+                // an earlier hand-maintained field list here forwarded only a
+                // subset and never forwarded those two, so every Seedance/VEO call
+                // ran as pure text-to-video (zero references) and quality collapsed.
+                //
+                // Fix / future-proofing: spread the ENTIRE resolved patch returned
+                // by `runSharedPreflight()` rather than cherry-picking named fields.
+                // `sharedPreflightState` is precisely what the resolvers emitted
+                // (single source of truth), so reference inputs for images, video,
+                // and any media modality added later propagate automatically.
+                ...sharedPreflightState,
+
+                // Per-child identity + primary-model media options. These are
+                // model-specific and MUST win over anything above, so they are set
+                // last (the spreads above never contain these keys today, but
+                // ordering keeps that guarantee robust).
                 aiModelMetaInfo: reasoningModel.meta,
                 imageModelMetaInfo: primaryImageModel?.meta,
                 videoModelMetaInfo: primaryVideoModel?.meta,
-                imageSize: normalized.imageSize,
-                videoAspectRatio: normalizedVideoAspectRatio,
-                videoResolution: normalizedVideoResolution,
-                videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+                imageSize: primaryImageOptions?.imageSize ?? normalized.imageSize,
+                videoAspectRatio: primaryVideoOptions?.aspectRatio,
+                videoResolution: primaryVideoOptions?.resolution,
+                videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
                 videoSourceForExtension: normalized.videoSourceForExtension,
-                workspaceContextResolution: sharedPreflightState.workspaceContextResolution,
-                imageBranchCandidateSnapshot: sharedPreflightState.imageBranchCandidateSnapshot,
-                imageBranchResolution: sharedPreflightState.imageBranchResolution,
-                mediaBranchLineagePlan: sharedPreflightState.mediaBranchLineagePlan,
-                messages: sharedPreflightState.messages,
-                featureReferenceImages: sharedPreflightState.featureReferenceImages,
-                featureReferenceImageTraceUrls: sharedPreflightState.featureReferenceImageTraceUrls,
-                featureUsagePrompt: sharedPreflightState.featureUsagePrompt,
-                referencedFeatureIds: sharedPreflightState.referencedFeatureIds,
                 preflightResolved: true,
                 mediaFanoutPlan: {
                     generationRequestId: normalized.generationRequestId,
                     imageModels: normalized.imageModels.map((model) => model.meta),
                     videoModels: normalized.videoModels.map((model) => model.meta),
                     imageSize: normalized.imageSize,
+                    imageModelOptions: normalized.imageModelOptions,
                     ...(normalized.videoAspectRatio ? { videoAspectRatio: normalized.videoAspectRatio } : {}),
                     ...(normalized.videoResolution ? { videoResolution: normalized.videoResolution } : {}),
                     ...(normalized.videoDuration ? { videoDuration: normalized.videoDuration } : {}),
+                    videoModelOptions: normalized.videoModelOptions,
                     ...(normalized.videoSourceForExtension ? { videoSourceForExtension: normalized.videoSourceForExtension } : {}),
+                    imageConfigGroups: normalized.imageConfigGroups,
+                    videoConfigGroups: normalized.videoConfigGroups,
                 },
                 mediaGenerationRequest: {
                     requestVersion: 'media-generation-matrix-v1',
                     generationRequestId: normalized.generationRequestId,
+                    useMultipleReasoningModels: normalized.useMultipleReasoningModels,
+                    useMultipleImageModels: normalized.useMultipleImageModels,
+                    useMultipleVideoModels: normalized.useMultipleVideoModels,
                     reasoningModelIds: normalized.reasoningModelIds,
                     imageModelIds: normalized.imageModelIds,
                     videoModelIds: normalized.videoModelIds,
-                    imageOptions: { imageSize: normalized.imageSize },
+                    imageOptions: {
+                        imageSize: normalized.imageSize,
+                        configGroups: normalized.imageConfigGroups,
+                    },
                     videoOptions: {
                         ...(normalized.videoAspectRatio ? { aspectRatio: normalized.videoAspectRatio } : {}),
                         ...(normalized.videoResolution ? { resolution: normalized.videoResolution } : {}),
                         ...(normalized.videoDuration ? { duration: String(normalized.videoDuration) } : {}),
                         ...(normalized.videoSourceForExtension ? { sourceForExtension: normalized.videoSourceForExtension } : {}),
+                        configGroups: normalized.videoConfigGroups,
                     },
                 },
                 generationRun,
@@ -249,9 +330,12 @@ export class MediaGenerationMatrixOrchestrator {
     private normalizeRequest(requestData: MatrixRequestData): NormalizedMatrixRequest {
         const request = requestData.mediaGenerationRequest
         const generationRequestId = request?.generationRequestId || uuid()
-        const reasoningModelIds = uniqueModelIds(request?.reasoningModelIds?.length ? request.reasoningModelIds : [requestData.aiModel])
-        const imageModelIds = uniqueModelIds(request?.imageModelIds?.length ? request.imageModelIds : [requestData.aiImageModel])
-        const videoModelIds = uniqueModelIds(request?.videoModelIds?.length ? request.videoModelIds : [requestData.aiVideoModel])
+        const useMultipleReasoningModels = request?.useMultipleReasoningModels ?? ((request?.reasoningModelIds?.length ?? 0) > 1)
+        const useMultipleImageModels = request?.useMultipleImageModels ?? ((request?.imageModelIds?.length ?? 0) > 1)
+        const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
+        const reasoningModelIds = normalizeModelIdsForMode(useMultipleReasoningModels, request?.reasoningModelIds, requestData.aiModel)
+        const imageModelIds = normalizeModelIdsForMode(useMultipleImageModels, request?.imageModelIds, requestData.aiImageModel)
+        const videoModelIds = normalizeModelIdsForMode(useMultipleVideoModels, request?.videoModelIds, requestData.aiVideoModel)
 
         if (reasoningModelIds.length === 0) {
             throw new Error('mediaGenerationRequest requires at least one reasoning model')
@@ -267,14 +351,23 @@ export class MediaGenerationMatrixOrchestrator {
                 requestData.aiChatThreadId,
                 generationRequestId,
             ),
+            useMultipleReasoningModels,
+            useMultipleImageModels,
+            useMultipleVideoModels,
             reasoningModelIds,
             imageModelIds,
             videoModelIds,
             imageSize: (request?.imageOptions?.imageSize ?? requestData.imageSize ?? 'auto') as ImageGenerationSize,
+            imageConfigGroups: useMultipleImageModels
+                ? normalizeConfigGroupsForModels(request?.imageOptions?.configGroups, imageModelIds)
+                : [],
             videoAspectRatio: request?.videoOptions?.aspectRatio ?? requestData.videoAspectRatio,
             videoResolution: request?.videoOptions?.resolution ?? requestData.videoResolution,
             videoDuration: request?.videoOptions?.duration ?? requestData.videoDuration,
             videoSourceForExtension: request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension,
+            videoConfigGroups: useMultipleVideoModels
+                ? normalizeConfigGroupsForModels(request?.videoOptions?.configGroups, videoModelIds)
+                : [],
         }
     }
 
@@ -294,7 +387,62 @@ export class MediaGenerationMatrixOrchestrator {
             reasoningModels,
             imageModels,
             videoModels,
+            imageModelOptions: this.resolveImageModelOptions(normalized, imageModels),
+            videoModelOptions: this.resolveVideoModelOptions(normalized, videoModels),
         }
+    }
+
+    private resolveImageModelOptions(
+        normalized: NormalizedMatrixRequest,
+        imageModels: ResolvedAiModel[],
+    ): Record<AiModelId, { imageSize?: string }> {
+        const optionsByModelId: Record<AiModelId, { imageSize?: string }> = {}
+        for (const imageModel of imageModels) {
+            const requestedImageSize = findConfigGroupValue(
+                normalized.imageConfigGroups,
+                imageModel.modelId,
+                'imageSize',
+            ) ?? normalized.imageSize
+            optionsByModelId[imageModel.modelId] = {
+                imageSize: normalizeModelOption(requestedImageSize, imageModel.meta.imageSizes) ?? 'auto',
+            }
+        }
+        return optionsByModelId
+    }
+
+    private resolveVideoModelOptions(
+        normalized: NormalizedMatrixRequest,
+        videoModels: ResolvedAiModel[],
+    ): Record<AiModelId, { aspectRatio?: string; resolution?: string; duration?: string | number }> {
+        const optionsByModelId: Record<AiModelId, { aspectRatio?: string; resolution?: string; duration?: string | number }> = {}
+        for (const videoModel of videoModels) {
+            const requestedAspectRatio = findConfigGroupValue(
+                normalized.videoConfigGroups,
+                videoModel.modelId,
+                'aspectRatio',
+            ) ?? normalized.videoAspectRatio
+            const requestedResolution = findConfigGroupValue(
+                normalized.videoConfigGroups,
+                videoModel.modelId,
+                'resolution',
+            ) ?? normalized.videoResolution
+            const requestedDuration = findConfigGroupValue(
+                normalized.videoConfigGroups,
+                videoModel.modelId,
+                'duration',
+            ) ?? normalized.videoDuration
+
+            const aspectRatio = normalizeModelOption(requestedAspectRatio, videoModel.meta.videoAspectRatios)
+            const resolution = normalizeModelOption(requestedResolution, videoModel.meta.videoResolutions)
+            const duration = normalizeModelOption(requestedDuration, videoModel.meta.videoDurations)
+
+            optionsByModelId[videoModel.modelId] = {
+                ...(aspectRatio ? { aspectRatio } : {}),
+                ...(resolution ? { resolution } : {}),
+                ...(duration ? { duration } : {}),
+            }
+        }
+        return optionsByModelId
     }
 
     private async resolveModels(modelIds: AiModelId[]): Promise<ResolvedAiModel[]> {
@@ -322,17 +470,15 @@ export class MediaGenerationMatrixOrchestrator {
         normalized,
         primaryImageModel,
         primaryVideoModel,
-        normalizedVideoAspectRatio,
-        normalizedVideoResolution,
-        normalizedVideoDuration,
+        primaryImageOptions,
+        primaryVideoOptions,
     }: {
         requestData: MatrixRequestData
         normalized: ResolvedMatrixRequest
         primaryImageModel?: ResolvedAiModel
         primaryVideoModel?: ResolvedAiModel
-        normalizedVideoAspectRatio?: string
-        normalizedVideoResolution?: string
-        normalizedVideoDuration?: string
+        primaryImageOptions?: { imageSize?: string }
+        primaryVideoOptions?: { aspectRatio?: string; resolution?: string; duration?: string | number }
     }): Promise<Partial<ProviderState>> {
         const reasoningModel = normalized.reasoningModels[0]
         const abortController = new AbortController()
@@ -363,7 +509,7 @@ export class MediaGenerationMatrixOrchestrator {
             streamActive: false,
             aiRequestReceivedAt: Date.now(),
             enableImageGeneration: requestData.enableImageGeneration ?? false,
-            imageSize: normalized.imageSize,
+            imageSize: primaryImageOptions?.imageSize ?? normalized.imageSize,
             imageModelMetaInfo: primaryImageModel?.meta,
             imageModelVersion: primaryImageModel?.meta.modelVersion,
             imageProviderName: primaryImageModel?.provider,
@@ -375,20 +521,47 @@ export class MediaGenerationMatrixOrchestrator {
             videoModelMetaInfo: primaryVideoModel?.meta,
             videoModelVersion: primaryVideoModel?.meta.modelVersion,
             videoProviderName: primaryVideoModel?.provider,
-            videoAspectRatio: normalizedVideoAspectRatio,
-            videoResolution: normalizedVideoResolution,
-            videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+            videoAspectRatio: primaryVideoOptions?.aspectRatio,
+            videoResolution: primaryVideoOptions?.resolution,
+            videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
             videoSourceForExtension: normalized.videoSourceForExtension,
             generationRun,
         }
 
-        state = this.applyStatePatch(state, await resolveWorkspaceContext(state, {
+        // Each resolver runs against the accumulating `state` because later
+        // resolvers depend on earlier outputs (e.g. the image-branch resolver
+        // reads the `messages` rewritten by `/use` feature resolution). Separately
+        // we capture the RAW resolver patches into `resolved`: this is the exact,
+        // complete set of fields the shared preflight produced and is the single
+        // source of truth forwarded to every reasoning child in `process()`.
+        //
+        // Deriving the forwarded set from the patches — instead of a hand-listed
+        // field allow-list — is what makes it structurally impossible to drop a
+        // resolver output on the way to the per-model children. Children run with
+        // `preflightResolved: true`, which makes their provider graph SKIP every
+        // resolver node (see `BaseProvider.buildWorkflow`), so a field the
+        // preflight resolved but did not forward is lost forever. That is exactly
+        // how `videoReferenceImages` / `videoFirstFrameImage` got dropped and made
+        // every video generate as text-to-video. Capturing patches guarantees the
+        // reference images for images, video, and ANY media modality added later
+        // ride along automatically. `undefined` values are skipped to mirror
+        // `applyStatePatch` and avoid clobbering already-forwarded request data.
+        const resolved: Partial<ProviderState> = {}
+        const resolvedRecord = resolved as Record<string, unknown>
+        const applyResolved = (patch: Partial<ProviderState>): void => {
+            state = this.applyStatePatch(state, patch)
+            for (const [key, value] of Object.entries(patch)) {
+                if (value !== undefined) resolvedRecord[key] = value
+            }
+        }
+
+        applyResolved(await resolveWorkspaceContext(state, {
             natsService: this.natsService,
             publisher,
             abortSignal: abortController.signal,
         }))
-        state = this.applyStatePatch(state, await resolveFeatures(state))
-        state = this.applyStatePatch(state, await resolveImageBranch(state, {
+        applyResolved(await resolveFeatures(state))
+        applyResolved(await resolveImageBranch(state, {
             natsService: this.natsService,
             publisher,
             abortSignal: abortController.signal,
@@ -413,9 +586,9 @@ export class MediaGenerationMatrixOrchestrator {
             branchForkCount: mediaBranchLineagePlan.branchForks.length,
             runAssignmentCount: mediaBranchLineagePlan.runAssignments.length,
         })
-        state = this.applyStatePatch(state, { mediaBranchLineagePlan })
+        applyResolved({ mediaBranchLineagePlan })
 
-        return state
+        return resolved
     }
 
     private getRunLineageAssignment(

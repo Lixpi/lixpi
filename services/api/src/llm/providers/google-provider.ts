@@ -442,7 +442,6 @@ export class GoogleProvider extends BaseProvider {
 
         const veoConfig: Record<string, any> = {
             numberOfVideos: 1,
-            personGeneration: 'allow_adult',
             abortSignal: this.signal,
         }
         // `generateAudio` is a Vertex-AI-only knob. The Gemini Developer API
@@ -490,12 +489,17 @@ export class GoogleProvider extends BaseProvider {
         }
 
         const referenceImagesCount = (veoConfig.referenceImages as any[] | undefined)?.length ?? 0
+        const usesImageConditioning = !!firstFrameImage || referenceImagesCount > 0
+        // VEO validates personGeneration by input mode: text-to-video and extension
+        // require allow_all, while image/reference-conditioned requests require allow_adult.
+        veoConfig.personGeneration = usesImageConditioning ? 'allow_adult' : 'allow_all'
 
         info(`[Google:${this.instanceKey}] VEO submit ${JSON.stringify({
             model: modelVersion,
             aspectRatio: veoConfig.aspectRatio,
             resolution: veoConfig.resolution,
             durationSeconds: veoConfig.durationSeconds,
+            personGeneration: veoConfig.personGeneration,
             promptLen: prompt.length,
             hasFirstFrame: !!firstFrameImage,
             referenceImagesCount,

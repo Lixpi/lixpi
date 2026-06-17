@@ -179,8 +179,13 @@ export class BubbleMenu {
             return
         }
 
-        // Measure menu
-        applyStyle(this.menu, { visibility: 'hidden', display: 'flex' })
+        // Measure menu. Keep an already-visible menu visible during reposition so
+        // controls under the pointer do not briefly lose hover/cursor state.
+        if (this.menu.style.visibility === 'visible') {
+            applyStyle(this.menu, { display: 'flex' })
+        } else {
+            applyStyle(this.menu, { visibility: 'hidden', display: 'flex' })
+        }
         this.menu.style.setProperty('--bubble-menu-visual-scale', String(visualScale))
         const menuLayoutWidth = this.menu.offsetWidth
         const menuLayoutHeight = this.menu.offsetHeight

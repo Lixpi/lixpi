@@ -1,4 +1,5 @@
 export {
+    applyVideoControlsHostStyleProperties,
     createVideoControls,
     type VideoControlsConfig,
     type VideoControlsInstance,

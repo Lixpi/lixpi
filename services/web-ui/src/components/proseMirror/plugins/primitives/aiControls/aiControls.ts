@@ -10,13 +10,20 @@ import {
     imageIcon
 } from '$src/svgIcons/index.ts'
 
+// @ts-ignore - runtime import
+import { select } from 'd3-selection'
 import { html } from '$src/utils/domTemplates.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { createPureDropdown } from '$src/components/dropdown/index.ts'
+import { createTagPill as createSvgTagPill, type TagPillInstance } from '$src/components/tagPill/index.ts'
 import { settings } from '$src/settings.ts'
 
-import type { EditorView } from 'prosemirror-view'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import type {
+    MediaGenerationConfigControl,
+    MediaGenerationConfigControlKey,
+    MediaGenerationConfigGroup,
+    MediaGenerationConfigSelectionGroup,
+} from '@lixpi/constants'
 
 export type AiModelDropdownOption = {
     title: string
@@ -66,6 +73,55 @@ type VideoOptionControls = {
     getCurrentVideoModel?: () => string
 }
 
+export type MediaGenerationConfigMatrixControls = {
+    mediaType: 'image' | 'video'
+    getUseMultipleModels: () => boolean
+    getSelectedModelIds: () => string[]
+    setSelectedModelIds: (modelIds: string[]) => void
+    getConfigGroups: () => MediaGenerationConfigSelectionGroup[]
+    setConfigGroups: (groups: MediaGenerationConfigSelectionGroup[]) => void
+}
+
+export type MediaGenerationConfigMatrixViewInstance = {
+    dom: HTMLElement
+    update: () => void
+    destroy: () => void
+}
+
+type RenderedMediaConfigGroup = MediaGenerationConfigGroup & {
+    selectedModelIds: string[]
+}
+
+type PendingMediaConfigTagHost = {
+    host: HTMLElement
+    modelId: string
+}
+
+function findMatrixControlForModel(
+    mediaType: 'image' | 'video',
+    modelId: string | undefined,
+    controlKey: MediaGenerationConfigControlKey,
+): MediaGenerationConfigControl | undefined {
+    if (!modelId) return undefined
+    const matrix = aiModelsStore.getMediaGenerationConfigMatrix()
+    const group = matrix.groups.find(candidate =>
+        candidate.mediaType === mediaType && candidate.modelIds.some(candidateModelId => candidateModelId === modelId)
+    )
+    return group?.controls.find(control => control.key === controlKey)
+}
+
+function matrixControlOptions(
+    control: MediaGenerationConfigControl | undefined,
+    fallbackTitle: string,
+    fallbackValue = '',
+): Array<{ title: string; value: string }> {
+    const options = control?.options.map(option => ({
+        title: option.label,
+        value: option.value,
+    })) ?? []
+    return options.length > 0 ? options : [{ title: fallbackTitle, value: fallbackValue }]
+}
+
 const AI_AVATAR_ICONS: Record<string, string> = {
     gptAvatarIcon,
     claudeIcon,
@@ -84,48 +140,6 @@ export function transformModelsToOptions(models: any[]): AiModelDropdownOption[]
         model: aiModel.model,
         tags: aiModel.modalities?.map((m: any) => m.shortTitle) || []
     }))
-}
-
-function isResolutionValue(value: string): boolean {
-    return /^\d+x\d+$/i.test(value)
-}
-
-function isAspectRatioValue(value: string): boolean {
-    return /^\d+:\d+$/.test(value)
-}
-
-function getImageSizeMode(model: any | undefined): 'resolution' | 'aspectRatio' | 'size' {
-    if (model?.imageSizeMode === 'resolution' || model?.imageSizeMode === 'aspectRatio') {
-        return model.imageSizeMode
-    }
-
-    const values = (model?.imageSizes ?? [])
-        .map((option: any) => option.value)
-        .filter((value: unknown): value is string => typeof value === 'string' && value !== 'auto')
-
-    if (values.some(isResolutionValue)) return 'resolution'
-    if (values.some(isAspectRatioValue)) return 'aspectRatio'
-    return 'size'
-}
-
-function getImageSizeControlLabel(model: any | undefined): string {
-    const mode = getImageSizeMode(model)
-    if (mode === 'resolution') return 'Resolution'
-    if (mode === 'aspectRatio') return 'Aspect ratio'
-    return 'Image option'
-}
-
-function findImageSizeModel(models: any[], aiModelId: string | undefined, provider: string | undefined): any | undefined {
-    if (aiModelId) {
-        const selectedModel = models.find((model: any) => `${model.provider}:${model.model}` === aiModelId && model.imageSizes?.length)
-        if (selectedModel) return selectedModel
-    }
-
-    if (provider) {
-        return models.find((model: any) => model.provider === provider && model.imageSizes?.length)
-    }
-
-    return models.find((model: any) => model.imageSizes?.length)
 }
 
 function extractAvailableTags(models: any[]) {
@@ -286,26 +300,9 @@ export function createGenericImageSizeDropdown(
     controls: ImageSizeControls,
     dropdownId: string
 ) {
-    const getImageSizeModel = () => {
-        const models: any[] = aiModelsStore.getData()
-        return findImageSizeModel(
-            models,
-            controls.getCurrentImageModel?.(),
-            controls.getProvider?.(),
-        )
-    }
-
-    const getSizesForSelectedModel = () => {
-        const model = getImageSizeModel()
-        const sizes = model?.imageSizes ?? [{ value: 'auto', label: 'Auto' }]
-        const mode = getImageSizeMode(model)
-        return sizes.map((s: any) => ({
-            title: mode === 'resolution' && isResolutionValue(s.value) ? s.value : s.label,
-            value: s.value,
-        }))
-    }
-
-    const getSizeContextKey = () => controls.getCurrentImageModel?.() || controls.getProvider?.() || ''
+    const getImageControl = () => findMatrixControlForModel('image', controls.getCurrentImageModel?.(), 'imageSize')
+    const getSizesForSelectedModel = () => matrixControlOptions(getImageControl(), 'Auto', 'auto')
+    const getSizeContextKey = () => controls.getCurrentImageModel?.() || ''
     const getOptionsSignature = (options: Array<{ title: string; value: string }>) =>
         options.map(option => `${option.value}:${option.title}`).join('|')
 
@@ -361,7 +358,7 @@ export function createGenericImageSizeDropdown(
 
     return {
         dom: dropdown.dom,
-        getControlLabel: () => getImageSizeControlLabel(getImageSizeModel()),
+        getControlLabel: () => getImageControl()?.label ?? 'Image option',
         destroy: () => {
             dropdown.destroy?.()
         },
@@ -472,6 +469,295 @@ export function createGenericImageModelDropdown(
     }
 }
 
+function normalizeControlValue(control: MediaGenerationConfigControl, value: string | undefined): string {
+    const optionValues = new Set(control.options.map(option => option.value))
+    if (value && optionValues.has(value)) return value
+    return control.defaultValue || control.options[0]?.value || ''
+}
+
+function toDomSafeId(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, '-')
+}
+
+function getSelectedMatrixGroups(
+    matrixGroups: MediaGenerationConfigGroup[],
+    mediaType: 'image' | 'video',
+    selectedModelIds: string[],
+): RenderedMediaConfigGroup[] {
+    const selectedModelIdSet = new Set(selectedModelIds)
+    return matrixGroups
+        .filter(group => group.mediaType === mediaType)
+        .map(group => ({
+            ...group,
+            selectedModelIds: group.modelIds.filter(modelId => selectedModelIdSet.has(modelId)),
+        }))
+        .filter(group => group.selectedModelIds.length > 0)
+}
+
+class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixViewInstance {
+    readonly dom: HTMLElement
+
+    private readonly unsubscribe: () => void
+    private readonly dropdowns: Array<{ destroy?: () => void }> = []
+    private readonly tagPills: TagPillInstance[] = []
+    private modelLabelsById = new Map<string, string>()
+    private modelIconsById = new Map<string, string>()
+    private renderedSignature = ''
+    private builtConnected = false
+
+    constructor(private readonly controls: MediaGenerationConfigMatrixControls) {
+        this.dom = html`<div className="ai-media-config-matrix" data-media-type=${controls.mediaType} data-visible="false" contenteditable="false"></div>` as HTMLElement
+        this.syncModelLabels(aiModelsStore.getData())
+        this.unsubscribe = aiModelsStore.subscribe((storeState: any) => {
+            this.syncModelLabels(storeState.data)
+            this.renderedSignature = ''
+            this.builtConnected = false
+            this.update()
+        })
+        this.update()
+    }
+
+    private syncModelLabels(models: any[]): void {
+        const options = transformModelsToOptions(models)
+        this.modelLabelsById = new Map(options.map((option: AiModelDropdownOption) => [option.aiModel, option.title]))
+        this.modelIconsById = new Map(options.map((option: AiModelDropdownOption) => [option.aiModel, option.icon]))
+    }
+
+    private getModelLabel(modelId: string): string {
+        return this.modelLabelsById.get(modelId) ?? modelId.split(':').at(-1) ?? modelId
+    }
+
+    private getModelIcon(modelId: string): string {
+        return this.modelIconsById.get(modelId) ?? ''
+    }
+
+    private getMatrixGroups(): RenderedMediaConfigGroup[] {
+        if (!this.controls.getUseMultipleModels()) return []
+
+        const matrix = aiModelsStore.getMediaGenerationConfigMatrix()
+        return getSelectedMatrixGroups(
+            matrix.groups,
+            this.controls.mediaType,
+            this.controls.getSelectedModelIds(),
+        )
+    }
+
+    private normalizeSelectionGroups(groups: RenderedMediaConfigGroup[]): MediaGenerationConfigSelectionGroup[] {
+        const currentGroups = this.controls.getConfigGroups()
+        return groups.map((group) => {
+            const currentGroup = currentGroups.find(candidate => candidate.groupId === group.groupId)
+            const values = group.controls.reduce<Partial<Record<MediaGenerationConfigControlKey, string>>>((nextValues, control) => {
+                const value = normalizeControlValue(control, currentGroup?.values?.[control.key])
+                if (value) nextValues[control.key] = value
+                return nextValues
+            }, {})
+
+            return {
+                groupId: group.groupId,
+                modelIds: group.selectedModelIds as MediaGenerationConfigSelectionGroup['modelIds'],
+                values,
+            }
+        })
+    }
+
+    private destroyDropdowns(): void {
+        for (const dropdown of this.dropdowns) {
+            dropdown.destroy?.()
+        }
+        this.dropdowns.length = 0
+    }
+
+    private destroyTagPills(): void {
+        for (const tagPill of this.tagPills) {
+            tagPill.destroy()
+        }
+        this.tagPills.length = 0
+    }
+
+    private getSelectionForGroup(
+        selectionGroups: MediaGenerationConfigSelectionGroup[],
+        groupId: string,
+    ): MediaGenerationConfigSelectionGroup | undefined {
+        return selectionGroups.find(group => group.groupId === groupId)
+    }
+
+    private setGroupControlValue(
+        group: RenderedMediaConfigGroup,
+        control: MediaGenerationConfigControl,
+        value: string,
+    ): void {
+        const renderedGroups = this.getMatrixGroups()
+        const nextGroups = this.normalizeSelectionGroups(renderedGroups).map((selectionGroup) => {
+            if (selectionGroup.groupId !== group.groupId) return selectionGroup
+            return {
+                ...selectionGroup,
+                values: {
+                    ...selectionGroup.values,
+                    [control.key]: value,
+                },
+            }
+        })
+        this.controls.setConfigGroups(nextGroups)
+        this.renderedSignature = ''
+        this.update()
+    }
+
+    private removeModel(modelId: string): void {
+        const nextModelIds = this.controls.getSelectedModelIds()
+            .filter((selectedModelId) => selectedModelId !== modelId)
+        this.controls.setSelectedModelIds(nextModelIds)
+        this.renderedSignature = ''
+        this.update()
+    }
+
+    private createTagHost(): HTMLElement {
+        return html`<span className="ai-media-config-model-tag"></span>` as HTMLElement
+    }
+
+    private createTagPill(tagHost: HTMLElement, modelId: string): void {
+        const label = this.getModelLabel(modelId)
+        const svgEl = select(tagHost)
+            .append('svg')
+            .attr('class', 'ai-media-config-model-tag-svg ai-prompt-selected-model-tag-svg')
+            .node() as SVGSVGElement
+
+        const tagStyles = settings.aiPromptInput.modelMenu.styles
+        const tagPill = createSvgTagPill(select(svgEl), {
+            id: modelId,
+            x: 0,
+            y: 0,
+            label,
+            icon: this.getModelIcon(modelId),
+            iconColor: tagStyles.selectedModelTagIconColor,
+            textColor: tagStyles.selectedModelTagTextColor,
+            selected: true,
+            closable: true,
+            className: 'ai-prompt-selected-model-tag-pill',
+            closeAriaLabel: `Remove ${label}`,
+            onClose: () => this.removeModel(modelId),
+        })
+        this.tagPills.push(tagPill)
+    }
+
+    private renderModelTags(
+        modelIds: string[],
+        pendingTagHosts: PendingMediaConfigTagHost[],
+    ): HTMLElement {
+        const tagHosts = modelIds.map((modelId) => {
+            const host = this.createTagHost()
+            pendingTagHosts.push({ host, modelId })
+            return host
+        })
+        const tagsEl = html`
+            <div className="ai-media-config-model-tags">
+                ${tagHosts}
+            </div>
+        ` as HTMLElement
+
+        return tagsEl
+    }
+
+    private createControlDropdown(
+        group: RenderedMediaConfigGroup,
+        control: MediaGenerationConfigControl,
+        selectionGroup: MediaGenerationConfigSelectionGroup | undefined,
+    ): HTMLElement {
+        const options = control.options.map(option => ({
+            title: option.label,
+            value: option.value,
+        }))
+        const selectedValue = normalizeControlValue(control, selectionGroup?.values?.[control.key])
+        const selectedOption = options.find(option => option.value === selectedValue) || options[0] || { title: '', value: '' }
+        const dropdown = createPureDropdown({
+            id: `ai-media-config-${this.controls.mediaType}-${toDomSafeId(group.groupId)}-${control.key}`,
+            selectedValue: selectedOption,
+            options,
+            theme: 'dark',
+            buttonIcon: chevronDownIcon,
+            ignoreColorValuesForOptions: true,
+            ignoreColorValuesForSelectedValue: true,
+            renderIconForSelectedValue: false,
+            renderIconForOptions: false,
+            mountToBody: false,
+            disableAutoPositioning: true,
+            onSelect: (option: any) => this.setGroupControlValue(group, control, option.value),
+        })
+        this.dropdowns.push(dropdown)
+
+        return html`
+            <div className="ai-media-config-control">
+                <span className="ai-prompt-model-menu-control-label">${control.label}</span>
+                ${dropdown.dom}
+            </div>
+        ` as HTMLElement
+    }
+
+    private renderGroup(
+        group: RenderedMediaConfigGroup,
+        selectionGroups: MediaGenerationConfigSelectionGroup[],
+        pendingTagHosts: PendingMediaConfigTagHost[],
+    ): HTMLElement {
+        const selectionGroup = this.getSelectionForGroup(selectionGroups, group.groupId)
+        const modelTags = this.renderModelTags(group.selectedModelIds, pendingTagHosts)
+        const controlEls = group.controls.map(control => this.createControlDropdown(group, control, selectionGroup))
+
+        return html`
+            <div className="ai-media-config-group" data-group-id=${group.groupId}>
+                <div className="ai-media-config-group-row">
+                    <div className="ai-media-config-group-models">
+                        <div className="ai-media-config-group-title">
+                            <span className="ai-media-config-provider-title">${group.title}</span>
+                            <span className="ai-prompt-model-menu-control-label ai-media-config-models-label">models</span>
+                        </div>
+                        ${modelTags}
+                    </div>
+                    <div className="ai-media-config-group-controls">
+                        ${controlEls}
+                    </div>
+                </div>
+            </div>
+        ` as HTMLElement
+    }
+
+    update(): void {
+        const groups = this.getMatrixGroups()
+        const selectionGroups = this.normalizeSelectionGroups(groups)
+        const signature = JSON.stringify({ groups, selectionGroups })
+        const connected = this.dom.isConnected
+        if (signature === this.renderedSignature && (this.builtConnected || !connected)) return
+        this.renderedSignature = signature
+        this.builtConnected = connected || groups.length === 0
+
+        this.destroyDropdowns()
+        this.destroyTagPills()
+        if (groups.length === 0) {
+            this.dom.dataset.visible = 'false'
+            this.dom.replaceChildren()
+            return
+        }
+
+        this.dom.dataset.visible = 'true'
+        const pendingTagHosts: PendingMediaConfigTagHost[] = []
+        this.dom.replaceChildren(...groups.map(group => this.renderGroup(group, selectionGroups, pendingTagHosts)))
+        for (const pendingTagHost of pendingTagHosts) {
+            this.createTagPill(pendingTagHost.host, pendingTagHost.modelId)
+        }
+    }
+
+    destroy(): void {
+        this.unsubscribe()
+        this.destroyDropdowns()
+        this.destroyTagPills()
+        this.dom.remove()
+    }
+}
+
+export function createMediaGenerationConfigMatrixView(
+    controls: MediaGenerationConfigMatrixControls,
+): MediaGenerationConfigMatrixViewInstance {
+    return new MediaGenerationConfigMatrixView(controls)
+}
+
 // Filters models that expose the `video_generation` modality. Mirrors the
 // image-model dropdown so the prompt input gets a parallel Video selector that
 // can coexist with the image selector — the text model decides between
@@ -570,10 +856,14 @@ export function createGenericVideoModelDropdown(
 }
 
 // Generic factory for the three video option dropdowns (aspect / resolution /
-// duration). The option list is read off the currently-selected video model's
-// `videoAspectRatios` | `videoResolutions` | `videoDurations` field — the same
-// shape (ImageSizeOption[]) the image size dropdown already consumes.
+// duration). The option list is read from the API-authored media config matrix.
 type VideoOptionListKey = 'videoAspectRatios' | 'videoResolutions' | 'videoDurations'
+
+const videoOptionControlKeyByListKey: Record<VideoOptionListKey, MediaGenerationConfigControlKey> = {
+    videoAspectRatios: 'aspectRatio',
+    videoResolutions: 'resolution',
+    videoDurations: 'duration',
+}
 
 function createGenericVideoOptionDropdown(
     controls: VideoOptionControls,
@@ -581,19 +871,9 @@ function createGenericVideoOptionDropdown(
     listKey: VideoOptionListKey,
     fallbackLabel: string,
 ) {
-    const getOptionsForModel = (videoAiModel: string) => {
-        const [provider, modelId] = (videoAiModel || '').split(':')
-        const models: any[] = aiModelsStore.getData()
-        let model: any = models.find((m: any) => m.provider === provider && m.model === modelId && Array.isArray(m[listKey]) && m[listKey].length > 0)
-        if (!model) {
-            model = models.find((m: any) => m.provider === provider && Array.isArray(m[listKey]) && m[listKey].length > 0)
-        }
-        if (!model) {
-            model = models.find((m: any) => Array.isArray(m[listKey]) && m[listKey].length > 0)
-        }
-        const list = model?.[listKey] ?? [{ value: '', label: fallbackLabel }]
-        return list.map((s: any) => ({ title: s.label, value: s.value }))
-    }
+    const controlKey = videoOptionControlKeyByListKey[listKey]
+    const getOptionsForModel = (videoAiModel: string) =>
+        matrixControlOptions(findMatrixControlForModel('video', videoAiModel, controlKey), fallbackLabel)
 
     let lastVideoModel = controls.getCurrentVideoModel?.() || ''
     let VIDEO_OPTIONS = getOptionsForModel(lastVideoModel)

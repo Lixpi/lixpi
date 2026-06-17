@@ -5,6 +5,11 @@
 // generation collapsible, and its generated media — kept separate so the
 // concurrently-streaming models never interleave their content.
 import { html } from '$src/utils/domTemplates.ts'
+import {
+    createAiLineageEventMarker,
+    getReasoningSectionLineageEvents,
+    normalizeAiLineageProjectionScope,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 
 export const aiReasoningSectionNodeType = 'aiReasoningSection'
 
@@ -14,6 +19,9 @@ export const aiReasoningSectionNodeSpec = {
         reasoningRunId: { default: '' },
         reasoningModelId: { default: '' },
         reasoningIndex: { default: null },
+        branchOriginNodeId: { default: '' },
+        branchForkNodeId: { default: '' },
+        lineageProjectionScope: { default: 'conversation' },
         isReceivingAnimation: { default: false },
     },
     content: '(paragraph | block)*',
@@ -28,6 +36,9 @@ export const aiReasoningSectionNodeSpec = {
                     reasoningRunId: dom.getAttribute('data-reasoning-run-id') || '',
                     reasoningModelId: dom.getAttribute('data-reasoning-model-id') || '',
                     reasoningIndex: parseReasoningIndex(dom.getAttribute('data-reasoning-index')),
+                    branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
+                    branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
+                    lineageProjectionScope: normalizeAiLineageProjectionScope(dom.getAttribute('data-lineage-projection-scope')),
                     isReceivingAnimation: false,
                 }
             },
@@ -42,6 +53,9 @@ export const aiReasoningSectionNodeSpec = {
                 'data-reasoning-run-id': node.attrs.reasoningRunId,
                 'data-reasoning-model-id': node.attrs.reasoningModelId,
                 'data-reasoning-index': node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
+                'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
+                'data-branch-fork-node-id': node.attrs.branchForkNodeId,
+                'data-lineage-projection-scope': node.attrs.lineageProjectionScope,
             },
             0,
         ]
@@ -49,7 +63,7 @@ export const aiReasoningSectionNodeSpec = {
 }
 
 function parseReasoningIndex(value) {
-    if (!value) return null
+    if (value === null || value === undefined || value === '') return null
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : null
 }
@@ -63,19 +77,35 @@ export const aiReasoningSectionNodeView = (node) => {
                 reasoningRunId: node.attrs.reasoningRunId || '',
                 reasoningModelId: node.attrs.reasoningModelId || '',
                 reasoningIndex: node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
+                branchOriginNodeId: node.attrs.branchOriginNodeId || '',
+                branchForkNodeId: node.attrs.branchForkNodeId || '',
+                lineageProjectionScope: node.attrs.lineageProjectionScope || 'conversation',
             }}
         >
+            <div className="ai-reasoning-section-lineage-markers"></div>
             <div className="ai-reasoning-section-content"></div>
             <div className="ai-reasoning-section-spinner" aria-hidden="true"></div>
         </div>
     ` as HTMLElement
 
+    const lineageMarkers = dom.querySelector('.ai-reasoning-section-lineage-markers') as HTMLElement
     const contentDOM = dom.querySelector('.ai-reasoning-section-content') as HTMLElement
     const spinner = dom.querySelector('.ai-reasoning-section-spinner') as HTMLElement
 
     const syncState = (current) => {
         const isWaiting = current.childCount === 0 && current.attrs.isReceivingAnimation
+        const branchOriginNodeId = current.attrs.branchOriginNodeId || ''
+        const branchForkNodeId = current.attrs.branchForkNodeId || ''
+        const lineageProjectionScope = normalizeAiLineageProjectionScope(current.attrs.lineageProjectionScope)
+        const lineageEvents = getReasoningSectionLineageEvents(current.attrs, lineageProjectionScope)
         dom.classList.toggle('is-empty', isWaiting)
+        dom.classList.toggle('has-branch-origin', lineageEvents.some(event => event.kind === 'branch-origin'))
+        dom.classList.toggle('has-branch-fork', lineageEvents.some(event => event.kind === 'branch-fork'))
+        dom.dataset.branchOriginNodeId = branchOriginNodeId
+        dom.dataset.branchForkNodeId = branchForkNodeId
+        dom.dataset.lineageProjectionScope = lineageProjectionScope
+        lineageMarkers.replaceChildren(...lineageEvents.map(createAiLineageEventMarker))
+        lineageMarkers.hidden = lineageEvents.length === 0
         spinner.classList.toggle('is-active', isWaiting)
     }
 
@@ -91,6 +121,9 @@ export const aiReasoningSectionNodeView = (node) => {
             dom.dataset.reasoningRunId = node.attrs.reasoningRunId || ''
             dom.dataset.reasoningModelId = node.attrs.reasoningModelId || ''
             dom.dataset.reasoningIndex = node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex)
+            dom.dataset.branchOriginNodeId = node.attrs.branchOriginNodeId || ''
+            dom.dataset.branchForkNodeId = node.attrs.branchForkNodeId || ''
+            dom.dataset.lineageProjectionScope = node.attrs.lineageProjectionScope || 'conversation'
             syncState(node)
             return true
         },

@@ -20,7 +20,7 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, aiChatIcon, mediaLibraryIconFilled } from '$src/svgIcons/index.ts'
+    import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
@@ -402,14 +402,10 @@
         onclick={handleToggleAiChatPanel}
         aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}
     >
-        {#if isAiChatPanelOpen}
-            {@html aiChatPanelCollapseIcon}
-        {:else}
-            {@html aiChatIcon}
-        {/if}
+        {@html aiChatPanelCollapseIcon}
     </button>
     <button class="workspace-media-library-launcher" onclick={handleToggleMediaLibrary} aria-label="Media Library">
-        {@html mediaLibraryIconFilled}
+        {@html mediaFoloderIcon}
         <span class="workspace-media-library-launcher-tooltip">Media Library</span>
     </button>
     <span class="workspace-zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>

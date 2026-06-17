@@ -199,6 +199,16 @@ accounting are documented in the
 mechanics and the event catalog are in
 [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
 
+When a media-generation matrix creates API-planned branch forks, the chat
+thread stores lineage ids on the streamed message pieces instead of baking panel
+chrome into those messages. Reasoning sections carry `branchOriginNodeId` and
+`branchForkNodeId`; generated image/video atoms retain the same ids for canvas
+reconstruction, while their provider badge rows stay model/provider-only. The
+shared lineage-event projector decides what to render for each view: the live
+conversation can show the full `Branch started` / `Branch fork created` context,
+a branch-root canvas panel materializes only `Branch started`, and a branch-fork
+or media-run panel renders only fork-local `Branch fork created` markers.
+
 ## Extraction Tab UX
 
 When an extraction is triggered (for example via an image's "Ask AI" handler), a

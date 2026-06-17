@@ -40,7 +40,7 @@ const buildFeatureDefinitionMessage = (featureId: string, name: string, category
         `  <summary>${summary}</summary>\n  <instructions>\n${instructions}\n  </instructions>\n` +
         `  <parameters>${JSON.stringify(parameters)}</parameters>\n` +
         (references.length > 0 ? `  <visualReferences>\n${referencesXml}\n  </visualReferences>\n` : '') +
-        `  <usage>When this feature is used for image generation, transfer the reusable visual property to the requested new subject. The attached images are derived feature samples generated during extraction; the original source image is intentionally not attached. Do not copy sample subjects, composition, pose, or layout unless the user explicitly asks.</usage>\n` +
+        `  <usage>When this feature is used for image or video generation, transfer the reusable visual property to the requested new subject. The attached images are derived feature samples generated during extraction; the original source image is intentionally not attached. Do not copy sample subjects, composition, pose, or layout unless the user explicitly asks.</usage>\n` +
         `</feature>`
     return { role: 'user', content: `Feature definition for @${name}. Use this as reusable context for the next request.\n${content}` }
 }

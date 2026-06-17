@@ -38,6 +38,10 @@ export type ModelSelectorDropdownSettings = {
 }
 
 export type DropdownSettings = {
+    errorState: {
+        fallbackTitle: string
+        textColor: string
+    }
     styles: {
         popoverBoxShadow: string
     }
@@ -221,6 +225,7 @@ export type MediaNodeSettings = {
     generatedMediaChrome: {
         iconSize: number
         topGap: number
+        chatScale: number
         modelBadgeSeparator: string
         zoomScaling: BoundedZoomScalingSettings
         styles: {
@@ -262,6 +267,93 @@ export type MediaNodeSettings = {
             defaultBoxShadow: string
             selectedBoxShadow: string
             borderRadius: number
+        }
+    }
+}
+
+export type VideoControlsSettings = {
+    height: number
+    canvas: {
+        horizontalInset: number
+        compactHorizontalInset: number
+        compactWidthThreshold: number
+        bottomInset: number
+        zoomScaling: BoundedZoomScalingSettings
+    }
+    chat: {
+        horizontalInset: number
+        bottomInset: number
+        controlsScale: number
+        minWidth: number
+        fallbackWidth: number
+    }
+    layout: {
+        padding: number
+        gap: number
+        buttonSize: number
+        iconSize: number
+        barRadius: number
+        buttonRadius: number
+        railHeight: number
+        scrubberHandleRadius: number
+        volumeHandleRadius: number
+        backgroundHighlightInset: number
+        timeWidth: number
+        speedSliderWidth: number
+        compactSpeedSliderWidth: number
+        speedSliderMinWidth: number
+        speedValueWidth: number
+        speedValueSliderGap: number
+        volumeSliderWidth: number
+        volumeSliderMinWidth: number
+        minSeekWidth: number
+        speedScaleTickHeight: number
+    }
+    typography: {
+        timeFontSize: number
+        timeFontWeight: number
+    }
+    speed: {
+        minRate: number
+        maxRate: number
+        pointerStep: number
+        keyboardStep: number
+        displayPrecision: number
+        defaultRate: number
+        guideRate: number
+        guideRates: number[]
+    }
+    responsive: {
+        speedSliderMinResponsiveWidth: number
+        speedSliderFullResponsiveWidth: number
+        volumeSliderMinResponsiveWidth: number
+        volumeSliderFullResponsiveWidth: number
+    }
+    styles: {
+        hostBorderRadius: string
+        hostDropShadow: string
+        hostBackdropFilter: string
+        hostReducedTransparencyBackground: string
+        background: string
+        backgroundStroke: string
+        backgroundStrokeWidth: number
+        glassHighlight: string
+        glassHighlightStrokeWidth: number
+        buttonHover: string
+        icon: string
+        iconMuted: string
+        text: string
+        textSubtle: string
+        rail: string
+        buffered: string
+        progress: string
+        speedScaleTick: string
+        speedScaleTickWidth: number
+        liquidGlassFilter: {
+            displacementScale: number
+            baseFrequency: string
+            numOctaves: number
+            seed: number
         }
     }
 }
@@ -314,6 +406,8 @@ export type Settings = {
 
     mediaNode: MediaNodeSettings
 
+    videoControls: VideoControlsSettings
+
     imageBranchLineage: ImageBranchLineageSettings
 
     mediaLibrary: MediaLibrarySettings
@@ -330,6 +424,10 @@ export const settings: Settings = {
 
     // Shared dropdown surface settings.
     dropdown: {
+        errorState: {
+            fallbackTitle: 'Error state',
+            textColor: colorPalette.red,
+        },
         styles: {
             // Shadow for dropdown popover menus. Increasing it raises menus visually from their backdrop.
             popoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
@@ -584,6 +682,8 @@ export const settings: Settings = {
             iconSize: 28,
             // Base screen-pixel gap at 100% and higher zoom between the media node's bottom edge and the chrome strip.
             topGap: 8,
+            // Scale applied to generated-media badges rendered inside AI chat history cards.
+            chatScale: 0.72,
             // Separator between the provider brand and model title in the model badge, e.g. "OpenAI : GPT Image 2". Includes its own surrounding spacing so it can be tuned freely (" : ", " — ", " / ", …).
             modelBadgeSeparator: ' : ',
             // Lower zoom breakpoint for generated-media icon chrome. Runtime call
@@ -650,6 +750,110 @@ export const settings: Settings = {
                 selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
                 // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
                 borderRadius: 8,
+            },
+        },
+    },
+
+    // Shared SVG video player controls used by canvas video nodes and in-chat generated videos.
+    videoControls: {
+        // Screen-pixel height of the control bar and host.
+        height: 40,
+        // Canvas video-node mount geometry.
+        canvas: {
+            // Horizontal inset for normal-width video nodes.
+            horizontalInset: 0,
+            // Horizontal inset for compact video nodes.
+            compactHorizontalInset: 0,
+            // Node width below which the compact horizontal inset is used.
+            compactWidthThreshold: 260,
+            // Vertical gap between the video node edge and the external controls strip.
+            bottomInset: 8,
+            // Bounded zoom scaling for the canvas control strip.
+            zoomScaling: { minZoom: 1.2 },
+        },
+        // In-chat generated-video mount geometry.
+        chat: {
+            // Left and right inset for the external chat controls row.
+            horizontalInset: 0,
+            // Vertical gap between the chat video surface and the external controls row.
+            bottomInset: 0,
+            // Visual scale applied to the shared controls inside chat history cards.
+            controlsScale: 0.72,
+            // Minimum SVG viewBox width used when the host is narrow or not measured.
+            minWidth: 300,
+            // Fallback width before ResizeObserver measurement is available.
+            fallbackWidth: 520,
+        },
+        // Internal SVG geometry. These are supported sizing knobs, not CSS layout mechanics.
+        layout: {
+            padding: 9,
+            gap: 6,
+            buttonSize: 30,
+            iconSize: 18,
+            barRadius: 99,
+            buttonRadius: 99,
+            railHeight: 5,
+            scrubberHandleRadius: 5.5,
+            volumeHandleRadius: 4,
+            backgroundHighlightInset: 1,
+            timeWidth: 48,
+            speedSliderWidth: 96,
+            compactSpeedSliderWidth: 78,
+            speedSliderMinWidth: 64,
+            speedValueWidth: 34,
+            speedValueSliderGap: 7,
+            volumeSliderWidth: 62,
+            volumeSliderMinWidth: 28,
+            minSeekWidth: 36,
+            speedScaleTickHeight: 10,
+        },
+        typography: {
+            timeFontSize: 13,
+            timeFontWeight: 600,
+        },
+        // Continuous playback-speed slider settings. Guide rates render as scale marks only.
+        speed: {
+            minRate: 0.5,
+            maxRate: 2,
+            pointerStep: 0.01,
+            keyboardStep: 0.05,
+            displayPrecision: 2,
+            defaultRate: 1,
+            guideRate: 1,
+            guideRates: [0.75, 1, 1.5],
+        },
+        // Responsive rail sizing thresholds.
+        responsive: {
+            speedSliderMinResponsiveWidth: 430,
+            speedSliderFullResponsiveWidth: 520,
+            volumeSliderMinResponsiveWidth: 330,
+            volumeSliderFullResponsiveWidth: 520,
+        },
+        styles: {
+            hostBorderRadius: '99px',
+            hostDropShadow: 'drop-shadow(0 12px 30px rgba(0, 0, 0, 0.30))',
+            hostBackdropFilter: 'blur(22px) saturate(155%) contrast(108%)',
+            hostReducedTransparencyBackground: 'rgba(24, 28, 34, 0.70)',
+            background: 'rgba(24, 28, 34, 0.24)',
+            backgroundStroke: 'rgba(255, 255, 255, 0.22)',
+            backgroundStrokeWidth: 1,
+            glassHighlight: 'rgba(255, 255, 255, 0.10)',
+            glassHighlightStrokeWidth: 1,
+            buttonHover: 'rgba(255, 255, 255, 0.14)',
+            icon: 'rgba(255, 255, 255, 0.95)',
+            iconMuted: 'rgba(255, 255, 255, 0.58)',
+            text: 'rgba(255, 255, 255, 0.92)',
+            textSubtle: 'rgba(255, 255, 255, 0.76)',
+            rail: 'rgba(255, 255, 255, 0.24)',
+            buffered: 'rgba(255, 255, 255, 0.34)',
+            progress: '#ffffff',
+            speedScaleTick: 'rgba(255, 255, 255, 0.42)',
+            speedScaleTickWidth: 1,
+            liquidGlassFilter: {
+                displacementScale: 2.4,
+                baseFrequency: '0.012 0.08',
+                numOctaves: 2,
+                seed: 7,
             },
         },
     },

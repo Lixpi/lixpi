@@ -92,9 +92,14 @@ createPureDropdown({
   enableTagFilter?: boolean,
   availableTags?: ['tag1', 'tag2'],
   mountToBody?: boolean,
-  disableAutoPositioning?: boolean
+  disableAutoPositioning?: boolean,
+  errorState?: {
+    enabled?: boolean,
+    title?: string,
+    textColor?: string
+  }
 })
-// Returns: { dom: HTMLElement, update: (option) => void, destroy: () => void }
+// Returns: { dom: HTMLElement, update: (option) => void, setErrorState: (errorState) => void, destroy: () => void }
 ```
 
 ### Configuration
@@ -109,6 +114,7 @@ createPureDropdown({
 - `availableTags`: Tags for filtering options
 - `mountToBody`: Appends bubble to `document.body` when `true`, otherwise nests it under the trigger container
 - `disableAutoPositioning`: Disables viewport `top/left` placement and relies on CSS placement while keeping arrow-to-anchor alignment
+- `errorState`: Enables red error text for the selected-value label unless `enabled` is `false`. Missing `title` falls back to `Error state`; missing `textColor` uses `settings.dropdown.errorState.textColor`
 - Various rendering flags for icons, colors, titles
 
 **Note**: `renderPosition` is deprecated and removed. The dropdown now uses InfoBubble's smart auto-flip logic instead.
@@ -117,6 +123,7 @@ createPureDropdown({
 
 - `dom`: HTMLElement to append to your container
 - `update(option)`: Update selected value display
+- `setErrorState(errorState)`: Toggle or replace the selected-value error state
 - `destroy()`: Clean up (automatically handled by infoBubble)
 
 ## Usage Pattern

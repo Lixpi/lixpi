@@ -1,17 +1,20 @@
 import { brokenImageIcon } from '$src/svgIcons/index.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import AuthService from '$src/services/auth-service.ts'
+import { settings } from '$src/settings.ts'
 import { NodeSelection } from 'prosemirror-state'
 import type { ImageBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
+import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
 // Sibling of aiGeneratedImageNode.ts. The in-chat representation of a generated
 // video. While VIDEO_PENDING is the active state, the node renders a placeholder
 // (matching the canvas placeholder style — no DOM spinner per PR #202). On
-// VIDEO_COMPLETE the node swaps to a poster + controls-less <video> element plus
-// the shared SVG videoControls bar used by the workspace canvas.
+// VIDEO_COMPLETE the node swaps to a poster + controls-less <video> element,
+// then mounts the shared SVG videoControls bar as an external row below it.
 
 export const aiGeneratedVideoNodeType = 'aiGeneratedVideo'
 
@@ -19,17 +22,6 @@ function parseVariantIndex(value: string | null): number | null {
     if (!value) return null
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : null
-}
-
-function formatModelLabel(modelId: string): string {
-    if (!modelId) return ''
-    const parts = String(modelId).split(':')
-    return parts[1] || parts[0] || ''
-}
-
-function formatVariantLabel(variantIndex: number | null): string {
-    if (variantIndex == null || !Number.isFinite(Number(variantIndex))) return ''
-    return `Variant ${Number(variantIndex) + 1}`
 }
 
 export const aiGeneratedVideoNodeSpec = {
@@ -54,6 +46,11 @@ export const aiGeneratedVideoNodeSpec = {
         mediaModelId: { default: '' },
         mediaType: { default: '' },
         variantIndex: { default: null },
+        branchId: { default: '' },
+        parentMediaNodeId: { default: '' },
+        branchOriginNodeId: { default: '' },
+        branchForkNodeId: { default: '' },
+        lineageParentNodeId: { default: '' },
         // Display attributes (mirror the image node)
         width: { default: null },
         alignment: { default: 'left' },
@@ -87,6 +84,11 @@ export const aiGeneratedVideoNodeSpec = {
                     mediaModelId: dom.getAttribute('data-media-model-id') || '',
                     mediaType: dom.getAttribute('data-media-type') || '',
                     variantIndex: parseVariantIndex(dom.getAttribute('data-variant-index')),
+                    branchId: dom.getAttribute('data-branch-id') || '',
+                    parentMediaNodeId: dom.getAttribute('data-parent-media-node-id') || '',
+                    branchOriginNodeId: dom.getAttribute('data-branch-origin-node-id') || '',
+                    branchForkNodeId: dom.getAttribute('data-branch-fork-node-id') || '',
+                    lineageParentNodeId: dom.getAttribute('data-lineage-parent-node-id') || '',
                     width: dom.getAttribute('data-width') || null,
                     alignment: dom.getAttribute('data-alignment') || 'left',
                     textWrap: dom.getAttribute('data-text-wrap') || 'none',
@@ -117,6 +119,11 @@ export const aiGeneratedVideoNodeSpec = {
             'data-media-model-id': node.attrs.mediaModelId,
             'data-media-type': node.attrs.mediaType,
             'data-variant-index': node.attrs.variantIndex == null ? '' : String(node.attrs.variantIndex),
+            'data-branch-id': node.attrs.branchId,
+            'data-parent-media-node-id': node.attrs.parentMediaNodeId,
+            'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
+            'data-branch-fork-node-id': node.attrs.branchForkNodeId,
+            'data-lineage-parent-node-id': node.attrs.lineageParentNodeId,
             'data-width': node.attrs.width || '',
             'data-alignment': node.attrs.alignment || 'left',
             'data-text-wrap': node.attrs.textWrap || 'none',
@@ -219,34 +226,37 @@ const buildAuthenticatedUrl = async (url: string): Promise<string> => {
 }
 
 export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => number | undefined) => {
-    const controlsHeight = 52
+    const normalizeScale = (value: number): number => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 1
+    const controlsScale = normalizeScale(settings.videoControls.chat.controlsScale)
+    const controlsSvgHeight = settings.videoControls.height
+    const controlsHeight = controlsSvgHeight * controlsScale
+    const controlsStyles = settings.videoControls.styles
     const containerStyle = {
         position: 'relative' as const,
         overflow: 'hidden' as const,
+        aspectRatio: String(Number(node.attrs.aspectRatio) || 1.777),
     }
     const controlsHostStyle = {
-        position: 'absolute' as const,
-        left: '18px',
-        right: '18px',
-        bottom: '14px',
         height: `${controlsHeight}px`,
+        margin: `${settings.videoControls.chat.bottomInset}px ${settings.videoControls.chat.horizontalInset}px 0`,
         pointerEvents: 'auto' as const,
-        borderRadius: '18px',
-        filter: 'drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28))',
-        backdropFilter: 'blur(10px)',
-        webkitBackdropFilter: 'blur(10px)',
+        borderRadius: controlsStyles.hostBorderRadius,
+        filter: controlsStyles.hostDropShadow,
+        backdropFilter: controlsStyles.hostBackdropFilter,
+        webkitBackdropFilter: controlsStyles.hostBackdropFilter,
+        overflow: 'hidden' as const,
         display: 'none',
     }
     const wrapper = html`
-        <div className="ai-generated-video-wrapper">
+        <div className="ai-generated-video-wrapper ai-generated-media-node">
             <div className="ai-generated-video-container" style=${containerStyle}>
                 <div className="ai-generated-video-placeholder">
                     <span className="placeholder-text">Generating video…</span>
                 </div>
                 <video className="ai-generated-video-content" preload="metadata" playsinline crossorigin="anonymous"></video>
-                <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
             </div>
-            <div className="ai-generated-media-run-meta"></div>
+            <div className="ai-generated-video-controls-host nopan" style=${controlsHostStyle}></div>
+            <div className="ai-generated-media-model-chrome ai-generated-media-run-meta"></div>
         </div>
     `
 
@@ -255,12 +265,21 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     const placeholderText = wrapper.querySelector('.ai-generated-video-placeholder .placeholder-text') as HTMLElement
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
     const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
-    const runMetaElement = wrapper.querySelector('.ai-generated-media-run-meta') as HTMLElement
+    const modelChromeElement = wrapper.querySelector('.ai-generated-media-model-chrome') as HTMLElement
+    applyVideoControlsHostStyleProperties(controlsHost)
+    applyMediaModelBadgeStyleProperties(wrapper, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
     let videoControls: VideoControlsInstance | null = null
     let controlsSvg: any = null
     let resizeObserver: ResizeObserver | null = null
+    let unsubscribeAiModelsStore: (() => void) | null = null
 
     applyStyle(videoElement, { display: 'none' })
+
+    const syncContainerGeometry = (): void => {
+        applyStyle(container, {
+            aspectRatio: String(Number(node.attrs.aspectRatio) || 1.777),
+        })
+    }
 
     const handleClick = (event: MouseEvent) => {
         const target = event.target as HTMLElement
@@ -280,37 +299,33 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
     wrapper.addEventListener('click', handleClick)
 
-    const updateRunMeta = (): void => {
-        const mediaLabel = formatModelLabel(node.attrs.mediaModelId || node.attrs.videoModel)
-        const variantLabel = formatVariantLabel(node.attrs.variantIndex)
-        runMetaElement.replaceChildren()
+    const updateModelChrome = (): void => {
+        renderMediaModelBadge(modelChromeElement, {
+            modelId: node.attrs.mediaModelId || node.attrs.videoModel,
+        })
+    }
 
-        if (mediaLabel) {
-            const modelPill = html`<span className="ai-generated-media-run-pill" title=${node.attrs.mediaModelId || node.attrs.videoModel}>${mediaLabel}</span>` as HTMLElement
-            runMetaElement.appendChild(modelPill)
-        }
-
-        if (variantLabel) {
-            const variantPill = html`<span className="ai-generated-media-run-pill is-variant">${variantLabel}</span>` as HTMLElement
-            runMetaElement.appendChild(variantPill)
-        }
-
-        runMetaElement.hidden = runMetaElement.childElementCount === 0
+    const clearErrorPlaceholder = (): void => {
+        container.querySelector('.video-error-placeholder')?.remove()
     }
 
     const getControlsWidth = (): number => {
+        return Math.max(settings.videoControls.chat.minWidth / controlsScale, getControlsVisualWidth() / controlsScale)
+    }
+
+    const getControlsVisualWidth = (): number => {
         const measuredWidth = controlsHost.getBoundingClientRect().width || controlsHost.clientWidth
-        return Math.max(240, measuredWidth || 520)
+        return Math.max(settings.videoControls.chat.minWidth, measuredWidth || settings.videoControls.chat.fallbackWidth)
     }
 
     const syncControlsGeometry = (): void => {
         if (!videoControls || !controlsSvg) return
         const width = getControlsWidth()
         controlsSvg
-            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
-            .attr('width', '100%')
-            .attr('height', String(controlsHeight))
-        videoControls.resize(0, 0, width)
+            .attr('viewBox', `0 0 ${width} ${controlsSvgHeight}`)
+            .attr('width', `${100 / controlsScale}%`)
+            .attr('height', String(controlsSvgHeight))
+        videoControls.resize(0, 0, width, getControlsVisualWidth())
     }
 
     const destroyVideoControls = (): void => {
@@ -330,18 +345,22 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         controlsSvg = select(controlsHost)
             .append('svg')
             .attr('class', 'ai-generated-video-controls-svg')
-            .attr('width', '100%')
-            .attr('height', String(controlsHeight))
-            .attr('viewBox', `0 0 ${width} ${controlsHeight}`)
+            .attr('width', `${100 / controlsScale}%`)
+            .attr('height', String(controlsSvgHeight))
+            .attr('viewBox', `0 0 ${width} ${controlsSvgHeight}`)
             .style('display', 'block')
             .style('overflow', 'visible')
+            .style('pointer-events', 'none')
+            .style('transform-origin', '0 0')
+            .style('transform', `scale(${controlsScale})`)
 
         videoControls = createVideoControls(controlsSvg, {
             id: String(node.attrs.responseId || node.attrs.fileId || 'chat-video'),
             x: 0,
             y: 0,
             width,
-            height: controlsHeight,
+            height: controlsSvgHeight,
+            responsiveWidth: getControlsVisualWidth(),
             videoEl: videoElement,
             className: 'ai-generated-video-controls',
         })
@@ -356,19 +375,19 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         const { videoUrl, posterUrl, isPending, errorMessage } = node.attrs
 
         if (errorMessage) {
+            clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
             destroyVideoControls()
             placeholderElement.classList.remove('is-active')
-            if (!container.querySelector('.video-error-placeholder')) {
-                container.appendChild(html`
-                    <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>${errorMessage}</span></div>
-                `)
-            }
+            container.appendChild(html`
+                <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>${errorMessage}</span></div>
+            `)
             return
         }
 
         if (isPending || !videoUrl) {
+            clearErrorPlaceholder()
             applyStyle(videoElement, { display: 'none' })
             applyStyle(controlsHost, { display: 'none' })
             destroyVideoControls()
@@ -377,6 +396,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             return
         }
 
+        clearErrorPlaceholder()
         placeholderElement.classList.remove('is-active')
         applyStyle(videoElement, { display: 'block' })
         applyStyle(controlsHost, { display: 'block' })
@@ -394,18 +414,18 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     }
 
     videoElement.onerror = () => {
+        clearErrorPlaceholder()
         applyStyle(videoElement, { display: 'none' })
         applyStyle(controlsHost, { display: 'none' })
         destroyVideoControls()
-        if (!container.querySelector('.video-error-placeholder')) {
-            container.appendChild(html`
-                <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Video unavailable</span></div>
-            `)
-        }
+        container.appendChild(html`
+            <div className="video-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Video unavailable</span></div>
+        `)
     }
 
     updateDisplay().catch(() => {})
-    updateRunMeta()
+    unsubscribeAiModelsStore = aiModelsStore.subscribe(() => updateModelChrome())
+    syncContainerGeometry()
 
     return {
         dom: wrapper,
@@ -415,12 +435,15 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             }
 
             node = updatedNode
+            syncContainerGeometry()
             updateDisplay().catch(() => {})
-            updateRunMeta()
+            updateModelChrome()
             return true
         },
         destroy: () => {
             wrapper.removeEventListener('click', handleClick)
+            unsubscribeAiModelsStore?.()
+            unsubscribeAiModelsStore = null
             resizeObserver?.disconnect()
             resizeObserver = null
             destroyVideoControls()
