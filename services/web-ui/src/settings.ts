@@ -735,11 +735,11 @@ export const settings: Settings = {
             // Fraction of the rounded media perimeter occupied by the visible snake.
             snakeLengthFraction: 0.24,
             // Milliseconds for one complete lap around the media node.
-            animationDurationMs: 13200,
+            animationDurationMs: 93200,
             // Lower zoom breakpoint for the PIXI generation outline stroke widths. Runtime call sites opt this config into the shared adaptive low-zoom curve.
             zoomScaling: { minZoom: 0.4 },
             styles: {
-                // Alpha at the tail; the head is always fully opaque, so this controls how completely the tail fades out.
+                // Tail fade preference. The glass renderer keeps a material-opacity floor so the tail fades without turning into mist.
                 snakeTailAlpha: 0,
                 // Tail-to-head colors matching the visible footer link underline accents after footer opacity is applied.
                 snakeColors: ['#E3A089', '#96BFF4'],

@@ -21,7 +21,7 @@ The visual-effects system has three rendering families:
 |---|---|---|---|
 | Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds |
 | SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border |
-| PIXI traveling outline | `PixiTravelingOutlineRenderer` | PIXI mesh snake with a continuous tapered gradient traveling around a rounded perimeter while active | Generated-media progress border and future PIXI outlined progress surfaces |
+| PIXI traveling outline | `PixiTravelingOutlineRenderer` | Single PIXI mesh snake with a continuous tapered colored-glass droplet texture traveling around a rounded perimeter while active | Generated-media progress border and future PIXI outlined progress surfaces |
 
 Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer:
 
@@ -37,7 +37,7 @@ Animation curves are centralized in `Easing` where a surface uses shared easing,
 | `FreeformGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/freeformGradient.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.ts) | Color parsing, phase positions, freeform sampling, image-data painting, and canvas bitmap drawing |
 | `ShiftingGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts) | Singleton-per-color-set canvas renderer, subscriptions, visibility, resize redraws, optional pattern overlays, and animated phase changes |
 | `SvgGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/svgGradient.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.ts) | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
-| `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with continuous tapered color/alpha/width interpolation and active-only animation lifecycle |
+| `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with a continuous tapered colored-glass droplet texture and active-only animation lifecycle |
 
 ### Reuse Rules
 
@@ -70,7 +70,7 @@ These SVG consumers use `settings.gradient.styles.shiftingColors`; they reuse th
 
 ### PIXI Generated-Media Progress Outline
 
-`PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a PIXI mesh. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for generated-media progress with the palette configured in `settings.mediaNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
+`PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a single PIXI mesh textured as a raised colored-glass droplet: solid tinted core, one broad specular streak, and one soft shadowed edge are baked into one material. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for generated-media progress with the palette configured in `settings.mediaNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
 
 ### Static CSS Gradient Surfaces
 

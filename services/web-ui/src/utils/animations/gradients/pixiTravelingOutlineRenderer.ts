@@ -67,6 +67,8 @@ type TravelingSnakeMeshGeometry = {
 type GradientCanvas = OffscreenCanvas | HTMLCanvasElement
 type GradientCanvasContext = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
 
+type RgbColor = { r: number; g: number; b: number }
+
 export function getRoundedOutlinePerimeter(width: number, height: number, radius: number): number {
     const boundedRadius = Math.max(0, Math.min(radius, width / 2, height / 2))
     return 2 * (width + height - 4 * boundedRadius) + 2 * Math.PI * boundedRadius
@@ -192,20 +194,70 @@ export function interpolateTravelingOutlineColor(colors: ReadonlyArray<string>, 
     return (channel(16) << 16) | (channel(8) << 8) | channel(0)
 }
 
-function parseHexColor(hex: string): { r: number; g: number; b: number } {
-    const normalized = hex.trim().replace(/^#/, '')
-    if (!/^[\da-f]{6}$/i.test(normalized)) return { r: 255, g: 255, b: 255 }
-    const value = Number.parseInt(normalized, 16)
+function getTravelingOutlineColorChannels(colors: ReadonlyArray<string>, progress: number): RgbColor {
+    const color = interpolateTravelingOutlineColor(colors, progress)
     return {
-        r: (value >> 16) & 0xff,
-        g: (value >> 8) & 0xff,
-        b: value & 0xff,
+        r: (color >> 16) & 0xff,
+        g: (color >> 8) & 0xff,
+        b: color & 0xff,
     }
 }
 
-function getGradientColorStop(color: string, alpha: number): string {
-    const { r, g, b } = parseHexColor(color)
-    return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`
+function mixChannel(from: number, to: number, amount: number): number {
+    return Math.round(from + (to - from) * Math.max(0, Math.min(1, amount)))
+}
+
+function mixColor(from: RgbColor, to: RgbColor, amount: number): RgbColor {
+    return {
+        r: mixChannel(from.r, to.r, amount),
+        g: mixChannel(from.g, to.g, amount),
+        b: mixChannel(from.b, to.b, amount),
+    }
+}
+
+function gaussian(position: number, center: number, width: number): number {
+    return Math.exp(-((position - center) ** 2) / (2 * width ** 2))
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+    const progress = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)))
+    return progress * progress * (3 - 2 * progress)
+}
+
+function getTextureOpacityProgress(progress: number, tailAlpha: number): number {
+    const configuredOpacity = tailAlpha + (1 - tailAlpha) * Math.pow(progress, 0.72)
+    const tailFade = smoothstep(0, 0.08, progress)
+    return tailFade * Math.max(0.62, Math.min(1, configuredOpacity))
+}
+
+function getGlassTexturePixel(
+    colors: ReadonlyArray<string>,
+    progress: number,
+    crossSection: number,
+    tailAlpha: number
+): { color: RgbColor; alpha: number } {
+    const white = { r: 255, g: 255, b: 255 }
+    const glassShadow = { r: 78, g: 91, b: 108 }
+    const baseColor = getTravelingOutlineColorChannels(colors, progress)
+    const opacityProgress = getTextureOpacityProgress(progress, tailAlpha)
+    const edgeDistance = Math.abs(crossSection - 0.5) * 2
+    const roundedBody = Math.max(0, Math.sin(Math.PI * crossSection))
+    const lensCore = Math.pow(roundedBody, 0.42)
+    const upperSpecular = gaussian(crossSection, 0.32 + 0.035 * Math.sin(progress * Math.PI), 0.16)
+        * smoothstep(0.1, 0.32, progress)
+    const headSpecular = gaussian(progress, 0.91, 0.22) * gaussian(crossSection, 0.48, 0.26)
+    const lowerEdgeShadow = gaussian(crossSection, 0.88, 0.2)
+    const upperEdgeShadow = gaussian(crossSection, 0.1, 0.2)
+    const edgeShadow = lowerEdgeShadow * 0.16 + upperEdgeShadow * 0.07 + Math.pow(edgeDistance, 2.2) * 0.04
+    const highlight = upperSpecular * 0.24 + headSpecular * 0.18 + lensCore * 0.08
+
+    const litColor = mixColor(baseColor, white, Math.min(0.3, highlight))
+    const color = mixColor(litColor, glassShadow, Math.min(0.14, edgeShadow))
+    const alpha = opacityProgress * Math.min(0.94, 0.72 + lensCore * 0.16 + upperSpecular * 0.04 + headSpecular * 0.03)
+    return {
+        color,
+        alpha: Math.min(0.99, alpha),
+    }
 }
 
 function createGradientCanvas(width: number, height: number): GradientCanvas {
@@ -216,27 +268,33 @@ function createGradientCanvas(width: number, height: number): GradientCanvas {
     return canvas
 }
 
-function createTravelingSnakeTexture(colors: ReadonlyArray<string>, tailAlpha: number): Texture {
+function createTravelingSnakeTexture(
+    colors: ReadonlyArray<string>,
+    tailAlpha: number
+): Texture {
     const width = 256
-    const height = 4
+    const height = 64
     const canvas = createGradientCanvas(width, height)
     const context = canvas.getContext('2d') as GradientCanvasContext | null
     if (!context) return Texture.WHITE
-
-    const gradient = context.createLinearGradient(0, 0, width, 0)
     const safeColors = colors.length > 0 ? colors : ['#ffffff']
-    const colorStopCount = Math.max(2, safeColors.length)
-    for (let index = 0; index < colorStopCount; index++) {
-        const progress = index / (colorStopCount - 1)
-        const color = safeColors[Math.min(index, safeColors.length - 1)]
-        const opacityProgress = Math.pow(progress, 1.35)
-        const alpha = tailAlpha + (1 - tailAlpha) * opacityProgress
-        gradient.addColorStop(progress, getGradientColorStop(color, alpha))
+
+    const imageData = context.createImageData(width, height)
+    for (let y = 0; y < height; y++) {
+        const crossSection = y / (height - 1)
+        for (let x = 0; x < width; x++) {
+            const progress = x / (width - 1)
+            const { color, alpha } = getGlassTexturePixel(safeColors, progress, crossSection, tailAlpha)
+            const offset = (y * width + x) * 4
+            imageData.data[offset] = color.r
+            imageData.data[offset + 1] = color.g
+            imageData.data[offset + 2] = color.b
+            imageData.data[offset + 3] = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
+        }
     }
 
     context.clearRect(0, 0, width, height)
-    context.fillStyle = gradient
-    context.fillRect(0, 0, width, height)
+    context.putImageData(imageData, 0, 0)
 
     return Texture.from(canvas as HTMLCanvasElement, true)
 }
@@ -463,7 +521,7 @@ export class PixiTravelingOutlineRenderer {
     private readonly onFrame: () => void
     private readonly ease: (progress: number) => number
     private readonly getStrokeScale: () => number
-    private readonly gradientTexture: Texture
+    private readonly texture: Texture
     private readonly entries = new Map<string, OutlineEntry>()
     private animationRaf: number | null = null
     private animationStartedAt: number | null = null
@@ -475,7 +533,7 @@ export class PixiTravelingOutlineRenderer {
         this.onFrame = options.onFrame
         this.ease = options.ease ?? Easing.travelingOutlineTransition
         this.getStrokeScale = options.getStrokeScale ?? (() => 1)
-        this.gradientTexture = createTravelingSnakeTexture(this.style.snakeColors, this.style.snakeTailAlpha)
+        this.texture = createTravelingSnakeTexture(this.style.snakeColors, this.style.snakeTailAlpha)
     }
 
     sync(datums: ReadonlyArray<PixiTravelingOutlineDatum>): void {
@@ -489,7 +547,7 @@ export class PixiTravelingOutlineRenderer {
             const entry = this.entries.get(datum.id) ?? this.createEntry(datum)
             this.entries.set(datum.id, entry)
             this.updateEntryGeometry(entry, datum)
-            entry.mesh.renderable = datum.visible
+            this.setEntryRenderable(entry, datum.visible)
         }
 
         this.stopIfIdle()
@@ -509,7 +567,7 @@ export class PixiTravelingOutlineRenderer {
     setVisible(id: string, visible: boolean): void {
         const entry = this.entries.get(id)
         if (!entry) return
-        entry.mesh.renderable = visible
+        this.setEntryRenderable(entry, visible)
     }
 
     destroy(): void {
@@ -520,20 +578,20 @@ export class PixiTravelingOutlineRenderer {
         }
         for (const id of this.entries.keys()) this.destroyEntry(id)
         this.animationStartedAt = null
-        if (this.gradientTexture !== Texture.WHITE) this.gradientTexture.destroy(true)
+        if (this.texture !== Texture.WHITE) this.texture.destroy(true)
     }
 
     private paint(entry: OutlineEntry, elapsed: number): void {
         const strokeScale = this.getSafeStrokeScale()
         const snakeHeadWidth = this.style.snakeHeadWidth * strokeScale
-        const snakeTailWidth = snakeHeadWidth * Math.max(0, Math.min(1, this.style.snakeTailWidthFraction))
         const outlineGap = this.style.gap * strokeScale
-        const headOutset = outlineGap + snakeHeadWidth / 2
-        const width = entry.width + headOutset * 2
-        const height = entry.height + headOutset * 2
         const mediaRadius = Number.isFinite(entry.radius) ? Math.max(0, entry.radius) : this.style.radius
-        const radius = mediaRadius + headOutset
-        const perimeter = getRoundedOutlinePerimeter(width, height, radius)
+        const snakeTailWidth = snakeHeadWidth * Math.max(0, Math.min(1, this.style.snakeTailWidthFraction))
+        const headOutset = outlineGap + snakeHeadWidth / 2
+        const outlineWidth = entry.width + headOutset * 2
+        const outlineHeight = entry.height + headOutset * 2
+        const outlineRadius = mediaRadius + headOutset
+        const perimeter = getRoundedOutlinePerimeter(outlineWidth, outlineHeight, outlineRadius)
         const headDistance = getTravelingOutlineHeadDistance(elapsed, this.style.durationMs, perimeter, this.ease)
         const snakeLength = perimeter * this.style.snakeLengthFraction
         const sampleCount = getTravelingSnakeSampleCount(snakeLength, snakeHeadWidth)
@@ -562,10 +620,11 @@ export class PixiTravelingOutlineRenderer {
 
     private createEntry(datum: PixiTravelingOutlineDatum): OutlineEntry {
         const geometry = new MeshGeometry()
-        const mesh = new Mesh({ geometry, texture: this.gradientTexture })
-        mesh.label = 'pixi-traveling-outline'
+        const mesh = new Mesh({ geometry, texture: this.texture })
+        mesh.label = 'pixi-traveling-outline-glass'
         mesh.eventMode = 'none'
         this.container.addChild(mesh)
+
         const entry = {
             mesh,
             geometry,
@@ -576,9 +635,13 @@ export class PixiTravelingOutlineRenderer {
             radius: datum.radius,
         }
         this.updateEntryGeometry(entry, datum)
-        mesh.renderable = datum.visible
+        this.setEntryRenderable(entry, datum.visible)
         this.paint(entry, 0)
         return entry
+    }
+
+    private setEntryRenderable(entry: OutlineEntry, renderable: boolean): void {
+        entry.mesh.renderable = renderable
     }
 
     private updateEntryGeometry(
