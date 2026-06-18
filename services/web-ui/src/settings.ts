@@ -248,16 +248,15 @@ export type MediaNodeSettings = {
     }
     generationBorder: {
         radius: number
-        trackWidth: number
+        gap: number
         snakeWidth: number
+        snakeTailWidthFraction: number
         snakeLengthFraction: number
-        snakeSegmentCount: number
         animationDurationMs: number
+        zoomScaling: BoundedZoomScalingSettings
         styles: {
-            trackColor: string
-            trackAlpha: number
             snakeTailAlpha: number
-            snakeColors: [string, string, string, string, string]
+            snakeColors: string[]
         }
     }
     // Image-specific.
@@ -725,17 +724,25 @@ export const settings: Settings = {
 
         // PIXI-rendered animated outline shown while AI-generated media (image or video) is receiving partials.
         generationBorder: {
+            // Fallback rounded-corner radius for the snake path when a media-specific clip radius is unavailable.
             radius: 10,
-            trackWidth: 3,
-            snakeWidth: 4,
+            // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
+            gap: 3,
+            // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
+            snakeWidth: 15,
+            // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
+            snakeTailWidthFraction: 0.18,
+            // Fraction of the rounded media perimeter occupied by the visible snake.
             snakeLengthFraction: 0.24,
-            snakeSegmentCount: 72,
-            animationDurationMs: 3200,
+            // Milliseconds for one complete lap around the media node.
+            animationDurationMs: 13200,
+            // Lower zoom breakpoint for the PIXI generation outline stroke widths. Runtime call sites opt this config into the shared adaptive low-zoom curve.
+            zoomScaling: { minZoom: 0.4 },
             styles: {
-                trackColor: '#D0D6E1',
-                trackAlpha: 0.72,
-                snakeTailAlpha: 0.25,
-                snakeColors: ['#1D57CB', '#2474FF', '#7C4DFF', '#D63FF0', '#FF9933'],
+                // Alpha at the tail; the head is always fully opaque, so this controls how completely the tail fades out.
+                snakeTailAlpha: 0,
+                // Tail-to-head colors matching the visible footer link underline accents after footer opacity is applied.
+                snakeColors: ['#E3A089', '#96BFF4'],
             },
         },
 

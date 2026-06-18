@@ -7,6 +7,7 @@ import {
 } from 'pixi.js'
 import RBush from 'rbush'
 import type {
+    CanvasNode,
     CanvasState,
     ImageCanvasNode,
     CanvasViewport,
@@ -37,6 +38,10 @@ import {
     PixiTravelingOutlineRenderer,
     type PixiTravelingOutlineDatum,
 } from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
+import {
+    getAdaptiveBoundedZoomScalingOptions,
+    scaleCanvasChromeWorldSizeForZoom,
+} from '$src/infographics/utils/zoomScaling.ts'
 import { settings } from '$src/settings.ts'
 
 type PixiImageEntry = {
@@ -219,20 +224,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let prefetchScheduled = false
     const generationBorder = settings.mediaNode.generationBorder
     const generationBorderStyles = generationBorder.styles
+    const generationBorderZoomScaling = getAdaptiveBoundedZoomScalingOptions(generationBorder.zoomScaling ?? { minZoom: 0.4 })
     const generatingBorderRenderer = new PixiTravelingOutlineRenderer({
         container: generatingBorderLayer,
         style: {
             radius: generationBorder.radius,
-            trackWidth: generationBorder.trackWidth,
-            trackColor: generationBorderStyles.trackColor,
-            trackAlpha: generationBorderStyles.trackAlpha,
-            segmentWidth: generationBorder.snakeWidth,
-            segmentLengthFraction: generationBorder.snakeLengthFraction,
-            segmentTailAlpha: generationBorderStyles.snakeTailAlpha,
-            segmentCount: generationBorder.snakeSegmentCount,
-            segmentColors: generationBorderStyles.snakeColors,
+            gap: generationBorder.gap ?? 0,
+            snakeHeadWidth: generationBorder.snakeWidth,
+            snakeTailWidthFraction: generationBorder.snakeTailWidthFraction ?? 0.18,
+            snakeLengthFraction: generationBorder.snakeLengthFraction,
+            snakeTailAlpha: generationBorderStyles.snakeTailAlpha,
+            snakeColors: generationBorderStyles.snakeColors,
             durationMs: generationBorder.animationDurationMs,
         },
+        getStrokeScale: () => scaleCanvasChromeWorldSizeForZoom(1, currentViewport.zoom, generationBorderZoomScaling),
         onFrame: scheduleRender,
     })
 
@@ -445,21 +450,28 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         dimensions: { width: number; height: number }
     ): void {
         if (destroyed) return
+        const x = worldPosition.x
+        const y = worldPosition.y
+        const w = dimensions.width
+        const h = dimensions.height
         const entry = entries.get(nodeId)
         if (!entry) {
             // Non-image (e.g. video) nodes flow through the registry so their
             // sprite transforms stay in lockstep with DOM hitboxes during drag/resize.
             if (registryDispatchedNodes.has(nodeId)) {
                 mediaNodeRegistry.dispatchLiveTransform(nodeId, worldPosition, dimensions)
+                const node = lastState?.nodes.find((candidate) => candidate.nodeId === nodeId)
+                generatingBorderRenderer.updateGeometry(nodeId, {
+                    x,
+                    y,
+                    width: w,
+                    height: h,
+                    radius: getGeneratingBorderRadius(node, w, h),
+                })
                 scheduleRender()
             }
             return
         }
-
-        const x = worldPosition.x
-        const y = worldPosition.y
-        const w = dimensions.width
-        const h = dimensions.height
 
         entry.sprite.position.set(x, y)
         entry.sprite.width = w
@@ -472,7 +484,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entry.colorRectH = h
         }
 
-        generatingBorderRenderer.updateGeometry(nodeId, { x, y, width: w, height: h })
+        generatingBorderRenderer.updateGeometry(nodeId, { x, y, width: w, height: h, radius: getImageBorderRadius(w, h) })
 
         spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
         const newRect: IndexedImage = { minX: x, minY: y, maxX: x + w, maxY: y + h, nodeId }
@@ -488,6 +500,21 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function getImageBorderRadius(width: number, height: number): number {
         const borderRadius = settings.mediaNode.image.styles.borderRadius
+        if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
+        return Math.min(borderRadius, width / 2, height / 2)
+    }
+
+    function getVideoBorderRadius(width: number, height: number): number {
+        const mediaNodeSettings = settings.mediaNode as typeof settings.mediaNode & { borderRadius?: number }
+        const borderRadius = mediaNodeSettings.borderRadius ?? 12
+        if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
+        return Math.min(borderRadius, width / 2, height / 2)
+    }
+
+    function getGeneratingBorderRadius(node: CanvasNode | undefined, width: number, height: number): number {
+        if (node?.type === 'image') return getImageBorderRadius(width, height)
+        if (node?.type === 'video') return getVideoBorderRadius(width, height)
+        const borderRadius = generationBorder.radius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }
@@ -610,6 +637,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 y: worldPosition.y,
                 width: node.dimensions.width,
                 height: node.dimensions.height,
+                radius: getGeneratingBorderRadius(node, node.dimensions.width, node.dimensions.height),
                 visible: true,
             })
         }

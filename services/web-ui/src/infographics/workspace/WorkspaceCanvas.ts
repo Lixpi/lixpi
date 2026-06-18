@@ -168,6 +168,8 @@ type GeneratedMediaInfoPanelOptions = {
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
+// Temporary visual-debug switch for the PIXI generating-media outline.
+const DEBUG_SHOW_GENERATING_OUTLINE_ON_ALL_MEDIA_NODES = true
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
     return { width: size, height: size }
@@ -1943,13 +1945,20 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         }
     }
 
-    function syncPixiGeneratingImageNodes(): void {
+    function syncPixiGeneratingImageNodes(canvasState: CanvasState | null = currentCanvasState): void {
         // Feeds the PIXI traveling outline (snake border) renderer with the set
         // of currently-generating media nodes, both image and video. Before the
         // first generated variant arrives, selected/reference media also
         // participate so users can see which source pixels are conditioning the
         // request. Once pixels arrive, only the generated node keeps animating.
         const generatingIds = new Set<string>()
+        if (DEBUG_SHOW_GENERATING_OUTLINE_ON_ALL_MEDIA_NODES) {
+            for (const node of canvasState?.nodes ?? []) {
+                if (node.type === 'image' || node.type === 'video') generatingIds.add(node.nodeId)
+            }
+            pixiMediaLayer?.setGeneratingImageNodes(generatingIds)
+            return
+        }
         for (const partial of partialImageTracker.values()) generatingIds.add(partial.nodeId)
         for (const pending of videoGenerationTracker.values()) generatingIds.add(pending.nodeId)
         for (const referenceNodeIds of generatingReferenceNodeIdsByThread.values()) {
@@ -1959,7 +1968,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function syncPixiMediaLayer(canvasState: CanvasState | null = currentCanvasState): void {
-        syncPixiGeneratingImageNodes()
+        syncPixiGeneratingImageNodes(canvasState)
         pixiMediaLayer?.sync(canvasState)
         syncGeneratedMediaChrome(canvasState)
     }
