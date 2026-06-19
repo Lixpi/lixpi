@@ -2,11 +2,12 @@
 
 This plugin provides rich image editing functionality in the ProseMirror editor for **both `image` and `aiGeneratedImage` node types**, including:
 
-- **Visual Selection** - Images display corner indicators when hovered or selected
-- **Resize Handles** - Drag any corner handle to resize images (width only, aspect ratio is always preserved)
+- **Visual Selection** - Images can be selected without revealing resize chrome
+- **Resize Handles** - Drag a corner handle to resize images (width only, aspect ratio is always preserved); only the hovered corner indicator is shown
 - **Percentage Width** - Image widths are stored as percentages for responsive behavior
 - **Bubble Menu Integration** - When an image is selected, the bubble menu shows image-specific options
 - **Partial Image Placeholder** - `aiGeneratedImage` nodes with `isPartial: true` and no `imageData` render a compact generating placeholder using the same wrapper, alignment, and selection behavior as completed images
+- **Generated Model Chrome** - `aiGeneratedImage` nodes render the provider/model badge below completed generated images; branch lineage stays in node attrs and AI chat projection markers, not in this badge row
 
 ## Supported Node Types
 
@@ -44,7 +45,7 @@ Text wrapping uses the modern CSS `shape-outside` property for smooth text flow 
 
 - `imageNodeView.ts` - Custom ProseMirror NodeView for images with four corner resize handles (handles both `image` and `aiGeneratedImage`)
 - `imageSelectionPlugin.ts` - Plugin that registers the custom NodeView for both node types
-- `imageSelection.scss` - Styles for image wrapper, resize handles, alignment, and text wrap
+- `imageSelection.scss` - Styles for image wrapper, image-only media frame, resize handles, alignment, and text wrap
 - `index.ts` - Module exports
 
 **Adding a new image-like node type:**
@@ -86,6 +87,11 @@ aiGeneratedImage: {
     responseId: {default: null},
     aiModel: {default: null},
     isPartial: {default: true},
+    branchId: {default: ''},          // API lineage id for branch-tree reconstruction
+    branchOriginNodeId: {default: ''},
+    branchForkNodeId: {default: ''},
+    parentMediaNodeId: {default: ''},
+    lineageParentNodeId: {default: ''},
     width: {default: null},           // Percentage string
     alignment: {default: 'left'},     // 'left' | 'center' | 'right'
     textWrap: {default: 'none'}       // 'none' | 'left' | 'right'
@@ -105,8 +111,10 @@ The plugin is automatically registered in the editor. To use:
 ## CSS Classes
 
 - `.pm-image-wrapper` - Figure element wrapping the image
+- `.ai-generated-media-node` - Added to generated image wrappers so chat-thread media layout can share sizing with generated videos
 - `.pm-image-align-{left|center|right}` - Alignment modifier classes
 - `.pm-image-wrap-{none|left|right}` - Text wrap modifier classes
+- `.pm-image-media-frame` - Image-only frame that owns resize handles, the image, error state, and partial placeholder
 - `.pm-image-generating-placeholder` - Compact dot placeholder for partial generated images without image data
 - `.pm-image-resize-handle` - Base class for resize handle elements
 - `.pm-image-resize-{top-left|top-right|bottom-left|bottom-right}` - Corner-specific handle classes

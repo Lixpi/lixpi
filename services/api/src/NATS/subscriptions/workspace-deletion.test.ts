@@ -37,7 +37,11 @@ vi.mock('../../models/ai-chat-thread.ts', () => ({ default: mocks.aiChatThread }
 vi.mock('../../models/extraction-run.ts', () => ({ default: mocks.extractionRun }))
 vi.mock('../../services/media-library-storage.ts', () => ({
     deleteLibraryImageObject: vi.fn(),
+    deleteLibraryVideoObject: vi.fn(),
     deleteMediaLibraryWorkspaceBucket: vi.fn(),
+    getMediaLibraryWorkspaceBucketName: vi.fn((workspaceId: string) =>
+        `media-library-workspace-${workspaceId}-files`
+    ),
 }))
 vi.mock('../../services/feature-sample-storage.ts', () => ({
     ensureFeatureSamplesForScope: vi.fn(),

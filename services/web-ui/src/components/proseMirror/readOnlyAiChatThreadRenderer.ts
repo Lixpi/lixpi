@@ -1,6 +1,7 @@
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import type { ProseMirrorJsonNode } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadContentUtils.ts'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
+import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { html } from '$src/utils/domTemplates.ts'
 
 export type ReadOnlyAiChatThreadRenderOptions = {
@@ -9,6 +10,7 @@ export type ReadOnlyAiChatThreadRenderOptions = {
     threadId: string
     className?: string
     traceDetailsOptions?: ImageGenerationTraceDetailsOptions
+    contextPreview?: AiUserMessageContextPreviewRenderer
 }
 
 export type ReadOnlyAiChatThreadRendererInstance = {
@@ -41,6 +43,7 @@ class ReadOnlyAiChatThreadRenderer implements ReadOnlyAiChatThreadRendererInstan
             aiChatThreadRenderContext: {
                 readOnly: true,
                 traceDetailsOptions: options.traceDetailsOptions,
+                contextPreview: options.contextPreview,
             },
             onEditorChange: () => {},
             onProjectTitleChange: () => {},

@@ -43,5 +43,14 @@ export {
     aiReasoningSectionNodeView
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
 
+// Export aiLineageEvent node for projection-time workflow markers
+export {
+    aiLineageEventNodeType,
+    aiLineageEventNodeSpec,
+    aiLineageEventNodeView
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
+
+export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+
 // Export all from plugin
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'

@@ -12,6 +12,7 @@ import {
     type ContentDescriptor,
     type DocumentFile
 } from '@lixpi/constants'
+import { err } from '@lixpi/debug-tools'
 
 const {
     ORG_NAME,
@@ -149,7 +150,7 @@ export default {
 
             return newWorkspaceData
         } catch (error) {
-            console.error('Failed to create workspace:', error)
+            err('Failed to create workspace:', error)
         }
     },
 
@@ -185,7 +186,7 @@ export default {
                 })
             }
         } catch (error) {
-            console.error('Failed to update workspace:', error)
+            err('Failed to update workspace:', error)
         }
     },
 
@@ -216,7 +217,7 @@ export default {
                 origin: 'updateWorkspaceCanvasState'
             })
         } catch (error) {
-            console.error('Failed to update workspace canvas state:', error)
+            err('Failed to update workspace canvas state:', error)
         }
     },
 
@@ -266,7 +267,7 @@ export default {
 
             return true
         } catch (error) {
-            console.error('Failed to patch workspace canvas node descriptor:', error)
+            err('Failed to patch workspace canvas node descriptor:', error)
             throw error
         }
     },
@@ -327,7 +328,7 @@ export default {
                 origin: 'model::Workspace->addFile()'
             })
         } catch (error) {
-            console.error('Failed to add file to workspace:', error)
+            err('Failed to add file to workspace:', error)
             throw error
         }
     },
@@ -337,8 +338,9 @@ export default {
         fileId
     }: { workspaceId: string; fileId: string }): Promise<void> => {
         const currentDate = new Date().getTime()
+        const maxAttempts = 5
 
-        try {
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
             const workspace = await dynamoDBService.getItem({
                 tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
                 key: { workspaceId },
@@ -346,21 +348,35 @@ export default {
             })
 
             const currentFiles = workspace?.files || []
-            const updatedFiles = currentFiles.filter((file: DocumentFile) => file.id !== fileId)
+            const fileIndex = currentFiles.findIndex((file: DocumentFile) => file.id === fileId)
+            if (fileIndex < 0) return
 
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
-                key: { workspaceId },
-                updates: {
-                    files: updatedFiles,
-                    updatedAt: currentDate
-                },
-                origin: 'model::Workspace->removeFile()'
-            })
-        } catch (error) {
-            console.error('Failed to remove file from workspace:', error)
-            throw error
+            try {
+                await dynamoDBService.updateItem({
+                    tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
+                    key: { workspaceId },
+                    updateExpression: `SET #updatedAt = :now REMOVE #files[${fileIndex}]`,
+                    conditionExpression: `#files[${fileIndex}].#id = :fileId`,
+                    expressionAttributeNames: {
+                        '#files': 'files',
+                        '#id': 'id',
+                        '#updatedAt': 'updatedAt'
+                    },
+                    expressionAttributeValues: {
+                        ':fileId': fileId,
+                        ':now': currentDate
+                    },
+                    origin: 'model::Workspace->removeFile()'
+                })
+                return
+            } catch (error: any) {
+                if (error?.name === 'ConditionalCheckFailedException') continue
+                err('Failed to remove file from workspace:', error)
+                throw error
+            }
         }
+
+        throw new Error(`Failed to remove file from workspace after concurrent updates: ${workspaceId}/${fileId}`)
     },
 
     getWorkspaceInternal: async ({
@@ -407,7 +423,7 @@ export default {
                 origin: 'replaceWorkspaceContent:meta'
             })
         } catch (error) {
-            console.error('Failed to replace workspace content:', error)
+            err('Failed to replace workspace content:', error)
             throw error
         }
     },

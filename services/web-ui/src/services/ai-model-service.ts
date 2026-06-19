@@ -20,7 +20,13 @@ export default class AiModelService {
                 token: await AuthService.getTokenSilently()
             })
 
-            aiModelsStore.setAiModels(availableModels)
+            if (Array.isArray(availableModels)) {
+                aiModelsStore.setAiModels(availableModels)
+            } else if (Array.isArray(availableModels?.models)) {
+                aiModelsStore.setAiModelsCatalog(availableModels)
+            } else {
+                aiModelsStore.setAiModels([])
+            }
             aiModelsStore.setMetaValues({ loadingStatus: LoadingStatus.success })
 
         } catch (error) {

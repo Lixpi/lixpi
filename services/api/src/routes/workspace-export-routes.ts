@@ -326,9 +326,12 @@ router.post(
                 AiChatThread.deleteWorkspaceAiChatThreads({ workspaceId })
             ])
 
-            // ── Restore images ─────────────────────────────────────
+            // ── Restore workspace bucket + images ──────────────────
+            if (natsService) {
+                await natsService.createObjectStore(bucketName)
+            }
+
             if (imageEntries.length > 0 && natsService) {
-                await natsService.ensureObjectStore(bucketName)
                 for (const image of imageEntries) {
                     await natsService.putObject(bucketName, image.fileId, image.data, {
                         name: image.fileId,

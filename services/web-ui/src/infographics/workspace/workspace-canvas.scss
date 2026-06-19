@@ -1,7 +1,7 @@
 @import '$src/sass/_transitions.scss';
 @import '$src/sass/_variables.scss';
 @import '$src/components/bubbleMenu/bubbleMenu.scss';
-@import '$src/components/helpTooltip/help-tooltip.scss';
+@import '$src/components/contextPreview/context-preview.scss';
 
 :root {
     --workspace-ai-chat-sidebar-width: min(380px, calc(100vw - 64px));
@@ -219,7 +219,7 @@
     background: transparent;
     color: $steelBlue;
     cursor: pointer;
-    transition: right 70ms ease, color 70ms ease;
+    transition: right 50ms ease-in, color 50ms ease-in;
 
     svg {
         width: 20px;
@@ -249,25 +249,26 @@
     top: 15px;
     right: 15px;
     display: block;
-    width: 22px;
-    height: 22px;
-    color: $aiGreen;
+    width: 15px;
+    height: 15px;
+    color: $steelBlue;
 
     svg {
         display: block;
         width: 100%;
         height: 100%;
-        transform: none;
+        transform: rotate(180deg);
+        transform-origin: center;
     }
 
     &:hover,
     &:focus-visible {
-        color: darken($aiGreen, 8%);
+        color: $nightBlue;
     }
 }
 
 .workspace-canvas-chat-panel-open .workspace-media-library-launcher {
-    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap) + 3px);
+    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px);
 }
 
 .workspace-canvas-chat-panel-open .workspace-ai-chat-launcher {
@@ -280,6 +281,7 @@
     svg {
         width: 100%;
         height: 100%;
+        transform: none;
     }
 
     &:hover,
@@ -314,17 +316,17 @@
     right: 16px;
     z-index: 100;
     background: rgba(255, 255, 255, 0.9);
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 6px 7px;
+    border-radius: 999px;
     font-size: 12px;
     font-weight: 500;
     color: #555;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.15);
     pointer-events: none;
 }
 
 .workspace-canvas-chat-panel-open .workspace-zoom-indicator {
-    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + var(--workspace-ai-chat-sidebar-zoom-gap));
+    right: calc(var(--workspace-ai-chat-sidebar-width) + var(--workspace-ai-chat-sidebar-edge-gap) + 5px);
 }
 
 .workspace-pane {
@@ -394,16 +396,17 @@
 
 .workspace-video-chrome {
     position: absolute;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 .workspace-video-surface {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
     overflow: hidden;
     border-radius: var(--workspace-image-border-radius);
     background: #1c1c1c;
-    pointer-events: none;
+    pointer-events: auto;
 
     video {
         width: 100%;
@@ -414,22 +417,18 @@
 }
 
 .workspace-video-controls-host {
-    opacity: 0;
-    pointer-events: auto;
-    border-radius: 18px;
-    filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28));
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    transition: opacity 0.15s ease;
-
-    &.is-visible {
-        opacity: 1;
-    }
+    opacity: 1;
+    pointer-events: none;
+    border-radius: var(--video-controls-host-border-radius, 18px);
+    filter: var(--video-controls-host-drop-shadow, drop-shadow(0 12px 30px rgba(0, 0, 0, 0.30)));
+    backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
+    -webkit-backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
 }
 
 .workspace-video-controls-svg {
     display: block;
     overflow: visible;
+    pointer-events: none;
 }
 
 .workspace-generated-media-actions {
@@ -626,35 +625,25 @@
         margin: 0 0 0.3rem;
     }
 
-    .canvas-branch-origin-reference-list {
-        display: grid;
-        gap: 0.35rem;
-        padding: 0;
-        margin: 0;
-        list-style: none;
+    .canvas-branch-origin-reference-preview-list {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 6px;
     }
 
-    .canvas-branch-origin-reference-item {
-        display: grid;
-        gap: 0.15rem;
-        padding: 0.45rem 0.5rem;
-        background: rgba(34, 40, 49, 0.045);
-        border-radius: 6px;
-    }
-
-    .canvas-branch-origin-reference-id {
-        font-size: 0.66rem;
-        color: rgba(0, 0, 0, 0.46);
-        overflow-wrap: anywhere;
-    }
-
-    .canvas-branch-origin-reference-label,
     .canvas-branch-origin-rationale {
         margin: 0;
         font-size: 0.76rem;
         line-height: 1.4;
         color: #36414a;
         overflow-wrap: anywhere;
+    }
+
+    .canvas-branch-origin-reference-preview-list .workspace-ai-chat-panel-context-preview-main {
+        flex: 0 0 58px;
+        width: 58px;
+        height: 42px;
     }
 
     .canvas-branch-origin-rationale {
@@ -1069,370 +1058,6 @@
     display: block;
 }
 
-.workspace-ai-chat-panel-context-preview-main {
-    position: relative;
-    display: block;
-    width: 100%;
-    height: 42px;
-    min-width: 0;
-}
-
-.workspace-ai-chat-panel-context-preview-tooltip {
-    --help-tooltip-offset: 10px;
-    --help-tooltip-viewport-margin: 8px;
-    --help-tooltip-width: 280px;
-    --help-tooltip-max-width: min(280px, calc(100vw - 24px));
-    --help-tooltip-padding: 8px;
-    --help-tooltip-background: var(--workspace-ai-chat-panel-context-preview-tooltip-background, #fff);
-    --help-tooltip-border: var(--workspace-ai-chat-panel-context-preview-tooltip-border, none);
-    --help-tooltip-border-radius: var(--workspace-ai-chat-panel-context-preview-tooltip-border-radius, 8px);
-    --help-tooltip-box-shadow: var(--workspace-ai-chat-panel-context-preview-tooltip-box-shadow, 0 16px 38px rgba(57, 69, 93, 0.18), 0 2px 8px rgba(57, 69, 93, 0.12));
-    --help-tooltip-color: var(--workspace-ai-chat-panel-context-preview-tooltip-color, #1a3a47);
-    --help-tooltip-font-size: 11px;
-    --help-tooltip-font-weight: 500;
-    --help-tooltip-line-height: 1.3;
-    --help-tooltip-content-z-index: 10120;
-    display: block;
-    width: 100%;
-    height: 42px;
-    min-width: 0;
-}
-
-.workspace-ai-chat-panel-context-preview-tooltip.help-tooltip {
-    display: block;
-    width: 58px;
-    height: 42px;
-    flex: 0 0 58px;
-    align-items: stretch;
-}
-
-.workspace-ai-chat-panel-context-preview-trigger,
-.workspace-ai-chat-panel-context-preview-trigger.help-tooltip-trigger,
-.workspace-ai-chat-panel-context-preview-trigger.help-tooltip-trigger-custom {
-    display: block;
-    width: 58px;
-    min-width: 58px;
-    max-width: 58px;
-    height: 42px;
-    min-height: 42px;
-    max-height: 42px;
-    box-sizing: border-box;
-    padding: 0;
-    border: 0;
-    border-radius: var(--workspace-ai-chat-panel-context-preview-trigger-border-radius, 6px);
-    background: var(--workspace-ai-chat-panel-context-chip-background, transparent);
-    color: inherit;
-    cursor: default;
-    pointer-events: auto;
-    overflow: hidden;
-}
-
-.workspace-ai-chat-panel-context-preview-trigger:hover,
-.workspace-ai-chat-panel-context-preview-trigger:focus-visible {
-    background: var(--workspace-ai-chat-panel-context-chip-background, transparent);
-    color: inherit;
-}
-
-.workspace-ai-chat-panel-context-preview-image,
-.workspace-ai-chat-panel-context-preview-video,
-.workspace-ai-chat-panel-context-preview-document {
-    width: 100%;
-    border-radius: var(--workspace-ai-chat-panel-context-preview-border-radius, 6px);
-    background: var(--workspace-ai-chat-panel-context-chip-background, transparent);
-    overflow: hidden;
-}
-
-.workspace-ai-chat-panel-context-preview-image {
-    display: block;
-}
-
-.workspace-ai-chat-panel-context-preview-image-mini {
-    width: 100%;
-    height: 42px;
-    object-fit: cover;
-}
-
-.workspace-ai-chat-panel-context-preview-trigger.help-tooltip-trigger-custom .workspace-ai-chat-panel-context-preview-image-mini {
-    width: 58px;
-    height: 42px;
-    object-fit: cover;
-}
-
-.workspace-ai-chat-panel-context-preview-image-large {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    flex: 0 0 auto;
-    align-self: stretch;
-    box-sizing: border-box;
-    object-fit: contain;
-}
-
-.workspace-ai-chat-panel-context-preview-video {
-    position: relative;
-    display: block;
-}
-
-.workspace-ai-chat-panel-context-preview-video video {
-    display: block;
-    width: 100%;
-    background: var(--workspace-ai-chat-panel-context-preview-video-background, #0f1721);
-}
-
-.workspace-ai-chat-panel-context-preview-video-mini {
-    height: 42px;
-}
-
-.workspace-ai-chat-panel-context-preview-trigger.help-tooltip-trigger-custom .workspace-ai-chat-panel-context-preview-video-mini {
-    width: 58px;
-    height: 42px;
-}
-
-.workspace-ai-chat-panel-context-preview-video-mini video {
-    height: 100%;
-    object-fit: cover;
-}
-
-.workspace-ai-chat-panel-context-preview-video-large {
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    flex: 0 0 auto;
-    align-self: stretch;
-    box-sizing: border-box;
-}
-
-.workspace-ai-chat-panel-context-preview-video-large video {
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    object-fit: contain;
-}
-
-.workspace-ai-chat-panel-context-preview-video-glyph {
-    position: absolute;
-    inset: 50% auto auto 50%;
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--workspace-ai-chat-panel-context-preview-video-glyph-background, rgba(255, 255, 255, 0.84));
-    color: var(--workspace-ai-chat-panel-context-preview-video-glyph-color, #1a3a47);
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-}
-
-.workspace-ai-chat-panel-context-preview-video-glyph svg {
-    width: 13px;
-    height: 13px;
-    fill: currentColor;
-}
-
-.workspace-ai-chat-panel-context-preview-video-large .workspace-ai-chat-panel-context-preview-video-glyph {
-    display: none;
-}
-
-.workspace-ai-chat-panel-context-preview-document {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    box-sizing: border-box;
-    color: var(--workspace-ai-chat-panel-context-preview-document-color, #243045);
-}
-
-.workspace-ai-chat-panel-context-preview-document-mini {
-    justify-content: center;
-    height: 42px;
-    padding: 6px 7px;
-}
-
-.workspace-ai-chat-panel-context-preview-document-skeleton {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 5px;
-    min-width: 0;
-}
-
-.workspace-ai-chat-panel-context-preview-document-skeleton span {
-    display: block;
-    height: 4px;
-    border-radius: var(--workspace-ai-chat-panel-context-preview-document-skeleton-line-border-radius, 999px);
-    background: var(--workspace-ai-chat-panel-context-preview-document-skeleton-line-background, rgba(105, 115, 136, 0.32));
-}
-
-.workspace-ai-chat-panel-context-preview-document-skeleton span:nth-child(2) {
-    width: 82%;
-}
-
-.workspace-ai-chat-panel-context-preview-document-skeleton span:nth-child(3) {
-    width: 64%;
-}
-
-.workspace-ai-chat-panel-context-preview-document-large {
-    width: 100%;
-    height: 116px;
-    padding: 10px;
-    overflow-y: auto;
-}
-
-.workspace-ai-chat-panel-context-preview-popover > .workspace-ai-chat-panel-context-preview-document-large:only-child {
-    height: 100%;
-}
-
-.workspace-ai-chat-panel-context-preview-document-icon {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    color: var(--workspace-ai-chat-panel-context-preview-document-icon-color, #697388);
-}
-
-.workspace-ai-chat-panel-context-preview-document-icon svg {
-    width: 18px;
-    height: 18px;
-    fill: currentColor;
-}
-
-.workspace-ai-chat-panel-context-preview-document-lines {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-width: 0;
-    gap: 3px;
-}
-
-.workspace-ai-chat-panel-context-preview-document-title {
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.2;
-    overflow-wrap: anywhere;
-}
-
-.workspace-ai-chat-panel-context-preview-document-text {
-    display: block;
-    color: var(--workspace-ai-chat-panel-context-preview-document-text-color, rgba(57, 69, 93, 0.76));
-    font-size: 10px;
-    line-height: 1.25;
-    overflow-wrap: anywhere;
-}
-
-.workspace-ai-chat-panel-context-preview-document-large .workspace-ai-chat-panel-context-preview-document-text {
-    font-size: 11px;
-}
-
-.workspace-ai-chat-panel-context-preview-popover {
-    width: var(--help-tooltip-width, 280px);
-    max-width: var(--help-tooltip-max-width, min(280px, calc(100vw - 24px)));
-    height: auto;
-    max-height: min(430px, var(--help-tooltip-available-max-height, 430px));
-    box-sizing: border-box;
-    overflow-x: hidden;
-    overflow-y: auto;
-    pointer-events: auto;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-portrait {
-    width: 364px;
-    max-width: calc(100vw - 24px);
-    height: 240px;
-    max-height: var(--help-tooltip-available-max-height, 240px);
-    overflow: hidden;
-}
-
-.help-tooltip-content.workspace-ai-chat-panel-context-preview-popover-portrait,
-.help-tooltip-content.workspace-ai-chat-panel-context-preview-popover:has(.workspace-ai-chat-panel-context-preview-popover-body-portrait) {
-    width: 364px;
-    max-width: calc(100vw - 24px);
-    height: 240px;
-    max-height: var(--help-tooltip-available-max-height, 240px);
-}
-
-.workspace-ai-chat-panel-context-preview-popover-body {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-body-portrait {
-    flex-direction: row;
-    align-items: stretch;
-    gap: 12px;
-    height: 100%;
-    min-height: 0;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-media {
-    display: block;
-    flex: 0 0 auto;
-    width: 100%;
-    min-width: 0;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-body-portrait .workspace-ai-chat-panel-context-preview-popover-media {
-    align-self: stretch;
-    width: auto;
-    height: 100%;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-media > .workspace-ai-chat-panel-context-preview-image-large,
-.workspace-ai-chat-panel-context-preview-popover-media > .workspace-ai-chat-panel-context-preview-video-large {
-    width: 100%;
-    max-width: 100%;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-body-portrait .workspace-ai-chat-panel-context-preview-image-large,
-.workspace-ai-chat-panel-context-preview-popover-body-portrait .workspace-ai-chat-panel-context-preview-video-large,
-.workspace-ai-chat-panel-context-preview-popover-body-portrait .workspace-ai-chat-panel-context-preview-video-large video {
-    height: 100%;
-    width: auto;
-    max-width: none;
-    object-fit: contain;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-title {
-    color: var(--workspace-ai-chat-panel-context-preview-popover-title-color, #1a3a47);
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.25;
-    overflow: visible;
-    overflow-wrap: anywhere;
-    white-space: normal;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-meta {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 3px;
-    min-height: 0;
-    min-width: 0;
-    overflow: visible;
-    padding-right: 2px;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-body-portrait .workspace-ai-chat-panel-context-preview-popover-meta {
-    align-self: stretch;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-.workspace-ai-chat-panel-context-preview-popover-text {
-    display: block;
-    color: var(--workspace-ai-chat-panel-context-preview-popover-text-color, rgba(57, 69, 93, 0.82));
-    font-size: 11px;
-    line-height: 1.3;
-    overflow: visible;
-    overflow-wrap: anywhere;
-}
-
 .workspace-ai-chat-panel-context-chip-remove {
     display: grid;
     place-items: center;
@@ -1843,6 +1468,12 @@
         );
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
+    }
+
+    .workspace-video-controls-host {
+        background: var(--video-controls-host-reduced-transparency-background, rgba(24, 28, 34, 0.88));
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
     }
 }
 

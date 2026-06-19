@@ -209,6 +209,74 @@ describe('settings - grouped configuration', () => {
 		}
 	})
 
+	it('keeps video controls scalar values numerically valid', () => {
+		const videoControlNumbers = [
+			['videoControls.height', settings.videoControls.height],
+			['videoControls.canvas.horizontalInset', settings.videoControls.canvas.horizontalInset],
+			['videoControls.canvas.compactHorizontalInset', settings.videoControls.canvas.compactHorizontalInset],
+			['videoControls.canvas.compactWidthThreshold', settings.videoControls.canvas.compactWidthThreshold],
+			['videoControls.canvas.bottomInset', settings.videoControls.canvas.bottomInset],
+			['videoControls.canvas.zoomScaling.minZoom', settings.videoControls.canvas.zoomScaling.minZoom],
+			['videoControls.chat.horizontalInset', settings.videoControls.chat.horizontalInset],
+			['videoControls.chat.bottomInset', settings.videoControls.chat.bottomInset],
+			['videoControls.chat.controlsScale', settings.videoControls.chat.controlsScale],
+			['videoControls.chat.minWidth', settings.videoControls.chat.minWidth],
+			['videoControls.chat.fallbackWidth', settings.videoControls.chat.fallbackWidth],
+			['videoControls.layout.padding', settings.videoControls.layout.padding],
+			['videoControls.layout.gap', settings.videoControls.layout.gap],
+			['videoControls.layout.buttonSize', settings.videoControls.layout.buttonSize],
+			['videoControls.layout.iconSize', settings.videoControls.layout.iconSize],
+			['videoControls.layout.barRadius', settings.videoControls.layout.barRadius],
+			['videoControls.layout.buttonRadius', settings.videoControls.layout.buttonRadius],
+			['videoControls.layout.railHeight', settings.videoControls.layout.railHeight],
+			['videoControls.layout.scrubberHandleRadius', settings.videoControls.layout.scrubberHandleRadius],
+			['videoControls.layout.volumeHandleRadius', settings.videoControls.layout.volumeHandleRadius],
+			['videoControls.layout.backgroundHighlightInset', settings.videoControls.layout.backgroundHighlightInset],
+			['videoControls.layout.timeWidth', settings.videoControls.layout.timeWidth],
+			['videoControls.layout.speedSliderWidth', settings.videoControls.layout.speedSliderWidth],
+			['videoControls.layout.compactSpeedSliderWidth', settings.videoControls.layout.compactSpeedSliderWidth],
+			['videoControls.layout.speedSliderMinWidth', settings.videoControls.layout.speedSliderMinWidth],
+			['videoControls.layout.speedValueWidth', settings.videoControls.layout.speedValueWidth],
+			['videoControls.layout.speedValueSliderGap', settings.videoControls.layout.speedValueSliderGap],
+			['videoControls.layout.volumeSliderWidth', settings.videoControls.layout.volumeSliderWidth],
+			['videoControls.layout.volumeSliderMinWidth', settings.videoControls.layout.volumeSliderMinWidth],
+			['videoControls.layout.minSeekWidth', settings.videoControls.layout.minSeekWidth],
+			['videoControls.layout.speedScaleTickHeight', settings.videoControls.layout.speedScaleTickHeight],
+			['videoControls.typography.timeFontSize', settings.videoControls.typography.timeFontSize],
+			['videoControls.typography.timeFontWeight', settings.videoControls.typography.timeFontWeight],
+			['videoControls.speed.minRate', settings.videoControls.speed.minRate],
+			['videoControls.speed.maxRate', settings.videoControls.speed.maxRate],
+			['videoControls.speed.pointerStep', settings.videoControls.speed.pointerStep],
+			['videoControls.speed.keyboardStep', settings.videoControls.speed.keyboardStep],
+			['videoControls.speed.displayPrecision', settings.videoControls.speed.displayPrecision],
+			['videoControls.speed.defaultRate', settings.videoControls.speed.defaultRate],
+			['videoControls.speed.guideRate', settings.videoControls.speed.guideRate],
+			['videoControls.responsive.speedSliderMinResponsiveWidth', settings.videoControls.responsive.speedSliderMinResponsiveWidth],
+			['videoControls.responsive.speedSliderFullResponsiveWidth', settings.videoControls.responsive.speedSliderFullResponsiveWidth],
+			['videoControls.responsive.volumeSliderMinResponsiveWidth', settings.videoControls.responsive.volumeSliderMinResponsiveWidth],
+			['videoControls.responsive.volumeSliderFullResponsiveWidth', settings.videoControls.responsive.volumeSliderFullResponsiveWidth],
+			['videoControls.styles.backgroundStrokeWidth', settings.videoControls.styles.backgroundStrokeWidth],
+			['videoControls.styles.glassHighlightStrokeWidth', settings.videoControls.styles.glassHighlightStrokeWidth],
+			['videoControls.styles.liquidGlassFilter.displacementScale', settings.videoControls.styles.liquidGlassFilter.displacementScale],
+			['videoControls.styles.liquidGlassFilter.numOctaves', settings.videoControls.styles.liquidGlassFilter.numOctaves],
+			['videoControls.styles.liquidGlassFilter.seed', settings.videoControls.styles.liquidGlassFilter.seed],
+			['videoControls.styles.speedScaleTickWidth', settings.videoControls.styles.speedScaleTickWidth],
+		] as const
+
+		for (const [path, value] of videoControlNumbers) {
+			expectFiniteNumber(value, path)
+		}
+
+		expect(Array.isArray(settings.videoControls.speed.guideRates), 'videoControls.speed.guideRates should be an array').toBe(true)
+		for (let index = 0; index < settings.videoControls.speed.guideRates.length; index += 1) {
+			expectFiniteNumber(settings.videoControls.speed.guideRates[index], `videoControls.speed.guideRates[${index}]`)
+		}
+
+		expect(settings.videoControls.speed.guideRates.length).toBeGreaterThan(0)
+		expect(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction').toBeGreaterThan(0)
+		expect(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction').toBeLessThan(1)
+	})
+
 	it('keeps migrated keys nested, not duplicated at stale roots', () => {
 		expectNoOwnKeys(settings.dropdown, ['popoverBoxShadow'])
 		expectNoOwnKeys(settings.gradient, ['shiftingColors'])

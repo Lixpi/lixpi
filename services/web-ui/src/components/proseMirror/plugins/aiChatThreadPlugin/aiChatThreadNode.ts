@@ -2,6 +2,9 @@
 import { v4 as uuidv4 } from 'uuid'
 import { TextSelection } from 'prosemirror-state'
 import { html } from '$src/utils/domTemplates.ts'
+import {
+    normalizeMediaGenerationConfigSelectionAttr,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 
 export const aiChatThreadNodeType = 'aiChatThread'
 
@@ -30,6 +33,7 @@ export const aiChatThreadNodeSpec = {
         // Image generation settings
         imageGenerationEnabled: { default: false },
         imageGenerationSize: { default: 'auto' }, // 1024x1024, 1536x1024, 1024x1536, auto
+        imageGenerationConfigGroups: { default: '' },
         // Previous response ID for multi-turn image editing
         previousResponseId: { default: '' },
         // Video model for video generation routing (Provider:model format)
@@ -39,6 +43,7 @@ export const aiChatThreadNodeSpec = {
         videoAspectRatio: { default: '' },   // e.g. '16:9' | '9:16'
         videoResolution: { default: '' },    // e.g. '720p' | '1080p' | '4k'
         videoDuration: { default: '' },      // string seconds: '4' | '6' | '8'
+        videoGenerationConfigGroups: { default: '' },
         // Source VideoCanvasNode id when this thread is "Extend in new thread"
         // off an existing generated video. Read at submit time so the LLM
         // request passes VEO's `video` (extension) parameter via the workspace
@@ -67,12 +72,14 @@ export const aiChatThreadNodeSpec = {
                     aiImageModels: dom.getAttribute('data-ai-image-models') || '',
                     imageGenerationEnabled: dom.getAttribute('data-image-generation-enabled') === 'true',
                     imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
+                    imageGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-image-generation-config-groups')),
                     previousResponseId: dom.getAttribute('data-previous-response-id') || '',
                     aiVideoModel: dom.getAttribute('data-ai-video-model') || '',
                     aiVideoModels: dom.getAttribute('data-ai-video-models') || '',
                     videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                     videoResolution: dom.getAttribute('data-video-resolution') || '',
                     videoDuration: dom.getAttribute('data-video-duration') || '',
+                    videoGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups')),
                     sourceVideoNodeId: dom.getAttribute('data-source-video-node-id') || ''
                 }
             }
@@ -112,12 +119,14 @@ export const aiChatThreadNodeSpec = {
                 'data-ai-image-models': node.attrs.aiImageModels,
                 'data-image-generation-enabled': node.attrs.imageGenerationEnabled,
                 'data-image-generation-size': node.attrs.imageGenerationSize,
+                'data-image-generation-config-groups': normalizeMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups),
                 'data-previous-response-id': node.attrs.previousResponseId,
                 'data-ai-video-model': node.attrs.aiVideoModel,
                 'data-ai-video-models': node.attrs.aiVideoModels,
                 'data-video-aspect-ratio': node.attrs.videoAspectRatio,
                 'data-video-resolution': node.attrs.videoResolution,
                 'data-video-duration': node.attrs.videoDuration,
+                'data-video-generation-config-groups': normalizeMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups),
                 'data-source-video-node-id': node.attrs.sourceVideoNodeId
             },
             0

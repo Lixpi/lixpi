@@ -1,0 +1,163 @@
+'use strict'
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import AiModelModel from './ai-model.ts'
+
+const dynamoDBService = {
+    scanItems: vi.fn(),
+    getItem: vi.fn(),
+    putItem: vi.fn(),
+    updateItem: vi.fn(),
+    deleteItems: vi.fn(),
+}
+
+beforeEach(() => {
+    vi.clearAllMocks()
+    ;(globalThis as any).dynamoDBService = dynamoDBService
+    process.env.ORG_NAME = 'acme'
+    process.env.STAGE = 'test'
+})
+
+describe('AiModel.getAvailableAiModels', () => {
+    it('sorts models by sortingPosition and removes pricing before returning catalog data', async () => {
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    provider: 'Anthropic',
+                    model: 'claude-3-opus-20240229',
+                    modelVersion: 'claude-3-opus-20240229',
+                    providerTitle: 'Anthropic',
+                    sortingPosition: 2,
+                    modalities: [{ modality: 'text' }],
+                    pricing: { input: 99 },
+                },
+                {
+                    provider: 'Google',
+                    model: 'gemini-image-1',
+                    modelVersion: 'gemini-image-1',
+                    providerTitle: 'Google',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizeMode: 'resolution',
+                    imageSizes: [{ value: '768x768' }],
+                    pricing: { input: 1 },
+                },
+                {
+                    provider: 'Google',
+                    model: 'veo-3.1-generate-preview',
+                    modelVersion: 'veo-3.1-generate-preview',
+                    providerTitle: 'Google',
+                    sortingPosition: 3,
+                    modalities: [{ modality: 'video_generation' }],
+                    videoAspectRatios: [{ value: '16:9' }],
+                    videoResolutions: [{ value: '720p' }],
+                    videoDurations: [{ value: '8' }],
+                    pricing: { input: 2 },
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+
+        expect(dynamoDBService.scanItems).toHaveBeenCalledWith(expect.objectContaining({
+            tableName: expect.any(String),
+            limit: 25,
+            fetchAllItems: true,
+            origin: 'model::AiModel->getAvailableAiModels()',
+        }))
+        expect(result.models.map((model) => `${model.provider}:${model.model}`)).toEqual([
+            'Google:gemini-image-1',
+            'Anthropic:claude-3-opus-20240229',
+            'Google:veo-3.1-generate-preview',
+        ])
+        expect(result.models[0]).not.toHaveProperty('pricing')
+        expect(result.models[2]).not.toHaveProperty('pricing')
+
+        const imageGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'image')
+        const videoGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'video')
+
+        expect(imageGroup?.groupId).toBe('image:Google')
+        expect(imageGroup?.controls).toEqual([{
+            key: 'imageSize',
+            label: 'Resolution',
+            options: [{ value: '768x768', label: '768x768' }],
+            defaultValue: '768x768',
+        }])
+        expect(videoGroup?.groupId).toBe('video:Google')
+        expect(videoGroup?.controls).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                key: 'aspectRatio',
+                label: 'Aspect ratio',
+                defaultValue: '16:9',
+                options: [{ value: '16:9', label: '16:9' }],
+            }),
+            expect.objectContaining({
+                key: 'resolution',
+                label: 'Resolution',
+                defaultValue: '720p',
+                options: [{ value: '720p', label: '720p' }],
+            }),
+            expect.objectContaining({
+                key: 'duration',
+                label: 'Duration',
+                defaultValue: '8',
+                options: [{ value: '8', label: '8' }],
+            }),
+        ]))
+    })
+})
+
+describe('AiModel.getAiModel', () => {
+    it('omits pricing metadata by default and preserves request contract fields', async () => {
+        const modelRecord = {
+            provider: 'Google',
+            model: 'gemini-2.5-flash-image',
+            modelVersion: 'gemini-2.5-flash-image',
+            providerTitle: 'Google',
+            imageSizeMode: 'resolution',
+            imageSizes: [{ value: '1024x1024' }],
+            modalities: [{ modality: 'image_generation' }],
+            pricing: {
+                input: 0.1,
+                output: 0.2,
+            },
+        }
+        dynamoDBService.getItem.mockImplementation(async () => ({ ...modelRecord }))
+
+        const model = await AiModelModel.getAiModel({
+            provider: 'Google',
+            model: 'gemini-2.5-flash-image',
+        })
+
+        expect(dynamoDBService.getItem).toHaveBeenCalledWith(expect.objectContaining({
+            key: { provider: 'Google', model: 'gemini-2.5-flash-image' },
+            origin: 'model::AiModel->getAiModel()',
+        }))
+        expect(model).toMatchObject({
+            provider: 'Google',
+            model: 'gemini-2.5-flash-image',
+            providerTitle: 'Google',
+            imageSizeMode: 'resolution',
+            imageSizes: [{ value: '1024x1024' }],
+        })
+        expect(model).not.toHaveProperty('pricing')
+    })
+
+    it('returns pricing metadata when omitPricing is false', async () => {
+        dynamoDBService.getItem.mockImplementation(async () => ({
+            provider: 'Google',
+            model: 'gemini-2.5-flash-image',
+            modelVersion: 'gemini-2.5-flash-image',
+            pricing: { input: 0.1, output: 0.2 },
+        }))
+
+        const model = await AiModelModel.getAiModel({
+            provider: 'Google',
+            model: 'gemini-2.5-flash-image',
+            omitPricing: false,
+        })
+
+        expect(model).toHaveProperty('pricing', { input: 0.1, output: 0.2 })
+    })
+})

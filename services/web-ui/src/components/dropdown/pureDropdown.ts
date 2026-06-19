@@ -20,6 +20,12 @@ type DropdownOption = {
     [key: string]: any
 }
 
+type DropdownErrorState = {
+    enabled?: boolean
+    title?: string
+    textColor?: string
+}
+
 type PureDropdownConfig = {
     id: string
     selectedValue: DropdownOption
@@ -36,6 +42,7 @@ type PureDropdownConfig = {
     mountToBody?: boolean
     disableAutoPositioning?: boolean
     disableTriggerHover?: boolean
+    errorState?: DropdownErrorState
     onSelect: (option: DropdownOption) => void
 }
 
@@ -55,14 +62,17 @@ export function createPureDropdown(config: PureDropdownConfig) {
         mountToBody = false,
         disableAutoPositioning = false,
         disableTriggerHover = false,
+        errorState,
         onSelect
     } = config
 
     let availableTags = config.availableTags || []
     let currentSelectedValue = selectedValue
+    let currentErrorState: DropdownErrorState | undefined = errorState
     let activeFilterTags: Set<string> = new Set()
     let allOptions = [...options]
     let infoBubble: any = null // Will be initialized after button is created
+    let selectedDisplaySignature = ''
 
     const modalityFilterEnabled = Boolean(
         enableTagFilter
@@ -284,18 +294,42 @@ export function createPureDropdown(config: PureDropdownConfig) {
     const updateSelectedDisplay = () => {
         const titleEl = dom.querySelector('.title')
         const iconWrap = dom.querySelector('.selected-option-icon')
+        const activeErrorState = currentErrorState && currentErrorState.enabled !== false
+            ? currentErrorState
+            : null
+        const nextTitle = activeErrorState
+            ? activeErrorState.title || settings.dropdown.errorState.fallbackTitle
+            : renderTitleForSelectedValue ? (currentSelectedValue?.title || '') : ''
+        const nextTitleColor = activeErrorState
+            ? activeErrorState.textColor || settings.dropdown.errorState.textColor
+            : ''
+        const nextIcon = renderIconForSelectedValue && currentSelectedValue?.icon
+            ? ignoreColorValuesForSelectedValue
+                ? currentSelectedValue.icon
+                : injectFillColor(currentSelectedValue.icon, currentSelectedValue.color)
+            : ''
+        const nextDisplaySignature = [
+            Boolean(activeErrorState),
+            nextTitle,
+            nextTitleColor,
+            nextIcon,
+        ].join('\u0000')
+
+        if (selectedDisplaySignature === nextDisplaySignature) return
+        selectedDisplaySignature = nextDisplaySignature
+
+        dom.classList.toggle('dropdown-error-state', Boolean(activeErrorState))
 
         if (titleEl) {
-            titleEl.textContent = renderTitleForSelectedValue ? (currentSelectedValue?.title || '') : ''
+            titleEl.textContent = nextTitle
+            titleEl.style.color = nextTitleColor
         }
 
         if (iconWrap) {
-            if (renderIconForSelectedValue && currentSelectedValue?.icon) {
+            if (nextIcon) {
                 iconWrap.innerHTML = ''
                 const span = document.createElement('span')
-                span.innerHTML = ignoreColorValuesForSelectedValue
-                    ? currentSelectedValue.icon
-                    : injectFillColor(currentSelectedValue.icon, currentSelectedValue.color)
+                span.innerHTML = nextIcon
                 iconWrap.appendChild(span)
             } else {
                 iconWrap.innerHTML = ''
@@ -335,6 +369,10 @@ export function createPureDropdown(config: PureDropdownConfig) {
         destroy: () => {
             document.removeEventListener('mousedown', handleDocumentMouseDown, true)
             infoBubble?.destroy()
+        },
+        setErrorState: (newErrorState?: DropdownErrorState) => {
+            currentErrorState = newErrorState
+            updateSelectedDisplay()
         }
     }
 }

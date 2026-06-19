@@ -50,6 +50,9 @@ type FanoutRouterResult = Pick<ProviderState,
     'generatedVideos'
 >
 
+const catalogModelIdFor = (model: AiModelMetaInfo): string =>
+    `${model.provider}:${model.model}`
+
 const normalizeModelOption = (
     requested: string | number | undefined,
     options: Array<{ value?: string; label?: string }> | undefined,
@@ -103,6 +106,17 @@ export abstract class BaseProvider {
     }
 
     private buildWorkflow() {
+        // `preflightResolved` gates every shared-resolution node below. For
+        // multi-model matrix requests the orchestrator runs these resolvers ONCE
+        // in a shared preflight and dispatches each child with
+        // `preflightResolved: true`, so the child SKIPS them (returns `{}`) and
+        // relies entirely on the resolution the matrix forwarded in the request.
+        // INVARIANT: any field these resolvers emit must be propagated by
+        // `MediaGenerationMatrixOrchestrator` (it forwards the whole resolved
+        // patch). A field resolved here but not forwarded is lost for matrix
+        // children — that is what once dropped the video reference images and
+        // forced text-to-video. Single (non-matrix) requests leave the flag
+        // `false`, so these nodes run in-graph and feed the same state directly.
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
             .addNode('resolveWorkspaceContext', async (s: ProviderState) => s.preflightResolved ? {} : resolveWorkspaceContext(s, {
                 natsService: this.nats,
@@ -551,13 +565,14 @@ export abstract class BaseProvider {
 
         const settledResults = await Promise.allSettled(imageModels.map(async (imageModelMetaInfo, imageIndex): Promise<FanoutRouterResult> => {
             const generationRun = this.buildMediaRun(state, imageModelMetaInfo, 'image', imageIndex, imageModels.length)
+            const imageModelOptions = state.mediaFanoutPlan?.imageModelOptions?.[catalogModelIdFor(imageModelMetaInfo)]
             let fanoutState: ProviderState = {
                 ...state,
                 generationRun,
                 imageModelMetaInfo,
                 imageModelVersion: imageModelMetaInfo.modelVersion,
                 imageProviderName: imageModelMetaInfo.provider as ProviderName,
-                imageSize: state.mediaFanoutPlan?.imageSize ?? state.imageSize,
+                imageSize: imageModelOptions?.imageSize ?? state.mediaFanoutPlan?.imageSize ?? state.imageSize,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
             const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
@@ -650,16 +665,17 @@ export abstract class BaseProvider {
 
         const settledResults = await Promise.allSettled(videoModels.map(async (videoModelMetaInfo, videoIndex): Promise<FanoutRouterResult> => {
             const generationRun = this.buildMediaRun(state, videoModelMetaInfo, 'video', videoIndex, videoModels.length)
+            const videoModelOptions = state.mediaFanoutPlan?.videoModelOptions?.[catalogModelIdFor(videoModelMetaInfo)]
             const normalizedVideoAspectRatio = normalizeModelOption(
-                state.mediaFanoutPlan?.videoAspectRatio ?? state.videoAspectRatio,
+                videoModelOptions?.aspectRatio ?? state.mediaFanoutPlan?.videoAspectRatio ?? state.videoAspectRatio,
                 videoModelMetaInfo.videoAspectRatios as Array<{ value?: string; label?: string }> | undefined,
             )
             const normalizedVideoResolution = normalizeModelOption(
-                state.mediaFanoutPlan?.videoResolution ?? state.videoResolution,
+                videoModelOptions?.resolution ?? state.mediaFanoutPlan?.videoResolution ?? state.videoResolution,
                 videoModelMetaInfo.videoResolutions as Array<{ value?: string; label?: string }> | undefined,
             )
             const normalizedVideoDuration = normalizeModelOption(
-                state.mediaFanoutPlan?.videoDuration ?? state.mediaFanoutPlan?.videoDurationSeconds ?? state.videoDurationSeconds,
+                videoModelOptions?.duration ?? state.mediaFanoutPlan?.videoDuration ?? state.mediaFanoutPlan?.videoDurationSeconds ?? state.videoDurationSeconds,
                 videoModelMetaInfo.videoDurations as Array<{ value?: string; label?: string }> | undefined,
             )
             const fanoutState: ProviderState = {

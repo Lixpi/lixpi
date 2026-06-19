@@ -25,15 +25,17 @@ export function getAiModelIcon(iconName: string | null | undefined): string | nu
 }
 
 export function getAiProviderIcon(provider: string | null | undefined): string | null {
-    switch (provider) {
-        case 'Anthropic':
+    switch (String(provider ?? '').trim().toLowerCase()) {
+        case 'anthropic':
             return claudeIcon
-        case 'OpenAI':
+        case 'openai':
             return gptAvatarIcon
-        case 'Google':
+        case 'google':
             return geminiIcon
-        case 'Stability':
+        case 'stability':
             return stabilityIcon
+        case 'bytedance':
+            return bytedanceIcon
         default:
             return null
     }

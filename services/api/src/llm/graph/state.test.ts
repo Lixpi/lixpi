@@ -27,5 +27,13 @@ describe('state defaults and helpers', () => {
         expect(getVideoMaxReferenceImages({ videoMaxReferenceImages: 0 } as any)).toBe(3)
         expect(getVideoMaxReferenceImages({ videoMaxReferenceImages: 1 } as any)).toBe(1)
         expect(getVideoMaxReferenceImages({ videoMaxReferenceImages: -2 } as any)).toBe(3)
+        expect(getVideoMaxReferenceImages({ videoMaxReferenceImages: Number.NaN } as any)).toBe(3)
+    })
+
+    it('keeps previous values when reducer input is undefined', () => {
+        expect(channels.streamActive.reducer(false, undefined)).toBe(false)
+        expect(channels.enableImageGeneration.reducer(false, undefined)).toBe(false)
+        expect(channels.preflightResolved.reducer(true, undefined)).toBe(true)
+        expect(channels.imagePromptRetryCount.reducer(2, undefined)).toBe(2)
     })
 })

@@ -190,6 +190,8 @@ Image generation publishes its events on the same per-thread receive subject as 
 
 On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; `pixiMediaLayer.ts` renders the partial pixels and supplies the active image bounds to the reusable `PixiTravelingOutlineRenderer`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers.
 
+In the AI chat history, `imageSelectionPlugin/ImageNodeView` renders generated images and the same generated-media provider badge used by canvas media chrome and in-chat generated videos. The badge resolves from `mediaModelId`; canvas rendering remains owned by PIXI and the canvas chrome layer.
+
 ## File Structure
 
 ```text

@@ -403,6 +403,7 @@ export default class DynamoDBService {
         updateExpression = '',    // Use this if you need to provide a custom update expression
         expressionAttributeNames = {},    // Use this if you need to provide custom attribute names
         expressionAttributeValues = {},    // Use this if you need to provide custom attribute values
+        conditionExpression = '',
         origin = 'unknown'
     }) {
         if (!tableName || Object.keys(key).length === 0) {
@@ -431,6 +432,10 @@ export default class DynamoDBService {
         } else {
             console.error("Either 'updates' or 'updateExpression' must be provided.")
             return
+        }
+
+        if (conditionExpression) {
+            params.ConditionExpression = conditionExpression
         }
 
         try {

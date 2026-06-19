@@ -7,8 +7,8 @@ description: The one shared SVG video control bar used for generated and saved v
 
 Lixpi uses **one shared SVG video control bar** for generated and saved videos. The control bar is a framework-agnostic D3 primitive in [`services/web-ui/src/components/videoControls/`](../../services/web-ui/src/components/videoControls/videoControls.ts), mounted in two places:
 
-- over canvas `VideoCanvasNode`s in the transformed workspace chrome layer
-- inside in-chat generated video nodes in the ProseMirror AI chat history
+- below canvas `VideoCanvasNode`s in the transformed workspace chrome layer
+- below in-chat generated video nodes in the ProseMirror AI chat history
 
 The bar controls an `HTMLVideoElement`; **it does not render video frames**. The host surface owns pixels. On the canvas, PIXI owns the poster/placeholder behind the node and the browser-composited `<video>` element owns completed playback. In chat, the same component controls the visible DOM `<video>`.
 
@@ -22,24 +22,22 @@ For video generation, storage, VEO polling, and branch lineage, see [Video Gener
 
 **Two Mount Points** — `WorkspaceCanvas.ts` mounts the bar in `.workspace-video-controls-host` for canvas videos. `aiGeneratedVideoNode.ts` mounts the same bar in `.ai-generated-video-controls-host` for chat-history videos.
 
-**Browser-Composited Canvas Playback** — The canvas does not sample a live video texture into PIXI. `videoNodeHandler.ts` creates the authenticated video element and loads the PIXI poster. `WorkspaceCanvas.ts` moves that same element into `.workspace-video-chrome`, above the poster, so browser playback, seeking, PiP, and fullscreen work normally.
+**Browser-Composited Canvas Playback** — The canvas does not sample a live video texture into PIXI. `videoNodeHandler.ts` creates the authenticated video element and loads the PIXI poster. `WorkspaceCanvas.ts` moves that same element into `.workspace-video-chrome`, above the poster, so browser playback, seeking, and fullscreen work normally. Canvas controls render as a separate row below the video surface, not over the video pixels.
 
-**Ephemeral Playback State** — Playback position, speed, volume, PiP, fullscreen, hover visibility, and scrubbing state are **not** persisted to `canvasState`.
+**Ephemeral Playback State** — Playback position, speed, volume, fullscreen, and scrubbing state are **not** persisted to `canvasState`.
 
 ## Control Set
 
 | Control | Behavior |
 |---------|----------|
 | Play / pause | Calls `videoEl.play()` or `videoEl.pause()` and reflects `play` / `pause` events |
-| Skip back / forward | Moves `currentTime` by `skipSeconds` (default `10`) within duration bounds |
 | Current time / duration | Renders `m:ss`; duration stays `0:00` until metadata is loaded |
 | Scrubber | Shows buffered and played ranges; dragging seeks the element |
-| Playback speed | Opens a rate menu, default `[0.5, 0.75, 1, 1.25, 1.5, 2]` |
+| Playback speed | Speed value plus continuous slider writes `playbackRate`; double-click resets to the configured default rate, and configured guide ticks are visual references only |
 | Volume / mute | Toggles `muted`; slider writes `volume` and reflects `volumechange` |
-| Picture-in-picture | Uses `requestPictureInPicture()` when supported; hidden otherwise |
-| Fullscreen | Uses `requestFullscreen()` / `exitFullscreen()` when supported; hidden otherwise |
+| Fullscreen | Uses `requestFullscreen()` / `exitFullscreen()` when supported |
 
-The layout is responsive. Skip buttons, PiP, fullscreen, and the volume slider hide when the available width is too small. Unsupported browser capabilities hide rather than error.
+The layout is responsive. Controls stay present while the seek, speed, and volume rails absorb tight widths by shrinking.
 
 ## Component API
 
@@ -50,20 +48,21 @@ export type VideoControlsConfig = {
     y: number
     width: number
     height?: number
+    responsiveWidth?: number
     videoEl: HTMLVideoElement
-    skipSeconds?: number
-    playbackRates?: number[]
     className?: string
 }
 
 export type VideoControlsInstance = {
     render: () => void
-    resize: (x: number, y: number, width: number) => void
+    resize: (x: number, y: number, width: number, responsiveWidth?: number) => void
     destroy: () => void
 }
 ```
 
-`render()` re-syncs SVG state from the element. `resize()` updates bar geometry after canvas node resize or chat player resize. `destroy()` removes SVG nodes, media listeners, document listeners, pointer listeners, and in-flight scrub handlers.
+`render()` re-syncs SVG state from the element. `resize()` updates bar geometry after canvas node resize or chat player resize. `responsiveWidth` lets hosts scale the SVG viewBox for canvas zoom or chat sizing while keeping responsive sizing decisions tied to the visible row width. `destroy()` removes SVG nodes, media listeners, document listeners, pointer listeners, and in-flight scrub handlers.
+
+Player behavior, geometry, speed range, default rate, center guide rate, rendered guide rates, responsive thresholds, canvas zoom scaling, chat scale, glass treatment, colors, line styles, shadows, and typography live in `settings.videoControls` in [`services/web-ui/src/settings.ts`](../../services/web-ui/src/settings.ts). The `speed.defaultRate` value is used by double-click reset. The `speed.guideRate` value is the midpoint of the slider curve, while `speed.guideRates` controls the rendered reference ticks. Pointer and keyboard changes remain continuous across the configured `minRate`-to-`maxRate` range.
 
 ## System Architecture
 
@@ -104,15 +103,14 @@ flowchart TB
 
 `videoNodeHandler.ts` creates one `<video preload="metadata" playsinline crossorigin="anonymous">` per `VideoCanvasNode`, loads authenticated `/api/videos` URLs, applies the poster URL, and keeps intrinsic video dimensions available to the canvas. The element begins in `.workspace-hidden-video-host`.
 
-When the video node is playable, `WorkspaceCanvas.ts` creates `.workspace-video-chrome`, moves that same element into `.workspace-video-surface`, and mounts `createVideoControls(...)` in `.workspace-video-controls-host`.
+When the video node is playable, `WorkspaceCanvas.ts` creates `.workspace-video-chrome`, moves that same element into `.workspace-video-surface`, and mounts `createVideoControls(...)` in a sibling `.workspace-video-controls-host` row below the surface. The canvas control row is always visible and uses bounded zoom scaling from `settings.videoControls`.
 
 The chrome mirrors normal node interactions:
 
-- pointer movement over the video surface reveals the controls
-- leaving the surface schedules a short hide delay so moving between video and controls does not flicker
 - double-clicking the surface toggles playback
-- pointer down outside the controls starts node drag or corner resize
-- pointer events inside `.workspace-video-controls-host` are isolated from drag/resize/selection
+- pointer down on the video surface starts node drag or corner resize
+- pointer events on actual control hit areas are isolated from drag, resize, selection, and playback toggles, while empty strip space still passes canvas pan/zoom gestures through
+- generated-media provider/info chrome is projected below the external control row for video nodes
 
 {% callout type="important" %}
 This is why the video element must be **visibly composited**. Browser playback and native APIs are reliable only when the real element is rendered; a hidden element sampled into a PIXI texture can be throttled or blank, and a PIXI video-frame loop caused connector lines to disappear during playback. The full renderer-ownership rationale lives in [Rendering Engine](../canvas/RENDERING-ENGINE.md).
@@ -120,7 +118,7 @@ This is why the video element must be **visibly composited**. Browser playback a
 
 ## Chat Playback Flow
 
-`aiGeneratedVideoNode.ts` keeps its pending, keepalive, complete, and error states (see [Video Generation](./VIDEO-GENERATION.md) for the lifecycle that drives them). On completion it renders a native-controls-disabled `<video>` and overlays the same `createVideoControls(...)` bar at the bottom. A `ResizeObserver` keeps the SVG `viewBox` and control geometry in sync with the chat card width.
+`aiGeneratedVideoNode.ts` keeps its pending, keepalive, complete, and error states (see [Video Generation](./VIDEO-GENERATION.md) for the lifecycle that drives them). On completion it renders a native-controls-disabled `<video>`, mounts the same `createVideoControls(...)` bar as a sibling row below the video surface, and renders the shared generated-media provider badge below the controls. The canvas info button is not mounted in chat. A `ResizeObserver` keeps the SVG `viewBox` and control geometry in sync with the chat card width.
 
 The chat video has **no PIXI involvement**. The same component still works because all state lives on the supplied `HTMLVideoElement`.
 
@@ -139,27 +137,27 @@ This avoids piling many seeks onto short VEO clips while still making paused scr
 
 ## Accessibility and Capability Handling
 
-Buttons are SVG groups with `role="button"`, `tabindex="0"`, and `aria-label`s. Enter and Space activate button controls. The speed picker also supports Enter/Space and closes on outside pointer down.
+Buttons are SVG groups with `role="button"`, `tabindex="0"`, and `aria-label`s. Enter and Space activate button controls. The speed control is an SVG slider with `role="slider"`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, and `aria-valuetext`; arrow keys adjust by the configured keyboard step, while Home and End jump to the configured range bounds.
 
-PiP and fullscreen controls are gated by browser support:
+Fullscreen controls are gated by browser support:
 
-- PiP requires `document.pictureInPictureEnabled` and `videoEl.requestPictureInPicture`
 - fullscreen requires `videoEl.requestFullscreen` and `document.exitFullscreen`
 
-If a capability is missing or the bar is too narrow, that control is hidden. Failures from `play()`, PiP, fullscreen, or resume-after-scrub are logged as warnings without breaking the rest of the bar.
+If fullscreen support is missing, the fullscreen action returns without changing layout. Failures from `play()`, fullscreen, or resume-after-scrub are logged as warnings without breaking the rest of the bar.
 
 ## Styling
 
-The component inlines SVG attributes rather than relying on global CSS, matching the existing D3 control primitives. It uses a translucent dark rounded bar, white glyphs, subtle hover fills, a buffered rail, a played rail, and a compact speed popup.
+The component inlines SVG attributes rather than relying on global CSS, matching the existing D3 control primitives. It uses a liquid-glass rounded bar, white glyphs, subtle hover fills, buffered and played rails, continuous speed and volume rails, speed value text, a volume glyph, configured speed guide marks, and settings-driven host backdrop filtering. The host elements apply the same glass pattern as the AI Chat panel: translucent fill, blur/saturation backdrop filtering, an inner highlight, and a reduced-transparency fallback.
 
 Canvas visibility and positioning are controlled by host elements:
 
 | Host | Purpose |
 |------|---------|
-| `.workspace-video-chrome` | Full video overlay surface above the PIXI poster |
+| `.workspace-video-chrome` | Transform-synced video chrome containing the visible video surface plus the external controls row |
 | `.workspace-video-surface` | Holds the visible canvas `<video>` element |
-| `.workspace-video-controls-host` | Mounts the canvas SVG bar and auto-hide visibility class |
+| `.workspace-video-controls-host` | Mounts the canvas SVG bar below the video surface; individual control hit areas isolate their own events while empty strip space stays available to canvas gestures |
 | `.ai-generated-video-controls-host` | Mounts the in-chat SVG bar |
+| `.ai-generated-media-model-chrome` | Holds the in-chat generated-media provider badge below the controls or image |
 
 ## Data, Storage, and Transport
 
@@ -175,7 +173,7 @@ Video controls add **no** persisted data model, NATS subject, API route, Object 
 | Component barrel | [index.ts](../../services/web-ui/src/components/videoControls/index.ts) |
 | SVG glyphs | [svgIcons/index.ts](../../services/web-ui/src/svgIcons/index.ts) |
 | Canvas video element + poster handler | [videoNodeHandler.ts](../../services/web-ui/src/infographics/workspace/rendering/videoNodeHandler.ts) |
-| Canvas chrome mount and auto-hide | [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) |
+| Canvas chrome mount | [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) |
 | In-chat video mount | [aiGeneratedVideoNode.ts](../../services/web-ui/src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts) |
 | Control tests | [videoControls.test.ts](../../services/web-ui/src/components/videoControls/videoControls.test.ts) |
 | Canvas source-shape coverage | [workspace-canvas.test.ts](../../services/web-ui/src/infographics/workspace/workspace-canvas.test.ts) |

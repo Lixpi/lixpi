@@ -5,6 +5,7 @@ import { settings } from '$src/settings.ts'
 export type AiUserMessageShell = {
     wrapper: HTMLElement
     messageEl: HTMLElement
+    referencePreviewsEl: HTMLElement
     contentEl: HTMLElement
 }
 
@@ -36,6 +37,7 @@ export function createAiUserMessageShell(options: MessageShellOptions = {}): AiU
     const wrapper = html`
         <div className=${wrapperClassName}>
             <div className="ai-user-message">
+                <div className="ai-user-message-reference-previews" contenteditable="false" hidden="true"></div>
                 <div className="ai-user-message-content"></div>
             </div>
         </div>
@@ -44,6 +46,7 @@ export function createAiUserMessageShell(options: MessageShellOptions = {}): AiU
     return {
         wrapper,
         messageEl: wrapper.querySelector('.ai-user-message') as HTMLElement,
+        referencePreviewsEl: wrapper.querySelector('.ai-user-message-reference-previews') as HTMLElement,
         contentEl: wrapper.querySelector('.ai-user-message-content') as HTMLElement,
     }
 }

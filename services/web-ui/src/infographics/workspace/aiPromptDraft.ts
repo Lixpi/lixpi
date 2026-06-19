@@ -1,4 +1,8 @@
-import { serializeAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import {
+    serializeAiModelSelectionAttr,
+    serializeMediaGenerationConfigSelectionAttr,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 
 export type AiPromptSubmitModelData = {
     aiModel?: string
@@ -11,6 +15,7 @@ export type AiPromptSubmitModelData = {
         aiImageModel?: string
         aiImageModels?: readonly string[] | string
         imageGenerationSize?: string
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     videoOptions?: {
         aiVideoModel?: string
@@ -18,6 +23,7 @@ export type AiPromptSubmitModelData = {
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 }
 
@@ -42,21 +48,36 @@ export function buildAiPromptDraftAttrsFromSubmitData(data: AiPromptSubmitModelD
     const useMultipleReasoningModels = rawUseMultipleReasoningModels || useLegacyModeFallback
     const useMultipleImageModels = rawUseMultipleImageModels || useLegacyModeFallback
     const useMultipleVideoModels = rawUseMultipleVideoModels || useLegacyModeFallback
+    const reasoningModelSelection = useMultipleReasoningModels
+        ? data.aiModels
+        : data.aiModel ? [data.aiModel] : []
+    const imageModelSelection = useMultipleImageModels
+        ? data.imageOptions?.aiImageModels
+        : data.imageOptions?.aiImageModel ? [data.imageOptions.aiImageModel] : []
+    const videoModelSelection = useMultipleVideoModels
+        ? data.videoOptions?.aiVideoModels
+        : data.videoOptions?.aiVideoModel ? [data.videoOptions.aiVideoModel] : []
     return {
         aiModel: data.aiModel || '',
-        aiModels: serializePromptModelSelection(data.aiModels),
+        aiModels: serializePromptModelSelection(reasoningModelSelection),
         useMultipleModels: useMultipleReasoningModels || useMultipleImageModels || useMultipleVideoModels,
         useMultipleReasoningModels,
         useMultipleImageModels,
         useMultipleVideoModels,
         aiImageModel: data.imageOptions?.aiImageModel || '',
-        aiImageModels: serializePromptModelSelection(data.imageOptions?.aiImageModels),
+        aiImageModels: serializePromptModelSelection(imageModelSelection),
         imageGenerationSize: data.imageOptions?.imageGenerationSize || 'auto',
+        imageGenerationConfigGroups: useMultipleImageModels
+            ? serializeMediaGenerationConfigSelectionAttr(data.imageOptions?.configGroups ?? [])
+            : '',
         aiVideoModel: data.videoOptions?.aiVideoModel || '',
-        aiVideoModels: serializePromptModelSelection(data.videoOptions?.aiVideoModels),
+        aiVideoModels: serializePromptModelSelection(videoModelSelection),
         videoAspectRatio: data.videoOptions?.videoAspectRatio || '',
         videoResolution: data.videoOptions?.videoResolution || '',
         videoDuration: data.videoOptions?.videoDuration || '',
+        videoGenerationConfigGroups: useMultipleVideoModels
+            ? serializeMediaGenerationConfigSelectionAttr(data.videoOptions?.configGroups ?? [])
+            : '',
     }
 }
 
@@ -71,6 +92,9 @@ export function buildAiPromptDraftFromText(promptText: string, attrs: Record<str
     const rawUseMultipleVideoModels = parseBooleanModelMode(attrs.useMultipleVideoModels)
     const hasSectionModelMode = rawUseMultipleReasoningModels || rawUseMultipleImageModels || rawUseMultipleVideoModels
     const useLegacyModeFallback = legacyUseMultipleModels && !hasSectionModelMode
+    const useMultipleReasoningModels = rawUseMultipleReasoningModels || useLegacyModeFallback
+    const useMultipleImageModels = rawUseMultipleImageModels || useLegacyModeFallback
+    const useMultipleVideoModels = rawUseMultipleVideoModels || useLegacyModeFallback
     return {
         type: 'doc',
         content: [
@@ -78,19 +102,27 @@ export function buildAiPromptDraftFromText(promptText: string, attrs: Record<str
                 type: 'aiPromptInput',
                 attrs: {
                     aiModel: attrs.aiModel || '',
-                    aiModels: attrs.aiModels || '',
+                    aiModels: useMultipleReasoningModels
+                        ? attrs.aiModels || ''
+                        : serializeAiModelSelectionAttr(attrs.aiModel ? [attrs.aiModel] : []),
                     useMultipleModels: legacyUseMultipleModels || hasSectionModelMode,
-                    useMultipleReasoningModels: rawUseMultipleReasoningModels || useLegacyModeFallback,
-                    useMultipleImageModels: rawUseMultipleImageModels || useLegacyModeFallback,
-                    useMultipleVideoModels: rawUseMultipleVideoModels || useLegacyModeFallback,
+                    useMultipleReasoningModels,
+                    useMultipleImageModels,
+                    useMultipleVideoModels,
                     aiImageModel: attrs.aiImageModel || '',
-                    aiImageModels: attrs.aiImageModels || '',
+                    aiImageModels: useMultipleImageModels
+                        ? attrs.aiImageModels || ''
+                        : serializeAiModelSelectionAttr(attrs.aiImageModel ? [attrs.aiImageModel] : []),
                     imageGenerationSize: attrs.imageGenerationSize || 'auto',
+                    imageGenerationConfigGroups: useMultipleImageModels ? attrs.imageGenerationConfigGroups || '' : '',
                     aiVideoModel: attrs.aiVideoModel || '',
-                    aiVideoModels: attrs.aiVideoModels || '',
+                    aiVideoModels: useMultipleVideoModels
+                        ? attrs.aiVideoModels || ''
+                        : serializeAiModelSelectionAttr(attrs.aiVideoModel ? [attrs.aiVideoModel] : []),
                     videoAspectRatio: attrs.videoAspectRatio || '',
                     videoResolution: attrs.videoResolution || '',
                     videoDuration: attrs.videoDuration || '',
+                    videoGenerationConfigGroups: useMultipleVideoModels ? attrs.videoGenerationConfigGroups || '' : '',
                 },
                 content: [paragraph],
             },

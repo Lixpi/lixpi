@@ -8,10 +8,14 @@ import type {
     AiChatThreadCanvasNode,
     WorkspaceEdge,
     ImageGenerationSize,
+    MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
-import { serializeAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import {
+    serializeAiModelSelectionAttr,
+    serializeMediaGenerationConfigSelectionAttr,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import { settings } from '$src/settings.ts'
 
 type ThreadEditorEntry = {
@@ -25,6 +29,7 @@ type VideoOptions = {
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
+    configGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
 type AiSubmitPayload = {
@@ -40,8 +45,10 @@ type AiSubmitPayload = {
         aiImageModel?: string
         aiImageModels?: string[]
         imageGenerationSize: ImageGenerationSize
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     videoOptions?: VideoOptions
+    referenceNodeIds?: string[]
 }
 
 type TargetNode = {
@@ -62,8 +69,10 @@ type PendingMessage = {
         aiImageModel?: string
         aiImageModels?: string[]
         imageGenerationSize: ImageGenerationSize
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     videoOptions?: VideoOptions
+    referenceNodeIds?: string[]
 }
 
 type AiPromptInputControllerOptions = {
@@ -167,8 +176,10 @@ export class AiPromptInputController {
             aiImageModel?: string
             aiImageModels?: string[]
             imageGenerationSize: ImageGenerationSize
+            configGroups?: MediaGenerationConfigSelectionGroup[]
         }
         videoOptions?: VideoOptions
+        referenceNodeIds?: string[]
     }): Promise<void> {
         const {
             contentJSON,
@@ -180,6 +191,7 @@ export class AiPromptInputController {
             useMultipleVideoModels,
             imageOptions,
             videoOptions,
+            referenceNodeIds,
         } = params
 
         if (!this.target) {
@@ -205,6 +217,7 @@ export class AiPromptInputController {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
+                referenceNodeIds,
             })
         } else {
             // Target is a document or image — auto-create a new AI chat thread
@@ -218,6 +231,7 @@ export class AiPromptInputController {
                 useMultipleVideoModels,
                 imageOptions,
                 videoOptions,
+                referenceNodeIds,
             })
         }
     }
@@ -275,7 +289,7 @@ export class AiPromptInputController {
         }
 
         const messageNode = userMessageType.create(
-            { id: createId(), createdAt: Date.now() },
+            { id: createId(), createdAt: Date.now(), referenceNodeIds: pending.referenceNodeIds ?? [] },
             messageContent
         )
 
@@ -285,9 +299,6 @@ export class AiPromptInputController {
 
         // Update the AI model, image options, and video options on the thread node
         const currentAttrs = (threadNode as ProseMirrorNode).attrs
-        const pendingAiModels = pending.aiModels ? serializeAiModelSelectionAttr(pending.aiModels) : undefined
-        const pendingImageModels = pending.imageOptions?.aiImageModels ? serializeAiModelSelectionAttr(pending.imageOptions.aiImageModels) : undefined
-        const pendingVideoModels = pending.videoOptions?.aiVideoModels ? serializeAiModelSelectionAttr(pending.videoOptions.aiVideoModels) : undefined
         const legacyPendingUseMultipleModels = Boolean(pending.useMultipleModels)
         const pendingUseMultipleReasoningModels = pending.useMultipleReasoningModels ?? legacyPendingUseMultipleModels
         const pendingUseMultipleImageModels = pending.useMultipleImageModels ?? legacyPendingUseMultipleModels
@@ -295,6 +306,35 @@ export class AiPromptInputController {
         const pendingUseMultipleModels = pendingUseMultipleReasoningModels
             || pendingUseMultipleImageModels
             || pendingUseMultipleVideoModels
+        const pendingAiModels = serializeAiModelSelectionAttr(
+            pendingUseMultipleReasoningModels
+                ? pending.aiModels ?? []
+                : pending.aiModel ? [pending.aiModel] : []
+        )
+        const pendingImageModels = pending.imageOptions
+            ? serializeAiModelSelectionAttr(
+                pendingUseMultipleImageModels
+                    ? pending.imageOptions.aiImageModels ?? []
+                    : pending.imageOptions.aiImageModel ? [pending.imageOptions.aiImageModel] : []
+            )
+            : undefined
+        const pendingVideoModels = pending.videoOptions
+            ? serializeAiModelSelectionAttr(
+                pendingUseMultipleVideoModels
+                    ? pending.videoOptions.aiVideoModels ?? []
+                    : pending.videoOptions.aiVideoModel ? [pending.videoOptions.aiVideoModel] : []
+            )
+            : undefined
+        const pendingImageConfigGroups = pending.imageOptions
+            ? serializeMediaGenerationConfigSelectionAttr(
+                pendingUseMultipleImageModels ? pending.imageOptions.configGroups ?? [] : []
+            )
+            : undefined
+        const pendingVideoConfigGroups = pending.videoOptions
+            ? serializeMediaGenerationConfigSelectionAttr(
+                pendingUseMultipleVideoModels ? pending.videoOptions.configGroups ?? [] : []
+            )
+            : undefined
         const legacyCurrentUseMultipleModels = currentAttrs.useMultipleModels === true || currentAttrs.useMultipleModels === 'true'
         const rawCurrentUseMultipleReasoningModels = currentAttrs.useMultipleReasoningModels === true
             || currentAttrs.useMultipleReasoningModels === 'true'
@@ -317,11 +357,13 @@ export class AiPromptInputController {
             || (pending.imageOptions?.aiImageModel && currentAttrs.aiImageModel !== pending.imageOptions.aiImageModel)
             || (pendingImageModels !== undefined && currentAttrs.aiImageModels !== pendingImageModels)
             || (pending.imageOptions?.imageGenerationSize && currentAttrs.imageGenerationSize !== pending.imageOptions.imageGenerationSize)
+            || (pendingImageConfigGroups !== undefined && currentAttrs.imageGenerationConfigGroups !== pendingImageConfigGroups)
             || (pending.videoOptions?.aiVideoModel && currentAttrs.aiVideoModel !== pending.videoOptions.aiVideoModel)
             || (pendingVideoModels !== undefined && currentAttrs.aiVideoModels !== pendingVideoModels)
             || (pending.videoOptions?.videoAspectRatio && currentAttrs.videoAspectRatio !== pending.videoOptions.videoAspectRatio)
             || (pending.videoOptions?.videoResolution && currentAttrs.videoResolution !== pending.videoOptions.videoResolution)
             || (pending.videoOptions?.videoDuration && currentAttrs.videoDuration !== pending.videoOptions.videoDuration)
+            || (pendingVideoConfigGroups !== undefined && currentAttrs.videoGenerationConfigGroups !== pendingVideoConfigGroups)
 
         if (needsUpdate) {
             const mappedThreadPos = tr.mapping.map(threadPos)
@@ -332,11 +374,12 @@ export class AiPromptInputController {
                 useMultipleReasoningModels: pendingUseMultipleReasoningModels,
                 useMultipleImageModels: pendingUseMultipleImageModels,
                 useMultipleVideoModels: pendingUseMultipleVideoModels,
-                ...(pendingAiModels !== undefined ? { aiModels: pendingAiModels } : {}),
+                aiModels: pendingAiModels,
                 ...(pending.imageOptions ? {
                     aiImageModel: pending.imageOptions.aiImageModel || '',
                     ...(pendingImageModels !== undefined ? { aiImageModels: pendingImageModels } : {}),
                     imageGenerationSize: pending.imageOptions.imageGenerationSize,
+                    ...(pendingImageConfigGroups !== undefined ? { imageGenerationConfigGroups: pendingImageConfigGroups } : {}),
                 } : {}),
                 ...(pending.videoOptions ? {
                     aiVideoModel: pending.videoOptions.aiVideoModel || '',
@@ -344,6 +387,7 @@ export class AiPromptInputController {
                     videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
                     videoResolution: pending.videoOptions.videoResolution || '',
                     videoDuration: pending.videoOptions.videoDuration || '',
+                    ...(pendingVideoConfigGroups !== undefined ? { videoGenerationConfigGroups: pendingVideoConfigGroups } : {}),
                 } : {})
             })
         }
@@ -366,6 +410,7 @@ export class AiPromptInputController {
         useMultipleVideoModels?: boolean
         imageOptions?: PendingMessage['imageOptions']
         videoOptions?: PendingMessage['videoOptions']
+        referenceNodeIds?: string[]
     }): Promise<void> {
         const {
             contentJSON,
@@ -377,6 +422,7 @@ export class AiPromptInputController {
             useMultipleVideoModels,
             imageOptions,
             videoOptions,
+            referenceNodeIds,
         } = params
         if (!this.target) return
 
@@ -389,6 +435,26 @@ export class AiPromptInputController {
         const threadUseMultipleModels = threadUseMultipleReasoningModels
             || threadUseMultipleImageModels
             || threadUseMultipleVideoModels
+        const threadImageModels = imageOptions
+            ? serializeAiModelSelectionAttr(
+                threadUseMultipleImageModels
+                    ? imageOptions.aiImageModels ?? []
+                    : imageOptions.aiImageModel ? [imageOptions.aiImageModel] : []
+            )
+            : ''
+        const threadVideoModels = videoOptions
+            ? serializeAiModelSelectionAttr(
+                threadUseMultipleVideoModels
+                    ? videoOptions.aiVideoModels ?? []
+                    : videoOptions.aiVideoModel ? [videoOptions.aiVideoModel] : []
+            )
+            : ''
+        const threadImageConfigGroups = threadUseMultipleImageModels
+            ? serializeMediaGenerationConfigSelectionAttr(imageOptions?.configGroups ?? [])
+            : ''
+        const threadVideoConfigGroups = threadUseMultipleVideoModels
+            ? serializeMediaGenerationConfigSelectionAttr(videoOptions?.configGroups ?? [])
+            : ''
 
         // Create the initial thread content (without aiUserInput since we removed it)
         const initialContent = {
@@ -407,20 +473,26 @@ export class AiPromptInputController {
                         useMultipleReasoningModels: threadUseMultipleReasoningModels,
                         useMultipleImageModels: threadUseMultipleImageModels,
                         useMultipleVideoModels: threadUseMultipleVideoModels,
-                        ...(aiModels?.length ? { aiModels: serializeAiModelSelectionAttr(aiModels) } : {}),
+                        aiModels: serializeAiModelSelectionAttr(
+                            threadUseMultipleReasoningModels
+                                ? aiModels ?? []
+                                : aiModel ? [aiModel] : []
+                        ),
                         ...(imageOptions?.aiImageModel ? { aiImageModel: imageOptions.aiImageModel } : {}),
-                        ...(imageOptions?.aiImageModels?.length ? { aiImageModels: serializeAiModelSelectionAttr(imageOptions.aiImageModels) } : {}),
+                        ...(threadImageModels ? { aiImageModels: threadImageModels } : {}),
                         ...(imageOptions?.imageGenerationSize ? { imageGenerationSize: imageOptions.imageGenerationSize } : {}),
+                        ...(threadImageConfigGroups ? { imageGenerationConfigGroups: threadImageConfigGroups } : {}),
                         ...(videoOptions?.aiVideoModel ? { aiVideoModel: videoOptions.aiVideoModel } : {}),
-                        ...(videoOptions?.aiVideoModels?.length ? { aiVideoModels: serializeAiModelSelectionAttr(videoOptions.aiVideoModels) } : {}),
+                        ...(threadVideoModels ? { aiVideoModels: threadVideoModels } : {}),
                         ...(videoOptions?.videoAspectRatio ? { videoAspectRatio: videoOptions.videoAspectRatio } : {}),
                         ...(videoOptions?.videoResolution ? { videoResolution: videoOptions.videoResolution } : {}),
                         ...(videoOptions?.videoDuration ? { videoDuration: videoOptions.videoDuration } : {}),
+                        ...(threadVideoConfigGroups ? { videoGenerationConfigGroups: threadVideoConfigGroups } : {}),
                     },
                     content: [
                         {
                             type: 'aiUserMessage',
-                            attrs: { id: createId(), createdAt: Date.now() },
+                            attrs: { id: createId(), createdAt: Date.now(), referenceNodeIds: referenceNodeIds ?? [] },
                             content: contentJSON.length > 0 ? contentJSON : [{ type: 'paragraph' }]
                         }
                     ]
@@ -491,6 +563,7 @@ export class AiPromptInputController {
                 useMultipleVideoModels: threadUseMultipleVideoModels,
                 imageOptions,
                 videoOptions,
+                referenceNodeIds,
             })
 
             this.persistCanvasState(newCanvasState)

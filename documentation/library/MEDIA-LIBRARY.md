@@ -397,6 +397,8 @@ The `Features` category continues to use `WORKSPACE_SUBJECTS.FEATURE_SUBJECTS`, 
 
 Saving writes the library object before publishing item metadata. If the metadata records cannot be created, the handler attempts to delete the copied object instead of leaving a usable item pointing nowhere.
 
+Workspace-scoped Media Library objects are stored in a workspace-owned Object Store bucket created during workspace creation. Save/copy paths expect that bucket to already exist; they do not auto-create a replacement if it is missing.
+
 Changing scope follows the same copy-first rule. It writes the destination object, updates the item and metadata records, and then removes the old object. If metadata update fails, the copied destination object is retained for reconciliation rather than deleting a possible recovery copy. If removing the old object fails after a successful move, the item still points at the new canonical copy.
 
 Deleting a library image removes its records and then attempts to remove its current library object. Deleting a library video also removes its copied poster when present. Deleting a library item does not remove canvas copies previously materialized from that item.

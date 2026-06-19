@@ -104,12 +104,12 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | [Internal Service NATS Auth Pattern](knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md) | NKey-signed service auth recipe |
 | [NATS NEX Execution Engine — How It Works](knowledge/NATS-NEX-EXECUTION-ENGINE-EXPLAINED.md) | Nodes/nexlets/workloads, the Nexfile, every way to run NEX, and the real container/Docker story |
 
-## Building these docs
+## Manual Docs Rendering
 
-The docs render to HTML with a zero-framework Markdoc renderer:
+The docs can render to HTML with the zero-framework Markdoc renderer when a human explicitly wants the static site:
 
 ```bash
 pnpm docs:build
 ```
 
-See [`site/README.md`](site/README.md) for the renderer details.
+This is not an agent verification step. See [`site/README.md`](site/README.md) for the renderer details.

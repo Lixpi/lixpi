@@ -17,13 +17,17 @@ import { aiResponseMessageNodeType, aiResponseMessageNodeView } from '$src/compo
 // aiUserInput has been removed — the composer is now a separate floating canvas element
 // The aiUserInputNodeType is still imported for legacy content migration
 import { aiUserInputNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserInputNode.ts'
-import { aiUserMessageNodeType, aiUserMessageNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
+import { aiUserMessageNodeType, aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import { aiCollapsibleBlockNodeType, aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import { aiReasoningSectionNodeType, aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
+import { aiLineageEventNodeType, aiLineageEventNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { documentStore } from '$src/stores/documentStore.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { parseAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import {
+    parseAiModelSelectionAttr,
+    parseMediaGenerationConfigSelectionAttr,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import type {
     AiInteractionChatSendMessagePayload,
     AiInteractionChatStopMessagePayload,
@@ -33,6 +37,7 @@ import type {
     ImageGenerationSize,
     MarkdownParsedSegment,
     MediaBranchLineagePlan,
+    MediaGenerationConfigSelectionGroup,
     MediaGenerationRunMeta,
     StreamStatus,
     WorkspaceContextResolution,
@@ -53,6 +58,7 @@ type ImageOptions = {
     aiImageModel: string
     aiImageModels?: string[]
     imageGenerationSize: ImageGenerationSize
+    configGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
 type VideoOptions = {
@@ -61,6 +67,7 @@ type VideoOptions = {
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string
+    configGroups?: MediaGenerationConfigSelectionGroup[]
     // Set when the user invoked "Extend in new thread" from a generated video
     // node. WorkspaceCanvas resolves the nodeId to a workspace Object Store URI
     // (`nats-obj://workspace-{ws}-files/{fileId}`) before forwarding to the
@@ -68,12 +75,21 @@ type VideoOptions = {
     sourceVideoNodeId?: string
 }
 
-type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & { aiModels?: string[]; imageOptions?: ImageOptions; videoOptions?: VideoOptions }) => void
+type SendAiRequestHandler = (data: AiInteractionChatSendMessagePayload & {
+    aiModels?: string[]
+    useMultipleModels?: boolean
+    useMultipleReasoningModels?: boolean
+    useMultipleImageModels?: boolean
+    useMultipleVideoModels?: boolean
+    imageOptions?: ImageOptions
+    videoOptions?: VideoOptions
+}) => void
 type StopAiRequestHandler = (data: AiInteractionChatStopMessagePayload) => void
 type PlaceholderOptions = { titlePlaceholder: string; paragraphPlaceholder: string }
 export type AiChatThreadRenderContext = {
     readOnly?: boolean
     traceDetailsOptions?: ImageGenerationTraceDetailsOptions
+    contextPreview?: AiUserMessageContextPreviewRenderer
 }
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
@@ -127,6 +143,14 @@ type GeneratedRunAttrs = {
     mediaType: string
     variantIndex: number | null
 }
+
+type GeneratedMediaRunAttrs = GeneratedRunAttrs & {
+    branchId: string
+    parentMediaNodeId: string
+    branchOriginNodeId: string
+    branchForkNodeId: string
+    lineageParentNodeId: string
+}
 type ImageReference = { fileId: string; workspaceId: string }
 type ThreadContent = {
     nodeType: string
@@ -148,7 +172,7 @@ type AiGeneratedImageAttrs = {
     width: string
     alignment: AiGeneratedImageAlignment
     textWrap: AiGeneratedImageTextWrap
-} & GeneratedRunAttrs
+} & GeneratedMediaRunAttrs
 
 type AiGeneratedVideoAttrs = {
     videoUrl: string
@@ -167,7 +191,7 @@ type AiGeneratedVideoAttrs = {
     width: string
     alignment: AiGeneratedImageAlignment
     textWrap: AiGeneratedImageTextWrap
-} & GeneratedRunAttrs
+} & GeneratedMediaRunAttrs
 
 function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previousAttrs: Partial<GeneratedRunAttrs> = {}): GeneratedRunAttrs {
     return {
@@ -179,6 +203,26 @@ function buildGeneratedRunAttrs(generationRun?: MediaGenerationRunMeta, previous
         mediaType: generationRun?.mediaType || previousAttrs.mediaType || '',
         variantIndex: generationRun?.variantIndex ?? previousAttrs.variantIndex ?? null,
     }
+}
+
+function buildGeneratedMediaRunAttrs(
+    generationRun?: MediaGenerationRunMeta,
+    previousAttrs: Partial<GeneratedMediaRunAttrs> = {}
+): GeneratedMediaRunAttrs {
+    const lineageAssignment = generationRun?.lineageAssignment
+    return {
+        ...buildGeneratedRunAttrs(generationRun, previousAttrs),
+        branchId: lineageAssignment?.branchId || previousAttrs.branchId || '',
+        parentMediaNodeId: lineageAssignment?.parentMediaNodeId || previousAttrs.parentMediaNodeId || '',
+        branchOriginNodeId: lineageAssignment?.branchOriginNodeId || previousAttrs.branchOriginNodeId || '',
+        branchForkNodeId: lineageAssignment?.branchForkNodeId || previousAttrs.branchForkNodeId || '',
+        lineageParentNodeId: lineageAssignment?.lineageParentNodeId || previousAttrs.lineageParentNodeId || '',
+    }
+}
+
+function buildMediaModelId(provider?: string, model?: string): string {
+    if (!model) return ''
+    return model.includes(':') || !provider ? model : `${provider}:${model}`
 }
 
 function usesReasoningSection(
@@ -200,6 +244,7 @@ function getReasoningOnlyGenerationRun(generationRun?: MediaGenerationRunMeta): 
         reasoningRunId: generationRun.reasoningRunId,
         reasoningModelId: generationRun.reasoningModelId,
         reasoningIndex: generationRun.reasoningIndex,
+        lineageAssignment: generationRun.lineageAssignment,
     }
 }
 
@@ -237,6 +282,8 @@ function buildReasoningSectionAttrs(
         reasoningRunId: generationRun.reasoningRunId || previousAttrs.reasoningRunId || '',
         reasoningModelId: generationRun.reasoningModelId || previousAttrs.reasoningModelId || '',
         reasoningIndex: generationRun.reasoningIndex ?? previousAttrs.reasoningIndex ?? null,
+        branchOriginNodeId: generationRun.lineageAssignment?.branchOriginNodeId || previousAttrs.branchOriginNodeId || '',
+        branchForkNodeId: generationRun.lineageAssignment?.branchForkNodeId || previousAttrs.branchForkNodeId || '',
         isReceivingAnimation,
     }
 }
@@ -295,9 +342,9 @@ type AiChatThreadPluginState = {
 
 const PLUGIN_KEY = AI_CHAT_THREAD_PLUGIN_KEY as PluginKey<AiChatThreadPluginState>
 const INSERT_THREAD_META = `insert:${aiChatThreadNodeType}`
-const AI_GENERATED_IMAGE_THUMBNAIL_WIDTH = '112px'
-const AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT: AiGeneratedImageAlignment = 'right'
-const AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP: AiGeneratedImageTextWrap = 'none'
+const AI_GENERATED_MEDIA_WIDTH = '100%'
+const AI_GENERATED_MEDIA_ALIGNMENT: AiGeneratedImageAlignment = 'right'
+const AI_GENERATED_MEDIA_TEXT_WRAP: AiGeneratedImageTextWrap = 'none'
 
 // ========== UTILITY MODULES ==========
 
@@ -1061,6 +1108,32 @@ class AiChatThreadPluginClass {
         }
     }
 
+    private applyGenerationRunLineageToResponseSection(
+        tr: Transaction,
+        responseContext: ResponseContext,
+        generationRun?: MediaGenerationRunMeta
+    ): void {
+        if (!generationRun?.lineageAssignment) return
+        if (responseContext.responseNode.type.name !== aiReasoningSectionNodeType) return
+
+        const currentAttrs = responseContext.responseNode.attrs
+        const nextAttrs = buildReasoningSectionAttrs(
+            generationRun,
+            currentAttrs,
+            currentAttrs.isReceivingAnimation,
+        )
+        const hasLineageAttrChange = currentAttrs.branchOriginNodeId !== nextAttrs.branchOriginNodeId
+            || currentAttrs.branchForkNodeId !== nextAttrs.branchForkNodeId
+            || currentAttrs.generationRequestId !== nextAttrs.generationRequestId
+            || currentAttrs.reasoningRunId !== nextAttrs.reasoningRunId
+            || currentAttrs.reasoningModelId !== nextAttrs.reasoningModelId
+            || currentAttrs.reasoningIndex !== nextAttrs.reasoningIndex
+
+        if (!hasLineageAttrChange) return
+
+        tr.setNodeMarkup(responseContext.responseStartPos, undefined, nextAttrs)
+    }
+
     private findGeneratedImageInResponse(
         responseContext: ResponseContext,
         options: {
@@ -1123,11 +1196,13 @@ class AiChatThreadPluginClass {
         const previousAlignment = previousAttrs.alignment
         const alignment = previousAlignment === 'left' || previousAlignment === 'center' || previousAlignment === 'right'
             ? previousAlignment
-            : AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT
+            : AI_GENERATED_MEDIA_ALIGNMENT
         const previousTextWrap = previousAttrs.textWrap
         const textWrap = previousTextWrap === 'left' || previousTextWrap === 'right' || previousTextWrap === 'none'
             ? previousTextWrap
-            : AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP
+            : AI_GENERATED_MEDIA_TEXT_WRAP
+        const runAttrs = buildGeneratedMediaRunAttrs(event.generationRun, previousAttrs)
+        const mediaModelId = runAttrs.mediaModelId || buildMediaModelId(event.imageModelProvider, event.imageModelId)
 
         return {
             imageData: event.imageUrl || previousAttrs.imageData || '',
@@ -1138,10 +1213,11 @@ class AiChatThreadPluginClass {
             aiModel: event.aiProvider || previousAttrs.aiModel || '',
             isPartial,
             partialIndex,
-            width: previousAttrs.width || AI_GENERATED_IMAGE_THUMBNAIL_WIDTH,
+            width: previousAttrs.width || AI_GENERATED_MEDIA_WIDTH,
             alignment,
             textWrap,
-            ...buildGeneratedRunAttrs(event.generationRun, previousAttrs),
+            ...runAttrs,
+            mediaModelId,
         }
     }
 
@@ -1165,6 +1241,7 @@ class AiChatThreadPluginClass {
         })
         const imageAttrs = this.buildGeneratedImageAttrs(event, true, partialIndex, existingImage?.node.attrs)
         const tr = state.tr
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (existingImage) {
             tr.setNodeMarkup(existingImage.nodePos, undefined, imageAttrs)
@@ -1243,6 +1320,7 @@ class AiChatThreadPluginClass {
 
         const imageNodePos = existingImage ? tr.mapping.map(existingImage.nodePos, 1) : undefined
         const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (imageNodeType) {
             const imageAttrs = this.buildGeneratedImageAttrs(event, false, partialIndex, existingImage?.node.attrs)
@@ -1306,11 +1384,11 @@ class AiChatThreadPluginClass {
         const previousAlignment = previousAttrs.alignment
         const alignment = previousAlignment === 'left' || previousAlignment === 'center' || previousAlignment === 'right'
             ? previousAlignment
-            : AI_GENERATED_IMAGE_THUMBNAIL_ALIGNMENT
+            : AI_GENERATED_MEDIA_ALIGNMENT
         const previousTextWrap = previousAttrs.textWrap
         const textWrap = previousTextWrap === 'left' || previousTextWrap === 'right' || previousTextWrap === 'none'
             ? previousTextWrap
-            : AI_GENERATED_IMAGE_THUMBNAIL_TEXT_WRAP
+            : AI_GENERATED_MEDIA_TEXT_WRAP
 
         return {
             videoUrl: event.videoUrl || previousAttrs.videoUrl || '',
@@ -1326,10 +1404,10 @@ class AiChatThreadPluginClass {
             videoModel: event.videoModel || event.generationRun?.mediaModelId || previousAttrs.videoModel || '',
             isPending,
             errorMessage,
-            width: previousAttrs.width || AI_GENERATED_IMAGE_THUMBNAIL_WIDTH,
+            width: previousAttrs.width || AI_GENERATED_MEDIA_WIDTH,
             alignment,
             textWrap,
-            ...buildGeneratedRunAttrs(event.generationRun, previousAttrs),
+            ...buildGeneratedMediaRunAttrs(event.generationRun, previousAttrs),
         }
     }
 
@@ -1349,6 +1427,7 @@ class AiChatThreadPluginClass {
         })
         const videoAttrs = this.buildGeneratedVideoAttrs(event, true, '', existingVideo?.node.attrs)
         const tr = state.tr
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (existingVideo) {
             tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
@@ -1383,6 +1462,7 @@ class AiChatThreadPluginClass {
         const tr = state.tr
         const videoNodePos = existingVideo ? tr.mapping.map(existingVideo.nodePos, 1) : undefined
         const insertionPos = tr.mapping.map(responseContext.responseEndPos - 1, -1)
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         const videoAttrs = this.buildGeneratedVideoAttrs(event, false, '', existingVideo?.node.attrs)
         if (videoNodePos !== undefined) {
@@ -1419,6 +1499,7 @@ class AiChatThreadPluginClass {
             existingVideo?.node.attrs
         )
         const tr = state.tr
+        this.applyGenerationRunLineageToResponseSection(tr, responseContext, event.generationRun)
 
         if (existingVideo) {
             tr.setNodeMarkup(existingVideo.nodePos, undefined, videoAttrs)
@@ -1513,6 +1594,9 @@ class AiChatThreadPluginClass {
             }
 
             if (type === 'media_lineage_planned') {
+                if (event.generationRun) {
+                    this.ensureReceivingResponseNode(state, dispatch, aiProvider, effectiveThreadId, event.generationRun)
+                }
                 const callbacks = getAiGeneratedImageCallbacks()
                 if (effectiveThreadId && event.mediaBranchLineagePlan) {
                     callbacks.onMediaLineagePlannedToCanvas?.({
@@ -2483,11 +2567,13 @@ class AiChatThreadPluginClass {
             threadContext = 'Thread',
             threadId: threadIdFromNode = '',
             imageGenerationSize = 'auto',
+            imageGenerationConfigGroups = '',
             aiVideoModel = '',
             aiVideoModels = '',
             videoAspectRatio = '',
             videoResolution = '',
             videoDuration = '',
+            videoGenerationConfigGroups = '',
             sourceVideoNodeId = ''
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
@@ -2507,22 +2593,43 @@ class AiChatThreadPluginClass {
         const rawReasoningModelIds = parseAiModelSelectionAttr(aiModels)
         const rawImageModelIds = parseAiModelSelectionAttr(aiImageModels)
         const rawVideoModelIds = parseAiModelSelectionAttr(aiVideoModels)
-        const effectiveAiModel = aiModel || rawReasoningModelIds[0] || ''
-        const effectiveImageModel = aiImageModel || rawImageModelIds[0] || ''
-        const effectiveVideoModel = aiVideoModel || rawVideoModelIds[0] || ''
+        const imageConfigGroups = parseMediaGenerationConfigSelectionAttr(imageGenerationConfigGroups)
+        const videoConfigGroups = parseMediaGenerationConfigSelectionAttr(videoGenerationConfigGroups)
         const reasoningModelIds = reasoningModelsEnabled
-            ? (rawReasoningModelIds.length > 0 ? rawReasoningModelIds : effectiveAiModel ? [effectiveAiModel] : [])
+            ? rawReasoningModelIds
             : []
         const imageModelIds = imageModelsEnabled
-            ? (rawImageModelIds.length > 0 ? rawImageModelIds : effectiveImageModel ? [effectiveImageModel] : [])
+            ? rawImageModelIds
             : []
         const videoModelIds = videoModelsEnabled
-            ? (rawVideoModelIds.length > 0 ? rawVideoModelIds : effectiveVideoModel ? [effectiveVideoModel] : [])
+            ? rawVideoModelIds
             : []
+        const effectiveAiModel = reasoningModelsEnabled
+            ? reasoningModelIds[0] || ''
+            : aiModel || rawReasoningModelIds[0] || ''
+        const effectiveImageModel = imageModelsEnabled
+            ? imageModelIds[0] || ''
+            : aiImageModel || rawImageModelIds[0] || ''
+        const effectiveVideoModel = videoModelsEnabled
+            ? videoModelIds[0] || ''
+            : aiVideoModel || rawVideoModelIds[0] || ''
+
+        if (reasoningModelsEnabled && reasoningModelIds.length === 0) {
+            alert('Please select at least 1 reasoning model.')
+            return null
+        }
 
         // Validate AI model selected
         if (!effectiveAiModel) {
             alert('Please select an AI model from the dropdown before submitting.')
+            return null
+        }
+        if (imageModelsEnabled && imageModelIds.length === 0) {
+            alert('Please select at least 1 image model.')
+            return null
+        }
+        if (videoModelsEnabled && videoModelIds.length === 0) {
+            alert('Please select at least 1 video model.')
             return null
         }
 
@@ -2536,7 +2643,8 @@ class AiChatThreadPluginClass {
         const imageOptions = effectiveImageModel ? {
             aiImageModel: effectiveImageModel,
             aiImageModels: imageModelIds,
-            imageGenerationSize
+            imageGenerationSize,
+            ...(imageModelsEnabled && imageConfigGroups.length > 0 ? { configGroups: imageConfigGroups } : {}),
         } : undefined
 
         // Build video generation options if a video model is selected. The
@@ -2548,6 +2656,7 @@ class AiChatThreadPluginClass {
             videoAspectRatio,
             videoResolution,
             videoDuration,
+            ...(videoModelsEnabled && videoConfigGroups.length > 0 ? { configGroups: videoConfigGroups } : {}),
             ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
         } : undefined
 
@@ -2562,6 +2671,10 @@ class AiChatThreadPluginClass {
             messages,
             aiModel: effectiveAiModel,
             aiModels: reasoningModelIds,
+            useMultipleModels: reasoningModelsEnabled || imageModelsEnabled || videoModelsEnabled,
+            useMultipleReasoningModels: reasoningModelsEnabled,
+            useMultipleImageModels: imageModelsEnabled,
+            useMultipleVideoModels: videoModelsEnabled,
             threadId,
             imageOptions,
             videoOptions,
@@ -2882,13 +2995,17 @@ class AiChatThreadPluginClass {
                     [aiResponseMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiResponseMessageNodeView(node, view, getPos),
                     [aiUserMessageNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
-                        aiUserMessageNodeView(node, view, getPos),
+                        aiUserMessageNodeView(node, view, getPos, {
+                            contextPreview: this.renderContext.contextPreview,
+                        }),
                     [aiCollapsibleBlockNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiCollapsibleBlockNodeView(node, view, getPos, {
                             traceDetailsOptions: this.renderContext.traceDetailsOptions,
                         }),
                     [aiReasoningSectionNodeType]: (node: ProseMirrorNode) =>
                         aiReasoningSectionNodeView(node),
+                    [aiLineageEventNodeType]: (node: ProseMirrorNode) =>
+                        aiLineageEventNodeView(node),
                     [aiGeneratedVideoNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiGeneratedVideoNodeView(node, view, getPos),
                     // Note: aiGeneratedImage is handled by imageSelectionPlugin for bubble menu integration

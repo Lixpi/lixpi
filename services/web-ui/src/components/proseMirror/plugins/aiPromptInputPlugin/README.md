@@ -8,7 +8,7 @@
 2. Cmd/Ctrl+Enter, the injected submit button, or `SUBMIT_AI_PROMPT_META` starts submission.
 3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
 4. `getInputAttrs()` reads reasoning, image, video, and multi-model attrs from the input node.
-5. `onSubmit()` receives `{ contentJSON, aiModel, aiModels, useMultipleModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }`.
+5. `onSubmit()` receives `{ contentJSON, aiModel, aiModels, useMultipleModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }`. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active.
 6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
 7. `AiPromptInputController` routes the submitted content to an existing AI chat thread or creates a thread and queues the submit until that thread editor is registered.
 
@@ -81,15 +81,18 @@ Attrs declared in `aiPromptInputNode.ts`:
 - `aiImageModel`
 - `aiImageModels`
 - `imageGenerationSize`
+- `imageGenerationConfigGroups`
 - `aiVideoModel`
 - `aiVideoModels`
 - `videoAspectRatio`
 - `videoResolution`
 - `videoDuration`
+- `videoGenerationConfigGroups`
 
 `aiModels`, `aiImageModels`, and `aiVideoModels` are JSON-serialized ordered model-id arrays. `parseAiModelSelectionAttr()` accepts array values or serialized arrays and filters empty entries. `serializeAiModelSelectionAttr()` deduplicates non-empty model ids.
 
 `useMultipleModels` is the aggregate multi-model flag. The section-specific flags control reasoning, image, and video sections independently. When a section switch is enabled and its model-list attr is empty, the scalar model attr is used as the single selected model for that section.
+When a section switch is disabled, its model-list attr is collapsed back to the scalar model; image/video config group attrs are cleared for disabled media sections so stale provider-matrix values cannot be submitted or restored.
 
 ## NodeView Structure
 
@@ -111,9 +114,9 @@ div.ai-prompt-input-wrapper[data-empty]
 
 The reasoning section mounts a model selector and a multi-model switch.
 
-The image section mounts a model selector, image-size dropdown, and a multi-model switch.
+The image section mounts a model selector, an API-authored provider configuration matrix, and a multi-model switch.
 
-The video section mounts a model selector, aspect-ratio dropdown, resolution dropdown, duration dropdown, and a multi-model switch.
+The video section mounts a model selector, an API-authored provider configuration matrix, and a multi-model switch.
 
 ## Control Adapters
 
@@ -127,6 +130,8 @@ Multi-select controls update the scalar attr to the first selected model and ser
 
 `SelectedModelTagsRow` subscribes to `aiModelsStore`, renders selected model tag pills while multi-model mode is enabled, and removes ids through the matching adapter when a tag is closed.
 
+`MediaGenerationConfigMatrixView` reads `aiModelsStore.mediaGenerationConfigMatrix`, which is returned by the API model catalog. It renders only the matrix groups that contain currently selected image or video model ids. Each rendered provider/API group has a model-pill column for that group's selected models and a property-control column for that group's controls. User changes write a sanitized `imageGenerationConfigGroups` or `videoGenerationConfigGroups` attr containing `{ groupId, modelIds, values }`; untouched controls are left for the API to normalize against provider/model defaults. The frontend does not derive provider-specific controls from model metadata.
+
 ## Model Settings Menu
 
 The model settings button is created by `createModelMenuTrigger()` and opens a shared `BubbleMenu` anchored to the trigger.
@@ -137,7 +142,9 @@ The menu content is built from three `ai-prompt-model-menu-section` blocks:
 - `Image model`
 - `Video model`
 
-Each section has a title, help tooltip, section switch, one or more controls, and an optional selected-model tag row.
+Image and video setting rows render provider/model groups from the API configuration matrix. When one provider group is selected, a single group row appears; when selected models span multiple API groups, each group gets its own controls.
+
+Each section has a title, help tooltip, section switch, one or more controls, and an optional selected-model tag row. Reasoning multi-select uses the section-level tag row; image and video multi-select tags render inside their API matrix provider groups.
 
 `settings.aiPromptInput.modelMenu.styles` is copied to CSS custom properties on the NodeView root by `applyModelMenuStyleSettings()`. Layout rules stay in `ai-prompt-input.scss`.
 
@@ -257,7 +264,7 @@ Settings hooks:
 ## Files
 
 - `aiPromptInputPlugin.ts`: plugin creation, submit payload construction, content extraction, attr reading, clearing, placeholder decorations, keydown handling, meta handling.
-- `aiPromptInputNode.ts`: node spec, attr parsing/serialization helpers, NodeView, model menu, control adapters, multi-model selectors, selected tag rows, lifecycle handling.
+- `aiPromptInputNode.ts`: node spec, attr parsing/serialization helpers, NodeView, model menu, control adapters, multi-model selectors, media config matrix rendering, selected tag rows, lifecycle handling.
 - `aiPromptInputPluginConstants.ts`: `AI_PROMPT_INPUT_PLUGIN_KEY`, `SUBMIT_AI_PROMPT_META`, `STOP_AI_PROMPT_META`.
 - `ai-prompt-input.scss`: floating prompt input, wrapper, editable content, controls row, submit states, model settings menu, selected-model tag row styles.
 - `index.ts`: public exports.

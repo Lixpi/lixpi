@@ -3,7 +3,13 @@ import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 
 import { AI_PROMPT_INPUT_PLUGIN_KEY, SUBMIT_AI_PROMPT_META, STOP_AI_PROMPT_META } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
-import { aiPromptInputNodeType, createAiPromptInputNodeView, parseAiModelSelectionAttr } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import {
+    aiPromptInputNodeType,
+    createAiPromptInputNodeView,
+    parseAiModelSelectionAttr,
+    parseMediaGenerationConfigSelectionAttr,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 
 type SubmitHandler = (data: {
     contentJSON: any[]
@@ -17,6 +23,7 @@ type SubmitHandler = (data: {
         aiImageModel?: string
         aiImageModels?: string[]
         imageGenerationSize: string
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
     videoOptions?: {
         aiVideoModel?: string
@@ -24,6 +31,7 @@ type SubmitHandler = (data: {
         videoAspectRatio?: string
         videoResolution?: string
         videoDuration?: string
+        configGroups?: MediaGenerationConfigSelectionGroup[]
     }
 }) => void
 
@@ -86,11 +94,13 @@ type InputAttrs = {
     aiImageModel: string
     aiImageModels: string[]
     imageGenerationSize: string
+    imageGenerationConfigGroups: MediaGenerationConfigSelectionGroup[]
     aiVideoModel: string
     aiVideoModels: string[]
     videoAspectRatio: string
     videoResolution: string
     videoDuration: string
+    videoGenerationConfigGroups: MediaGenerationConfigSelectionGroup[]
 }
 
 function getInputAttrs(state: EditorState): InputAttrs {
@@ -104,11 +114,13 @@ function getInputAttrs(state: EditorState): InputAttrs {
         aiImageModel: '',
         aiImageModels: [],
         imageGenerationSize: 'auto',
+        imageGenerationConfigGroups: [],
         aiVideoModel: '',
         aiVideoModels: [],
         videoAspectRatio: '',
         videoResolution: '',
         videoDuration: '',
+        videoGenerationConfigGroups: [],
     }
     state.doc.descendants((node: ProseMirrorNode) => {
         if (node.type.name === aiPromptInputNodeType) {
@@ -128,11 +140,13 @@ function getInputAttrs(state: EditorState): InputAttrs {
                 aiImageModel: node.attrs.aiImageModel || '',
                 aiImageModels: parseAiModelSelectionAttr(node.attrs.aiImageModels),
                 imageGenerationSize: node.attrs.imageGenerationSize || 'auto',
+                imageGenerationConfigGroups: parseMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups),
                 aiVideoModel: node.attrs.aiVideoModel || '',
                 aiVideoModels: parseAiModelSelectionAttr(node.attrs.aiVideoModels),
                 videoAspectRatio: node.attrs.videoAspectRatio || '',
                 videoResolution: node.attrs.videoResolution || '',
                 videoDuration: node.attrs.videoDuration || '',
+                videoGenerationConfigGroups: parseMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups),
             }
             return false
         }
@@ -202,6 +216,12 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         const aiVideoModels = attrs.useMultipleVideoModels
             ? (attrs.aiVideoModels.length > 0 ? attrs.aiVideoModels : attrs.aiVideoModel ? [attrs.aiVideoModel] : [])
             : []
+        const imageGenerationConfigGroups = attrs.useMultipleImageModels
+            ? attrs.imageGenerationConfigGroups
+            : []
+        const videoGenerationConfigGroups = attrs.useMultipleVideoModels
+            ? attrs.videoGenerationConfigGroups
+            : []
         const useMultipleModels = attrs.useMultipleReasoningModels
             || attrs.useMultipleImageModels
             || attrs.useMultipleVideoModels
@@ -218,6 +238,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                 aiImageModel: attrs.aiImageModel,
                 aiImageModels,
                 imageGenerationSize: attrs.imageGenerationSize,
+                ...(imageGenerationConfigGroups.length > 0 ? { configGroups: imageGenerationConfigGroups } : {}),
             },
             videoOptions: {
                 aiVideoModel: attrs.aiVideoModel,
@@ -225,6 +246,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                 videoAspectRatio: attrs.videoAspectRatio,
                 videoResolution: attrs.videoResolution,
                 videoDuration: attrs.videoDuration,
+                ...(videoGenerationConfigGroups.length > 0 ? { configGroups: videoGenerationConfigGroups } : {}),
             },
         }
     }

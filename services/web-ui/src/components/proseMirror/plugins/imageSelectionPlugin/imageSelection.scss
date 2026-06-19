@@ -27,14 +27,6 @@ $imageSelectionColor: rgba(85, 150, 124, 1);
         margin: 0 auto;
     }
 
-    // Selection state (when editor focused or menu is open)
-    &.ProseMirror-selectednode,
-    &.pm-image-menu-active {
-        .pm-image-resize-handle {
-            opacity: 1;
-        }
-    }
-
     // Resizing state
     &.is-resizing {
         user-select: none;
@@ -49,6 +41,11 @@ $imageSelectionColor: rgba(85, 150, 124, 1);
             display: flex;
         }
     }
+}
+
+.pm-image-media-frame {
+    position: relative;
+    max-width: 100%;
 }
 
 .pm-image-generating-placeholder {
@@ -181,6 +178,8 @@ $imageSelectionColor: rgba(85, 150, 124, 1);
     display: flex;
     align-items: center;
     justify-content: center;
+    pointer-events: auto;
+    background: transparent;
 
     svg {
         width: 20px;
@@ -189,11 +188,8 @@ $imageSelectionColor: rgba(85, 150, 124, 1);
         transition: transform 0.15s ease;
     }
 
-    // Show on hover or when selected or during resize
-    .pm-image-wrapper:hover &,
-    .pm-image-wrapper.ProseMirror-selectednode &,
-    .pm-image-wrapper.pm-image-menu-active &,
-    .pm-image-wrapper.is-resizing & {
+    &:hover,
+    &.is-dragging {
         opacity: 1;
     }
 

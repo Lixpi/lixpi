@@ -339,4 +339,63 @@ describe('AiInteractionService', () => {
         expect(service.currentAiProvider).toBeNull()
         expect(service.markdownParserContexts.size).toBe(0)
     })
+
+    it('ignores malformed response payloads without dispatching segments', () => {
+        service.onChatMessageResponse({} as any)
+        service.onChatMessageResponse({ content: null } as any)
+
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
+    })
+
+    it('emits image and video non-text statuses with generated run metadata', () => {
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.IMAGE_PARTIAL,
+                imageUrl: 'https://images.example/partial.png',
+                fileId: 'partial-file',
+                partialIndex: 4,
+                generationRun: { reasoningRunId: 'reasoning-run' },
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'image_partial',
+                imageUrl: 'https://images.example/partial.png',
+                fileId: 'partial-file',
+                partialIndex: 4,
+                generationRun: { reasoningRunId: 'reasoning-run' },
+            }),
+        )
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.VIDEO_PENDING,
+                generationRun: { reasoningRunId: 'video-run' },
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'video_pending',
+                generationRun: { reasoningRunId: 'video-run' },
+                aiChatThreadId,
+            }),
+        )
+
+        service.onChatMessageResponse({
+            content: {
+                status: STREAM_STATUS.ERROR,
+                text: 'backend failed',
+            },
+        })
+
+        expect(receiveSegmentMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                status: 'ERROR',
+                error: 'backend failed',
+                aiChatThreadId,
+            }),
+        )
+    })
 })

@@ -20,7 +20,7 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, aiChatIcon, mediaLibraryIconFilled } from '$src/svgIcons/index.ts'
+    import { createNewFileIcon, imageIcon, aiChatPanelCollapseIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
@@ -37,10 +37,12 @@
     }
 
     let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
-    let canvasState = $derived($workspaceStore.data.canvasState)
-    let isAiChatPanelOpen = $derived(Boolean(canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveAiChatThreadId))
-    let documents = $derived($documentsStore.data)
-    let aiChatThreads = $derived(Array.from($aiChatThreadsStore.data.values()))
+    let loadedWorkspaceId = $derived($workspaceStore.data.workspaceId)
+    let isRouteWorkspaceLoaded = $derived(Boolean(workspaceId && loadedWorkspaceId === workspaceId))
+    let canvasState = $derived(isRouteWorkspaceLoaded ? $workspaceStore.data.canvasState : null)
+    let isAiChatPanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveAiChatThreadId)))
+    let documents = $derived(isRouteWorkspaceLoaded ? $documentsStore.data.filter((document: any) => document.workspaceId === workspaceId) : [])
+    let aiChatThreads = $derived(isRouteWorkspaceLoaded ? Array.from($aiChatThreadsStore.data.values()).filter((thread: any) => thread.workspaceId === workspaceId) : [])
 
     let viewport: Viewport = $state({ x: 0, y: 0, zoom: 1 })
     let imageSubmenuOpen = $state(false)
@@ -60,6 +62,8 @@
     }
 
     function persistCanvasState(newCanvasState: CanvasState) {
+        if (!workspaceId || loadedWorkspaceId !== workspaceId) return
+
         const stateToPersist = {
             ...newCanvasState,
             viewport,
@@ -79,6 +83,7 @@
 
         if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
         const scheduledViewport = newViewport
+        const scheduledWorkspaceId = workspaceId
         saveDebounceTimer = setTimeout(() => {
             if (
                 viewport.x !== scheduledViewport.x ||
@@ -86,7 +91,7 @@
                 viewport.zoom !== scheduledViewport.zoom
             ) return
 
-            if (workspaceId && canvasState) {
+            if (scheduledWorkspaceId && loadedWorkspaceId === scheduledWorkspaceId && workspaceId === scheduledWorkspaceId && canvasState) {
                 const newCanvasState: CanvasState = {
                     ...canvasState,
                     viewport: scheduledViewport
@@ -97,7 +102,8 @@
     }
 
     async function handleCreateDocument() {
-        if (!workspaceId) {
+        const targetWorkspaceId = workspaceId
+        if (!targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) {
             console.error('No workspaceId available!')
             return
         }
@@ -119,10 +125,12 @@
             }
 
             const doc = await servicesStore.getData('documentService').createDocument({
-                workspaceId,
+                workspaceId: targetWorkspaceId,
                 title: 'New Document',
                 content: initialContent
             })
+
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
             if (doc) {
                 const dimensions = { ...DEFAULT_DOCUMENT_NODE_DIMENSIONS }
@@ -169,13 +177,14 @@
 
     async function handleImageUrlInsert() {
         const url = imageUrlValue.trim()
-        if (!url || !workspaceId) return
+        const targetWorkspaceId = workspaceId
+        if (!url || !targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
         try {
             const token = await AuthService.getTokenSilently()
             if (!token) return
 
-            const response = await fetch(`${API_BASE_URL}/api/images/${workspaceId}/import-url`, {
+            const response = await fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}/import-url`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -187,8 +196,10 @@
 
             const data = await response.json()
             const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+
             closeImageSubmenu()
-            addImageToCanvas({ fileId: data.fileId, src: imageUrl })
+            addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })
         } catch (error) {
             console.error('Image URL import failed:', error)
         }
@@ -197,7 +208,8 @@
     async function uploadAndAddImage(file: File) {
         if (!file.type.startsWith('image/')) return
         if (file.size > MAX_IMAGE_FILE_SIZE) return
-        if (!workspaceId) return
+        const targetWorkspaceId = workspaceId
+        if (!targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
         try {
             const token = await AuthService.getTokenSilently()
@@ -206,7 +218,7 @@
             const formData = new FormData()
             formData.append('file', file)
 
-            const response = await fetch(`${API_BASE_URL}/api/images/${workspaceId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/images/${targetWorkspaceId}`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
@@ -216,18 +228,21 @@
 
             const data = await response.json()
             const imageUrl = `${API_BASE_URL}${data.url}?token=${encodeURIComponent(token)}`
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
-            addImageToCanvas({ fileId: data.fileId, src: imageUrl })
+            addImageToCanvas({ fileId: data.fileId, src: imageUrl, targetWorkspaceId })
         } catch (error) {
             console.error('Image upload failed:', error)
         }
     }
 
-    function addImageToCanvas({ fileId, src }: { fileId: string, src: string }) {
-        if (!workspaceId) return
+    function addImageToCanvas({ fileId, src, targetWorkspaceId }: { fileId: string, src: string, targetWorkspaceId: string }) {
+        if (!targetWorkspaceId || workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
 
         const img = new Image()
         img.onload = () => {
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+
             const aspectRatio = img.naturalWidth > 0 && img.naturalHeight > 0
                 ? img.naturalWidth / img.naturalHeight
                 : 1
@@ -237,7 +252,7 @@
                 nodeId: `node-${fileId}`,
                 type: 'image',
                 fileId,
-                workspaceId,
+                workspaceId: targetWorkspaceId,
                 src,
                 aspectRatio,
                 dimensions,
@@ -247,13 +262,15 @@
         }
 
         img.onerror = () => {
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return
+
             console.error('Failed to load image for dimension calculation')
             const dimensions = getImageInsertionDimensions(1)
             const imageNode: Omit<ImageCanvasNode, 'position'> = {
                 nodeId: `node-${fileId}`,
                 type: 'image',
                 fileId,
-                workspaceId,
+                workspaceId: targetWorkspaceId,
                 src,
                 aspectRatio: 1,
                 dimensions,
@@ -278,7 +295,7 @@
             onViewportChange: handleViewportChange,
             onCanvasStateChange: persistCanvasState,
             onDocumentContentChange: ({ documentId, title, prevRevision, content }) => {
-                if (!workspaceId) return
+                if (!workspaceId || loadedWorkspaceId !== workspaceId) return
                 documentService.updateDocument({
                     workspaceId,
                     documentId,
@@ -288,8 +305,8 @@
                 })
             },
             onDocumentTitleChange: ({ documentId, title }) => {
+                if (!workspaceId || loadedWorkspaceId !== workspaceId) return
                 documentsStore.updateDocument(documentId, { title })
-                if (!workspaceId) return
                 documentService.updateDocument({
                     workspaceId,
                     documentId,
@@ -402,14 +419,10 @@
         onclick={handleToggleAiChatPanel}
         aria-label={isAiChatPanelOpen ? 'Collapse AI Chat' : 'Open AI Chat'}
     >
-        {#if isAiChatPanelOpen}
-            {@html aiChatPanelCollapseIcon}
-        {:else}
-            {@html aiChatIcon}
-        {/if}
+        {@html aiChatPanelCollapseIcon}
     </button>
     <button class="workspace-media-library-launcher" onclick={handleToggleMediaLibrary} aria-label="Media Library">
-        {@html mediaLibraryIconFilled}
+        {@html mediaFoloderIcon}
         <span class="workspace-media-library-launcher-tooltip">Media Library</span>
     </button>
     <span class="workspace-zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>

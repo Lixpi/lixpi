@@ -574,23 +574,6 @@ export default class NatsService {
         return objm.open(bucketName)
     }
 
-    // Open a bucket for WRITES, creating it only if it genuinely does not exist.
-    // A transient open failure is rethrown rather than masked by creating an
-    // empty replacement bucket. New buckets are created replicated (R3).
-    async ensureObjectStore(bucketName: string): Promise<ObjectStore> {
-        const objm = this.getObjectStoreManager()
-        try {
-            return await objm.open(bucketName)
-        } catch (e: any) {
-            if (!this.isStreamNotFoundError(e)) {
-                err(`Object Store open failed for ${bucketName} (NOT auto-creating — transient/cluster error):`, e)
-                throw e
-            }
-            warn(`Object Store bucket does not exist, creating (replicas=${this.streamReplicas}): ${bucketName}`)
-            return await objm.create(bucketName, { replicas: this.streamReplicas })
-        }
-    }
-
     async deleteObjectStore(bucketName: string): Promise<boolean> {
         const objm = this.getObjectStoreManager()
         const result = await objm.destroy(bucketName)
@@ -633,7 +616,7 @@ export default class NatsService {
     }
 
     async putObject(bucketName: string, name: string, data: Uint8Array, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
-        const os = await this.ensureObjectStore(bucketName)
+        const os = await this.getObjectStore(bucketName)
         const stream = this.readableStreamFrom(data)
         const result = await os.put({ name, ...meta }, stream)
         info(`Object stored: ${bucketName}/${name} (${data.length} bytes)`)
@@ -641,7 +624,7 @@ export default class NatsService {
     }
 
     async putObjectFromReadable(bucketName: string, name: string, readable: ReadableStream<Uint8Array>, meta?: Partial<ObjectInfo>): Promise<ObjectInfo> {
-        const os = await this.ensureObjectStore(bucketName)
+        const os = await this.getObjectStore(bucketName)
         const result = await os.put({ name, ...meta }, readable)
         info(`Object stored from stream: ${bucketName}/${name}`)
         return result
