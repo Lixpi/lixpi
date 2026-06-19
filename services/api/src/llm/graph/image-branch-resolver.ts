@@ -306,7 +306,12 @@ const sanitizeDecisions = (
         if (typeof decision !== 'object' || decision === null) continue
         const nodeId = normalizeOptionalNodeId((decision as any).nodeId)
         if (!nodeId) continue
-        assertKnownNodeIds('decision nodeIds', [nodeId], candidateByNodeId)
+        // Decisions are trace/debug metadata, not routing authority. VLMs can
+        // echo stale or invented nodeIds here even when target/reference arrays
+        // are valid, so unknown audit rows are discarded instead of failing a
+        // simple generation. The authoritative node-id fields are validated
+        // below and still fail hard when they name unknown candidates.
+        if (!candidateByNodeId.has(nodeId)) continue
         const role = (decision as any).role
         if (!['target', 'base-context', 'style-reference', 'comparison-target', 'excluded'].includes(role)) {
             throw new Error(`Image branch resolver returned invalid decision role for ${nodeId}: ${role}`)

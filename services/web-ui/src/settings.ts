@@ -291,6 +291,7 @@ export type MediaNodeSettings = {
     inProgressOutlineAnimation: {
         radius: number
         gap: number
+        preFrameCircleScale: number
         snakeWidth: number
         snakeTailWidthFraction: number
         snakeTailThinLengthFraction: number
@@ -301,6 +302,7 @@ export type MediaNodeSettings = {
         zoomScaling: BoundedZoomScalingSettings
         developmentFlags: {
             alwaysOn: boolean
+            debugPreFrameNode: boolean
         }
         styles: {
             snakeTailAlpha: number
@@ -781,6 +783,8 @@ export const settings: Settings = {
             radius: 10,
             // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
             gap: 3,
+            // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
+            preFrameCircleScale: 1.3 / 3,
             // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
             snakeWidth: 9,
             // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
@@ -796,10 +800,12 @@ export const settings: Settings = {
             // Milliseconds for one complete lap around the media node.
             animationDurationMs: 3200,
             // Lower zoom breakpoint for the PIXI generation outline stroke widths. Runtime call sites opt this config into the shared adaptive low-zoom curve.
-            zoomScaling: { minZoom: 0.4 },
+            zoomScaling: { minZoom: 0 },
             developmentFlags: {
                 // Shows the outline on every media node for visual tuning.
                 alwaysOn: false,
+                // Renders one non-persisted generated-media placeholder in the pre-first-frame state for visual tuning.
+                debugPreFrameNode: false,
             },
             styles: {
                 // Tail fade preference. The glass renderer keeps a material-opacity floor so the tail fades without turning into mist.

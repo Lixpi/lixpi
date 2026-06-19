@@ -251,6 +251,7 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
             drawColorRect(entry.colorRect, w, h)
         }
         entry.colorRect.position.set(x, y)
+        entry.colorRect.visible = Boolean(node.fileId || node.posterFileId || node.frameFileId || node.src || node.posterSrc)
 
         entry.worldRect = { x, y, width: w, height: h }
 

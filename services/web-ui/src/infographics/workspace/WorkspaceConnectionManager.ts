@@ -1279,7 +1279,7 @@ export class WorkspaceConnectionManager {
 			return
 		}
 
-		const nodeById = new Map(this.nodes.map((node) => [node.nodeId, node]))
+		const nodeById = new Map<string, CanvasNode>(this.nodes.map((node) => [node.nodeId, node]))
 
 		const worldNodeMap = new Map<string, NodeConfig>()
 
