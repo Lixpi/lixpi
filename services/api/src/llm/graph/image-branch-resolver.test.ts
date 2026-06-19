@@ -556,4 +556,140 @@ describe('resolveImageBranch', () => {
         expect(update.videoFirstFrameImage).toBeUndefined()
         expect(update.videoReferenceImages).toHaveLength(5)
     })
+
+    it('returns an empty patch when neither image nor video generation is configured', async () => {
+        const { deps, publisher, callVlm } = createDeps(createParsedResolution({}))
+
+        const update = await resolveImageBranch({
+            ...createState(),
+            imageModelVersion: undefined,
+            videoModelVersion: undefined,
+            imageProviderName: undefined,
+            videoProviderName: undefined,
+        }, deps)
+
+        expect(update).toEqual({})
+        expect(callVlm).not.toHaveBeenCalled()
+        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+        expect(publisher.imageBranchResolutionError).not.toHaveBeenCalled()
+    })
+
+    it('errors for missing snapshot on a video-only request', async () => {
+        const { deps, publisher } = createDeps(createParsedResolution({}))
+
+        await expect(resolveImageBranch({
+            ...createVideoState(),
+            imageBranchCandidateSnapshot: undefined,
+        }, deps)).rejects.toThrow('Image branch candidate snapshot is required for video generation.')
+
+        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
+    })
+
+    it('honors resolver env override only when model is provided', async () => {
+        const previousProvider = process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
+        const previousModel = process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+        process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = 'Google'
+        delete process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+
+        try {
+            const { deps } = createDeps(createParsedResolution({}))
+
+            await expect(resolveImageBranch(createState(), deps)).rejects.toThrow(
+                'Image branch resolver model is not configured for provider Google',
+            )
+        } finally {
+            if (previousProvider === undefined) {
+                delete process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
+            } else {
+                process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = previousProvider
+            }
+            if (previousModel === undefined) {
+                delete process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+            } else {
+                process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION = previousModel
+            }
+        }
+    })
+
+    it('rejects invalid decision roles from the VLM while retaining strict node-id validation', async () => {
+        const { deps, publisher } = createDeps({
+            ...createParsedResolution({}),
+            decisions: [
+                { nodeId: 'person-generated', role: 'invalid-role', reason: 'bad enum member' },
+            ],
+        })
+
+        await expect(resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps))
+            .rejects
+            .toThrow('Image branch resolver returned invalid decision role for person-generated: invalid-role')
+        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+    })
+
+    it('rejects low-confidence resolutions even when references are present', async () => {
+        const { deps, publisher } = createDeps(createParsedResolution({ confidence: 0.1 }))
+
+        await expect(resolveImageBranch(createState(), deps)).rejects.toThrow('confidence too low (0.1): Resolved from visible candidates.')
+        expect(publisher.imageBranchResolutionError).toHaveBeenCalledOnce()
+        expect(publisher.imageBranchResolved).not.toHaveBeenCalled()
+    })
+
+    it('continues a targetless mode with a single generated non-style reference even without decision hints', async () => {
+        const { deps, publisher } = createDeps(createParsedResolution({
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            referenceImageNodeIds: ['person-generated'],
+            sourceContextNodeIds: ['portrait-source'],
+            decisions: [],
+        }))
+
+        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+
+        expect(publisher.imageBranchResolved).toHaveBeenCalledOnce()
+        expect(update.imageBranchResolution).toMatchObject({
+            mode: 'edit-active-branch',
+            operationKind: 'style_transfer',
+            targetImageNodeId: 'person-generated',
+            parentImageNodeId: 'person-generated',
+            branchId: 'branch-person',
+        })
+    })
+
+    it('keeps targetless fresh-branch when the only generated reference is style-only', async () => {
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            referenceImageNodeIds: ['person-generated'],
+            sourceContextNodeIds: [],
+            styleReferenceNodeIds: ['person-generated'],
+            decisions: [],
+        }))
+
+        const update = await resolveImageBranch(createState({ candidates: [...baseCandidates, goatCandidate] }), deps)
+
+        expect(update.imageBranchResolution).toMatchObject({
+            mode: 'fresh-branch',
+            targetImageNodeId: null,
+            operationKind: 'new_image',
+        })
+    })
+
+    it('uses the target image as first-frame regardless of reference-image ordering', async () => {
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetImageNodeId: 'person-generated',
+            parentImageNodeId: 'person-generated',
+            referenceImageNodeIds: ['landscape-source', 'person-generated'],
+            sourceContextNodeIds: ['landscape-source'],
+            decisions: [
+                { nodeId: 'person-generated', role: 'target', reason: 'target image should win first-frame order' },
+            ],
+        }))
+
+        const update = await resolveImageBranch(createVideoState(), deps)
+
+        expect(update.videoFirstFrameImage).toBe(resolvedTinyPngUrl)
+        expect(update.videoReferenceImages).toBeUndefined()
+    })
 })

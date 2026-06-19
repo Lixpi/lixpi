@@ -21,7 +21,7 @@ The visual-effects system has three rendering families:
 |---|---|---|---|
 | Freeform bitmap gradient | `FreeformGradientRenderer` | Canvas `ImageData` generated from four color anchors, eight phase positions, inverse-distance blending, and swirl distortion | AI chat thread and floating prompt shifting backgrounds |
 | SVG linear gradient | `SvgGradientRenderer` | D3-created `<linearGradient>` stops and rotating endpoint animation | Document context selection, document thread border |
-| PIXI traveling outline | `PixiTravelingOutlineRenderer` | PIXI `Graphics` track with a colored segment traveling around a rounded perimeter while active | Generated-image progress border and future PIXI outlined progress surfaces |
+| PIXI traveling outline | `PixiTravelingOutlineRenderer` | Single PIXI mesh snake with a continuous tapered colored-glass droplet texture traveling around a rounded perimeter while active | Generated-media progress border and future PIXI outlined progress surfaces |
 
 Animation curves are centralized in `Easing` where a surface uses shared easing, while surface-specific lifecycle remains with each consumer:
 
@@ -37,7 +37,7 @@ Animation curves are centralized in `Easing` where a surface uses shared easing,
 | `FreeformGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/freeformGradient.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.ts) | Color parsing, phase positions, freeform sampling, image-data painting, and canvas bitmap drawing |
 | `ShiftingGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.ts) | Singleton-per-color-set canvas renderer, subscriptions, visibility, resize redraws, optional pattern overlays, and animated phase changes |
 | `SvgGradientRenderer` | [`services/web-ui/src/utils/animations/gradients/svgGradient.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.ts) | Linear gradient stop construction, repeating border stops, and rotating linear-gradient animation |
-| `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded track and traveling colored-segment renderer with active-only animation lifecycle |
+| `PixiTravelingOutlineRenderer` | [`services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts) | Reusable PIXI rounded-path snake renderer with a continuous tapered colored-glass droplet texture and active-only animation lifecycle |
 
 ### Reuse Rules
 
@@ -54,7 +54,7 @@ The system intentionally has separate palettes for different visual roles:
 | Setting | Purpose | Consumers |
 |---|---|---|
 | `settings.gradient.styles.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
-| `settings.mediaNode.generationBorder.styles.snakeColors` | Bright traveling progress path palette | PIXI generated-image progress outline |
+| `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors` | Bright traveling in-progress outline palette | PIXI media progress outline |
 
 ## Gradient Consumers
 
@@ -68,9 +68,9 @@ The system intentionally has separate palettes for different visual roles:
 
 These SVG consumers use `settings.gradient.styles.shiftingColors`; they reuse the palette but do not run the freeform pixel sampler.
 
-### PIXI Generated-Image Progress Outline
+### PIXI Generated-Media Progress Outline
 
-`PixiTravelingOutlineRenderer` renders a subdued rounded track and a bright colored segment moving around its perimeter with PIXI `Graphics`. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds and style data into it. The workspace media layer uses it for generated-image progress with the blue-to-purple-to-orange palette configured in `settings.mediaNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
+`PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a single PIXI mesh textured as a raised colored-glass droplet: solid tinted core, one broad specular streak, and one soft shadowed edge are baked into one material. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for media work in progress with the palette and glass-material parameters configured in `settings.mediaNode.inProgressOutlineAnimation`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
 
 ### Static CSS Gradient Surfaces
 
@@ -104,7 +104,7 @@ Do not route ordinary CSS background treatments through `FreeformGradientRendere
 | [`easing.test.ts`](../../services/web-ui/src/utils/animations/easing.test.ts) | Cubic-bezier identity/clamping, valid curve bounds, and shared easing profiles |
 | [`freeformGradient.test.ts`](../../services/web-ui/src/utils/animations/gradients/freeformGradient.test.ts) | Colors, phases, sampling, bitmap painting, and context drawing |
 | [`svgGradient.test.ts`](../../services/web-ui/src/utils/animations/gradients/svgGradient.test.ts) | Stop creation, repeated stops, rotating transitions, and shared default easing |
-| [`pixiTravelingOutlineRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.test.ts) | Rounded perimeter sampling, default eased travel, and colored segment interpolation |
+| [`pixiTravelingOutlineRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/pixiTravelingOutlineRenderer.test.ts) | Rounded perimeter sampling, default eased travel, and snake color interpolation |
 | [`shiftingGradientRenderer.test.ts`](../../services/web-ui/src/utils/animations/gradients/shiftingGradientRenderer.test.ts) | Singleton lifecycle, animation phase changes, pixels, subscriptions, resize redraw, patterns, and teardown |
 
 Run the web UI suite inside its container:
@@ -492,7 +492,7 @@ Edit the `gradient.styles.shiftingColors` array in `settings.ts`:
 shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; generated-image progress outlines use the separate palette in `settings.mediaNode.generationBorder.styles.snakeColors`.
+These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; media progress outlines use the separate palette in `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors`.
 
 #### Changing Animation Speed
 

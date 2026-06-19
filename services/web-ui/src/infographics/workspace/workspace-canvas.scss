@@ -372,7 +372,7 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: 4;
+    z-index: 1;
 }
 
 .workspace-generated-media-chrome {
@@ -404,7 +404,7 @@
     top: 0;
     left: 0;
     overflow: hidden;
-    border-radius: var(--workspace-image-border-radius);
+    border-radius: var(--workspace-media-node-border-radius);
     background: #1c1c1c;
     pointer-events: auto;
 
@@ -437,6 +437,23 @@
     gap: 0;
     width: 100%;
     pointer-events: auto;
+}
+
+.workspace-generated-media-pending-icon {
+    position: absolute;
+    width: var(--workspace-generated-media-chrome-icon-size, 34px);
+    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+
+    .media-model-badge {
+        width: var(--workspace-generated-media-chrome-icon-size, 34px);
+        height: var(--workspace-generated-media-chrome-icon-size, 34px);
+        flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
+        justify-content: center;
+    }
 }
 
 .media-model-badge {
@@ -1480,8 +1497,8 @@
 
 .workspace-image-node {
     background: transparent;
-    border-radius: var(--workspace-image-border-radius);
-    box-shadow: var(--workspace-image-default-box-shadow);
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
     overflow: visible;
     padding: 0;
 
@@ -1498,7 +1515,11 @@
     // The node shadow/frame may sit behind the PIXI sprite.
 
     &.is-selected {
-        box-shadow: var(--workspace-image-selected-box-shadow);
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
+    }
+
+    &.is-pending-generated-media-before-frame {
+        box-shadow: none;
     }
 
 }
@@ -1518,8 +1539,8 @@
 // provides fallback drag/resize hit areas.
 .workspace-video-node {
     background: transparent;
-    border-radius: var(--workspace-image-border-radius);
-    box-shadow: var(--workspace-image-default-box-shadow);
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
     overflow: visible;
     padding: 0;
 
@@ -1532,7 +1553,11 @@
     }
 
     &.is-selected {
-        box-shadow: var(--workspace-image-selected-box-shadow);
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
+    }
+
+    &.is-pending-generated-media-before-frame {
+        box-shadow: none;
     }
 }
 

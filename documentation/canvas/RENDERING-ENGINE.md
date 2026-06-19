@@ -120,7 +120,7 @@ flowchart TB
         subgraph MediaChromeViewport[".workspace-media-chrome-viewport (z-index 3, CSS-transformed)"]
             VIDEO_CHROME[Visible video surface<br/>shared SVG controls]
         end
-        subgraph GeneratedChrome[".workspace-generated-media-chrome-layer (z-index 4, screen-space)"]
+        subgraph GeneratedChrome[".workspace-generated-media-chrome-layer (z-index 1, screen-space)"]
             IMG_CHROME[Generated-media model label<br/>+ info button strip]
         end
         subgraph InfoPanelLayer[".workspace-generated-media-info-panel-layer (z-index 5, screen-space)"]
@@ -133,12 +133,12 @@ flowchart TB
     WORLD --> IMG_SPR
     WORLD --> GEN_BORDER
     WORLD --> FG
+    GeneratedChrome --> PixiCanvas
     PixiCanvas --> MediaChromeViewport
-    PixiCanvas --> GeneratedChrome
     PixiCanvas --> InfoPanelLayer
 ```
 
-The PIXI media canvas sits **above** the DOM viewport. Completed video DOM surfaces sit in `.workspace-media-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Generated media model labels and info buttons sit in `.workspace-generated-media-chrome-layer`, a screen-space DOM overlay projected from media node bounds with bounded zoom compensation; the strip contains only the provider badge and info button, its width tracks the media node's projected width, and its top gap lives under `settings.mediaNode.generatedMediaChrome`. The expandable provenance panels are fully decoupled from that strip: they render in `.workspace-generated-media-info-panel-layer`, a separate screen-space DOM overlay positioned from the same media node bounds and matched to the media node's on-screen width, but their content is not nested in or transformed by the icon strip. The lower zoom breakpoint and related size knobs for the zoom-compensated canvas-chrome families live in `settings.ts`: `settings.connector.scaling`, `settings.canvasBubbleMenu.zoomScaling`, `settings.mediaNode.generatedMediaChrome`, and `settings.mediaNode.resizeHandle`. Provenance panels expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform as the media world and is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
+The PIXI media canvas sits **above** the DOM viewport and the generated-media icon strip, so active traveling generation outlines render over provider badges and info buttons. Completed video DOM surfaces sit in `.workspace-media-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Generated media model labels and info buttons sit in `.workspace-generated-media-chrome-layer`, a screen-space DOM overlay projected from media node bounds with bounded zoom compensation; the strip contains only the provider badge and info button, its width tracks the media node's projected width, and its top gap lives under `settings.mediaNode.generatedMediaChrome`. The PIXI media layer has `pointer-events: none`, so the visually lower info button remains clickable. The expandable provenance panels are fully decoupled from that strip: they render in `.workspace-generated-media-info-panel-layer`, a separate screen-space DOM overlay positioned from the same media node bounds and matched to the media node's on-screen width, but their content is not nested in or transformed by the icon strip. The lower zoom breakpoint and related size knobs for the zoom-compensated canvas-chrome families live in `settings.ts`: `settings.connector.scaling`, `settings.canvasBubbleMenu.zoomScaling`, `settings.mediaNode.generatedMediaChrome`, and `settings.mediaNode.resizeHandle`. Provenance panels expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform as the media world and is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
 1. They host core interaction chrome — drag overlay and resize handles.
 2. They provide stable DOM geometry for selection, drag, resize, and bubble-menu integration.

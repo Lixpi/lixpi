@@ -100,12 +100,14 @@ function drawSvgPath(g: Graphics, svgPath: string, viewport: CanvasViewport): vo
     }
 }
 
+const ARROW_ICON_REF_X = 48
+const ARROW_ICON_REF_Y = 128
+const ARROWHEAD_CURVE_SEGMENTS = 8
+
 // Replicates the arrowRightIcon shape (flaticon 9903638, 256×256 viewBox).
 // refX=48, refY=128 is the path attachment point; tip extends rightward.
-// Key vertices in icon space (relative to refX/refY), traced from the SVG path:
-//   tipTop=(181,-19), tipBottom=(181,19),
-//   lowerOuter=(1,122), lowerInner=(-31,96), notch=(4,0),
-//   upperInner=(-31,-96), upperOuter=(1,-122)
+// The source icon uses cubic curves for the tip and tail, so sample those
+// curves instead of flattening them to broad clipped polygon corners.
 function drawArrowhead(g: Graphics, arrow: PixiEdgeArrow, color: string, viewport: CanvasViewport): void {
     const point = worldPointToScreenPoint({ x: arrow.x, y: arrow.y }, viewport)
     const x = point.x
@@ -122,20 +124,45 @@ function drawArrowhead(g: Graphics, arrow: PixiEdgeArrow, color: string, viewpor
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
 
-    // Transform icon-space (ix, iy) → screen space around the attachment point (x, y)
-    function pt(ix: number, iy: number): [number, number] {
+    // Transform icon-space (ix, iy) -> screen space around the attachment point (x, y)
+    function pt(iconX: number, iconY: number): [number, number] {
+        const ix = iconX - ARROW_ICON_REF_X
+        const iy = iconY - ARROW_ICON_REF_Y
         return snapScreenPoint([x + ix * s * cos - iy * s * sin, y + ix * s * sin + iy * s * cos])
     }
 
-    const verts = [
-        pt(181, -19),   // tip top
-        pt(181,  19),   // tip bottom
-        pt(  1, 122),   // lower outer
-        pt(-31,  96),   // lower inner (V-notch bottom)
-        pt(  4,   0),   // notch center
-        pt(-31, -96),   // upper inner (V-notch top)
-        pt(  1, -122),  // upper outer
-    ]
+    const verts: Array<[number, number]> = []
+    let currentIconX = 228.992
+    let currentIconY = 146.827
+
+    function addPoint(iconX: number, iconY: number): void {
+        verts.push(pt(iconX, iconY))
+        currentIconX = iconX
+        currentIconY = iconY
+    }
+
+    function addCubicCurve(c1x: number, c1y: number, c2x: number, c2y: number, endX: number, endY: number): void {
+        const startX = currentIconX
+        const startY = currentIconY
+
+        for (let step = 1; step <= ARROWHEAD_CURVE_SEGMENTS; step++) {
+            const t = step / ARROWHEAD_CURVE_SEGMENTS
+            const mt = 1 - t
+            addPoint(
+                mt * mt * mt * startX + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * endX,
+                mt * mt * mt * startY + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * endY,
+            )
+        }
+    }
+
+    addPoint(228.992, 146.827)
+    addPoint(48.594, 250.051)
+    addCubicCurve(31.097, 260.049, 10.554, 242.787, 17.428, 223.845)
+    addPoint(52.07, 128.003)
+    addPoint(17.428, 32.16)
+    addCubicCurve(10.554, 13.178, 31.097, -4.045, 48.594, 5.953)
+    addPoint(228.992, 109.177)
+    addCubicCurve(243.598, 117.496, 243.56, 138.508, 228.992, 146.827)
 
     const flat: number[] = []
     for (const [px, py] of verts) { flat.push(px, py) }

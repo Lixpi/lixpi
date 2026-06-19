@@ -214,18 +214,26 @@ vi.mock('$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts', () =>
 vi.mock('$src/settings.ts', () => ({
     settings: {
         mediaNode: {
-            generationBorder: {
+            styles: {
+                borderRadius: 8,
+            },
+            inProgressOutlineAnimation: {
                 radius: 10,
-                trackWidth: 2,
+                gap: 3,
+                preFrameCircleScale: 1.3 / 3,
                 snakeWidth: 4,
+                snakeTailWidthFraction: 0.14,
+                snakeTailThinLengthFraction: 0.1,
+                snakeWidthTaperPower: 0.86,
                 snakeLengthFraction: 0.8,
-                snakeSegmentCount: 9,
+                snakeHeadRoundLengthFraction: 0.5,
                 animationDurationMs: 2000,
+                zoomScaling: { minZoom: 0.4 },
+                developmentFlags: { alwaysOn: false },
                 styles: {
-                    trackColor: '#fff',
-                    trackAlpha: 0.75,
-                    snakeColors: ['#fff'],
                     snakeTailAlpha: 0.3,
+                    snakeColors: ['#fff'],
+                    glassMaterial: {},
                 },
             },
             image: {
@@ -415,16 +423,15 @@ describe('createPixiMediaLayer runtime behavior', () => {
 
         const syncCalls = renderer!.sync.mock.calls
         const lastCall = syncCalls[syncCalls.length - 1] as [{ id: string; x: number; y: number; width: number; height: number; visible: boolean }[]]
-        expect(lastCall[0]).toEqual([
-            {
-                id: 'gen-1',
-                x: 10,
-                y: 20,
-                width: 100,
-                height: 70,
-                visible: true,
-            },
-        ])
+        expect(lastCall[0]).toHaveLength(1)
+        expect(lastCall[0][0]).toMatchObject({
+            id: 'gen-1',
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 70,
+            visible: true,
+        })
     })
 
     it('invokes media-node registry destroy during teardown', async () => {

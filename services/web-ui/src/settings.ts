@@ -220,8 +220,50 @@ export type SelectionSettings = {
     }
 }
 
+export type GenerationBorderGlassMaterialSettings = {
+    shadowColor: string
+    tailOpacityPower: number
+    tailFadeFraction: number
+    minTailOpacity: number
+    edgeFeatherFraction: number
+    edgeFeatherPower: number
+    lensCorePower: number
+    upperSpecularCenter: number
+    upperSpecularDrift: number
+    upperSpecularWidth: number
+    upperSpecularFadeStart: number
+    upperSpecularFadeEnd: number
+    upperSpecularStrength: number
+    headSpecularProgressCenter: number
+    headSpecularProgressWidth: number
+    headSpecularCrossSectionCenter: number
+    headSpecularCrossSectionWidth: number
+    headSpecularStrength: number
+    lowerEdgeShadowCenter: number
+    lowerEdgeShadowWidth: number
+    lowerEdgeShadowStrength: number
+    upperEdgeShadowCenter: number
+    upperEdgeShadowWidth: number
+    upperEdgeShadowStrength: number
+    edgeShadowPower: number
+    edgeShadowStrength: number
+    lensHighlightStrength: number
+    highlightWhiteMixMax: number
+    shadowMixMax: number
+    materialAlphaBase: number
+    materialAlphaMax: number
+    lensAlphaStrength: number
+    upperSpecularAlphaStrength: number
+    headSpecularAlphaStrength: number
+}
+
 export type MediaNodeSettings = {
     // Shared across all media types (image, video, …).
+    styles: {
+        defaultBoxShadow: string
+        selectedBoxShadow: string
+        borderRadius: number
+    }
     generatedMediaChrome: {
         iconSize: number
         topGap: number
@@ -246,28 +288,30 @@ export type MediaNodeSettings = {
         minSize: number
         zoomScaling: BoundedZoomScalingSettings
     }
-    generationBorder: {
+    inProgressOutlineAnimation: {
         radius: number
-        trackWidth: number
+        gap: number
+        preFrameCircleScale: number
         snakeWidth: number
+        snakeTailWidthFraction: number
+        snakeTailThinLengthFraction: number
+        snakeWidthTaperPower: number
         snakeLengthFraction: number
-        snakeSegmentCount: number
+        snakeHeadRoundLengthFraction: number
         animationDurationMs: number
+        zoomScaling: BoundedZoomScalingSettings
+        developmentFlags: {
+            alwaysOn: boolean
+        }
         styles: {
-            trackColor: string
-            trackAlpha: number
             snakeTailAlpha: number
-            snakeColors: [string, string, string, string, string]
+            snakeColors: string[]
+            glassMaterial: GenerationBorderGlassMaterialSettings
         }
     }
     // Image-specific.
     image: {
         defaultInsertionWidth: number
-        styles: {
-            defaultBoxShadow: string
-            selectedBoxShadow: string
-            borderRadius: number
-        }
     }
 }
 
@@ -632,11 +676,11 @@ export const settings: Settings = {
         // Connector screen-space base sizes and zoom breakpoint.
         scaling: {
             // Base screen-pixel connector stroke width at 100% and higher zoom.
-            strokeWidth: 2,
+            strokeWidth: 3,
             // Base screen-pixel arrowhead size at 100% and higher zoom.
-            markerSize: 16,
+            markerSize: 23,
             // Base screen-pixel source/target marker offsets at 100% and higher zoom.
-            markerOffset: { source: 6, target: 19 },
+            markerOffset: { source: 11, target: 24 },
             // Screen-pixel width of the invisible selection hit area around connector lines.
             clickAreaWidth: 24,
             // Lower zoom breakpoint for connector chrome. Runtime call sites opt
@@ -675,6 +719,15 @@ export const settings: Settings = {
     // Canvas media node settings. Shared values style the chrome, resize handles, generation outline, and selection states common to every media node (image, video, …); per-type subcategories hold values specific to one media type.
     mediaNode: {
         // ── Shared across all media types (image, video, …) ──
+
+        styles: {
+            // Box shadow applied to media nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
+            defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
+            // Box shadow applied when a media node is selected. Increasing this makes selected media read as more prominent on the canvas.
+            selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+            // Canvas-unit corner radius for media pixels and browser-composited media surfaces on the workspace canvas.
+            borderRadius: 30,
+        },
 
         // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
         generatedMediaChrome: {
@@ -723,19 +776,109 @@ export const settings: Settings = {
             zoomScaling: { minZoom: 0.4 },
         },
 
-        // PIXI-rendered animated outline shown while AI-generated media (image or video) is receiving partials.
-        generationBorder: {
+        // PIXI-rendered animated outline shown while media work is in progress.
+        inProgressOutlineAnimation: {
+            // Fallback rounded-corner radius for the snake path when a media-specific clip radius is unavailable.
             radius: 10,
-            trackWidth: 3,
-            snakeWidth: 4,
+            // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
+            gap: 3,
+            // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
+            preFrameCircleScale: 1.3 / 3,
+            // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
+            snakeWidth: 9,
+            // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
+            snakeTailWidthFraction: 0.14,
+            // Fraction of the snake path held near the minimum tail width before the body starts widening.
+            snakeTailThinLengthFraction: 0.1,
+            // Power curve for the tail-to-head width ramp. Higher values keep the trail thin longer without changing total snake length.
+            snakeWidthTaperPower: 0.86,
+            // Fraction of the rounded media perimeter occupied by the visible snake.
             snakeLengthFraction: 0.24,
-            snakeSegmentCount: 72,
+            // Rounded head length as a fraction of the feather-expanded snake width. Higher values make the endpoint softer without protruding past the head.
+            snakeHeadRoundLengthFraction: 0.5,
+            // Milliseconds for one complete lap around the media node.
             animationDurationMs: 3200,
+            // Lower zoom breakpoint for the PIXI generation outline stroke widths. Runtime call sites opt this config into the shared adaptive low-zoom curve.
+            zoomScaling: { minZoom: 0 },
+            developmentFlags: {
+                // Shows the outline on every media node for visual tuning.
+                alwaysOn: false,
+            },
             styles: {
-                trackColor: '#D0D6E1',
-                trackAlpha: 0.72,
-                snakeTailAlpha: 0.25,
-                snakeColors: ['#1D57CB', '#2474FF', '#7C4DFF', '#D63FF0', '#FF9933'],
+                // Tail fade preference. The glass renderer keeps a material-opacity floor so the tail fades without turning into mist.
+                snakeTailAlpha: 0,
+                // Tail-to-head colors inspired by the shifting gradient and model menu divider, with a bright iridescent amethyst tail.
+                snakeColors: ['#ff0084', '#ff39b0', '#fc75c6', '#eba0f5', '#f1c2e9', '#e0d6ff', '#eaeaff', '#DAD7F1', '#E8E4F6'],
+                glassMaterial: {
+                    // Dark tint mixed into the soft lower rim of the glass.
+                    shadowColor: '#4E5B6C',
+                    // Exponent for tail-to-head opacity growth. Lower values make the tail become visible sooner.
+                    tailOpacityPower: 0.72,
+                    // Fraction of snake length used to fade the tail in from fully transparent.
+                    tailFadeFraction: 0.08,
+                    // Minimum opacity floor after the tail fade finishes.
+                    minTailOpacity: 0.62,
+                    // Extra transparent feather width as a fraction of the visible snake width. Higher values blur outward without shrinking the core.
+                    edgeFeatherFraction: 0.1,
+                    // Exponent applied to the feather mask. Higher values make the fade more gradual at the outer edge.
+                    edgeFeatherPower: 1.18,
+                    // Cross-section lens exponent. Lower values spread the rounded glass body farther toward the edges.
+                    lensCorePower: 0.42,
+                    // Vertical center of the main specular highlight, from top edge 0 to bottom edge 1.
+                    upperSpecularCenter: 0.32,
+                    // How far the main specular highlight drifts across the width as it travels along the snake.
+                    upperSpecularDrift: 0.035,
+                    // Width of the main specular highlight across the snake body.
+                    upperSpecularWidth: 0.16,
+                    // Tail progress where the main specular highlight starts fading in.
+                    upperSpecularFadeStart: 0.1,
+                    // Tail progress where the main specular highlight reaches full strength.
+                    upperSpecularFadeEnd: 0.32,
+                    // Brightness contribution from the main specular highlight.
+                    upperSpecularStrength: 0.24,
+                    // Longitudinal center of the head glint, from tail 0 to head 1.
+                    headSpecularProgressCenter: 0.91,
+                    // Longitudinal width of the head glint.
+                    headSpecularProgressWidth: 0.22,
+                    // Cross-section center of the head glint, from top edge 0 to bottom edge 1.
+                    headSpecularCrossSectionCenter: 0.48,
+                    // Cross-section width of the head glint.
+                    headSpecularCrossSectionWidth: 0.26,
+                    // Brightness contribution from the head glint.
+                    headSpecularStrength: 0.18,
+                    // Cross-section center of the lower glass shadow rim.
+                    lowerEdgeShadowCenter: 0.88,
+                    // Width of the lower glass shadow rim.
+                    lowerEdgeShadowWidth: 0.2,
+                    // Darkness contribution from the lower glass shadow rim.
+                    lowerEdgeShadowStrength: 0.16,
+                    // Cross-section center of the upper glass shadow rim.
+                    upperEdgeShadowCenter: 0.1,
+                    // Width of the upper glass shadow rim.
+                    upperEdgeShadowWidth: 0.2,
+                    // Darkness contribution from the upper glass shadow rim.
+                    upperEdgeShadowStrength: 0.07,
+                    // Power curve for the broad edge shadow. Higher values push shadow closer to the edge.
+                    edgeShadowPower: 2.2,
+                    // Darkness contribution from the broad edge shadow.
+                    edgeShadowStrength: 0.04,
+                    // Brightness contribution from the rounded lens core.
+                    lensHighlightStrength: 0.08,
+                    // Maximum amount of white mixed into highlights.
+                    highlightWhiteMixMax: 0.3,
+                    // Maximum amount of shadow color mixed into edge shadows.
+                    shadowMixMax: 0.14,
+                    // Baseline material opacity before cross-section highlights are added.
+                    materialAlphaBase: 0.72,
+                    // Maximum material opacity before the feathered edge mask is applied.
+                    materialAlphaMax: 0.94,
+                    // Opacity contribution from the rounded lens core.
+                    lensAlphaStrength: 0.16,
+                    // Opacity contribution from the main specular highlight.
+                    upperSpecularAlphaStrength: 0.04,
+                    // Opacity contribution from the head glint.
+                    headSpecularAlphaStrength: 0.03,
+                },
             },
         },
 
@@ -743,14 +886,6 @@ export const settings: Settings = {
         image: {
             // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
             defaultInsertionWidth: 600,
-            styles: {
-                // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
-                defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
-                // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
-                selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
-                // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
-                borderRadius: 8,
-            },
         },
     },
 

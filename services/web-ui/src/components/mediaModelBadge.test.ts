@@ -7,6 +7,7 @@ import {
 } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { settings } from '$src/settings.ts'
+import { stabilityIcon, gptAvatarIcon } from '$src/svgIcons/index.ts'
 
 function setMockModels(models: Array<{ provider?: string; model?: string; title?: string; providerTitle?: string; colorIconName?: string }>): void {
     aiModelsStore.setAiModels(models as any)
@@ -75,6 +76,61 @@ describe('getMediaModelBadgeMeta', () => {
         expect(meta.label).toBe('')
         expect(meta.icon).toBeNull()
     })
+
+    it('uses a model-specific icon before falling back to provider icons', () => {
+        setMockModels([
+            {
+                provider: 'openai',
+                model: 'gpt-4o-mini',
+                title: 'GPT-4o mini',
+                providerTitle: 'OpenAI',
+                colorIconName: 'stabilityIcon',
+            },
+        ])
+
+        const meta = getMediaModelBadgeMeta({ modelId: 'openai:gpt-4o-mini', modelProvider: 'Anthropic' })
+
+        expect(meta.providerTitle).toBe('OpenAI')
+        expect(meta.modelTitle).toBe('GPT-4o mini')
+        expect(meta.label).toBe(`OpenAI${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}GPT-4o mini`)
+        expect(meta.icon).toBe(stabilityIcon)
+    })
+
+    it('does not fall back to modelProvider when modelId includes an explicit provider', () => {
+        setMockModels([
+            {
+                provider: 'google',
+                model: 'gemini-pro',
+                title: 'Gemini Pro',
+                providerTitle: 'Google',
+                colorIconName: 'gptAvatarIcon',
+            },
+        ])
+
+        const meta = getMediaModelBadgeMeta({ modelId: 'openai:gemini-pro', modelProvider: 'google' })
+
+        expect(meta.providerTitle).toBe('openai')
+        expect(meta.modelTitle).toBe('gemini-pro')
+        expect(meta.icon).toBe(gptAvatarIcon)
+    })
+
+    it('matches models where the model segment contains colon characters', () => {
+        setMockModels([
+            {
+                provider: 'google',
+                model: 'gemini:2.5',
+                title: 'Gemini 2.5',
+                providerTitle: 'Google',
+                colorIconName: 'geminiIcon',
+            },
+        ])
+
+        const meta = getMediaModelBadgeMeta({ modelId: 'google:gemini:2.5', modelProvider: '' })
+
+        expect(meta.providerTitle).toBe('Google')
+        expect(meta.modelTitle).toBe('Gemini 2.5')
+        expect(meta.label).toBe(`Google${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}Gemini 2.5`)
+    })
 })
 
 describe('createMediaModelBadge', () => {
@@ -99,6 +155,31 @@ describe('createMediaModelBadge', () => {
         expect(badge?.querySelector('.media-model-badge-provider')?.textContent).toBe('google')
         expect(badge?.querySelector('.media-model-badge-model')?.textContent).toBe('Gemini Pro')
         expect(badge?.querySelector('.media-model-badge-icon')).not.toBeNull()
+    })
+
+    it('hides text when iconOnly is true but preserves icon and title label semantics', () => {
+        setMockModels([
+            {
+                provider: 'openai',
+                model: 'gpt-4o',
+                title: 'GPT-4o',
+                providerTitle: 'OpenAI',
+                colorIconName: 'gptAvatarIcon',
+            },
+        ])
+
+        const badge = createMediaModelBadge({ modelId: 'openai:gpt-4o', iconOnly: true })
+
+        expect(badge?.className).toContain('media-model-badge-icon-only')
+        expect(badge?.querySelector('.media-model-badge-icon')).not.toBeNull()
+        expect(badge?.querySelector('.media-model-badge-name')).toBeNull()
+        expect(badge?.title).toBe(`OpenAI${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}GPT-4o`)
+    })
+
+    it('returns null for resolved providers that resolve to no label and no icon', () => {
+        const badge = createMediaModelBadge({ modelId: '', modelProvider: '' })
+
+        expect(badge).toBeNull()
     })
 })
 
@@ -132,6 +213,23 @@ describe('renderMediaModelBadge', () => {
         expect(host.hidden).toBe(true)
         expect(host.children).toHaveLength(0)
     })
+
+    it('adds icon-only badge without model text when iconOnly is requested', () => {
+        setMockModels([
+            {
+                provider: 'stability',
+                model: 'sdxl',
+                title: 'Stable Diffusion XL',
+            },
+        ])
+
+        const host = createHost()
+        renderMediaModelBadge(host, { modelId: 'stability:sdxl', iconOnly: true })
+
+        expect(host.hidden).toBe(false)
+        expect(host.querySelector('.media-model-badge-icon')).not.toBeNull()
+        expect(host.querySelector('.media-model-badge-name')).toBeNull()
+    })
 })
 
 describe('applyMediaModelBadgeStyleProperties', () => {
@@ -161,5 +259,25 @@ describe('applyMediaModelBadgeStyleProperties', () => {
         applyMediaModelBadgeStyleProperties(host, { scale: Number.NaN })
 
         expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap}px`)
+        expect(host.style.getPropertyValue('--workspace-media-model-badge-name-font-size')).toBe(settings.mediaNode.generatedMediaChrome.styles.modelBadgeNameFontSize)
+    })
+
+    it('falls back to scale 1 when scale is zero or negative', () => {
+        const host = createHost()
+        applyMediaModelBadgeStyleProperties(host, { scale: 0 })
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-top-gap')).toBe(`${settings.mediaNode.generatedMediaChrome.topGap}px`)
+        applyMediaModelBadgeStyleProperties(host, { scale: -1 })
+        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe(`${settings.mediaNode.generatedMediaChrome.iconSize}px`)
+    })
+
+    it('scales unitless values as a passthrough and scales css lengths by exact multiplier', () => {
+        const host = createHost()
+        applyMediaModelBadgeStyleProperties(host, { scale: 1.5 })
+
+        expect(host.style.getPropertyValue('--workspace-media-model-badge-icon-gap')).toBe('4.5px')
+        expect(host.style.getPropertyValue('--workspace-media-model-badge-name-font-size')).toBe('22.5px')
+        expect(host.style.getPropertyValue('--workspace-media-model-badge-name-line-height')).toBe(String(settings.mediaNode.generatedMediaChrome.styles.modelBadgeNameLineHeight))
     })
 })
