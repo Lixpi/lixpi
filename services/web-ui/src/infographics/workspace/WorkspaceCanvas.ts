@@ -274,9 +274,6 @@ type PendingGeneratedMediaTracker = {
 
 type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nodes' | 'edges' | 'viewport'>
 
-const DEBUG_PENDING_GENERATED_MEDIA_NODE_ID = '__debug-pending-generated-media-node__'
-const TRANSPARENT_PIXEL_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
-
 type WorkspaceCanvasOptions = {
     paneEl: HTMLDivElement
     viewportEl: HTMLDivElement
@@ -1318,59 +1315,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function updateGeneratedMediaChromeLayout(viewport: Viewport = getLiveViewport()): void {
         if (!currentCanvasState || !generatedMediaChromeLayerEl) return
-        const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState)
-        if (!visualCanvasState) return
-        const nodesById = getCanvasNodesById(visualCanvasState.nodes)
-        for (const node of visualCanvasState.nodes) {
+        const nodesById = getCanvasNodesById(currentCanvasState.nodes)
+        for (const node of currentCanvasState.nodes) {
             if (node.type !== 'image' && node.type !== 'video') continue
             const position = getNodeWorldPosition(node, nodesById)
             const dimensions = liveNodeOverrides.get(node.nodeId)?.dimensions ?? node.dimensions
             updateGeneratedMediaChromeLiveTransform(node.nodeId, position, dimensions, viewport)
-        }
-    }
-
-    function shouldShowDebugPendingGeneratedMediaNode(): boolean {
-        if (settings.mediaNode.inProgressOutlineAnimation.developmentFlags.debugPreFrameNode) return true
-        try {
-            return typeof window !== 'undefined'
-                && window.localStorage.getItem('lixpi:debug-pre-frame-node') === 'true'
-        } catch {
-            return false
-        }
-    }
-
-    function getDebugPendingGeneratedMediaNode(): ImageCanvasNode {
-        const size = getGeneratedImageInsertionSize()
-        return {
-            nodeId: DEBUG_PENDING_GENERATED_MEDIA_NODE_ID,
-            type: 'image',
-            fileId: '',
-            workspaceId,
-            src: TRANSPARENT_PIXEL_SRC,
-            aspectRatio: 1,
-            position: getCenteredInsertionPosition({ width: size, height: size }),
-            dimensions: { width: size, height: size },
-            generatedBy: {
-                aiChatThreadId: '__debug__',
-                responseId: '',
-                aiModel: 'Google:debug-reasoning' as any,
-                mediaModelId: 'Google:debug-pre-frame' as any,
-                revisedPrompt: 'Debug pre-frame generated-media placeholder',
-                responseMessageId: '',
-            },
-        }
-    }
-
-    function getCanvasStateWithDebugPendingGeneratedMediaNode(canvasState: CanvasState | null): CanvasState | null {
-        if (!canvasState) return null
-        const baseState = canvasState
-        if (!shouldShowDebugPendingGeneratedMediaNode()) return baseState
-        return {
-            ...baseState,
-            nodes: [
-                ...baseState.nodes.filter((node: CanvasNode) => node.nodeId !== DEBUG_PENDING_GENERATED_MEDIA_NODE_ID),
-                getDebugPendingGeneratedMediaNode(),
-            ],
         }
     }
 
@@ -1981,8 +1931,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function syncGeneratedMediaChrome(canvasState: CanvasState | null = currentCanvasState): void {
         if (!mediaChromeViewportEl || !generatedMediaChromeLayerEl || !pendingGeneratedMediaIconLayerEl) return
-        const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(canvasState)
-        const canvasNodes = visualCanvasState?.nodes ?? []
+        const canvasNodes = canvasState?.nodes ?? []
         const pendingBeforeFirstFrameNodeIds = getPendingGeneratedMediaBeforeFirstFrameNodeIds()
         // Generated/uploaded media (image OR video) carrying generation metadata
         // or a descriptor gets the below-node provenance chrome (info button +
@@ -2097,12 +2046,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 shape: pending.hasReceivedFrame ? 'node' : 'preFrameCircle',
             })
         }
-        if (shouldShowDebugPendingGeneratedMediaNode()) {
-            generatingIds.set(DEBUG_PENDING_GENERATED_MEDIA_NODE_ID, {
-                direction: 'clockwise',
-                shape: 'preFrameCircle',
-            })
-        }
         for (const referenceNodeIds of generatingReferenceNodeIdsByThread.values()) {
             for (const nodeId of referenceNodeIds) {
                 if (!generatingIds.has(nodeId)) generatingIds.set(nodeId, { direction: 'counterclockwise' })
@@ -2119,14 +2062,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         for (const pending of videoGenerationTracker.values()) {
             if (!pending.hasReceivedFrame) nodeIds.add(pending.nodeId)
         }
-        if (shouldShowDebugPendingGeneratedMediaNode()) {
-            nodeIds.add(DEBUG_PENDING_GENERATED_MEDIA_NODE_ID)
-        }
         return nodeIds
     }
 
     function isPendingGeneratedMediaBeforeFirstFrame(nodeId: string): boolean {
-        if (nodeId === DEBUG_PENDING_GENERATED_MEDIA_NODE_ID && shouldShowDebugPendingGeneratedMediaNode()) return true
         for (const pending of partialImageTracker.values()) {
             if (pending.nodeId === nodeId) return !pending.hasReceivedFrame
         }
@@ -2141,10 +2080,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function syncPixiMediaLayer(canvasState: CanvasState | null = currentCanvasState): void {
-        const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(canvasState)
-        syncPixiGeneratingImageNodes(visualCanvasState)
-        pixiMediaLayer?.sync(visualCanvasState)
-        syncGeneratedMediaChrome(visualCanvasState)
+        syncPixiGeneratingImageNodes(canvasState)
+        pixiMediaLayer?.sync(canvasState)
+        syncGeneratedMediaChrome(canvasState)
     }
 
     function fitImageDimensionsToAspectRatio(
@@ -5843,7 +5781,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     // and skips renderNodes(). The caller manages DOM updates manually.
     function commitCanvasStatePreservingEditors(nextState: CanvasState): void {
         commitCanvasState(nextState)
-        lastNodeStructureKey = getNodeStructureKey(getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState))
+        lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
     }
 
     function commitCanvasMetadataState(nextState: CanvasState): void {
@@ -6705,8 +6643,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 if (settings.connector.useZoomCompensatedScaling) {
                     const hasPreFrameConnectorBounds = getPendingGeneratedMediaBeforeFirstFrameNodeIds().size > 0
                     if (hasPreFrameConnectorBounds && connectionManager && currentCanvasState) {
-                        const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState) ?? currentCanvasState
-                        connectionManager.syncNodes(getNodesForConnectionManager(visualCanvasState.nodes))
+                        connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
                         connectionManager.syncEdges(currentCanvasState.edges)
                         connectionManager.render()
                         pixiMediaLayer?.renderNow()
@@ -6865,16 +6802,15 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function commitCanvasState(nextState: CanvasState) {
         canvasMediaNodeLifecycle.trackCanvasState(nextState)
         currentCanvasState = nextState
-        const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(nextState) ?? nextState
         pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(nextState)
         onCanvasStateChange?.(nextState)
 
-        syncCanvasNodeDomGeometry(visualCanvasState.nodes)
+        syncCanvasNodeDomGeometry(nextState.nodes)
         connectionManager?.syncEdges(nextState.edges)
-        connectionManager?.syncNodes(getNodesForConnectionManager(visualCanvasState.nodes))
+        connectionManager?.syncNodes(getNodesForConnectionManager(nextState.nodes))
         scheduleEdgesRender()
         syncPixiMediaLayer(nextState)
-        lastVisualSyncKey = getCanvasVisualSyncKey(visualCanvasState)
+        lastVisualSyncKey = getCanvasVisualSyncKey(nextState)
     }
 
     function scheduleTransformSideEffects() {
@@ -6899,8 +6835,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
             if (!connectionManager || !currentCanvasState) return
 
-            const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState) ?? currentCanvasState
-            const nodesForEdges = getNodesForConnectionManager(visualCanvasState.nodes)
+            const nodesForEdges = getNodesForConnectionManager(currentCanvasState.nodes)
             connectionManager.syncNodes(nodesForEdges)
             connectionManager.syncEdges(currentCanvasState.edges)
             connectionManager.render()
@@ -6946,8 +6881,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
 
         if (currentCanvasState) {
-            const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState) ?? currentCanvasState
-            connectionManager.syncNodes(getNodesForConnectionManager(visualCanvasState.nodes))
+            connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
             connectionManager.syncEdges(currentCanvasState.edges)
             if (selectedEdgeId) {
                 connectionManager.selectEdge(selectedEdgeId)
@@ -7653,14 +7587,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
             'workspace-image-node',
-            { fileId: node.fileId },
-            node.nodeId === DEBUG_PENDING_GENERATED_MEDIA_NODE_ID
-                ? {
-                    renderResizeHandles: false,
-                    allowSelection: false,
-                    allowDrag: false,
-                }
-                : {}
+            { fileId: node.fileId }
         )
         dragOverlay.className = 'image-drag-overlay nopan'
 
@@ -7850,13 +7777,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         document.addEventListener('mouseup', handleMouseUp)
     }
 
-    let lastNodeStructureKey = getNodeStructureKey(getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState))
-    let lastVisualSyncKey = getCanvasVisualSyncKey(getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState))
+    let lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
+    let lastVisualSyncKey = getCanvasVisualSyncKey(currentCanvasState)
 
     function renderNodes() {
         if (!viewportEl || !currentCanvasState) return
-        const visualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState)
-        if (!visualCanvasState) return
 
         destroyGeneratedMediaInfoRenderers()
         viewportEl.innerHTML = ''
@@ -7892,7 +7817,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         hiddenEmptyThreadNodeIds.clear()
 
         const documentMap = new Map<string, Document>(currentDocuments.map((d) => [d.documentId, d]))
-        for (const node of visualCanvasState.nodes) {
+        for (const node of currentCanvasState.nodes) {
             let nodeEl: HTMLElement
 
             if (node.type === 'document') {
@@ -7933,13 +7858,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         updateSelectionDrivenUi()
 
         // Ensure edges render after a full rerender
-        connectionManager?.syncNodes(getNodesForConnectionManager(visualCanvasState.nodes))
+        connectionManager?.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
         connectionManager?.syncEdges(currentCanvasState.edges)
         scheduleEdgesRender()
 
         renderActiveAiChatPanel()
 
-        lastNodeStructureKey = getNodeStructureKey(visualCanvasState)
+        lastNodeStructureKey = getNodeStructureKey(currentCanvasState)
 
         // PIXI sync is driven by the caller (render() / commitCanvasState),
         // not here — avoids a duplicate sync when renderNodes() is called
@@ -7962,7 +7887,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let lastThreadsKey = getAiChatThreadsKey(currentAiChatThreads)
 
     function shouldRerender(newCanvasState: CanvasState | null, newDocuments: Document[], newThreads: AiChatThread[]): boolean {
-        const newNodeKey = getNodeStructureKey(getCanvasStateWithDebugPendingGeneratedMediaNode(newCanvasState))
+        const newNodeKey = getNodeStructureKey(newCanvasState)
         const newDocsKey = getDocumentsKey(newDocuments)
         const newThreadsKey = getAiChatThreadsKey(newThreads)
         return newNodeKey !== lastNodeStructureKey || newDocsKey !== lastDocumentsKey || newThreadsKey !== lastThreadsKey
@@ -8237,8 +8162,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 oldViewport.x !== newViewport.x ||
                 oldViewport.y !== newViewport.y ||
                 oldViewport.zoom !== newViewport.zoom
-            const effectiveVisualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(effectiveCanvasState)
-            const nextVisualSyncKey = getCanvasVisualSyncKey(effectiveVisualCanvasState)
+            const nextVisualSyncKey = getCanvasVisualSyncKey(effectiveCanvasState)
             const visualStateChanged = workspaceChanged || nextVisualSyncKey !== lastVisualSyncKey
             const liveViewport = getLiveViewport()
             const shouldPreserveLiveViewport = shouldPreserveLiveViewportForViewportOnlyRender({
@@ -8279,14 +8203,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             //    zoom-tier change during workspace switch would call
             //    `upsertAllImages(OLD_STATE)`, spawning async texture fetches for
             //    the old workspace's images that arrive and overwrite new sprites.
-            const currentVisualCanvasState = getCanvasStateWithDebugPendingGeneratedMediaNode(currentCanvasState)
-            if (currentCanvasState && currentVisualCanvasState && connectionManager && visualStateChanged) {
-                if (!needsRerender) syncCanvasNodeDomGeometry(currentVisualCanvasState.nodes)
-                connectionManager.syncNodes(getNodesForConnectionManager(currentVisualCanvasState.nodes))
+            if (currentCanvasState && connectionManager && visualStateChanged) {
+                if (!needsRerender) syncCanvasNodeDomGeometry(currentCanvasState.nodes)
+                connectionManager.syncNodes(getNodesForConnectionManager(currentCanvasState.nodes))
                 connectionManager.syncEdges(currentCanvasState.edges)
                 scheduleEdgesRender()
                 syncPixiMediaLayer(currentCanvasState)
-                lastVisualSyncKey = getCanvasVisualSyncKey(currentVisualCanvasState)
+                lastVisualSyncKey = getCanvasVisualSyncKey(currentCanvasState)
             }
 
             // Video controls need videoNodeHandler entries. Those entries are

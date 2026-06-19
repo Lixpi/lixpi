@@ -302,7 +302,6 @@ export type MediaNodeSettings = {
         zoomScaling: BoundedZoomScalingSettings
         developmentFlags: {
             alwaysOn: boolean
-            debugPreFrameNode: boolean
         }
         styles: {
             snakeTailAlpha: number
@@ -804,8 +803,6 @@ export const settings: Settings = {
             developmentFlags: {
                 // Shows the outline on every media node for visual tuning.
                 alwaysOn: false,
-                // Renders one non-persisted generated-media placeholder in the pre-first-frame state for visual tuning.
-                debugPreFrameNode: false,
             },
             styles: {
                 // Tail fade preference. The glass renderer keeps a material-opacity floor so the tail fades without turning into mist.
