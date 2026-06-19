@@ -21,6 +21,8 @@ export type PixiTravelingOutlineStyle = {
     durationMs: number
 }
 
+export type PixiTravelingOutlineDirection = 'clockwise' | 'counterclockwise'
+
 export type PixiTravelingOutlineGlassMaterialStyle = {
     shadowColor: string
     tailOpacityPower: number
@@ -66,6 +68,7 @@ export type PixiTravelingOutlineDatum = {
     height: number
     radius: number
     visible: boolean
+    direction?: PixiTravelingOutlineDirection
 }
 
 export type PixiTravelingOutlineRendererOptions = {
@@ -84,6 +87,7 @@ type OutlineEntry = {
     width: number
     height: number
     radius: number
+    direction: PixiTravelingOutlineDirection
 }
 
 export type OutlinePoint = {
@@ -97,7 +101,7 @@ type OutlineFrame = {
 }
 
 type OutlineGeometryUpdate = Pick<PixiTravelingOutlineDatum, 'x' | 'y' | 'width' | 'height'>
-    & Partial<Pick<PixiTravelingOutlineDatum, 'radius'>>
+    & Partial<Pick<PixiTravelingOutlineDatum, 'radius' | 'direction'>>
 
 type TravelingSnakeMeshGeometry = {
     positions: Float32Array
@@ -432,6 +436,10 @@ function getTravelingSnakeWidthProgress(
     return Math.pow(taperProgress, boundedTaperPower)
 }
 
+function getTravelingOutlineDirectionSign(direction?: PixiTravelingOutlineDirection): 1 | -1 {
+    return direction === 'counterclockwise' ? -1 : 1
+}
+
 function getInsetAlignedRoundedOutlineFrame(
     mediaWidth: number,
     mediaHeight: number,
@@ -541,6 +549,7 @@ function buildTravelingSnakeMeshGeometry(
     snakeTailWidth: number,
     snakeTailThinLengthFraction: number,
     snakeWidthTaperPower: number,
+    travelDirection: 1 | -1,
     edgeFeatherFraction: number,
     snakeHeadRoundLengthFraction: number
 ): TravelingSnakeMeshGeometry {
@@ -567,7 +576,7 @@ function buildTravelingSnakeMeshGeometry(
             mediaRadius,
             sampleOutset,
             headOutset,
-            headDistance - snakeLength * (1 - progress)
+            headDistance - travelDirection * snakeLength * (1 - progress)
         )
         const normal = { x: -frame.tangent.y, y: frame.tangent.x }
         const halfWidth = meshSampleWidth / 2
@@ -685,7 +694,8 @@ export class PixiTravelingOutlineRenderer {
         const outlineHeight = entry.height + headOutset * 2
         const outlineRadius = mediaRadius + headOutset
         const perimeter = getRoundedOutlinePerimeter(outlineWidth, outlineHeight, outlineRadius)
-        const headDistance = getTravelingOutlineHeadDistance(elapsed, this.style.durationMs, perimeter, this.ease)
+        const travelDirection = getTravelingOutlineDirectionSign(entry.direction)
+        const headDistance = getTravelingOutlineHeadDistance(elapsed, this.style.durationMs, perimeter, this.ease) * travelDirection
         const snakeLength = perimeter * this.style.snakeLengthFraction
         const sampleCount = getTravelingSnakeSampleCount(snakeLength, snakeHeadWidth)
         const geometry = buildTravelingSnakeMeshGeometry(
@@ -700,6 +710,7 @@ export class PixiTravelingOutlineRenderer {
             snakeTailWidth,
             this.style.snakeTailThinLengthFraction,
             this.style.snakeWidthTaperPower,
+            travelDirection,
             this.style.glassMaterial.edgeFeatherFraction,
             this.style.snakeHeadRoundLengthFraction
         )
@@ -730,6 +741,7 @@ export class PixiTravelingOutlineRenderer {
             width: datum.width,
             height: datum.height,
             radius: datum.radius,
+            direction: datum.direction ?? 'clockwise',
         }
         this.updateEntryGeometry(entry, datum)
         this.setEntryRenderable(entry, datum.visible)
@@ -750,6 +762,7 @@ export class PixiTravelingOutlineRenderer {
         entry.x = geometry.x
         entry.y = geometry.y
         if (typeof geometry.radius === 'number') entry.radius = geometry.radius
+        if (geometry.direction) entry.direction = geometry.direction
     }
 
     private destroyEntry(id: string): void {

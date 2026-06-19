@@ -37,6 +37,7 @@ import { createMediaNodeRegistry, type MediaNodeRegistry } from '$src/infographi
 import {
     PixiTravelingOutlineRenderer,
     type PixiTravelingOutlineDatum,
+    type PixiTravelingOutlineDirection,
 } from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
 import {
     getAdaptiveBoundedZoomScalingOptions,
@@ -87,13 +88,17 @@ export type SelectionColors = {
     groupOverlayFill: string
 }
 
+export type GeneratingMediaOutlineDirection = PixiTravelingOutlineDirection
+
 type SelectionOverlayOptions = {
     fill?: boolean
 }
 
+type GeneratingMediaOutlineTargets = Set<string> | Map<string, GeneratingMediaOutlineDirection>
+
 export type PixiMediaLayer = {
     sync: (canvasState: CanvasState | null) => void
-    setGeneratingImageNodes: (nodeIds: Set<string>) => void
+    setGeneratingImageNodes: (nodeTargets: GeneratingMediaOutlineTargets) => void
     setViewport: (viewport: CanvasViewport) => void
     setNodeLiveTransform: (
         nodeId: string,
@@ -204,7 +209,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     // detect removal (when a node leaves canvasState we dispatch remove).
     let registryDispatchedNodes: Set<string> = new Set()
     const entries = new Map<string, PixiImageEntry>()
-    let generatingImageNodeIds = new Set<string>()
+    let generatingImageNodeDirections = new Map<string, GeneratingMediaOutlineDirection | undefined>()
     let edgeRenderer: PixiEdgeRenderer | null = null
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
@@ -222,26 +227,26 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
-    const generationBorder = settings.mediaNode.generationBorder
-    const generationBorderStyles = generationBorder.styles
-    const generationBorderZoomScaling = getAdaptiveBoundedZoomScalingOptions(generationBorder.zoomScaling ?? { minZoom: 0.4 })
+    const inProgressOutlineAnimation = settings.mediaNode.inProgressOutlineAnimation
+    const inProgressOutlineAnimationStyles = inProgressOutlineAnimation.styles
+    const inProgressOutlineZoomScaling = getAdaptiveBoundedZoomScalingOptions(inProgressOutlineAnimation.zoomScaling ?? { minZoom: 0.4 })
     const generatingBorderRenderer = new PixiTravelingOutlineRenderer({
         container: generatingBorderLayer,
         style: {
-            radius: generationBorder.radius,
-            gap: generationBorder.gap ?? 0,
-            snakeHeadWidth: generationBorder.snakeWidth,
-            snakeTailWidthFraction: generationBorder.snakeTailWidthFraction ?? 0.18,
-            snakeTailThinLengthFraction: generationBorder.snakeTailThinLengthFraction,
-            snakeWidthTaperPower: generationBorder.snakeWidthTaperPower,
-            snakeLengthFraction: generationBorder.snakeLengthFraction,
-            snakeHeadRoundLengthFraction: generationBorder.snakeHeadRoundLengthFraction,
-            snakeTailAlpha: generationBorderStyles.snakeTailAlpha,
-            snakeColors: generationBorderStyles.snakeColors,
-            glassMaterial: generationBorderStyles.glassMaterial,
-            durationMs: generationBorder.animationDurationMs,
+            radius: inProgressOutlineAnimation.radius,
+            gap: inProgressOutlineAnimation.gap ?? 0,
+            snakeHeadWidth: inProgressOutlineAnimation.snakeWidth,
+            snakeTailWidthFraction: inProgressOutlineAnimation.snakeTailWidthFraction ?? 0.18,
+            snakeTailThinLengthFraction: inProgressOutlineAnimation.snakeTailThinLengthFraction,
+            snakeWidthTaperPower: inProgressOutlineAnimation.snakeWidthTaperPower,
+            snakeLengthFraction: inProgressOutlineAnimation.snakeLengthFraction,
+            snakeHeadRoundLengthFraction: inProgressOutlineAnimation.snakeHeadRoundLengthFraction,
+            snakeTailAlpha: inProgressOutlineAnimationStyles.snakeTailAlpha,
+            snakeColors: inProgressOutlineAnimationStyles.snakeColors,
+            glassMaterial: inProgressOutlineAnimationStyles.glassMaterial,
+            durationMs: inProgressOutlineAnimation.animationDurationMs,
         },
-        getStrokeScale: () => scaleCanvasChromeWorldSizeForZoom(1, currentViewport.zoom, generationBorderZoomScaling),
+        getStrokeScale: () => scaleCanvasChromeWorldSizeForZoom(1, currentViewport.zoom, inProgressOutlineZoomScaling),
         onFrame: scheduleRender,
     })
 
@@ -510,7 +515,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function getGeneratingBorderRadius(node: CanvasNode | undefined, width: number, height: number): number {
         if (node?.type === 'image' || node?.type === 'video') return getMediaNodeBorderRadius(width, height)
-        const borderRadius = generationBorder.radius
+        const borderRadius = inProgressOutlineAnimation.radius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }
@@ -623,11 +628,11 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     function syncGeneratingImageBorders(): void {
         const datums: PixiTravelingOutlineDatum[] = []
         const nodesById = lastState ? buildNodesById(lastState.nodes) : new Map()
-        for (const nodeId of generatingImageNodeIds) {
+        for (const [nodeId, direction] of generatingImageNodeDirections) {
             const node = nodesById.get(nodeId)
             if (!node) continue
             const worldPosition = computeWorldPosition(node, nodesById)
-            datums.push({
+            const datum: PixiTravelingOutlineDatum = {
                 id: nodeId,
                 x: worldPosition.x,
                 y: worldPosition.y,
@@ -635,13 +640,22 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 height: node.dimensions.height,
                 radius: getGeneratingBorderRadius(node, node.dimensions.width, node.dimensions.height),
                 visible: true,
-            })
+            }
+            if (direction) datum.direction = direction
+            datums.push(datum)
         }
         generatingBorderRenderer.sync(datums)
     }
 
-    function setGeneratingImageNodes(nodeIds: Set<string>): void {
-        generatingImageNodeIds = new Set(nodeIds)
+    function setGeneratingImageNodes(nodeIds: Set<string>): void
+    function setGeneratingImageNodes(nodeIds: Map<string, GeneratingMediaOutlineDirection>): void
+    function setGeneratingImageNodes(nodeIds: GeneratingMediaOutlineTargets): void {
+        generatingImageNodeDirections = nodeIds instanceof Map
+            ? new Map(nodeIds)
+            : new Map(Array.from(
+                nodeIds,
+                (nodeId): [string, GeneratingMediaOutlineDirection | undefined] => [nodeId, undefined]
+            ))
         if (destroyed || health !== 'ready') return
         syncGeneratingImageBorders()
         scheduleRender()
@@ -1034,7 +1048,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             visibilityRaf = null
         }
         generatingBorderRenderer.destroy()
-        generatingImageNodeIds.clear()
+        generatingImageNodeDirections.clear()
         mediaNodeRegistry.destroy()
         registryDispatchedNodes.clear()
         for (const [, entry] of entries) {

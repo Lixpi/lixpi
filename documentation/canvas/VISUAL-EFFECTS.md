@@ -54,7 +54,7 @@ The system intentionally has separate palettes for different visual roles:
 | Setting | Purpose | Consumers |
 |---|---|---|
 | `settings.gradient.styles.shiftingColors` | Dreamy pastel canvas/SVG accent palette | AI chat thread and floating prompt backgrounds, document thread border, document context selection |
-| `settings.mediaNode.generationBorder.styles.snakeColors` | Bright traveling progress path palette | PIXI generated-image progress outline |
+| `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors` | Bright traveling in-progress outline palette | PIXI media progress outline |
 
 ## Gradient Consumers
 
@@ -70,7 +70,7 @@ These SVG consumers use `settings.gradient.styles.shiftingColors`; they reuse th
 
 ### PIXI Generated-Media Progress Outline
 
-`PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a single PIXI mesh textured as a raised colored-glass droplet: solid tinted core, one broad specular streak, and one soft shadowed edge are baked into one material. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for generated-media progress with the palette and glass-material parameters configured in `settings.mediaNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
+`PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a single PIXI mesh textured as a raised colored-glass droplet: solid tinted core, one broad specular streak, and one soft shadowed edge are baked into one material. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for media work in progress with the palette and glass-material parameters configured in `settings.mediaNode.inProgressOutlineAnimation`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
 
 ### Static CSS Gradient Surfaces
 
@@ -492,7 +492,7 @@ Edit the `gradient.styles.shiftingColors` array in `settings.ts`:
 shiftingColors: ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 ```
 
-These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; generated-image progress outlines use the separate palette in `settings.mediaNode.generationBorder.styles.snakeColors`.
+These hex values are converted to RGB at startup by `FreeformGradientRenderer` in `services/web-ui/src/utils/animations/gradients/freeformGradient.ts`. Document shape borders reuse them through SVG gradient rendering; media progress outlines use the separate palette in `settings.mediaNode.inProgressOutlineAnimation.styles.snakeColors`.
 
 #### Changing Animation Speed
 

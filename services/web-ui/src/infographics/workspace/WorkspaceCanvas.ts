@@ -116,7 +116,7 @@ import {
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
 } from '$src/components/proseMirror/plugins/primitives/aiControls/index.ts'
-import { createPixiMediaLayer, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
+import { createPixiMediaLayer, type GeneratingMediaOutlineDirection, type PixiMediaLayer, type SelectionColors } from '$src/infographics/workspace/pixiMediaLayer.ts'
 import { createViewportBridge, type ViewportBridge } from '$src/infographics/workspace/rendering/viewportBridge.ts'
 import { createMediaLibraryPanel } from '$src/infographics/workspace/mediaLibraryPanel.ts'
 import { setPendingExtractionContext, getPendingExtractionContext, submitExtractionRequest, renderExtractionTabBody } from '$src/infographics/workspace/extractionTab.ts'
@@ -168,8 +168,6 @@ type GeneratedMediaInfoPanelOptions = {
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
-// Temporary visual-debug switch for the PIXI generating-media outline.
-const DEBUG_SHOW_GENERATING_OUTLINE_ON_ALL_MEDIA_NODES = true
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
     return { width: size, height: size }
@@ -1947,22 +1945,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function syncPixiGeneratingImageNodes(canvasState: CanvasState | null = currentCanvasState): void {
         // Feeds the PIXI traveling outline (snake border) renderer with the set
-        // of currently-generating media nodes, both image and video. Before the
-        // first generated variant arrives, selected/reference media also
-        // participate so users can see which source pixels are conditioning the
-        // request. Once pixels arrive, only the generated node keeps animating.
-        const generatingIds = new Set<string>()
-        if (DEBUG_SHOW_GENERATING_OUTLINE_ON_ALL_MEDIA_NODES) {
+        // of active media nodes and their travel direction. New generated media
+        // travels clockwise; existing reference/evaluation media travels counterclockwise.
+        const generatingIds = new Map<string, GeneratingMediaOutlineDirection>()
+        if (settings.mediaNode.inProgressOutlineAnimation.developmentFlags.alwaysOn) {
             for (const node of canvasState?.nodes ?? []) {
-                if (node.type === 'image' || node.type === 'video') generatingIds.add(node.nodeId)
+                if (node.type === 'image' || node.type === 'video') generatingIds.set(node.nodeId, 'counterclockwise')
             }
             pixiMediaLayer?.setGeneratingImageNodes(generatingIds)
             return
         }
-        for (const partial of partialImageTracker.values()) generatingIds.add(partial.nodeId)
-        for (const pending of videoGenerationTracker.values()) generatingIds.add(pending.nodeId)
+        for (const partial of partialImageTracker.values()) generatingIds.set(partial.nodeId, 'clockwise')
+        for (const pending of videoGenerationTracker.values()) generatingIds.set(pending.nodeId, 'clockwise')
         for (const referenceNodeIds of generatingReferenceNodeIdsByThread.values()) {
-            for (const nodeId of referenceNodeIds) generatingIds.add(nodeId)
+            for (const nodeId of referenceNodeIds) {
+                if (!generatingIds.has(nodeId)) generatingIds.set(nodeId, 'counterclockwise')
+            }
         }
         pixiMediaLayer?.setGeneratingImageNodes(generatingIds)
     }

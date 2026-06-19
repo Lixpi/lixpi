@@ -288,7 +288,7 @@ export type MediaNodeSettings = {
         minSize: number
         zoomScaling: BoundedZoomScalingSettings
     }
-    generationBorder: {
+    inProgressOutlineAnimation: {
         radius: number
         gap: number
         snakeWidth: number
@@ -299,6 +299,9 @@ export type MediaNodeSettings = {
         snakeHeadRoundLengthFraction: number
         animationDurationMs: number
         zoomScaling: BoundedZoomScalingSettings
+        developmentFlags: {
+            alwaysOn: boolean
+        }
         styles: {
             snakeTailAlpha: number
             snakeColors: string[]
@@ -772,8 +775,8 @@ export const settings: Settings = {
             zoomScaling: { minZoom: 0.4 },
         },
 
-        // PIXI-rendered animated outline shown while AI-generated media (image or video) is receiving partials.
-        generationBorder: {
+        // PIXI-rendered animated outline shown while media work is in progress.
+        inProgressOutlineAnimation: {
             // Fallback rounded-corner radius for the snake path when a media-specific clip radius is unavailable.
             radius: 10,
             // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
@@ -794,6 +797,10 @@ export const settings: Settings = {
             animationDurationMs: 3200,
             // Lower zoom breakpoint for the PIXI generation outline stroke widths. Runtime call sites opt this config into the shared adaptive low-zoom curve.
             zoomScaling: { minZoom: 0.4 },
+            developmentFlags: {
+                // Shows the outline on every media node for visual tuning.
+                alwaysOn: false,
+            },
             styles: {
                 // Tail fade preference. The glass renderer keeps a material-opacity floor so the tail fades without turning into mist.
                 snakeTailAlpha: 0,
