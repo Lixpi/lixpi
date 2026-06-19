@@ -270,6 +270,148 @@ function getInputTextBlocks(state: Partial<ProviderState>): string[] {
 }
 
 describe('resolveWorkspaceContext', () => {
+    it('uses configured resolver provider and model environment overrides', async () => {
+        const previousProvider = process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
+        const previousModel = process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+        process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = 'Google'
+        process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION = 'google-pro-1'
+
+        try {
+            const { deps, callLlm } = createDeps({
+                selections: [
+                    { nodeId: 'goat-image', rationale: 'The goat is most relevant.', needsBetterDescriptor: false },
+                ],
+            })
+
+            await resolveWorkspaceContext(createState(), deps)
+            expect(callLlm).toHaveBeenCalledOnce()
+            expect(callLlm.mock.calls[0]?.[0]).toMatchObject({
+                provider: 'Google',
+                modelVersion: 'google-pro-1',
+            })
+        } finally {
+            if (previousProvider === undefined) {
+                delete process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
+            } else {
+                process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = previousProvider
+            }
+            if (previousModel === undefined) {
+                delete process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+            } else {
+                process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION = previousModel
+            }
+        }
+    })
+
+    it('publishes resolver errors when env provider override is unsupported', async () => {
+        const previousProvider = process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
+        const previousModel = process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+        process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = 'NotAProvider'
+        process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION = 'anything'
+
+        try {
+            const { deps, publisher } = createDeps({
+                selections: [
+                    { nodeId: 'goat-image', rationale: 'Fallback should never happen with invalid model', needsBetterDescriptor: false },
+                ],
+            })
+
+            await expect(resolveWorkspaceContext(createState(), deps)).rejects.toThrow(
+                'Workspace context resolver requires a structured-output provider; got NotAProvider',
+            )
+            expect(publisher.contextRelevanceError).toHaveBeenCalledWith(
+                'Workspace context resolver requires a structured-output provider; got NotAProvider',
+            )
+        } finally {
+            if (previousProvider === undefined) {
+                delete process.env.IMAGE_BRANCH_RESOLVER_PROVIDER
+            } else {
+                process.env.IMAGE_BRANCH_RESOLVER_PROVIDER = previousProvider
+            }
+            if (previousModel === undefined) {
+                delete process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION
+            } else {
+                process.env.IMAGE_BRANCH_RESOLVER_MODEL_VERSION = previousModel
+            }
+        }
+    })
+
+    it('does not expand a preexisting image-branch snapshot with non-forced auto-picked media', async () => {
+        const { deps } = createDeps({
+            selections: [
+                { nodeId: 'landscape-image', rationale: 'Landscape was chosen by the resolver.', needsBetterDescriptor: false },
+            ],
+        })
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'team-video'
+                    ? { ...node, isEdgeForced: false }
+                    : node),
+            },
+            imageBranchCandidateSnapshot: {
+                ...createState().imageBranchCandidateSnapshot!,
+                candidates: [baseCandidates[0]!,],
+            },
+        }), deps)
+
+        expect(update.imageBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toEqual(['goat-image'])
+    })
+
+    it('expands a missing snapshot with auto-selected media nodes from workspace nodes', async () => {
+        const { deps, callLlm } = createDeps({
+            selections: [
+                { nodeId: 'landscape-image', rationale: 'An unrelated landscape is visually relevant.', needsBetterDescriptor: false },
+            ],
+        })
+
+        const update = await resolveWorkspaceContext(createState({
+            imageBranchCandidateSnapshot: undefined,
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'team-video'
+                    ? { ...node, isEdgeForced: false }
+                    : node),
+            },
+        }), deps)
+
+        expect(update.workspaceContextResolution?.selections.map((selection) => selection.nodeId)).toContain('landscape-image')
+        expect(callLlm).toHaveBeenCalledOnce()
+        expect(update.imageBranchCandidateSnapshot?.candidates.map((candidate) => candidate.nodeId)).toContain('landscape-image')
+    })
+
+    it('runs descriptor self-healing for weak descriptors even without explicit needsBetterDescriptor', async () => {
+        const weakSnapshot: WorkspaceContextSnapshot = {
+            ...baseWorkspaceSnapshot,
+            nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'goat-image'
+                ? { ...node, descriptorStatus: 'failed' as const, descriptorSummary: 'goat' }
+                : node
+            ),
+        }
+        const { deps, describeMediaStill, patchCanvasNodeDescriptor } = createDeps([
+            {
+                selections: [
+                    { nodeId: 'goat-image', rationale: 'Weak descriptor but likely relevant.', needsBetterDescriptor: false },
+                ],
+            },
+            {
+                selections: [
+                    { nodeId: 'goat-image', rationale: 'The healed descriptor now strongly matches.', needsBetterDescriptor: false },
+                ],
+            },
+        ])
+
+        await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: weakSnapshot,
+        }), deps)
+
+        expect(describeMediaStill).toHaveBeenCalledOnce()
+        expect(patchCanvasNodeDescriptor).toHaveBeenCalledWith(expect.objectContaining({
+            nodeId: 'goat-image',
+        }))
+    })
+
     it('ranks workspace descriptors, force-includes chips and edge nodes, and assembles selected content', async () => {
         const { deps, publisher, getDocument, getAiChatThread, callLlm } = createDeps({
             selections: [

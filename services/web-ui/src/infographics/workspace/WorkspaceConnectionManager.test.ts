@@ -545,10 +545,10 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
 			expect(pixiEdges).toHaveLength(1)
 			expect(pixiEdges[0].id).toBe(edge.edgeId)
 			expect(pixiEdges[0].svgPath).toMatch(/^M\s/)
-			expect(pixiEdges[0].baseScreenStrokeWidth).toBe(2)
-			expect(pixiEdges[0].strokeWidth).toBe(2)
-			expect(pixiEdges[0].arrowEnd?.baseScreenSize ?? 0).toBe(16)
-			expect(pixiEdges[0].arrowEnd?.size ?? 0).toBe(16)
+			expect(pixiEdges[0].baseScreenStrokeWidth).toBe(settings.connector.scaling.strokeWidth)
+			expect(pixiEdges[0].strokeWidth).toBe(settings.connector.scaling.strokeWidth)
+			expect(pixiEdges[0].arrowEnd?.baseScreenSize ?? 0).toBe(settings.connector.scaling.markerSize)
+			expect(pixiEdges[0].arrowEnd?.size ?? 0).toBe(settings.connector.scaling.markerSize)
 			expect(config.viewportEl.querySelector('svg.connector-svg')).toBeNull()
 		}
 	})
@@ -676,7 +676,11 @@ describe('WorkspaceConnectionManager — edge anchors', () => {
 		manager.syncEdges([edge])
 		manager.render()
 
-		const sourceMarkerOffset = 6
+		const sourceMarkerOffset = scaleCanvasChromeWorldSizeForZoom(
+			settings.connector.scaling.markerOffset.source,
+			1,
+			getAdaptiveBoundedZoomScalingOptions(settings.connector.scaling.zoomScaling)
+		)
 		const start = getRenderedPixiEdgeStart(onPixiEdgesReady, edge.edgeId)
 
 		expect(start.x).toBeCloseTo(chatNode.position.x + chatNode.dimensions.width + sourceMarkerOffset, 2)

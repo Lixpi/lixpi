@@ -86,6 +86,7 @@ describe('settings - grouped configuration', () => {
 			'connector',
 			'selection',
 			'mediaNode',
+			'videoControls',
 			'imageBranchLineage',
 			'mediaLibrary',
 			'contentDescriptor',
@@ -138,19 +139,45 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.mediaNode.resizeHandle.zoomScaling.minZoom, 'settings.mediaNode.resizeHandle.zoomScaling.minZoom')
 		expectFiniteNumber(settings.mediaNode.image.defaultInsertionWidth, 'settings.mediaNode.image.defaultInsertionWidth')
 		expectFiniteNumber(
-			settings.mediaNode.generationBorder.radius,
-			'settings.mediaNode.generationBorder.radius',
+			settings.mediaNode.inProgressOutlineAnimation.radius,
+			'settings.mediaNode.inProgressOutlineAnimation.radius',
 		)
-		expectFiniteNumber(settings.mediaNode.generationBorder.trackWidth, 'settings.mediaNode.generationBorder.trackWidth')
-		expectFiniteNumber(settings.mediaNode.generationBorder.snakeWidth, 'settings.mediaNode.generationBorder.snakeWidth')
+		expectFiniteNumber(settings.mediaNode.inProgressOutlineAnimation.gap, 'settings.mediaNode.inProgressOutlineAnimation.gap')
 		expectFiniteNumber(
-			settings.mediaNode.generationBorder.snakeLengthFraction,
-			'settings.mediaNode.generationBorder.snakeLengthFraction',
+			settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale,
+			'settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale',
 		)
-		expectFiniteNumber(settings.mediaNode.generationBorder.snakeSegmentCount, 'settings.mediaNode.generationBorder.snakeSegmentCount')
 		expectFiniteNumber(
-			settings.mediaNode.generationBorder.animationDurationMs,
-			'settings.mediaNode.generationBorder.animationDurationMs',
+			settings.mediaNode.inProgressOutlineAnimation.snakeWidth,
+			'settings.mediaNode.inProgressOutlineAnimation.snakeWidth',
+		)
+		expectFiniteNumber(
+			settings.mediaNode.inProgressOutlineAnimation.snakeTailWidthFraction,
+			'settings.mediaNode.inProgressOutlineAnimation.snakeTailWidthFraction',
+		)
+		expectFiniteNumber(
+			settings.mediaNode.inProgressOutlineAnimation.snakeTailThinLengthFraction,
+			'settings.mediaNode.inProgressOutlineAnimation.snakeTailThinLengthFraction',
+		)
+		expectFiniteNumber(
+			settings.mediaNode.inProgressOutlineAnimation.snakeWidthTaperPower,
+			'settings.mediaNode.inProgressOutlineAnimation.snakeWidthTaperPower',
+		)
+		expectFiniteNumber(
+			settings.mediaNode.inProgressOutlineAnimation.snakeLengthFraction,
+			'settings.mediaNode.inProgressOutlineAnimation.snakeLengthFraction',
+		)
+		expectFiniteNumber(
+			settings.mediaNode.inProgressOutlineAnimation.snakeHeadRoundLengthFraction,
+			'settings.mediaNode.inProgressOutlineAnimation.snakeHeadRoundLengthFraction',
+		)
+		expectFiniteNumber(
+			settings.mediaNode.inProgressOutlineAnimation.animationDurationMs,
+			'settings.mediaNode.inProgressOutlineAnimation.animationDurationMs',
+		)
+		expectFiniteNumber(
+			settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom,
+			'settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom',
 		)
 		expectFiniteNumber(settings.imageBranchLineage.generatedImageSize, 'settings.imageBranchLineage.generatedImageSize')
 		expectFiniteNumber(settings.imageBranchLineage.rootOutputGap, 'settings.imageBranchLineage.rootOutputGap')
@@ -198,8 +225,9 @@ describe('settings - grouped configuration', () => {
 			'settings.aiChatThread.contextPreview.styles': settings.aiChatThread.contextPreview.styles,
 			'settings.connector.styles': settings.connector.styles,
 			'settings.selection.styles': settings.selection.styles,
-			'settings.mediaNode.image.styles': settings.mediaNode.image.styles,
-			'settings.mediaNode.generationBorder.styles': settings.mediaNode.generationBorder.styles,
+			'settings.mediaNode.styles': settings.mediaNode.styles,
+			'settings.mediaNode.generatedMediaChrome.styles': settings.mediaNode.generatedMediaChrome.styles,
+			'settings.mediaNode.inProgressOutlineAnimation.styles': settings.mediaNode.inProgressOutlineAnimation.styles,
 			'settings.imageBranchLineage.branchOrigin.styles': settings.imageBranchLineage.branchOrigin.styles,
 		}
 
@@ -297,7 +325,8 @@ describe('settings - grouped configuration', () => {
 			'outlineColor',
 		])
 		expectNoOwnKeys(settings.mediaNode.image, ['defaultBoxShadow', 'selectedBoxShadow', 'borderRadius', 'modelBadgeBoxShadow'])
-		expectNoOwnKeys(settings.mediaNode.generationBorder, ['trackColor', 'trackAlpha', 'snakeTailAlpha', 'snakeColors'])
+		expectNoOwnKeys(settings.mediaNode, ['generationBorder'])
+		expectNoOwnKeys(settings.mediaNode.inProgressOutlineAnimation, ['trackColor', 'trackAlpha', 'snakeTailAlpha', 'snakeColors'])
 	})
 
 	it('keeps model menu style controls isolated from legacy layout props', () => {
