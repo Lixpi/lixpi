@@ -19,6 +19,7 @@ import type {
     CanvasNode,
     BranchOriginCanvasNode,
     BranchForkCanvasNode,
+    BranchLineCanvasNode,
     ImageCanvasNode,
     VideoCanvasNode,
     WorkspaceEdge,
@@ -29,7 +30,7 @@ import { resolveCollisions } from '$src/infographics/utils/resolveCollisions.ts'
 import { computeWorldPosition, buildNodesById } from '$src/infographics/workspace/pixiMediaLayerLogic.ts'
 
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
-type BranchTreeMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode
+type BranchTreeMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type BranchTreeMemberNode = GeneratedMediaNode | BranchTreeMarkerNode
 type Point = { x: number; y: number }
 type Rect = { x: number; y: number; width: number; height: number }
@@ -64,13 +65,24 @@ function isBranchForkMember(node: CanvasNode): node is BranchForkCanvasNode {
     return node.type === 'branchFork' && !node.parentId && Boolean(node.branchId)
 }
 
+function isBranchLineMember(node: CanvasNode): node is BranchLineCanvasNode {
+    return node.type === 'branchLine' && !node.parentId && Boolean(node.branchId)
+}
+
 function isBranchTreeMember(node: CanvasNode): node is BranchTreeMemberNode {
-    return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node) || isBranchForkMember(node)
+    return isGeneratedMediaBranchMember(node) || isBranchOriginMember(node) || isBranchForkMember(node) || isBranchLineMember(node)
+}
+
+// A branchFork (split) and a branchLine (continuation) are both mid-connector
+// markers, never depth parents: the child keeps the original parent media / branch
+// origin as its in-tree parent so it stays one normal gap away, and the marker is
+// positioned at the midpoint of that single connector (see positionLineageMarkers).
+function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanvasNode | BranchLineCanvasNode {
+    return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
 
 function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<string | undefined> {
     return [
-        node.generatedBy?.branchForkNodeId,
         node.generatedBy?.parentMediaNodeId,
         node.generatedBy?.parentImageNodeId,
         node.generatedBy?.branchOriginNodeId,
@@ -78,7 +90,7 @@ function getGeneratedMediaParentCandidates(node: GeneratedMediaNode): Array<stri
 }
 
 function getBranchMarkerParentCandidates(node: BranchTreeMarkerNode): Array<string | undefined> {
-    if (node.type !== 'branchFork') return []
+    if (node.type !== 'branchFork' && node.type !== 'branchLine') return []
     return [node.parentBranchNodeId]
 }
 
@@ -143,7 +155,11 @@ export function buildBranchTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): B
         const tree = ensureTree(rootOf(node.nodeId))
         tree.memberIds.push(node.nodeId)
         const parentId = inTreeParentById.get(node.nodeId) ?? null
-        if (parentId !== null) {
+        // Fork/line markers belong to the tree (so they move rigidly and survive
+        // pruning) but are never a tidy-layout child — they don't add a depth
+        // column or fan their parent; positionLineageMarkers places them at the
+        // connector midpoint instead.
+        if (parentId !== null && !isMidpointMarker(node)) {
             const siblings = tree.childrenByParentId.get(parentId) ?? []
             siblings.push(node.nodeId)
             tree.childrenByParentId.set(parentId, siblings)
@@ -211,16 +227,18 @@ export function applyBranchTreeLayout(
 
         const memberSet = new Set(tree.memberIds)
         const parentByChild = parentByChildOf(tree)
-        const layoutNodes: TreeLayoutNode[] = tree.memberIds.map((id: string) => {
-            const node = nodesById.get(id) as BranchTreeMemberNode
-            const parentId = parentByChild.get(id)
-            return {
-                id,
-                parentId: parentId && memberSet.has(parentId) ? parentId : null,
-                width: node.dimensions.width,
-                height: node.dimensions.height,
-            }
-        })
+        const layoutNodes: TreeLayoutNode[] = tree.memberIds
+            .filter((id: string) => !isMidpointMarker(nodesById.get(id)))
+            .map((id: string) => {
+                const node = nodesById.get(id) as BranchTreeMemberNode
+                const parentId = parentByChild.get(id)
+                return {
+                    id,
+                    parentId: parentId && memberSet.has(parentId) ? parentId : null,
+                    width: node.dimensions.width,
+                    height: node.dimensions.height,
+                }
+            })
 
         const result = layoutTree(layoutNodes, {
             depthGap: options.depthGap,
@@ -238,11 +256,60 @@ export function applyBranchTreeLayout(
         }
     }
 
+    positionLineageMarkers(nodes, nodesById, nextPositionById)
+
     if (nextPositionById.size === 0) return nodes
     return nodes.map((node: CanvasNode) => {
         const position = nextPositionById.get(node.nodeId)
         return position ? { ...node, position } : node
     })
+}
+
+// Fork (split) and line (continuation) markers are one regular connector broken
+// in half: the parent media / branch origin and each generated child are laid out
+// one normal gap apart, and the marker sits at the midpoint of the connector
+// between the parent's right edge and the child's left edge — on the parent's
+// center line for a continuation, on the diagonal for a split. This keeps splits
+// as compact as continuations instead of adding a wide second depth column.
+function positionLineageMarkers(
+    nodes: CanvasNode[],
+    nodesById: Map<string, CanvasNode>,
+    nextPositionById: Map<string, Point>,
+): void {
+    const childByMarkerId = new Map<string, GeneratedMediaNode>()
+    for (const node of nodes) {
+        if (node.type !== 'image' && node.type !== 'video') continue
+        const markerId = node.generatedBy?.branchForkNodeId ?? node.generatedBy?.branchLineNodeId
+        if (markerId) childByMarkerId.set(markerId, node as GeneratedMediaNode)
+    }
+
+    const worldOf = (id: string): Point => {
+        const planned = nextPositionById.get(id)
+        if (planned) return planned
+        const node = nodesById.get(id)
+        return node ? computeWorldPosition(node, nodesById) : { x: 0, y: 0 }
+    }
+
+    for (const node of nodes) {
+        if (!isMidpointMarker(node)) continue
+        const parentId = node.parentBranchNodeId
+        const child = childByMarkerId.get(node.nodeId)
+        if (!parentId || !child) continue
+        const parent = nodesById.get(parentId)
+        if (!parent) continue
+
+        // Midpoint of the connector: parent right-edge anchor → child left-edge anchor.
+        const parentPos = worldOf(parentId)
+        const childPos = worldOf(child.nodeId)
+        const parentAnchorX = parentPos.x + parent.dimensions.width
+        const parentAnchorY = parentPos.y + parent.dimensions.height / 2
+        const childAnchorX = childPos.x
+        const childAnchorY = childPos.y + child.dimensions.height / 2
+        nextPositionById.set(node.nodeId, {
+            x: (parentAnchorX + childAnchorX) / 2 - node.dimensions.width / 2,
+            y: (parentAnchorY + childAnchorY) / 2 - node.dimensions.height / 2,
+        })
+    }
 }
 
 function computeTreeAabb(tree: BranchTree, nodesById: Map<string, CanvasNode>): Rect {

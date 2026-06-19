@@ -386,7 +386,8 @@
 }
 
 .workspace-branch-origin-info-chrome,
-.workspace-branch-fork-info-chrome {
+.workspace-branch-fork-info-chrome,
+.workspace-branch-line-info-chrome {
     position: absolute;
     display: flex;
     flex-direction: column;
@@ -1572,7 +1573,8 @@
 }
 
 .workspace-branch-origin-node,
-.workspace-branch-fork-node {
+.workspace-branch-fork-node,
+.workspace-branch-line-node {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1585,7 +1587,8 @@
 }
 
 .workspace-branch-origin-icon,
-.workspace-branch-fork-icon {
+.workspace-branch-fork-icon,
+.workspace-branch-line-icon {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1612,7 +1615,8 @@
 }
 
 .branch-origin-drag-overlay,
-.branch-fork-drag-overlay {
+.branch-fork-drag-overlay,
+.branch-line-drag-overlay {
     position: absolute;
     inset: 0;
     z-index: 15;

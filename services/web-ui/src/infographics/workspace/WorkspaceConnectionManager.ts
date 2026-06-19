@@ -107,6 +107,13 @@ function computeWorldAnchorPoint(
 	}
 }
 
+// Length the arrowhead body occupies along the connector, as a fraction of the
+// marker size. Mirrors the arrow icon geometry in pixiEdgeRenderer: the path
+// attaches at icon refX=48 and the tip reaches icon x≈228.992 in a 256px viewBox,
+// so the body spans (228.992 − 48) / 256 of the marker size. This lets the
+// renderer compensate for the arrowhead without settings ever knowing about it.
+const ARROW_BODY_LENGTH_FRACTION = (228.992 - 48) / 256
+
 function anchorArrowAngle(position: AnchorPosition): number {
 	// Angle = direction the arrowhead tip points (into the node).
 	// left anchor  → edge arrives from the left going rightward  → tip points RIGHT (0)
@@ -130,7 +137,8 @@ function computePixiEdgeDatum(
 	focusColor: string,
 	baseScreenStrokeWidth: number,
 	baseScreenMarkerSize: number,
-	markerOffset: { source: number; target: number }
+	markerOffset: { source: number; target: number },
+	scaledMarkerSizeWorld: number,
 ): PixiEdgeRenderDatum | null {
 	const {
 		id,
@@ -159,8 +167,17 @@ function computePixiEdgeDatum(
 	let srcCoords = applyOffset(rawSrcAnchor.x, rawSrcAnchor.y, source.offset)
 	let tgtCoords = applyOffset(rawTgtAnchor.x, rawTgtAnchor.y, target.offset)
 
-	const srcOff = markerOffset.source ?? 5
-	const tgtOff = markerOffset.target ?? 5
+	// markerOffset is the pure node↔connector gap and carries NO knowledge of the
+	// arrowhead. The arrowhead occupies real length along the line, so when (and
+	// only when) an arrow is drawn this component adds that length here — keeping
+	// the line's end tucked exactly at the arrow's tail and the arrow tip landing
+	// at the same gap as a plain, arrowless endpoint. An endpoint with no arrow
+	// (e.g. into a lineage marker) gets just the base gap, no phantom compensation.
+	const arrowLengthWorld = scaledMarkerSizeWorld * ARROW_BODY_LENGTH_FRACTION
+	const endArrowComp = marker !== 'none' ? arrowLengthWorld : 0
+	const startArrowComp = (markerStart && markerStart !== 'none') ? arrowLengthWorld : 0
+	const srcOff = (markerOffset.source ?? 5) + startArrowComp
+	const tgtOff = (markerOffset.target ?? 5) + endArrowComp
 
 	switch (source.position) {
 		case 'right':  srcCoords = { x: srcCoords.x + srcOff, y: srcCoords.y }; break
@@ -1304,16 +1321,18 @@ export class WorkspaceConnectionManager {
 		// Marker offsets and hit areas are part of edge geometry/hit testing, so
 		// they stay in world units. Stroke width and arrowhead size are screen
 		// pixels for the PIXI renderer and must not be pre-scaled here.
-		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } =
-			settings.connector.useZoomCompensatedScaling
-				? getEdgeScaledSizes(zoom, {
-					baseStrokeWidth: connectorScaling.strokeWidth,
-					baseMarkerSize: connectorScaling.markerSize,
-					baseMarkerOffset: connectorScaling.markerOffset,
-					baseClickAreaWidth: connectorScaling.clickAreaWidth,
-					zoomScaling: getAdaptiveBoundedZoomScalingOptions(connectorScaling.zoomScaling),
-				})
-				: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth }
+		const edgeScaledSizes = settings.connector.useZoomCompensatedScaling
+			? getEdgeScaledSizes(zoom, {
+				baseStrokeWidth: connectorScaling.strokeWidth,
+				baseMarkerSize: connectorScaling.markerSize,
+				baseMarkerOffset: connectorScaling.markerOffset,
+				baseClickAreaWidth: connectorScaling.clickAreaWidth,
+				zoomScaling: getAdaptiveBoundedZoomScalingOptions(connectorScaling.zoomScaling),
+			})
+			: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth, markerSize: connectorScaling.markerSize }
+		const scaledMarkerOffset = edgeScaledSizes.markerOffset
+		const scaledClickAreaWidth = edgeScaledSizes.clickAreaWidth
+		const scaledMarkerSizeWorld = edgeScaledSizes.markerSize
 		const pixiStrokeWidth = connectorScaling.strokeWidth
 		const pixiMarkerSize = connectorScaling.markerSize
 		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
@@ -1332,7 +1351,7 @@ export class WorkspaceConnectionManager {
 			const pixiDatum = computePixiEdgeDatum(
 				edgeConfig, worldNodeMap, isSelected,
 				pixiDefaultColor, pixiFocusColor,
-				pixiStrokeWidth, pixiMarkerSize, scaledMarkerOffset
+				pixiStrokeWidth, pixiMarkerSize, scaledMarkerOffset, scaledMarkerSizeWorld
 			)
 			if (pixiDatum) {
 				pixiEdgeData.push(pixiDatum)
@@ -1410,12 +1429,19 @@ export class WorkspaceConnectionManager {
 				}
 			}
 
+			// Branch lineage markers (continuation branchLine and split branchFork)
+			// sit mid-connector, not at a destination, so the incoming segment must
+			// not draw an arrowhead into them — the arrowhead belongs only on the
+			// segment landing on the next generated media node.
+			const edgeTargetNode = this.nodes.find(n => n.nodeId === e.targetNodeId)
+			const targetIsLineageMarker = edgeTargetNode?.type === 'branchLine' || edgeTargetNode?.type === 'branchFork'
+
 			const edgeConfig: EdgeConfig = {
 				id: e.edgeId,
 				source: this.buildEdgeAnchor(e.sourceNodeId, source, sourceT, nodeById),
 				target: this.buildEdgeAnchor(e.targetNodeId, target, targetT, nodeById),
 				pathType: e.pathType ?? settings.connector.lineCurve,
-				marker: isSelected ? 'arrowhead-selected' : 'arrowhead',
+				marker: targetIsLineageMarker ? 'none' : (isSelected ? 'arrowhead-selected' : 'arrowhead'),
 				laneIndex: tValues?.laneIndex ?? 0,
 				laneCount: tValues?.laneCount ?? 1
 			}
@@ -1544,7 +1570,7 @@ export class WorkspaceConnectionManager {
 		// PIXI edge datum still carries base screen pixels for stroke/arrow sizes;
 		// `pixiEdgeRenderer` applies the matching adaptive bounded curve during
 		// paint so path geometry and rendered chrome stay in sync.
-		const { markerOffset: scaledMarkerOffset, clickAreaWidth: scaledClickAreaWidth } = settings.connector.useZoomCompensatedScaling
+		const edgeScaledSizes = settings.connector.useZoomCompensatedScaling
 			? getEdgeScaledSizes(zoom, {
 				baseStrokeWidth: connectorScaling.strokeWidth,
 				baseMarkerSize: connectorScaling.markerSize,
@@ -1552,15 +1578,17 @@ export class WorkspaceConnectionManager {
 				baseClickAreaWidth: connectorScaling.clickAreaWidth,
 				zoomScaling: getAdaptiveBoundedZoomScalingOptions(connectorScaling.zoomScaling),
 			})
-			: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth }
-		this.currentEdgeClickAreaWidth = scaledClickAreaWidth
+			: { markerOffset: connectorScaling.markerOffset, clickAreaWidth: connectorScaling.clickAreaWidth, markerSize: connectorScaling.markerSize }
+		const scaledMarkerOffset = edgeScaledSizes.markerOffset
+		this.currentEdgeClickAreaWidth = edgeScaledSizes.clickAreaWidth
+		const scaledMarkerSizeWorld = edgeScaledSizes.markerSize
 
 		const pixiEdgeData: PixiEdgeRenderDatum[] = []
 		for (const { edgeConfig, isSelected } of this.cachedPixiEdgeConfigs) {
 			const pixiDatum = computePixiEdgeDatum(
 				edgeConfig, this.cachedPixiWorldNodeMap, isSelected,
 				this.cachedPixiDefaultColor, this.cachedPixiFocusColor,
-				connectorScaling.strokeWidth, connectorScaling.markerSize, scaledMarkerOffset
+				connectorScaling.strokeWidth, connectorScaling.markerSize, scaledMarkerOffset, scaledMarkerSizeWorld
 			)
 			if (pixiDatum) pixiEdgeData.push(pixiDatum)
 		}

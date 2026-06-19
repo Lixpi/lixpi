@@ -158,6 +158,65 @@ describe('buildBranchTrees', () => {
         expect(trees[0].childrenByParentId.get('parent')).toEqual(['branch-origin'])
         expect(trees[0].childrenByParentId.get('branch-origin')).toEqual(['child'])
     })
+
+    it('keeps a branchLine continuation as one normal-gap chain with the marker off the depth path', () => {
+        const branchLineMarker = {
+            nodeId: 'branch-line',
+            type: 'branchLine',
+            workspaceId: 'w',
+            dimensions: { width: SIZE, height: SIZE },
+            position: { x: 0, y: 0 },
+            fileId: 'branch-line',
+            branchId: 'branch-1',
+            generationRequestId: 'req-1',
+            parentBranchNodeId: 'parent',
+            temporary: true,
+        }
+        const nodes = [
+            genMedia('parent', 0, 0, { branchId: 'branch-1', createdAt: 1 }),
+            branchLineMarker,
+            genMedia('child', 0, 0, { branchId: 'branch-1', createdAt: 2 }),
+        ] as any
+        nodes[2].generatedBy.parentMediaNodeId = 'parent'
+        nodes[2].generatedBy.branchLineNodeId = 'branch-line'
+
+        const trees = buildBranchTrees(nodes, [])
+        expect(trees).toHaveLength(1)
+        expect(trees[0].rootId).toBe('parent')
+        expect(new Set(trees[0].memberIds)).toEqual(new Set(['parent', 'branch-line', 'child']))
+        // The child chains directly off the parent media (one normal gap); the
+        // marker is a member but never a depth child.
+        expect(trees[0].childrenByParentId.get('parent')).toEqual(['child'])
+        expect(trees[0].childrenByParentId.has('branch-line')).toBe(false)
+    })
+
+    it('positions a branchLine marker at the midpoint of the parent→child connector', () => {
+        const branchLineMarker = {
+            nodeId: 'branch-line', type: 'branchLine', workspaceId: 'w',
+            dimensions: { width: SIZE, height: SIZE }, position: { x: 0, y: 0 },
+            fileId: 'branch-line', branchId: 'branch-1', generationRequestId: 'req-1',
+            parentBranchNodeId: 'parent', temporary: true,
+        }
+        const nodes = [
+            genMedia('parent', 0, 0, { branchId: 'branch-1', createdAt: 1 }),
+            branchLineMarker,
+            genMedia('child', 0, 0, { branchId: 'branch-1', createdAt: 2 }),
+        ] as any
+        nodes[2].generatedBy.parentMediaNodeId = 'parent'
+        nodes[2].generatedBy.branchLineNodeId = 'branch-line'
+
+        const out = applyBranchTreeLayout(nodes, [], { depthGap: 100, siblingGap: 40 })
+        const parent = out.find(n => n.nodeId === 'parent')!
+        const child = out.find(n => n.nodeId === 'child')!
+        const marker = out.find(n => n.nodeId === 'branch-line')!
+        // Child sits one normal gap to the right of the parent (collinear).
+        expect(child.position.x).toBe(parent.position.x + SIZE + 100)
+        expect(child.position.y).toBe(parent.position.y)
+        // Marker is centered between the parent's right edge and the child's left
+        // edge, vertically centered on the parent.
+        expect(marker.position.x).toBe((parent.position.x + SIZE + child.position.x) / 2 - SIZE / 2)
+        expect(marker.position.y).toBe(parent.position.y + SIZE / 2 - SIZE / 2)
+    })
 })
 
 describe('applyBranchTreeLayout', () => {

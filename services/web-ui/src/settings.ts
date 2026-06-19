@@ -679,8 +679,12 @@ export const settings: Settings = {
             strokeWidth: 3,
             // Base screen-pixel arrowhead size at 100% and higher zoom.
             markerSize: 23,
-            // Base screen-pixel source/target marker offsets at 100% and higher zoom.
-            markerOffset: { source: 11, target: 24 },
+            // Base screen-pixel gap between a connector endpoint and the node it
+            // attaches to, at 100% and higher zoom. This is the pure node↔line gap
+            // and is identical for both ends; it carries NO arrowhead knowledge —
+            // WorkspaceConnectionManager adds the arrowhead's own length only on
+            // ends that actually draw an arrow.
+            markerOffset: { source: 15, target: 15 },
             // Screen-pixel width of the invisible selection hit area around connector lines.
             clickAreaWidth: 24,
             // Lower zoom breakpoint for connector chrome. Runtime call sites opt
@@ -783,7 +787,7 @@ export const settings: Settings = {
             // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
             gap: 3,
             // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
-            preFrameCircleScale: 1.3 / 3,
+            preFrameCircleScale: 1 / 3,
             // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
             snakeWidth: 9,
             // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
