@@ -12,9 +12,48 @@ export type PixiTravelingOutlineStyle = {
     snakeHeadWidth: number
     snakeTailWidthFraction: number
     snakeLengthFraction: number
+    snakeHeadRoundLengthFraction: number
     snakeTailAlpha: number
     snakeColors: ReadonlyArray<string>
+    glassMaterial: PixiTravelingOutlineGlassMaterialStyle
     durationMs: number
+}
+
+export type PixiTravelingOutlineGlassMaterialStyle = {
+    shadowColor: string
+    tailOpacityPower: number
+    tailFadeFraction: number
+    minTailOpacity: number
+    edgeFeatherFraction: number
+    edgeFeatherPower: number
+    lensCorePower: number
+    upperSpecularCenter: number
+    upperSpecularDrift: number
+    upperSpecularWidth: number
+    upperSpecularFadeStart: number
+    upperSpecularFadeEnd: number
+    upperSpecularStrength: number
+    headSpecularProgressCenter: number
+    headSpecularProgressWidth: number
+    headSpecularCrossSectionCenter: number
+    headSpecularCrossSectionWidth: number
+    headSpecularStrength: number
+    lowerEdgeShadowCenter: number
+    lowerEdgeShadowWidth: number
+    lowerEdgeShadowStrength: number
+    upperEdgeShadowCenter: number
+    upperEdgeShadowWidth: number
+    upperEdgeShadowStrength: number
+    edgeShadowPower: number
+    edgeShadowStrength: number
+    lensHighlightStrength: number
+    highlightWhiteMixMax: number
+    shadowMixMax: number
+    materialAlphaBase: number
+    materialAlphaMax: number
+    lensAlphaStrength: number
+    upperSpecularAlphaStrength: number
+    headSpecularAlphaStrength: number
 }
 
 export type PixiTravelingOutlineDatum = {
@@ -203,6 +242,17 @@ function getTravelingOutlineColorChannels(colors: ReadonlyArray<string>, progres
     }
 }
 
+function parseHexColor(hex: string): RgbColor {
+    const normalized = hex.trim().replace(/^#/, '')
+    if (!/^[\da-f]{6}$/i.test(normalized)) return { r: 78, g: 91, b: 108 }
+    const value = Number.parseInt(normalized, 16)
+    return {
+        r: (value >> 16) & 0xff,
+        g: (value >> 8) & 0xff,
+        b: value & 0xff,
+    }
+}
+
 function mixChannel(from: number, to: number, amount: number): number {
     return Math.round(from + (to - from) * Math.max(0, Math.min(1, amount)))
 }
@@ -220,40 +270,72 @@ function gaussian(position: number, center: number, width: number): number {
 }
 
 function smoothstep(edge0: number, edge1: number, value: number): number {
+    if (edge0 === edge1) return value >= edge1 ? 1 : 0
     const progress = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)))
     return progress * progress * (3 - 2 * progress)
 }
 
-function getTextureOpacityProgress(progress: number, tailAlpha: number): number {
-    const configuredOpacity = tailAlpha + (1 - tailAlpha) * Math.pow(progress, 0.72)
-    const tailFade = smoothstep(0, 0.08, progress)
-    return tailFade * Math.max(0.62, Math.min(1, configuredOpacity))
+function getTextureEdgeFeatherFraction(edgeFeatherFraction: number): number {
+    const boundedFeather = Math.max(0, edgeFeatherFraction)
+    return Math.min(0.49, boundedFeather / (1 + 2 * boundedFeather))
+}
+
+function getTextureOpacityProgress(
+    progress: number,
+    tailAlpha: number,
+    glassMaterial: PixiTravelingOutlineGlassMaterialStyle
+): number {
+    const configuredOpacity = tailAlpha + (1 - tailAlpha) * Math.pow(progress, glassMaterial.tailOpacityPower)
+    const tailFade = smoothstep(0, glassMaterial.tailFadeFraction, progress)
+    return tailFade * Math.max(glassMaterial.minTailOpacity, Math.min(1, configuredOpacity))
 }
 
 function getGlassTexturePixel(
     colors: ReadonlyArray<string>,
     progress: number,
     crossSection: number,
-    tailAlpha: number
+    tailAlpha: number,
+    glassMaterial: PixiTravelingOutlineGlassMaterialStyle
 ): { color: RgbColor; alpha: number } {
     const white = { r: 255, g: 255, b: 255 }
-    const glassShadow = { r: 78, g: 91, b: 108 }
+    const glassShadow = parseHexColor(glassMaterial.shadowColor)
     const baseColor = getTravelingOutlineColorChannels(colors, progress)
-    const opacityProgress = getTextureOpacityProgress(progress, tailAlpha)
-    const edgeDistance = Math.abs(crossSection - 0.5) * 2
-    const roundedBody = Math.max(0, Math.sin(Math.PI * crossSection))
-    const lensCore = Math.pow(roundedBody, 0.42)
-    const upperSpecular = gaussian(crossSection, 0.32 + 0.035 * Math.sin(progress * Math.PI), 0.16)
-        * smoothstep(0.1, 0.32, progress)
-    const headSpecular = gaussian(progress, 0.91, 0.22) * gaussian(crossSection, 0.48, 0.26)
-    const lowerEdgeShadow = gaussian(crossSection, 0.88, 0.2)
-    const upperEdgeShadow = gaussian(crossSection, 0.1, 0.2)
-    const edgeShadow = lowerEdgeShadow * 0.16 + upperEdgeShadow * 0.07 + Math.pow(edgeDistance, 2.2) * 0.04
-    const highlight = upperSpecular * 0.24 + headSpecular * 0.18 + lensCore * 0.08
+    const opacityProgress = getTextureOpacityProgress(progress, tailAlpha, glassMaterial)
+    const textureEdgeFeather = getTextureEdgeFeatherFraction(glassMaterial.edgeFeatherFraction)
+    const coreSpan = Math.max(0.001, 1 - textureEdgeFeather * 2)
+    const coreCrossSection = Math.max(0, Math.min(1, (crossSection - textureEdgeFeather) / coreSpan))
+    const edgeDistance = Math.abs(coreCrossSection - 0.5) * 2
+    const edgeFeather = textureEdgeFeather <= 0
+        ? 1
+        : smoothstep(0, textureEdgeFeather, crossSection) * smoothstep(0, textureEdgeFeather, 1 - crossSection)
+    const roundedBody = Math.max(0, Math.sin(Math.PI * coreCrossSection))
+    const lensCore = Math.pow(roundedBody, glassMaterial.lensCorePower)
+    const upperSpecular = gaussian(
+        coreCrossSection,
+        glassMaterial.upperSpecularCenter + glassMaterial.upperSpecularDrift * Math.sin(progress * Math.PI),
+        glassMaterial.upperSpecularWidth
+    ) * smoothstep(glassMaterial.upperSpecularFadeStart, glassMaterial.upperSpecularFadeEnd, progress)
+    const headSpecular = gaussian(progress, glassMaterial.headSpecularProgressCenter, glassMaterial.headSpecularProgressWidth)
+        * gaussian(coreCrossSection, glassMaterial.headSpecularCrossSectionCenter, glassMaterial.headSpecularCrossSectionWidth)
+    const lowerEdgeShadow = gaussian(coreCrossSection, glassMaterial.lowerEdgeShadowCenter, glassMaterial.lowerEdgeShadowWidth)
+    const upperEdgeShadow = gaussian(coreCrossSection, glassMaterial.upperEdgeShadowCenter, glassMaterial.upperEdgeShadowWidth)
+    const edgeShadow = lowerEdgeShadow * glassMaterial.lowerEdgeShadowStrength
+        + upperEdgeShadow * glassMaterial.upperEdgeShadowStrength
+        + Math.pow(edgeDistance, glassMaterial.edgeShadowPower) * glassMaterial.edgeShadowStrength
+    const highlight = upperSpecular * glassMaterial.upperSpecularStrength
+        + headSpecular * glassMaterial.headSpecularStrength
+        + lensCore * glassMaterial.lensHighlightStrength
 
-    const litColor = mixColor(baseColor, white, Math.min(0.3, highlight))
-    const color = mixColor(litColor, glassShadow, Math.min(0.14, edgeShadow))
-    const alpha = opacityProgress * Math.min(0.94, 0.72 + lensCore * 0.16 + upperSpecular * 0.04 + headSpecular * 0.03)
+    const litColor = mixColor(baseColor, white, Math.min(glassMaterial.highlightWhiteMixMax, highlight))
+    const color = mixColor(litColor, glassShadow, Math.min(glassMaterial.shadowMixMax, edgeShadow))
+    const materialAlpha = Math.min(
+        glassMaterial.materialAlphaMax,
+        glassMaterial.materialAlphaBase
+            + lensCore * glassMaterial.lensAlphaStrength
+            + upperSpecular * glassMaterial.upperSpecularAlphaStrength
+            + headSpecular * glassMaterial.headSpecularAlphaStrength
+    )
+    const alpha = opacityProgress * materialAlpha * Math.pow(edgeFeather, glassMaterial.edgeFeatherPower)
     return {
         color,
         alpha: Math.min(0.99, alpha),
@@ -270,7 +352,8 @@ function createGradientCanvas(width: number, height: number): GradientCanvas {
 
 function createTravelingSnakeTexture(
     colors: ReadonlyArray<string>,
-    tailAlpha: number
+    tailAlpha: number,
+    glassMaterial: PixiTravelingOutlineGlassMaterialStyle
 ): Texture {
     const width = 256
     const height = 64
@@ -284,7 +367,7 @@ function createTravelingSnakeTexture(
         const crossSection = y / (height - 1)
         for (let x = 0; x < width; x++) {
             const progress = x / (width - 1)
-            const { color, alpha } = getGlassTexturePixel(safeColors, progress, crossSection, tailAlpha)
+            const { color, alpha } = getGlassTexturePixel(safeColors, progress, crossSection, tailAlpha, glassMaterial)
             const offset = (y * width + x) * 4
             imageData.data[offset] = color.r
             imageData.data[offset + 1] = color.g
@@ -317,6 +400,18 @@ function setMeshVertex(
     geometry.positions[positionIndex + 1] = y
     geometry.uvs[positionIndex] = u
     geometry.uvs[positionIndex + 1] = v
+}
+
+function getTravelingSnakeHeadRoundFactor(
+    progress: number,
+    snakeLength: number,
+    roundLength: number
+): number {
+    if (roundLength <= 0 || snakeLength <= 0) return 1
+    const distanceFromHead = snakeLength * (1 - progress)
+    if (distanceFromHead >= roundLength) return 1
+    const roundProgress = Math.max(0, Math.min(1, distanceFromHead / roundLength))
+    return Math.sqrt(Math.max(0, 1 - (1 - roundProgress) ** 2))
 }
 
 function getInsetAlignedRoundedOutlineFrame(
@@ -425,23 +520,26 @@ function buildTravelingSnakeMeshGeometry(
     snakeLength: number,
     sampleCount: number,
     snakeHeadWidth: number,
-    snakeTailWidth: number
+    snakeTailWidth: number,
+    edgeFeatherFraction: number,
+    snakeHeadRoundLengthFraction: number
 ): TravelingSnakeMeshGeometry {
     const stripVertexCount = (sampleCount + 1) * 2
-    const headCapSegmentCount = 12
-    const headCapVertexCount = headCapSegmentCount + 2
-    const positions = new Float32Array((stripVertexCount + headCapVertexCount) * 2)
+    const positions = new Float32Array(stripVertexCount * 2)
     const uvs = new Float32Array(positions.length)
-    const indices = new Uint32Array(sampleCount * 6 + headCapSegmentCount * 3)
+    const indices = new Uint32Array(sampleCount * 6)
     const geometry = { positions, uvs, indices }
     let indexOffset = 0
-    let headFrame: OutlineFrame | null = null
     const headOutset = outlineGap + snakeHeadWidth / 2
+    const meshWidthScale = 1 + Math.max(0, edgeFeatherFraction) * 2
+    const headRoundLength = snakeHeadWidth * meshWidthScale * Math.max(0, snakeHeadRoundLengthFraction)
 
     for (let index = 0; index <= sampleCount; index++) {
         const progress = index / sampleCount
         const widthProgress = Math.pow(progress, 0.86)
         const sampleWidth = snakeTailWidth + (snakeHeadWidth - snakeTailWidth) * widthProgress
+        const headRoundFactor = getTravelingSnakeHeadRoundFactor(progress, snakeLength, headRoundLength)
+        const meshSampleWidth = sampleWidth * meshWidthScale * headRoundFactor
         const sampleOutset = outlineGap + sampleWidth / 2
         const frame = getInsetAlignedRoundedOutlineFrame(
             mediaWidth,
@@ -452,9 +550,11 @@ function buildTravelingSnakeMeshGeometry(
             headDistance - snakeLength * (1 - progress)
         )
         const normal = { x: -frame.tangent.y, y: frame.tangent.x }
-        const halfWidth = sampleWidth / 2
+        const halfWidth = meshSampleWidth / 2
         const leftVertex = index * 2
         const rightVertex = leftVertex + 1
+        const crossSectionStart = headRoundFactor <= 0.001 ? 0.5 : 0
+        const crossSectionEnd = headRoundFactor <= 0.001 ? 0.5 : 1
 
         setMeshVertex(
             geometry,
@@ -462,7 +562,7 @@ function buildTravelingSnakeMeshGeometry(
             frame.point.x + normal.x * halfWidth,
             frame.point.y + normal.y * halfWidth,
             progress,
-            0
+            crossSectionStart
         )
         setMeshVertex(
             geometry,
@@ -470,7 +570,7 @@ function buildTravelingSnakeMeshGeometry(
             frame.point.x - normal.x * halfWidth,
             frame.point.y - normal.y * halfWidth,
             progress,
-            1
+            crossSectionEnd
         )
 
         if (index < sampleCount) {
@@ -482,33 +582,6 @@ function buildTravelingSnakeMeshGeometry(
             indices[indexOffset++] = rightVertex
             indices[indexOffset++] = nextRightVertex
             indices[indexOffset++] = nextLeftVertex
-        } else {
-            headFrame = frame
-        }
-    }
-
-    if (headFrame) {
-        const normal = { x: -headFrame.tangent.y, y: headFrame.tangent.x }
-        const headRadius = snakeHeadWidth / 2
-        const centerVertex = stripVertexCount
-        const firstArcVertex = centerVertex + 1
-        setMeshVertex(geometry, centerVertex, headFrame.point.x, headFrame.point.y, 1, 0.5)
-
-        for (let index = 0; index <= headCapSegmentCount; index++) {
-            const angle = Math.PI / 2 - Math.PI * (index / headCapSegmentCount)
-            const x = headFrame.point.x
-                + headFrame.tangent.x * Math.cos(angle) * headRadius
-                + normal.x * Math.sin(angle) * headRadius
-            const y = headFrame.point.y
-                + headFrame.tangent.y * Math.cos(angle) * headRadius
-                + normal.y * Math.sin(angle) * headRadius
-            setMeshVertex(geometry, firstArcVertex + index, x, y, 1, index / headCapSegmentCount)
-        }
-
-        for (let index = 0; index < headCapSegmentCount; index++) {
-            indices[indexOffset++] = centerVertex
-            indices[indexOffset++] = firstArcVertex + index
-            indices[indexOffset++] = firstArcVertex + index + 1
         }
     }
 
@@ -533,7 +606,7 @@ export class PixiTravelingOutlineRenderer {
         this.onFrame = options.onFrame
         this.ease = options.ease ?? Easing.travelingOutlineTransition
         this.getStrokeScale = options.getStrokeScale ?? (() => 1)
-        this.texture = createTravelingSnakeTexture(this.style.snakeColors, this.style.snakeTailAlpha)
+        this.texture = createTravelingSnakeTexture(this.style.snakeColors, this.style.snakeTailAlpha, this.style.glassMaterial)
     }
 
     sync(datums: ReadonlyArray<PixiTravelingOutlineDatum>): void {
@@ -604,7 +677,9 @@ export class PixiTravelingOutlineRenderer {
             snakeLength,
             sampleCount,
             snakeHeadWidth,
-            snakeTailWidth
+            snakeTailWidth,
+            this.style.glassMaterial.edgeFeatherFraction,
+            this.style.snakeHeadRoundLengthFraction
         )
 
         entry.mesh.position.set(entry.x - headOutset, entry.y - headOutset)

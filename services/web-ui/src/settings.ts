@@ -220,6 +220,43 @@ export type SelectionSettings = {
     }
 }
 
+export type GenerationBorderGlassMaterialSettings = {
+    shadowColor: string
+    tailOpacityPower: number
+    tailFadeFraction: number
+    minTailOpacity: number
+    edgeFeatherFraction: number
+    edgeFeatherPower: number
+    lensCorePower: number
+    upperSpecularCenter: number
+    upperSpecularDrift: number
+    upperSpecularWidth: number
+    upperSpecularFadeStart: number
+    upperSpecularFadeEnd: number
+    upperSpecularStrength: number
+    headSpecularProgressCenter: number
+    headSpecularProgressWidth: number
+    headSpecularCrossSectionCenter: number
+    headSpecularCrossSectionWidth: number
+    headSpecularStrength: number
+    lowerEdgeShadowCenter: number
+    lowerEdgeShadowWidth: number
+    lowerEdgeShadowStrength: number
+    upperEdgeShadowCenter: number
+    upperEdgeShadowWidth: number
+    upperEdgeShadowStrength: number
+    edgeShadowPower: number
+    edgeShadowStrength: number
+    lensHighlightStrength: number
+    highlightWhiteMixMax: number
+    shadowMixMax: number
+    materialAlphaBase: number
+    materialAlphaMax: number
+    lensAlphaStrength: number
+    upperSpecularAlphaStrength: number
+    headSpecularAlphaStrength: number
+}
+
 export type MediaNodeSettings = {
     // Shared across all media types (image, video, …).
     generatedMediaChrome: {
@@ -252,11 +289,13 @@ export type MediaNodeSettings = {
         snakeWidth: number
         snakeTailWidthFraction: number
         snakeLengthFraction: number
+        snakeHeadRoundLengthFraction: number
         animationDurationMs: number
         zoomScaling: BoundedZoomScalingSettings
         styles: {
             snakeTailAlpha: number
             snakeColors: string[]
+            glassMaterial: GenerationBorderGlassMaterialSettings
         }
     }
     // Image-specific.
@@ -734,6 +773,8 @@ export const settings: Settings = {
             snakeTailWidthFraction: 0.18,
             // Fraction of the rounded media perimeter occupied by the visible snake.
             snakeLengthFraction: 0.24,
+            // Rounded head length as a fraction of the feather-expanded snake width. Higher values make the endpoint softer without protruding past the head.
+            snakeHeadRoundLengthFraction: 0.5,
             // Milliseconds for one complete lap around the media node.
             animationDurationMs: 93200,
             // Lower zoom breakpoint for the PIXI generation outline stroke widths. Runtime call sites opt this config into the shared adaptive low-zoom curve.
@@ -743,6 +784,76 @@ export const settings: Settings = {
                 snakeTailAlpha: 0,
                 // Tail-to-head colors matching the visible footer link underline accents after footer opacity is applied.
                 snakeColors: ['#E3A089', '#96BFF4'],
+                glassMaterial: {
+                    // Dark tint mixed into the soft lower rim of the glass.
+                    shadowColor: '#4E5B6C',
+                    // Exponent for tail-to-head opacity growth. Lower values make the tail become visible sooner.
+                    tailOpacityPower: 0.72,
+                    // Fraction of snake length used to fade the tail in from fully transparent.
+                    tailFadeFraction: 0.08,
+                    // Minimum opacity floor after the tail fade finishes.
+                    minTailOpacity: 0.62,
+                    // Extra transparent feather width as a fraction of the visible snake width. Higher values blur outward without shrinking the core.
+                    edgeFeatherFraction: 0.2,
+                    // Exponent applied to the feather mask. Higher values make the fade more gradual at the outer edge.
+                    edgeFeatherPower: 1.18,
+                    // Cross-section lens exponent. Lower values spread the rounded glass body farther toward the edges.
+                    lensCorePower: 0.42,
+                    // Vertical center of the main specular highlight, from top edge 0 to bottom edge 1.
+                    upperSpecularCenter: 0.32,
+                    // How far the main specular highlight drifts across the width as it travels along the snake.
+                    upperSpecularDrift: 0.035,
+                    // Width of the main specular highlight across the snake body.
+                    upperSpecularWidth: 0.16,
+                    // Tail progress where the main specular highlight starts fading in.
+                    upperSpecularFadeStart: 0.1,
+                    // Tail progress where the main specular highlight reaches full strength.
+                    upperSpecularFadeEnd: 0.32,
+                    // Brightness contribution from the main specular highlight.
+                    upperSpecularStrength: 0.24,
+                    // Longitudinal center of the head glint, from tail 0 to head 1.
+                    headSpecularProgressCenter: 0.91,
+                    // Longitudinal width of the head glint.
+                    headSpecularProgressWidth: 0.22,
+                    // Cross-section center of the head glint, from top edge 0 to bottom edge 1.
+                    headSpecularCrossSectionCenter: 0.48,
+                    // Cross-section width of the head glint.
+                    headSpecularCrossSectionWidth: 0.26,
+                    // Brightness contribution from the head glint.
+                    headSpecularStrength: 0.18,
+                    // Cross-section center of the lower glass shadow rim.
+                    lowerEdgeShadowCenter: 0.88,
+                    // Width of the lower glass shadow rim.
+                    lowerEdgeShadowWidth: 0.2,
+                    // Darkness contribution from the lower glass shadow rim.
+                    lowerEdgeShadowStrength: 0.16,
+                    // Cross-section center of the upper glass shadow rim.
+                    upperEdgeShadowCenter: 0.1,
+                    // Width of the upper glass shadow rim.
+                    upperEdgeShadowWidth: 0.2,
+                    // Darkness contribution from the upper glass shadow rim.
+                    upperEdgeShadowStrength: 0.07,
+                    // Power curve for the broad edge shadow. Higher values push shadow closer to the edge.
+                    edgeShadowPower: 2.2,
+                    // Darkness contribution from the broad edge shadow.
+                    edgeShadowStrength: 0.04,
+                    // Brightness contribution from the rounded lens core.
+                    lensHighlightStrength: 0.08,
+                    // Maximum amount of white mixed into highlights.
+                    highlightWhiteMixMax: 0.3,
+                    // Maximum amount of shadow color mixed into edge shadows.
+                    shadowMixMax: 0.14,
+                    // Baseline material opacity before cross-section highlights are added.
+                    materialAlphaBase: 0.72,
+                    // Maximum material opacity before the feathered edge mask is applied.
+                    materialAlphaMax: 0.94,
+                    // Opacity contribution from the rounded lens core.
+                    lensAlphaStrength: 0.16,
+                    // Opacity contribution from the main specular highlight.
+                    upperSpecularAlphaStrength: 0.04,
+                    // Opacity contribution from the head glint.
+                    headSpecularAlphaStrength: 0.03,
+                },
             },
         },
 

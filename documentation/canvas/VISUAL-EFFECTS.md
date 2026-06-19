@@ -70,7 +70,7 @@ These SVG consumers use `settings.gradient.styles.shiftingColors`; they reuse th
 
 ### PIXI Generated-Media Progress Outline
 
-`PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a single PIXI mesh textured as a raised colored-glass droplet: solid tinted core, one broad specular streak, and one soft shadowed edge are baked into one material. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for generated-media progress with the palette configured in `settings.mediaNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
+`PixiTravelingOutlineRenderer` renders a continuous tapered snake moving around a rounded perimeter with a single PIXI mesh textured as a raised colored-glass droplet: solid tinted core, one broad specular streak, and one soft shadowed edge are baked into one material. It is **not** tied to generated images: consumers synchronize arbitrary active outline bounds, media corner radius, and style data into it. The workspace media layer uses it for generated-media progress with the palette and glass-material parameters configured in `settings.mediaNode.generationBorder`. The renderer defaults to `Easing.travelingOutlineTransition()`, which gives each lap a gentle pace pulse without slowing to a near-stop at the wrap boundary. The workspace removes its outline when generation completes or fails.
 
 ### Static CSS Gradient Surfaces
 
