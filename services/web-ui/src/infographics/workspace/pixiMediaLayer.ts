@@ -232,6 +232,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             gap: generationBorder.gap ?? 0,
             snakeHeadWidth: generationBorder.snakeWidth,
             snakeTailWidthFraction: generationBorder.snakeTailWidthFraction ?? 0.18,
+            snakeTailThinLengthFraction: generationBorder.snakeTailThinLengthFraction,
+            snakeWidthTaperPower: generationBorder.snakeWidthTaperPower,
             snakeLengthFraction: generationBorder.snakeLengthFraction,
             snakeHeadRoundLengthFraction: generationBorder.snakeHeadRoundLengthFraction,
             snakeTailAlpha: generationBorderStyles.snakeTailAlpha,

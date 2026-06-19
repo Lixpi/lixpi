@@ -11,6 +11,8 @@ export type PixiTravelingOutlineStyle = {
     gap: number
     snakeHeadWidth: number
     snakeTailWidthFraction: number
+    snakeTailThinLengthFraction: number
+    snakeWidthTaperPower: number
     snakeLengthFraction: number
     snakeHeadRoundLengthFraction: number
     snakeTailAlpha: number
@@ -414,6 +416,22 @@ function getTravelingSnakeHeadRoundFactor(
     return Math.sqrt(Math.max(0, 1 - (1 - roundProgress) ** 2))
 }
 
+function getTravelingSnakeWidthProgress(
+    progress: number,
+    thinTailLengthFraction: number,
+    taperPower: number
+): number {
+    const boundedThinTailLength = Number.isFinite(thinTailLengthFraction)
+        ? Math.max(0, Math.min(0.85, thinTailLengthFraction))
+        : 0
+    const boundedTaperPower = Number.isFinite(taperPower)
+        ? Math.max(0.1, taperPower)
+        : 1
+    const taperProgress = Math.max(0, Math.min(1, (progress - boundedThinTailLength) / (1 - boundedThinTailLength)))
+
+    return Math.pow(taperProgress, boundedTaperPower)
+}
+
 function getInsetAlignedRoundedOutlineFrame(
     mediaWidth: number,
     mediaHeight: number,
@@ -521,6 +539,8 @@ function buildTravelingSnakeMeshGeometry(
     sampleCount: number,
     snakeHeadWidth: number,
     snakeTailWidth: number,
+    snakeTailThinLengthFraction: number,
+    snakeWidthTaperPower: number,
     edgeFeatherFraction: number,
     snakeHeadRoundLengthFraction: number
 ): TravelingSnakeMeshGeometry {
@@ -536,7 +556,7 @@ function buildTravelingSnakeMeshGeometry(
 
     for (let index = 0; index <= sampleCount; index++) {
         const progress = index / sampleCount
-        const widthProgress = Math.pow(progress, 0.86)
+        const widthProgress = getTravelingSnakeWidthProgress(progress, snakeTailThinLengthFraction, snakeWidthTaperPower)
         const sampleWidth = snakeTailWidth + (snakeHeadWidth - snakeTailWidth) * widthProgress
         const headRoundFactor = getTravelingSnakeHeadRoundFactor(progress, snakeLength, headRoundLength)
         const meshSampleWidth = sampleWidth * meshWidthScale * headRoundFactor
@@ -678,6 +698,8 @@ export class PixiTravelingOutlineRenderer {
             sampleCount,
             snakeHeadWidth,
             snakeTailWidth,
+            this.style.snakeTailThinLengthFraction,
+            this.style.snakeWidthTaperPower,
             this.style.glassMaterial.edgeFeatherFraction,
             this.style.snakeHeadRoundLengthFraction
         )

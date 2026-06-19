@@ -288,6 +288,8 @@ export type MediaNodeSettings = {
         gap: number
         snakeWidth: number
         snakeTailWidthFraction: number
+        snakeTailThinLengthFraction: number
+        snakeWidthTaperPower: number
         snakeLengthFraction: number
         snakeHeadRoundLengthFraction: number
         animationDurationMs: number
@@ -768,22 +770,26 @@ export const settings: Settings = {
             // Empty screen-pixel gap between the media node edge and the inside edge of the snake at 100% zoom.
             gap: 3,
             // Screen-pixel width of the snake head at 100% zoom. The body tapers from this value toward the tail.
-            snakeWidth: 15,
+            snakeWidth: 9,
             // Tail width as a fraction of `snakeWidth`; lower values make the tail taper to a finer point.
-            snakeTailWidthFraction: 0.18,
+            snakeTailWidthFraction: 0.14,
+            // Fraction of the snake path held near the minimum tail width before the body starts widening.
+            snakeTailThinLengthFraction: 0.1,
+            // Power curve for the tail-to-head width ramp. Higher values keep the trail thin longer without changing total snake length.
+            snakeWidthTaperPower: 0.86,
             // Fraction of the rounded media perimeter occupied by the visible snake.
             snakeLengthFraction: 0.24,
             // Rounded head length as a fraction of the feather-expanded snake width. Higher values make the endpoint softer without protruding past the head.
             snakeHeadRoundLengthFraction: 0.5,
             // Milliseconds for one complete lap around the media node.
-            animationDurationMs: 93200,
+            animationDurationMs: 3200,
             // Lower zoom breakpoint for the PIXI generation outline stroke widths. Runtime call sites opt this config into the shared adaptive low-zoom curve.
             zoomScaling: { minZoom: 0.4 },
             styles: {
                 // Tail fade preference. The glass renderer keeps a material-opacity floor so the tail fades without turning into mist.
                 snakeTailAlpha: 0,
                 // Tail-to-head colors inspired by the shifting gradient and model menu divider, with a bright iridescent amethyst tail.
-                snakeColors: ['#B86CFF', '#C991FF', '#E1B9FF', '#F3DDF6', '#F0E5EE', '#F1EFF7', '#ECECF7', '#DAD7F1', '#E8E4F6'],
+                snakeColors: ['#ff0084', '#ff39b0', '#fc75c6', '#eba0f5', '#f1c2e9', '#e0d6ff', '#eaeaff', '#DAD7F1', '#E8E4F6'],
                 glassMaterial: {
                     // Dark tint mixed into the soft lower rim of the glass.
                     shadowColor: '#4E5B6C',
