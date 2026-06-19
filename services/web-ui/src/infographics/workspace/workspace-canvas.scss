@@ -404,7 +404,7 @@
     top: 0;
     left: 0;
     overflow: hidden;
-    border-radius: var(--workspace-image-border-radius);
+    border-radius: var(--workspace-media-node-border-radius);
     background: #1c1c1c;
     pointer-events: auto;
 
@@ -1480,8 +1480,8 @@
 
 .workspace-image-node {
     background: transparent;
-    border-radius: var(--workspace-image-border-radius);
-    box-shadow: var(--workspace-image-default-box-shadow);
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
     overflow: visible;
     padding: 0;
 
@@ -1498,7 +1498,7 @@
     // The node shadow/frame may sit behind the PIXI sprite.
 
     &.is-selected {
-        box-shadow: var(--workspace-image-selected-box-shadow);
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
     }
 
 }
@@ -1518,8 +1518,8 @@
 // provides fallback drag/resize hit areas.
 .workspace-video-node {
     background: transparent;
-    border-radius: var(--workspace-image-border-radius);
-    box-shadow: var(--workspace-image-default-box-shadow);
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
     overflow: visible;
     padding: 0;
 
@@ -1532,7 +1532,7 @@
     }
 
     &.is-selected {
-        box-shadow: var(--workspace-image-selected-box-shadow);
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
     }
 }
 

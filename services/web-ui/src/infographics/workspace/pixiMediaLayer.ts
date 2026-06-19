@@ -488,7 +488,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entry.colorRectH = h
         }
 
-        generatingBorderRenderer.updateGeometry(nodeId, { x, y, width: w, height: h, radius: getImageBorderRadius(w, h) })
+        generatingBorderRenderer.updateGeometry(nodeId, { x, y, width: w, height: h, radius: getMediaNodeBorderRadius(w, h) })
 
         spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
         const newRect: IndexedImage = { minX: x, minY: y, maxX: x + w, maxY: y + h, nodeId }
@@ -502,29 +502,21 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return `${getWorkspaceId()}|${node.fileId}|${node.src}`
     }
 
-    function getImageBorderRadius(width: number, height: number): number {
-        const borderRadius = settings.mediaNode.image.styles.borderRadius
-        if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
-        return Math.min(borderRadius, width / 2, height / 2)
-    }
-
-    function getVideoBorderRadius(width: number, height: number): number {
-        const mediaNodeSettings = settings.mediaNode as typeof settings.mediaNode & { borderRadius?: number }
-        const borderRadius = mediaNodeSettings.borderRadius ?? 12
+    function getMediaNodeBorderRadius(width: number, height: number): number {
+        const borderRadius = settings.mediaNode.styles.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }
 
     function getGeneratingBorderRadius(node: CanvasNode | undefined, width: number, height: number): number {
-        if (node?.type === 'image') return getImageBorderRadius(width, height)
-        if (node?.type === 'video') return getVideoBorderRadius(width, height)
+        if (node?.type === 'image' || node?.type === 'video') return getMediaNodeBorderRadius(width, height)
         const borderRadius = generationBorder.radius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }
 
     function syncSpriteMask(entry: PixiImageEntry, x: number, y: number, width: number, height: number): void {
-        const radius = getImageBorderRadius(width, height)
+        const radius = getMediaNodeBorderRadius(width, height)
         entry.spriteMask.position.set(x, y)
         if (width === entry.spriteMaskW && height === entry.spriteMaskH && radius === entry.spriteMaskRadius) return
 
@@ -624,7 +616,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function drawColorRect(rect: Graphics, width: number, height: number): void {
         rect.clear()
-        rect.roundRect(0, 0, width, height, getImageBorderRadius(width, height))
+        rect.roundRect(0, 0, width, height, getMediaNodeBorderRadius(width, height))
         rect.fill({ color: 0xe7eaee, alpha: 0.85 })
     }
 

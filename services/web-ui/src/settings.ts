@@ -259,6 +259,11 @@ export type GenerationBorderGlassMaterialSettings = {
 
 export type MediaNodeSettings = {
     // Shared across all media types (image, video, …).
+    styles: {
+        defaultBoxShadow: string
+        selectedBoxShadow: string
+        borderRadius: number
+    }
     generatedMediaChrome: {
         iconSize: number
         topGap: number
@@ -303,11 +308,6 @@ export type MediaNodeSettings = {
     // Image-specific.
     image: {
         defaultInsertionWidth: number
-        styles: {
-            defaultBoxShadow: string
-            selectedBoxShadow: string
-            borderRadius: number
-        }
     }
 }
 
@@ -716,6 +716,15 @@ export const settings: Settings = {
     mediaNode: {
         // ── Shared across all media types (image, video, …) ──
 
+        styles: {
+            // Box shadow applied to media nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
+            defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
+            // Box shadow applied when a media node is selected. Increasing this makes selected media read as more prominent on the canvas.
+            selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+            // Canvas-unit corner radius for media pixels and browser-composited media surfaces on the workspace canvas.
+            borderRadius: 30,
+        },
+
         // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
         generatedMediaChrome: {
             // Base screen-pixel icon/button size at 100% and higher zoom.
@@ -867,14 +876,6 @@ export const settings: Settings = {
         image: {
             // Canvas-unit width for manually inserted image nodes. Height is derived from the image aspect ratio; failed dimension probes use this as a square fallback.
             defaultInsertionWidth: 600,
-            styles: {
-                // Box shadow applied to image nodes in their default state. Keep this subtler than the selected shadow so selection remains the stronger visual state.
-                defaultBoxShadow: '0 1px 6px rgba(0, 0, 0, 0.15)',
-                // Box shadow applied when an image node is selected. Increasing this makes selected images read as more prominent on the canvas.
-                selectedBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
-                // Canvas-unit corner radius for image pixels on the workspace canvas. Increasing it rounds PIXI-rendered image pixels more strongly.
-                borderRadius: 8,
-            },
         },
     },
 

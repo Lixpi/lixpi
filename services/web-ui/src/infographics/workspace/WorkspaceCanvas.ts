@@ -329,7 +329,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     let workspaceId = options.workspaceId
     const connectorStyles = settings.connector.styles
     const selectionStyles = settings.selection.styles
-    const imageNodeStyles = settings.mediaNode.image.styles
+    const mediaNodeStyles = settings.mediaNode.styles
     const branchOriginSettings = settings.imageBranchLineage.branchOrigin
 
     paneEl.style.setProperty('--connector-line-default-color', connectorStyles.lineDefaultColor)
@@ -339,9 +339,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--selection-overlay-border-color', selectionStyles.overlayBorderColor)
     paneEl.style.setProperty('--selection-overlay-background-color', selectionStyles.overlayBackgroundColor)
     paneEl.style.setProperty('--selection-outline-color', selectionStyles.outlineColor)
-    paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)
-    paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)
-    paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)
+    paneEl.style.setProperty('--workspace-media-node-default-box-shadow', mediaNodeStyles.defaultBoxShadow)
+    paneEl.style.setProperty('--workspace-media-node-selected-box-shadow', mediaNodeStyles.selectedBoxShadow)
+    paneEl.style.setProperty('--workspace-media-node-border-radius', `${mediaNodeStyles.borderRadius}px`)
     applyMediaModelBadgeStyleProperties(paneEl)
     paneEl.style.setProperty('--workspace-branch-origin-icon-size', `${branchOriginSettings.iconSize}px`)
     paneEl.style.setProperty('--workspace-branch-origin-background-color', branchOriginSettings.styles.backgroundColor)

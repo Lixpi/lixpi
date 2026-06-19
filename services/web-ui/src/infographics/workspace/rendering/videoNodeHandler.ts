@@ -91,7 +91,7 @@ export function createVideoNodeHandler(options: VideoNodeHandlerOptions): VideoN
     }
 
     const getBorderRadius = (w: number, h: number): number => {
-        const borderRadius = (settings as any).mediaNode?.borderRadius ?? 12
+        const borderRadius = settings.mediaNode.styles.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, w / 2, h / 2)
     }
