@@ -782,8 +782,8 @@ export const settings: Settings = {
             styles: {
                 // Tail fade preference. The glass renderer keeps a material-opacity floor so the tail fades without turning into mist.
                 snakeTailAlpha: 0,
-                // Tail-to-head colors matching the visible footer link underline accents after footer opacity is applied.
-                snakeColors: ['#E3A089', '#96BFF4'],
+                // Tail-to-head colors inspired by the shifting gradient and model menu divider, with a bright iridescent amethyst tail.
+                snakeColors: ['#B86CFF', '#C991FF', '#E1B9FF', '#F3DDF6', '#F0E5EE', '#F1EFF7', '#ECECF7', '#DAD7F1', '#E8E4F6'],
                 glassMaterial: {
                     // Dark tint mixed into the soft lower rim of the glass.
                     shadowColor: '#4E5B6C',
@@ -794,7 +794,7 @@ export const settings: Settings = {
                     // Minimum opacity floor after the tail fade finishes.
                     minTailOpacity: 0.62,
                     // Extra transparent feather width as a fraction of the visible snake width. Higher values blur outward without shrinking the core.
-                    edgeFeatherFraction: 0.2,
+                    edgeFeatherFraction: 0.1,
                     // Exponent applied to the feather mask. Higher values make the fade more gradual at the outer edge.
                     edgeFeatherPower: 1.18,
                     // Cross-section lens exponent. Lower values spread the rounded glass body farther toward the edges.

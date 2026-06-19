@@ -1007,7 +1007,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             position: 'absolute' as const,
             inset: '0',
             pointerEvents: 'none' as const,
-            zIndex: '4',
+            zIndex: '1',
         }
         const chromeLayer = html`<div className="workspace-generated-media-chrome-layer" style=${chromeLayerStyle}></div>` as HTMLDivElement
         paneEl.appendChild(chromeLayer)
