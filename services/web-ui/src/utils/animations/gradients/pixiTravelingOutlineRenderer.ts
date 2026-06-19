@@ -383,8 +383,8 @@ function createTravelingSnakeTexture(
 }
 
 function getTravelingSnakeSampleCount(snakeLength: number, snakeHeadWidth: number): number {
-    const spacing = Math.max(0.75, snakeHeadWidth * 0.16)
-    return Math.max(32, Math.min(720, Math.ceil(snakeLength / spacing)))
+    const spacing = Math.max(0.5, snakeHeadWidth * 0.05)
+    return Math.max(32, Math.min(1440, Math.ceil(snakeLength / spacing)))
 }
 
 function setMeshVertex(
