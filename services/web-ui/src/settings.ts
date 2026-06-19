@@ -675,11 +675,11 @@ export const settings: Settings = {
         // Connector screen-space base sizes and zoom breakpoint.
         scaling: {
             // Base screen-pixel connector stroke width at 100% and higher zoom.
-            strokeWidth: 2,
+            strokeWidth: 3,
             // Base screen-pixel arrowhead size at 100% and higher zoom.
-            markerSize: 16,
+            markerSize: 23,
             // Base screen-pixel source/target marker offsets at 100% and higher zoom.
-            markerOffset: { source: 6, target: 19 },
+            markerOffset: { source: 11, target: 24 },
             // Screen-pixel width of the invisible selection hit area around connector lines.
             clickAreaWidth: 24,
             // Lower zoom breakpoint for connector chrome. Runtime call sites opt
