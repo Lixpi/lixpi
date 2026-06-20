@@ -171,9 +171,12 @@ type GeneratedMediaInfoPanelOptions = {
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
+const BRANCH_MARKER_WIDTH_MULTIPLIER = 2.75
+const BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS = 30
+
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
-    return { width: size, height: size }
+    return { width: Math.round(size * BRANCH_MARKER_WIDTH_MULTIPLIER), height: size }
 }
 
 function getBranchForkNodeDimensions(): { width: number; height: number } {
@@ -182,6 +185,47 @@ function getBranchForkNodeDimensions(): { width: number; height: number } {
 
 function getBranchLineNodeDimensions(): { width: number; height: number } {
     return getBranchOriginNodeDimensions()
+}
+
+function getExpectedBranchMarkerDimensions(node: CanvasNode): { width: number; height: number } | undefined {
+    if (node.type === 'branchOrigin') return getBranchOriginNodeDimensions()
+    if (node.type === 'branchFork') return getBranchForkNodeDimensions()
+    if (node.type === 'branchLine') return getBranchLineNodeDimensions()
+    return undefined
+}
+
+function normalizeBranchMarkerDimensions(canvasState: CanvasState): CanvasState {
+    let changed = false
+    const nodes = canvasState.nodes.map((node: CanvasNode): CanvasNode => {
+        const dimensions = getExpectedBranchMarkerDimensions(node)
+        if (!dimensions) return node
+        if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
+
+        changed = true
+        return {
+            ...node,
+            position: {
+                x: node.position.x - (dimensions.width - node.dimensions.width) / 2,
+                y: node.position.y - (dimensions.height - node.dimensions.height) / 2,
+            },
+            dimensions,
+        } as CanvasNode
+    })
+    return changed ? { ...canvasState, nodes } : canvasState
+}
+
+type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
+
+function getBranchMarkerPromptText(node: BranchMarkerNode): string {
+    return node.provenance?.promptText?.trim().replace(/\s+/g, ' ') ?? ''
+}
+
+function getBranchMarkerPromptPreview(promptText: string): string {
+    if (!promptText) return 'No message text'
+
+    if (promptText.length <= BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS) return promptText
+
+    return `${promptText.slice(0, BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS)}...`
 }
 
 function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
@@ -356,6 +400,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-origin-box-shadow', branchOriginSettings.styles.boxShadow)
 
     let currentCanvasState: CanvasState | null = options.canvasState
+        ? normalizeBranchMarkerDimensions(options.canvasState)
+        : options.canvasState
     let currentDocuments: Document[] = options.documents
     let currentAiChatThreads: AiChatThread[] = options.aiChatThreads
     let panZoom: PanZoomInstance | null = null
@@ -1509,7 +1555,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!(target instanceof Element)) return false
         if (!paneEl.contains(target)) return false
         if (target.closest('.canvas-generated-media-info-panel')) return false
-        if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node')) return false
+        if (target.closest('.workspace-branch-origin-node, .workspace-branch-fork-node, .workspace-branch-line-node')) return false
         if (target.closest('.workspace-ai-chat-floating-panel, .ai-prompt-input-floating, .bubble-menu, .workspace-video-controls-host')) return false
         return true
     }
@@ -7822,6 +7868,32 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    function createBranchMarkerContent({
+        node,
+        icon,
+        iconClassName,
+        label,
+    }: {
+        node: BranchMarkerNode
+        icon: string
+        iconClassName: string
+        label: string
+    }): HTMLDivElement {
+        const promptText = getBranchMarkerPromptText(node)
+        const promptPreview = getBranchMarkerPromptPreview(promptText)
+        const accessibleLabel = `${label}: ${promptPreview}`
+        return html`
+            <div className="workspace-branch-marker-content" title=${promptText || promptPreview} aria-label=${accessibleLabel}>
+                <div className="workspace-branch-marker-header">
+                    <div className=${`workspace-branch-marker-icon ${iconClassName}`} innerHTML=${icon}></div>
+                    <div className="workspace-branch-marker-label">${label}</div>
+                </div>
+                <div className="workspace-branch-marker-separator"></div>
+                <div className="workspace-branch-marker-message">${promptPreview}</div>
+            </div>
+        ` as HTMLDivElement
+    }
+
     function createBranchOriginNode(node: BranchOriginCanvasNode): HTMLElement {
         const { nodeEl, dragOverlay } = createBaseNodeElement(
             node,
@@ -7838,8 +7910,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'branch-origin-drag-overlay nopan'
 
-        const icon = html`<div className="workspace-branch-origin-icon" innerHTML=${branchMidIcon}></div>` as HTMLDivElement
-        nodeEl.insertBefore(icon, dragOverlay)
+        const content = createBranchMarkerContent({
+            node,
+            icon: branchMidIcon,
+            iconClassName: 'workspace-branch-origin-icon',
+            label: 'Start branch',
+        })
+        nodeEl.insertBefore(content, dragOverlay)
 
         return nodeEl
     }
@@ -7863,8 +7940,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'branch-fork-drag-overlay nopan'
 
-        const icon = html`<div className="workspace-branch-fork-icon" innerHTML=${branchForkfIcon}></div>` as HTMLDivElement
-        nodeEl.insertBefore(icon, dragOverlay)
+        const content = createBranchMarkerContent({
+            node,
+            icon: branchForkfIcon,
+            iconClassName: 'workspace-branch-fork-icon',
+            label: 'Fork branch',
+        })
+        nodeEl.insertBefore(content, dragOverlay)
 
         return nodeEl
     }
@@ -7888,8 +7970,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         )
         dragOverlay.className = 'branch-line-drag-overlay nopan'
 
-        const icon = html`<div className="workspace-branch-line-icon" innerHTML=${branchLineIcon}></div>` as HTMLDivElement
-        nodeEl.insertBefore(icon, dragOverlay)
+        const content = createBranchMarkerContent({
+            node,
+            icon: branchLineIcon,
+            iconClassName: 'workspace-branch-line-icon',
+            label: 'Continue branch',
+        })
+        nodeEl.insertBefore(content, dragOverlay)
 
         return nodeEl
     }
@@ -8364,6 +8451,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 pendingVisualCommit: pendingLocalCanvasVisualCommit,
             })
             const effectiveCanvasState = renderStatePlan.state
+                ? normalizeBranchMarkerDimensions(renderStatePlan.state)
+                : renderStatePlan.state
             pendingLocalCanvasVisualCommit = renderStatePlan.pendingVisualCommit
 
             // Stale drag/resize positions from a previous workspace would corrupt

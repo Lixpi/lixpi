@@ -1580,38 +1580,86 @@
     justify-content: center;
     background: var(--workspace-branch-origin-background-color);
     border: 1px solid var(--workspace-branch-origin-border-color);
-    border-radius: 50%;
+    border-radius: 9999px;
+    box-sizing: border-box;
     box-shadow: var(--workspace-branch-origin-box-shadow);
+    color: var(--workspace-branch-origin-icon-color);
+    cursor: pointer;
     overflow: visible;
     padding: 0;
 }
 
-.workspace-branch-origin-icon,
-.workspace-branch-fork-icon,
-.workspace-branch-line-icon {
+.workspace-branch-marker-content {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     justify-content: center;
     width: 100%;
     height: 100%;
-    color: var(--workspace-branch-origin-icon-color);
+    box-sizing: border-box;
+    padding: 12px 22px;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    gap: 10px;
+}
+
+.workspace-branch-marker-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 calc(var(--workspace-branch-origin-icon-size) * 0.55);
+    width: calc(var(--workspace-branch-origin-icon-size) * 0.55);
+    height: calc(var(--workspace-branch-origin-icon-size) * 0.55);
     pointer-events: none;
 
     svg {
         display: block;
-        width: calc(var(--workspace-branch-origin-icon-size) * 0.9);
-        height: calc(var(--workspace-branch-origin-icon-size) * 0.9);
+        width: 100%;
+        height: 100%;
         fill: currentColor;
         transform-origin: center;
     }
 }
 
 .workspace-branch-origin-icon svg {
-    transform: translate(2px, 2px);
+    transform: translate(1px, 1px);
 }
 
 .workspace-branch-fork-icon svg {
-    transform: translate(3px, 2px);
+    transform: translate(1px, 1px);
+}
+
+.workspace-branch-marker-label {
+    min-width: 0;
+    color: currentColor;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.workspace-branch-marker-separator {
+    width: 100%;
+    height: 1px;
+    margin: 10px 0 7px;
+    background: rgba(255, 255, 255, 0.38);
+}
+
+.workspace-branch-marker-message {
+    color: currentColor;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.1;
+    opacity: 0.82;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .branch-origin-drag-overlay,
@@ -1621,7 +1669,8 @@
     inset: 0;
     z-index: 15;
     background: transparent;
-    border-radius: 50%;
+    border-radius: inherit;
+    cursor: pointer;
 }
 
 .image-error {

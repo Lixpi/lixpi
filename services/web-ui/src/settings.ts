@@ -1017,9 +1017,9 @@ export const settings: Settings = {
         branchFanoutDepthGap: 96,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
-            // Canvas-unit diameter of the branch-origin circle.
+            // Canvas-unit height for branch lineage markers; width is derived in WorkspaceCanvas.
             size: 96,
-            // Canvas-unit size for the centered branch icon.
+            // Canvas-unit base size for the branch icon inside marker labels.
             iconSize: 52,
             styles: {
                 backgroundColor: colorPalette.steelBlue,
