@@ -7,6 +7,7 @@ import {
 } from 'pixi.js'
 import RBush from 'rbush'
 import type {
+    CanvasNode,
     CanvasState,
     ImageCanvasNode,
     CanvasViewport,
@@ -34,9 +35,15 @@ import {
 import { createPixiEdgeRenderer, type PixiEdgeRenderer } from '$src/infographics/workspace/rendering/pixiEdgeRenderer.ts'
 import { createMediaNodeRegistry, type MediaNodeRegistry } from '$src/infographics/workspace/rendering/mediaNodeRegistry.ts'
 import {
+    getRoundedOutlinePerimeter,
     PixiTravelingOutlineRenderer,
     type PixiTravelingOutlineDatum,
+    type PixiTravelingOutlineDirection,
 } from '$src/utils/animations/gradients/pixiTravelingOutlineRenderer.ts'
+import {
+    getAdaptiveBoundedZoomScalingOptions,
+    scaleCanvasChromeWorldSizeForZoom,
+} from '$src/infographics/utils/zoomScaling.ts'
 import { settings } from '$src/settings.ts'
 
 type PixiImageEntry = {
@@ -82,13 +89,23 @@ export type SelectionColors = {
     groupOverlayFill: string
 }
 
+export type GeneratingMediaOutlineDirection = PixiTravelingOutlineDirection
+
+export type GeneratingMediaOutlineOptions = {
+    direction?: GeneratingMediaOutlineDirection
+    shape?: 'node' | 'preFrameCircle'
+}
+
 type SelectionOverlayOptions = {
     fill?: boolean
 }
 
+export type GeneratingMediaOutlineTarget = GeneratingMediaOutlineDirection | GeneratingMediaOutlineOptions | undefined
+export type GeneratingMediaOutlineTargets = Set<string> | Map<string, GeneratingMediaOutlineTarget>
+
 export type PixiMediaLayer = {
     sync: (canvasState: CanvasState | null) => void
-    setGeneratingImageNodes: (nodeIds: Set<string>) => void
+    setGeneratingImageNodes: (nodeTargets: GeneratingMediaOutlineTargets) => void
     setViewport: (viewport: CanvasViewport) => void
     setNodeLiveTransform: (
         nodeId: string,
@@ -199,7 +216,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     // detect removal (when a node leaves canvasState we dispatch remove).
     let registryDispatchedNodes: Set<string> = new Set()
     const entries = new Map<string, PixiImageEntry>()
-    let generatingImageNodeIds = new Set<string>()
+    let generatingImageNodeOutlines = new Map<string, GeneratingMediaOutlineOptions>()
     let edgeRenderer: PixiEdgeRenderer | null = null
     const textureCache = new Map<string, TextureEntry>()
     const spatialIndex = new RBush<IndexedImage>()
@@ -217,22 +234,26 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
-    const generationBorder = settings.mediaNode.generationBorder
-    const generationBorderStyles = generationBorder.styles
+    const inProgressOutlineAnimation = settings.mediaNode.inProgressOutlineAnimation
+    const inProgressOutlineAnimationStyles = inProgressOutlineAnimation.styles
+    const inProgressOutlineZoomScaling = getAdaptiveBoundedZoomScalingOptions(inProgressOutlineAnimation.zoomScaling ?? { minZoom: 0.4 })
     const generatingBorderRenderer = new PixiTravelingOutlineRenderer({
         container: generatingBorderLayer,
         style: {
-            radius: generationBorder.radius,
-            trackWidth: generationBorder.trackWidth,
-            trackColor: generationBorderStyles.trackColor,
-            trackAlpha: generationBorderStyles.trackAlpha,
-            segmentWidth: generationBorder.snakeWidth,
-            segmentLengthFraction: generationBorder.snakeLengthFraction,
-            segmentTailAlpha: generationBorderStyles.snakeTailAlpha,
-            segmentCount: generationBorder.snakeSegmentCount,
-            segmentColors: generationBorderStyles.snakeColors,
-            durationMs: generationBorder.animationDurationMs,
+            radius: inProgressOutlineAnimation.radius,
+            gap: inProgressOutlineAnimation.gap ?? 0,
+            snakeHeadWidth: inProgressOutlineAnimation.snakeWidth,
+            snakeTailWidthFraction: inProgressOutlineAnimation.snakeTailWidthFraction ?? 0.18,
+            snakeTailThinLengthFraction: inProgressOutlineAnimation.snakeTailThinLengthFraction,
+            snakeWidthTaperPower: inProgressOutlineAnimation.snakeWidthTaperPower,
+            snakeLengthFraction: inProgressOutlineAnimation.snakeLengthFraction,
+            snakeHeadRoundLengthFraction: inProgressOutlineAnimation.snakeHeadRoundLengthFraction,
+            snakeTailAlpha: inProgressOutlineAnimationStyles.snakeTailAlpha,
+            snakeColors: inProgressOutlineAnimationStyles.snakeColors,
+            glassMaterial: inProgressOutlineAnimationStyles.glassMaterial,
+            durationMs: inProgressOutlineAnimation.animationDurationMs,
         },
+        getStrokeScale: () => scaleCanvasChromeWorldSizeForZoom(1, currentViewport.zoom, inProgressOutlineZoomScaling),
         onFrame: scheduleRender,
     })
 
@@ -445,21 +466,28 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         dimensions: { width: number; height: number }
     ): void {
         if (destroyed) return
+        const x = worldPosition.x
+        const y = worldPosition.y
+        const w = dimensions.width
+        const h = dimensions.height
         const entry = entries.get(nodeId)
         if (!entry) {
             // Non-image (e.g. video) nodes flow through the registry so their
             // sprite transforms stay in lockstep with DOM hitboxes during drag/resize.
             if (registryDispatchedNodes.has(nodeId)) {
                 mediaNodeRegistry.dispatchLiveTransform(nodeId, worldPosition, dimensions)
+                const node = lastState?.nodes.find((candidate) => candidate.nodeId === nodeId)
+                generatingBorderRenderer.updateGeometry(nodeId, {
+                    x,
+                    y,
+                    width: w,
+                    height: h,
+                    radius: getGeneratingBorderRadius(node, w, h),
+                })
                 scheduleRender()
             }
             return
         }
-
-        const x = worldPosition.x
-        const y = worldPosition.y
-        const w = dimensions.width
-        const h = dimensions.height
 
         entry.sprite.position.set(x, y)
         entry.sprite.width = w
@@ -472,7 +500,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             entry.colorRectH = h
         }
 
-        generatingBorderRenderer.updateGeometry(nodeId, { x, y, width: w, height: h })
+        generatingBorderRenderer.updateGeometry(nodeId, { x, y, width: w, height: h, radius: getMediaNodeBorderRadius(w, h) })
 
         spatialIndex.remove(entry.worldRect, (a: IndexedImage, b: IndexedImage) => a.nodeId === b.nodeId)
         const newRect: IndexedImage = { minX: x, minY: y, maxX: x + w, maxY: y + h, nodeId }
@@ -486,14 +514,67 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         return `${getWorkspaceId()}|${node.fileId}|${node.src}`
     }
 
-    function getImageBorderRadius(width: number, height: number): number {
-        const borderRadius = settings.mediaNode.image.styles.borderRadius
+    function getMediaNodeBorderRadius(width: number, height: number): number {
+        const borderRadius = settings.mediaNode.styles.borderRadius
         if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
         return Math.min(borderRadius, width / 2, height / 2)
     }
 
+    function getGeneratingBorderRadius(node: CanvasNode | undefined, width: number, height: number): number {
+        if (node?.type === 'image' || node?.type === 'video') return getMediaNodeBorderRadius(width, height)
+        const borderRadius = inProgressOutlineAnimation.radius
+        if (!Number.isFinite(borderRadius) || borderRadius <= 0) return 0
+        return Math.min(borderRadius, width / 2, height / 2)
+    }
+
+    function getPreFrameCircleGeometry(
+        worldPosition: WorldPosition,
+        dimensions: { width: number; height: number }
+    ): { x: number; y: number; width: number; height: number; radius: number } {
+        const configuredScale = Number(inProgressOutlineAnimation.preFrameCircleScale)
+        const scale = Number.isFinite(configuredScale) && configuredScale > 0
+            ? Math.min(1, configuredScale)
+            : 1 / 3
+        const size = Math.max(1, Math.min(dimensions.width, dimensions.height) * scale)
+        return {
+            x: worldPosition.x + (dimensions.width - size) / 2,
+            y: worldPosition.y + (dimensions.height - size) / 2,
+            width: size,
+            height: size,
+            radius: size / 2,
+        }
+    }
+
+    function getGeneratingOutlinePathPerimeter(width: number, height: number, radius: number): number {
+        const strokeScale = scaleCanvasChromeWorldSizeForZoom(1, currentViewport.zoom, inProgressOutlineZoomScaling)
+        const headOutset = (inProgressOutlineAnimation.gap + inProgressOutlineAnimation.snakeWidth / 2) * strokeScale
+        return getRoundedOutlinePerimeter(width + headOutset * 2, height + headOutset * 2, radius + headOutset)
+    }
+
+    function getPreFrameCircleDurationMs(
+        node: CanvasNode,
+        circleGeometry: { width: number; height: number; radius: number }
+    ): number | undefined {
+        const nodeRadius = getGeneratingBorderRadius(node, node.dimensions.width, node.dimensions.height)
+        const nodePerimeter = getGeneratingOutlinePathPerimeter(node.dimensions.width, node.dimensions.height, nodeRadius)
+        const circlePerimeter = getGeneratingOutlinePathPerimeter(circleGeometry.width, circleGeometry.height, circleGeometry.radius)
+        if (nodePerimeter <= 0 || circlePerimeter <= 0) return undefined
+        return inProgressOutlineAnimation.animationDurationMs * (circlePerimeter / nodePerimeter)
+    }
+
+    function getPreFrameCircleSnakeLengthFraction(
+        node: CanvasNode,
+        circleGeometry: { width: number; height: number; radius: number }
+    ): number | undefined {
+        const nodeRadius = getGeneratingBorderRadius(node, node.dimensions.width, node.dimensions.height)
+        const nodePerimeter = getGeneratingOutlinePathPerimeter(node.dimensions.width, node.dimensions.height, nodeRadius)
+        const circlePerimeter = getGeneratingOutlinePathPerimeter(circleGeometry.width, circleGeometry.height, circleGeometry.radius)
+        if (nodePerimeter <= 0 || circlePerimeter <= 0) return undefined
+        return Math.min(0.98, inProgressOutlineAnimation.snakeLengthFraction * (nodePerimeter / circlePerimeter))
+    }
+
     function syncSpriteMask(entry: PixiImageEntry, x: number, y: number, width: number, height: number): void {
-        const radius = getImageBorderRadius(width, height)
+        const radius = getMediaNodeBorderRadius(width, height)
         entry.spriteMask.position.set(x, y)
         if (width === entry.spriteMaskW && height === entry.spriteMaskH && radius === entry.spriteMaskRadius) return
 
@@ -593,34 +674,66 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
     function drawColorRect(rect: Graphics, width: number, height: number): void {
         rect.clear()
-        rect.roundRect(0, 0, width, height, getImageBorderRadius(width, height))
+        rect.roundRect(0, 0, width, height, getMediaNodeBorderRadius(width, height))
         rect.fill({ color: 0xe7eaee, alpha: 0.85 })
     }
 
     function syncGeneratingImageBorders(): void {
         const datums: PixiTravelingOutlineDatum[] = []
         const nodesById = lastState ? buildNodesById(lastState.nodes) : new Map()
-        for (const nodeId of generatingImageNodeIds) {
+        for (const [nodeId, outline] of generatingImageNodeOutlines) {
             const node = nodesById.get(nodeId)
             if (!node) continue
             const worldPosition = computeWorldPosition(node, nodesById)
-            datums.push({
+            const geometry = outline.shape === 'preFrameCircle'
+                ? getPreFrameCircleGeometry(worldPosition, node.dimensions)
+                : {
+                    x: worldPosition.x,
+                    y: worldPosition.y,
+                    width: node.dimensions.width,
+                    height: node.dimensions.height,
+                    radius: getGeneratingBorderRadius(node, node.dimensions.width, node.dimensions.height),
+                }
+            const datum: PixiTravelingOutlineDatum = {
                 id: nodeId,
-                x: worldPosition.x,
-                y: worldPosition.y,
-                width: node.dimensions.width,
-                height: node.dimensions.height,
+                x: geometry.x,
+                y: geometry.y,
+                width: geometry.width,
+                height: geometry.height,
+                radius: geometry.radius,
                 visible: true,
-            })
+            }
+            if (outline.direction) datum.direction = outline.direction
+            datum.durationMs = outline.shape === 'preFrameCircle'
+                ? getPreFrameCircleDurationMs(node, geometry)
+                : undefined
+            datum.snakeLengthFraction = outline.shape === 'preFrameCircle'
+                ? getPreFrameCircleSnakeLengthFraction(node, geometry)
+                : undefined
+            datums.push(datum)
         }
         generatingBorderRenderer.sync(datums)
     }
 
-    function setGeneratingImageNodes(nodeIds: Set<string>): void {
-        generatingImageNodeIds = new Set(nodeIds)
+    function setGeneratingImageNodes(nodeIds: Set<string>): void
+    function setGeneratingImageNodes(nodeIds: Map<string, GeneratingMediaOutlineTarget>): void
+    function setGeneratingImageNodes(nodeIds: GeneratingMediaOutlineTargets): void {
+        generatingImageNodeOutlines = nodeIds instanceof Map
+            ? new Map(Array.from(nodeIds, ([nodeId, target]) => [nodeId, normalizeGeneratingOutlineTarget(target)]))
+            : new Map(Array.from(nodeIds, (nodeId): [string, GeneratingMediaOutlineOptions] => [nodeId, {}]))
         if (destroyed || health !== 'ready') return
         syncGeneratingImageBorders()
         scheduleRender()
+    }
+
+    function normalizeGeneratingOutlineTarget(target: GeneratingMediaOutlineTarget): GeneratingMediaOutlineOptions {
+        if (!target) return {}
+        if (typeof target === 'string') return { direction: target }
+        return target
+    }
+
+    function isPreFrameCircleGeneratingNode(nodeId: string): boolean {
+        return generatingImageNodeOutlines.get(nodeId)?.shape === 'preFrameCircle'
     }
 
     // Idempotent texture-quality guarantor. Ensures the entry has at least
@@ -633,11 +746,12 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     //      progressively load `thumb-256` first for instant visual feedback,
     //      then schedule a background upgrade to the desired tier in idle time.
     function ensureTextureForEntry(entry: PixiImageEntry, desiredTier: LodTier): void {
+        const isPreFrameCircle = isPreFrameCircleGeneratingNode(entry.nodeRef.nodeId)
         if (desiredTier === 'color') {
             // Extreme zoom-out: tinted rectangle suffices. Keep any existing
             // texture cached on the sprite for when the user zooms back in.
             entry.sprite.visible = entry.loadedTier !== null
-            entry.colorRect.visible = entry.loadedTier === null
+            entry.colorRect.visible = entry.loadedTier === null && !isPreFrameCircle
             return
         }
 
@@ -646,7 +760,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         // is exactly what made zoom-out feel sluggish.
         if (entry.loadedTier !== null && tierRank(entry.loadedTier) >= tierRank(desiredTier)) {
             entry.sprite.visible = true
-                            syncSpriteMask(entry, entry.worldRect.minX, entry.worldRect.minY, entry.nodeRef.dimensions.width, entry.nodeRef.dimensions.height)
+            syncSpriteMask(entry, entry.worldRect.minX, entry.worldRect.minY, entry.nodeRef.dimensions.width, entry.nodeRef.dimensions.height)
             entry.colorRect.visible = false
             return
         }
@@ -679,7 +793,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const hasTexture = entry.textureKey !== null
         if (!hasTexture) {
             entry.sprite.visible = false
-            entry.colorRect.visible = true
+            entry.colorRect.visible = !isPreFrameCircle
         }
 
         const node = entry.nodeRef
@@ -732,7 +846,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     entry.requestedTier = null
                     if (!hasTexture) {
                         entry.sprite.visible = false
-                        entry.colorRect.visible = true
+                        entry.colorRect.visible = !isPreFrameCircle
                     }
                     scheduleRender()
                 }
@@ -874,12 +988,13 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         const tier = currentTier
         for (const [nodeId, entry] of entries) {
             const isVisible = visibleNodeIds.has(nodeId)
+            const shouldRenderColorRect = isVisible && !isPreFrameCircleGeneratingNode(nodeId)
             if (isVisible !== entry.isVisible) {
                 entry.sprite.renderable = isVisible
-                entry.colorRect.renderable = isVisible
                 generatingBorderRenderer.setVisible(nodeId, isVisible)
                 entry.isVisible = isVisible
             }
+            entry.colorRect.renderable = shouldRenderColorRect
             // Only fetch/upload textures for sprites that are actually on
             // screen. Non-visible entries that may have a stale tier will
             // refresh lazily once they enter the viewport.
@@ -1010,7 +1125,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             visibilityRaf = null
         }
         generatingBorderRenderer.destroy()
-        generatingImageNodeIds.clear()
+        generatingImageNodeOutlines.clear()
         mediaNodeRegistry.destroy()
         registryDispatchedNodes.clear()
         for (const [, entry] of entries) {

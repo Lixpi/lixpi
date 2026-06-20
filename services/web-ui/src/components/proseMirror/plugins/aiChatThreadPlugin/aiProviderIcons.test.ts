@@ -3,9 +3,16 @@ import {
     claudeIcon,
     geminiIcon,
     gptAvatarIcon,
+    geminiColorIcon,
+    stabilityIcon,
     bytedanceIcon,
 } from '$src/svgIcons/index.ts'
-import { getAiModelIcon, getAiProviderClassSuffix, getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
+import {
+    getAiModelIcon,
+    getAiProviderClassSuffix,
+    getAiProviderIcon,
+    getAiProviderColorIcon,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 
 describe('getAiModelIcon', () => {
     it('resolves known model icon names to SVG strings', () => {
@@ -36,11 +43,21 @@ describe('getAiProviderIcon', () => {
     })
 })
 
+describe('getAiProviderColorIcon', () => {
+    it('returns the color variant for google and falls back to monochrome provider icon otherwise', () => {
+        expect(getAiProviderColorIcon('google')).toBe(geminiColorIcon)
+        expect(getAiProviderColorIcon('google')).not.toBe(getAiProviderIcon('google'))
+        expect(getAiProviderColorIcon('Stability')).toBe(stabilityIcon)
+        expect(getAiProviderColorIcon('openai')).toBe(gptAvatarIcon)
+    })
+})
+
 describe('getAiProviderClassSuffix', () => {
     it('normalizes providers into deterministic class suffixes', () => {
         expect(getAiProviderClassSuffix('OpenAI')).toBe('openai')
         expect(getAiProviderClassSuffix('Some Model Provider')).toBe('some-model-provider')
         expect(getAiProviderClassSuffix('co@mp/lex')).toBe('co-mp-lex')
+        expect(getAiProviderClassSuffix('Weird!Name++')).toBe('weird-name-')
         expect(getAiProviderClassSuffix(null)).toBe('unknown')
     })
 })

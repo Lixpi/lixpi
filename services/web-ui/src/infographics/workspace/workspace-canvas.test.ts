@@ -249,7 +249,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 	})
 
 	it('.workspace-image-node base uses the theme-configured default box-shadow', () => {
-		expect(imageNodeBlock).toMatch(/^\s*box-shadow:\s*var\(--workspace-image-default-box-shadow\);/m)
+		expect(imageNodeBlock).toMatch(/^\s*box-shadow:\s*var\(--workspace-media-node-default-box-shadow\);/m)
 	})
 
 	it('keeps generated media model chrome free of badge and button shadows', () => {
@@ -262,7 +262,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 	it('uses a theme-configured shadow for selected image nodes', () => {
 		const selectedBlock = extractBlockContainingSelector(imageNodeBlock, '&.is-selected')
-		expectExcerptToContain(selectedBlock, 'box-shadow: var(--workspace-image-selected-box-shadow)', 'selected image selector block')
+		expectExcerptToContain(selectedBlock, 'box-shadow: var(--workspace-media-node-selected-box-shadow)', 'selected image selector block')
 		expectExcerptNotToContain(selectedBlock, 'outline:', 'selected image selector block')
 	})
 
@@ -376,11 +376,12 @@ describe('PIXI media layer — first sync geometry', () => {
 
 	it('clips PIXI image sprites with the configured image border radius', () => {
 		expectSourceToContain(ts, "import { settings } from '$src/settings.ts'")
-		expectSourceToContain(ts, 'settings.mediaNode.image.styles.borderRadius')
+		expectSourceToContain(ts, 'settings.mediaNode.styles.borderRadius')
+		expectSourceToContain(ts, 'function getMediaNodeBorderRadius(width: number, height: number): number')
 		expectSourceToContain(ts, 'sprite.mask = spriteMask')
 		expectSourceToContain(ts, 'function syncSpriteMask(entry: PixiImageEntry')
 		expectSourceToContain(ts, 'entry.spriteMask.roundRect(0, 0, width, height, radius)')
-		expectSourceToContain(ts, 'rect.roundRect(0, 0, width, height, getImageBorderRadius(width, height))')
+		expectSourceToContain(ts, 'entry.spriteMask.fill({ color: 0xffffff, alpha: 1 })')
 	})
 
 	it('supports optional fill for selection overlays', () => {
@@ -391,16 +392,17 @@ describe('PIXI media layer — first sync geometry', () => {
 		expectSourceToContain(ts, 'groupOverlayGraphics.stroke({ color: selectionColors.groupOverlayStroke')
 	})
 
-	it('reads generation-border colors from style tokens while keeping geometry tokens separate', () => {
-		expectSourceToContain(ts, 'const generationBorder = settings.mediaNode.generationBorder')
-		expectSourceToContain(ts, 'const generationBorderStyles = generationBorder.styles')
-		expectSourceToContain(ts, 'radius: generationBorder.radius')
-		expectSourceToContain(ts, 'trackWidth: generationBorder.trackWidth')
-		expectSourceToContain(ts, 'trackColor: generationBorderStyles.trackColor')
-		expectSourceToContain(ts, 'trackAlpha: generationBorderStyles.trackAlpha')
-		expectSourceToContain(ts, 'segmentTailAlpha: generationBorderStyles.snakeTailAlpha')
-		expectSourceToContain(ts, 'segmentColors: generationBorderStyles.snakeColors')
-		expectSourceNotToContain(ts, 'trackColor: generationBorder.trackColor')
+	it('reads in-progress outline animation tokens from geometry and style layers separately', () => {
+		expectSourceToContain(ts, 'const inProgressOutlineAnimation = settings.mediaNode.inProgressOutlineAnimation')
+		expectSourceToContain(ts, 'const inProgressOutlineAnimationStyles = inProgressOutlineAnimation.styles')
+		expectSourceToContain(ts, 'radius: inProgressOutlineAnimation.radius')
+		expectSourceToContain(ts, 'gap: inProgressOutlineAnimation.gap ?? 0')
+		expectSourceToContain(ts, 'snakeHeadWidth: inProgressOutlineAnimation.snakeWidth')
+		expectSourceToContain(ts, 'snakeTailWidthFraction: inProgressOutlineAnimation.snakeTailWidthFraction ?? 0.18')
+		expectSourceToContain(ts, 'snakeTailAlpha: inProgressOutlineAnimationStyles.snakeTailAlpha')
+		expectSourceToContain(ts, 'snakeColors: inProgressOutlineAnimationStyles.snakeColors')
+		expectSourceToContain(ts, 'glassMaterial: inProgressOutlineAnimationStyles.glassMaterial')
+		expectSourceNotToContain(ts, 'trackColor: generationBorderStyles.trackColor')
 		expectSourceNotToContain(ts, 'segmentColors: generationBorder.snakeColors')
 	})
 })
@@ -441,17 +443,20 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(outlineRendererTs, 'export class PixiTravelingOutlineRenderer {')
 		expectSourceToContain(pixiLayerTs, 'new PixiTravelingOutlineRenderer({')
 		expectSourceToContain(pixiLayerTs, 'generatingBorderRenderer.sync(datums)')
-		expectSourceToContain(outlineRendererTs, "graphics.label = 'pixi-traveling-outline'")
+		expectSourceToContain(outlineRendererTs, "mesh.label = 'pixi-traveling-outline-glass'")
 		expectSourceToContain(outlineRendererTs, 'private paint(entry: OutlineEntry, elapsed: number)')
-		expectSourceToContain(outlineRendererTs, 'getTravelingOutlineHeadDistance(elapsed, this.style.durationMs, perimeter, this.ease)')
-		expectSourceToContain(outlineRendererTs, 'graphics.roundRect(0, 0, width, height, this.style.radius)')
-		expectSourceToContain(outlineRendererTs, 'interpolateTravelingOutlineColor(this.style.segmentColors, headProgress)')
+		expectSourceToContain(outlineRendererTs, 'const headDistance = getTravelingOutlineHeadDistance(elapsed, durationMs, perimeter, this.ease)')
+		expectSourceToContain(outlineRendererTs, 'new MeshGeometry()')
+		expectSourceToContain(outlineRendererTs, 'new Mesh({ geometry, texture: this.texture })')
+		expectSourceToContain(outlineRendererTs, 'createTravelingSnakeTexture(this.style.snakeColors, this.style.snakeTailAlpha, this.style.glassMaterial)')
 		expectSourceToContain(outlineRendererTs, 'this.ease = options.ease ?? Easing.travelingOutlineTransition')
 		expectSourceToContain(pixiLayerTs, 'function setGeneratingImageNodes(nodeIds: Set<string>)')
-		expectSourceToContain(settingsTs, 'trackWidth: 3')
-		expectSourceToContain(settingsTs, 'snakeWidth: 4')
+		expectSourceToContain(settingsTs, 'gap: 3')
+		expectSourceToContain(settingsTs, 'preFrameCircleScale: 1.3 / 3')
+		expectSourceToContain(settingsTs, 'snakeWidth: 9')
+		expectSourceToContain(settingsTs, 'snakeTailWidthFraction: 0.14')
 		expectSourceToContain(settingsTs, 'snakeLengthFraction: 0.24')
-		expectSourceToContain(settingsTs, "snakeColors: ['#1D57CB', '#2474FF', '#7C4DFF', '#D63FF0', '#FF9933']")
+		expectSourceToContain(settingsTs, "'#ff0084'")
 		expectSourceToContain(settingsTs, 'animationDurationMs: 3200')
 		expectSourceNotToContain(ts, 'SvgGradientRenderer')
 		expectSourceNotToContain(ts, 'image-generating-border')
@@ -1758,8 +1763,13 @@ describe('Vertical rail — TS infrastructure', () => {
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
 		expectSourceToContain(ts, ': rememberStandaloneGeneratedImagePlacement(panelThreadId, messages, hasMediaModel)')
 		expectSourceToContain(ts, 'const placementNode = getGeneratedMediaPlacementNode(threadId, generationRun)')
-		expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode')
-		expectSourceToContain(ts, 'partialImageTracker.set(runKey, { nodeId, fileId: fileId || \'\', placementKey, ...(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}) })')
+			expectSourceToContain(ts, 'const edgeSourceNode = getGeneratedMediaEdgeSourceNode(threadId, generationRun) ?? branchOriginNode')
+		expectSourceToContain(ts, 'partialImageTracker.set(runKey, {')
+		expectSourceToContain(ts, 'nodeId,')
+		expectSourceToContain(ts, 'fileId: fileId || \'\',')
+		expectSourceToContain(ts, 'placementKey,')
+		expectSourceToContain(ts, 'hasReceivedFrame: Boolean(imageUrl),')
+		expectSourceToContain(ts, '(edgeSourceNode ? { sourceNodeId: edgeSourceNode.nodeId } : {}),')
 		expectSourceToContain(ts, 'updatePendingGeneratedImageReferencesFromWorkspaceContext(threadId, resolution, generationRun)')
 		expectSourceToContain(ts, 'placementAnchorNodeId: placement.placementAnchorNodeId ?? referenceNodeIds[0]')
 		expectSourceToContain(ts, 'branchId: resolution.branchId ?? placement.branchId')
@@ -2080,11 +2090,11 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('wires image settings to CSS custom properties', () => {
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-default-box-shadow', imageNodeStyles.defaultBoxShadow)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-selected-box-shadow', imageNodeStyles.selectedBoxShadow)")
-			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-image-border-radius', `${imageNodeStyles.borderRadius}px`)")
-			expectSourceNotToContain(ts, "paneEl.style.setProperty('--workspace-media-model-badge-box-shadow', imageNodeStyles.modelBadgeBoxShadow)")
-			expect(scss).toMatch(/border-radius:\s*var\(--workspace-image-border-radius\)/)
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-media-node-default-box-shadow', mediaNodeStyles.defaultBoxShadow)")
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-media-node-selected-box-shadow', mediaNodeStyles.selectedBoxShadow)")
+			expectSourceToContain(ts, "paneEl.style.setProperty('--workspace-media-node-border-radius', `${mediaNodeStyles.borderRadius}px`)")
+			expectSourceNotToContain(ts, "paneEl.style.setProperty('--workspace-media-model-badge-box-shadow', mediaNodeStyles.modelBadgeBoxShadow)")
+			expect(scss).toMatch(/border-radius:\s*var\(--workspace-media-node-border-radius\)/)
 	})
 
 	it('wires resize handles through configured bounded zoom scaling', () => {
@@ -2731,7 +2741,7 @@ describe('video generation — canvas + plugin source shape', () => {
 		// plus selected/reference media before the first variant arrives.
 		// Regression-guards both the merged id set and unified canvas-state bounds.
 		const pixiLayerTs = loadPixiMediaLayer()
-		expectSourceToContain(ts, 'function syncPixiGeneratingImageNodes()')
+		expectSourceToContain(ts, 'function syncPixiGeneratingImageNodes(canvasState: CanvasState | null = currentCanvasState): void')
 		expectSourceToContain(ts, 'for (const partial of partialImageTracker.values())')
 		expectSourceToContain(ts, 'for (const pending of videoGenerationTracker.values())')
 		expectSourceToContain(ts, 'for (const referenceNodeIds of generatingReferenceNodeIdsByThread.values())')

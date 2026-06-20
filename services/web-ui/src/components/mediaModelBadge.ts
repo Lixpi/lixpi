@@ -1,6 +1,6 @@
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { getAiModelIcon, getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
+import { getAiModelIcon, getAiProviderColorIcon, getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 import { html } from '$src/utils/domTemplates.ts'
 
 type MediaModelCatalogEntry = {
@@ -14,6 +14,7 @@ type MediaModelCatalogEntry = {
 export type MediaModelBadgeConfig = {
     modelId?: string | null
     modelProvider?: string | null
+    iconOnly?: boolean
 }
 
 export type MediaModelBadgeStyleOptions = {
@@ -83,7 +84,11 @@ export function getMediaModelBadgeMeta(config: MediaModelBadgeConfig): MediaMode
     const label = providerTitle && modelTitle
         ? `${providerTitle}${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}${modelTitle}`
         : providerTitle || modelTitle
-    const icon = getAiModelIcon(modelMeta?.colorIconName) ?? getAiProviderIcon(providerTitle) ?? getAiProviderIcon(providerKey)
+    const icon = getAiModelIcon(modelMeta?.colorIconName)
+        ?? getAiProviderColorIcon(providerTitle)
+        ?? getAiProviderColorIcon(providerKey)
+        ?? getAiProviderIcon(providerTitle)
+        ?? getAiProviderIcon(providerKey)
 
     return {
         providerTitle,
@@ -95,16 +100,17 @@ export function getMediaModelBadgeMeta(config: MediaModelBadgeConfig): MediaMode
 
 export function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElement | null {
     const { providerTitle, modelTitle, icon, label } = getMediaModelBadgeMeta(config)
-    if (!icon && !label) return null
+    const visibleLabel = config.iconOnly ? '' : label
+    if (!icon && !visibleLabel) return null
 
     const separator = providerTitle && modelTitle
         ? settings.mediaNode.generatedMediaChrome.modelBadgeSeparator
         : ''
 
     return html`
-        <div className="media-model-badge" title=${label}>
+        <div className=${`media-model-badge${config.iconOnly ? ' media-model-badge-icon-only' : ''}`} title=${label}>
             ${icon ? html`<span className="media-model-badge-icon" innerHTML=${icon}></span>` : null}
-            ${label ? html`<span className="media-model-badge-name">${
+            ${visibleLabel ? html`<span className="media-model-badge-name">${
                 providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null
             }${separator}${
                 modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null

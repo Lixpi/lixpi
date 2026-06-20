@@ -41,6 +41,15 @@ export function getAiProviderIcon(provider: string | null | undefined): string |
     }
 }
 
+export function getAiProviderColorIcon(provider: string | null | undefined): string | null {
+    switch (String(provider ?? '').trim().toLowerCase()) {
+        case 'google':
+            return geminiColorIcon
+        default:
+            return getAiProviderIcon(provider)
+    }
+}
+
 export function getAiProviderClassSuffix(provider: string | null | undefined): string {
     return (provider || 'unknown').toLowerCase().replace(/[^a-z0-9-]+/g, '-')
 }

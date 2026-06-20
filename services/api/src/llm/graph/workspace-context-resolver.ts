@@ -619,6 +619,34 @@ const buildCandidateFromWorkspaceNode = (
     }
 }
 
+// Rebuild the branch-resolver transcript after workspace relevance has narrowed
+// the media set. The browser snapshot's original transcriptContext can mention
+// candidates that were just filtered out, and those stale nodeIds make the VLM
+// produce decisions for images it can no longer see. This keeps the textual
+// labels and attached candidate images aligned.
+const buildNarrowedTranscriptContext = (
+    candidates: ImageBranchCandidateImage[],
+    promptText: string,
+    activeTargetNodeId: string | undefined,
+): string => {
+    const candidateLines = candidates.map((candidate) => [
+        `nodeId=${candidate.nodeId}`,
+        `kind=${candidate.mediaKind ?? 'image'}`,
+        `roles=${candidate.roleHints.join(',')}`,
+        candidate.branchId ? `branchId=${candidate.branchId}` : undefined,
+        candidate.visualEntitySummary ? `visualEntity=${candidate.visualEntitySummary}` : undefined,
+        candidate.visualStyleSummary ? `visualStyle=${candidate.visualStyleSummary}` : undefined,
+        candidate.promptText ? `promptText=${candidate.promptText.slice(0, 800)}` : undefined,
+    ].filter(Boolean).join(' | '))
+
+    return [
+        `Current user prompt: ${promptText}`,
+        activeTargetNodeId ? `Active target nodeId: ${activeTargetNodeId}` : undefined,
+        'Candidate media labels:',
+        ...candidateLines,
+    ].filter((line): line is string => typeof line === 'string').join('\n')
+}
+
 const buildNarrowedImageBranchSnapshot = (
     state: ProviderState,
     resolution: WorkspaceContextResolution,
@@ -640,6 +668,11 @@ const buildNarrowedImageBranchSnapshot = (
             candidates.push(existing)
             continue
         }
+        // When a browser-built branch snapshot already exists, only explicit
+        // chips and edge-forced media are allowed to expand it. Plain automatic
+        // workspace-relevance picks are descriptor-selected context, not visual
+        // branch candidates, so adding them here would let unrelated workspace
+        // media leak into the branch VLM.
         if (existingSnapshot && selection.role !== 'forced-chip' && selection.role !== 'forced-edge') continue
         const node = nodeById.get(selection.nodeId)
         const candidate = node ? buildCandidateFromWorkspaceNode(node, state.workspaceId) : undefined
@@ -651,16 +684,17 @@ const buildNarrowedImageBranchSnapshot = (
     const activeTargetNodeId = existingSnapshot?.activeTargetNodeId && candidates.some((candidate) => candidate.nodeId === existingSnapshot.activeTargetNodeId)
         ? existingSnapshot.activeTargetNodeId
         : undefined
+    const promptText = existingSnapshot?.promptText ?? snapshot.promptText
 
     return {
         resolverVersion: existingSnapshot?.resolverVersion ?? snapshot.resolverVersion,
         threadId: existingSnapshot?.threadId ?? snapshot.threadId,
         regionNodeId: existingSnapshot?.regionNodeId ?? snapshot.threadId,
         ...(activeTargetNodeId ? { activeTargetNodeId } : {}),
-        promptText: existingSnapshot?.promptText ?? snapshot.promptText,
+        promptText,
         promptFingerprint: existingSnapshot?.promptFingerprint ?? `workspace-context:${snapshot.threadId}:${snapshot.promptText}:${selectedMediaSelections.map((selection) => selection.nodeId).join(',')}`,
         candidates,
-        transcriptContext: existingSnapshot?.transcriptContext ?? 'Workspace context selected media candidates.',
+        transcriptContext: buildNarrowedTranscriptContext(candidates, promptText, activeTargetNodeId),
     }
 }
 
