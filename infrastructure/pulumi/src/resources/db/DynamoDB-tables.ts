@@ -53,6 +53,12 @@ export const getTableDefinitions = () => [
             { name: 'createdAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
             { name: 'updatedAt', rangeKey: 'createdAt', projectionType: 'ALL' as const },
         ],
+        // Reverse lookup "members of an organization" (base key is per-user, so it
+        // can't answer that). Used by the billing allowance projection's
+        // Organization.getOrganizationMembers (query indexName: 'organizationId').
+        globalSecondaryIndexes: [
+            { name: 'organizationId', hashKey: 'organizationId', projectionType: 'ALL' as const },
+        ],
     },
     {
         name: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
