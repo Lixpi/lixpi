@@ -416,6 +416,7 @@ export type ImageBranchLineageSettings = {
             borderColor: string
             iconColor: string
             boxShadow: string
+            separatorGradient: string
         }
     }
 }
@@ -1017,7 +1018,7 @@ export const settings: Settings = {
         branchFanoutDepthGap: 96,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
-            // Canvas-unit height for branch lineage markers; width is derived in WorkspaceCanvas.
+            // Canvas-unit base size for branch lineage markers; final width and height are derived in WorkspaceCanvas.
             size: 96,
             // Canvas-unit base size for the branch icon inside marker labels.
             iconSize: 52,
@@ -1026,6 +1027,7 @@ export const settings: Settings = {
                 borderColor: colorPalette.steelBlue,
                 iconColor: colorPalette.offWhite,
                 boxShadow: '0 8px 24px rgba(42, 48, 57, 0.22)',
+                separatorGradient: 'linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 10%, rgba(255, 255, 255, 0.34) 26%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0.34) 74%, rgba(255, 255, 255, 0.18) 90%, rgba(255, 255, 255, 0) 100%)',
             },
         },
     },

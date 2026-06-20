@@ -464,7 +464,7 @@ On every generated-media add/remove the affected tree is laid out deterministica
 
 - [`utils/layoutTree.ts`](../../services/web-ui/src/infographics/utils/layoutTree.ts) is a pure, geometry-agnostic block-allocation **tidy-tree** algorithm (left-to-right). The root keeps its anchor; children fan out symmetrically around the parent's vertical center; linear chains stay collinear; branching parents add horizontal fanout gap before their child column; sibling subtrees occupy disjoint vertical bands, so the layout is provably overlap-free.
 - [`workspace/branchTreeLayout.ts`](../../services/web-ui/src/infographics/workspace/branchTreeLayout.ts) builds the generated-media forest from canvas nodes + lineage edges, runs the tidy layout per tree, then feeds **one rigid bounding box per tree** (plus one box per loose node) into the **unchanged** `resolveCollisions`. A pushed tree translates as a single block, so it never loses its internal balance because an unrelated node moved nearby.
-- Depth spacing starts with `settings.imageBranchLineage.imageToImageGap`, then adds `branchFanoutDepthGap` for every child after the first when a parent forks; sibling spacing reuses `branchToBranchGap`. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked children back onto the old predecessor center line.
+- Depth spacing starts with `settings.imageBranchLineage.imageToImageGap`, except the first segment from a temporary `branchOrigin` marker uses half that gap. Branches then add `branchFanoutDepthGap` for every child after the first when a parent forks; sibling spacing reuses `branchToBranchGap`. Final image/video aspect-ratio updates preserve the node center and re-run the branch-tree layout, so a resolved frame cannot collapse forked children back onto the old predecessor center line.
 
 ### What Counts as a Branch Tree
 
@@ -503,13 +503,13 @@ export type LayoutTreeResult = {
 }
 ```
 
-The workspace adapter supplies `depthGap` from `settings.imageBranchLineage.imageToImageGap`, `siblingGap` from `branchToBranchGap`, and `branchFanoutDepthGap` from the same settings group. The pure utility never reads settings, canvas nodes, Svelte state, PIXI state, or `branchId`.
+The workspace adapter supplies `depthGap` from `settings.imageBranchLineage.imageToImageGap`, `branchOriginDepthGap` as half that value for the temporary origin marker's first segment, `siblingGap` from `branchToBranchGap`, and `branchFanoutDepthGap` from the same settings group. The pure utility never reads settings, canvas nodes, Svelte state, PIXI state, or `branchId`.
 
 ### Algorithm
 
 The layout is a left-to-right block-allocation tidy tree:
 
-- **X by depth and fanout:** `x(child) = x(parent) + width(parent) + depthGap + branchFanoutDepthGap * max(0, childCount(parent) - 1)`. A linear chain gets the base gap. A two-child fork gets extra curve room. A large fork pushes the whole child column and its descendants farther right during the same deterministic rebalance.
+- **X by depth and fanout:** `x(child) = x(parent) + width(parent) + depthGap + branchFanoutDepthGap * max(0, childCount(parent) - 1)`. A child of a temporary `branchOrigin` uses `branchOriginDepthGap` for that first segment, then the whole descendant subtree keeps the normal downstream depth spacing. A two-child fork gets extra curve room. A large fork pushes the whole child column and its descendants farther right during the same deterministic rebalance.
 - **Y by subtree bands:** each subtree reserves a vertical band equal to the larger of its own height and its stacked child bands plus sibling gaps. Children are stacked into disjoint bands, and the parent center is placed at the midpoint between the first and last child centers. Single-child nodes inherit the child's center, so chains stay perfectly horizontal.
 
 This is deliberately simpler than full Walker/Buchheim contour merging. The canvas is infinite, generated-media nodes are large, and the configured gaps are generous, so tighter contour packing is not worth the extra complexity right now. The module boundary can still support a future contour implementation because callers only depend on `TreeLayoutNode[] -> positions`.

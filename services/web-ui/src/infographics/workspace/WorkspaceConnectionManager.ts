@@ -250,12 +250,15 @@ function computeTFromPointerPosition(
 	return t
 }
 
-// Image AND video nodes always anchor edges to the middle of their side — no
-// pointer/source-Y projection or fan-out spreading — so a connector meets the
-// node cleanly at the centre of its left/right edge. (AI chat threads and
-// documents still auto-align so stacked branches don't overlap.)
+function isBranchLineageMarkerNode(node: CanvasNode | undefined): boolean {
+	return node?.type === 'branchOrigin' || node?.type === 'branchFork' || node?.type === 'branchLine'
+}
+
+// Media nodes and branch lineage markers always anchor edges to the middle of
+// their side. Chat threads and documents still auto-align so stacked branches
+// do not overlap.
 function isMidSideAnchorNode(node: CanvasNode | undefined): boolean {
-	return node?.type === 'image' || node?.type === 'video'
+	return node?.type === 'image' || node?.type === 'video' || isBranchLineageMarkerNode(node)
 }
 
 function resolveEdgeAnchorT(node: CanvasNode | undefined, t: number | undefined): number {

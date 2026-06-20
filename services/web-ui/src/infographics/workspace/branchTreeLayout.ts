@@ -44,6 +44,7 @@ export type BranchTree = {
 
 export type BranchTreeLayoutOptions = {
     depthGap: number                  // LR horizontal gap — imageBranchLineage.imageToImageGap
+    branchOriginDepthGap?: number     // LR horizontal gap from a branchOrigin marker to its first generated child
     siblingGap: number                // LR vertical gap — imageBranchLineage.branchToBranchGap
     branchFanoutDepthGap?: number     // LR extra depth gap for each child after the first
     collisionMargin?: number          // resolver breathing room; defaults to the resolver's own 20
@@ -251,8 +252,15 @@ export function applyBranchTreeLayout(
         const rootNode = nodesById.get(tree.rootId)
         if (!rootNode) continue
         const anchor = computeWorldPosition(rootNode, nodesById)
+        const rootIsBranchOrigin = rootNode.type === 'branchOrigin'
+        const originDepthAdjustment = rootIsBranchOrigin
+            ? Math.max(0, options.depthGap - (options.branchOriginDepthGap ?? options.depthGap))
+            : 0
         for (const [id, relative] of result.positions) {
-            nextPositionById.set(id, { x: anchor.x + relative.x, y: anchor.y + relative.y })
+            nextPositionById.set(id, {
+                x: anchor.x + relative.x - (id === tree.rootId ? 0 : originDepthAdjustment),
+                y: anchor.y + relative.y,
+            })
         }
     }
 

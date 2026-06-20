@@ -59,7 +59,7 @@ import {
     type ReadOnlyAiChatThreadRendererInstance,
 } from '$src/components/proseMirror/readOnlyAiChatThreadRenderer.ts'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
-import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, branchMidIcon, branchForkfIcon, branchLineIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, aiChatThreadRailBoundaryCircle, infoCircleFilledIcon, trashBinIcon, aiChatPanelToggleHistoryIcon, xCircleIcon, branchMidIcon, branchForkfIcon, branchLineIcon, promptIcon } from '$src/svgIcons/index.ts'
 import { type Document } from '$src/stores/documentStore.ts'
 import { createCanvasMediaNodeLifecycleTracker } from '$src/infographics/workspace/canvasMediaNodeLifecycle.ts'
 import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForState } from '$src/infographics/workspace/generatedMediaEventWorkspaceGuard.ts'
@@ -144,6 +144,7 @@ import {
     type ContextPreviewTileInstance,
 } from '$src/components/contextPreview/index.ts'
 import { applyMediaModelBadgeStyleProperties, createMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { getAiModelIcon, getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
@@ -167,16 +168,40 @@ type GeneratedMediaInfoPanelOptions = {
     limitProjectionToSelectedMedia?: boolean
     lineageProjectionScope?: AiLineageProjectionScope
 }
+type BranchMarkerModelDescriptor = {
+    modelId: string
+    modelProvider?: string
+}
+type BranchMarkerModelCatalogEntry = {
+    provider?: string
+    model?: string
+    title?: string
+    shortTitle?: string
+    iconName?: string
+}
+type BranchMarkerModelEntry = {
+    title: string
+    icon: string | null
+}
+type BranchMarkerModelDetail = {
+    label: string
+    entries: BranchMarkerModelEntry[]
+}
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const NODE_DRAG_START_THRESHOLD_PX = 6
 const AI_CHAT_DRAFT_TAB_PREFIX = 'draft:'
-const BRANCH_MARKER_WIDTH_MULTIPLIER = 2.75
-const BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS = 30
+const BRANCH_MARKER_WIDTH_MULTIPLIER = 3.2
+const BRANCH_MARKER_HEIGHT_MULTIPLIER = 1.35
+const BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS = 60
+const BRANCH_ORIGIN_OUTPUT_GAP_MULTIPLIER = 0.5
 
 function getBranchOriginNodeDimensions(): { width: number; height: number } {
     const size = settings.imageBranchLineage.branchOrigin.size
-    return { width: Math.round(size * BRANCH_MARKER_WIDTH_MULTIPLIER), height: size }
+    return {
+        width: Math.round(size * BRANCH_MARKER_WIDTH_MULTIPLIER),
+        height: Math.round(size * BRANCH_MARKER_HEIGHT_MULTIPLIER),
+    }
 }
 
 function getBranchForkNodeDimensions(): { width: number; height: number } {
@@ -185,6 +210,10 @@ function getBranchForkNodeDimensions(): { width: number; height: number } {
 
 function getBranchLineNodeDimensions(): { width: number; height: number } {
     return getBranchOriginNodeDimensions()
+}
+
+function getBranchOriginOutputGap(): number {
+    return settings.imageBranchLineage.imageToImageGap * BRANCH_ORIGIN_OUTPUT_GAP_MULTIPLIER
 }
 
 function getExpectedBranchMarkerDimensions(node: CanvasNode): { width: number; height: number } | undefined {
@@ -226,6 +255,70 @@ function getBranchMarkerPromptPreview(promptText: string): string {
     if (promptText.length <= BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS) return promptText
 
     return `${promptText.slice(0, BRANCH_MARKER_PROMPT_PREVIEW_MAX_CHARS)}...`
+}
+
+function normalizeBranchMarkerModelValue(value: string | null | undefined): string {
+    return String(value ?? '').trim().toLowerCase()
+}
+
+function splitBranchMarkerModelId(modelId: string): { provider: string; model: string } {
+    const separatorIndex = modelId.indexOf(':')
+    if (separatorIndex < 0) return { provider: '', model: modelId }
+    return {
+        provider: modelId.slice(0, separatorIndex),
+        model: modelId.slice(separatorIndex + 1),
+    }
+}
+
+function findBranchMarkerModelMeta(modelId: string, modelProvider: string): BranchMarkerModelCatalogEntry | null {
+    const { provider, model } = splitBranchMarkerModelId(modelId)
+    const normalizedProvider = normalizeBranchMarkerModelValue(provider || modelProvider)
+    const normalizedModel = normalizeBranchMarkerModelValue(model)
+    const normalizedModelId = normalizeBranchMarkerModelValue(modelId)
+    const models = (aiModelsStore.getData() ?? []) as BranchMarkerModelCatalogEntry[]
+
+    return models.find((candidate) => {
+        const candidateProvider = normalizeBranchMarkerModelValue(candidate.provider)
+        const candidateModel = normalizeBranchMarkerModelValue(candidate.model)
+        const candidateModelId = normalizeBranchMarkerModelValue(`${candidate.provider ?? ''}:${candidate.model ?? ''}`)
+
+        if (normalizedProvider) {
+            return candidateProvider === normalizedProvider && candidateModel === normalizedModel
+        }
+
+        return candidateModel === normalizedModel || candidateModelId === normalizedModelId
+    }) ?? null
+}
+
+function getBranchMarkerModelEntry(modelId: string, modelProvider = ''): BranchMarkerModelEntry | null {
+    if (!modelId) return null
+    const fallbackParts = splitBranchMarkerModelId(modelId)
+    const providerKey = modelProvider || fallbackParts.provider
+    const meta = findBranchMarkerModelMeta(modelId, providerKey)
+    const title = meta?.shortTitle ?? meta?.title ?? fallbackParts.model ?? modelId
+    const icon = getAiModelIcon(meta?.iconName)
+        ?? getAiProviderIcon(meta?.provider)
+        ?? getAiProviderIcon(providerKey)
+    return title ? { title, icon } : null
+}
+
+function uniqueBranchMarkerModelEntries(entries: BranchMarkerModelEntry[]): BranchMarkerModelEntry[] {
+    const seen = new Set<string>()
+    const uniqueEntries: BranchMarkerModelEntry[] = []
+    for (const entry of entries) {
+        const key = `${entry.title}:${entry.icon ?? ''}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        uniqueEntries.push(entry)
+    }
+    return uniqueEntries
+}
+
+function createBranchMarkerModelDetail(label: string, descriptors: BranchMarkerModelDescriptor[]): BranchMarkerModelDetail | null {
+    const entries = uniqueBranchMarkerModelEntries(descriptors
+        .map(descriptor => getBranchMarkerModelEntry(descriptor.modelId, descriptor.modelProvider ?? ''))
+        .filter((entry): entry is BranchMarkerModelEntry => Boolean(entry)))
+    return entries.length > 0 ? { label, entries } : null
 }
 
 function applyAiPromptInputStyleSettings(promptEl: HTMLElement): void {
@@ -398,6 +491,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     paneEl.style.setProperty('--workspace-branch-origin-border-color', branchOriginSettings.styles.borderColor)
     paneEl.style.setProperty('--workspace-branch-origin-icon-color', branchOriginSettings.styles.iconColor)
     paneEl.style.setProperty('--workspace-branch-origin-box-shadow', branchOriginSettings.styles.boxShadow)
+    paneEl.style.setProperty('--workspace-branch-marker-separator-gradient', branchOriginSettings.styles.separatorGradient)
 
     let currentCanvasState: CanvasState | null = options.canvasState
         ? normalizeBranchMarkerDimensions(options.canvasState)
@@ -2474,6 +2568,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function rebalanceGeneratedMediaTrees(nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[] {
         return rebalanceBranchTreesAndResolve(nodes, edges, {
             depthGap: settings.imageBranchLineage.imageToImageGap,
+            branchOriginDepthGap: getBranchOriginOutputGap(),
             siblingGap: settings.imageBranchLineage.branchToBranchGap,
             branchFanoutDepthGap: settings.imageBranchLineage.branchFanoutDepthGap,
         })
@@ -5203,7 +5298,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const referencePosition = getReferenceGroupGeneratedMediaPosition(threadId, mediaHeight, generationRun)
             ?? getCenteredInsertionPosition({ width: getGeneratedImageInsertionSize(), height: mediaHeight })
         const position = {
-            x: referencePosition.x - settings.imageBranchLineage.imageToImageGap - dimensions.width,
+            x: referencePosition.x - getBranchOriginOutputGap() - dimensions.width,
             y: referencePosition.y + (mediaHeight - dimensions.height) / 2,
         }
 
@@ -7868,6 +7963,80 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return nodeEl
     }
 
+    function getBranchMarkerGeneratedMediaNodes(node: BranchMarkerNode): Array<ImageCanvasNode | VideoCanvasNode> {
+        if (node.type === 'branchOrigin') return getBranchOriginGeneratedMediaNodes(node.nodeId)
+        if (node.type === 'branchFork') return getBranchForkGeneratedMediaNodes(node.nodeId)
+        return getBranchLineGeneratedMediaNodes(node.nodeId)
+    }
+
+    function getBranchMarkerReasoningModelDetail(node: BranchMarkerNode): BranchMarkerModelDetail | null {
+        const descriptors: BranchMarkerModelDescriptor[] = []
+        if (node.type === 'branchFork' || node.type === 'branchLine') {
+            if (node.reasoningModelId) descriptors.push({ modelId: node.reasoningModelId })
+            if (node.provenance?.reasoningModelId) descriptors.push({ modelId: node.provenance.reasoningModelId })
+        }
+        for (const mediaNode of getBranchMarkerGeneratedMediaNodes(node)) {
+            const reasoningModelId = mediaNode.generatedBy?.reasoningModelId
+            if (reasoningModelId) descriptors.push({ modelId: reasoningModelId })
+        }
+        return createBranchMarkerModelDetail('Reasoning', descriptors)
+    }
+
+    function getBranchMarkerDirectMediaModelDescriptor(node: BranchMarkerNode): BranchMarkerModelDescriptor | null {
+        if (node.type === 'branchLine' && node.mediaModelId) return { modelId: node.mediaModelId }
+        if (node.type === 'branchFork' && node.provenance?.mediaModelId) return { modelId: node.provenance.mediaModelId }
+        return null
+    }
+
+    function getBranchMarkerMediaModelDetails(node: BranchMarkerNode): BranchMarkerModelDetail[] {
+        const descriptorsByLabel = new Map<string, BranchMarkerModelDescriptor[]>()
+        const addDescriptor = (label: string, descriptor: BranchMarkerModelDescriptor | null): void => {
+            if (!descriptor?.modelId) return
+            descriptorsByLabel.set(label, [...(descriptorsByLabel.get(label) ?? []), descriptor])
+        }
+
+        if (node.type === 'branchLine' && node.mediaType) {
+            addDescriptor(node.mediaType === 'video' ? 'Video' : 'Image', getBranchMarkerDirectMediaModelDescriptor(node))
+        } else if (node.type === 'branchFork' && node.provenance?.mediaType) {
+            addDescriptor(node.provenance.mediaType === 'video' ? 'Video' : 'Image', getBranchMarkerDirectMediaModelDescriptor(node))
+        }
+
+        for (const mediaNode of getBranchMarkerGeneratedMediaNodes(node)) {
+            const modelId = getGeneratedMediaModelId(mediaNode)
+            const modelProvider = getGeneratedMediaModelProvider(mediaNode, modelId)
+            const mediaType = mediaNode.generatedBy?.mediaType ?? mediaNode.type
+            addDescriptor(mediaType === 'video' ? 'Video' : 'Image', { modelId, modelProvider })
+        }
+
+        return Array.from(descriptorsByLabel.entries())
+            .map(([label, descriptors]) => createBranchMarkerModelDetail(label, descriptors))
+            .filter((detail): detail is BranchMarkerModelDetail => Boolean(detail))
+    }
+
+    function getBranchMarkerModelDetails(node: BranchMarkerNode): BranchMarkerModelDetail[] {
+        return [
+            getBranchMarkerReasoningModelDetail(node),
+            ...getBranchMarkerMediaModelDetails(node),
+        ].filter((detail): detail is BranchMarkerModelDetail => Boolean(detail))
+    }
+
+    function getBranchMarkerModelSummary(details: BranchMarkerModelDetail[]): string {
+        return details
+            .map(detail => `${detail.label}: ${detail.entries.map(entry => entry.title).join(', ')}`)
+            .join(' · ')
+    }
+
+    function createBranchMarkerModelRow(detail: BranchMarkerModelDetail): HTMLDivElement {
+        const icon = detail.entries.find(entry => entry.icon)?.icon ?? null
+        const models = detail.entries.map(entry => entry.title).join(', ')
+        return html`
+            <div className="workspace-branch-marker-model-row">
+                ${icon ? html`<span className="workspace-branch-marker-model-icon" innerHTML=${icon}></span>` : null}
+                <span className="workspace-branch-marker-model-text">${detail.label}: ${models}</span>
+            </div>
+        ` as HTMLDivElement
+    }
+
     function createBranchMarkerContent({
         node,
         icon,
@@ -7881,17 +8050,83 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }): HTMLDivElement {
         const promptText = getBranchMarkerPromptText(node)
         const promptPreview = getBranchMarkerPromptPreview(promptText)
-        const accessibleLabel = `${label}: ${promptPreview}`
+        const modelDetails = getBranchMarkerModelDetails(node)
+        const modelSummary = getBranchMarkerModelSummary(modelDetails)
+        const accessibleLabel = [label, promptPreview, modelSummary].filter(Boolean).join(' · ')
+        const title = [promptText || promptPreview, modelSummary].filter(Boolean).join('\n')
         return html`
-            <div className="workspace-branch-marker-content" title=${promptText || promptPreview} aria-label=${accessibleLabel}>
+            <div className="workspace-branch-marker-content" title=${title} aria-label=${accessibleLabel}>
                 <div className="workspace-branch-marker-header">
                     <div className=${`workspace-branch-marker-icon ${iconClassName}`} innerHTML=${icon}></div>
                     <div className="workspace-branch-marker-label">${label}</div>
                 </div>
+                ${modelDetails.length > 0 ? html`
+                    <div className="workspace-branch-marker-separator workspace-branch-marker-title-separator"></div>
+                    <div className="workspace-branch-marker-model-list">
+                        ${modelDetails.map(detail => createBranchMarkerModelRow(detail))}
+                    </div>
+                ` : null}
                 <div className="workspace-branch-marker-separator"></div>
-                <div className="workspace-branch-marker-message">${promptPreview}</div>
+                <div className="workspace-branch-marker-message">
+                    <span className="workspace-branch-marker-message-icon" innerHTML=${promptIcon}></span>
+                    <span className="workspace-branch-marker-message-text">${promptPreview}</span>
+                </div>
             </div>
         ` as HTMLDivElement
+    }
+
+    function isBranchMarkerNode(node: CanvasNode): node is BranchMarkerNode {
+        return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+    }
+
+    function getBranchMarkerContentConfig(node: BranchMarkerNode): {
+        icon: string
+        iconClassName: string
+        label: string
+    } {
+        if (node.type === 'branchOrigin') {
+            return {
+                icon: branchMidIcon,
+                iconClassName: 'workspace-branch-origin-icon',
+                label: 'Start branch',
+            }
+        }
+        if (node.type === 'branchFork') {
+            return {
+                icon: branchForkfIcon,
+                iconClassName: 'workspace-branch-fork-icon',
+                label: 'Fork branch',
+            }
+        }
+        return {
+            icon: branchLineIcon,
+            iconClassName: 'workspace-branch-line-icon',
+            label: 'Continue branch',
+        }
+    }
+
+    function syncBranchMarkerNodeContent(node: BranchMarkerNode): void {
+        const nodeEl = viewportEl.querySelector(`[data-node-id="${node.nodeId}"]`) as HTMLElement | null
+        if (!nodeEl) return
+
+        const currentContent = nodeEl.querySelector('.workspace-branch-marker-content')
+        const dragOverlay = nodeEl.querySelector('.branch-origin-drag-overlay, .branch-fork-drag-overlay, .branch-line-drag-overlay')
+        const nextContent = createBranchMarkerContent({
+            node,
+            ...getBranchMarkerContentConfig(node),
+        })
+        if (currentContent) {
+            currentContent.replaceWith(nextContent)
+            return
+        }
+        nodeEl.insertBefore(nextContent, dragOverlay)
+    }
+
+    function syncBranchMarkerNodeContents(): void {
+        if (!currentCanvasState) return
+        for (const node of currentCanvasState.nodes) {
+            if (isBranchMarkerNode(node)) syncBranchMarkerNodeContent(node)
+        }
     }
 
     function createBranchOriginNode(node: BranchOriginCanvasNode): HTMLElement {
@@ -7912,9 +8147,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const content = createBranchMarkerContent({
             node,
-            icon: branchMidIcon,
-            iconClassName: 'workspace-branch-origin-icon',
-            label: 'Start branch',
+            ...getBranchMarkerContentConfig(node),
         })
         nodeEl.insertBefore(content, dragOverlay)
 
@@ -7942,9 +8175,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const content = createBranchMarkerContent({
             node,
-            icon: branchForkfIcon,
-            iconClassName: 'workspace-branch-fork-icon',
-            label: 'Fork branch',
+            ...getBranchMarkerContentConfig(node),
         })
         nodeEl.insertBefore(content, dragOverlay)
 
@@ -7972,9 +8203,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const content = createBranchMarkerContent({
             node,
-            icon: branchLineIcon,
-            iconClassName: 'workspace-branch-line-icon',
-            label: 'Continue branch',
+            ...getBranchMarkerContentConfig(node),
         })
         nodeEl.insertBefore(content, dragOverlay)
 
@@ -8401,6 +8630,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             return
         }
         scheduleGeneratedMediaChromeSync()
+        syncBranchMarkerNodeContents()
     })
 
     function insertNodeAtViewportCenterInternal(node: WorkspaceCanvasNodeInsertion, statePatch: WorkspaceCanvasInsertionStatePatch = {}) {
