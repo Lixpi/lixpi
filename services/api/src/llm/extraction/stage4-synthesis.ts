@@ -46,9 +46,6 @@ Critically: the synthesized feature must NOT misrepresent the medium. If the rou
 const buildSynthesisSchema = (): VlmJsonSchema => ({
     name: 'synthesize_feature',
     description: 'Synthesize a single coherent Feature definition from per-axis extractions, weighted by router dominance scores.',
-    // `parameters` is intentionally open-ended (dynamic per-axis keys via additionalProperties),
-    // which OpenAI strict structured output forbids — opt this schema out of strict mode.
-    strict: false,
     schema: {
         type: 'object',
         properties: {

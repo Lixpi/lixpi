@@ -48,7 +48,7 @@ echo Waiting for certificates to be generated...
 timeout /t 5 /nobreak >nul
 
 :wait_cert
-docker run --rm -v lixpi_caddy-certs:/certs busybox test -f /certs/ca.crt 2>nul
+docker run --rm -v lixpi-lists_caddy-certs:/certs busybox test -f /certs/ca.crt 2>nul
 if errorlevel 1 (
     echo Waiting for CA certificate...
     timeout /t 2 /nobreak >nul
@@ -60,7 +60,7 @@ echo.
 
 :: Extract CA certificate
 echo Extracting CA certificate...
-docker run --rm -v lixpi_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
+docker run --rm -v lixpi-lists_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
 
 :: Install certificate on Windows
 echo Installing CA certificate on Windows...

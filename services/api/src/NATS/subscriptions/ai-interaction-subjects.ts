@@ -11,7 +11,6 @@ import {
 } from '@lixpi/constants'
 
 import AiModel from '../../models/ai-model.ts'
-import User from '../../models/user.ts'
 import type { LlmModule } from '../../llm/index.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
@@ -88,18 +87,6 @@ export const aiInteractionSubjects = [
                 videoSourceForExtension?: string
             } & AiInteractionChatSendMessagePayload
 
-            // organizationId may be absent from the client payload (e.g. the web-ui user store
-            // not yet hydrated with `organizations`). Billing keys spend by org, so fall back to
-            // the user's organization from their record. 1:1 user:org at launch → first entry.
-            let resolvedOrganizationId = organizationId
-            if (!resolvedOrganizationId) {
-                const userRecord = await User.get(userId)
-                resolvedOrganizationId = (userRecord as any)?.organizations?.[0] ?? ''
-                if (!resolvedOrganizationId) {
-                    warn(`[billing] no organizationId for user ${userId}; billing events will be dropped until an organization is provisioned`)
-                }
-            }
-
             const natsService = await NATS_Service.getInstance()
 
             if (mediaGenerationRequest) {
@@ -118,12 +105,12 @@ export const aiInteractionSubjects = [
                             ...data,
                             workspaceId,
                             aiChatThreadId,
-                            organizationId: resolvedOrganizationId,
+                            organizationId,
                             mediaGenerationRequest,
                             eventMeta: {
                                 userId,
                                 stripeCustomerId,
-                                organizationId: resolvedOrganizationId,
+                                organizationId,
                                 workspaceId,
                                 aiChatThreadId,
                             },
@@ -227,7 +214,7 @@ export const aiInteractionSubjects = [
                             eventMeta: {
                                 userId,
                                 stripeCustomerId,
-                                organizationId: resolvedOrganizationId,
+                                organizationId,
                                 workspaceId,
                                 aiChatThreadId,
                             },

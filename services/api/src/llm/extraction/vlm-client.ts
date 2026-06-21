@@ -10,18 +10,13 @@ import { warn, info, err } from '@lixpi/debug-tools'
 
 import type { ProviderName } from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
-import { convertAttachmentsForProvider, resolveImageUrls, type AttachmentFormat } from '../utils/attachments.ts'
+import { convertAttachmentsForProvider, resolveImageUrls } from '../utils/attachments.ts'
 import { detectCapabilities, type ModelCapabilities } from './capabilities.ts'
 
 export type VlmJsonSchema = {
     name: string
     description: string
     schema: Record<string, any>
-    // OpenAI strict structured output requires `additionalProperties: false` on every
-    // nested object. Schemas that intentionally use open-ended objects (dynamic keys)
-    // must opt out with `strict: false`. Defaults to true. OpenAI-only; ignored by
-    // the Anthropic and Google paths.
-    strict?: boolean
 }
 
 export type VlmCallArgs = {
@@ -88,7 +83,7 @@ const getGoogle = (): GoogleGenAI => {
 const resolveAndConvert = async (
     messages: ChatMessage[],
     natsService: NatsService,
-    format: AttachmentFormat,
+    format: 'ANTHROPIC' | 'OPENAI' | 'GOOGLE',
 ): Promise<Array<{ role: string; content: any }>> => {
     const out: Array<{ role: string; content: any }> = []
     for (const msg of messages) {
@@ -224,7 +219,7 @@ const callAnthropic = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> =>
 const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = detectCapabilities(args.provider, args.modelVersion)
     const client = getOpenAi()
-    const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI_CHAT')
+    const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI')
     const messages: Array<Record<string, any>> = [
         { role: 'system', content: args.systemPrompt },
         ...formatted,
@@ -241,17 +236,13 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
                 name: args.schema.name,
                 description: args.schema.description,
                 parameters: args.schema.schema,
-                strict: args.schema.strict ?? true,
+                strict: true,
             },
         }],
         tool_choice: { type: 'function', function: { name: args.schema.name } },
     }
     if (args.temperature !== undefined && caps.supportsTemperature) requestArgs.temperature = args.temperature
-    // GPT-5 / o-series reject the legacy `max_tokens` and require `max_completion_tokens`.
-    if (args.maxTokens) {
-        if (caps.usesMaxCompletionTokens) requestArgs.max_completion_tokens = args.maxTokens
-        else requestArgs.max_tokens = args.maxTokens
-    }
+    if (args.maxTokens) requestArgs.max_tokens = args.maxTokens
 
     const stream = await client.chat.completions.create(requestArgs as any, { signal: args.abortSignal })
 

@@ -38,7 +38,7 @@ echo "Waiting for certificates to be generated..."
 sleep 5
 
 # Check if certificates exist
-while ! docker run --rm -v lixpi_caddy-certs:/certs busybox test -f /certs/ca.crt; do
+while ! docker run --rm -v lixpi-lists_caddy-certs:/certs busybox test -f /certs/ca.crt; do
     echo "Waiting for CA certificate..."
     sleep 2
 done
@@ -48,7 +48,7 @@ echo ""
 
 # Extract CA certificate
 echo "Extracting CA certificate..."
-docker run --rm -v lixpi_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
+docker run --rm -v lixpi-lists_caddy-certs:/certs busybox cat /certs/ca.crt > ca.crt
 
 # Detect OS and install certificate
 if [[ "$OSTYPE" == "darwin"* ]]; then

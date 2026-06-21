@@ -166,12 +166,6 @@ export type ProviderState = {
     referencedFeatureIds?: string[] | undefined
     featureUsagePrompt?: string | undefined
 
-    // Billing — transient per-run identity. workflowId is minted in validateRequest
-    // and groups this run's start signal + usage events; workflowSeq is a 1-based
-    // counter incremented per emitted usage event (gap detection on the billing side).
-    workflowId?: string | undefined
-    workflowSeq?: number | undefined
-    
     // Multi-model media generation request-group metadata.
     generationRun?: MediaGenerationRunMeta | undefined
     mediaFanoutPlan?: MediaFanoutPlan | undefined
@@ -235,9 +229,6 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     previousResponseId: { reducer: keep },
     referencedFeatureIds: { reducer: keep },
     featureUsagePrompt: { reducer: keep },
-    workflowId: { reducer: keep },
-    workflowSeq: { reducer: keep },
-    
     generationRun: { reducer: keep },
     mediaFanoutPlan: { reducer: keep },
     preflightResolved: { reducer: keep, default: () => false },

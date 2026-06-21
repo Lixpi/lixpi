@@ -78,35 +78,6 @@ export default {
         }
     },
 
-    // setBillingAllowance projects the billing allowance onto the user record so the
-    // pre-flight gate is a local field read (see billing/allowance-projection.ts).
-    // Billing is per-org; at launch a user maps 1:1 to a default org, so the flat
-    // fields are unambiguous. When multi-member / multi-org lands, scope these by org.
-    setBillingAllowance: async ({
-        userId,
-        allowed,
-        balance,
-    }: {
-        userId: string
-        allowed: Record<string, boolean>
-        balance: number
-    }): Promise<void> => {
-        try {
-            await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
-                key: { userId },
-                updates: {
-                    billingAllowed: allowed,
-                    billingBalance: balance,
-                    billingUpdatedAt: new Date().getTime(),
-                },
-                origin: 'model::User->setBillingAllowance()',
-            })
-        } catch (e) {
-            console.error('Error setting billing allowance:', e)
-        }
-    },
-
     addRecentTag: async ({
         userId,
         tagId
