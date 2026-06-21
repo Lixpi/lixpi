@@ -43,6 +43,11 @@ import { createLlmModule } from './llm/index.ts'
 import { storeWorkspaceImage } from './services/image-storage.ts'
 import { storeWorkspaceVideo } from './services/video-storage.ts'
 
+import User from './models/user.ts'
+import Organization from './models/organization.ts'
+import { BillingClient, billingConfigFromEnv, type BillingNats } from './billing/billing-client.ts'
+import { startAllowanceProjection } from './billing/allowance-projection.ts'
+
 const env = process.env
 
 // Production safety check: Prevent LocalAuth0 from being used in non-local environments
@@ -259,12 +264,47 @@ await startNatsAuthCalloutService({
     serviceAuthConfigs,
 })
 
+// Billing client. The spend gate is async — the client never sits on the workflow
+// path. publish goes through the NATS service; balance.changed is subscribed on the
+// raw connection so it bypasses the global JWT middleware (an internal billing
+// subject carries no user token). Off (BILLING_ENABLED!=true) → today's behavior.
+const billingNatsConn = (await NATS_Service.getInstance())!
+const billingNats: BillingNats = {
+    publish: (subject, data) => billingNatsConn.publish(subject, data),
+    subscribe: (subject, handler) => {
+        const conn = billingNatsConn.getConnection()
+        if (!conn) return undefined
+        const sub = conn.subscribe(subject)
+        ;(async () => {
+            for await (const msg of sub) {
+                try {
+                    await handler(JSON.parse(new TextDecoder().decode(msg.data)))
+                } catch (e: any) {
+                    warn(`[billing] balance.changed handler error: ${e?.message ?? String(e)}`)
+                }
+            }
+        })()
+        return sub
+    },
+}
+const billing = new BillingClient(billingNats, billingConfigFromEnv())
+
+// Project balance.changed onto user records so the pre-flight gate is a local read.
+startAllowanceProjection(billing, {
+    getOrganizationMembers: (organizationId) => Organization.getOrganizationMembers({ organizationId }),
+    setUserAllowance: (args) => User.setBillingAllowance(args),
+})
+
 // Initialize the in-process LLM module. The LangGraph workflow that previously
 // ran in the standalone services/llm-api Python service now runs here directly.
 const llmModule = createLlmModule({
     natsService: await NATS_Service.getInstance(),
     storeWorkspaceImage,
     storeWorkspaceVideo,
+    billing,
+    // Gate read: the allowance billing projected onto the user record. Re-reads the
+    // user here (auth already loaded it; threading it through is the prod optimization).
+    getOrgAllowance: async (userId: string) => (await User.get(userId) as any)?.billingAllowed,
 })
 setLlmModule(llmModule)
 setExtractionLlmModule(llmModule)

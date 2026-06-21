@@ -1720,47 +1720,44 @@ export class AiModelsSync {
     async synchronizeModels(): Promise<AiModelsSyncResult> {
         info(`🚀 Starting AI models synchronization - Service: ${this.serviceName}`)
 
-        try {
-            // Synchronize OpenAI models
-            const openAIResult = await this.synchronizeOpenAIModels()
-            info(`OpenAI synchronization completed: ${JSON.stringify(openAIResult)}`)
-
-            // Synchronize Anthropic models (placeholder)
-            const anthropicResult = await this.synchronizeAnthropicModels()
-            info(`Anthropic synchronization completed: ${JSON.stringify(anthropicResult)}`)
-
-            // Synchronize Google models
-            const googleResult = await this.synchronizeGoogleModels()
-            info(`Google synchronization completed: ${JSON.stringify(googleResult)}`)
-
-            // Synchronize Stability AI models
-            const stabilityResult = await this.synchronizeStabilityModels()
-            info(`Stability AI synchronization completed: ${JSON.stringify(stabilityResult)}`)
-
-            // Synchronize BytePlus (Seedance) models
-            const bytePlusResult = await this.synchronizeBytePlusModels()
-            info(`BytePlus synchronization completed: ${JSON.stringify(bytePlusResult)}`)
-
-            const totalResult = {
-                openAI: openAIResult,
-                anthropic: anthropicResult,
-                google: googleResult,
-                stability: stabilityResult,
-                byteplus: bytePlusResult,
-                totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed + stabilityResult.processed + bytePlusResult.processed,
-                totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels + stabilityResult.newModels + bytePlusResult.newModels,
-                totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels + stabilityResult.updatedModels + bytePlusResult.updatedModels,
-                totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels + stabilityResult.deletedModels + bytePlusResult.deletedModels
+        // Each provider syncs independently. A missing/invalid API key (or any
+        // provider-side failure) is logged and skipped — it must never abort the
+        // other providers or crash startup, since model sync is a best-effort
+        // bootstrap task, not a hard dependency for the server to run.
+        type ProviderResult = { processed: number; newModels: number; updatedModels: number; deletedModels: number }
+        const zero: ProviderResult = { processed: 0, newModels: 0, updatedModels: 0, deletedModels: 0 }
+        const runProvider = async (name: string, fn: () => Promise<ProviderResult>): Promise<ProviderResult> => {
+            try {
+                const result = await fn()
+                info(`${name} synchronization completed: ${JSON.stringify(result)}`)
+                return result
+            } catch (error) {
+                warn(`⚠️  ${name} models synchronization skipped (continuing): ${error instanceof Error ? error.message : String(error)}`)
+                return { ...zero }
             }
-
-            info('✅ AI models synchronization completed successfully')
-            info(`📊 Summary: ${JSON.stringify(totalResult)}`)
-
-            return totalResult
-
-        } catch (error) {
-            err('❌ AI models synchronization failed:', error)
-            throw error
         }
+
+        const openAIResult = await runProvider('OpenAI', () => this.synchronizeOpenAIModels())
+        const anthropicResult = await runProvider('Anthropic', () => this.synchronizeAnthropicModels())
+        const googleResult = await runProvider('Google', () => this.synchronizeGoogleModels())
+        const stabilityResult = await runProvider('Stability AI', () => this.synchronizeStabilityModels())
+        const bytePlusResult = await runProvider('BytePlus', () => this.synchronizeBytePlusModels())
+
+        const totalResult = {
+            openAI: openAIResult,
+            anthropic: anthropicResult,
+            google: googleResult,
+            stability: stabilityResult,
+            byteplus: bytePlusResult,
+            totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed + stabilityResult.processed + bytePlusResult.processed,
+            totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels + stabilityResult.newModels + bytePlusResult.newModels,
+            totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels + stabilityResult.updatedModels + bytePlusResult.updatedModels,
+            totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels + stabilityResult.deletedModels + bytePlusResult.deletedModels
+        }
+
+        info('✅ AI models synchronization completed')
+        info(`📊 Summary: ${JSON.stringify(totalResult)}`)
+
+        return totalResult
     }
 }
